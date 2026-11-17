@@ -85,7 +85,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `chat_markdown::{render, plain, web_link}`, `chat_words::{Clock, when, clock_time, date_and_time, seconds_of, badge, named_model, tool_words, kinds}` | a reply rendered from its Markdown at 13 on 19 (an image as its alt text, HTML as plain text, a link only to a web address that shows what it is, through the confirmation); times local with short translated months, the provider badge, a tool row's words |
 | `settings::{open, open_at, Section}` | Settings over the window, on Profile or AI Agents |
 | `ProjectHost` | `fn create(&self, folder: &Path, name: &str) -> Receiver<Result<Opened, CreateError>>` (the host creates on its own thread) |
-| `Opened`, `CreateError` | an open project; why a creation failed, in the kinds the dialog explains |
+| `Opened`, `CreateError` | an open project; why a creation or an opening failed, in the kinds the dialog explains; `UnsupportedKinds` names a project's diagram kinds Archforge does not support, worded on Home and in the status bar |
 | `UiState` | the stored appearance, language, Home's closed banner, the workspace's explorer and panel and their widths |
 | the title strip's controls | `strip.home`, `strip.open-project`, `strip.theme` on every screen; on the workspace `strip.home` closes the project |
 | `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time |

@@ -1167,6 +1167,8 @@ str		The model could not be opened	The model could not be opened
 str		Not kept on {name}: {why}	Not kept on {name}: {why}
 str		Not kept on the element selected before: {why}	Not kept on the element selected before: {why}
 str		The host gives no ids for the model's elements	The host gives no ids for the model's elements
+str		It holds diagrams whose kind Archforge does not support; create a new project to carry on.	It holds diagrams whose kind Archforge does not support; create a new project to carry on.
+str		It holds diagrams whose kind Archforge does not support ({kinds}); create a new project to carry on.	It holds diagrams whose kind Archforge does not support ({kinds}); create a new project to carry on.
 str		Collapse panel	Collapse panel
 str		Not available yet	Not available yet
 str		Welcome home	Welcome home

@@ -603,6 +603,7 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     {
         let (why, ink) = match why {
             crate::SessionError::NoIdSource => (tr("The host gives no ids for the model's elements"), p.text_secondary),
+            crate::SessionError::UnsupportedKinds { kinds } => (crate::unsupported_kinds(kinds), p.text_secondary),
             // The engine's own words, small and untranslated, as the New project dialog shows a detail.
             crate::SessionError::Engine(e) => (e.clone(), p.text_muted),
         };

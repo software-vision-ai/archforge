@@ -441,10 +441,11 @@ impl Shell {
         self.save_ticket
     }
 
-    /// A session of `rows`, repaired as an opening repairs it.
+    /// A session of `rows`, repaired as an opening repairs it; refused in the user's words when it
+    /// holds diagrams of kinds Archforge does not support.
     pub(crate) fn build(&self, rows: &Rows) -> Result<Session, String> {
         let Some(source) = self.services.ids.clone() else { return Err(tr("The host gives no ids for the model's elements")) };
-        archforge_notations::session_from_rows_repaired(rows, Box::new(move || source()), editing::fit_tables).map_err(String::from)
+        archforge_notations::session_from_rows_repaired(rows, Box::new(move || source()), editing::fit_tables).map_err(crate::open_refusal)
     }
 
     /// Ends the operation with the session as it was, saying `why` when given. The same session

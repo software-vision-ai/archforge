@@ -3170,6 +3170,131 @@ fn opening_from_the_workspace_says_it_waits_and_why_it_failed_and_keeps_the_proj
     assert!(h.state().open_error.is_none());
 }
 
+/// The refusal of diagrams of `kinds` as the window words it in German, checked to be translated
+/// and to name each kind given, and `template` of the catalogues with it as `{why}`.
+fn refused_in_german(kinds: &[&str], template: &str) -> (String, String) {
+    let kinds: Vec<String> = kinds.iter().map(|k| k.to_string()).collect();
+    crate::i18n::set_language("en");
+    let english = crate::unsupported_kinds(&kinds);
+    crate::i18n::set_language("de");
+    let german = crate::unsupported_kinds(&kinds);
+    assert!(german != english && kinds.iter().all(|k| german.contains(k.as_str())), "{german}");
+    let around = crate::i18n::fmt(&crate::i18n::tr(template), &[("why", &german)]);
+    (german, around)
+}
+
+/// AR-548: an opening refused for diagrams of kinds Archforge does not support says so in the
+/// user's words, each kind once, in the status bar and on Home; the project shown, the one parked
+/// and the model's revision stay as they were.
+#[test]
+fn an_opening_refused_for_unsupported_diagram_kinds_says_so_and_keeps_the_projects() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = saving_harness(Some(commerce()), Some("/tmp/Old.archforge"));
+        h.state_mut().state.theme = theme;
+        h.state_mut().state.language = "de".into();
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+        h.run_steps(2);
+        add_schema(&mut h, "shop");
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().open_from_picker();
+        h.run_steps(2);
+        let (_, tx) = host.opens.lock().unwrap().pop().expect("the host was asked to open");
+        let kinds = ["uml.class", "", "uml.class", "legacy.kind"].map(String::from).to_vec();
+        tx.send(Err(crate::CreateError::UnsupportedKinds { kinds })).unwrap();
+        h.run_steps(4);
+        let (said, line) = refused_in_german(&["uml.class", "legacy.kind"], "The project could not be opened: {why}");
+        let shell = h.state();
+        assert_eq!(shell.open_error.as_deref(), Some(said.as_str()), "{theme:?}");
+        assert_eq!(said.matches("uml.class").count(), 1, "{theme:?}: each kind once");
+        assert!(!shell.is_opening() && shell.tabs.len() == 2 && shell.active == Some(1), "{theme:?}: no tab opened");
+        let shown = shell.project.as_ref().map(|o| o.path.clone());
+        assert!(shell.tabs[0].parked.is_some() && shown == Some("/tmp/Library.archforge".into()), "{theme:?}");
+        assert_eq!(shell.session.as_ref().map(|s| s.revision()), Some(revision), "{theme:?}");
+        assert!(painted_has(&h, &line), "{theme:?}: {:?}", painted(&h));
+        // Home says it too, with the projects still open in their tabs.
+        h.state_mut().go_home();
+        h.run_steps(2);
+        let start: String = line.chars().take(60).collect();
+        assert!(h.state().project.is_none() && painted_has(&h, &start), "{theme:?}: {:?}", painted(&h));
+        assert_eq!(h.state().tabs.len(), 2, "{theme:?}");
+    });
+}
+
+/// The sentence names the first few kinds, each once and cut short, and one with no kind at all.
+#[test]
+fn the_unsupported_kinds_sentence_names_a_few_kinds_each_once() {
+    crate::i18n::set_language("en");
+    let said = |kinds: &[&str]| crate::unsupported_kinds(&kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>());
+    assert_eq!(said(&["uml.class"]), "It holds diagrams whose kind Archforge does not support (uml.class); create a new project to carry on.");
+    assert_eq!(said(&["", ""]), "It holds diagrams whose kind Archforge does not support; create a new project to carry on.");
+    let long = "k".repeat(200);
+    assert!(said(&["a", "b", "a", "c", "d", "e", &long]).contains("(a, b, c, …);"), "the first three, each once, and that more were found");
+    assert!(said(&["a", "", "b", "a"]).contains("(a, b);"), "nothing more was found");
+    assert!(said(&[&long]).contains(&format!("({});", "k".repeat(64))), "a kind is cut short");
+}
+
+/// A project with an ER diagram, then a schema "shop" added as unsaved work, and the rows of it
+/// before "shop" with the diagram's kind as no notation knows it.
+fn work_and_unsupported() -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>, std::sync::Arc<archforge_mof::rows::Rows>) {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    let s = h.state_mut().session.as_mut().unwrap();
+    let till = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
+    s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": till, "name": "Till" })).unwrap();
+    h.run_steps(2);
+    let mut rows = (*rows_now(&h)).clone();
+    let (tables, _) = archforge_notations::storage();
+    let at = tables.iter().position(|t| t.name == "diagram_diagram").unwrap();
+    let kind = tables[at].columns.iter().position(|c| c.name == "kind").unwrap();
+    rows.tables[at].iter_mut().for_each(|row| row[kind] = archforge_mof::rows::Cell::Text("legacy.kind".into()));
+    add_schema(&mut h, "shop");
+    (h, host, std::sync::Arc::new(rows))
+}
+
+/// AR-548: rows handed over with such diagrams build no model, and the status bar says why in the
+/// user's words, never the store's.
+#[test]
+fn a_model_of_unsupported_diagram_kinds_says_why_in_the_status_bar() {
+    let rows = work_and_unsupported().2;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = saving_harness(Some(crate::Opened { model: Some(rows.clone()), ..commerce() }), None);
+        h.state_mut().state.theme = theme;
+        h.state_mut().state.language = "de".into();
+        h.run_steps(2);
+        assert!(h.state().session.is_none(), "{theme:?}");
+        assert_eq!(h.state().session_error, Some(crate::SessionError::UnsupportedKinds { kinds: vec!["legacy.kind".into()] }), "{theme:?}");
+        let said = refused_in_german(&["legacy.kind"], "{why}").0;
+        assert!(painted_has(&h, &crate::i18n::tr("The model could not be opened")) && painted_has(&h, &said), "{theme:?}: {:?}", painted(&h));
+    }
+}
+
+/// AR-548: a restore of a version, or a switch to a branch, holding diagrams of kinds Archforge
+/// does not support is refused in the user's words, never the store's, and the work stays.
+#[test]
+fn a_restore_or_a_switch_to_unsupported_diagram_kinds_says_so_and_keeps_the_work() {
+    for restore in [true, false] {
+        in_both(work_and_unsupported, |mut h, host, rows| {
+            h.state_mut().state.language = "de".into();
+            let revision = h.state().session.as_ref().unwrap().revision();
+            if restore {
+                h.state_mut().restore_version("c1", "2026-11-08T14:02:11Z").unwrap();
+                h.run_steps(3);
+                answer_read(&mut h, &host, Ok(rows));
+            } else {
+                h.state_mut().switch_branch("old".into()).unwrap();
+                h.run_steps(4);
+                host.switches.lock().unwrap().remove(0).check.send(Ok(rows)).unwrap();
+                h.run_steps(4);
+            }
+            // A restore adds that nothing was changed, as for any version it can't build.
+            let (said, expected) = refused_in_german(&["legacy.kind"], if restore { "{why} Nothing was changed." } else { "{why}" });
+            assert_eq!(h.state().save_error.as_deref(), Some(expected.as_str()), "restore {restore}");
+            assert!(painted_has(&h, &said), "restore {restore}: {:?}", painted(&h));
+            assert!(!h.state().is_held() && schema_names(&h).contains(&"shop".to_string()), "restore {restore}: the work stays");
+            assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "restore {restore}");
+        });
+    }
+}
+
 #[test]
 fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
     let (mut h, host) = saving_harness(Some(commerce()), None);

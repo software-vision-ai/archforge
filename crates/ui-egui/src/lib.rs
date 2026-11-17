@@ -744,14 +744,82 @@ pub enum CreateError {
     Failed {
         detail: String,
     },
+    /// The project holds diagrams of kinds Archforge does not support, such as an earlier version
+    /// stored: their `kinds`, as stored, in the order found. Nothing opened, so the projects shown
+    /// stay as they were; the window says it with `unsupported_kinds`.
+    UnsupportedKinds {
+        kinds: Vec<String>,
+    },
 }
 
-/// Why an open project's model could not be made: the host gave no id source, or the engine
-/// refused with its own words, which the status bar shows small and untranslated.
+/// Why an open project's model could not be made: the host gave no id source, the model holds
+/// diagrams of kinds no notation knows (the first few kinds, as [`CreateError::UnsupportedKinds`]
+/// holds them, which the status bar words), or the engine refused with its own words, which the
+/// status bar shows small and untranslated.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionError {
     NoIdSource,
+    UnsupportedKinds { kinds: Vec<String> },
     Engine(String),
+}
+
+impl From<archforge_notations::OpenError> for SessionError {
+    /// The notations' refusal of a model's rows, its diagrams of unknown kinds by their kinds.
+    fn from(e: archforge_notations::OpenError) -> SessionError {
+        match e {
+            archforge_notations::OpenError::UnknownKinds(refused) => SessionError::UnsupportedKinds { kinds: kinds_of(&refused) },
+            archforge_notations::OpenError::Unreadable(why) => SessionError::Engine(why),
+        }
+    }
+}
+
+/// The most kinds the refusal of diagrams of unknown kinds names, and the most bytes of each.
+const KINDS_NAMED: usize = 3;
+const KIND_BYTES: usize = 64;
+
+/// The first of `kinds` that are not empty, each once, in their order: one more than
+/// [`KINDS_NAMED`] at most, which is enough to say that more were found.
+fn named_kinds<'a>(kinds: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
+    let mut named = Vec::new();
+    for kind in kinds.filter(|k| !k.is_empty()) {
+        if named.len() > KINDS_NAMED {
+            break;
+        }
+        if !named.contains(&kind) {
+            named.push(kind);
+        }
+    }
+    named
+}
+
+/// The kinds of the diagrams `refused` names, as [`named_kinds`] keeps them.
+fn kinds_of(refused: &archforge_notations::UnknownKinds) -> Vec<String> {
+    named_kinds(refused.diagrams.iter().map(|d| d.kind.as_str())).into_iter().map(String::from).collect()
+}
+
+/// Why a project, a branch or a version does not open when it holds diagrams of `kinds` Archforge
+/// does not support: one sentence that names the first few, each once and as stored, and says to
+/// create a new project. A kind left empty is not named.
+pub(crate) fn unsupported_kinds(kinds: &[String]) -> String {
+    let named = named_kinds(kinds.iter().map(String::as_str));
+    if named.is_empty() {
+        return crate::i18n::tr("It holds diagrams whose kind Archforge does not support; create a new project to carry on.");
+    }
+    let mut list = named.iter().take(KINDS_NAMED).map(|k| crate::chat_panel::cut(k, KIND_BYTES)).collect::<Vec<_>>().join(", ");
+    if named.len() > KINDS_NAMED {
+        list.push_str(", …");
+    }
+    let sentence = crate::i18n::tr("It holds diagrams whose kind Archforge does not support ({kinds}); create a new project to carry on.");
+    crate::i18n::fmt(&sentence, &[("kinds", &list)])
+}
+
+/// The notations' refusal of a model's rows as a sentence: diagrams of unknown kinds in the
+/// user's words, any other reason in the store's own.
+pub(crate) fn open_refusal(e: archforge_notations::OpenError) -> String {
+    match e {
+        archforge_notations::OpenError::UnknownKinds(refused) => unsupported_kinds(&kinds_of(&refused)),
+        archforge_notations::OpenError::Unreadable(why) => why,
+    }
 }
 
 /// A folder as the shell shows it: where it is, and how the interface names it.
@@ -1447,7 +1515,7 @@ impl Shell {
                     }),
                     None => archforge_notations::new_project_session(&project.name, ids).map_err(archforge_notations::OpenError::from),
                 }
-                .map_err(|e| SessionError::Engine(e.to_string()))
+                .map_err(SessionError::from)
             }
             None => Err(SessionError::NoIdSource),
         };
@@ -1736,6 +1804,8 @@ impl Shell {
                     }
                     self.open_error = Some(match e {
                         CreateError::Failed { detail } | CreateError::FolderUnusable { detail } | CreateError::DoltMissing { detail } => detail,
+                        // Refused before a tab opened: the projects shown and parked stay as they were.
+                        CreateError::UnsupportedKinds { kinds } => unsupported_kinds(&kinds),
                         other => format!("{other:?}"),
                     });
                 }
