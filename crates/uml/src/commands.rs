@@ -425,8 +425,8 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     }
     detach(ctx.doc, pkg)?;
     place_package(ctx.doc, pkg, to)?;
-    // Its cards go from the diagrams of a package that no longer holds it (AR-102): a class
-    // diagram shows the packages its own package holds. Its own diagram and what it holds stay.
+    // Its cards go from the diagrams of a package that no longer holds it (AR-102). Its own
+    // diagram and what it holds stay.
     let parent = package_of(ctx.doc, pkg);
     let (_, _, nodes) = archforge_diagram::views_of(ctx.doc, pkg);
     for n in nodes {
@@ -599,8 +599,9 @@ fn association_class_move(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_move(ctx, p, ASSOCIATION_CLASS, "association_class", "an association class")
 }
 
-/// `uml.package.list`: every package with its parent, its description (AR-186) and how many
-/// classes, interfaces, enumerations, data types, primitive types and association classes it holds.
+/// `uml.package.list`: every package with its parent, the names of its owners from the root down
+/// as its card gives them (`path`, AR-562), its description (AR-186) and how many classes,
+/// interfaces, enumerations, data types, primitive types and association classes it holds.
 fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
     let store = &*ctx.doc;
     let items: Vec<Json> = all_packages(store)
@@ -609,6 +610,7 @@ fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
             let parent = package_of(store, pkg).and_then(|p| uuid_of(store, p).ok());
             json!({
                 "id": uuid_of(store, pkg).unwrap_or_default(), "name": name_of(store, pkg), "parent": parent,
+                "path": crate::figures::owner_path(store, pkg),
                 "description": crate::descriptions::description_of(store, pkg),
                 "classes": classes(store, pkg).len(), "interfaces": interfaces(store, pkg).len(),
                 "enumerations": enumerations(store, pkg).len(), "data_types": data_types(store, pkg).len(),
