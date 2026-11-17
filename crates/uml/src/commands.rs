@@ -699,16 +699,20 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
 }
 
 /// The package that takes what a nested package of `parent` hands up as `objs` go: `parent`, or,
-/// when it goes too, the first package above it that stays; none when a package with no parent
-/// that goes takes it all along.
+/// when it goes too, the first package above it that stays. None when the topmost package above
+/// goes: having no parent, it takes everything below it along, the package that would take what
+/// is handed up among them, so nothing is handed up for good (AR-673).
 fn receiver(store: &Store, objs: &[Obj], parent: Obj) -> Option<Obj> {
-    let mut at = parent;
-    // Every step up passes a package that goes, so there are no more steps than packages named.
-    for _ in 0..=objs.len() {
-        if !objs.contains(&at) {
-            return Some(at);
+    let (mut at, mut taker, mut seen) = (parent, None, std::collections::BTreeSet::new());
+    // The seen-set bounds the walk up, whatever the store holds.
+    while seen.insert(at) {
+        if taker.is_none() && !objs.contains(&at) {
+            taker = Some(at);
         }
-        at = package_of(store, at)?;
+        match package_of(store, at) {
+            Some(up) => at = up,
+            None => return taker.filter(|_| !objs.contains(&at)),
+        }
     }
     None
 }
@@ -734,7 +738,8 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// top-level package takes them along. Either takes its default-diagram binding along, with no
 /// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). A
 /// nested package that would hand a structure diagram up to a package with no sound default (its
-/// parent, or the first package above that stays when the parent goes too) is refused typed as
+/// parent, or the first package above that stays when the parent goes too, unless a package with
+/// no parent that goes takes it along) is refused typed as
 /// [`Reason::ParentDefaultUnsound`], before anything moves (AR-673). An
 /// element that would take along a diagram another element's binding names, unsoundly, is refused
 /// typed as [`Reason::DefaultDiagramOf`], unless that element goes too; the bindings of all that

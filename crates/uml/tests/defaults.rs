@@ -904,3 +904,35 @@ fn a_handoff_of_no_class_diagram_goes_and_one_past_a_parent_going_too_is_judged_
     assert_eq!(st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), Value::Ref(shop), "past Accounts, into Shop");
     assert_eq!(resolve(st, shop), Ok(DefaultDiagram::Bound(shop_default)));
 }
+
+/// Ledger in Accounts (no diagram yet) in Shop, a package with no parent: removing Shop with Ledger
+/// takes everything along, Accounts and Ledger's diagram among them, exactly as removing Shop
+/// alone does, so nothing is refused. Under a package that stays, Accounts would keep Ledger's
+/// diagram, and the same selection is refused, naming Accounts (AR-673).
+#[test]
+fn a_handoff_inside_a_package_with_no_parent_that_goes_is_not_judged() {
+    let shop_with = |under: bool| {
+        let (mut st, model) = store();
+        let shop = add(&mut st, model, PACKAGE, 0x50);
+        if under {
+            let sales = add(&mut st, model, PACKAGE, 0x40);
+            let default = diagram(&mut st, model, 0x41, STRUCTURE_DIAGRAM, sales);
+            bind(&mut st, model, 0x42, sales, default);
+            st.remove_value(model, archforge_core::model::MEMBER, &Value::Ref(shop)).unwrap();
+            st.push(sales, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(shop)).unwrap();
+        }
+        let accounts = nested(&mut st, shop, 0x60, "");
+        let ledger = nested(&mut st, accounts, 0x70, "Ledger");
+        let handed = diagram(&mut st, model, 0x71, STRUCTURE_DIAGRAM, ledger);
+        bind(&mut st, model, 0x72, ledger, handed);
+        over(st)
+    };
+    let (mut both, mut alone) = (shop_with(false), shop_with(false));
+    both.execute("element.remove", &json!({ "ids": [id(0x50), id(0x70)] })).unwrap();
+    alone.execute("element.remove", &json!({ "ids": [id(0x50)] })).unwrap();
+    assert!(rows_of(both.doc()) == rows_of(alone.doc()), "the same as Shop alone");
+    assert!(both.doc().by_uuid(Uuid([0x71; 16])).is_none_or(|d| !both.doc().is_alive(d)), "Ledger's diagram went with Shop");
+    let mut kept = shop_with(true);
+    let unsound = Reason::ParentDefaultUnsound { parent: id(0x60).into(), fault: None };
+    assert_eq!(refused(&mut kept, "element.remove", json!({ "ids": [id(0x50), id(0x70)] })).1, Some(unsound), "Accounts stays");
+}

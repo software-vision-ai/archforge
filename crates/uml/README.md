@@ -212,7 +212,8 @@ A nested package that hands up a structure diagram is refused before anything mo
 package that takes it (its parent, or the first package above that stays when the parent goes
 too) has no structure diagram yet or an unsound binding, typed as `Reason::ParentDefaultUnsound`
 with that package's name or id and its `BindingFault`, none for no diagram yet (AR-673,
-`defaults::handoff_problem`); one that hands up none goes whatever its parent's default.
+`defaults::handoff_problem`); one that hands up none goes whatever its parent's default, and so
+does one inside a package with no parent removed with it, which takes that package along.
 An element that would take along a diagram the binding of an element that stays names (unsoundly,
 `WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
 binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578);
