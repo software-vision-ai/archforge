@@ -530,8 +530,8 @@ itself stays.
 
 ### Move a package
 
-A package moves into another package with everything it holds and its own diagram. Two ways lead
-there:
+A package moves into another package with everything it holds and its own diagram. Its cards
+stay where they are on every diagram that shows them. Two ways lead there:
 
 - **In Models**, drag its row onto another package's row, or onto a class there.
 - **In Properties**, select it and choose its **Parent package**. The menu
