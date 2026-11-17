@@ -159,5 +159,12 @@
     <packagedElement xmi:type="uml:Class" xmi:id="View" name="View" isAbstract="true">
       <generalization xmi:type="uml:Generalization" xmi:id="View-_generalization" general="Element"/>
     </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="DefaultDiagramBinding" name="DefaultDiagramBinding">
+      <generalization xmi:type="uml:Generalization" xmi:id="DefaultDiagramBinding-_generalization" general="Element"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="DefaultDiagramBinding-ownerElement" name="ownerElement">
+        <type href="archforge:mof#Any"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="DefaultDiagramBinding-defaultDiagram" name="defaultDiagram" type="Diagram"/>
+    </packagedElement>
   </uml:Package>
 </xmi:XMI>

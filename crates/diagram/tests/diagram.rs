@@ -9,8 +9,9 @@ use archforge_diagram::rules::problems;
 use archforge_diagram::*;
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{Document, EngineError, Options, Registry, Session};
+use archforge_mof::schema::{Column, Junction, Table};
 use archforge_mof::toy::{self, CLASS, GENERALIZATION, PACKAGE, ToySlabs};
-use archforge_mof::{ClassId, CompositeSlabs, Obj, PropId, Store, Uuid, Value};
+use archforge_mof::{ClassId, CompositeSlabs, Obj, Problem, PropId, Store, Uuid, Value, rows};
 use serde_json::{Value as Json, json};
 
 /// The test notation's view: the selection, the open diagram, and a policy of classes and
@@ -203,7 +204,7 @@ fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     let reg = registry();
     assert!(reg.ids().filter(|i| i.starts_with("diagram.")).count() == 20 && reg.ids().any(|i| i == "view.open-diagram"));
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 8, "with View, the abstract end of an edge");
+    assert_eq!(m.classes.len(), 9, "with View, the abstract end of an edge, and a package's default-diagram binding");
     assert_eq!(m.data_types.len(), 7, "the five primitives, LabelPlace and Routing");
     assert_eq!(LabelPlace::from_index(1), Some(LabelPlace::Middle));
     assert_eq!(commands::place_name(LabelPlace::Target), "target");
@@ -944,4 +945,126 @@ fn a_new_diagram_routes_its_lines_at_right_angles_around_what_is_in_their_way() 
     let got = s.execute("diagram.get", &json!({ "diagram": sm.diagram })).unwrap().value;
     let edge = got["edges"].as_array().unwrap().iter().find(|e| e["id"] == json!(sm.edge)).unwrap().clone();
     assert_eq!(edge["style"], Json::Null, "the line takes its diagram's routing again");
+}
+
+/// The toy package's rows, as a notation's generated schema gives its own, so a store holding one
+/// saves: its name, and its comments and packaged elements as lists.
+const TOY_TABLES: &[Table] = &[Table {
+    name: "toy_package",
+    class: PACKAGE,
+    columns: &[Column { name: "id", prop: None, sql: "" }, Column { name: "name", prop: Some(toy::NAMED_ELEMENT_NAME), sql: "" }],
+}];
+const TOY_JUNCTIONS: &[Junction] = &[
+    Junction { name: "toy_package_owned_comment", class: PACKAGE, prop: toy::ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
+    Junction { name: "toy_package_packaged_element", class: PACKAGE, prop: toy::PACKAGE_PACKAGED_ELEMENT, ordered: true, reference: true },
+];
+
+/// The tables and junctions of a store of the core's model, the toy package and the diagrams.
+fn bound_storage() -> (Vec<Table>, Vec<Junction>) {
+    let tables = [archforge_core::TABLES, TOY_TABLES, TABLES].concat();
+    let junctions = [archforge_core::JUNCTIONS, TOY_JUNCTIONS, JUNCTIONS].concat();
+    (tables, junctions)
+}
+
+/// A store of the core, the toy and the diagram metamodels, with fresh ids from `ids`.
+fn bound_store(ids: Box<dyn FnMut() -> Uuid + Send>) -> Store {
+    let universe = universe_with(vec![toy::metamodel().unwrap(), archforge_core::metamodel().unwrap()]).unwrap();
+    let slabs = CompositeSlabs::new()
+        .with(toy::INDEX, Box::new(ToySlabs::default()))
+        .and_then(|s| s.with(archforge_core::INDEX, Box::new(archforge_core::CoreSlabs::default())))
+        .and_then(with_slabs)
+        .unwrap();
+    Store::new(universe, Box::new(slabs), ids)
+}
+
+/// A project's model holding a package, a diagram of it, and the binding naming that diagram the
+/// package's default: (model, package, diagram, binding).
+fn bound(st: &mut Store) -> (Obj, Obj, Obj, Obj) {
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let package = st.create(PACKAGE).unwrap();
+    st.set(package, toy::NAMED_ELEMENT_NAME, Value::str("p")).unwrap();
+    let diagram = st.create(DIAGRAM).unwrap();
+    DiagramObj::set_kind(st, diagram, Some("toy.class")).unwrap();
+    DiagramObj::set_element(st, diagram, Some(package)).unwrap();
+    for o in [package, diagram] {
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(o)).unwrap();
+    }
+    let binding = bind(st, model, package, diagram);
+    (model, package, diagram, binding)
+}
+
+/// A binding of `package` to its default `diagram`, a member of `model`.
+fn bind(st: &mut Store, model: Obj, package: Obj, diagram: Obj) -> Obj {
+    let binding = st.create(DEFAULT_DIAGRAM_BINDING).unwrap();
+    DefaultDiagramBindingObj::set_owner_element(st, binding, Some(package)).unwrap();
+    DefaultDiagramBindingObj::set_default_diagram(st, binding, Some(diagram)).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(binding)).unwrap();
+    binding
+}
+
+/// The uuid `prop` of `obj` refers to.
+fn uuid_at(st: &Store, obj: Obj, prop: PropId) -> Option<Uuid> {
+    st.get(obj, prop).unwrap().as_ref().map(|o| st.uuid(o).unwrap())
+}
+
+/// A binding saved to its rows and read back into another store is the same object: its id, both
+/// references and its place among the Model's members, and the rows read back are the rows written.
+#[test]
+fn a_default_diagram_binding_is_a_model_member_that_comes_back_from_its_rows_whole() {
+    let mut st = bound_store(toy::counter_ids());
+    let (model, package, diagram, binding) = bound(&mut st);
+    assert!(st.validate_all().is_empty(), "{:?}", st.validate_all());
+    assert_eq!(st.container(binding).unwrap(), Some((model, archforge_core::model::MEMBER)));
+    let (tables, junctions) = bound_storage();
+    let saved = rows::snapshot(&st, &tables, &junctions).unwrap();
+    // Read back into a store whose own ids could never give the same ones.
+    let mut back = bound_store(Box::new(|| Uuid::v7(1, [0xff; 10])));
+    rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    assert!(back.validate_all().is_empty(), "{:?}", back.validate_all());
+    let again = back.by_uuid(st.uuid(binding).unwrap()).expect("the binding keeps its id");
+    assert_eq!(back.class_of(again).unwrap(), DEFAULT_DIAGRAM_BINDING);
+    assert_eq!(uuid_at(&back, again, default_diagram_binding::OWNER_ELEMENT), st.uuid(package).ok());
+    assert_eq!(uuid_at(&back, again, default_diagram_binding::DEFAULT_DIAGRAM), st.uuid(diagram).ok());
+    let (owner, prop) = back.container(again).unwrap().expect("the binding is still a member");
+    assert_eq!((back.uuid(owner).unwrap(), prop), (st.uuid(model).unwrap(), archforge_core::model::MEMBER));
+    assert_eq!(rows::snapshot(&back, &tables, &junctions).unwrap(), saved, "the rows read back are the rows written");
+}
+
+/// Taking a binding's creation back restores the store exactly, and doing it again brings the
+/// binding back under the same id.
+#[test]
+fn undoing_and_redoing_a_bindings_creation_gives_the_identical_store() {
+    let mut st = bound_store(toy::counter_ids());
+    let (model, package, diagram, binding) = bound(&mut st);
+    st.destroy(binding).unwrap();
+    let before = picture(&st);
+    st.begin();
+    let binding = bind(&mut st, model, package, diagram);
+    let delta = st.end().unwrap();
+    let (after, id) = (picture(&st), st.uuid(binding).unwrap());
+    st.apply(&Store::invert(&delta)).unwrap();
+    assert_eq!(picture(&st), before, "undo");
+    st.apply(&delta).unwrap();
+    assert_eq!(picture(&st), after, "redo");
+    assert_eq!(st.uuid(binding).unwrap(), id, "the binding comes back under its id");
+}
+
+/// A binding's ends must be set and hold what they name in place, yet destroying the binding takes
+/// only the binding.
+#[test]
+fn a_bindings_references_are_required_and_own_nothing() {
+    let mut st = bound_store(toy::counter_ids());
+    let (model, package, diagram, binding) = bound(&mut st);
+    // Required: an empty end is a problem, and what a binding names cannot go from under it.
+    DefaultDiagramBindingObj::set_owner_element(&mut st, binding, None).unwrap();
+    let missing = st.validate(binding).unwrap();
+    assert!(matches!(missing[..], [Problem::Missing { prop: default_diagram_binding::OWNER_ELEMENT, .. }]), "{missing:?}");
+    DefaultDiagramBindingObj::set_owner_element(&mut st, binding, Some(package)).unwrap();
+    assert!(st.destroy(diagram).is_err() && st.is_alive(diagram), "the default diagram is held by its binding");
+    assert!(st.destroy(package).is_err() && st.is_alive(package), "and so is its package");
+    // Owning nothing: destroying the binding leaves its package and diagram in the model.
+    assert_eq!(st.destroy(binding).unwrap(), 1);
+    assert!(st.is_alive(package) && st.is_alive(diagram));
+    assert_eq!(st.list(model, archforge_core::model::MEMBER).unwrap(), vec![Value::Ref(package), Value::Ref(diagram)]);
+    assert!(st.validate_all().is_empty(), "{:?}", st.validate_all());
 }

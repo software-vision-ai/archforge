@@ -77,6 +77,15 @@ pub const TABLES: &[Table] = &[
             Column { name: "avoid", prop: Some(style::AVOID), sql: "TINYINT NOT NULL" },
         ],
     },
+    Table {
+        name: "diagram_default_diagram_binding",
+        class: DEFAULT_DIAGRAM_BINDING,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "owner_element", prop: Some(default_diagram_binding::OWNER_ELEMENT), sql: "BINARY(16) NULL" },
+            Column { name: "default_diagram", prop: Some(default_diagram_binding::DEFAULT_DIAGRAM), sql: "BINARY(16) NULL" },
+        ],
+    },
 ];
 
 /// One table per multi-valued stored property.

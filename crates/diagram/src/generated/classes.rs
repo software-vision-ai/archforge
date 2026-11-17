@@ -767,3 +767,65 @@ impl StyleObj {
         store.set(obj, style::AVOID, Value::Bool(v))
     }
 }
+
+/// An object of DefaultDiagramBinding, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct DefaultDiagramBindingObj {
+    pub owner_element: Option<Obj>,
+    pub default_diagram: Option<Obj>,
+}
+
+impl Reflect for DefaultDiagramBindingObj {
+    fn class(&self) -> ClassId {
+        DEFAULT_DIAGRAM_BINDING
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            default_diagram_binding::OWNER_ELEMENT => Some(self.owner_element.map_or(Value::Null, Value::Ref)),
+            default_diagram_binding::DEFAULT_DIAGRAM => Some(self.default_diagram.map_or(Value::Null, Value::Ref)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            default_diagram_binding::OWNER_ELEMENT => {
+                match value {
+                    Value::Null => self.owner_element = None,
+                    Value::Ref(v) => self.owner_element = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            default_diagram_binding::DEFAULT_DIAGRAM => {
+                match value {
+                    Value::Null => self.default_diagram = None,
+                    Value::Ref(v) => self.default_diagram = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on DefaultDiagramBinding", prop.0)),
+        }
+    }
+    fn list(&self, _prop: PropId) -> Option<&[Value]> {
+        None
+    }
+    fn list_mut(&mut self, _prop: PropId) -> Option<&mut Vec<Value>> {
+        None
+    }
+}
+
+impl DefaultDiagramBindingObj {
+    pub fn owner_element(&self) -> Option<Obj> {
+        self.owner_element
+    }
+    pub fn default_diagram(&self) -> Option<Obj> {
+        self.default_diagram
+    }
+    pub fn set_owner_element(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, default_diagram_binding::OWNER_ELEMENT, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn set_default_diagram(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, default_diagram_binding::DEFAULT_DIAGRAM, v.map_or(Value::Null, Value::Ref))
+    }
+}

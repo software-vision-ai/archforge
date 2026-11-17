@@ -971,7 +971,7 @@ fn a_change_of_the_model_tables_keeps_the_fingerprint_it_had() {
     assert!(!EARLIER_MODELS.contains(&CURRENT));
 }
 
-const CURRENT: &str = "bb92f9913c8937ef";
+const CURRENT: &str = "3afa5109a47ff478";
 
 /// A failed save says whether a version exists, by the head and by whether the server answered;
 /// a retry then finds nothing left and makes no second version.
