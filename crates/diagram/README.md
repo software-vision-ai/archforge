@@ -27,8 +27,9 @@ once per diagram, and its ends show the relationship's ends in order (`DiagramVi
 without an element is an anchor and has a note at one end; a label's slot is one the element has.
 A notation may require an element (`needs_element`) and keep a diagram to its scope (`may_show`,
 such as a schema's own entities). Removing a model element removes, for it and everything it
-contains, the diagrams of them, the edges that show them and the nodes that show them with the
-edges on those nodes (`remove_views_of`); a notation calls it before it destroys an element. A
+contains, the default-diagram bindings they own (with no replacement, AR-577), the diagrams of
+them, the edges that show them and the nodes that show them with the edges on those nodes
+(`remove_views_of`); a notation calls it before it destroys an element. A
 diagram goes with the skills on it, whether `diagram.remove` or its element's removal takes it.
 A `DefaultDiagramBinding` names a package's default diagram (AR-552): a member of the core's Model,
 whose `ownerElement` (typed Any) and `defaultDiagram` are both required and own nothing. Destroying
@@ -37,8 +38,9 @@ it leaves both alive; while it stands, the store refuses to destroy either. Its 
 table through the project crate's `EARLIER_MODELS`, and no diagram kind is migrated.
 `defaults::{bindings_of, bindings_to, bindings}` find the bindings naming an element as their owner,
 naming a diagram as its default, and all of them, without judging them; UML's resolver says what a
-binding may name (AR-575). The commands that make bindings, Properties and the deletion policy come
-later (AR-396, AR-397); nothing creates a binding yet. A comparison lists a binding among the model's elements, not
+binding may name (AR-575). `remove_views_of` takes the bindings it finds along (AR-577); the
+commands that make bindings, Properties and what removing a default diagram does come later (AR-396,
+AR-397); nothing creates a binding yet. A comparison lists a binding among the model's elements, not
 the diagrams, worded by its package and diagram (`Sales → Sales overview`) under the kind word
 Default diagram (AR-553).
 
