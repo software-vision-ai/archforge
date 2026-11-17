@@ -611,9 +611,18 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   answer no longer has `made`. A package with no class diagram yet is refused as having none, and
   one whose binding is unsound is refused as `uml_package_default_get` refuses it; make a diagram
   with `diagram_add` or choose one with `uml_package_default_set` first. A package's default diagram
-  is not removed: `diagram_remove` of it is refused, naming the package, until another of the
-  package's class diagrams is its default; its other diagrams are removed as before and leave the
-  default as it is. A diagram another package names as its default, which is unsound, is kept the
+  is not removed on its own: `diagram_remove` of it is refused, naming the package, unless it
+  names a `replacement_diagram`, another of the package's class diagrams, with the
+  `expected_revision` the project state gives. Then, in one undo step, the package's binding keeps
+  its id and names the replacement, which keeps its boxes as they were, and the diagram goes; the
+  model elements it showed stay. A package with more than one binding keeps the first, as
+  `uml_package_default_set` mends them, and the others are removed in the same step. The diagram itself, an id of nothing, another package's diagram or
+  a diagram of another kind as the replacement, a replacement for a diagram that is no default, and
+  a revision left out or changed since read are each refused and change nothing. Its other diagrams
+  are removed as before, with no revision needed, and leave the default as it is; a revision given
+  is checked all the same. `diagram_remove` answers `removed` (how many objects went), the
+  `diagram`'s id, the ids of the `replacement` and the `binding` kept (null when there is none),
+  `bindings_removed`, the ids of the other bindings removed, and `created`, false. A diagram another package names as its default, which is unsound, is kept the
   same way: `element_remove` of a package with no parent that holds it, its own package among them,
   is refused, naming the package whose default it is, unless that package is removed in the same
   call. Choose a default of that package's own first. A nested package hands the diagram up to its
