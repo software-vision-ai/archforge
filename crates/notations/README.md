@@ -28,7 +28,7 @@ another kind. A default-diagram binding (Decision 12) that names an owner or dia
 not hold, or names none, refuses the model the same way, with the typed `BrokenBindings`. One that
 names the wrong thing (a package with two, none, or a diagram of another kind or package) opens as
 it was stored and is reported, never repaired: the rows read back unchanged, and a repair that
-would change a binding is refused. A version opened to be looked at reports its own.
+would change a binding, compared by ids, is refused. A version opened to be looked at reports its own.
 
 **Public API.**
 
@@ -42,7 +42,7 @@ would change a binding is refused. A version opened to be looked at reports its 
 | `registry`, `Session` | the edit area, the shared element commands, every notation's own, the diagrams' and the skills'; a project's session, `Session<Store, ProjectView>` |
 | `new_project_session` | a session with the project's Model root named `name`; the host supplies the ids |
 | `session_from_rows`, `session_from_rows_repaired` | a session rebuilt from a project's rows and checked (by `check_kinds_in_rows`, `check_bindings_in_rows`, then `name_kind`), saved as it is; the second runs a repair on the store first; refused with an `OpenError` |
-| `session_from_rows_diagnosed`, `Opened` | the second, with the binding problems the rows hold (`archforge_uml::defaults::problems`) beside the session |
+| `session_from_rows_diagnosed`, `Opened` | the second, with the binding problems of the store the session gets, after the repair (`archforge_uml::defaults::problems`), beside it |
 | `OpenError` | why rows do not open: `UnknownKinds` or `BrokenBindings`, which callers match, or any other reason in English |
 | `check_bindings_in_rows`, `BrokenBinding`, `BindingEnd` | the default-diagram bindings in rows whose owner or diagram is no row of any table, or none |
 | `check_kinds`, `check_kinds_in_rows`, `UnknownKinds`, `UnknownDiagram` | the diagrams of kinds no notation knows, in a store or in rows of any shape whose diagram table has its `id` and `kind` columns, read by name alone, so a host checks a project before it brings its tables up to date |

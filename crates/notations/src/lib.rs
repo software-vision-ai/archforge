@@ -385,14 +385,15 @@ pub fn session_from_rows_repaired(
 /// A project's session as it opens, with what is wrong with its default-diagram bindings.
 pub struct Opened {
     pub session: Session,
-    /// The binding problems the rows hold, as [`archforge_uml::defaults::problems`] gives them for
-    /// the session's store: reported, never repaired, so the model opens as it was stored.
+    /// The binding problems of the session's store, after any repair, as
+    /// [`archforge_uml::defaults::problems`] gives them: reported, never repaired, so the bindings
+    /// open as they were stored.
     pub problems: Vec<archforge_uml::defaults::Diagnosis>,
 }
 
-/// [`session_from_rows_repaired`], with the binding problems the rows hold. A version opened to be
-/// looked at reports those of its own revision. No repair changes a binding: one that would is
-/// refused.
+/// [`session_from_rows_repaired`], with the binding problems of the model opened. A version opened
+/// to be looked at reports those of its own revision. No repair changes a binding, its ids compared
+/// whatever store the repair leaves: one that would is refused.
 pub fn session_from_rows_diagnosed(
     rows: &archforge_mof::rows::Rows,
     ids: Box<dyn FnMut() -> Uuid + Send>,
@@ -406,10 +407,16 @@ pub fn session_from_rows_diagnosed(
     check_bindings_in_rows(rows, &tables).map_err(OpenError::BrokenBindings)?;
     // Built without an undo log, so a model of any size the read budgets let through opens.
     let mut st = archforge_mof::rows::restore_into_empty(store(ids)?, rows, &tables, &junctions).map_err(|e| e.to_string())?;
-    let problems = archforge_uml::defaults::problems(&st);
+    // Every binding and its ends by their ids, in id order: a repair may hand back another store,
+    // whose handles name other objects.
     let bound = |st: &Store| {
-        let end = |b, prop| st.get(b, prop).ok().and_then(|v| v.as_ref());
-        archforge_diagram::defaults::bindings(st).into_iter().map(|b| (b, end(b, OWNER_ELEMENT), end(b, DEFAULT_DIAGRAM))).collect::<Vec<_>>()
+        let end = |b, prop| st.get(b, prop).ok().and_then(|v| v.as_ref()).and_then(|o| st.uuid(o).ok());
+        let mut all: Vec<_> = archforge_diagram::defaults::bindings(st)
+            .into_iter()
+            .map(|b| (st.uuid(b).ok(), end(b, OWNER_ELEMENT), end(b, DEFAULT_DIAGRAM)))
+            .collect();
+        all.sort();
+        all
     };
     let stored = bound(&st);
     repair(&mut st);
@@ -428,6 +435,8 @@ pub fn session_from_rows_diagnosed(
     if !st.alive().any(|o| st.class_of(o).ok() == Some(archforge_core::MODEL)) {
         return Err(OpenError::Unreadable("the project has no model root".into()));
     }
+    // Read from the store the session gets, so they hold whatever the repair changed around a binding.
+    let problems = archforge_uml::defaults::problems(&st);
     let mut session = Session::with_view(registry, st, FIRST_COUNTER, archforge_engine::Options::default(), view());
     session.mark_saved().map_err(|e| e.to_string())?;
     Ok(Opened { session, problems })

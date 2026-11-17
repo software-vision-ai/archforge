@@ -666,6 +666,40 @@ fn unsound_bindings_open_unchanged_and_are_reported() {
     }
 }
 
+/// AR-586: a repair is judged by ids, whatever store it leaves: the rows rebuilt as they were open,
+/// rebuilt with the binding under another id, its handles all the same, they are refused. What is
+/// reported is the store the session gets: a diagram the repair gives another owner is reported so.
+#[test]
+fn a_repair_is_judged_by_ids_and_the_problems_reported_follow_it() {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let billing = id(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let d = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let (tables, junctions) = storage();
+    let written = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let rebuilt = |rows: &rows::Rows| rows::restore_into_empty(store(ids(1 << 42)).unwrap(), rows, &tables, &junctions).unwrap();
+    assert!(session_from_rows_repaired(&written, ids(1 << 41), |st| *st = rebuilt(&written)).is_ok(), "the same rows rebuilt open");
+    let binding = s.doc().uuid(archforge_diagram::defaults::bindings(s.doc())[0]).unwrap();
+    let (old, new) = (Cell::Id(binding), Cell::Id(Uuid::v7(1_761_670_800_000, [8; 10])));
+    let mut renamed = written.clone();
+    for cell in renamed.tables.iter_mut().flatten().flatten().chain(renamed.junctions.iter_mut().flatten().map(|(_, _, c)| c)) {
+        if *cell == old {
+            *cell = new.clone();
+        }
+    }
+    let refused = session_from_rows_repaired(&written, ids(1 << 41), |st| *st = rebuilt(&renamed)).err();
+    assert!(matches!(&refused, Some(OpenError::Unreadable(why)) if why.contains("binding")), "{refused:?}");
+    // Sales's diagram given to Billing: Sales's binding names another's diagram, and Billing has one but no binding.
+    let opened = archforge_notations::session_from_rows_diagnosed(&written, ids(1 << 41), |st| {
+        let obj = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+        let (d, billing) = (obj(st, &d), obj(st, &billing));
+        st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(billing)).unwrap();
+    })
+    .unwrap();
+    let expected = [("Sales", "WrongOwner"), ("Billing", "Missing")].map(|(p, k)| (p.to_string(), k.to_string()));
+    assert_eq!(diagnosed(opened.session.doc(), &opened.problems), expected);
+}
+
 /// AR-586: a binding whose diagram or owner the project does not hold, or which names none, is
 /// refused as the project opens, typed and naming it, before anything is built; one that names
 /// what the project holds opens.
