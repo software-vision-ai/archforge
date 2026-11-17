@@ -240,7 +240,12 @@ refused, typed, with no undo step; one outside the model shown on no diagram; th
 link and the bindings, and gains none, undone, redone and read back exactly; a refused move and one
 to its own parent change nothing, no undo step. (AR-577): bound packages removed nested, under the root and with no
 parent, each one undo step bringing the bindings back under their ids; a diagram that is no default
-removed alone. `tests/defaults.rs` (AR-578): a default diagram's removal refused with no undo step,
+removed alone. `tests/appearances.rs` (AR-572): a package
+shown in two branches moved where its new owner's diagram lacks it and where it has it, gaining no
+appearance and keeping each one, its bounds and a route beside it; a later placement its own undo
+step; the rows read back; an earlier version built from its rows unchanged and read-only; the
+package removed with every appearance in one undo step; an agent's commands giving the store the
+interface's give. `tests/defaults.rs` (AR-578): a default diagram's removal refused with no undo step,
 another diagram's leaving the binding, and a foreign binding keeping its diagram and the package
 that holds it, while a nested package that holds one hands it up and goes; that package and the
 binding's owner removed together in either order, as one undo step; the diagram of an association
