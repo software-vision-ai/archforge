@@ -490,6 +490,13 @@ where they sit there, and the lines between them. When you change that diagram, 
 A package whose diagram has nothing on it says *Empty diagram*. Zoomed out below 50 %, the card
 shows the package's name in its middle instead, as every card does.
 
+Under each package's card a line says where the package lives: *Owner:* and the packages from your
+project's root down to the one that holds it, such as *Owner: Commerce platform › Operations*. A
+diagram can show packages from anywhere in the project, so this line tells them apart. When the
+card is too narrow for the whole line, its first packages fold into "…" and the nearest stay, as in
+*Owner: … › Operations*; pointing at the line shows it whole. The root package's card has no such
+line, and below 50 % zoom none is drawn.
+
 The tab is part of the card: click it to select the package, drag it to move the card, and double
 click it to rename the package there. The tab grows as you type.
 
@@ -531,7 +538,7 @@ itself stays.
 ### Move a package
 
 A package moves into another package with everything it holds and its own diagram. Its cards
-stay where they are on every diagram that shows them. Two ways lead there:
+stay where they are on every diagram that shows them, and the line under each names its new owner. Two ways lead there:
 
 - **In Models**, drag its row onto another package's row, or onto a class there.
 - **In Properties**, select it and choose its **Parent package**. The menu

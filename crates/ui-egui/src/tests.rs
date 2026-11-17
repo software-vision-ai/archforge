@@ -10086,6 +10086,108 @@ fn a_package_cards_thumbnail_is_its_own_diagram_scaled_and_follows_it() {
     assert!(painted(&h).iter().any(|t| t == "Empty diagram"));
 }
 
+/// A project whose root's structure diagram is open at 100 % (AR-565), with the root's id and the
+/// diagram's.
+fn owning_path_harness(theme: ThemeKind) -> (Harness<'static, Shell>, String, String) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let root = owning_path_made(&mut h, "uml.model.root", serde_json::json!({}));
+    let kind = archforge_uml::STRUCTURE_DIAGRAM;
+    let top = owning_path_made(&mut h, "diagram.add", serde_json::json!({ "kind": kind, "element": root, "name": "Commerce platform" }));
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&top).unwrap());
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.pan = egui::Vec2::ZERO;
+    h.run();
+    (h, root, top)
+}
+
+/// Runs `command` on the harness's project and gives the id it answers with.
+fn owning_path_made(h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value) -> String {
+    let value = h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap().value;
+    value["id"].as_str().unwrap().to_string()
+}
+
+/// A package of another branch says its whole owning path under its card, to a screen reader and
+/// on hover; the root's card says none (AR-565).
+#[test]
+fn a_package_card_says_where_its_package_lives_under_it_and_the_root_says_nothing() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, top) = owning_path_harness(theme);
+        // Archive lives in Operations, another branch than the diagram's root; the root is shown too.
+        let operations = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": "Operations", "parent": root }));
+        let archive = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": "Archive", "parent": operations }));
+        let place = |element: &str, x: i64| serde_json::json!({ "diagram": top, "element": element, "x": x, "y": 80, "width": 240, "height": 148 });
+        let card = owning_path_made(&mut h, "diagram.place", place(&archive, 80));
+        let root_card = owning_path_made(&mut h, "diagram.place", place(&root, 480));
+        h.run();
+        let whole = "Owner: Commerce platform › Operations";
+        let body = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+        let path = rect_of(&h, &format!("workspace.canvas.node.{card}.path"));
+        assert!(
+            (path.top() - body.bottom() - 6.0).abs() < 0.5 && (path.left() - body.left()).abs() < 0.5,
+            "{theme:?}: under the card: {path:?} {body:?}"
+        );
+        assert!(path.width() <= body.width() + 0.5 && path.height() > 12.0, "{theme:?}: {path:?}");
+        assert!(painted(&h).iter().any(|t| t == whole), "{theme:?}: the whole path, said in words");
+        assert!(painted(&h).iter().any(|t| t == "Archive"), "{theme:?}: the name stays in the tab");
+        let said = h.get_by_label(whole).accesskit_node();
+        assert_eq!(said.role(), egui::accesskit::Role::Label, "{theme:?}: read out whole");
+        // The root, which no package owns, says no path.
+        let found = ids(&h);
+        assert!(found.contains(&format!("workspace.canvas.node.{root_card}.tab")), "{theme:?}: the root's card shows");
+        assert!(!found.contains(&format!("workspace.canvas.node.{root_card}.path")), "{theme:?}: but no path under it");
+        // The pointer on the path shows it whole.
+        let before = painted(&h).iter().filter(|t| *t == whole).count();
+        h.event(egui::Event::PointerMoved(path.center()));
+        for _ in 0..40 {
+            h.step();
+        }
+        assert_eq!(painted(&h).iter().filter(|t| *t == whole).count(), before + 1, "{theme:?}: its tooltip");
+    }
+}
+
+/// A path too long for its card folds its first owners into `…`; a card too narrow even for that
+/// shows the nearest owner alone, cut but legible; both say the whole path (AR-565).
+#[test]
+fn a_long_owning_path_folds_its_first_owners_and_a_narrow_card_keeps_the_nearest() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, top) = owning_path_harness(theme);
+        let mut parent = root;
+        for name in ["Operations and logistics", "Regional fulfilment"] {
+            parent = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": name, "parent": parent }));
+        }
+        let place = |name: &str, x: i64, width: i64, h: &mut Harness<'static, Shell>| {
+            let p = owning_path_made(h, "uml.package.add", serde_json::json!({ "name": name, "parent": parent }));
+            owning_path_made(h, "diagram.place", serde_json::json!({ "diagram": top, "element": p, "x": x, "y": 80, "width": width, "height": 148 }))
+        };
+        let wide = place("Archive", 80, 240, &mut h);
+        let narrow = place("Ledger", 480, 100, &mut h);
+        h.run();
+        let whole = "Owner: Commerce platform › Operations and logistics › Regional fulfilment";
+        let badge = |h: &Harness<'static, Shell>, card: &str| {
+            h.state().canvas.path_badges.iter().find(|b| b.node.to_string() == card).cloned().unwrap_or_else(|| panic!("a path under {card}"))
+        };
+        // Too long for its card: the first owners fold, the nearest stays.
+        let long = badge(&h, &wide);
+        assert_eq!((long.shown.as_str(), long.whole.as_str()), ("Owner: … › Regional fulfilment", whole), "{theme:?}");
+        let body = rect_of(&h, &format!("workspace.canvas.node.{wide}"));
+        assert!(rect_of(&h, &format!("workspace.canvas.node.{wide}.path")).width() <= body.width() + 0.5, "{theme:?}");
+        assert!(painted(&h).iter().any(|t| t == "Archive"), "{theme:?}: the package's name stays in its tab");
+        // Too narrow even for that: the nearest owner alone, cut at its end, in the caption's size.
+        let short = badge(&h, &narrow);
+        assert_eq!((short.shown.as_str(), short.whole.as_str()), ("Owner: Regional fulfilment", whole), "{theme:?}");
+        let body = rect_of(&h, &format!("workspace.canvas.node.{narrow}"));
+        let path = rect_of(&h, &format!("workspace.canvas.node.{narrow}.path"));
+        assert!(path.width() <= body.width() + 0.5 && path.height() > 12.0, "{theme:?}: legible, inside the card's width: {path:?}");
+        let glyphs = texts_in(&h, path).into_iter().find(|(t, _)| t == "Owner: Regional fulfilment").map(|(_, g)| g);
+        assert!(glyphs.is_some_and(|g| g > 6 && g < "Owner: Regional fulfilment".chars().count()), "{theme:?}: cut, not gone: {glyphs:?}");
+        // Both read out whole.
+        assert_eq!(h.query_all_by_label(whole).count(), 2, "{theme:?}");
+    }
+}
+
 #[test]
 fn a_click_on_a_packages_tab_selects_the_package_though_a_line_crosses_the_tab() {
     let (mut h, top, sales, card, _, _) = package_preview_harness(ThemeKind::Light);

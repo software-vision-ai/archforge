@@ -1404,6 +1404,7 @@ str		Literal · model	字面量 · 模型
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	字面量 · {n}
 str		Owner	所有者
+str		Owner: {path}	所有者：{path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者是包或分类器。更改它会保留 {name} 的标识、成员、关系以及使用它的每个类型。
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · 嵌套于 {owner} · 模型，所有图中
 str		Nested classifiers · {n}	嵌套分类器 · {n}
