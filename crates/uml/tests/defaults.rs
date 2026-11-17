@@ -248,8 +248,10 @@ fn the_command_answers_every_state_of_a_default_and_changes_nothing() {
     diagram(&mut st, model, 0x41, STRUCTURE_DIAGRAM, missing);
     let twice = add(&mut st, model, PACKAGE, 0x50);
     let both = diagram(&mut st, model, 0x51, STRUCTURE_DIAGRAM, twice);
-    bind(&mut st, model, 0x53, twice, both);
-    bind(&mut st, model, 0x52, twice, both);
+    // Six, made in the other order from their ids: the refusal names five and counts the sixth.
+    for n in (0x52..=0x57).rev() {
+        bind(&mut st, model, n, twice, both);
+    }
     let schema_bound = add(&mut st, model, PACKAGE, 0x60);
     let schema = diagram(&mut st, model, 0x61, ER_DIAGRAM, schema_bound);
     bind(&mut st, model, 0x62, schema_bound, schema);
@@ -269,7 +271,12 @@ fn the_command_answers_every_state_of_a_default_and_changes_nothing() {
     let own = "choose one of its own structure diagrams as its default";
     for (package, fault, named, mend) in [
         (0x40, BindingFault::Missing, format!("(package {})", id(0x40)), own),
-        (0x50, BindingFault::Duplicate, format!("bindings {}, {})", id(0x52), id(0x53)), "choose which of its structure diagrams stays its default"),
+        (
+            0x50,
+            BindingFault::Duplicate,
+            format!("bindings {} and 1 more)", (0x52..=0x56).map(id).collect::<Vec<_>>().join(", ")),
+            "choose which of its structure diagrams stays its default",
+        ),
         (0x60, BindingFault::WrongKind, format!("binding {}, diagram {})", id(0x62), id(0x61)), own),
         (0x70, BindingFault::WrongOwner, format!("binding {}, diagram {})", id(0x72), id(0x12)), own),
         (0x80, BindingFault::DeadTarget, format!("binding {})", id(0x82)), own),
