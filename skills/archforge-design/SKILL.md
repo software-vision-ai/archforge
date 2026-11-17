@@ -721,9 +721,9 @@ What is UML's own, beside the shared rules above.
   switch fades in over 0.2 s. A double click renames, never navigates.
 - A package moves (AR-102) by its row in Models onto another package's, or Properties' Parent
   package (the keyboard's way; never itself or one it holds). It goes with what it holds and its
-  own diagram, onto its new home's diagram, its card leaving diagrams of a package that no longer
-  holds it; one undo step, with a toast offering Undo. Into itself or a package it holds is refused
-  with the reason; Models rings such a row in amber. Dragging on the canvas only arranges (owner,
+  own diagram; its cards stay where they are, their owner lines following, and none is added to
+  its new owner's diagram (Decision 26, AR-568); one undo step, with a toast offering Undo. Into
+  itself or a package it holds is refused with the reason; Models rings such a row in amber. Dragging on the canvas only arranges (owner,
   2026-11-11, AR-566): a card let go over another package's card or a path-bar ancestor keeps its
   owner, with no ring and no prompt, and a moved selection is one diagram undo step.
 - A class is a plain card: the surface's white with the plain border, its eyebrow CLASS, its name,

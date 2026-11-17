@@ -546,7 +546,10 @@ stay where they are on every diagram that shows them, and the line under each na
 
 A package can't go into itself or into a package it holds. In Models, such a row is ringed in
 amber while you hold the package over it, and the drop is refused with the reason. Each move is
-one step you can undo, and the project keeps it once saved.
+one step you can undo, with a notice that offers **Undo**, and the project keeps it once saved.
+
+A move adds no card to its new owner's diagram. To show the package there as well, drag its row
+from **Models** onto that diagram; that is a step of its own.
 
 Dragging a card on a diagram only arranges the diagram, wherever you let it go: over another
 package's card, or over a package named in the path bar, it keeps its package. Drag several
