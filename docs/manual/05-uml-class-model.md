@@ -500,6 +500,10 @@ line, and below 50 % zoom none is drawn.
 The tab is part of the card: click it to select the package, drag it to move the card, and double
 click it to rename the package there. The tab grows as you type.
 
+A package's card lies under the diagram's other cards and notes. A class or a note you place over
+a package's card or its tab stays in sight, and clicking it selects it, not the package; click the
+card where nothing lies over it to select the package.
+
 - **Add one** with the **Package** tool of the toolbar: click where it goes and type its name. The
   package goes into the diagram's package, and its own diagram, named like it, is made with it.
   Both are one step you can undo. A package dragged from Models onto the diagram of the package

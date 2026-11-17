@@ -700,7 +700,9 @@ What is UML's own, beside the shared rules above.
   (AR-113) holds the name in 12 px SemiBold, 22 px high with 12 px padding, never narrower than
   56 px nor wider than the card (a longer name ends in "…", the tab's hover shows it whole); it
   follows a rename as it is typed, and the rename field is the tab. The tab is part of the card for
-  click, drag and double click. The card's body is a thumbnail of the package's own diagram on the
+  click, drag and double click. Package cards are drawn and hit under every other figure (AR-570),
+  each group in stored order: a class or a note over a card or its tab stays in front and takes
+  the press; the model's order is untouched. The card's body is a thumbnail of the package's own diagram on the
   page tint, 10 px in from the card, fitted and enlarged at most 50 %: mini cards with a name bar,
   a header line and a bar per row, nested packages with a tab, notes amber, and the lines; "Empty
   diagram" when it shows nothing; below 50 % zoom the name centred instead. Under the card, 6 px

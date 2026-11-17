@@ -995,13 +995,14 @@ fn remove_selected_link(shell: &mut Shell) -> bool {
 }
 
 /// The topmost node of `d` under a screen point whose element takes part in the diagram kind's
-/// gestures: on its card, or on its package's tab.
+/// gestures: on its card, or on its package's tab, the one drawn on top where a card covers a tab
+/// (AR-570).
 fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
     let store = shell.session.as_ref()?.doc();
     let kind = crate::kinds::kind_of(shell, store, d);
     let card =
         nodes_of(store, d).into_iter().rev().find(|n| part_of_node(kind, store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at));
-    on_top(shell, store, &Grid::build(store, d), card, at).filter(|n| part_of_node(kind, store, *n).is_some()).and_then(|n| uuid(store, n))
+    on_top(shell, store, &crate::canvas::grid(store, d), card, at).filter(|n| part_of_node(kind, store, *n).is_some()).and_then(|n| uuid(store, n))
 }
 
 /// Of the card under a point and the package tab under it, the one drawn on top: the later in

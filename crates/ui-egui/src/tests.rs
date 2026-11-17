@@ -10239,6 +10239,79 @@ fn a_long_owning_path_folds_its_first_owners_and_a_narrow_card_keeps_the_nearest
     }
 }
 
+/// A class placed on a diagram before a package whose card and tab then cover it: the card is
+/// drawn first and the class over it, a press or a relationship's end on the class takes the class,
+/// on the card as on the tab, and a press on the card where nothing lies takes the package. Drawing
+/// and pressing leave the history and the rows as they were (AR-570).
+#[test]
+fn a_class_over_a_package_card_is_drawn_and_pressed_in_front_of_the_card() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, top) = owning_path_harness(theme);
+        let invoice = owning_path_made(&mut h, "uml.class.add", serde_json::json!({ "package": root, "name": "Invoice" }));
+        let place = |element: &str, (x, y, width, height): (i64, i64, i64, i64)| serde_json::json!({ "diagram": top, "element": element, "x": x, "y": y, "width": width, "height": height });
+        let class_card = owning_path_made(&mut h, "diagram.place", place(&invoice, (210, 120, 140, 100)));
+        let sales = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": "Sales", "parent": root }));
+        let card = owning_path_made(&mut h, "diagram.place", place(&sales, (200, 160, 320, 200)));
+        h.run();
+        let history = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.undo_label().map(str::to_owned), s.can_redo())
+        };
+        let (rows, before) = (rows_now(&h), history(&h));
+        let (class_rect, card_rect) =
+            (rect_of(&h, &format!("workspace.canvas.node.{class_card}")), rect_of(&h, &format!("workspace.canvas.node.{card}")));
+        // Where the class covers the package's tab, above its card.
+        let on_tab = class_rect.intersect(rect_of(&h, &format!("workspace.canvas.node.{card}.tab"))).center();
+        assert!(card_rect.contains(class_rect.center()) && !card_rect.contains(on_tab), "{theme:?}: {class_rect:?} {card_rect:?} {on_tab:?}");
+        // Where the last frame filled a rectangle `r`, in painting order.
+        let filled = |h: &Harness<'static, Shell>, r: egui::Rect| {
+            /// Every shape `s` holds, nested lists opened, in painting order.
+            fn walk<'a>(s: &'a egui::Shape, out: &mut Vec<&'a egui::Shape>) {
+                match s {
+                    egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                    s => out.push(s),
+                }
+            }
+            let mut flat = Vec::new();
+            h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut flat));
+            flat.iter().position(
+                |s| matches!(s, egui::Shape::Rect(f) if f.fill.a() > 0 && f.rect.min.distance(r.min) < 0.5 && f.rect.max.distance(r.max) < 0.5),
+            )
+        };
+        let (class_at, card_at) = (filled(&h, class_rect), filled(&h, card_rect));
+        assert!(card_at.is_some() && class_at > card_at, "{theme:?}: the class is painted after the card: {class_at:?} {card_at:?}");
+        let selected = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            s.view().selection.iter().filter_map(|o| s.doc().uuid(*o).ok()).map(|id| id.to_string()).collect::<Vec<_>>()
+        };
+        // Each press past egui's double-click window, so it is a click of its own.
+        for (at, takes) in [(class_rect.center(), &invoice), (on_tab, &invoice), (card_rect.max - egui::vec2(24.0, 24.0), &sales)] {
+            for _ in 0..40 {
+                h.step();
+            }
+            click(&mut h, at);
+            assert_eq!(selected(&h), std::slice::from_ref(takes), "{theme:?}: a press at {at:?}");
+        }
+        assert_eq!(history(&h), before, "{theme:?}: no step of its own");
+        assert!(*rows_now(&h) == *rows, "{theme:?}: the rows are as they were");
+        // A relationship dragged onto the class where it covers the tab ends at the class's card.
+        let party = owning_path_made(&mut h, "uml.class.add", serde_json::json!({ "package": root, "name": "Party" }));
+        let party_card = owning_path_made(&mut h, "diagram.place", place(&party, (700, 200, 120, 80)));
+        h.run();
+        h.state_mut().canvas.tool = crate::canvas::Tool::Connect("relationship");
+        let from = rect_of(&h, &format!("workspace.canvas.node.{party_card}")).center();
+        drag(&mut h, from, on_tab);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let end = |e: archforge_mof::Obj, prop| st.get(e, prop).ok().and_then(|v| v.as_ref()).and_then(|n| st.uuid(n).ok()).map(|id| id.to_string());
+        let lines: Vec<_> = st
+            .alive()
+            .filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::EDGE))
+            .map(|e| (end(e, archforge_diagram::edge::SOURCE), end(e, archforge_diagram::edge::TARGET)))
+            .collect();
+        assert_eq!(lines, [(Some(party_card), Some(class_card))], "{theme:?}: {:?}", h.state().canvas.notice);
+    }
+}
+
 #[test]
 fn a_click_on_a_packages_tab_selects_the_package_though_a_line_crosses_the_tab() {
     let (mut h, top, sales, card, _, _) = package_preview_harness(ThemeKind::Light);
@@ -10304,7 +10377,8 @@ fn a_packages_tab_drawn_over_another_card_takes_the_click_and_the_card_on_top_of
     let at = rect_of(&h, &format!("workspace.canvas.node.{card}.tab")).center();
     click(&mut h, at);
     assert_eq!(ids(&h), vec![under], "the class, drawn over the tab, takes the click");
-    // Sales placed again comes after the class, its tab drawn over the class's card: the tab takes it.
+    // Sales placed again comes after the class, but a package's card and tab stay under the other
+    // figures (AR-570): the class keeps the click.
     let card = {
         let s = h.state_mut().session.as_mut().unwrap();
         s.execute("diagram.unplace", &serde_json::json!({ "nodes": [card.to_string()] })).unwrap();
@@ -10323,7 +10397,7 @@ fn a_packages_tab_drawn_over_another_card_takes_the_click_and_the_card_on_top_of
     h.run();
     let at = rect_of(&h, &format!("workspace.canvas.node.{card}.tab")).center();
     click(&mut h, at);
-    assert_eq!(ids(&h), vec![sales], "the tab, drawn over the class, takes the click");
+    assert_eq!(ids(&h), vec![under], "the class, still drawn over the tab, takes the click");
     // A package nested in Sales's card, its tab over Sales's body: the nested tab, drawn after its
     // parent, takes the click.
     let (inner, inner_card) = {
