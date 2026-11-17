@@ -614,11 +614,14 @@ impl<D: Document, V: View<D>> Session<D, V> {
     }
 
     /// Runs a handler on the live document, recording, inside the guard. On any failure the
-    /// document, the view and the counter are as before and the error is given back.
+    /// document, the view and the counter are as before and the error is given back. The handler
+    /// runs on [`Session::token`]: a query while a gesture shows a preview runs on the preview's
+    /// own revision, which a token read before it never matches; a preview itself runs on the
+    /// state before the gesture, which it shows again first, so on that state's revision.
     fn run_recorded(&mut self, spec: &CommandSpec<D, V>, run: crate::cmd::RunFn<D, V>, params: &Params) -> Result<Ran<D::Delta>, EngineError> {
         let view0 = self.view.clone();
         let next0 = self.counter;
-        let at = crate::cmd::Revision { history: self.history, revision: self.id };
+        let at = self.token();
         let (doc, view, counter) = (&mut self.doc, &mut self.view, &mut self.counter);
         let result = guard(spec.id, || {
             doc.begin();

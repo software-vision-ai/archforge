@@ -309,6 +309,24 @@ fn the_command_answers_only_on_the_revision_its_caller_read() {
     }
 }
 
+/// While a gesture shows a preview, the command runs on the preview's own revision: a token read
+/// before it is refused as stale, though the preview left the session's revision as it was.
+#[test]
+fn a_token_read_before_a_preview_is_stale_during_it() {
+    let (mut st, model) = store();
+    add(&mut st, model, PACKAGE, 0x10);
+    let mut s = over(st);
+    let at = s.token();
+    let before = json!({ "package": id(0x10), "expected_revision": { "history": at.history, "revision": at.revision } });
+    s.begin_interaction("uml.package.diagram").unwrap();
+    s.preview(&json!({ "package": id(0x10) })).unwrap();
+    assert_eq!(s.revision(), at.revision);
+    let Err(EngineError::Failed { error, .. }) = s.execute(GET, &before) else { panic!("the token read before the preview matched it") };
+    assert_eq!(error.reason, Some(Reason::StaleRevision { expected: Some(at), current: s.token() }));
+    s.cancel().unwrap();
+    assert!(s.execute(GET, &before).is_ok(), "after a cancel, it matches again");
+}
+
 /// The command is a query: never journaled nor undoable, which the MCP server offers as a
 /// read-only tool (`readOnlyHint`), its `expected_revision` an object it may leave out.
 #[test]
