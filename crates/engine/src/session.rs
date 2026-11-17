@@ -666,7 +666,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
 
     /// Runs the registry's commit check on the change `delta` made, inside the guard, and gives
     /// the change back when it passes; a refusal or a panic takes the change back to `view0` and
-    /// `next0` and is given as the error. Without a check, it costs nothing.
+    /// `next0` and is given as the error. Without a check, nothing runs and nothing is copied.
     fn check_commit(&mut self, id: &str, delta: D::Delta, view0: &V, next0: u64) -> Result<D::Delta, EngineError> {
         let Some(check) = self.registry.commit_check() else { return Ok(delta) };
         let doc = &self.doc;
@@ -915,11 +915,14 @@ impl<D: Document, V: View<D>> Session<D, V> {
         let doc_changed = whole.is_some();
         let view_changed = self.view != view0;
         self.retain_valid_or_roll_back("a batch", &whole, view0.clone(), next0)?;
+        // The batch is checked whole, never command by command.
+        let whole = match whole {
+            Some(d) => Some(self.check_commit("a batch", d, &view0, next0)?),
+            None => None,
+        };
         self.chain = None;
         let mut cleared = false;
         if let Some(delta) = whole {
-            // The batch is checked whole, never command by command.
-            let delta = self.check_commit("a batch", delta, &view0, next0)?;
             let weight = match self.weigh("a batch", &delta) {
                 Ok(w) => w,
                 Err(e) => {
