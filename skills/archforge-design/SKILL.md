@@ -703,7 +703,12 @@ What is UML's own, beside the shared rules above.
   click, drag and double click. The card's body is a thumbnail of the package's own diagram on the
   page tint, 10 px in from the card, fitted and enlarged at most 50 %: mini cards with a name bar,
   a header line and a bar per row, nested packages with a tab, notes amber, and the lines; "Empty
-  diagram" when it shows nothing; below 50 % zoom the name centred instead. Only a package the
+  diagram" when it shows nothing; below 50 % zoom the name centred instead. Under the card, 6 px
+  down, its owning path (AR-565): `Owner: Commerce platform › Operations` in the 11 px caption
+  style and the secondary ink, at most as wide as the card, its front folding into `…` as
+  Properties' path selects do so the nearest owners stay; the whole sentence is its hover and its
+  accessible name, the id `workspace.canvas.node.{id}.path`. The root has none; below 50 % zoom
+  none is drawn. Only a package the
   diagram's package holds goes on it. Every package placed on a canvas has its own class diagram,
   made with it in one undo step (an existing one is reused); renaming the package renames a diagram
   still named like it. Selected, its card shows Open; ⌘↓ opens it too, and zooming in until it

@@ -98,6 +98,9 @@ pub enum Screen {
     WorkspacePackageParent,
     /// The root's diagram zoomed out to 10 %, its notice saying no package is above (AR-110).
     WorkspacePackageTop,
+    /// The root's diagram with packages of other branches beside Sales and Billing, each with its
+    /// owning path under its card, a long one folded at its front (AR-565).
+    WorkspacePackagePaths,
     /// The Diagrams explorer with its groups: two class diagrams, one of a nested package and
     /// open, and an ER diagram.
     WorkspaceDiagrams,
@@ -770,6 +773,11 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             shell.state.show_panel(crate::state::Panel::Properties);
             shell.panels.menu = Some(crate::panels::Menu::PackageParent);
         }
+    }
+    if screen == Screen::WorkspacePackagePaths {
+        shell.adopt_project();
+        sample_packages(&mut shell, false)?;
+        sample_package_paths(&mut shell)?;
     }
     if screen == Screen::WorkspacePackageTop {
         shell.adopt_project();
@@ -1811,6 +1819,32 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
         let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
         run(session, "view.select", json!({ "ids": [sales] }))?;
     }
+    shell.canvas.fit_pending = true;
+    Ok(())
+}
+
+/// Two packages of other branches placed on the open diagram, the root's, under Sales and Billing
+/// (AR-565): Archive in Operations, and one in a long branch, whose path folds at its front.
+fn sample_package_paths(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let top = crate::canvas::active_diagram(shell).and_then(|d| shell.session.as_ref()?.doc().uuid(d).ok());
+    let top = top.ok_or_else(|| "the sample needs its diagram open".to_string())?.to_string();
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let (w, h) = archforge_uml::PACKAGE_SIZE;
+    for (branch, name, x) in [(["Operations"].as_slice(), "Archive", 420), (["Integrations", "Customer relationships"].as_slice(), "Exports", 760)] {
+        let mut owner = run(session, "uml.model.root", json!({}))?;
+        for b in branch {
+            owner = run(session, "uml.package.add", json!({ "name": b, "parent": owner }))?;
+        }
+        let p = run(session, "uml.package.add", json!({ "name": name, "parent": owner }))?;
+        run(session, "diagram.place", json!({ "diagram": top, "element": p, "x": x, "y": 400, "width": w, "height": h }))?;
+    }
+    run(session, "view.select", json!({ "ids": [] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     shell.canvas.fit_pending = true;
     Ok(())
 }
