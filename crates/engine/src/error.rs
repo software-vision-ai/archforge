@@ -492,6 +492,9 @@ pub enum Reason {
     /// The class diagram `diagram` is not one of `package`'s own (each its name, or its id when it
     /// has none), so it cannot be that package's default diagram (AR-580).
     NotOwnDiagram { diagram: Box<str>, package: Box<str> },
+    /// The package `package` (its name, or its id when it has none) has no class diagram yet, so
+    /// it has no default diagram to open; one has to be made for it first (AR-582).
+    NoDiagramYet { package: Box<str> },
 }
 
 /// What is wrong with a package's default-diagram binding, in a [`Reason::InvalidBinding`].

@@ -9,7 +9,8 @@
 //! that stays because a package's binding names it as its default (AR-578).
 //!
 //! A package move or rename the root package or the package Types refuses is said here too (AR-563),
-//! as is a default diagram chosen for no package or from another element's diagrams (AR-580).
+//! as is a default diagram chosen for no package or from another element's diagrams (AR-580), and
+//! a package with no class diagram yet to open (AR-582).
 
 use archforge_engine::{BindingFault, EngineError, Reason};
 
@@ -58,8 +59,8 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 /// binding keeps, its own default or another element's diagram, with the choice to make first, a
 /// package move or rename refused because the root package stays or the package Types keeps the
 /// built-in types, and a package's default diagram chosen with no package, something that is none,
-/// or a class diagram of another element (AR-580); none for another reason, or for a kind of
-/// element the catalogues don't name.
+/// or a class diagram of another element (AR-580), and a package with no class diagram to open yet
+/// (AR-582); none for another reason, or for a kind of element the catalogues don't name.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
     Some(match reason {
@@ -110,6 +111,9 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
             &tr("{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram."),
             &[("diagram", diagram), ("package", package)],
         ),
+        Reason::NoDiagramYet { package } => {
+            fmt(&tr("{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first."), &[("package", package)])
+        }
         _ => return None,
     })
 }

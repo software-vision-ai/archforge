@@ -9497,6 +9497,15 @@ fn own_diagram(s: &mut archforge_notations::Session, package: archforge_mof::Uui
     d
 }
 
+/// The default diagram of the package `p`, the one its binding names; none when it has none yet or
+/// its binding is unsound.
+fn default_of(st: &archforge_mof::Store, p: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+    match archforge_uml::defaults::resolve(st, p) {
+        Ok(archforge_uml::defaults::DefaultDiagram::Bound(d)) => Some(d),
+        _ => None,
+    }
+}
+
 /// The packages, their diagrams and the default-diagram bindings in the open project, counted.
 fn packages_diagrams_bindings(h: &Harness<'static, Shell>) -> [usize; 3] {
     let st = h.state().session.as_ref().unwrap().doc();
@@ -9638,7 +9647,7 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
             let st = h.state().session.as_ref().unwrap().doc();
             let p = st.by_uuid(rename.entity).unwrap();
             assert_eq!(archforge_core::name_of(st, p), "Sales");
-            let d = archforge_uml::commands::diagram_of(st, p).expect("its own diagram");
+            let d = default_of(st, p).expect("its own diagram");
             assert_eq!(crate::diagrams::diagram_name(st, d), "Sales", "{theme:?}: named with the package");
             (rename.entity, st.uuid(d).unwrap())
         };
@@ -9733,8 +9742,93 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         again.run();
         let st = again.state().session.as_ref().unwrap().doc();
         let p = st.by_uuid(package).expect("the package");
-        assert_eq!(archforge_uml::commands::diagram_of(st, p).and_then(|d| st.uuid(d).ok()), Some(inner), "{theme:?}: the same diagram");
+        assert_eq!(default_of(st, p).and_then(|d| st.uuid(d).ok()), Some(inner), "{theme:?}: the same diagram");
     }
+}
+
+/// Open, ⌘↓ and zooming in enter a package through its default diagram, the one its binding names,
+/// never the first found: Sales's first diagram is made first, and its second is then chosen with
+/// `uml.package.default.set`. The query agents ask, `uml.package.diagram`, names that same diagram.
+/// Billing, with no diagram yet, opens nothing and makes nothing, the model as it was, and the
+/// notice under the path bar says why in the chosen language (AR-582). In light and dark.
+#[test]
+fn entry_reaches_the_bound_default_never_the_first_found_and_makes_nothing_without_one() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (top, [sales, billing], first, chosen, cards) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &json!({})).unwrap().value);
+            let top = own_diagram(s, root);
+            let sales = id(s.execute("uml.package.add", &json!({ "name": "Sales" })).unwrap().value);
+            let billing = id(s.execute("uml.package.add", &json!({ "name": "Billing" })).unwrap().value);
+            let first = own_diagram(s, sales);
+            let detail = json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Detail" });
+            let chosen = id(s.execute("diagram.add", &detail).unwrap().value);
+            let at = s.token();
+            let token = json!({ "history": at.history, "revision": at.revision });
+            let choose = json!({ "package": sales.to_string(), "diagram": chosen.to_string(), "expected_revision": token });
+            s.execute("uml.package.default.set", &choose).unwrap();
+            // Sales's card big enough for zooming in on it to make it cover the canvas.
+            let mut place = |p: archforge_mof::Uuid, x: i32, width: i32| {
+                let at = json!({ "diagram": top.to_string(), "element": p.to_string(), "x": x, "y": 160, "width": width, "height": 260 });
+                id(s.execute("diagram.place", &at).unwrap().value)
+            };
+            let cards = [place(sales, 120, 400), place(billing, 600, 240)];
+            (top, [sales, billing], first, chosen, cards)
+        };
+        let asked = h.state_mut().session.as_mut().unwrap().execute("uml.package.diagram", &json!({ "package": sales.to_string() }));
+        assert_eq!(asked.map(|o| id(o.value)).ok(), Some(chosen), "{theme:?}: agents ask for the same diagram, not the first {first}");
+        let active = |h: &Harness<'static, Shell>| h.state().canvas.active;
+        let back_on_top = |h: &mut Harness<'static, Shell>, p: archforge_mof::Uuid| {
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            rest(h);
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &json!({ "ids": [p.to_string()] })).unwrap();
+            h.state_mut().canvas.focused = true;
+            h.run();
+        };
+        let down = egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND;
+        // Open, ⌘↓ and zooming in on Sales each reach the chosen diagram.
+        back_on_top(&mut h, sales);
+        let at = rect_of(&h, &format!("workspace.canvas.node.{}.enter", cards[0])).center();
+        click(&mut h, at);
+        assert_eq!(active(&h), Some(chosen), "{theme:?}: Open");
+        back_on_top(&mut h, sales);
+        key(&mut h, egui::Key::ArrowDown, down);
+        assert_eq!(active(&h), Some(chosen), "{theme:?}: ⌘↓");
+        back_on_top(&mut h, sales);
+        h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{}", cards[0])).center()));
+        for _ in 0..40 {
+            if active(&h) != Some(top) {
+                break;
+            }
+            h.event(egui::Event::Zoom(1.2));
+            h.step();
+        }
+        assert_eq!(active(&h), Some(chosen), "{theme:?}: zooming in");
+        // Billing has none: Open and ⌘↓ stay, make nothing and say why, in German.
+        h.state_mut().state.language = "de".into();
+        back_on_top(&mut h, billing);
+        let rows = |h: &Harness<'static, Shell>| {
+            let (tables, junctions) = archforge_notations::storage();
+            let s = h.state().session.as_ref().unwrap();
+            (archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap(), s.undo_label().map(str::to_string))
+        };
+        let before = rows(&h);
+        let at = rect_of(&h, &format!("workspace.canvas.node.{}.enter", cards[1])).center();
+        click(&mut h, at);
+        let said = "Billing hat noch kein Klassendiagramm, daher gibt es nichts zu öffnen. Erstellen Sie zuerst ein Klassendiagramm dafür.";
+        assert_eq!((active(&h), h.state().canvas.notice.as_deref()), (Some(top), Some(said)), "{theme:?}: Open");
+        assert!(ids(&h).iter().any(|i| i == "workspace.canvas.notice"), "{theme:?}: the notice is shown");
+        h.state_mut().canvas.notice = None;
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::ArrowDown, down);
+        assert_eq!((active(&h), h.state().canvas.notice.as_deref()), (Some(top), Some(said)), "{theme:?}: ⌘↓");
+        assert!(rows(&h) == before, "{theme:?}: the model and its history as they were");
+    }
+    crate::i18n::set_language("en");
 }
 
 /// A package's card dragged over another package or an ancestor in the path bar only arranges the
@@ -9858,7 +9952,7 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         // Its two cards stay, their owner lines naming Billing; Billing's diagram gets none (AR-568).
         let inner = {
             let st = h.state().session.as_ref().unwrap().doc();
-            st.uuid(archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap()).unwrap()
+            st.uuid(default_of(st, st.by_uuid(billing).unwrap()).unwrap()).unwrap()
         };
         let lines_say = |h: &mut Harness<'static, Shell>, owner: &str| {
             let mut said = Vec::new();
@@ -10026,7 +10120,8 @@ fn a_package_moved_back_where_it_is_shown_keeps_its_one_card() {
         assert_eq!(parent(&h).as_deref(), Some("Billing"), "{theme:?}: in Billing");
         assert_eq!(shown(&h), vec![(top, card)], "{theme:?}: the one card it had, none placed");
         let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()), None, "{theme:?}: no diagram made");
+        let none_yet = Ok(archforge_uml::defaults::DefaultDiagram::NoDiagramYet);
+        assert_eq!(archforge_uml::defaults::resolve(st, st.by_uuid(billing).unwrap()), none_yet, "{theme:?}: no diagram made");
     }
 }
 
@@ -10078,7 +10173,8 @@ fn a_long_package_path_folds_its_first_ancestors_and_keeps_the_nearest_ones_clic
             parent = p.to_string();
             chain.push(p);
         }
-        let d = own_diagram(s, *chain.last().unwrap());
+        // Each with its own diagram, which the path bar leads back to; entry makes none (AR-582).
+        let d = chain.iter().map(|p| own_diagram(s, *p)).last().unwrap();
         (chain, d)
     };
     crate::canvas::open(h.state_mut(), deepest);

@@ -24,6 +24,9 @@ type S = Session<Store, ProjectView>;
 /// The query this file's command tests call.
 const GET: &str = "uml.package.default.get";
 
+/// The query entry asks for the diagram a package opens to (AR-582).
+const ENTRY: &str = "uml.package.diagram";
+
 /// An ER diagram's kind, `archforge_er::DIAGRAM_KIND`, which UML does not depend on.
 const ER_DIAGRAM: &str = "er";
 
@@ -222,12 +225,17 @@ fn id(n: u8) -> String {
     Uuid([n; 16]).to_string()
 }
 
-/// `uml.package.default.get` of `package` given `p` besides, checked to have changed nothing and
-/// left no undo step: its answer, or the refusal's parameter, reason and English.
-fn get(s: &mut S, package: &str, mut p: Json) -> Result<Json, (Option<String>, Option<Reason>, String)> {
+/// `uml.package.default.get` of `package` given `p` besides, checked as [`ask`] checks it.
+fn get(s: &mut S, package: &str, p: Json) -> Result<Json, (Option<String>, Option<Reason>, String)> {
+    ask(s, GET, package, p)
+}
+
+/// The query `cmd` of `package` given `p` besides, checked to have changed nothing and left no undo
+/// step: its answer, or the refusal's parameter, reason and English.
+fn ask(s: &mut S, cmd: &str, package: &str, mut p: Json) -> Result<Json, (Option<String>, Option<Reason>, String)> {
     let at = s.token();
     p["package"] = json!(package);
-    let out = s.execute(GET, &p);
+    let out = s.execute(cmd, &p);
     assert_eq!((s.token(), s.can_undo()), (at, false), "{p} changed nothing and left no undo step");
     match out {
         Ok(o) => Ok(o.value),
@@ -239,7 +247,8 @@ fn get(s: &mut S, package: &str, mut p: Json) -> Result<Json, (Option<String>, O
 /// Every state a package's default can be in, read through the command: the bound diagram with
 /// its binding, none yet, a profile's that does not apply, and each unsound binding refused about
 /// `package` as its fault, naming the ids concerned and the choice that mends it; never the first
-/// diagram found.
+/// diagram found. `uml.package.diagram`, which entry asks, gives the same bound diagram and refuses
+/// the same way, a package with no diagram yet as `NoDiagramYet`, and makes nothing (AR-582).
 #[test]
 fn the_command_answers_every_state_of_a_default_and_changes_nothing() {
     let (mut st, model) = store();
@@ -288,9 +297,16 @@ fn the_command_answers_every_state_of_a_default_and_changes_nothing() {
         (0x80, BindingFault::DeadTarget, format!("binding {})", id(0x82)), own),
     ] {
         let Err((key, reason, said)) = get(&mut s, &id(package), json!({})) else { panic!("{fault:?} answered") };
-        assert_eq!((key.as_deref(), reason), (Some("package"), Some(Reason::InvalidBinding(fault))), "{said}");
+        assert_eq!((key.as_deref(), reason.clone()), (Some("package"), Some(Reason::InvalidBinding(fault))), "{said}");
         assert!(said.contains(&named) && said.ends_with(mend), "{fault:?}: {said}");
+        assert_eq!(ask(&mut s, ENTRY, &id(package), json!({})), Err((key, reason, said)), "{fault:?}: entry refused alike");
     }
+    assert_eq!(ask(&mut s, ENTRY, &id(0x10), json!({})), Ok(json!({ "id": id(0x12) })), "entry opens the bound, not 0x11");
+    let none_yet = format!("the package {} has no class diagram yet, so none opens; make one for it with diagram.add first", id(0x20));
+    let no_diagram = Reason::NoDiagramYet { package: id(0x20).into() };
+    assert_eq!(ask(&mut s, ENTRY, &id(0x20), json!({})), Err((Some("package".into()), Some(no_diagram), none_yet)));
+    assert!(ask(&mut s, ENTRY, &id(0x30), json!({})).is_err(), "a profile opens no default");
+    assert_eq!(s.registry().is_query(ENTRY), Some(true), "offered as a read-only tool");
     let Err((key, None, said)) = get(&mut s, &id(0x11), json!({})) else { panic!("a diagram answered") };
     assert_eq!((key.as_deref(), said), (Some("package"), format!("{} is not a package", id(0x11))));
 }
@@ -324,8 +340,8 @@ fn a_token_read_before_a_preview_is_stale_during_it() {
     let mut s = over(st);
     let at = s.token();
     let before = json!({ "package": id(0x10), "expected_revision": { "history": at.history, "revision": at.revision } });
-    s.begin_interaction("uml.package.diagram").unwrap();
-    s.preview(&json!({ "package": id(0x10) })).unwrap();
+    s.begin_interaction("diagram.add").unwrap();
+    s.preview(&json!({ "kind": STRUCTURE_DIAGRAM, "element": id(0x10) })).unwrap();
     assert_eq!(s.revision(), at.revision);
     let Err(EngineError::Failed { error, .. }) = s.execute(GET, &before) else { panic!("the token read before the preview matched it") };
     assert_eq!(error.reason, Some(Reason::StaleRevision { expected: Some(at), current: s.token() }));
@@ -608,42 +624,38 @@ fn at(s: &S, id: &str) -> Obj {
     s.doc().by_uuid(Uuid::parse(id).unwrap()).unwrap()
 }
 
-/// A package's first class diagram is its default from the start: `diagram.add` and
-/// `uml.package.diagram` alike make the binding with it, a member of the project's Model naming
-/// the package and the diagram, which `uml.package.default.get` reads back. One undo step takes the
-/// diagram and its binding back together, and redo brings both back under their ids, as do the
-/// project's rows read back (AR-579).
+/// A package's first class diagram is its default from the start: `diagram.add` makes the binding
+/// with it, a member of the project's Model naming the package and the diagram, which
+/// `uml.package.default.get` reads back. One undo step takes the diagram and its binding back
+/// together, and redo brings both back under their ids, as do the project's rows read back (AR-579).
 #[test]
 fn a_packages_first_class_diagram_is_bound_as_its_default_in_the_same_step() {
     let mut s = over(store().0);
     let model = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
-    for (cmd, name) in [("diagram.add", "Sales"), ("uml.package.diagram", "Billing")] {
-        let package = made(&mut s, "uml.package.add", json!({ "name": name }));
-        let p = if cmd == "diagram.add" { json!({ "kind": STRUCTURE_DIAGRAM, "element": package }) } else { json!({ "package": package }) };
-        let before = rows_of(s.doc());
-        let d = made(&mut s, cmd, p);
-        let st = s.doc();
-        let [binding] = archforge_diagram::defaults::bindings_of(st, at(&s, &package))[..] else { panic!("{cmd}: not one binding") };
-        assert_eq!(st.container(binding).unwrap(), Some((model, archforge_core::model::MEMBER)), "{cmd}: a member of the Model");
-        assert_eq!(resolve(st, at(&s, &package)), Ok(DefaultDiagram::Bound(at(&s, &d))), "{cmd}");
-        let binding = st.uuid(binding).unwrap().to_string();
-        let answer = s.execute(GET, &json!({ "package": package })).unwrap().value;
-        assert_eq!(answer, json!({ "package": package, "state": "bound", "binding": binding, "diagram": d }), "{cmd}");
-        let after = rows_of(s.doc());
-        s.undo().unwrap();
-        assert!(rows_of(s.doc()) == before, "{cmd}: one undo step takes the diagram and its binding back");
-        s.redo().unwrap();
-        assert!(rows_of(s.doc()) == after, "{cmd}: redo brings both back under their ids");
-        // Saved and read back: the binding under its id, still naming both by theirs.
-        let mut back = bare();
-        rows::restore(&mut back, &after, &tables().0, &tables().1).unwrap();
-        let again = back.by_uuid(Uuid::parse(&binding).unwrap()).expect("the binding keeps its id");
-        assert_eq!(
-            resolve(&back, back.by_uuid(Uuid::parse(&package).unwrap()).unwrap()),
-            Ok(DefaultDiagram::Bound(back.by_uuid(Uuid::parse(&d).unwrap()).unwrap()))
-        );
-        assert!(back.container(again).unwrap().is_some() && rows_of(&back) == after, "{cmd}: a member still, the rows as written");
-    }
+    let package = made(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let before = rows_of(s.doc());
+    let d = made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": package }));
+    let st = s.doc();
+    let [binding] = archforge_diagram::defaults::bindings_of(st, at(&s, &package))[..] else { panic!("not one binding") };
+    assert_eq!(st.container(binding).unwrap(), Some((model, archforge_core::model::MEMBER)), "a member of the Model");
+    assert_eq!(resolve(st, at(&s, &package)), Ok(DefaultDiagram::Bound(at(&s, &d))));
+    let binding = st.uuid(binding).unwrap().to_string();
+    let answer = s.execute(GET, &json!({ "package": package })).unwrap().value;
+    assert_eq!(answer, json!({ "package": package, "state": "bound", "binding": binding, "diagram": d }));
+    let after = rows_of(s.doc());
+    s.undo().unwrap();
+    assert!(rows_of(s.doc()) == before, "one undo step takes the diagram and its binding back");
+    s.redo().unwrap();
+    assert!(rows_of(s.doc()) == after, "redo brings both back under their ids");
+    // Saved and read back: the binding under its id, still naming both by theirs.
+    let mut back = bare();
+    rows::restore(&mut back, &after, &tables().0, &tables().1).unwrap();
+    let again = back.by_uuid(Uuid::parse(&binding).unwrap()).expect("the binding keeps its id");
+    assert_eq!(
+        resolve(&back, back.by_uuid(Uuid::parse(&package).unwrap()).unwrap()),
+        Ok(DefaultDiagram::Bound(back.by_uuid(Uuid::parse(&d).unwrap()).unwrap()))
+    );
+    assert!(back.container(again).unwrap().is_some() && rows_of(&back) == after, "a member still, the rows as written");
 }
 
 /// Only a package's first class diagram is bound: a second leaves its default as it was, a
@@ -657,7 +669,7 @@ fn a_second_diagram_a_profiles_or_one_of_a_package_without_a_binding_binds_nothi
     let first = made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales }));
     let binding = archforge_diagram::defaults::bindings(s.doc());
     made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales, "name": "Second" }));
-    assert_eq!(s.execute("uml.package.diagram", &json!({ "package": sales })).unwrap().value["id"], first.as_str(), "the first is entered");
+    assert_eq!(s.execute(ENTRY, &json!({ "package": sales })).unwrap().value["id"], first.as_str(), "the first is entered");
     assert_eq!(resolve(s.doc(), at(&s, &sales)), Ok(DefaultDiagram::Bound(at(&s, &first))), "the second does not take over");
     let persistence = made(&mut s, "uml.profile.add", json!({ "name": "Persistence" }));
     made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": persistence }));
@@ -674,7 +686,8 @@ fn a_second_diagram_a_profiles_or_one_of_a_package_without_a_binding_binds_nothi
     let foreign = bind(&mut st, model, 0x41, billing, unbound);
     let mut s = over(st);
     made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": id(0x30) }));
-    made(&mut s, "uml.package.diagram", json!({ "package": id(0x30) }));
+    let Err(EngineError::Failed { error, .. }) = s.execute(ENTRY, &json!({ "package": id(0x30) })) else { panic!("entry made a diagram") };
+    assert_eq!(error.reason, Some(Reason::InvalidBinding(BindingFault::Missing)), "entry refuses, binding nothing");
     made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": id(0x40) }));
     assert_eq!(archforge_diagram::defaults::bindings(s.doc()), [foreign], "nothing bound silently");
     assert_eq!(resolve(s.doc(), orders), Err(BindingProblem::Missing));

@@ -507,8 +507,10 @@ click it to rename the package there. The tab grows as you type.
 - **Go in.** Select the package and choose **Open** on its card, or press ⌘↓ (Ctrl+↓). Or zoom in
   on it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or the + key after
   clicking on empty canvas. Once the package covers most of the view, its diagram opens. However you go in,
-  the package's diagram opens at 100 %, what it shows centred. A double click still renames the
-  package, as it does a class.
+  the package's diagram opens at 100 %, what it shows centred. It is the package's default
+  diagram, the first class diagram made for it. Going in never makes a diagram: a package with no
+  class diagram yet, or whose default diagram can't be read, stays closed, and a note under the
+  path bar says why. A double click still renames the package, as it does a class.
 - **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
   least zoom, 10 %. Reach 10 % and its parent's diagram opens, at 100 %, with the package you were
   in at its centre. Zoom out to 10 % again to go up another level. At your project's root there is

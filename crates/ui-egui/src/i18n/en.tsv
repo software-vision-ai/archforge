@@ -781,6 +781,7 @@ str		{package} has another element's diagram as its default, so that diagram sta
 str		No package is given. Give its id.	No package is given. Give its id.
 str		{name} is not a package.	{name} is not a package.
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.
+str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.
 str		This could not be done because of an internal error. Nothing was changed.	This could not be done because of an internal error. Nothing was changed.
 str		The text can't be empty.	The text can't be empty.
 str		It can't be longer than {max} characters.	It can't be longer than {max} characters.
