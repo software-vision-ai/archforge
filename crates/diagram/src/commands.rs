@@ -296,8 +296,9 @@ const REPLACEMENT: &str = "replacement_diagram";
 /// `uml.package.default.set` mends them, and the others go in the same step. Refused typed before
 /// anything changes: a default without one (AR-578), a binding of another element naming it, a
 /// replacement for a diagram that is no default, and a revision stale or, with a replacement,
-/// absent. Gives how many objects went, the ids of the diagram, the replacement and the binding
-/// kept, those two null for a plain removal, and those of the bindings removed.
+/// absent. Gives how many objects went, the bindings removed and their links among them, the ids
+/// of the diagram, the replacement and the binding kept, those two null for a plain removal, and
+/// those of the bindings removed.
 fn diagram_remove<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let named = !str_of(p, REPLACEMENT).is_empty();
@@ -342,10 +343,12 @@ fn diagram_remove<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
             if let (Some(b), Some(r)) = (kept, replacement) {
                 st.set(b, crate::default_diagram_binding::DEFAULT_DIAGRAM, Value::Ref(r))?;
             }
+            // A binding may be a trace link's end, so each goes with its links, all counted.
+            let mut gone: usize = 0;
             for b in &extra {
-                st.destroy(*b)?;
+                gone = gone.saturating_add(archforge_core::destroy_with_links(st, *b)?);
             }
-            archforge_core::destroy_with_links(st, d)
+            Ok(gone.saturating_add(archforge_core::destroy_with_links(st, d)?))
         })
         .map_err(fail)?;
     let (replacement, removed) = (replacement_id, bindings_removed);

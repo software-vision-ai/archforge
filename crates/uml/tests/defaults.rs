@@ -491,14 +491,14 @@ fn a_default_removed_with_a_replacement_retargets_its_binding_in_one_undo_step()
     s.execute("diagram.place", &json!({ "diagram": id(0x11), "element": order, "x": 40, "y": 60 })).unwrap();
     s.execute("diagram.place", &json!({ "diagram": id(0x12), "element": item })).unwrap();
     let shown = |s: &mut S| s.execute("diagram.get", &json!({ "diagram": id(0x11) })).unwrap().value;
-    let (before, layout) = (rows_of(s.doc()), shown(&mut s));
+    let (before, layout, alive) = (rows_of(s.doc()), shown(&mut s), s.doc().alive().count());
     let p = json!({ "diagram": id(0x12), "replacement_diagram": id(0x11), "expected_revision": token(&s) });
     let answer = s.execute("diagram.remove", &p).unwrap().value;
+    assert_eq!(answer["removed"], json!(alive - s.doc().alive().count()), "every object that went is counted");
     let (removed, replacement) = (answer["removed"].clone(), id(0x11));
     let expected =
         json!({ "removed": removed, "diagram": id(0x12), "replacement": replacement, "binding": id(0x13), "bindings_removed": [], "created": false });
     assert_eq!(answer, expected);
-    assert!(answer["removed"].as_u64().unwrap() >= 2, "the diagram and its box: {answer}");
     let st = s.doc();
     assert!(!st.is_alive(detail) && st.is_alive(at(&s, &item)), "the class stays in the model");
     assert_eq!((archforge_diagram::defaults::bindings_of(st, sales), resolve(st, sales)), (vec![binding], Ok(DefaultDiagram::Bound(first))));
@@ -512,18 +512,23 @@ fn a_default_removed_with_a_replacement_retargets_its_binding_in_one_undo_step()
 
 /// A package with several bindings, the one naming the default removed not the first by id, keeps
 /// the first by id, now naming the replacement, and loses the others in the same undo step, each
-/// named in the answer, as `uml.package.default.set` mends them (AR-580, AR-640).
+/// named in the answer, as `uml.package.default.set` mends them (AR-580, AR-640). One of them the
+/// end of a trace link goes with its link, and the count of objects removed takes in the bindings
+/// and the link.
 #[test]
 fn a_default_removed_with_a_replacement_mends_duplicate_bindings_as_choosing_one_does() {
     let (mut st, model, sales, first, detail, binding) = bound_sales();
     let kept = bind(&mut st, model, 0x05, sales, first);
+    let unlinked = bind(&mut st, model, 0x14, sales, first);
+    let trace = archforge_core::link(&mut st, model, archforge_core::LinkKind::Trace, binding, sales, None).unwrap();
     let mut s = over(st);
-    let before = rows_of(s.doc());
+    let (before, alive) = (rows_of(s.doc()), s.doc().alive().count());
     let p = json!({ "diagram": id(0x12), "replacement_diagram": id(0x11), "expected_revision": token(&s) });
     let answer = s.execute("diagram.remove", &p).unwrap().value;
-    assert_eq!((&answer["binding"], &answer["bindings_removed"]), (&json!(id(0x05)), &json!([id(0x13)])), "{answer}");
+    assert_eq!((&answer["binding"], &answer["bindings_removed"]), (&json!(id(0x05)), &json!([id(0x13), id(0x14)])), "{answer}");
+    assert_eq!(answer["removed"], json!(alive - s.doc().alive().count()), "the bindings and the link counted");
     let st = s.doc();
-    assert!(!st.is_alive(detail) && !st.is_alive(binding));
+    assert!(!st.is_alive(detail) && !st.is_alive(binding) && !st.is_alive(unlinked) && !st.is_alive(trace));
     assert_eq!((archforge_diagram::defaults::bindings_of(st, sales), resolve(st, sales)), (vec![kept], Ok(DefaultDiagram::Bound(first))));
     s.execute("edit.undo", &json!({})).unwrap();
     assert!(rows_of(s.doc()) == before, "one undo step brings both bindings back");
