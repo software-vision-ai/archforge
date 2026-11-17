@@ -196,8 +196,9 @@ the package's own live class diagrams, each refusal typed: no package or no diag
 ER diagram among them (`NotA`), and another element's diagram (`NotOwnDiagram`). The package's one
 binding is made as a member of the core's Model, or keeps its id and names the diagram; with
 several (`Duplicate`), the first by id is kept and names it and the others are removed, as the one
-explicit choice that mends them, which `default.get`'s refusal points to. The same diagram again
-changes nothing and records no undo step; otherwise it is one undo step. It answers
+explicit choice that mends them, which `default.get`'s refusal points to. Choosing the diagram
+the package's one binding already names changes nothing and records no undo step; anything else,
+a duplicate mended included, is one undo step. It answers
 `{package, binding, diagram, removed}`, `removed` the ids of the bindings it removed. A read-only
 session, as a version viewed, refuses it before it runs.
 Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
