@@ -1331,3 +1331,124 @@ fn histories_of_two_starts_do_not_meet() {
     seed_histories(entropy);
     assert!(session().history() > first, "seeding again gives no number twice");
 }
+
+thread_local! {
+    /// How many times this test's thread ran the commit check.
+    static CHECKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The commit check's refusal: the toy holds at most two items once a change is kept.
+fn too_many() -> CommandError {
+    CommandError::new("the project holds at most two items")
+}
+
+/// A commit check that counts its runs and refuses a state of more than two items.
+fn at_most_two(doc: &Doc, _: &Replace<Items>) -> Result<(), CommandError> {
+    CHECKS.with(|c| c.set(c.get() + 1));
+    if doc.0.len() > 2 { Err(too_many()) } else { Ok(()) }
+}
+
+/// A session whose registry checks every change with [`at_most_two`], holding `items` already.
+fn checked(items: &[&str]) -> S {
+    let registry = Registry::with_commit_check(specs(), at_most_two).unwrap();
+    CHECKS.with(|c| c.set(0));
+    Session::new(registry, Snapshotted::new(Items(items.iter().map(|i| i.to_string()).collect())), 1, Options::default())
+}
+
+/// The commit check's runs since the last call.
+fn checks() -> usize {
+    CHECKS.with(|c| c.replace(0))
+}
+
+/// Everything a refused commit must leave as it was, the counter, the revision, its token and the
+/// top undo step included.
+fn kept(s: &S) -> ((Doc, Selection, bool, bool, bool, usize), u64, u64, Revision, Option<String>) {
+    (state(s), s.counter(), s.revision(), s.token(), s.undo_label().map(str::to_string))
+}
+
+/// A command the commit check accepts is kept as before; one it refuses is rolled back whole,
+/// with no undo step, the counter, revision and token as they were, and the check's own refusal
+/// given back. Queries, view commands, undo and redo are not checked (AR-629).
+#[test]
+fn a_commit_check_keeps_a_command_it_accepts_and_takes_back_one_it_refuses() {
+    let mut s = checked(&[]);
+    s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    assert_eq!((checks(), s.undo_label()), (1, Some("Add item")), "an accepted change is kept");
+    s.execute("item.tag", &json!({})).unwrap();
+    assert_eq!(checks(), 1);
+    let before = kept(&s);
+    for (id, params) in [("item.add", json!({ "name": "c" })), ("item.tag", json!({}))] {
+        let Err(EngineError::Failed { id: refused, error }) = s.execute(id, &params) else { panic!("{id} was kept") };
+        assert_eq!((refused.as_str(), error), (id, too_many()));
+        assert_eq!((checks(), kept(&s)), (1, before.clone()), "{id}");
+    }
+    s.execute("item.count", &json!({})).unwrap();
+    s.execute("view.select", &json!({ "index": 0 })).unwrap();
+    s.undo().unwrap();
+    s.redo().unwrap();
+    assert_eq!(checks(), 0, "only a change about to be kept is checked");
+}
+
+/// A batch is checked once, as a whole: it may pass through a state the check refuses when it
+/// ends in one it accepts, and one that ends refused is taken back whole, the coalescing chain
+/// left as it was (AR-629).
+#[test]
+fn a_commit_check_sees_a_batch_once_at_its_end() {
+    let mut s = checked(&["a", "b"]);
+    s.batch("Swap", |b| {
+        b.execute("item.add", &json!({ "name": "c" }))?;
+        b.execute("item.add", &json!({ "name": "d" }))?;
+        b.execute("item.remove", &json!({ "index": 0 }))?;
+        b.execute("item.remove", &json!({ "index": 0 })).map(|_| ())
+    })
+    .unwrap();
+    assert_eq!((checks(), names(&s), s.undo_label()), (1, vec!["c", "d"], Some("Swap")));
+    let rename = |name: &str| json!({ "index": 0, "name": name, "coalesce": "k" });
+    s.execute("item.rename", &rename("x")).unwrap();
+    let before = kept(&s);
+    let refused = s.batch("Grow", |b| {
+        b.execute("item.remove", &json!({ "index": 0 }))?;
+        b.execute("item.tag", &json!({}))?;
+        b.execute("item.add", &json!({ "name": "e" })).map(|_| ())
+    });
+    let Err(EngineError::Failed { id, error }) = refused else { panic!("the batch was kept: {refused:?}") };
+    assert_eq!((id.as_str(), error), ("a batch", too_many()));
+    assert_eq!((checks(), kept(&s)), (2, before), "the rename and the batch");
+    s.execute("item.rename", &rename("y")).unwrap();
+    s.undo().unwrap();
+    assert_eq!(names(&s), ["c", "d"], "a refused batch leaves a gesture's chain open, as a failing command does");
+}
+
+/// A gesture's previews are never checked, only its commit; a commit the check refuses ends the
+/// gesture at the state before it, with no undo step (AR-629).
+#[test]
+fn a_commit_check_sees_a_gesture_only_when_it_commits() {
+    let mut s = checked(&["a"]);
+    s.begin_interaction("item.add").unwrap();
+    s.preview(&json!({ "name": "b" })).unwrap();
+    s.preview(&json!({ "name": "c" })).unwrap();
+    assert_eq!(checks(), 0, "a preview is not checked");
+    s.commit().unwrap();
+    assert_eq!((checks(), names(&s)), (1, vec!["a", "c"]));
+    let before = kept(&s);
+    s.begin_interaction("item.add").unwrap();
+    s.preview(&json!({ "name": "d" })).unwrap();
+    assert_eq!((checks(), names(&s)), (0, vec!["a", "c", "d"]), "a preview may show a state the check refuses");
+    let Err(EngineError::Failed { id, error }) = s.commit() else { panic!("the gesture was kept") };
+    assert_eq!((id.as_str(), error), ("item.add", too_many()));
+    assert_eq!((checks(), kept(&s), s.interacting()), (1, before, false));
+}
+
+/// Without a commit check, a change the check would refuse is kept, as before (AR-629).
+#[test]
+fn without_a_commit_check_every_change_is_kept_as_before() {
+    let mut s = session();
+    for name in ["a", "b", "c"] {
+        s.execute("item.add", &json!({ "name": name })).unwrap();
+    }
+    s.batch("More", |b| b.execute("item.add", &json!({ "name": "d" })).map(|_| ())).unwrap();
+    s.begin_interaction("item.add").unwrap();
+    s.preview(&json!({ "name": "e" })).unwrap();
+    s.commit().unwrap();
+    assert_eq!((names(&s), checks()), (vec!["a", "b", "c", "d", "e"], 0));
+}
