@@ -736,6 +736,10 @@ str		A column of an enum type takes no size.	枚举类型的列不能指定大�
 str		{name} follows no column.	{name} 未跟随任何列。
 plural		The table has {n} column.	该表有 {n} 个列。
 str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
+str		The model's root package holds all the other packages, so it stays where it is.	模型的根包包含所有其他包，因此它会留在原处。
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	{types} 包存放内置类型：在存放它们期间，它保留名称并留在根包之下。
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	已有存放内置类型的 {types} 包；不能在它旁边再放第二个。
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	该包中有名为 {name} 的{what}，这是内置类型的名称，在 {types} 中会表示该类型。请先重命名 {name}。
 str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
 str		There is nothing to undo.	没有可撤销的操作。
 str		There is nothing to redo.	没有可重做的操作。

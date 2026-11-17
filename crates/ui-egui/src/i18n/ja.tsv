@@ -736,6 +736,10 @@ str		A column of an enum type takes no size.	列挙型の列にはサイズを�
 str		{name} follows no column.	{name} はどの列にも従っていません。
 plural		The table has {n} column.	テーブルには {n} 個の列があります。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
+str		The model's root package holds all the other packages, so it stays where it is.	モデルのルートパッケージは他のすべてのパッケージを含むため、今の場所から移動しません。
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	{types} パッケージは組み込み型を保持しています。保持している間は名前を変えず、ルートパッケージの下に残ります。
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	組み込み型を保持する {types} パッケージがすでにあります。その隣に 2 つ目を置くことはできません。
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	このパッケージには {name} という名前の{what}があります。これは組み込み型の名前で、{types} ではその型を意味することになります。先に {name} の名前を変更してください。
 str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
 str		There is nothing to undo.	元に戻す操作はありません。
 str		There is nothing to redo.	やり直す操作はありません。

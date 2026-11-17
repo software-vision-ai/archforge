@@ -117,6 +117,17 @@ pub enum Reason {
     DependsOnItself { kind: &'static str },
     /// A package would go into itself or a package it holds.
     PackageIntoItself,
+    /// The model's root package would move: it holds the other packages and stays where it is.
+    RootPackageStays,
+    /// The package Types would take another name or leave its place directly under the root
+    /// package, while it keeps the built-in types.
+    TypesPackageKept,
+    /// A package would become a second package Types directly under the root package, beside the
+    /// one that keeps the built-in types.
+    TypesPackageExists,
+    /// A package would become the package Types while it holds an element of `kind` named `name`, a
+    /// built-in type's name, which would then be taken for that built-in type.
+    HoldsBuiltInName { kind: &'static str, name: String },
     /// A name is empty.
     NameEmpty,
     /// A text that has to say something, as a note's, is empty.
