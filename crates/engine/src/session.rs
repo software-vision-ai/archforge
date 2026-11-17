@@ -139,6 +139,9 @@ struct Interaction<X, V> {
     view: V,
     next: u64,
     last: Option<(Params, Value, X)>,
+    /// The revision of the preview shown, a fresh one no state the history keeps ever has; none
+    /// while the state before the gesture shows.
+    shown: Option<u64>,
 }
 
 /// What a recorded run produced.
@@ -456,6 +459,15 @@ impl<D: Document, V: View<D>> Session<D, V> {
     /// state's back, so a host can tell when there is something new to write.
     pub fn revision(&self) -> u64 {
         self.id
+    }
+
+    /// The point a caller reading the model now names as its `expected_revision`: this history and
+    /// the revision. While a gesture shows a preview, which leaves [`Session::revision`] as it was,
+    /// the revision is the preview's own, which no state the history keeps ever has: a token read
+    /// from a preview never matches, whether the gesture is then committed or cancelled.
+    pub fn token(&self) -> crate::cmd::Revision {
+        let shown = self.interaction.as_ref().and_then(|it| it.shown);
+        crate::cmd::Revision { history: self.history, revision: shown.unwrap_or(self.id) }
     }
 
     /// Whether the document differs from the state last marked saved.
@@ -931,7 +943,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         }
         self.check_enabled(&spec)?;
         self.chain = None;
-        self.interaction = Some(Interaction { id: spec.id, view: self.view.clone(), next: self.counter, last: None });
+        self.interaction = Some(Interaction { id: spec.id, view: self.view.clone(), next: self.counter, last: None, shown: None });
         Ok(())
     }
 
@@ -941,6 +953,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         let id = it.id;
         let (view, next) = (it.view.clone(), it.next);
         let last = it.last.take().map(|(_, _, d)| d);
+        it.shown = None;
         self.roll_back(id, last, view, next)
     }
 
@@ -961,8 +974,10 @@ impl<D: Document, V: View<D>> Session<D, V> {
             return Err(failed(spec.id, COUNTER_ONLY));
         }
         self.retain_valid_or_roll_back(spec.id, &ran.delta, view0, next0)?;
+        let shown = ran.delta.is_some().then(|| self.fresh_id());
         if let (Some(it), Some(delta)) = (self.interaction.as_mut(), ran.delta) {
             it.last = Some((p, ran.value.clone(), delta));
+            it.shown = shown;
         }
         Ok(ran.value)
     }

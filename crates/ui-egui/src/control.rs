@@ -284,7 +284,8 @@ pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Opti
 }
 
 /// The open project, its history (which undo history it is, and its revision there, together what
-/// a command's `expected_revision` names) and what is selected and shown; `viewing` names the version in
+/// a command's `expected_revision` names; while a gesture shows a preview, the preview's revision,
+/// which never matches) and what is selected and shown; `viewing` names the version in
 /// view, whether it is still being read (the work still shows then), and whether the work has
 /// unsaved changes, which the rest of the answer does not describe once the version shows.
 fn inspect(shell: &Shell) -> Value {
@@ -302,8 +303,8 @@ fn inspect(shell: &Shell) -> Value {
         })),
         "project": shell.project.as_ref().map(|p| json!({ "name": p.name, "path": p.path.display().to_string() })),
         "branch": shell.project.as_ref().and_then(|p| shell.services.projects.as_ref()?.current_branch(&p.path)),
-        "history": session.history(),
-        "revision": session.revision(),
+        "history": session.token().history,
+        "revision": session.token().revision,
         "unsaved": session.is_dirty() || shell.typing_unkept(),
         "saving": shell.is_saving(),
         "save_error": shell.save_error,
@@ -665,7 +666,9 @@ mod tests {
     }
 
     /// The project state names the undo history beside the revision, together what a command's
-    /// `expected_revision` takes: two projects at the same revision differ in their history (AR-574).
+    /// `expected_revision` takes: two projects at the same revision differ in their history, and
+    /// while a gesture shows a preview the revision is the preview's, not the one it previews from
+    /// (AR-574).
     #[test]
     fn the_project_state_names_its_history_beside_its_revision() {
         let [one, two] = [project(), project()].map(|mut shell| {
@@ -676,6 +679,13 @@ mod tests {
         });
         assert_eq!(one["revision"], two["revision"]);
         assert_ne!(one["history"], two["history"]);
+        let mut shell = project();
+        let session = shell.session.as_mut().unwrap();
+        let committed = session.revision();
+        session.begin_interaction("er.schema.add").unwrap();
+        session.preview(&json!({ "name": "shop" })).unwrap();
+        let state = answer_request(&mut shell, &request("document.inspect", json!({}), true, true)).unwrap();
+        assert_ne!(state["revision"].as_u64(), Some(committed), "a preview names its own revision");
     }
 
     #[test]

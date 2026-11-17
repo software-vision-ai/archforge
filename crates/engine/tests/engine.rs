@@ -172,7 +172,7 @@ fn specs() -> Vec<CommandSpec<Doc, Selection>> {
             "Rename guarded",
             &["Item"],
             None,
-            "index: integer, 0..1000; which item\nname: string; its new name\nexpected_revision: object; the history and revision read",
+            "index: integer, 0..1000; which item\nname: string; its new name\nexpected_revision: object?; the history and revision read",
             has_items,
             guarded
         ),
@@ -1171,7 +1171,8 @@ fn a_session_is_not_made_read_only_during_a_gesture() {
 
 /// The point in `s`'s history it is at now, as a caller reads it and as a refusal names it.
 fn read(s: &S) -> (Value, Revision) {
-    (json!({ "history": s.history(), "revision": s.revision() }), Revision { history: s.history(), revision: s.revision() })
+    let at = s.token();
+    (json!({ "history": at.history, "revision": at.revision }), at)
 }
 
 /// `item.guarded` renaming item 0 to `name` for the revision `token`.
@@ -1180,8 +1181,8 @@ fn guarded_call(s: &mut S, name: &str, token: Value) -> Result<archforge_engine:
 }
 
 /// A change made for the revision its caller read runs. One made for another revision, another
-/// history or a token of another shape is refused, typed, about `expected_revision`; one without the
-/// token is refused before it runs. None leaves an undo step (AR-574).
+/// history, a token of another shape, a null one or none is refused, typed, about
+/// `expected_revision`, and leaves no undo step (AR-574).
 #[test]
 fn a_change_runs_only_on_the_revision_its_caller_read() {
     let mut s = session();
@@ -1194,19 +1195,17 @@ fn a_change_runs_only_on_the_revision_its_caller_read() {
         (json!({ "history": other.history, "revision": other.revision }), Some(other)),
         (json!({ "history": at.history }), None),
         (json!({ "history": at.history, "revision": -1 }), None),
+        (Value::Null, None),
     ] {
         let before = state(&s);
         let Err(EngineError::Failed { error, .. }) = guarded_call(&mut s, "b", given.clone()) else { panic!("{given} ran") };
-        assert_eq!(
-            (error.key.as_deref(), error.reason),
-            (Some("expected_revision"), Some(Reason::StaleRevision { expected, current: at })),
-            "{given}"
-        );
+        let stale = Reason::StaleRevision { expected, current: at };
+        assert_eq!((error.key.as_deref(), error.reason), (Some("expected_revision"), Some(stale)), "{given}");
         assert_eq!(state(&s), before, "{given}");
     }
     let before = state(&s);
-    let missing = s.execute("item.guarded", &json!({ "index": 0, "name": "b" }));
-    assert!(matches!(missing, Err(EngineError::MissingKey { ref key }) if key == "expected_revision"), "{missing:?}");
+    let Err(EngineError::Failed { error, .. }) = s.execute("item.guarded", &json!({ "index": 0, "name": "b" })) else { panic!("ran without") };
+    assert_eq!(error.reason, Some(Reason::StaleRevision { expected: None, current: at }));
     assert_eq!(state(&s), before);
     guarded_call(&mut s, "b", token.clone()).unwrap();
     assert_eq!((names(&s), s.undo_label()), (vec!["b"], Some("Rename guarded")));
@@ -1227,6 +1226,38 @@ fn a_token_from_another_session_is_refused() {
     assert_eq!(state(&two), before);
     let own = read(&two).0;
     guarded_call(&mut two, "b", own).unwrap();
+}
+
+/// A token read while a gesture shows a preview names that preview, never the state it previews
+/// from: once the gesture is cancelled it is refused, though the preview left the revision as it
+/// was, and so after a commit; a token read before the gesture, or while a refused preview shows the
+/// state before, matches after a cancel (AR-574).
+#[test]
+fn a_token_read_from_a_preview_never_matches() {
+    let mut s = session();
+    for name in ["a", "b"] {
+        s.execute("item.add", &json!({ "name": name })).unwrap();
+    }
+    let (before, at) = read(&s);
+    s.begin_interaction("item.remove").unwrap();
+    s.preview(&json!({ "index": 0 })).unwrap();
+    let (previewed, shown) = read(&s);
+    assert_eq!((names(&s), s.revision()), (vec!["b"], at.revision), "the preview leaves the revision as it was");
+    assert_ne!(shown, at);
+    s.preview(&json!({ "index": 5 })).unwrap_err();
+    assert_eq!(read(&s).1, at, "a refused preview shows the state before again");
+    s.preview(&json!({ "index": 0 })).unwrap();
+    s.cancel().unwrap();
+    let held = state(&s);
+    assert!(guarded_call(&mut s, "x", previewed).is_err());
+    assert_eq!(state(&s), held);
+    guarded_call(&mut s, "x", before).unwrap();
+    assert_eq!(names(&s), ["x", "b"]);
+    s.begin_interaction("item.remove").unwrap();
+    s.preview(&json!({ "index": 0 })).unwrap();
+    let previewed = read(&s).0;
+    s.commit().unwrap();
+    assert!(guarded_call(&mut s, "y", previewed).is_err(), "nor after a commit");
 }
 
 /// Undo takes the model back to the earlier revision, so a token read before the undone change

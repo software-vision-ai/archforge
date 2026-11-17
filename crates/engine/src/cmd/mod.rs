@@ -32,8 +32,9 @@ pub struct Revision {
 }
 
 /// The parameter a command that changes the model only on the revision its caller read takes:
-/// `{ "history": h, "revision": r }`, as the project state gives them. It is required only by the
-/// commands that adopt it.
+/// `{ "history": h, "revision": r }`, as the project state gives them ([`crate::Session::token`]).
+/// Such a command declares it `object?` and calls [`expected_revision`] first, so a token left out
+/// or null reaches the check and is refused typed, not as a missing parameter.
 pub const EXPECTED_REVISION: &str = "expected_revision";
 
 impl<D, V> Ctx<'_, D, V> {
@@ -53,7 +54,8 @@ impl<D, V> Ctx<'_, D, V> {
 
 /// Refuses, typed as [`Reason::StaleRevision`], unless `params` holds the
 /// [`EXPECTED_REVISION`] the call runs on: its history and its revision both, as whole numbers.
-/// Left out, or not of that shape, it is refused alike, naming the revision the call runs on. Like
+/// Left out, null, or not of that shape, it is refused alike (none expected), naming the revision
+/// the call runs on. Like
 /// every refusal it changes nothing and leaves no undo step. A journal entry that holds one is
 /// refused when replayed in another session, whose history differs.
 pub fn expected_revision<D, V>(ctx: &Ctx<'_, D, V>, params: &Params) -> Result<(), CommandError> {
