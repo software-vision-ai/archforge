@@ -920,6 +920,59 @@ fn a_version_reports_the_binding_problems_it_was_saved_with() {
     project.close().unwrap();
 }
 
+/// A version saved before Orders moved, read through Dolt, keeps Orders in Sales with its one
+/// appearance, while the work has moved it into Billing and placed it on Billing's diagram;
+/// compared, the two show the move in the model and the placement in the diagrams. Reading
+/// changes nothing (Decision 26, AR-573).
+#[test]
+fn a_version_from_before_a_package_move_keeps_its_owner_and_appearances() {
+    let env = Env::new("moved");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Moved", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let mut s = archforge_notations::new_project_session("Moved", ids(0)).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let mut diagram =
+        |of: &str, name: &str| run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": of, "name": name }));
+    let (sales_d, billing_d) = (diagram(&sales, "Sales"), diagram(&billing, "Billing"));
+    let shown = run(&mut s, "diagram.place", json!({ "diagram": sales_d, "element": orders, "x": 40, "y": 60 }));
+    let saved = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &saved).unwrap();
+    assert!(project.commit("Before the move").unwrap());
+    let version = head_of(&project);
+    run(&mut s, "uml.package.move", json!({ "package": orders, "to": billing }));
+    let placed = run(&mut s, "diagram.place", json!({ "diagram": billing_d, "element": orders, "x": 300, "y": 40 }));
+    let work = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &work).unwrap();
+
+    let before = untouched(&project);
+    let (then, now) = (project.read_model_at(&schema, &version).unwrap(), project.read_model(&schema).unwrap());
+    // Its owner, and each appearance as its node and the diagram holding it, in id order.
+    let read = |rows: &rows::Rows| {
+        let mut st = archforge_notations::store(ids(1 << 40)).unwrap();
+        rows::restore(&mut st, rows, schema.tables(), &schema.junctions()).unwrap();
+        let package = st.by_uuid(Uuid::parse(&orders).unwrap()).unwrap();
+        let owner = archforge_uml::commands::package_of(&st, package).map(|p| archforge_core::name_of(&st, p));
+        let at = |n| [n, archforge_diagram::diagram_of(&st, n).unwrap()].map(|o| st.uuid(o).unwrap().to_string());
+        let mut nodes: Vec<_> = archforge_diagram::views_of(&st, package).2.into_iter().map(at).collect();
+        nodes.sort();
+        (rows_of(&st, &schema), owner, nodes)
+    };
+    assert_eq!(read(&then), (saved, Some("Sales".into()), vec![[shown.clone(), sales_d.clone()]]), "the version as it was saved");
+    assert_eq!(read(&now), (work, Some("Billing".into()), vec![[shown, sales_d], [placed.clone(), billing_d]]), "the work moved and placed");
+    let found = archforge_notations::differences::classified(&then, &now, |_| {}).unwrap();
+    let areas: Vec<_> = found.iter().map(|d| (d.id.to_string(), d.area, d.kind)).collect();
+    use archforge_notations::differences::{Area, ChangeKind};
+    assert_eq!(
+        areas,
+        [(sales, Area::Model, ChangeKind::Changed), (billing, Area::Model, ChangeKind::Changed), (placed, Area::Diagram, ChangeKind::Added)]
+    );
+    assert_eq!(untouched(&project), before, "reading a version and the work changes nothing");
+    project.close().unwrap();
+}
+
 #[test]
 fn a_long_text_in_any_script_is_written_and_read_back_whole() {
     let env = Env::new("long");
