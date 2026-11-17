@@ -187,6 +187,9 @@ revision of its session, refused as `StaleRevision` on another; it changes nothi
 undo step.
 Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
 diagrams up and its parent's binding stays; a top-level one takes the bindings of what it holds too.
+An element that would take along a diagram the binding of an element that stays names (unsoundly,
+`WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
+binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578).
 
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.
@@ -203,7 +206,9 @@ made, none yet, missing, duplicate, a wrong-kind and a foreign target, a dead ta
 rows (a dangling id refused as they are read), a profile; a store's problems in id order, the same
 read back. `tests/packages.rs` (AR-577): bound packages removed nested, under the root and with no
 parent, each one undo step bringing the bindings back under their ids; a diagram that is no default
-removed alone. `tests/skills.rs`: skills on a package, a class, an
+removed alone. `tests/defaults.rs` (AR-578): a default diagram's removal refused with no undo step,
+another diagram's leaving the binding, and a foreign binding keeping its diagram and the package
+that holds it, while a nested package that holds one hands it up and goes. `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and

@@ -748,7 +748,9 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
 /// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
 /// top-level package takes them along. Either takes its default-diagram binding along, with no
-/// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). A classifier takes the relationships that touch it along,
+/// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). An
+/// element that would take along a diagram another element's binding names, unsoundly, is refused
+/// typed as [`Reason::DefaultDiagramOf`] (AR-578). A classifier takes the relationships that touch it along,
 /// and an association class among them takes its own ([`going_with`]); a member's type that goes is
 /// dropped from what had it, and so is a default that is a literal that goes (AR-126), as the
 /// property's own type would be. An element a constraint names leaves the constraint's elements, and
@@ -828,6 +830,10 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             && let Some(parent) = package_of(store, *o)
         {
             hand_up_problem(store, *o, parent)?;
+        } else if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, *o, "ids") {
+            // A diagram that would go stays while the binding of an element that stays names it,
+            // and so does what it is of (AR-578); a nested package hands its diagrams up instead.
+            return Err(refused);
         }
     }
     // A surviving template parameter's default, or a binding's argument, that would no longer

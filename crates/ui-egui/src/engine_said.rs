@@ -5,11 +5,12 @@
 //! engine refuses before the command runs, a command that stopped on an internal error) as one
 //! sentence, so no engine text reaches the user. The engine's own typed refusal, a change made for a
 //! revision of the model other than the one it would run on (AR-574), is said here too, as is a
-//! package's default diagram that cannot be read for its unsound binding (AR-576).
+//! package's default diagram that cannot be read for its unsound binding (AR-576), and a diagram
+//! that stays because a package's binding names it as its default (AR-578).
 
 use archforge_engine::{BindingFault, EngineError, Reason};
 
-use crate::i18n::tr;
+use crate::i18n::{fmt, tr};
 
 /// Why a command is not available now, in the user's words, by the reason its availability check
 /// gives; none for a reason the catalogues don't hold, which the engine's English then says.
@@ -50,7 +51,9 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 
 /// A refusal the engine types itself in the user's words: a change made for another revision of the
 /// model than the one it would run on, or for none, and a package's default diagram that cannot be
-/// read, by what is wrong with its binding and the choice that mends it; none for another reason.
+/// read, by what is wrong with its binding and the choice that mends it, and a diagram a package's
+/// binding keeps, its own default or another element's diagram, with the choice to make first;
+/// none for another reason.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     Some(match reason {
         Reason::StaleRevision { expected: Some(_), .. } => {
@@ -74,6 +77,14 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
         Reason::InvalidBinding(BindingFault::WrongOwner) => {
             tr("The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.")
         }
+        Reason::DefaultDiagramOf { package, fault: None } => fmt(
+            &tr("This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first."),
+            &[("package", package)],
+        ),
+        Reason::DefaultDiagramOf { package, fault: Some(BindingFault::WrongOwner) } => fmt(
+            &tr("{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first."),
+            &[("package", package)],
+        ),
         _ => return None,
     })
 }

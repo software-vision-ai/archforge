@@ -1,9 +1,12 @@
 //! The default-diagram bindings a store holds, read without judging them: which name an element
 //! as their owner and which name a diagram as its default. What a binding may name, and what is
-//! wrong with one, is the notation's to say (UML's `defaults`).
+//! wrong with one, is the notation's to say (UML's `defaults`). A diagram a binding names stays
+//! until that binding goes or names another (AR-578).
 
+use archforge_engine::{BindingFault, CommandError, Reason};
 use archforge_mof::{Obj, PropId, Store};
 
+use crate::commands::name_or_id;
 use crate::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 
 /// The bindings whose `ownerElement` is `owner`, in handle order: one for an element with a
@@ -25,4 +28,38 @@ pub fn bindings(store: &Store) -> Vec<Obj> {
 /// The objects referring to `target` through the single-valued `prop`, so each once.
 fn referring(store: &Store, target: Obj, prop: PropId) -> Vec<Obj> {
     store.referrers(target).into_iter().filter(|(_, p)| *p == prop).map(|(src, _)| src).collect()
+}
+
+/// Why the diagram `d` stays, as a refusal about `key`, while a binding of an element for which
+/// `going` is false names it as a default (AR-578): the diagram's own element's binding, whose
+/// default another diagram has to replace first, or another element's, which names it unsoundly
+/// ([`BindingFault::WrongOwner`]), which is named first; none when no such binding names it.
+pub fn diagram_removal_problem(store: &Store, d: Obj, key: &str, going: impl Fn(Obj) -> bool) -> Option<CommandError> {
+    let of = |o: Obj, prop: PropId| store.get(o, prop).ok().and_then(|v| v.as_ref());
+    let element = of(d, crate::diagram::ELEMENT);
+    let named: Vec<(Obj, Obj)> =
+        bindings_to(store, d).into_iter().filter_map(|b| of(b, OWNER_ELEMENT).filter(|o| !going(*o)).map(|o| (b, o))).collect();
+    // Another element's binding first: choosing another default for the diagram's own leaves it.
+    let (binding, owner) = named.iter().find(|(_, o)| Some(*o) != element).or(named.first()).copied()?;
+    let id = |o: Obj| store.uuid(o).map(|u| u.to_string()).unwrap_or_default();
+    let (package, fault) = (name_or_id(store, owner), (element != Some(owner)).then_some(BindingFault::WrongOwner));
+    let message = match fault {
+        None => format!("the diagram {} is the default diagram of {package}; choose another default diagram for it first", id(d)),
+        Some(_) => format!(
+            "the default-diagram binding {} of {package} names the diagram {}, which is another element's; choose a diagram of its own as its default first",
+            id(binding),
+            id(d)
+        ),
+    };
+    Some(CommandError::about(key, message).because(Reason::DefaultDiagramOf { package: package.into(), fault }))
+}
+
+/// Why removing the views of `element` and everything it contains ([`crate::remove_views_of`])
+/// is refused, as about `key`: one of their diagrams is the default of an element outside them,
+/// which keeps it ([`diagram_removal_problem`]); the bindings they own go along with them (AR-577).
+/// None when nothing stands in the way, or `element` is gone.
+pub fn views_removal_problem(store: &Store, element: Obj, key: &str) -> Option<CommandError> {
+    let elements = crate::within(store, element).ok()?;
+    let diagrams = elements.iter().flat_map(|e| crate::views_of(store, *e).0);
+    diagrams.into_iter().find_map(|d| diagram_removal_problem(store, d, key, |o| elements.contains(&o)))
 }
