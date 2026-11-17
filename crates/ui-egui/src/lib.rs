@@ -745,8 +745,11 @@ pub enum CreateError {
         detail: String,
     },
     /// The project holds diagrams of kinds Archforge does not support, such as an earlier version
-    /// stored: their `kinds`, as stored, in the order found. Nothing opened, so the projects shown
-    /// stay as they were; the window says it with `unsupported_kinds`.
+    /// stored: their `kinds`, as stored, in the order found. A host that checks the kinds before it
+    /// opens anything sends it; then nothing opened, so the projects shown stay as they were, and
+    /// the window says it with `unsupported_kinds`. A host that hands the rows over unchecked
+    /// leaves the refusal to the session build instead, as [`SessionError::UnsupportedKinds`],
+    /// worded the same way in the status bar once the project's tab is open.
     UnsupportedKinds {
         kinds: Vec<String>,
     },
