@@ -495,6 +495,12 @@ pub enum Reason {
     /// The package `package` (its name, or its id when it has none) has no class diagram yet, so
     /// it has no default diagram to open; one has to be made for it first (AR-582).
     NoDiagramYet { package: Box<str> },
+    /// The default diagram being removed is named as its own replacement; another of its
+    /// element's diagrams has to be named (AR-640).
+    ReplacementIsRemoved,
+    /// A replacement is named for the diagram `diagram` (its name, or its id when it has none),
+    /// which is no element's default, so it is removed without one (AR-640).
+    ReplacementNotNeeded { diagram: Box<str> },
 }
 
 /// What is wrong with a package's default-diagram binding, in a [`Reason::InvalidBinding`].

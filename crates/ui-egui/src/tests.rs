@@ -6672,7 +6672,8 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// its own default or another element's diagram, with the package named (AR-578). Each package move
 /// or rename the root package or the package Types refuses is said in its own sentence (AR-563), as
 /// is a default diagram chosen for no package, for something that is none or among another
-/// element's diagrams (AR-580).
+/// element's diagrams (AR-580), and a default's replacement that is the diagram removed or is
+/// named for a diagram that is no default (AR-640).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -6748,6 +6749,12 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
             "Rechnungen ist keines der Klassendiagramme von Vertrieb. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.";
         let chosen_said = ["Es ist kein Paket angegeben. Geben Sie seine ID an.", "Vertrieb ist kein Paket.", theirs].map(|s| Some(s.to_string()));
         assert_eq!(chosen, chosen_said, "{theme:?}");
+        // A replacement that is the diagram removed, or one named for a diagram that is no default (AR-640).
+        use archforge_engine::Reason::{ReplacementIsRemoved, ReplacementNotNeeded};
+        let replaced = [ReplacementIsRemoved, ReplacementNotNeeded { diagram: "Rechnungen".into() }].map(|r| crate::panels::said(&r));
+        let itself = "Ein Diagramm kann sich beim Entfernen nicht selbst ersetzen. Wählen Sie ein anderes Diagramm als Ersatz.";
+        let not_needed = "Rechnungen ist kein Standarddiagramm und wird daher ohne Ersatz entfernt.";
+        assert_eq!(replaced, [itself, not_needed].map(|s| Some(s.to_string())), "{theme:?}");
         // A package move or rename the root package or the package Types refuses, each its own sentence.
         use archforge_engine::Reason::{HoldsBuiltInName, RootPackageStays, TypesPackageExists, TypesPackageKept};
         let held = HoldsBuiltInName { kind: "class", name: "String".into() };

@@ -41,7 +41,14 @@ naming a diagram as its default, and all of them, without judging them; UML's re
 binding may name (AR-575). `remove_views_of` takes the bindings it finds along (AR-577).
 `diagram.remove` of a diagram a binding names is refused before anything changes, typed as
 `Reason::DefaultDiagramOf` with the binding's owner, and with `BindingFault::WrongOwner` when that
-owner is not the diagram's element (`defaults::diagram_removal_problem`); a notation asks
+owner is not the diagram's element (`defaults::diagram_removal_problem`), unless it names a
+`replacement_diagram` on the `expected_revision` read (AR-640): another live diagram of the same
+element and kind, to which one step retargets the binding, keeping its id, before the diagram goes.
+The diagram itself is refused as `ReplacementIsRemoved`, another element's diagram or another kind
+as `NotOwnDiagram`, a replacement for a diagram that is no default as `ReplacementNotNeeded`, and a
+revision absent with a replacement, or stale whenever given, as `StaleRevision`; a `WrongOwner`
+binding is refused still. It answers `{removed, diagram, replacement, binding, created}`, `removed`
+the count of objects that went, the replacement and binding null for a plain removal; a notation asks
 `defaults::views_removal_problem` before it removes an element whose diagram a binding of an element
 that stays names, judged against everything the removal takes, and `defaults::remove_bindings_of`
 takes the bindings of all of it before any diagram goes, so the order of selection does not matter
@@ -51,8 +58,8 @@ default as it is made: `defaults::new_diagram_bound`, which `diagram.add` calls,
 and a binding beside it in its home as one change, but only while the element has no diagram of
 that kind and no binding (`defaults::is_first`); an element with diagrams but no binding stays
 without one, its default diagnosed as missing, never bound silently (AR-579). UML's
-`uml.package.default.set` makes and retargets a binding (AR-580); Properties and replacing a default
-as it is removed come later (AR-396, AR-397). A comparison lists a binding among the model's elements, not
+`uml.package.default.set` makes and retargets a binding (AR-580); Properties and the window's way to
+replace a default as it is removed come later (AR-396, AR-397). A comparison lists a binding among the model's elements, not
 the diagrams, worded by its package and diagram (`Sales → Sales overview`) under the kind word
 Default diagram (AR-553).
 

@@ -779,6 +779,8 @@ str		The package's default diagram is not a class diagram. Choose one of its cla
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Le diagramme par défaut du paquetage appartient à un autre élément. Choisissez l’un de ses propres diagrammes de classes comme diagramme par défaut.
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Ce diagramme est le diagramme par défaut de {package}. Choisissez d’abord un autre diagramme de classes comme diagramme par défaut de {package}.
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} a pour diagramme par défaut le diagramme d’un autre élément, ce diagramme reste donc. Choisissez d’abord l’un de ses propres diagrammes de classes.
+str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Un diagramme ne peut pas se remplacer lui-même lors de sa suppression. Choisissez un autre diagramme comme remplaçant.
+str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} n’est pas un diagramme par défaut ; il est donc supprimé sans remplaçant.
 str		No package is given. Give its id.	Aucun paquetage n’est indiqué. Indiquez son identifiant.
 str		{name} is not a package.	{name} n’est pas un paquetage.
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} n’est pas l’un des diagrammes de classes de {package}. Choisissez l’un de ses propres diagrammes de classes comme diagramme par défaut.
