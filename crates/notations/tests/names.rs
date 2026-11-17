@@ -28,7 +28,7 @@ fn snapshot(st: &Store) -> rows::Rows {
 
 /// The project as it is, opened again from its rows: refused or not.
 fn reopens(st: &Store) -> Result<(), String> {
-    session_from_rows(&snapshot(st), ids(1 << 40)).map(|_| ())
+    session_from_rows(&snapshot(st), ids(1 << 40)).map(|_| ()).map_err(String::from)
 }
 
 /// `cmd` is refused with `words` in the reason, leaving the model and its history as they were,

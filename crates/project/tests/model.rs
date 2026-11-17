@@ -680,7 +680,7 @@ fn save_and_reopen(env: &Env, schema: &ModelSchema, path: &std::path::Path, st: 
     let read = project.read_model(schema).unwrap();
     project.close().unwrap();
     assert_eq!(read, written, "{message}: the rows come back as written");
-    archforge_notations::session_from_rows(&read, ids(1 << 44))
+    archforge_notations::session_from_rows(&read, ids(1 << 44)).map_err(String::from)
 }
 
 /// AR-208: a project whose names differ only in case across kinds (an attribute and an operation,
