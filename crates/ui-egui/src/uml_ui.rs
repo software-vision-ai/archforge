@@ -469,20 +469,17 @@ fn place_package(shell: &mut Shell, d: Obj, x: f64, y: f64) {
     }
 }
 
-/// A package dragged from Models onto a class diagram: placed where it was let go and, when it has
-/// no structure diagram yet, given one named like it by `diagram.add`, its default from the start,
-/// as one undo step (AR-581). Only a package the diagram's package holds goes on it.
+/// A package dragged from Models onto a class diagram, wherever the model owns it: another branch,
+/// the root or the diagram's own package (AR-569). It is placed where it was let go, keeping its
+/// owner, and, when it has no structure diagram yet, given one named like it by `diagram.add`, its
+/// default from the start, as one undo step (AR-581). One the diagram shows already is said so and
+/// left; one the diagram may not show, as on a profile's, is refused with the reason.
 fn drop_package(shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
     let Some(package) = store.by_uuid(element) else { return };
     if crate::editing::on_diagram(store, d, package) {
         shell.canvas.notice = Some(tr("Already on this diagram"));
-        return;
-    }
-    let here = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
-    if here.is_none() || package_of(store, package) != here {
-        shell.canvas.notice = Some(tr("Only a package this diagram's package holds goes on it"));
         return;
     }
     let Ok(diagram_id) = store.uuid(d) else { return };
