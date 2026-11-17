@@ -9619,6 +9619,59 @@ fn a_package_dropped_from_models_gets_a_default_diagram_only_when_it_has_none() 
     }
 }
 
+/// A package of another branch dragged from Models onto a class diagram is shown there once, its
+/// owner line naming where it lives, and keeps its owner; dropped again it is said to be there and
+/// nothing changes; its card removed, it is still in Models (AR-569).
+#[test]
+fn a_package_of_another_branch_dropped_from_models_is_shown_once_and_keeps_its_owner() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, _) = owning_path_harness(theme);
+        let add = |h: &mut Harness<'static, Shell>, name: &str, parent: &str| {
+            let id = owning_path_made(h, "uml.package.add", serde_json::json!({ "name": name, "parent": parent }));
+            archforge_mof::Uuid::parse(&id).unwrap()
+        };
+        let commerce = add(&mut h, "Commerce", &root);
+        let operations = add(&mut h, "Operations", &root);
+        let archive = add(&mut h, "Archive", &operations.to_string());
+        let shown = own_diagram(h.state_mut().session.as_mut().unwrap(), commerce);
+        crate::canvas::open(h.state_mut(), shown);
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().explorer.expanded.extend([archforge_mof::Uuid::parse(&root).unwrap(), operations]);
+        h.run();
+        // Archive's owner, and its cards with the diagram each is on.
+        let owner_and_cards = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let package = st.by_uuid(archive).unwrap();
+            let owner = archforge_uml::commands::package_of(st, package).map(|p| st.uuid(p).unwrap());
+            let on = |n: archforge_mof::Obj| archforge_diagram::diagram_of(st, n).map(|d| st.uuid(d).unwrap());
+            (owner, archforge_diagram::views_of(st, package).2.into_iter().map(|n| (st.uuid(n).unwrap(), on(n))).collect::<Vec<_>>())
+        };
+        let canvas = rect_of(&h, "workspace.canvas");
+        let row = rect_of(&h, &format!("workspace.explorer.row.{archive}")).center();
+        drag(&mut h, row, canvas.center());
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place package"), "{theme:?}: {:?}", h.state().canvas.notice);
+        let (owner, cards) = owner_and_cards(&h);
+        let [(card, Some(on))] = cards[..] else { panic!("{theme:?}: one card of Archive: {cards:?}") };
+        assert_eq!((owner, on), (Some(operations), shown), "{theme:?}: on Commerce's diagram, still owned by Operations");
+        let line = h.state().canvas.path_badges.iter().find(|b| b.node == card).map(|b| b.whole.clone());
+        assert_eq!(line.as_deref(), Some("Owner: Commerce platform › Operations"), "{theme:?}: its owner line");
+        // Dropped again: said so, nothing changed.
+        let state = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.undo_label().map(str::to_string), packages_diagrams_bindings(h), owner_and_cards(h))
+        };
+        let before = state(&h);
+        drag(&mut h, row, canvas.center() + egui::vec2(200.0, 0.0));
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("Already on this diagram"), "{theme:?}");
+        assert_eq!(state(&h), before, "{theme:?}: nothing changed");
+        // Its card removed from the diagram, Archive stays in Models, under Operations.
+        crate::editing::unplace(h.state_mut(), vec![card]);
+        h.run();
+        assert_eq!(owner_and_cards(&h), (Some(operations), Vec::new()), "{theme:?}: no card, the same owner");
+        assert!(ids(&h).contains(&format!("workspace.explorer.row.{archive}")), "{theme:?}: still in Models");
+    }
+}
+
 #[test]
 fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path_keys_and_zoom() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
