@@ -17,8 +17,8 @@
 //! middle (AR-131). An element's stereotypes (AR-135) take the place of a card's kind word (a
 //! keyword kind keeps its keyword first), start a member's row and sit at a line's middle; a diagram
 //! that shows them lists the values set in a compartment per stereotype. A package's card names
-//! its owners from the model's root down to its parent (AR-564). The canvas draws these
-//! descriptions.
+//! its owners from the model's root down to its parent (AR-564), and is drawn under the diagram's
+//! other figures (AR-570). The canvas draws these descriptions.
 
 use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
@@ -347,6 +347,12 @@ pub fn card_name(store: &Store, c: Obj, diagram: Obj) -> String {
         Some(owner) if !shows(store, diagram, owner) => crate::nesting::qualified_name(store, c),
         _ => name(store, c),
     }
+}
+
+/// Whether the diagram node `n` is drawn, and hit, under the diagram's other figures: a package's
+/// card, which its preview fills, so a class or a note placed over it stays in sight (AR-570).
+pub fn drawn_behind(store: &Store, n: Obj) -> bool {
+    store.get(n, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()).is_some_and(|e| store.class_of(e).ok() == Some(crate::PACKAGE))
 }
 
 /// Whether `diagram` has a node of `element`.

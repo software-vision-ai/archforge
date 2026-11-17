@@ -707,7 +707,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     let pointer = resp.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.hover_pos()));
     let overrides = crate::editing::preview_rects(shell, view, pointer);
     let renaming = shell.canvas.rename.as_ref().map(|rn| rn.node).or_else(|| shell.canvas.note_edit.as_ref().map(|ne| ne.node));
-    let grid = shell.session.as_ref().map(|s| Grid::build(s.doc(), d));
+    let grid = shell.session.as_ref().map(|s| grid(s.doc(), d));
     let mut pending_badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)> = Vec::new();
     if let (Some(session), Some(grid)) = (shell.session.as_ref(), grid.as_ref()) {
         let store = session.doc();
@@ -804,6 +804,13 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     below_path
 }
 
+/// The index of diagram `d` as the canvas draws and hits it: packages' cards under the other
+/// figures, each group in stored order, so a class or a note placed over a package's card stays in
+/// sight and takes the press (AR-570). The store's order is untouched.
+pub(crate) fn grid(store: &Store, d: Obj) -> Grid {
+    Grid::build_with(store, d, |n| archforge_uml::figures::drawn_behind(store, n))
+}
+
 /// A diagram to draw: its store, the notations that describe it, and where it goes on screen.
 #[derive(Clone, Copy)]
 pub(crate) struct Scene<'a> {
@@ -854,11 +861,16 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
     let (x0, y0) = view.to_canvas(r.min);
     let (x1, y1) = view.to_canvas(r.max);
     let mut visible = grid.visible(archforge_diagram::Rect::new(x0, y0, x1 - x0, y1 - y0));
-    // Nodes dragged into view draw too.
+    // Nodes dragged into view draw too, in the drawing order: a package's card dragged in stays
+    // under the other figures (AR-570).
+    let shown = visible.nodes.len();
     for n in refs(store, d, diagram::NODE) {
         if !visible.nodes.contains(&n) && store.uuid(n).ok().is_some_and(|id| overrides.contains_key(&id)) {
             visible.nodes.push(n);
         }
+    }
+    if visible.nodes.len() > shown {
+        grid.sort_drawn(&mut visible.nodes);
     }
     let draw = Drawing {
         p,
@@ -1448,7 +1460,7 @@ fn leads(store: &Store) -> std::collections::HashMap<Obj, Obj> {
 /// `d` scaled to fit `area`, centred, enlarged at most [`PREVIEW_MOST`]: none when it shows
 /// nothing.
 pub(crate) fn preview(store: &Store, notations: &archforge_diagram::ProjectView, d: Obj, area: Rect) -> Option<Preview> {
-    let grid = Grid::build(store, d);
+    let grid = grid(store, d);
     let all = grid.visible(archforge_diagram::Rect::new(-1.0e9, -1.0e9, 2.0e9, 2.0e9));
     let mut boxes: Vec<(Rect, MiniLook, Vec<usize>)> = Vec::new();
     for n in &all.nodes {
