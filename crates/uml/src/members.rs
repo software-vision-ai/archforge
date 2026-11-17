@@ -95,8 +95,10 @@ pub(crate) fn reserved_problem(store: &Store, package: Obj, name: &str) -> Optio
 /// package Types keeps its name and its place directly under the root while it holds built-in
 /// types; and a package becomes Types there only while there is no package Types, and only when it
 /// holds no classifier with a built-in type's name, which would else turn into a built-in type.
-/// The refusal names the ids involved.
-pub(crate) fn types_problem(store: &Store, package: Obj, name: &str, parent: Option<Obj>) -> Option<String> {
+/// The refusal is about the parameter `key`, names the ids involved in its sentence, and carries
+/// its reason typed ([`Reason::TypesPackageKept`], [`Reason::TypesPackageExists`],
+/// [`Reason::HoldsBuiltInName`]).
+pub(crate) fn types_problem(store: &Store, package: Obj, name: &str, parent: Option<Obj>, key: &str) -> Option<CommandError> {
     let types = types_package(store);
     let root_level = match crate::commands::root_package(store) {
         Some(root) => parent == Some(root),
@@ -104,30 +106,33 @@ pub(crate) fn types_problem(store: &Store, package: Obj, name: &str, parent: Opt
     };
     let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
     if types == Some(package) && (name != TYPES || !root_level) && holds_built_ins(store, package) {
-        return Some(format!(
+        let why = format!(
             "{} is the package {TYPES}, which keeps the built-in types ({}); it keeps its name and stays directly under the root package while it holds them",
             id(package),
             BUILT_IN.join(", ")
-        ));
+        );
+        return Some(refuse(key, why).because(Reason::TypesPackageKept));
     }
     if name != TYPES || !root_level || types == Some(package) {
         return None;
     }
     if let Some(t) = types {
-        return Some(format!(
+        let why = format!(
             "{} is the package {TYPES} already, where the built-in types are kept; {} keeps another name there or goes into another package",
             id(t),
             id(package)
-        ));
+        );
+        return Some(refuse(key, why).because(Reason::TypesPackageExists));
     }
     reserved_held(store, package).map(|c| {
-        format!(
-            "{} holds {} named {}, {}, a built-in type's name; as the package {TYPES} it would be taken for the built-in type, so rename that first",
+        let held = name_of(store, c);
+        let why = format!(
+            "{} holds {} named {held}, {}, a built-in type's name; as the package {TYPES} it would be taken for the built-in type, so rename that first",
             id(package),
             crate::commands::a_what(store, c),
-            name_of(store, c),
             id(c)
-        )
+        );
+        refuse(key, why).because(Reason::HoldsBuiltInName { kind: crate::commands::what(store, c), name: held })
     })
 }
 

@@ -735,6 +735,10 @@ str		A column of an enum type takes no size.	A column of an enum type takes no s
 str		{name} follows no column.	{name} follows no column.
 plural		The table has {n} column.	The table has {n} column.|The table has {n} columns.
 str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
+str		The model's root package holds all the other packages, so it stays where it is.	The model's root package holds all the other packages, so it stays where it is.
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.
 str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
 str		There is nothing to undo.	There is nothing to undo.
 str		There is nothing to redo.	There is nothing to redo.

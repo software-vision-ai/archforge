@@ -472,6 +472,46 @@ fn a_refused_move_and_one_to_its_own_parent_leave_the_store_and_the_history_as_t
     assert_eq!(appearances(&s, &orders), shown);
 }
 
+/// The root package moved, the package Types renamed or moved away from the built-in types, a
+/// package made a second Types, and one made Types while it holds a built-in type's name are each
+/// refused with their reason typed and the English sentence as before, by a move, a rename and a
+/// removal handing a package up; the store, the revision and the history as they were (AR-563).
+#[test]
+fn a_package_move_or_rename_the_root_or_the_package_types_refuses_carries_its_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let lib = run(&mut s, "uml.package.add", json!({ "name": "Lib" }));
+    run(&mut s, "uml.primitive-type.add", json!({ "package": lib, "name": "Integer" }));
+    let outer = run(&mut s, "uml.package.add", json!({ "name": "Outer" }));
+    let nested = run(&mut s, "uml.package.add", json!({ "name": "Types", "parent": outer }));
+    run(&mut s, "uml.class.add", json!({ "package": nested, "name": "String" }));
+    let root = root_id(&s);
+    let (reason, message) = refusal(&mut s, "uml.package.move", json!({ "package": root, "to": lib }));
+    assert_eq!((reason, message.as_str()), (Some(Reason::RootPackageStays), "the model's root package holds the others and stays where it is"));
+    // No package Types yet: neither becomes it while holding a built-in type's name.
+    let (reason, message) = refusal(&mut s, "uml.package.rename", json!({ "package": lib, "name": "Types" }));
+    assert_eq!(reason, Some(Reason::HoldsBuiltInName { kind: "primitive type", name: "Integer".into() }));
+    assert!(message.contains("a built-in type's name; as the package Types"), "{message}");
+    let (reason, _) = refusal(&mut s, "uml.package.move", json!({ "package": nested, "to": "" }));
+    assert_eq!(reason, Some(Reason::HoldsBuiltInName { kind: "class", name: "String".into() }), "moved to the root");
+    // The first use of a built-in type makes the package Types, which then keeps its name and place.
+    let order = run(&mut s, "uml.class.add", json!({ "package": lib, "name": "Order" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Boolean" }));
+    let types = s.doc().uuid(archforge_uml::members::types_package(s.doc()).unwrap()).unwrap().to_string();
+    let (reason, message) = refusal(&mut s, "uml.package.rename", json!({ "package": types, "name": "Builtins" }));
+    assert_eq!(reason, Some(Reason::TypesPackageKept));
+    assert!(message.contains("keeps its name and stays directly under the root package while it holds them"), "{message}");
+    assert_eq!(refusal(&mut s, "uml.package.move", json!({ "package": types, "to": outer })).0, Some(Reason::TypesPackageKept), "moved");
+    // A second Types beside it, by a rename, a move and a removal handing one up.
+    let (reason, message) = refusal(&mut s, "uml.package.rename", json!({ "package": outer, "name": "Types" }));
+    assert_eq!(reason, Some(Reason::TypesPackageExists));
+    assert!(message.contains("is the package Types already"), "{message}");
+    assert_eq!(refusal(&mut s, "uml.package.move", json!({ "package": nested, "to": root })).0, Some(Reason::TypesPackageExists), "moved");
+    let (reason, message) = refusal(&mut s, "element.remove", json!({ "ids": [outer] }));
+    assert_eq!(reason, Some(Reason::TypesPackageExists), "handed up");
+    assert!(message.starts_with("its contents cannot move up: "), "{message}");
+}
+
 #[test]
 fn a_package_card_builds_no_rows_however_much_it_holds() {
     let mut s = session();
