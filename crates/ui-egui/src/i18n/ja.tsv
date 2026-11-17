@@ -1275,6 +1275,7 @@ str		Relationships carry no skills	関係はスキルを持ちません
 str		Generalization sets carry no skills	汎化セットはスキルを持ちません
 str		This element carries no skills	この要素はスキルを持ちません
 str		Diagram	図
+str		Default diagram	既定の図
 str		Diagram · of {schema}	図 · {schema} の
 str		This diagram	この図
 str		On this diagram · {n}	この図に · {n}

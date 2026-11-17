@@ -1,8 +1,10 @@
 //! What a comparison calls an element with no name of its own: what it joins or what it states, as
-//! the notation writes it. These are the same in every language, so they can be made off the
-//! interface thread; an element with nothing to say is left to go by its kind.
+//! the notation writes it, and a package's default-diagram binding by its package and diagram.
+//! These are the same in every language, so they can be made off the interface thread; an element
+//! with nothing to say is left to go by its kind.
 
 use archforge_core::name_of;
+use archforge_diagram as diagram;
 use archforge_er as er;
 use archforge_mof::{ClassId, Obj, PropId, Store};
 use archforge_uml as uml;
@@ -16,6 +18,11 @@ pub(crate) fn unnamed(store: &Store, obj: Obj) -> Option<String> {
     let text = match class.metamodel() {
         er::INDEX => er_words(store, obj, class),
         uml::INDEX => uml_words(store, obj, class),
+        diagram::INDEX if class == diagram::DEFAULT_DIAGRAM_BINDING => arrow(
+            store,
+            target(store, obj, diagram::default_diagram_binding::OWNER_ELEMENT)?,
+            target(store, obj, diagram::default_diagram_binding::DEFAULT_DIAGRAM)?,
+        ),
         _ => None,
     }?;
     let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");

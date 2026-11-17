@@ -1275,6 +1275,7 @@ str		Relationships carry no skills	关系不带技能
 str		Generalization sets carry no skills	泛化集不带技能
 str		This element carries no skills	此元素不带技能
 str		Diagram	图
+str		Default diagram	默认图
 str		Diagram · of {schema}	图 · 属于 {schema}
 str		This diagram	此图
 str		On this diagram · {n}	此图上 · {n}

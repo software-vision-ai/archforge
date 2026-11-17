@@ -5,7 +5,9 @@
 //!
 //! The catalogues hold a row for every property a card shows and every literal in the model area
 //! (the core, ER and UML; a diagram's own are no model words). Kind words go only to the
-//! [`KINDS`] the notations create, as the catalogues stay smaller that way; the rest say Element.
+//! [`KINDS`] the notations create, as the catalogues stay smaller that way, and to a package's
+//! default-diagram binding, the one class of the diagrams a comparison lists as the model's; the
+//! rest say Element.
 
 use archforge_mof::{ClassId, DataId, DataKind, PropId, Universe};
 
@@ -120,10 +122,12 @@ pub fn literal_label(universe: &Universe, ty: DataId, index: u32) -> Option<Stri
 }
 
 /// The word Models and Properties use for `class` where it isn't its metamodel's name: a table and
-/// its columns, a subtype, an attribute, a literal. UML's Profile has a row of its own, as the plain
-/// word is a person's profile.
+/// its columns, a subtype, an attribute, a literal; and the word a comparison says for a package's
+/// default-diagram binding. UML's Profile has a row of its own, as the plain word is a person's
+/// profile.
 fn notation_word(class: ClassId) -> Option<String> {
     match class {
+        c if c == archforge_diagram::DEFAULT_DIAGRAM_BINDING => Some(tr("Default diagram")),
         c if c == archforge_er::ENTITY => Some(tr("Table")),
         c if c == archforge_er::ATTRIBUTE => Some(tr("Column")),
         c if c == archforge_er::GENERALIZATION => Some(tr("Subtype")),
