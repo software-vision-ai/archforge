@@ -363,12 +363,12 @@ fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
 
 /// `uml.package.rename`: a package renamed, the diagrams still named like it following. The
 /// package Types keeps its name while it holds built-in types, and a package becomes Types only as
-/// `members::types_problem` allows.
+/// `members::types_problem` allows, its refusal typed (AR-563).
 fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
-    if let Some(why) = crate::members::types_problem(ctx.doc, pkg, name, package_of(ctx.doc, pkg)) {
-        return Err(refuse("name", why));
+    if let Some(refused) = crate::members::types_problem(ctx.doc, pkg, name, package_of(ctx.doc, pkg), "name") {
+        return Err(refused);
     }
     check_name(ctx.doc, holder_of(ctx.doc, package_of(ctx.doc, pkg)), PACKAGE, name, Some(pkg))?;
     let old = name_of(ctx.doc, pkg);
@@ -400,12 +400,13 @@ fn detach(store: &mut Store, obj: Obj) -> Result<(), CommandError> {
 
 /// `uml.package.move`: a package into another, never into itself. Only its owner changes: every
 /// appearance of it stays where it is under its id, with its notes' links, and none is added to its
-/// new owner's diagram (Decision 26, AR-567). The package Types stays under the root while it holds
-/// built-in types, and a package named Types goes there only as `members::types_problem` allows.
+/// new owner's diagram (Decision 26, AR-567). The root package stays where it is; the package Types
+/// stays under the root while it holds built-in types, and a package named Types goes there only as
+/// `members::types_problem` allows; each refusal typed (AR-563).
 fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     if Some(pkg) == root_package(ctx.doc) {
-        return Err(refuse("package", "the model's root package holds the others and stays where it is"));
+        return Err(refuse("package", "the model's root package holds the others and stays where it is").because(Reason::RootPackageStays));
     }
     let to = parent_param(ctx.doc, p, "to")?;
     if to.is_some_and(|t| is_within(ctx.doc, t, pkg)) {
@@ -414,8 +415,8 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     if to == package_of(ctx.doc, pkg) {
         return Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }));
     }
-    if let Some(why) = crate::members::types_problem(ctx.doc, pkg, &name_of(ctx.doc, pkg), to) {
-        return Err(refuse("to", why));
+    if let Some(refused) = crate::members::types_problem(ctx.doc, pkg, &name_of(ctx.doc, pkg), to, "to") {
+        return Err(refused);
     }
     check_name(ctx.doc, holder_of(ctx.doc, to), PACKAGE, &name_of(ctx.doc, pkg), Some(pkg))?;
     if let Some(to) = to {
@@ -694,7 +695,8 @@ pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
 /// Why `parent` cannot take what `pkg` holds, when a name would clash there with one of its kind
 /// ([`crate::names`]), a built-in type's name would land in the package Types, or a package handed
 /// up would become a second Types or a Types holding such a name. A clash is typed, naming the
-/// element of `parent` that has the name.
+/// element of `parent` that has the name, as is a package handed up that would break the package
+/// Types' rules (AR-563).
 fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandError> {
     let up = |why: String| refuse("ids", format!("its contents cannot move up: {why}"));
     for o in held(store, pkg) {
@@ -707,9 +709,9 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
             return Err(up(why));
         }
         if class == PACKAGE
-            && let Some(why) = crate::members::types_problem(store, o, &n, Some(parent))
+            && let Some(refused) = crate::members::types_problem(store, o, &n, Some(parent), "ids")
         {
-            return Err(up(why));
+            return Err(CommandError { message: format!("its contents cannot move up: {}", refused.message), ..refused });
         }
         // The package itself goes, so its own name is free for what it hands up.
         if let Some(s) = crate::names::clash(store, parent, class, &n, Some(pkg)) {

@@ -736,6 +736,10 @@ str		A column of an enum type takes no size.	Eine Spalte eines Aufzählungstyps 
 str		{name} follows no column.	{name} folgt keiner Spalte.
 plural		The table has {n} column.	Die Tabelle hat {n} Spalte.|Die Tabelle hat {n} Spalten.
 str		A package cannot go into itself or a package it holds.	Ein Paket kann nicht in sich selbst oder in ein Paket verschoben werden, das es enthält.
+str		The model's root package holds all the other packages, so it stays where it is.	Das Wurzelpaket des Modells enthält alle anderen Pakete und bleibt daher, wo es ist.
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	Das Paket {types} enthält die eingebauten Typen: Solange es sie enthält, behält es seinen Namen und bleibt unter dem Wurzelpaket.
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	Es gibt bereits ein Paket {types}, das die eingebauten Typen enthält; ein zweites kann nicht daneben stehen.
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	Im Paket trägt {what} den Namen {name}, den Namen eines eingebauten Typs, der in {types} diesen Typ bedeuten würde. Benennen Sie {name} zuerst um.
 str		The model cannot be changed at the moment; nothing was changed.	Das Modell kann gerade nicht geändert werden; nichts wurde geändert.
 str		There is nothing to undo.	Es gibt nichts rückgängig zu machen.
 str		There is nothing to redo.	Es gibt nichts zu wiederholen.

@@ -6669,7 +6669,8 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// engine text. In light and dark (AR-440). A change made for another revision of the model, or for
 /// none, is said in its sentence too (AR-574), as is each way a package's default diagram binding
 /// can be unsound, with the choice that mends it (AR-576), and a diagram a package's binding keeps,
-/// its own default or another element's diagram, with the package named (AR-578).
+/// its own default or another element's diagram, with the package named (AR-578). Each package move
+/// or rename the root package or the package Types refuses is said in its own sentence (AR-563).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -6737,6 +6738,16 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let foreign = "Vertrieb hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. \
                        Wählen Sie zuerst eines seiner eigenen Klassendiagramme.";
         assert_eq!(kept(Some(WrongOwner)), foreign, "{theme:?}");
+        // A package move or rename the root package or the package Types refuses, each its own sentence.
+        use archforge_engine::Reason::{HoldsBuiltInName, RootPackageStays, TypesPackageExists, TypesPackageKept};
+        let held = HoldsBuiltInName { kind: "class", name: "String".into() };
+        let package = [RootPackageStays, TypesPackageKept, TypesPackageExists, held].map(|r| crate::panels::said(&r).unwrap_or_default());
+        let mut distinct = package.to_vec();
+        distinct.sort();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 4, "{theme:?}: each its own sentence {package:?}");
+        assert!(package.iter().all(|s| s.contains("Paket")), "{theme:?}: in German {package:?}");
+        assert!(package[3].contains("eine Klasse den Namen String"), "{theme:?}: {}", package[3]);
     }
     crate::i18n::set_language("en");
 }
@@ -7732,8 +7743,9 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
 }
 
 /// The engine's typed refusals are said in the chosen language, never in the engine's English: a
-/// name another schema has, a package moved into one it holds, a class depending on itself, and a
-/// model that can't be changed at the moment. In light and dark (AR-429).
+/// name another schema has, a package moved into one it holds, a class depending on itself, a
+/// model that can't be changed at the moment, and a package named Types moved in Properties beside
+/// the package Types (AR-563). In light and dark (AR-429).
 #[test]
 fn the_engines_refusals_are_said_in_the_chosen_language() {
     let renamed = |h: &mut Harness<'static, Shell>, name: &str| {
@@ -7798,6 +7810,32 @@ fn the_engines_refusals_are_said_in_the_chosen_language() {
         assert_ne!(class, "a class", "{theme:?}: the catalogue has the kind in German");
         assert!(refused.to_lowercase().starts_with(&class.to_lowercase()), "{theme:?}: {refused}");
         assert!(refused.starts_with(char::is_uppercase) && !refused.contains("depend"), "{theme:?}: a sentence, not the engine's English: {refused}");
+        // A package named Types moved in Properties to the root, where the package Types is (AR-563).
+        let nested = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let count = serde_json::json!({ "class": order.to_string(), "name": "count", "type": "Integer" });
+            s.execute("uml.attribute.add", &count).unwrap();
+            id(s.execute("uml.package.add", &serde_json::json!({ "name": "Types", "parent": sales.to_string() })).unwrap().value)
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [nested.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let (to_root, label) = {
+            let s = h.state().session.as_ref().unwrap();
+            let (st, package) = (s.doc(), s.doc().by_uuid(nested).unwrap());
+            let choices = archforge_uml::commands::all_packages(st).into_iter().filter(|o| !archforge_uml::commands::is_within(st, *o, package));
+            (choices.collect::<Vec<_>>().iter().position(|o| *o == st.by_uuid(root).unwrap()).unwrap(), s.undo_label().map(str::to_string))
+        };
+        let at = rect_of(&h, "workspace.properties.package.parent").center();
+        click(&mut h, at);
+        let at = rect_of(&h, &format!("workspace.properties.package.parent.{to_root}")).center();
+        click(&mut h, at);
+        let said = "Es gibt bereits ein Paket Types, das die eingebauten Typen enthält; ein zweites kann nicht daneben stehen.";
+        assert_eq!(h.state().panels.notice.as_deref(), Some(said), "{theme:?}");
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.notice"), "{theme:?}: Properties says it");
+        let s = h.state().session.as_ref().unwrap();
+        let (owner, sales) = (archforge_uml::commands::package_of(s.doc(), s.doc().by_uuid(nested).unwrap()), s.doc().by_uuid(sales));
+        assert_eq!((owner, s.undo_label().map(str::to_string)), (sales, label), "{theme:?}: not moved, nothing to undo");
     }
     crate::i18n::set_language("en");
 }

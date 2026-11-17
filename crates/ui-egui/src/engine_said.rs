@@ -7,6 +7,8 @@
 //! revision of the model other than the one it would run on (AR-574), is said here too, as is a
 //! package's default diagram that cannot be read for its unsound binding (AR-576), and a diagram
 //! that stays because a package's binding names it as its default (AR-578).
+//!
+//! A package move or rename the root package or the package Types refuses is said here too (AR-563).
 
 use archforge_engine::{BindingFault, EngineError, Reason};
 
@@ -50,12 +52,26 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 }
 
 /// A refusal the engine types itself in the user's words: a change made for another revision of the
-/// model than the one it would run on, or for none, and a package's default diagram that cannot be
-/// read, by what is wrong with its binding and the choice that mends it, and a diagram a package's
-/// binding keeps, its own default or another element's diagram, with the choice to make first;
-/// none for another reason.
+/// model than the one it would run on, or for none, a package's default diagram that cannot be
+/// read, by what is wrong with its binding and the choice that mends it, a diagram a package's
+/// binding keeps, its own default or another element's diagram, with the choice to make first, and a
+/// package move or rename refused because the root package stays or the package Types keeps the
+/// built-in types; none for another reason, or for a kind of element the catalogues don't name.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
+    let types = archforge_uml::members::TYPES;
     Some(match reason {
+        Reason::RootPackageStays => tr("The model's root package holds all the other packages, so it stays where it is."),
+        Reason::TypesPackageKept => fmt(
+            &tr("The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package."),
+            &[("types", types)],
+        ),
+        Reason::TypesPackageExists => {
+            fmt(&tr("There is a package {types} already, which keeps the built-in types; a second one can't sit beside it."), &[("types", types)])
+        }
+        Reason::HoldsBuiltInName { kind, name } => fmt(
+            &tr("The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first."),
+            &[("what", &crate::panels::a_kind(kind)?), ("name", name), ("types", types)],
+        ),
         Reason::StaleRevision { expected: Some(_), .. } => {
             tr("The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.")
         }
