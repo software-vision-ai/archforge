@@ -1245,10 +1245,11 @@ fn cards_members_and_lines_show_their_stereotypes() {
     assert_eq!(rows(&s, &one)[2], ["«Entity»", "table = \"orders\""], "the other keeps its choice");
     run(&mut s, "uml.stereotype.show-values", json!({ "diagram": one, "show": false }));
     assert_eq!(tags(&s), 0, "the last turned off takes the tag away");
-    // A removed diagram leaves the tag on nothing, which the next one turned on reuses.
-    run(&mut s, "uml.stereotype.show-values", json!({ "diagram": one, "show": true }));
-    one_step(&mut s, "diagram.remove", json!({ "diagram": one }));
+    // A removed diagram leaves the tag on nothing, which the next one turned on reuses; the second
+    // goes, as the package's first is its default, which stays (AR-578).
     run(&mut s, "uml.stereotype.show-values", json!({ "diagram": two, "show": true }));
+    one_step(&mut s, "diagram.remove", json!({ "diagram": two }));
+    run(&mut s, "uml.stereotype.show-values", json!({ "diagram": one, "show": true }));
     assert_eq!(tags(&s), 1);
     let st = s.doc();
     assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);

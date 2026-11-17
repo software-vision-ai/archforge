@@ -431,11 +431,30 @@ fn a_diagram_carries_skills_and_inherits_the_projects_and_its_elements() {
     assert!(e.contains("cannot sit on Diagram"), "{e}");
 }
 
+/// In a project of every notation only UML binds a first diagram as a default: a schema's first
+/// ER diagram binds nothing, a package's first class diagram is bound (AR-579).
+#[test]
+fn a_schemas_first_er_diagram_binds_nothing_and_a_packages_first_class_diagram_is_bound() {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    id(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "shop" }));
+    assert_eq!(archforge_diagram::defaults::bindings(s.doc()), [], "the schema's diagram is no default");
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let d = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let st = s.doc();
+    let [binding] = archforge_diagram::defaults::bindings(st)[..] else { panic!("the package's diagram is bound") };
+    let named = |prop| st.get(binding, prop).unwrap().as_ref().map(|o| uuid(st, o));
+    use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
+    assert_eq!((named(OWNER_ELEMENT), named(DEFAULT_DIAGRAM)), (Some(sales), Some(d)));
+}
+
 #[test]
 fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_with_undo() {
     let mut s = new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    // Sales's first diagram is its default, which is not removed alone (AR-578): the second goes.
+    id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales overview" }));
     let class_diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
     let er_diagram = id(&mut s, "diagram.add", json!({ "kind": "er", "element": schema, "name": "shop" }));
     id(&mut s, "skill.add", json!({ "subject": class_diagram, "name": "Layout" }));
