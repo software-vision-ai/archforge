@@ -9539,8 +9539,11 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
     }
 }
 
+/// A package's card dragged over another package or an ancestor in the path bar only arranges the
+/// diagram: no ring, no prompt, its owner stays and one Undo puts the card back (AR-566). Its owner
+/// changes in Properties and in Models, which refuse it into a package it holds (AR-102).
 #[test]
-fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_in_models_refusing_itself() {
+fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner_in_properties_and_models() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
         let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
@@ -9569,39 +9572,69 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
             let st = h.state().session.as_ref().unwrap().doc();
             archforge_uml::commands::package_of(st, st.by_uuid(p).unwrap()).map(|o| archforge_core::name_of(st, o))
         };
-        // Dragged onto Billing: ringed while held there, then Sales goes into it as one step.
+        let card_at = |h: &Harness<'static, Shell>, card: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let b = archforge_diagram::grid::bounds_of(st, st.by_uuid(card).unwrap());
+            (b.x, b.y)
+        };
+        // Whether the last frame ringed `target` in the accent, more boldly than a selection is.
+        let accent = crate::ux::palette(theme == ThemeKind::Dark).accent;
+        let ringed = |h: &Harness<'static, Shell>, target: egui::Rect| {
+            /// Whether `s`, or a shape it holds, is a rectangle round `target` stroked in `accent`
+            /// at least 2 points wide.
+            fn walk(s: &egui::Shape, accent: egui::Color32, target: egui::Rect) -> bool {
+                match s {
+                    egui::Shape::Rect(r) => r.stroke.color == accent && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
+                    egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent, target)),
+                    _ => false,
+                }
+            }
+            h.output().shapes.iter().any(|c| walk(&c.shape, accent, target))
+        };
+        // Whether any text the last frame painted names both `a` and `b`, as a move prompt would.
+        let prompt = |h: &Harness<'static, Shell>, a: &str, b: &str| painted(h).iter().any(|t| t.contains(a) && t.contains(b));
+        // Held over Billing: neither ringed nor a prompt; let go, Sales only moves on the diagram.
         let (from, to) = (
             rect_of(&h, &format!("workspace.canvas.node.{sales_card}")).center(),
             rect_of(&h, &format!("workspace.canvas.node.{billing_card}")).center(),
         );
+        let (billing_rect, before) = (rect_of(&h, &format!("workspace.canvas.node.{billing_card}")), card_at(&h, sales_card));
         h.event(egui::Event::PointerMoved(from));
         h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
         h.run();
         h.event(egui::Event::PointerMoved(to));
         h.run();
-        assert!(painted(&h).iter().any(|t| t == "Move Sales into Billing"), "{theme:?}: the drop is said");
+        assert!(!ringed(&h, billing_rect), "{theme:?}: Billing is not ringed");
+        assert!(!prompt(&h, "Sales", "Billing"), "{theme:?}: no prompt: {:?}", painted(&h));
         h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
         h.run();
-        assert_eq!(parent(&h, sales).as_deref(), Some("Billing"));
-        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"));
-        assert!(!ids(&h).iter().any(|i| i == &format!("workspace.canvas.node.{sales_card}")), "{theme:?}: gone from the root's diagram");
-        let on_billing = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let bd = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
-            crate::editing::on_diagram(st, bd, st.by_uuid(sales).unwrap())
-        };
-        assert!(on_billing, "{theme:?}: on Billing's diagram now");
-        assert!(painted(&h).iter().any(|t| t == "Sales moved into Billing"), "{theme:?}: the toast");
-        // Undo puts it back where it was, its card too.
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: the owner stays");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move"), "{theme:?}: a diagram step");
+        assert_ne!(card_at(&h, sales_card), before, "{theme:?}: the card moved");
+        assert!(!prompt(&h, "Sales", "Billing"), "{theme:?}: no toast");
+        // One Undo puts the card back, its owner untouched.
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         h.run();
+        assert_eq!(card_at(&h, sales_card), before, "{theme:?}: back where it was");
         assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"));
-        assert!(ids(&h).iter().any(|i| i == &format!("workspace.canvas.node.{sales_card}")));
-        // Let go on empty canvas: only moved, still in the root.
-        let empty = rect_of(&h, "workspace.canvas").center() + egui::vec2(0.0, 260.0);
-        drag(&mut h, from, empty);
-        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: nothing moved in the model");
-        // Properties: the parent package, the keyboard's way; then up the path bar back to the root.
+        // Both selected and dragged: one diagram step moves both, and one Undo puts both back.
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("view.select", &serde_json::json!({ "ids": [sales.to_string(), billing.to_string()] }))
+            .unwrap();
+        h.run();
+        let both = (card_at(&h, sales_card), card_at(&h, billing_card));
+        drag(&mut h, from, from + egui::vec2(0.0, 260.0));
+        let moved = (card_at(&h, sales_card), card_at(&h, billing_card));
+        assert!(moved.0 != both.0 && moved.1 != both.1, "{theme:?}: both moved: {both:?} to {moved:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move"), "{theme:?}: a diagram step");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!((card_at(&h, sales_card), card_at(&h, billing_card)), both, "{theme:?}: one Undo puts both back");
+        assert_eq!((parent(&h, sales).as_deref(), parent(&h, billing).as_deref()), (Some("Commerce platform"), Some("Commerce platform")));
+        // Properties: the parent package, the keyboard's way.
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
@@ -9612,7 +9645,7 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
         let at = rect_of(&h, "workspace.properties.package.parent.1").center();
         click(&mut h, at);
         assert_eq!(parent(&h, sales).as_deref(), Some("Billing"));
-        // Shown on a diagram, it goes onto its new home's diagram too, as a canvas drop takes it.
+        // Shown on a diagram, it goes onto its new home's diagram too, as a drop in Models takes it.
         let inner = {
             let st = h.state().session.as_ref().unwrap().doc();
             let d = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
@@ -9628,10 +9661,35 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
             let n = st.list(d, archforge_diagram::diagram::NODE).unwrap().iter().filter_map(archforge_mof::Value::as_ref).next().unwrap();
             st.uuid(n).unwrap()
         };
-        let from = rect_of(&h, &format!("workspace.canvas.node.{card}")).center();
-        let root_pill = rect_of(&h, "workspace.canvas.path.0").center();
-        drag(&mut h, from, root_pill);
-        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: up into the root by the path bar");
+        // Held over the root in the path bar: neither ringed nor a prompt; let go, Sales only moves
+        // on Billing's diagram, which stays open.
+        let (from, pill, before) =
+            (rect_of(&h, &format!("workspace.canvas.node.{card}")).center(), rect_of(&h, "workspace.canvas.path.0"), card_at(&h, card));
+        h.event(egui::Event::PointerMoved(from));
+        h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run();
+        h.event(egui::Event::PointerMoved(pill.center()));
+        h.run();
+        assert!(!ringed(&h, pill), "{theme:?}: the root is not ringed");
+        assert!(!prompt(&h, "Sales", "Commerce platform"), "{theme:?}: no prompt: {:?}", painted(&h));
+        h.event(egui::Event::PointerButton {
+            pos: pill.center(),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run();
+        assert_eq!(parent(&h, sales).as_deref(), Some("Billing"), "{theme:?}: the path bar takes no package");
+        assert_eq!(h.state().canvas.active, Some(inner), "{theme:?}: still on Billing's diagram");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move"), "{theme:?}: a diagram step");
+        assert_ne!(card_at(&h, card), before, "{theme:?}: the card moved");
+        // Undo puts the card back, then takes the Properties move back to the root.
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!((card_at(&h, card), parent(&h, sales).as_deref()), (before, Some("Billing")), "{theme:?}: only the card back");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: Properties' move undone");
         // In Models, a package dropped onto a package it holds is refused, and says so.
         let lines = id(h
             .state_mut()

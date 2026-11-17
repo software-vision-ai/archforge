@@ -1729,7 +1729,6 @@ str		Add package	Añadir paquete
 str		Place package	Colocar paquete
 str		Move package	Mover paquete
 str		Parent package	Paquete superior
-str		Move {what} into {where}	Mover {what} a {where}
 str		{what} moved into {where}	{what} movido a {where}
 str		Open this package's diagram	Abrir el diagrama de este paquete
 str		Open this package's diagram (⌘↓)	Abrir el diagrama de este paquete (⌘↓)
