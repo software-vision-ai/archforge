@@ -1792,16 +1792,16 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
     let customer = run(session, "uml.class.add", json!({ "package": root, "name": "Customer" }))?;
     run(session, "diagram.place", json!({ "diagram": top, "element": customer, "x": 80, "y": 120 }))?;
     let (w, h) = archforge_uml::PACKAGE_SIZE;
-    let mut sales = String::new();
+    let (mut sales, mut inner) = (String::new(), String::new());
     for (name, x) in [("Sales", 420), ("Billing", 760)] {
         let p = run(session, "uml.package.add", json!({ "name": name, "parent": root }))?;
         run(session, "diagram.place", json!({ "diagram": top, "element": p, "x": x, "y": 120, "width": w, "height": h }))?;
-        run(session, "uml.package.diagram", json!({ "package": p }))?;
+        // Each package's own diagram, named like it and its default (AR-581).
+        let own = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": p, "name": name }))?;
         if name == "Sales" {
-            sales = p;
+            (sales, inner) = (p, own);
         }
     }
-    let inner = run(session, "uml.package.diagram", json!({ "package": sales }))?;
     // Sales's own diagram, which its card shows as a thumbnail (AR-113): two classes with their
     // attributes, the association between them, and its own package Payments with a class.
     let mut classes = Vec::new();
@@ -1816,7 +1816,7 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
     run(session, "uml.association.add", json!({ "from": classes[0], "to": classes[1], "name": "lines" }))?;
     let payments = run(session, "uml.package.add", json!({ "name": "Payments", "parent": sales }))?;
     run(session, "diagram.place", json!({ "diagram": inner, "element": payments, "x": 760, "y": 120, "width": w, "height": h }))?;
-    let own = run(session, "uml.package.diagram", json!({ "package": payments }))?;
+    let own = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": payments, "name": "Payments" }))?;
     let payment = run(session, "uml.class.add", json!({ "package": payments, "name": "Payment" }))?;
     run(session, "diagram.place", json!({ "diagram": own, "element": payment, "x": 80, "y": 80 }))?;
     let _ = session.execute("diagram.connect-all", &json!({ "diagram": inner }));
