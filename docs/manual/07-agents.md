@@ -574,7 +574,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   change or a restore), a request that would change it is refused and says so, and a request sent
   before another version, branch or project took its place is refused rather than run on that one.
 - **Read the model and the skills**: `skill_list` and `skill_effective` as tools, and as MCP
-  resources `archforge://project` (the open project, its revision, the selection),
+  resources `archforge://project` (the open project, its undo history and revision, the selection),
   `archforge://skills`, `archforge://element/{id}` (a schema with its tables, a table, a diagram, or
   a class, an interface, an enumeration with its literals, a data type, a primitive type or an
   association class, each with its attributes, operations and description) and
@@ -583,6 +583,11 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   packages with `uml_package_list`, a class's relationships with `uml_relationship_list` and an
   element's constraints with `uml_constraint_list`, or, with `--compact`, `execute_command` given
   the command ids `uml.package.list`, `uml.relationship.list` and `uml.constraint.list`.
+  A command that changes the model only on the revision the agent read takes `expected_revision`,
+  `{"history": h, "revision": r}` as `inspect_document` gives them. Another revision, another
+  history, or none at all is refused and changes nothing. While a drag in the window shows a
+  preview, the revision given is the preview's own, which never matches: read again once the drag
+  ends.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element

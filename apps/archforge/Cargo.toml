@@ -17,6 +17,7 @@ path = "src/main.rs"
 archforge-agents.workspace = true
 archforge-control.workspace = true
 archforge-dolt.workspace = true
+archforge-engine.workspace = true
 archforge-notations.workspace = true
 archforge-mof.workspace = true
 archforge-project.workspace = true

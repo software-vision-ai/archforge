@@ -150,7 +150,19 @@ fn install_panic_hook() {
     }));
 }
 
+/// Seeds the engine's undo-history numbers once, before any project opens, from the standard
+/// library's per-process random keys over the clock and the process id, so a revision read from an
+/// earlier run never matches a session of this one (AR-574).
+fn seed_histories() {
+    use std::hash::{BuildHasher, RandomState};
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
+    archforge_engine::seed_histories(RandomState::new().hash_one((nanos, std::process::id())));
+}
+
+/// Starts the application: the undo-history numbering is seeded first, then the window runs and
+/// its exit code ends the process.
 fn main() {
+    seed_histories();
     std::process::exit(run());
 }
 

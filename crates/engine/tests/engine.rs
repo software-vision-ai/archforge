@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use archforge_engine::testing::round_trip;
 use archforge_engine::{
-    CommandError, CommandSpec, Ctx, EngineError, Facts, JournalEntry, Options, Params, Registry, Replace, Session, Snapshot, Snapshotted, View,
-    always, cmd,
+    CommandError, CommandSpec, Ctx, EngineError, Facts, JournalEntry, Options, Params, Reason, Registry, Replace, Revision, Session, Snapshot,
+    Snapshotted, View, always, cmd, expected_revision, history_start, seed_histories,
 };
 use serde_json::{Value, json};
 
@@ -130,6 +130,12 @@ fn label(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, Command
     Ok(Value::Null)
 }
 
+/// Renames an item, only on the revision its caller read.
+fn guarded(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
+    expected_revision(ctx, p)?;
+    rename(ctx, p)
+}
+
 fn specs() -> Vec<CommandSpec<Doc, Selection>> {
     let mut s = archforge_engine::cmd::edit::specs();
     s.extend([
@@ -160,6 +166,15 @@ fn specs() -> Vec<CommandSpec<Doc, Selection>> {
             "index: integer, 0..1000; which item\ntext: string; the name, a fresh id's when empty",
             has_items,
             label
+        ),
+        cmd!(
+            "item.guarded",
+            "Rename guarded",
+            &["Item"],
+            None,
+            "index: integer, 0..1000; which item\nname: string; its new name\nexpected_revision: object?; the history and revision read",
+            has_items,
+            guarded
         ),
     ]);
     s
@@ -1152,4 +1167,137 @@ fn a_session_is_not_made_read_only_during_a_gesture() {
     s.cancel().unwrap();
     s.set_read_only(true).unwrap();
     assert!(s.read_only());
+}
+
+/// The point in `s`'s history it is at now, as a caller reads it and as a refusal names it.
+fn read(s: &S) -> (Value, Revision) {
+    let at = s.token();
+    (json!({ "history": at.history, "revision": at.revision }), at)
+}
+
+/// `item.guarded` renaming item 0 to `name` for the revision `token`.
+fn guarded_call(s: &mut S, name: &str, token: Value) -> Result<archforge_engine::Outcome, EngineError> {
+    s.execute("item.guarded", &json!({ "index": 0, "name": name, "expected_revision": token }))
+}
+
+/// A change made for the revision its caller read runs. One made for another revision, another
+/// history, a token of another shape, a null one or none is refused, typed, about
+/// `expected_revision`, and leaves no undo step (AR-574).
+#[test]
+fn a_change_runs_only_on_the_revision_its_caller_read() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    let (token, at) = read(&s);
+    let later = Revision { revision: at.revision + 1, ..at };
+    let other = Revision { history: at.history + 1, ..at };
+    for (given, expected) in [
+        (json!({ "history": later.history, "revision": later.revision }), Some(later)),
+        (json!({ "history": other.history, "revision": other.revision }), Some(other)),
+        (json!({ "history": at.history }), None),
+        (json!({ "history": at.history, "revision": -1 }), None),
+        (Value::Null, None),
+    ] {
+        let before = state(&s);
+        let Err(EngineError::Failed { error, .. }) = guarded_call(&mut s, "b", given.clone()) else { panic!("{given} ran") };
+        let stale = Reason::StaleRevision { expected, current: at };
+        assert_eq!((error.key.as_deref(), error.reason), (Some("expected_revision"), Some(stale)), "{given}");
+        assert_eq!(state(&s), before, "{given}");
+    }
+    let before = state(&s);
+    let Err(EngineError::Failed { error, .. }) = s.execute("item.guarded", &json!({ "index": 0, "name": "b" })) else { panic!("ran without") };
+    assert_eq!(error.reason, Some(Reason::StaleRevision { expected: None, current: at }));
+    assert_eq!(state(&s), before);
+    guarded_call(&mut s, "b", token.clone()).unwrap();
+    assert_eq!((names(&s), s.undo_label()), (vec!["b"], Some("Rename guarded")));
+    assert!(guarded_call(&mut s, "c", token).is_err(), "the token read before the change is stale now");
+}
+
+/// A token from another session never matches, though both are at the same revision: each session
+/// has its own history (AR-574).
+#[test]
+fn a_token_from_another_session_is_refused() {
+    let (mut one, mut two) = (session(), session());
+    for s in [&mut one, &mut two] {
+        s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    }
+    assert_eq!(one.revision(), two.revision());
+    let before = state(&two);
+    assert!(guarded_call(&mut two, "b", read(&one).0).is_err());
+    assert_eq!(state(&two), before);
+    let own = read(&two).0;
+    guarded_call(&mut two, "b", own).unwrap();
+}
+
+/// A token read while a gesture shows a preview names that preview, never the state it previews
+/// from: once the gesture is cancelled it is refused, though the preview left the revision as it
+/// was, and so after a commit; a token read before the gesture, or while a refused preview shows the
+/// state before, matches after a cancel (AR-574).
+#[test]
+fn a_token_read_from_a_preview_never_matches() {
+    let mut s = session();
+    for name in ["a", "b"] {
+        s.execute("item.add", &json!({ "name": name })).unwrap();
+    }
+    let (before, at) = read(&s);
+    s.begin_interaction("item.remove").unwrap();
+    s.preview(&json!({ "index": 0 })).unwrap();
+    let (previewed, shown) = read(&s);
+    assert_eq!((names(&s), s.revision()), (vec!["b"], at.revision), "the preview leaves the revision as it was");
+    assert_ne!(shown, at);
+    s.preview(&json!({ "index": 5 })).unwrap_err();
+    assert_eq!(read(&s).1, at, "a refused preview shows the state before again");
+    s.preview(&json!({ "index": 0 })).unwrap();
+    s.cancel().unwrap();
+    let held = state(&s);
+    assert!(guarded_call(&mut s, "x", previewed).is_err());
+    assert_eq!(state(&s), held);
+    guarded_call(&mut s, "x", before).unwrap();
+    assert_eq!(names(&s), ["x", "b"]);
+    s.begin_interaction("item.remove").unwrap();
+    s.preview(&json!({ "index": 0 })).unwrap();
+    let previewed = read(&s).0;
+    s.commit().unwrap();
+    assert!(guarded_call(&mut s, "y", previewed).is_err(), "nor after a commit");
+}
+
+/// Undo takes the model back to the earlier revision, so a token read before the undone change
+/// matches again; inside a batch, a token names the revision the batch began on (AR-574).
+#[test]
+fn undo_brings_back_the_revision_a_token_was_read_at() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    let (token, at) = read(&s);
+    s.execute("item.rename", &json!({ "index": 0, "name": "x" })).unwrap();
+    assert_ne!(read(&s).1, at);
+    s.undo().unwrap();
+    assert_eq!(read(&s).1, at);
+    guarded_call(&mut s, "b", token).unwrap();
+    let (token, _) = read(&s);
+    s.batch("Both", |b| {
+        b.execute("item.add", &json!({ "name": "c" }))?;
+        b.execute("item.guarded", &json!({ "index": 0, "name": "d", "expected_revision": token })).map(|_| ())
+    })
+    .unwrap();
+    assert_eq!(names(&s), ["d", "c"]);
+}
+
+/// Two processes seeded from different entropy, even one apart, as two starts of the app a
+/// nanosecond apart, number their histories far apart, within the exact range of a JSON double.
+/// Seeding moves the next number there and never back, so a seed given again repeats no number
+/// (AR-574).
+#[test]
+fn histories_of_two_starts_do_not_meet() {
+    let starts = [0, 1, 1 << 32, u64::MAX].map(history_start);
+    for (i, a) in starts.iter().enumerate() {
+        assert!((1..1 << 52).contains(a), "{a}");
+        for b in &starts[i + 1..] {
+            assert!(a.abs_diff(*b) > 1 << 32, "{a} and {b} start close");
+        }
+    }
+    let entropy = 0x5eed;
+    seed_histories(entropy);
+    let first = session().history();
+    assert!(first >= history_start(entropy), "{first}");
+    seed_histories(entropy);
+    assert!(session().history() > first, "seeding again gives no number twice");
 }

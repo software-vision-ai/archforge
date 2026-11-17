@@ -139,6 +139,9 @@ struct Interaction<X, V> {
     view: V,
     next: u64,
     last: Option<(Params, Value, X)>,
+    /// The revision of the preview shown, a fresh one no state the history keeps ever has; none
+    /// while the state before the gesture shows.
+    shown: Option<u64>,
 }
 
 /// What a recorded run produced.
@@ -149,8 +152,31 @@ struct Ran<X> {
     next_changed: bool,
 }
 
-/// The number the next session's undo history gets.
+/// The number the next session's undo history gets: from 1 until the host seeds it
+/// ([`seed_histories`]).
 static NEXT_HISTORY: AtomicU64 = AtomicU64::new(1);
+
+/// The history numbers a seed starts at are below 2^52, so they stay exact as JSON numbers that a
+/// reader holds as doubles, with room to count up.
+const HISTORY_START_BITS: u64 = (1 << 52) - 1;
+
+/// Where a process's history numbers start for `entropy`, which the host draws once at start (the
+/// engine reads no clock and no randomness): the bits mixed, so near entropies start far apart,
+/// and kept between 1 and 2^52.
+pub fn history_start(entropy: u64) -> u64 {
+    // The splitmix64 finaliser: every bit of the entropy moves about half the bits of the start.
+    let mut z = entropy.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    ((z ^ (z >> 31)) & HISTORY_START_BITS).max(1)
+}
+
+/// Moves the next history number to [`history_start`] of `entropy`, never back, so the sessions of
+/// this process are numbered apart from another process's: a revision one process gave never
+/// matches a session of another, as an app started again. A number already given stays unique.
+pub fn seed_histories(entropy: u64) {
+    NEXT_HISTORY.fetch_max(history_start(entropy), Ordering::Relaxed);
+}
 
 pub struct Session<D: Document, V> {
     registry: Arc<Registry<D, V>>,
@@ -423,16 +449,25 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.groups.iter().position(|g| g.origin == origin)
     }
 
-    /// The document's state: it changes with every change, and undo and redo bring an earlier
-    /// state's back, so a host can tell when there is something new to write.
     /// Which undo history this session has: every session's is its own, so a revision means
     /// something only alongside this number.
     pub fn history(&self) -> u64 {
         self.history
     }
 
+    /// The document's state: it changes with every change, and undo and redo bring an earlier
+    /// state's back, so a host can tell when there is something new to write.
     pub fn revision(&self) -> u64 {
         self.id
+    }
+
+    /// The point a caller reading the model now names as its `expected_revision`: this history and
+    /// the revision. While a gesture shows a preview, which leaves [`Session::revision`] as it was,
+    /// the revision is the preview's own, which no state the history keeps ever has: a token read
+    /// from a preview never matches, whether the gesture is then committed or cancelled.
+    pub fn token(&self) -> crate::cmd::Revision {
+        let shown = self.interaction.as_ref().and_then(|it| it.shown);
+        crate::cmd::Revision { history: self.history, revision: shown.unwrap_or(self.id) }
     }
 
     /// Whether the document differs from the state last marked saved.
@@ -583,10 +618,11 @@ impl<D: Document, V: View<D>> Session<D, V> {
     fn run_recorded(&mut self, spec: &CommandSpec<D, V>, run: crate::cmd::RunFn<D, V>, params: &Params) -> Result<Ran<D::Delta>, EngineError> {
         let view0 = self.view.clone();
         let next0 = self.counter;
+        let at = crate::cmd::Revision { history: self.history, revision: self.id };
         let (doc, view, counter) = (&mut self.doc, &mut self.view, &mut self.counter);
         let result = guard(spec.id, || {
             doc.begin();
-            run(&mut Ctx { doc, view, next: counter }, params).map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })
+            run(&mut Ctx { doc, view, next: counter, at }, params).map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })
         });
         let doc = &mut self.doc;
         let delta = match guard(spec.id, || Ok(doc.end())) {
@@ -907,7 +943,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         }
         self.check_enabled(&spec)?;
         self.chain = None;
-        self.interaction = Some(Interaction { id: spec.id, view: self.view.clone(), next: self.counter, last: None });
+        self.interaction = Some(Interaction { id: spec.id, view: self.view.clone(), next: self.counter, last: None, shown: None });
         Ok(())
     }
 
@@ -917,6 +953,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         let id = it.id;
         let (view, next) = (it.view.clone(), it.next);
         let last = it.last.take().map(|(_, _, d)| d);
+        it.shown = None;
         self.roll_back(id, last, view, next)
     }
 
@@ -937,8 +974,10 @@ impl<D: Document, V: View<D>> Session<D, V> {
             return Err(failed(spec.id, COUNTER_ONLY));
         }
         self.retain_valid_or_roll_back(spec.id, &ran.delta, view0, next0)?;
+        let shown = ran.delta.is_some().then(|| self.fresh_id());
         if let (Some(it), Some(delta)) = (self.interaction.as_mut(), ran.delta) {
             it.last = Some((p, ran.value.clone(), delta));
+            it.shown = shown;
         }
         Ok(ran.value)
     }

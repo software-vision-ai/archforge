@@ -766,6 +766,8 @@ str		No stereotype is applied yet.	Ainda não foi aplicado nenhum estereótipo.
 str		Another change is still under way. Try again once it ends.	Outra alteração ainda está em curso. Tente novamente quando terminar.
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	Não foi possível repor o modelo como estava após uma falha. Reabra o projeto para continuar.
 str		Undo and redo cannot run as part of another change.	Anular e refazer não podem fazer parte de outra alteração.
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	O modelo mudou desde que foi lido, ou foi lido outro projeto. Leia-o novamente e tente outra vez. Nada foi alterado.
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	A alteração não indica para que revisão do modelo foi feita. Leia o modelo e tente outra vez. Nada foi alterado.
 str		This could not be done because of an internal error. Nothing was changed.	Não foi possível fazê-lo devido a um erro interno. Nada foi alterado.
 str		The text can't be empty.	O texto não pode estar vazio.
 str		It can't be longer than {max} characters.	São permitidos no máximo {max} caracteres.

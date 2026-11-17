@@ -466,6 +466,10 @@ pub enum Reason {
     FollowsNoColumn { name: Box<str> },
     /// A column's place is past the end of its table, which has `columns` columns.
     PastLastColumn { columns: usize },
+    /// The call expected the model at `expected`, but it is at `current`: it changed since the
+    /// caller read it, or the caller read another session's. None expected when the call gave no
+    /// readable revision.
+    StaleRevision { expected: Option<crate::cmd::Revision>, current: crate::cmd::Revision },
 }
 
 /// The rule a mapping table, or a relationship to become one, breaks, in a [`Reason::Mapping`].

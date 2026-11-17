@@ -3,9 +3,10 @@
 //! way, a session that could not be put back after a failure, and undo or redo inside another
 //! change as plain sentences; and the errors only a mistake in the program reaches (a parameter the
 //! engine refuses before the command runs, a command that stopped on an internal error) as one
-//! sentence, so no engine text reaches the user.
+//! sentence, so no engine text reaches the user. The engine's own typed refusal, a change made for a
+//! revision of the model other than the one it would run on (AR-574), is said here too.
 
-use archforge_engine::EngineError;
+use archforge_engine::{EngineError, Reason};
 
 use crate::i18n::tr;
 
@@ -43,6 +44,16 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
         profiles::NO_STEREOTYPES => tr("There is no stereotype yet."),
         applications::NO_APPLICATIONS => tr("No stereotype is applied yet."),
         _ => return None,
+    })
+}
+
+/// A refusal the engine types itself in the user's words: a change made for another revision of the
+/// model than the one it would run on, or for none; none for another reason.
+pub(crate) fn reason(reason: &Reason) -> Option<String> {
+    let Reason::StaleRevision { expected, .. } = reason else { return None };
+    Some(match expected {
+        Some(_) => tr("The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed."),
+        None => tr("The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed."),
     })
 }
 

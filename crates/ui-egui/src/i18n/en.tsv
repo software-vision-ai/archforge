@@ -765,6 +765,8 @@ str		No stereotype is applied yet.	No stereotype is applied yet.
 str		Another change is still under way. Try again once it ends.	Another change is still under way. Try again once it ends.
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	The model could not be put back as it was after a failure. Reopen the project to go on.
 str		Undo and redo cannot run as part of another change.	Undo and redo cannot run as part of another change.
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.
 str		This could not be done because of an internal error. Nothing was changed.	This could not be done because of an internal error. Nothing was changed.
 str		The text can't be empty.	The text can't be empty.
 str		It can't be longer than {max} characters.	It can't be longer than {max} characters.

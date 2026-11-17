@@ -766,6 +766,8 @@ str		No stereotype is applied yet.	还没有应用任何构造型。
 str		Another change is still under way. Try again once it ends.	另一项更改仍在进行中。请在其结束后重试。
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	失败后无法将模型恢复原状。请重新打开项目以继续。
 str		Undo and redo cannot run as part of another change.	撤销和重做不能作为其他更改的一部分运行。
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	模型在读取后已更改，或读取的是另一个项目。请重新读取，然后再试一次。未作任何更改。
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	此更改未说明它针对的是模型的哪个修订版本。请读取模型，然后再试一次。未作任何更改。
 str		This could not be done because of an internal error. Nothing was changed.	由于内部错误，无法完成此操作。未作任何更改。
 str		The text can't be empty.	文本不能为空。
 str		It can't be longer than {max} characters.	最多只能有 {max} 个字符。

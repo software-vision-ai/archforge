@@ -6666,7 +6666,8 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// reason, a reason the catalogues don't hold in the engine's words, a gesture under way, undo
 /// inside another change and a session that could not be put back, each in its sentence, and an
 /// unknown command, a parameter refused and an internal error as one sentence that repeats no
-/// engine text. In light and dark (AR-440).
+/// engine text. In light and dark (AR-440). A change made for another revision of the model, or for
+/// none, is said in its sentence too (AR-574).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -6699,6 +6700,18 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [&nodes["Order"]], "shade": 1 })), internal, "{theme:?}");
         let stopped = EngineError::Internal { id: "diagram.style".into(), message: "a handler panicked".into() };
         assert_eq!(crate::panels::refusal(&stopped), internal, "{theme:?}");
+        let at = archforge_engine::Revision { history: 2, revision: 5 };
+        let stale = |expected| {
+            let reason = archforge_engine::Reason::StaleRevision { expected, current: at };
+            let error = archforge_engine::CommandError::about("expected_revision", "stale").because(reason);
+            crate::panels::refusal(&EngineError::Failed { id: "uml.package.default.set".into(), error })
+        };
+        let changed = "Das Modell hat sich geändert, seit es gelesen wurde, oder ein anderes Projekt wurde gelesen. \
+                       Lesen Sie es erneut und versuchen Sie es noch einmal. Es wurde nichts geändert.";
+        assert_eq!(stale(Some(archforge_engine::Revision { revision: 4, ..at })), changed, "{theme:?}");
+        let none = "Die Änderung gibt nicht an, für welchen Stand des Modells sie gedacht ist. \
+                    Lesen Sie das Modell und versuchen Sie es noch einmal. Es wurde nichts geändert.";
+        assert_eq!(stale(None), none, "{theme:?}");
     }
     crate::i18n::set_language("en");
 }

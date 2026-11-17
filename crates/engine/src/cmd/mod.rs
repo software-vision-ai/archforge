@@ -9,17 +9,40 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::params::{ParamDoc, Params, parse_params};
-use crate::{CommandError, Document, View};
+use crate::{CommandError, Document, Reason, View};
 
-/// What a handler acts on: the document, which undo covers, the view, which it never touches, and
-/// the counter new ids come from, which undo never rolls back, so an id is never given twice.
+/// What a handler acts on: the document, which undo covers, the view, which it never touches, the
+/// counter new ids come from, which undo never rolls back, so an id is never given twice, and the
+/// revision the call runs on, which it only reads.
 pub struct Ctx<'a, D, V> {
     pub doc: &'a mut D,
     pub view: &'a mut V,
     pub next: &'a mut u64,
+    pub(crate) at: Revision,
 }
 
+/// A point in a session's undo history: which history, and the revision within it. A revision
+/// means something only within its own history, as every session counts its revisions from 0, so
+/// a point another session, an earlier opening of the project or, once the host has seeded the
+/// numbering ([`crate::seed_histories`]), an earlier run gave never matches by chance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Revision {
+    pub history: u64,
+    pub revision: u64,
+}
+
+/// The parameter a command that changes the model only on the revision its caller read takes:
+/// `{ "history": h, "revision": r }`, as the project state gives them ([`crate::Session::token`]).
+/// Such a command declares it `object?` and calls [`expected_revision`] first, so a token left out
+/// or null reaches the check and is refused typed, not as a missing parameter.
+pub const EXPECTED_REVISION: &str = "expected_revision";
+
 impl<D, V> Ctx<'_, D, V> {
+    /// The revision the call runs on: the session's when the call began (in a batch, the batch's).
+    pub fn revision(&self) -> Revision {
+        self.at
+    }
+
     /// The next number for a new id, or None when the counter is spent.
     pub fn fresh(&mut self) -> Option<u64> {
         let n = *self.next;
@@ -27,6 +50,32 @@ impl<D, V> Ctx<'_, D, V> {
         *self.next = after;
         Some(n)
     }
+}
+
+/// Refuses, typed as [`Reason::StaleRevision`], unless `params` holds the
+/// [`EXPECTED_REVISION`] the call runs on: its history and its revision both, as whole numbers.
+/// Left out, null, or not of that shape, it is refused alike (none expected), naming the revision
+/// the call runs on. Like
+/// every refusal it changes nothing and leaves no undo step. A journal entry that holds one is
+/// refused when replayed in another session, whose history differs.
+pub fn expected_revision<D, V>(ctx: &Ctx<'_, D, V>, params: &Params) -> Result<(), CommandError> {
+    let current = ctx.revision();
+    let field = |v: &Value, key: &str| v.get(key).and_then(Value::as_u64);
+    let expected = params.get(EXPECTED_REVISION).and_then(|v| Some(Revision { history: field(v, "history")?, revision: field(v, "revision")? }));
+    if expected == Some(current) {
+        return Ok(());
+    }
+    let message = match expected {
+        Some(e) => format!(
+            "the model is at revision {} of history {}, not revision {} of history {}; read the project again and retry",
+            current.revision, current.history, e.revision, e.history
+        ),
+        None => format!(
+            "it must be the history and the revision the project state gives, now {{\"history\": {}, \"revision\": {}}}",
+            current.history, current.revision
+        ),
+    };
+    Err(CommandError::about(EXPECTED_REVISION, message).because(Reason::StaleRevision { expected, current }))
 }
 
 /// What an enabled predicate sees: the state the command would run on, and the history.
