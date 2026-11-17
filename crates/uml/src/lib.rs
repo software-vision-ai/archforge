@@ -41,6 +41,7 @@ pub mod applications;
 pub mod bindings;
 pub mod commands;
 pub mod constraints;
+pub mod defaults;
 pub mod descriptions;
 pub mod figures;
 pub mod generalization_sets;

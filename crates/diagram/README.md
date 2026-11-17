@@ -34,9 +34,11 @@ A `DefaultDiagramBinding` names a package's default diagram (AR-552): a member o
 whose `ownerElement` (typed Any) and `defaultDiagram` are both required and own nothing. Destroying
 it leaves both alive; while it stands, the store refuses to destroy either. Its table,
 `diagram_default_diagram_binding`, is a storage upgrade only: a project saved before it gets the
-table through the project crate's `EARLIER_MODELS`, and no diagram kind is migrated. The commands
-that make and check bindings, the resolver, Properties and the deletion policy come later (AR-396,
-AR-397); nothing creates a binding yet. A comparison lists a binding among the model's elements, not
+table through the project crate's `EARLIER_MODELS`, and no diagram kind is migrated.
+`defaults::{bindings_of, bindings_to, bindings}` find the bindings naming an element as their owner,
+naming a diagram as its default, and all of them, without judging them; UML's resolver says what a
+binding may name (AR-575). The commands that make bindings, Properties and the deletion policy come
+later (AR-396, AR-397); nothing creates a binding yet. A comparison lists a binding among the model's elements, not
 the diagrams, worded by its package and diagram (`Sales → Sales overview`) under the kind word
 Default diagram (AR-553).
 
@@ -112,7 +114,8 @@ their key and change nothing, with their reasons typed; the cascades on the stor
 topmost node, nearest edge and viewport; the rules over hand-made data; the sweep; seeded random
 sequences with the rules and the store's validation checked after each step and undo back to the
 start; a default-diagram binding as a Model member read back from its rows under the same ids and
-references, its creation undone and redone exactly, its ends required and owned by nothing. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
+references, its creation undone and redone exactly, its ends required and owned by nothing, and
+found from either end. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
 
 **Known lacks.** The project crate persists diagrams; they do not load lazily. The style
 sheet's contents and the drawing come with the canvas. Arrange is a layered layout without dummy boxes for long lines; routes are worked out when drawn, never

@@ -1068,3 +1068,15 @@ fn a_bindings_references_are_required_and_own_nothing() {
     assert_eq!(st.list(model, archforge_core::model::MEMBER).unwrap(), vec![Value::Ref(package), Value::Ref(diagram)]);
     assert!(st.validate_all().is_empty(), "{:?}", st.validate_all());
 }
+
+/// A binding is found from its package and from its diagram, and among the store's bindings;
+/// nothing else names either end.
+#[test]
+fn a_binding_is_found_from_either_end() {
+    let mut st = bound_store(toy::counter_ids());
+    let (model, package, diagram, binding) = bound(&mut st);
+    assert_eq!((defaults::bindings_of(&st, package), defaults::bindings_to(&st, diagram)), (vec![binding], vec![binding]));
+    assert_eq!((defaults::bindings_of(&st, diagram), defaults::bindings_to(&st, package)), (vec![], vec![]), "each end by its own role");
+    let second = bind(&mut st, model, package, diagram);
+    assert_eq!(defaults::bindings(&st), [binding, second]);
+}
