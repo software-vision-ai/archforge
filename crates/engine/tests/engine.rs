@@ -1390,7 +1390,8 @@ fn a_commit_check_keeps_a_command_it_accepts_and_takes_back_one_it_refuses() {
 }
 
 /// A batch is checked once, as a whole: it may pass through a state the check refuses when it
-/// ends in one it accepts, and one that ends refused is taken back whole (AR-629).
+/// ends in one it accepts, and one that ends refused is taken back whole, the coalescing chain
+/// left as it was (AR-629).
 #[test]
 fn a_commit_check_sees_a_batch_once_at_its_end() {
     let mut s = checked(&["a", "b"]);
@@ -1402,6 +1403,8 @@ fn a_commit_check_sees_a_batch_once_at_its_end() {
     })
     .unwrap();
     assert_eq!((checks(), names(&s), s.undo_label()), (1, vec!["c", "d"], Some("Swap")));
+    let rename = |name: &str| json!({ "index": 0, "name": name, "coalesce": "k" });
+    s.execute("item.rename", &rename("x")).unwrap();
     let before = kept(&s);
     let refused = s.batch("Grow", |b| {
         b.execute("item.remove", &json!({ "index": 0 }))?;
@@ -1410,7 +1413,10 @@ fn a_commit_check_sees_a_batch_once_at_its_end() {
     });
     let Err(EngineError::Failed { id, error }) = refused else { panic!("the batch was kept: {refused:?}") };
     assert_eq!((id.as_str(), error), ("a batch", too_many()));
-    assert_eq!((checks(), kept(&s)), (1, before));
+    assert_eq!((checks(), kept(&s)), (2, before), "the rename and the batch");
+    s.execute("item.rename", &rename("y")).unwrap();
+    s.undo().unwrap();
+    assert_eq!(names(&s), ["c", "d"], "a refused batch leaves a gesture's chain open, as a failing command does");
 }
 
 /// A gesture's previews are never checked, only its commit; a commit the check refuses ends the
