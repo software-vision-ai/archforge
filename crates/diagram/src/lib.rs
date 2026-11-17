@@ -194,7 +194,7 @@ pub fn views_of(store: &Store, element: Obj) -> (Vec<Obj>, Vec<Obj>, Vec<Obj>) {
 
 /// `element` and everything it contains, each once, in the order a walk down meets them: what
 /// [`remove_views_of`] removes the views of.
-pub(crate) fn within(store: &Store, element: Obj) -> Result<Vec<Obj>, Invalid> {
+pub fn within(store: &Store, element: Obj) -> Result<Vec<Obj>, Invalid> {
     let mut elements = Vec::new();
     let mut stack = vec![element];
     let mut seen = BTreeSet::new();

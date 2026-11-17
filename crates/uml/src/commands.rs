@@ -742,7 +742,8 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// top-level package takes them along. Either takes its default-diagram binding along, with no
 /// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). An
 /// element that would take along a diagram another element's binding names, unsoundly, is refused
-/// typed as [`Reason::DefaultDiagramOf`] (AR-578). A classifier takes the relationships that touch it along,
+/// typed as [`Reason::DefaultDiagramOf`], unless that element goes too; the bindings of all that
+/// goes go before any diagram, in whatever order the elements are named (AR-578). A classifier takes the relationships that touch it along,
 /// and an association class among them takes its own ([`going_with`]); a member's type that goes is
 /// dropped from what had it, and so is a default that is a literal that goes (AR-126), as the
 /// property's own type would be. An element a constraint names leaves the constraint's elements, and
@@ -785,6 +786,15 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     if let Some(refused) = crate::templates::removals_problem(store, &params) {
         return Err(refused);
     }
+    // Everything the removal takes along, whose bindings go with it (AR-578): each element with
+    // what it holds, a nested package alone, as it hands what it holds up to its parent.
+    let nested = |o: Obj| store.class_of(o).ok() == Some(PACKAGE) && package_of(store, o).is_some();
+    let plan: std::collections::BTreeSet<Obj> = objs
+        .iter()
+        .copied()
+        .filter(|o| store.is_alive(*o))
+        .flat_map(|o| if nested(o) { vec![o] } else { archforge_diagram::within(store, o).unwrap_or_default() })
+        .collect();
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
         if let Some(why) = crate::templates::parameter_element_problem(store, *o) {
@@ -822,7 +832,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             && let Some(parent) = package_of(store, *o)
         {
             hand_up_problem(store, *o, parent)?;
-        } else if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, *o, "ids") {
+        } else if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, *o, "ids", |b| plan.contains(&b)) {
             // A diagram that would go stays while the binding of an element that stays names it,
             // and so does what it is of (AR-578); a nested package hands its diagrams up instead.
             return Err(refused);
@@ -917,6 +927,9 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     for profile in taken {
         crate::profiles::before_profile_removal(store, profile)?;
     }
+    // The bindings of everything that goes go first, so none names a diagram that goes before its
+    // owner, in whatever order the elements were selected (AR-578).
+    gone += archforge_diagram::defaults::remove_bindings_of(store, plan).map_err(fail)?;
     // A default that is a literal goes with the literal: an InstanceValue needs its instance.
     let defaults = crate::modifiers::literal_defaults(store);
     for o in all {

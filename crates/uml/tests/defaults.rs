@@ -416,3 +416,25 @@ fn a_diagram_another_packages_binding_names_keeps_it_and_its_package() {
     assert!(!st.is_alive(foreign) && st.is_alive(detail) && st.is_alive(handed_up) && st.is_alive(sales));
     assert_eq!(resolve(st, sales), Ok(DefaultDiagram::Bound(detail)));
 }
+
+/// Billing, whose binding names a diagram of Sales, removed together with Sales goes, its binding
+/// with it, whichever of the two is selected first; one undo step brings everything back. Sales
+/// alone is still refused while Billing stays (AR-578).
+#[test]
+fn a_package_and_the_one_whose_diagram_its_binding_names_go_together_in_either_order() {
+    for order in [[0x20, 0x10], [0x10, 0x20]] {
+        let (mut st, model, _, _, detail, _) = bound_sales();
+        let billing = add(&mut st, model, PACKAGE, 0x20);
+        bind(&mut st, model, 0x21, billing, detail);
+        let mut s = over(st);
+        let before = rows_of(s.doc());
+        let wrong = Some(Reason::DefaultDiagramOf { package: id(0x20).into(), fault: Some(BindingFault::WrongOwner) });
+        assert_eq!(refused(&mut s, "element.remove", json!({ "ids": [id(0x10)] })).1, wrong, "{order:x?}");
+        s.execute("element.remove", &json!({ "ids": order.map(id) })).unwrap();
+        let st = s.doc();
+        assert!(!st.is_alive(billing) && !st.is_alive(detail), "{order:x?}");
+        assert_eq!((archforge_diagram::defaults::bindings(st), problems(st)), (vec![], vec![]), "{order:x?}");
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert!(rows_of(s.doc()) == before, "{order:x?}: one undo step brings all back");
+    }
+}

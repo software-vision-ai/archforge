@@ -607,8 +607,9 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   package's class diagrams is its default; its other diagrams are removed as before and leave the
   default as it is. A diagram another package names as its default, which is unsound, is kept the
   same way: `element_remove` of a package with no parent that holds it, its own package among them,
-  is refused, naming the package whose default it is. Choose a default of that package's own first.
-  A nested package hands the diagram up to its parent and goes.
+  is refused, naming the package whose default it is, unless that package is removed in the same
+  call. Choose a default of that package's own first. A nested package hands the diagram up to its
+  parent and goes.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element

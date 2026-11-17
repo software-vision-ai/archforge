@@ -4,7 +4,7 @@
 //! until that binding goes or names another (AR-578).
 
 use archforge_engine::{BindingFault, CommandError, Reason};
-use archforge_mof::{Obj, PropId, Store};
+use archforge_mof::{Invalid, Obj, PropId, Store};
 
 use crate::commands::name_or_id;
 use crate::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
@@ -55,11 +55,27 @@ pub fn diagram_removal_problem(store: &Store, d: Obj, key: &str, going: impl Fn(
 }
 
 /// Why removing the views of `element` and everything it contains ([`crate::remove_views_of`])
-/// is refused, as about `key`: one of their diagrams is the default of an element outside them,
-/// which keeps it ([`diagram_removal_problem`]); the bindings they own go along with them (AR-577).
+/// is refused, as about `key`: one of their diagrams is the default of an element for which
+/// `going` is false, which keeps it ([`diagram_removal_problem`]); `going` covers the whole
+/// removal, every element selected with what it holds, whose bindings go with them (AR-577).
 /// None when nothing stands in the way, or `element` is gone.
-pub fn views_removal_problem(store: &Store, element: Obj, key: &str) -> Option<CommandError> {
-    let elements = crate::within(store, element).ok()?;
-    let diagrams = elements.iter().flat_map(|e| crate::views_of(store, *e).0);
-    diagrams.into_iter().find_map(|d| diagram_removal_problem(store, d, key, |o| elements.contains(&o)))
+pub fn views_removal_problem(store: &Store, element: Obj, key: &str, going: impl Fn(Obj) -> bool) -> Option<CommandError> {
+    let diagrams = crate::within(store, element).ok()?.into_iter().flat_map(|e| crate::views_of(store, e).0);
+    diagrams.into_iter().find_map(|d| diagram_removal_problem(store, d, key, &going))
+}
+
+/// Destroys the bindings the live ones of `elements` own, with no replacement, as one step, and
+/// gives how many went: a removal of several elements takes all their bindings before any diagram
+/// goes, so one's binding naming another's diagram is in no one's way, whatever the order (AR-578).
+pub fn remove_bindings_of(store: &mut Store, elements: impl IntoIterator<Item = Obj>) -> Result<usize, Invalid> {
+    let bindings: Vec<Obj> = elements.into_iter().filter(|e| store.is_alive(*e)).flat_map(|e| bindings_of(store, e)).collect();
+    store.transaction(|st| {
+        let mut gone = 0;
+        for b in bindings {
+            if st.is_alive(b) {
+                gone += st.destroy(b)?;
+            }
+        }
+        Ok(gone)
+    })
 }
