@@ -89,6 +89,12 @@ pub struct Facts<'a, D, V> {
 
 pub type RunFn<D, V> = fn(&mut Ctx<'_, D, V>, &Params) -> Result<Value, CommandError>;
 pub type EnabledFn<D, V> = fn(&Facts<'_, D, V>) -> Result<(), &'static str>;
+/// The check a registry may hold that sees every change just before it becomes kept history: the
+/// document as the change left it, and the change. It runs once at each commit point (a command
+/// run on its own, a gesture's commit, a whole batch), never per command inside a batch or per
+/// preview, so a batch may pass through a state it would refuse. A refusal takes the change back
+/// whole and is given to the caller as the command's failure.
+pub type CommitCheck<D> = fn(&D, &<D as Document>::Delta) -> Result<(), CommandError>;
 
 /// What runs a command: a handler, or the session's own undo and redo.
 pub enum Handler<D, V> {
@@ -220,15 +226,32 @@ pub struct CommandInfo {
     pub undoable: bool,
 }
 
-/// The commands of one notation, checked once and shared.
-pub struct Registry<D, V> {
+/// The commands of one notation, checked once and shared, and the check every change passes
+/// before it is kept, when the notation has one.
+pub struct Registry<D: Document, V> {
     specs: Vec<(CommandSpec<D, V>, Vec<ParamDoc>)>,
+    check: Option<CommitCheck<D>>,
 }
 
 impl<D: Document, V: View<D>> Registry<D, V> {
     /// Builds the table from the areas' specs, refusing a duplicate identifier, one that is not a
     /// dotted area-and-verb name, or parameter documentation that does not parse.
     pub fn new(specs: Vec<CommandSpec<D, V>>) -> Result<Arc<Registry<D, V>>, String> {
+        Registry::build(specs, None)
+    }
+
+    /// [`Registry::new`] with `check` run on every change at its commit point ([`CommitCheck`]).
+    pub fn with_commit_check(specs: Vec<CommandSpec<D, V>>, check: CommitCheck<D>) -> Result<Arc<Registry<D, V>>, String> {
+        Registry::build(specs, Some(check))
+    }
+
+    /// The commit check, when the registry has one.
+    pub(crate) fn commit_check(&self) -> Option<CommitCheck<D>> {
+        self.check
+    }
+
+    /// The table of [`Registry::new`], holding `check` when given.
+    fn build(specs: Vec<CommandSpec<D, V>>, check: Option<CommitCheck<D>>) -> Result<Arc<Registry<D, V>>, String> {
         let mut out: Vec<(CommandSpec<D, V>, Vec<ParamDoc>)> = Vec::with_capacity(specs.len());
         for spec in specs {
             if !valid_id(spec.id) {
@@ -240,7 +263,7 @@ impl<D: Document, V: View<D>> Registry<D, V> {
             let docs = parse_params(spec.params).map_err(|e| format!("{}: {e}", spec.id))?;
             out.push((spec, docs));
         }
-        Ok(Arc::new(Registry { specs: out }))
+        Ok(Arc::new(Registry { specs: out, check }))
     }
 
     pub(crate) fn find(&self, id: &str) -> Option<&(CommandSpec<D, V>, Vec<ParamDoc>)> {

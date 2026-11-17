@@ -8,6 +8,8 @@
 //! change takes a fresh one, undo and redo restore the one stored with the step, and the project is
 //! unsaved exactly when the current id is not the saved one. A session may be made read-only for a
 //! while: undoable commands, undo, redo and gestures are refused, view commands and queries run.
+//! A registry's commit check ([`crate::CommitCheck`]) sees each change as it is about to be kept:
+//! a command's, a gesture's commit, a whole batch's; a refusal rolls it back like a failed call.
 
 use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -662,6 +664,21 @@ impl<D: Document, V: View<D>> Session<D, V> {
         Ok(())
     }
 
+    /// Runs the registry's commit check on the change `delta` made, inside the guard, and gives
+    /// the change back when it passes; a refusal or a panic takes the change back to `view0` and
+    /// `next0` and is given as the error. Without a check, it costs nothing.
+    fn check_commit(&mut self, id: &str, delta: D::Delta, view0: &V, next0: u64) -> Result<D::Delta, EngineError> {
+        let Some(check) = self.registry.commit_check() else { return Ok(delta) };
+        let doc = &self.doc;
+        match guard(id, || check(doc, &delta).map_err(|error| EngineError::Failed { id: id.to_string(), error })) {
+            Ok(()) => Ok(delta),
+            Err(e) => {
+                self.roll_back(id, Some(delta), view0.clone(), next0)?;
+                Err(e)
+            }
+        }
+    }
+
     fn weigh(&mut self, id: &str, delta: &D::Delta) -> Result<usize, EngineError> {
         guard(id, || Ok(D::weight(delta)))
     }
@@ -714,6 +731,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.retain_valid_or_roll_back(spec.id, &ran.delta, view0.clone(), next0)?;
         let mut cleared = false;
         if let Some(delta) = ran.delta {
+            let delta = self.check_commit(spec.id, delta, &view0, next0)?;
             let weight = match self.weigh(spec.id, &delta) {
                 Ok(w) => w,
                 Err(e) => {
@@ -900,6 +918,8 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.chain = None;
         let mut cleared = false;
         if let Some(delta) = whole {
+            // The batch is checked whole, never command by command.
+            let delta = self.check_commit("a batch", delta, &view0, next0)?;
             let weight = match self.weigh("a batch", &delta) {
                 Ok(w) => w,
                 Err(e) => {
@@ -992,6 +1012,8 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.chain = None;
         match it.last {
             Some((params, value, delta)) => {
+                // Only the preview committed is checked; a refusal ends the gesture where it began.
+                let delta = self.check_commit(it.id, delta, &it.view, it.next)?;
                 let weight = match self.weigh(it.id, &delta) {
                     Ok(w) => w,
                     Err(e) => {
