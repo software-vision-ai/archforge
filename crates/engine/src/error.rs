@@ -495,6 +495,11 @@ pub enum Reason {
     /// The package `package` (its name, or its id when it has none) has no class diagram yet, so
     /// it has no default diagram to open; one has to be made for it first (AR-582).
     NoDiagramYet { package: Box<str> },
+    /// A nested package's class diagrams cannot move up to `parent` (its name, or its id when it has
+    /// none) as the package is removed: `parent`'s default-diagram binding is unsound in the way the
+    /// fault names or, with none, `parent` has no class diagram yet, so a default has to be chosen or
+    /// made for it first (AR-673).
+    ParentDefaultUnsound { parent: Box<str>, fault: Option<BindingFault> },
 }
 
 /// What is wrong with a package's default-diagram binding, in a [`Reason::InvalidBinding`].

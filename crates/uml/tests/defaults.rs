@@ -8,7 +8,8 @@
 //! default as it is made, and only that one (AR-579). `uml.package.default.set` makes the binding,
 //! keeps its id when it names another diagram, changes nothing for the same one, mends several into
 //! one, and refuses anything but one of the package's own class diagrams on the revision read
-//! (AR-580).
+//! (AR-580). A nested package handing a structure diagram up to a package with no sound default,
+//! the root among them, is refused with nothing changed; one handing up none goes (AR-673).
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
@@ -691,4 +692,113 @@ fn a_second_diagram_a_profiles_or_one_of_a_package_without_a_binding_binds_nothi
     made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": id(0x40) }));
     assert_eq!(archforge_diagram::defaults::bindings(s.doc()), [foreign], "nothing bound silently");
     assert_eq!(resolve(s.doc(), orders), Err(BindingProblem::Missing));
+}
+
+/// A package under the id `[id; 16]` nested in `parent`, named `name` unless it is empty.
+fn nested(st: &mut Store, parent: Obj, id: u8, name: &str) -> Obj {
+    let p = st.create_with_uuid(PACKAGE, Uuid([id; 16])).unwrap();
+    st.push(parent, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(p)).unwrap();
+    if !name.is_empty() {
+        st.set(p, archforge_uml::named_element::NAME, Value::str(name)).unwrap();
+    }
+    p
+}
+
+/// A nested package handing a structure diagram up to a parent with no sound default, each fault
+/// of its binding or no structure diagram yet, is refused before anything moves: typed with the
+/// parent's name and fault, the bindings, the diagrams and the undo stack as they were (AR-673).
+#[test]
+fn a_handoff_into_a_parent_with_no_sound_default_is_refused_and_changes_nothing() {
+    use BindingFault::{DeadTarget, Duplicate, Missing, WrongKind, WrongOwner};
+    for fault in [None, Some(Missing), Some(Duplicate), Some(DeadTarget), Some(WrongKind), Some(WrongOwner)] {
+        let (mut st, model) = store();
+        let sales = add(&mut st, model, PACKAGE, 0x10);
+        st.set(sales, archforge_uml::named_element::NAME, Value::str("Sales")).unwrap();
+        let archive = nested(&mut st, sales, 0x30, "Archive");
+        let handed = diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, archive);
+        bind(&mut st, model, 0x32, archive, handed);
+        let billing = add(&mut st, model, PACKAGE, 0x40);
+        let theirs = diagram(&mut st, model, 0x41, STRUCTURE_DIAGRAM, billing);
+        let kind = if fault == Some(WrongKind) { ER_DIAGRAM } else { STRUCTURE_DIAGRAM };
+        let own = diagram(&mut st, model, 0x11, kind, sales);
+        let target = if fault == Some(WrongOwner) { theirs } else { own };
+        let bindings: &[u8] = match fault {
+            None => {
+                st.destroy(own).unwrap();
+                &[]
+            }
+            Some(Missing) => &[],
+            Some(Duplicate) => &[0x12, 0x13],
+            Some(_) => &[0x12],
+        };
+        for n in bindings {
+            let b = bind(&mut st, model, *n, sales, target);
+            if fault == Some(DeadTarget) {
+                st.set(b, DEFAULT_DIAGRAM, Value::Null).unwrap();
+            }
+        }
+        let mut s = over(st);
+        let (key, reason, said) = refused(&mut s, "element.remove", json!({ "ids": [id(0x30)] }));
+        let unsound = Reason::ParentDefaultUnsound { parent: "Sales".into(), fault };
+        assert_eq!((key.as_deref(), reason), (Some("ids"), Some(unsound)), "{said}");
+        assert!(said.starts_with("its diagrams cannot move up: ") && said.contains("Sales"), "{fault:?}: {said}");
+    }
+}
+
+/// Every user package sits under the root: one directly under a root whose default is Missing
+/// keeps its diagram there, refused, until the root's default is chosen; then it goes, and its
+/// diagram is one more of the root's beside the root's default, which stays (AR-673).
+#[test]
+fn a_package_under_a_root_with_no_default_goes_once_the_root_has_one() {
+    let (mut st, model) = store();
+    let root = add(&mut st, model, PACKAGE, 0x10);
+    st.set(root, archforge_uml::named_element::NAME, Value::str("Model")).unwrap();
+    assert_eq!(archforge_uml::commands::ensure_root(&mut st).ok(), Some(root));
+    let overview = diagram(&mut st, model, 0x11, STRUCTURE_DIAGRAM, root);
+    let sales = nested(&mut st, root, 0x20, "Sales");
+    let handed = diagram(&mut st, model, 0x21, STRUCTURE_DIAGRAM, sales);
+    bind(&mut st, model, 0x22, sales, handed);
+    let mut s = over(st);
+    let (_, reason, said) = refused(&mut s, "element.remove", json!({ "ids": [id(0x20)] }));
+    let unsound = Reason::ParentDefaultUnsound { parent: "Model".into(), fault: Some(BindingFault::Missing) };
+    assert_eq!(reason, Some(unsound), "{said}");
+    assert!(said.ends_with("as its default with uml.package.default.set first"), "{said}");
+    set(&mut s, 0x10, 0x11);
+    s.execute("element.remove", &json!({ "ids": [id(0x20)] })).unwrap();
+    let st = s.doc();
+    assert!(!st.is_alive(sales) && st.is_alive(handed));
+    assert_eq!(st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), Value::Ref(root), "handed up");
+    assert_eq!((resolve(st, root), problems(st)), (Ok(DefaultDiagram::Bound(overview)), vec![]));
+}
+
+/// A package handing up no structure diagram goes whatever its parent's default: under a parent
+/// with no diagram yet, and with only an ER diagram under one whose default is Missing, left so.
+/// Removed with its parent, a package's diagram goes to the first package above that stays, judged
+/// by that one's default: refused alone, it goes with its parent into a bound grandparent (AR-673).
+#[test]
+fn a_handoff_of_no_class_diagram_goes_and_one_past_a_parent_going_too_is_judged_above() {
+    let (mut st, model) = store();
+    let sales = add(&mut st, model, PACKAGE, 0x10);
+    nested(&mut st, sales, 0x20, "Empty");
+    let billing = add(&mut st, model, PACKAGE, 0x30);
+    diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, billing);
+    let schema_only = nested(&mut st, billing, 0x40, "Schema");
+    diagram(&mut st, model, 0x41, ER_DIAGRAM, schema_only);
+    let shop = add(&mut st, model, PACKAGE, 0x50);
+    let shop_default = diagram(&mut st, model, 0x51, STRUCTURE_DIAGRAM, shop);
+    bind(&mut st, model, 0x52, shop, shop_default);
+    let accounts = nested(&mut st, shop, 0x60, "");
+    let ledger = nested(&mut st, accounts, 0x70, "Ledger");
+    let handed = diagram(&mut st, model, 0x71, STRUCTURE_DIAGRAM, ledger);
+    bind(&mut st, model, 0x72, ledger, handed);
+    let mut s = over(st);
+    let unsound = Reason::ParentDefaultUnsound { parent: id(0x60).into(), fault: None };
+    assert_eq!(refused(&mut s, "element.remove", json!({ "ids": [id(0x70)] })).1, Some(unsound), "Accounts has no diagram yet");
+    s.execute("element.remove", &json!({ "ids": [id(0x20)] })).unwrap();
+    s.execute("element.remove", &json!({ "ids": [id(0x40)] })).unwrap();
+    assert_eq!((resolve(s.doc(), sales), resolve(s.doc(), billing)), (Ok(DefaultDiagram::NoDiagramYet), Err(BindingProblem::Missing)));
+    s.execute("element.remove", &json!({ "ids": [id(0x70), id(0x60)] })).unwrap();
+    let st = s.doc();
+    assert_eq!(st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), Value::Ref(shop), "past Accounts, into Shop");
+    assert_eq!(resolve(st, shop), Ok(DefaultDiagram::Bound(shop_default)));
 }

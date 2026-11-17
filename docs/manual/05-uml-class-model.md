@@ -544,7 +544,10 @@ Drag a classifier's row in **Models** onto a package's row to move it there, or 
 as its **Owner** in **Properties** (see [Nested classifiers](#nested-classifiers)). A classifier of
 another package on a diagram is drawn dimmed, its package named above its name. Removing a
 package hands what it holds up to the package around it, in the end the root package, which
-itself stays.
+itself stays. Its class diagrams go up too, as more diagrams of the package around it, whose
+default diagram stays. When that package has no diagram yet, or no valid default diagram, the
+package is kept and Models says so: create a diagram for the package around it, or choose its
+default diagram, first.
 
 ### Move a package
 

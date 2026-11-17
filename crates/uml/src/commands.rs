@@ -698,6 +698,21 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
     Ok(())
 }
 
+/// The package that takes what a nested package of `parent` hands up as `objs` go: `parent`, or,
+/// when it goes too, the first package above it that stays; none when a package with no parent
+/// that goes takes it all along.
+fn receiver(store: &Store, objs: &[Obj], parent: Obj) -> Option<Obj> {
+    let mut at = parent;
+    // Every step up passes a package that goes, so there are no more steps than packages named.
+    for _ in 0..=objs.len() {
+        if !objs.contains(&at) {
+            return Some(at);
+        }
+        at = package_of(store, at)?;
+    }
+    None
+}
+
 /// Why `o` is not removed yet, as "{id} cannot be removed yet", typed with its name, or its id
 /// when it has none ([`Reason::ElementNotRemovable`]): an association's end, an element of a kind
 /// UML does not remove yet, or a classifier template parameter that is no template's parameter.
@@ -717,7 +732,10 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
 /// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
 /// top-level package takes them along. Either takes its default-diagram binding along, with no
-/// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). An
+/// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). A
+/// nested package that would hand a structure diagram up to a package with no sound default (its
+/// parent, or the first package above that stays when the parent goes too) is refused typed as
+/// [`Reason::ParentDefaultUnsound`], before anything moves (AR-673). An
 /// element that would take along a diagram another element's binding names, unsoundly, is refused
 /// typed as [`Reason::DefaultDiagramOf`], unless that element goes too; the bindings of all that
 /// goes go before any diagram, in whatever order the elements are named (AR-578). A classifier takes the relationships that touch it along,
@@ -800,6 +818,10 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             && let Some(parent) = package_of(store, *o)
         {
             hand_up_problem(store, *o, parent)?;
+            // Its diagrams land in the first package above that stays, which needs a sound default.
+            if let Some(refused) = receiver(store, objs, parent).and_then(|to| crate::defaults::handoff_problem(store, *o, to)) {
+                return Err(refused);
+            }
         }
     }
     // A surviving template parameter's default, or a binding's argument, that would no longer

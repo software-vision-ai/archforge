@@ -38,6 +38,7 @@ is and clears the history it belonged to.
 | `Reason::DefaultDiagramOf` | a diagram that stays while a default-diagram binding names it: `package` (the binding's owner, by name or id) and `fault`, none for that package's own default and `WrongOwner` for another element's diagram; boxed text, so `Reason` stays 48 bytes (AR-578) |
 | `Reason::NotOwnDiagram` | a class diagram chosen as a package's default that is not one of that package's own: `diagram` and `package`, each by name or id, as boxed text (AR-580) |
 | `Reason::NoDiagramYet` | a package with no class diagram yet, so no default diagram to open: `package`, by name or id, as boxed text; one has to be made for it first (AR-582) |
+| `Reason::ParentDefaultUnsound` | a nested package whose class diagrams cannot move up to its parent as it is removed: `parent`, by name or id, as boxed text, and `fault`, the parent's unsound binding or none for a parent with no class diagram yet; a default has to be chosen or made for the parent first (AR-673) |
 | `Session::execute` | `pub fn execute(&mut self, id: &str, params: &Value) -> Result<Outcome, EngineError>` |
 | `Session::{undo, redo, batch, replay}` | history, several commands as one step, a journal entry again |
 | `Session::{execute_from, batch_from}`, `Session::{undo_origin, redo_origin}` | a call or a batch on behalf of an origin (a chat): its step carries the origin, is labelled `<origin>: <label>` and never merges into another origin's step; the origin of the steps undo and redo would take |

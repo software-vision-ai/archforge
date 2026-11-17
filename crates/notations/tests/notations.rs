@@ -466,7 +466,10 @@ fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_wit
     s.undo().unwrap();
     assert_eq!(skill_count(&s), 2);
     // With the element it shows: a schema's diagram goes with it; a package sits in the model's
-    // root package, so its diagram moves up into the root and keeps its skill.
+    // root package, so its diagram moves up into the root, beside the root's default (AR-673), and
+    // keeps its skill.
+    let root = uuid(s.doc(), archforge_uml::commands::root_package(s.doc()).unwrap());
+    id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Shop" }));
     for (element, left) in [(&sales, 2), (&schema, 1)] {
         s.execute("element.remove", &json!({ "ids": [element] })).unwrap();
         assert_eq!(skill_count(&s), left, "{element}");
@@ -485,6 +488,8 @@ fn a_nested_packages_diagram_keeps_its_skill_when_the_package_goes_and_inherits_
     id(&mut s, "skill.add", json!({ "subject": sales, "name": "Sales style" }));
     id(&mut s, "skill.add", json!({ "subject": orders, "name": "Orders style" }));
     id(&mut s, "skill.add", json!({ "subject": diagram, "name": "Layout" }));
+    // Sales's default takes the diagram in (AR-673).
+    id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
     s.execute("element.remove", &json!({ "ids": [orders] })).unwrap();
     assert_eq!(applying(&s, &diagram), [("Sales style".into(), false), ("Layout".into(), false)], "moved up to Sales with its skill");
 }

@@ -189,8 +189,12 @@ fn a_package_removed_hands_its_contents_and_diagrams_up_to_its_parent_the_root_i
     let a = run(&mut s, "uml.association.add", json!({ "from": customer, "to": order }));
     let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": orders, "name": "orders" }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
+    // sales's own default takes the diagram in, an additional diagram of sales (AR-673).
+    let own = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "sales" }));
     // orders goes: Order, the package lines and the diagram move up into sales.
     round_trip(&mut s, "element.remove", json!({ "ids": [orders] }));
+    let default = archforge_uml::defaults::resolve(s.doc(), obj(&s, &sales));
+    assert_eq!(default, Ok(archforge_uml::defaults::DefaultDiagram::Bound(obj(&s, &own))), "sales's default stays");
     assert!(!alive(&s, &orders));
     assert_eq!(class_names(&s, &sales), ["Customer", "Order"]);
     assert_eq!(parent_of(&s, &deep), Some(obj(&s, &sales)));
@@ -206,6 +210,8 @@ fn a_package_removed_hands_its_contents_and_diagrams_up_to_its_parent_the_root_i
     let other = run(&mut s, "uml.package.add", json!({ "name": "other" }));
     let outside = run(&mut s, "uml.class.add", json!({ "package": other, "name": "Outside" }));
     let dep = run(&mut s, "uml.dependency.add", json!({ "client": outside, "supplier": customer }));
+    let root = s.doc().uuid(archforge_uml::commands::root_package(s.doc()).unwrap()).unwrap().to_string();
+    run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": root, "name": "model" }));
     round_trip(&mut s, "element.remove", json!({ "ids": [sales] }));
     assert!(!alive(&s, &sales));
     for kept in [&customer, &order, &deep, &a, &dep, &d, &outside] {

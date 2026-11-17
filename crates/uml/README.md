@@ -208,6 +208,11 @@ a duplicate mended included, is one undo step. It answers
 session, as a version viewed, refuses it before it runs.
 Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
 diagrams up and its parent's binding stays; a top-level one takes the bindings of what it holds too.
+A nested package that hands up a structure diagram is refused before anything moves while the
+package that takes it (its parent, or the first package above that stays when the parent goes
+too) has no structure diagram yet or an unsound binding, typed as `Reason::ParentDefaultUnsound`
+with that package's name or id and its `BindingFault`, none for no diagram yet (AR-673,
+`defaults::handoff_problem`); one that hands up none goes whatever its parent's default.
 An element that would take along a diagram the binding of an element that stays names (unsoundly,
 `WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
 binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578).

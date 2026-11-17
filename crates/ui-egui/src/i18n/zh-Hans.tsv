@@ -783,6 +783,8 @@ str		No package is given. Give its id.	未给出包。请给出其 ID。
 str		{name} is not a package.	{name} 不是包。
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} 不是 {package} 的类图。请选择它自己的一个类图作为默认图。
 str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} 还没有类图，因此没有可打开的内容。请先为它创建一个类图。
+str		{parent} has no diagram yet to take this package's diagrams. Create one for it first. Nothing was changed.	{parent} 还没有任何图，无法接收此包的图。请先为它创建一个图。未作任何更改。
+str		{parent} has no valid default diagram to take this package's diagrams. Choose its default first. Nothing was changed.	{parent} 没有有效的默认图，无法接收此包的图。请先选择它的默认图。未作任何更改。
 str		This could not be done because of an internal error. Nothing was changed.	由于内部错误，无法完成此操作。未作任何更改。
 str		The text can't be empty.	文本不能为空。
 str		It can't be longer than {max} characters.	最多只能有 {max} 个字符。
