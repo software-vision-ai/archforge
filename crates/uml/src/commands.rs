@@ -398,9 +398,10 @@ fn detach(store: &mut Store, obj: Obj) -> Result<(), CommandError> {
     Ok(())
 }
 
-/// `uml.package.move`: a package into another, never into itself, its cards leaving its old home's
-/// diagrams. The package Types stays under the root while it holds built-in types, and a package
-/// named Types goes there only as `members::types_problem` allows.
+/// `uml.package.move`: a package into another, never into itself. Only its owner changes: every
+/// appearance of it stays where it is under its id, with its notes' links, and none is added to its
+/// new owner's diagram (Decision 26, AR-567). The package Types stays under the root while it holds
+/// built-in types, and a package named Types goes there only as `members::types_problem` allows.
 fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     if Some(pkg) == root_package(ctx.doc) {
@@ -425,17 +426,6 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     }
     detach(ctx.doc, pkg)?;
     place_package(ctx.doc, pkg, to)?;
-    // Its cards go from the diagrams of a package that no longer holds it (AR-102). Its own
-    // diagram and what it holds stay.
-    let parent = package_of(ctx.doc, pkg);
-    let (_, _, nodes) = archforge_diagram::views_of(ctx.doc, pkg);
-    for n in nodes {
-        let shown_on = ctx.doc.container(n).map_err(fail)?.map(|(d, _)| d);
-        let of = shown_on.and_then(|d| ctx.doc.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()));
-        if of != parent && ctx.doc.is_alive(n) {
-            archforge_diagram::destroy_node_with_edges(ctx.doc, n).map_err(fail)?;
-        }
-    }
     ctx.view.selection = vec![pkg];
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
 }
@@ -1051,7 +1041,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move package",
             &["Package"],
             None,
-            "package: string; the package's id; the package Types stays directly under the root package while it holds the built-in types\nto: string = \"\"; the id of the package it goes into, or nothing for the model's root package; a package named Types goes directly under the root only while there is no package Types and it holds no classifier with a built-in type's name",
+            "package: string; the package's id; the package Types stays directly under the root package while it holds the built-in types\nto: string = \"\"; the id of the package it goes into, or nothing for the model's root package; only its owner changes: its appearances on diagrams stay where they are and none is added; a package named Types goes directly under the root only while there is no package Types and it holds no classifier with a built-in type's name",
             has_packages,
             package_move
         ),
