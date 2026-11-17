@@ -13,7 +13,7 @@ use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
-use archforge_uml::{ALONE, CLASS_DIAGRAM, ENUMERATION, ENUMERATION_LITERAL, registry};
+use archforge_uml::{ALONE, ENUMERATION, ENUMERATION_LITERAL, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -208,7 +208,7 @@ fn an_enumeration_is_added_renamed_moved_and_removed_each_one_step_its_name_free
     let st = s.doc();
     assert_eq!(archforge_uml::commands::package_of(st, obj(st, &status)), Some(obj(st, &billing)));
     // Removed through element.remove, with its card and its literals: one step.
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": billing }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": billing }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": status, "x": 0, "y": 0 }));
     let mut s = with_literals(&s, &status, &["Placed", "Paid"], 1 << 20);
     let before = picture(s.doc());
@@ -228,7 +228,7 @@ fn an_enumeration_draws_its_literals_in_one_compartment_and_takes_no_attributes_
     let mut s = session();
     let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let status = run(&mut s, "uml.enumeration.add", json!({ "package": pkg, "name": "OrderStatus" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": status, "x": 0, "y": 0 }));
     // With no literal, one empty compartment: the card is honest about having none.
     let empty = card(&s, &status, &d);
@@ -257,7 +257,7 @@ fn an_enumeration_draws_its_literals_in_one_compartment_and_takes_no_attributes_
     assert_eq!(listed["enumerations"][0]["literals"], json!(["Placed", "Paid", "Shipped"]));
     // On another package's diagram, its package is named beside the keyword.
     let other = run(&mut s, "uml.package.add", json!({ "name": "billing" }));
-    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": other }));
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": other }));
     run(&mut s, "diagram.place", json!({ "diagram": d2, "element": status, "x": 0, "y": 0 }));
     let outsider = card(&s, &status, &d2);
     assert_eq!(outsider.eyebrow, archforge_diagram::figure::Text::Said("«enumeration» · {package}", vec![("package", "sales".into())]));
@@ -294,7 +294,7 @@ fn an_enumeration_types_attributes_parameters_and_returns_and_they_keep_it_throu
     run(&mut s, "uml.enumeration.rename", json!({ "enumeration": status, "name": "State" }));
     run(&mut s, "uml.enumeration.move", json!({ "enumeration": status, "package": shared }));
     assert_eq!(typed(&mut s), (want("State"), want("State"), want("State")));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": sales }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     assert_eq!(rows_of(&card(&s, &order, &d)), [vec!["+ status : State"], vec!["+ advance(to : State) : State"]]);
     // Removed, it leaves them untyped, as one step; undone, they are typed by it again.
@@ -400,7 +400,7 @@ fn enumerations_with_literals_and_relationships_come_back_from_their_rows_identi
     let order = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Order" }));
     run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "status", "type": status }));
     run(&mut s, "uml.generalization.add", json!({ "specific": closing, "general": status }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": status, "x": 0, "y": 0 }));
     let s = with_literals(&s, &status, &["Placed", "Paid", "Shipped"], 1 << 20);
     let (tables, junctions) = tables();
@@ -512,7 +512,7 @@ fn literals_added_and_moved_keep_their_order_through_save_and_reopen() {
     let mut s = session();
     let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let status = run(&mut s, "uml.enumeration.add", json!({ "package": pkg, "name": "OrderStatus" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": status, "x": 0, "y": 0 }));
     for name in ["Paid", "Shipped", "Cancelled"] {
         run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": name }));
@@ -562,7 +562,7 @@ fn a_card_lists_a_bounded_number_of_rows_and_counts_the_rest() {
     let mut s = session();
     let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let status = run(&mut s, "uml.enumeration.add", json!({ "package": pkg, "name": "Codes" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     let max = archforge_uml::figures::MAX_CARD_ROWS;
     let names: Vec<String> = (0..max + 3).map(|i| format!("C{i}")).collect();
     let names: Vec<&str> = names.iter().map(String::as_str).collect();

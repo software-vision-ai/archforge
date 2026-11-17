@@ -467,7 +467,7 @@ fn set_set(ctx: &mut C<'_>, p: &Params) -> R {
 fn set_place(ctx: &mut C<'_>, p: &Params) -> R {
     let d = object(ctx.doc, "diagram", text(p, "diagram"))?;
     let kind = ctx.doc.get(d, diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
-    if ctx.doc.class_of(d).ok() != Some(archforge_diagram::DIAGRAM) || kind != crate::CLASS_DIAGRAM {
+    if ctx.doc.class_of(d).ok() != Some(archforge_diagram::DIAGRAM) || kind != crate::STRUCTURE_DIAGRAM {
         return Err(refuse("diagram", format!("{} is not a class diagram", short(text(p, "diagram")))));
     }
     let s = set_param(ctx.doc, p, "set")?;

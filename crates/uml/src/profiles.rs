@@ -1147,7 +1147,7 @@ fn profile_diagram(ctx: &mut C<'_>, p: &Params) -> R {
             let name: String = format!("{} profile", name_of(ctx.doc, profile)).chars().take(archforge_diagram::rules::MAX_NAME).collect();
             let d = archforge_diagram::commands::new_diagram(
                 ctx.doc,
-                crate::CLASS_DIAGRAM,
+                crate::STRUCTURE_DIAGRAM,
                 &name,
                 Some(profile),
                 Some((m, archforge_core::model::MEMBER)),

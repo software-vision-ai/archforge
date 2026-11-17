@@ -6458,7 +6458,7 @@ fn a_new_diagrams_element_refused_is_said_in_the_chosen_language() {
         h.run();
         let order = named(&h, archforge_uml::CLASS, "Order").to_string();
         let mut refused = |element: &str| {
-            let p = json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": element, "name": "Neu" });
+            let p = json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": element, "name": "Neu" });
             crate::panels::run(h.state_mut(), "diagram.add", p).err().unwrap_or_default()
         };
         assert_eq!(refused(""), "Es ist kein Element angegeben. Geben Sie seine ID an.", "{theme:?}");
@@ -6588,7 +6588,7 @@ fn a_style_colour_or_an_arrangement_refused_is_said_in_the_chosen_language() {
         let (order, customer) = (named(&h, archforge_uml::CLASS, "Order"), named(&h, archforge_uml::CLASS, "Customer"));
         let st = h.state().session.as_ref().unwrap().doc();
         let package = st.uuid(st.container(st.by_uuid(order).unwrap()).unwrap().unwrap().0).unwrap().to_string();
-        let added = run(&mut h, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package })).unwrap();
+        let added = run(&mut h, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package })).unwrap();
         let d = added["id"].as_str().unwrap().to_string();
         let none = "Dieses Diagramm zeigt keinen Kasten, der sich anordnen ließe.";
         assert_eq!(refused(&mut h, "diagram.arrange", json!({ "diagram": d })), none, "{theme:?}");
@@ -9132,7 +9132,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         // A group's + opens the New diagram dialog on its kind.
         let at = rect_of(&h, "workspace.diagrams.group.uml.class.add").center();
         click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_uml::CLASS_DIAGRAM));
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_uml::STRUCTURE_DIAGRAM));
         h.state_mut().diagrams.new = None;
         let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
         click(&mut h, at);
@@ -9233,7 +9233,7 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
         st.set(folder, archforge_core::named_element::NAME, Value::str("Views")).unwrap();
         st.push(model, archforge_core::model::MEMBER, Value::Ref(folder)).unwrap();
         let d = st.create(archforge_diagram::DIAGRAM).unwrap();
-        st.set(d, archforge_diagram::diagram::KIND, Value::str(archforge_uml::CLASS_DIAGRAM)).unwrap();
+        st.set(d, archforge_diagram::diagram::KIND, Value::str(archforge_uml::STRUCTURE_DIAGRAM)).unwrap();
         st.set(d, archforge_diagram::diagram::NAME, Value::str("Sales")).unwrap();
         st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(package)).unwrap();
         st.push(folder, archforge_core::folder::MEMBER, Value::Ref(d)).unwrap();
@@ -9298,7 +9298,7 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, "er");
         // The arrow keys move the choice; the name the dialog gave follows the kind.
         key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
-        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::CLASS_DIAGRAM);
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
         key(&mut h, egui::Key::ArrowLeft, egui::Modifiers::NONE);
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, "er");
         // Cancel makes nothing.
@@ -14196,14 +14196,14 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     let at = rect_of(&h, "workspace.new-diagram.continue").center();
     click(&mut h, at);
     let edit = h.state().diagrams.new.clone().expect("the dialog is open");
-    assert_eq!(edit.kind, archforge_uml::CLASS_DIAGRAM);
+    assert_eq!(edit.kind, archforge_uml::STRUCTURE_DIAGRAM);
     assert_eq!(edit.schema, None, "a project without a package gets its root package");
     assert!(painted(&h).iter().any(|t| t == "Commerce platform"), "the Package field names the root, after the project");
     h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
     let at = rect_of(&h, "workspace.new-diagram.create").center();
     click(&mut h, at);
     assert!(h.state().diagrams.new.is_none(), "{:?}", h.state().diagrams.new);
-    assert_eq!(class_diagram_shown(&h), (archforge_uml::CLASS_DIAGRAM.to_string(), Vec::new()), "an empty class diagram is open");
+    assert_eq!(class_diagram_shown(&h), (archforge_uml::STRUCTURE_DIAGRAM.to_string(), Vec::new()), "an empty class diagram is open");
     // The diagram is of the model's root package, named after the project; no other package.
     let st = h.state().session.as_ref().unwrap().doc();
     let root = archforge_uml::commands::root_package(st).expect("the root package is made");
@@ -14251,7 +14251,7 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     let back = archforge_notations::session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
     let st = back.doc();
     let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
-    assert_eq!(st.get(d, archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::CLASS_DIAGRAM));
+    assert_eq!(st.get(d, archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::STRUCTURE_DIAGRAM));
     assert_eq!(st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), 1);
 }
 
@@ -14268,7 +14268,7 @@ fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes
     h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
     let at = rect_of(&h, "workspace.new-diagram.create").center();
     click(&mut h, at);
-    assert_eq!(class_diagram_shown(&h).0, archforge_uml::CLASS_DIAGRAM);
+    assert_eq!(class_diagram_shown(&h).0, archforge_uml::STRUCTURE_DIAGRAM);
     assert_eq!(h.state().canvas.tabs.len(), 2, "beside the ER diagram's tab");
     assert!(h.state().canvas.tabs.contains(&archforge_mof::Uuid::parse(&er_diagram).unwrap()));
     // An agent, through the control channel's commands, as its MCP tools call them.
@@ -18698,7 +18698,7 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
         let st = s.doc();
         let pkg = st.uuid(archforge_uml::commands::packages(st)[0]).unwrap();
         let out = s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg.to_string(), "name": "Ordering" }))
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg.to_string(), "name": "Ordering" }))
             .unwrap();
         (pkg, archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap())
     };
@@ -22359,7 +22359,7 @@ fn reviews(theme: ThemeKind) -> Reviews {
     let s = h.state_mut().session.as_mut().unwrap();
     let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
     let package = run("uml.package.add", serde_json::json!({ "name": "Reviews" }));
-    let diagram = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews" }));
+    let diagram = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Reviews" }));
     let (mut ids, mut nodes) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
     for (name, cmd, x, y) in [
         ("Customer", "uml.class.add", 80, 520),
@@ -22670,7 +22670,7 @@ fn delete_on_an_association_class_line_without_its_card_takes_the_line_from_that
         let (package, customer, product) = (r.package.clone(), r.ids["Customer"].clone(), r.ids["Product"].clone());
         let s = r.h.state_mut().session.as_mut().unwrap();
         let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-        let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews 2" }));
+        let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Reviews 2" }));
         for (class, x) in [(&customer, 80), (&product, 760)] {
             run("diagram.place", serde_json::json!({ "diagram": d2, "element": class, "x": x, "y": 520, "width": 240, "height": 136 }));
         }
@@ -22763,7 +22763,7 @@ fn the_delete_dialog_counts_a_diagram_with_an_association_class_s_line_alone_and
         let (package, customer, product) = (r.package.clone(), r.ids["Customer"].clone(), r.ids["Product"].clone());
         let s = r.h.state_mut().session.as_mut().unwrap();
         let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-        let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews 2" }));
+        let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Reviews 2" }));
         for (class, x) in [(&customer, 80), (&product, 760)] {
             run("diagram.place", serde_json::json!({ "diagram": d2, "element": class, "x": x, "y": 520, "width": 240, "height": 136 }));
         }
@@ -22818,7 +22818,7 @@ fn deleting_an_association_class_shown_by_its_line_alone_on_two_diagrams_from_mo
         // Its card off the first diagram, which takes its line too; the line drawn again alone.
         run("diagram.unplace", serde_json::json!({ "nodes": [card] }));
         run("diagram.connect-all", serde_json::json!({ "diagram": r.diagram }));
-        let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews 2" }));
+        let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Reviews 2" }));
         for (class, x) in [(&customer, 80), (&product, 760)] {
             run("diagram.place", serde_json::json!({ "diagram": d2, "element": class, "x": x, "y": 520, "width": 240, "height": 136 }));
         }
@@ -22863,7 +22863,7 @@ fn deleting_a_class_shown_on_two_diagrams_says_two_from_models_and_from_the_canv
         };
         let s = h.state_mut().session.as_mut().unwrap();
         let second = s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Customers" }))
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Customers" }))
             .unwrap()
             .value["id"]
             .as_str()
@@ -22978,7 +22978,7 @@ fn a_line_selected_on_another_diagram_is_not_taken_for_this_one_s() {
     let (package, customer, product) = (r.package.clone(), r.ids["Customer"].clone(), r.ids["Product"].clone());
     let s = r.h.state_mut().session.as_mut().unwrap();
     let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-    let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews 2" }));
+    let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Reviews 2" }));
     for (class, x) in [(&customer, 80), (&product, 760)] {
         run("diagram.place", serde_json::json!({ "diagram": d2, "element": class, "x": x, "y": 520, "width": 240, "height": 136 }));
     }
@@ -24701,7 +24701,7 @@ fn modifiers_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collecti
         let s = h.state_mut().session.as_mut().unwrap();
         let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
         let pkg = run("uml.package.add", serde_json::json!({ "name": "Shop" }));
-        let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": "Shop" }));
+        let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Shop" }));
         let item = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Item" }));
         let order = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Order" }));
         run("uml.generalization.add", serde_json::json!({ "specific": order, "general": item }));
@@ -26050,7 +26050,7 @@ fn qualifiers_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collect
         run("uml.association.set-end", serde_json::json!({ "association": contains, "end": 1, "role": "line", "multiplicity": "0..1" }));
         let mut diagrams = Vec::new();
         for (name, x) in [("Shop", 600), ("Overview", 120)] {
-            let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": name }));
+            let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": name }));
             for (element, cx) in [(&order, 80), (&line, x)] {
                 run("diagram.place", serde_json::json!({ "diagram": d, "element": element, "x": cx, "y": if cx == 80 { 120 } else { 420 } }));
             }
@@ -26362,7 +26362,7 @@ fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_
             .session
             .as_mut()
             .unwrap()
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "Alone", "element": root }))
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "name": "Alone", "element": root }))
             .unwrap();
         let other = archforge_mof::Uuid::parse(other.value["id"].as_str().unwrap()).unwrap();
         crate::canvas::open(h.state_mut(), other);
@@ -26510,7 +26510,7 @@ fn templates_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collecti
         run("uml.generalization.add", serde_json::json!({ "specific": order, "general": entity }));
         let mut diagrams = Vec::new();
         for (name, x) in [("Shop", 200), ("Overview", 500)] {
-            let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": name }));
+            let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": name }));
             run("diagram.place", serde_json::json!({ "diagram": d, "element": repo, "x": x, "y": 200 }));
             diagrams.push(d);
         }
@@ -27598,7 +27598,7 @@ fn two_diagrams_show_the_same_n_ary_association_and_a_dropped_class_brings_its_l
         let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&ids["Customer"]).unwrap()).unwrap()).unwrap();
         let pkg = st.uuid(pkg).unwrap().to_string();
         let d = s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": "Second" }))
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Second" }))
             .unwrap()
             .value["id"]
             .as_str()

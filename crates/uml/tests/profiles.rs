@@ -437,7 +437,7 @@ fn the_profile_diagram_shows_stereotypes_metaclasses_and_extensions() {
     let [commerce, _, _, _, persistence, entity, ..] = shop(&mut s);
     let d = one_step(&mut s, "uml.profile.diagram", json!({ "profile": persistence }));
     assert_eq!(read(&mut s, "uml.profile.diagram", json!({ "profile": persistence }))["made"], false);
-    let package_diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "C", "element": commerce }));
+    let package_diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "name": "C", "element": commerce }));
     let st = s.doc();
     let (dd, pd, e) = (obj(st, &d), obj(st, &package_diagram), obj(st, &entity));
     let ext = profiles::extensions(st, e)[0];
@@ -1199,8 +1199,8 @@ fn cards_members_and_lines_show_their_stereotypes() {
         run(&mut s, "uml.stereotype.apply", json!({ "element": e, "stereotype": st }));
     }
     run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": "table", "values": ["orders"] }));
-    let one = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "One", "element": commerce }));
-    let two = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "Two", "element": commerce }));
+    let one = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "name": "One", "element": commerce }));
+    let two = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "name": "Two", "element": commerce }));
     let rows = |s: &S, d: &str| {
         let st = s.doc();
         let card = UmlNotation.card(st, obj(st, &order), obj(st, d)).unwrap();
@@ -1223,7 +1223,7 @@ fn cards_members_and_lines_show_their_stereotypes() {
     assert_eq!(read(&mut s, "uml.stereotype.list-applied", json!({ "element": order, "diagram": two }))["values_shown"], false);
     // An outsider names its package beside its stereotypes.
     let other = run(&mut s, "uml.package.add", json!({ "name": "Other" }));
-    let elsewhere = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "E", "element": other }));
+    let elsewhere = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "name": "E", "element": other }));
     {
         let st = s.doc();
         let eyebrow = UmlNotation.card(st, obj(st, &order), obj(st, &elsewhere)).unwrap().eyebrow;
@@ -1325,7 +1325,7 @@ fn the_sweep_over_applications_breaks_nothing() {
     let mut s = session();
     let [commerce, order, _, id_attr, _, entity, id, _] = applied_shop(&mut s);
     run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "One", "element": commerce }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "name": "One", "element": commerce }));
     let listed: Vec<String> = s.registry().infos(&s.facts()).into_iter().map(|i| i.id.to_string()).collect();
     for cmd in [
         "uml.stereotype.apply",
@@ -1358,7 +1358,7 @@ fn n_ary_associations_and_their_legs_show_their_stereotypes() {
         st.uuid(archforge_uml::nary::ends(st, obj(st, &a))[0]).unwrap().to_string()
     };
     one_step(&mut s, "uml.stereotype.apply", json!({ "element": end, "stereotype": id }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "One", "element": commerce }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "name": "One", "element": commerce }));
     let st = s.doc();
     let card = UmlNotation.card(st, obj(st, &a), obj(st, &d)).unwrap();
     assert_eq!(card.eyebrow, archforge_diagram::figure::Text::Plain("«Reference»".into()));

@@ -10,7 +10,7 @@ use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
 use archforge_uml::nesting::{self, OwnerProblem};
-use archforge_uml::{ALONE, CLASS_DIAGRAM, UmlNotation, registry};
+use archforge_uml::{ALONE, STRUCTURE_DIAGRAM, UmlNotation, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -115,7 +115,7 @@ fn shop(s: &mut S) -> [String; 6] {
     let customer = run(s, "uml.class.add", json!({ "package": sales, "name": "Customer" }));
     let status = run(s, "uml.enumeration.add", json!({ "package": sales, "name": "Status" }));
     let money = run(s, "uml.primitive-type.add", json!({ "package": sales, "name": "Money" }));
-    let d = run(s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Sales", "element": sales }));
+    let d = run(s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Sales", "element": sales }));
     run(s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     [sales, order, customer, status, money, d]
 }
@@ -306,7 +306,7 @@ fn the_card_names_its_owner_where_the_owner_is_absent() {
     let priority = run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "enumeration", "name": "Priority" }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": priority, "x": 0, "y": 300 }));
     let root = run(&mut s, "uml.model.root", json!({}));
-    let other = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Alone", "element": root }));
+    let other = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Alone", "element": root }));
     run(&mut s, "diagram.place", json!({ "diagram": other, "element": priority, "x": 0, "y": 0 }));
     let st = s.doc();
     let (p, o) = (obj(st, &priority), obj(st, &order));

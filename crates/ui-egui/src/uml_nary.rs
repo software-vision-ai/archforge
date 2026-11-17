@@ -102,7 +102,7 @@ fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
 pub(crate) fn armed(shell: &Shell) -> bool {
     shell.canvas.tool == Tool::Connect(TOOL)
         && shell.canvas.uml_relation == Relate::NAry
-        && crate::kinds::active_kind(shell).is_some_and(|k| k.kind() == archforge_uml::CLASS_DIAGRAM)
+        && crate::kinds::active_kind(shell).is_some_and(|k| k.kind() == archforge_uml::STRUCTURE_DIAGRAM)
 }
 
 /// Whether the connect tool `tool` of a class diagram draws n-ary associations now, by clicks.
@@ -1260,7 +1260,7 @@ pub(crate) fn put_recommends(shell: &mut Shell, drawn: bool) -> Result<std::coll
     let mut made: Vec<String> = Vec::new();
     session
         .batch("Add the recommendations diagram", |b| {
-            let d = pick(&b.execute("diagram.add", &json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": "Recommendations" }))?);
+            let d = pick(&b.execute("diagram.add", &json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Recommendations" }))?);
             made.push(d.clone());
             for (c, x, y, h) in &cards {
                 made.push(pick(&b.execute("diagram.place", &json!({ "diagram": d, "element": c, "x": x, "y": y, "width": 200, "height": h }))?));

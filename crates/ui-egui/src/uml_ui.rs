@@ -93,8 +93,9 @@ const TOOLS: &[KindTool] = &[
 ];
 
 impl DiagramKind for UmlKind {
+    /// The diagram kind this shell part draws: the UML structure diagram.
     fn kind(&self) -> &'static str {
-        archforge_uml::CLASS_DIAGRAM
+        archforge_uml::STRUCTURE_DIAGRAM
     }
 
     fn tools(&self) -> &'static [KindTool] {
@@ -1643,7 +1644,7 @@ pub(crate) fn open_sample(shell: &mut Shell) -> Result<Uuid, String> {
         .map(|o| (uuid(o), !name(store, o).is_empty()))
         .collect();
     let pkg_id = uuid(pkg);
-    let d = run(&mut session, "diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg_id, "name": "Commerce" }))?;
+    let d = run(&mut session, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg_id, "name": "Commerce" }))?;
     for (c, x, y, h) in &placed {
         run(&mut session, "diagram.place", serde_json::json!({ "diagram": d, "element": c, "x": x, "y": y, "width": 290, "height": h }))?;
     }

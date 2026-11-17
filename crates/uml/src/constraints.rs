@@ -580,7 +580,7 @@ fn constraint_move(ctx: &mut C<'_>, p: &Params) -> R {
 fn constraint_show(ctx: &mut C<'_>, p: &Params) -> R {
     let d = object(ctx.doc, "diagram", text(p, "diagram"), "class diagram")?;
     let kind = ctx.doc.get(d, diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
-    if ctx.doc.class_of(d).ok() != Some(archforge_diagram::DIAGRAM) || kind != crate::CLASS_DIAGRAM {
+    if ctx.doc.class_of(d).ok() != Some(archforge_diagram::DIAGRAM) || kind != crate::STRUCTURE_DIAGRAM {
         let reason = Reason::NotA { kind: "class diagram", name: crate::applications::name_or_id(ctx.doc, d) };
         return Err(refuse("diagram", format!("{} is not a class diagram", text(p, "diagram"))).because(reason));
     }

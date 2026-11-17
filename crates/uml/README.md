@@ -39,7 +39,7 @@ redefines `isAbstract`), the redefining property is the class's: `class::IS_ABST
 
 **Public API.** `metamodel()`, `universe()`, the constants, the structs and enums, `UmlSlabs`,
 `TABLES`, `JUNCTIONS`, `INDEX`, `URI`, `VERSION`, `CONTENT_HASH`; `UmlNotation`, `ALONE`,
-`CLASS_DIAGRAM`, `CLASS_SIZE`, `PRIMITIVE_TYPE_SIZE`, `CLASSIFIERS` and `is_classifier`, `registry`, `commands::{specs, packages, classes,
+`STRUCTURE_DIAGRAM`, `CLASS_SIZE`, `PRIMITIVE_TYPE_SIZE`, `CLASSIFIERS` and `is_classifier`, `registry`, `commands::{specs, packages, classes,
 interfaces, enumerations, data_types, primitive_types, literals, classifiers, package_of, remove_elements, MAX_NAME}` (`uml.enumeration.{add,
 rename, move, list}`: an enumeration in a package, its name shared with the classes and interfaces
 there, removed with its literals through `element.remove`; `uml.data-type.{add, rename, move,
