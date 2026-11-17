@@ -48,6 +48,8 @@ pub mod markdown;
 mod menu_bar;
 pub mod model_menu;
 pub mod model_words;
+#[cfg_attr(not(test), expect(dead_code, reason = "AR-662 (408-B1) is its first caller"))]
+mod nav_route;
 pub mod new_project;
 mod notation_ui;
 pub mod objects;
