@@ -4,9 +4,10 @@
 //! change as plain sentences; and the errors only a mistake in the program reaches (a parameter the
 //! engine refuses before the command runs, a command that stopped on an internal error) as one
 //! sentence, so no engine text reaches the user. The engine's own typed refusal, a change made for a
-//! revision of the model other than the one it would run on (AR-574), is said here too.
+//! revision of the model other than the one it would run on (AR-574), is said here too, as is a
+//! package's default diagram that cannot be read for its unsound binding (AR-576).
 
-use archforge_engine::{EngineError, Reason};
+use archforge_engine::{BindingFault, EngineError, Reason};
 
 use crate::i18n::tr;
 
@@ -48,12 +49,32 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 }
 
 /// A refusal the engine types itself in the user's words: a change made for another revision of the
-/// model than the one it would run on, or for none; none for another reason.
+/// model than the one it would run on, or for none, and a package's default diagram that cannot be
+/// read, by what is wrong with its binding and the choice that mends it; none for another reason.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
-    let Reason::StaleRevision { expected, .. } = reason else { return None };
-    Some(match expected {
-        Some(_) => tr("The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed."),
-        None => tr("The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed."),
+    Some(match reason {
+        Reason::StaleRevision { expected: Some(_), .. } => {
+            tr("The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.")
+        }
+        Reason::StaleRevision { expected: None, .. } => {
+            tr("The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.")
+        }
+        Reason::InvalidBinding(BindingFault::Missing) => {
+            tr("The package has class diagrams, but none is its default. Choose one of them as its default diagram.")
+        }
+        Reason::InvalidBinding(BindingFault::Duplicate) => {
+            tr("The package has more than one default diagram. Choose the one of its class diagrams that stays its default.")
+        }
+        Reason::InvalidBinding(BindingFault::DeadTarget) => {
+            tr("The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.")
+        }
+        Reason::InvalidBinding(BindingFault::WrongKind) => {
+            tr("The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.")
+        }
+        Reason::InvalidBinding(BindingFault::WrongOwner) => {
+            tr("The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.")
+        }
+        _ => return None,
     })
 }
 

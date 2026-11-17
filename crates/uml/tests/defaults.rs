@@ -1,13 +1,22 @@
 //! A package's default diagram through its binding (AR-575): each state built by hand in a store
 //! under fixed ids, as no command makes a binding yet: bound, none yet, missing, duplicate, a dead,
 //! a wrong-kind and a foreign target, a profile, and every problem of a store in a stable order.
+//! Each state read through `uml.package.default.get`, on the revision its caller read, as a
+//! read-only tool that leaves no undo step (AR-576).
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
-use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj};
+use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
+use archforge_engine::{BindingFault, EngineError, Options, Reason, Revision, Session};
 use archforge_mof::rows::{self, Cell};
 use archforge_mof::{ClassId, CompositeSlabs, Obj, Store, Uuid, Value};
 use archforge_uml::defaults::{BindingProblem, DefaultDiagram, Diagnosis, problems, resolve};
-use archforge_uml::{PACKAGE, PROFILE, STRUCTURE_DIAGRAM};
+use archforge_uml::{ALONE, PACKAGE, PROFILE, STRUCTURE_DIAGRAM, registry};
+use serde_json::{Value as Json, json};
+
+type S = Session<Store, ProjectView>;
+
+/// The query this file's command tests call.
+const GET: &str = "uml.package.default.get";
 
 /// An ER diagram's kind, `archforge_er::DIAGRAM_KIND`, which UML does not depend on.
 const ER_DIAGRAM: &str = "er";
@@ -195,4 +204,113 @@ fn a_stores_problems_come_in_the_order_of_their_ids() {
     let mut back = bare();
     rows::restore(&mut back, &rows::snapshot(&st, &tables, &junctions).unwrap(), &tables, &junctions).unwrap();
     assert_eq!(ids(&back), ids(&st), "read back with other handles");
+}
+
+/// A session over `st`, which nothing has changed yet.
+fn over(st: Store) -> S {
+    Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE))
+}
+
+/// The id `[n; 16]` as a command takes it.
+fn id(n: u8) -> String {
+    Uuid([n; 16]).to_string()
+}
+
+/// `uml.package.default.get` of `package` given `p` besides, checked to have changed nothing and
+/// left no undo step: its answer, or the refusal's parameter, reason and English.
+fn get(s: &mut S, package: &str, mut p: Json) -> Result<Json, (Option<String>, Option<Reason>, String)> {
+    let at = s.token();
+    p["package"] = json!(package);
+    let out = s.execute(GET, &p);
+    assert_eq!((s.token(), s.can_undo()), (at, false), "{p} changed nothing and left no undo step");
+    match out {
+        Ok(o) => Ok(o.value),
+        Err(EngineError::Failed { error, .. }) => Err((error.key, error.reason, error.message)),
+        Err(other) => panic!("{p}: {other}"),
+    }
+}
+
+/// Every state a package's default can be in, read through the command: the bound diagram with
+/// its binding, none yet, a profile's that does not apply, and each unsound binding refused about
+/// `package` as its fault, naming the ids concerned and the choice that mends it; never the first
+/// diagram found.
+#[test]
+fn the_command_answers_every_state_of_a_default_and_changes_nothing() {
+    let (mut st, model) = store();
+    let sales = add(&mut st, model, PACKAGE, 0x10);
+    diagram(&mut st, model, 0x11, STRUCTURE_DIAGRAM, sales);
+    let detail = diagram(&mut st, model, 0x12, STRUCTURE_DIAGRAM, sales);
+    bind(&mut st, model, 0x13, sales, detail);
+    add(&mut st, model, PACKAGE, 0x20);
+    let profile = add(&mut st, model, PROFILE, 0x30);
+    diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, profile);
+    let missing = add(&mut st, model, PACKAGE, 0x40);
+    diagram(&mut st, model, 0x41, STRUCTURE_DIAGRAM, missing);
+    let twice = add(&mut st, model, PACKAGE, 0x50);
+    let both = diagram(&mut st, model, 0x51, STRUCTURE_DIAGRAM, twice);
+    bind(&mut st, model, 0x53, twice, both);
+    bind(&mut st, model, 0x52, twice, both);
+    let schema_bound = add(&mut st, model, PACKAGE, 0x60);
+    let schema = diagram(&mut st, model, 0x61, ER_DIAGRAM, schema_bound);
+    bind(&mut st, model, 0x62, schema_bound, schema);
+    let foreign = add(&mut st, model, PACKAGE, 0x70);
+    bind(&mut st, model, 0x72, foreign, detail);
+    let dead = add(&mut st, model, PACKAGE, 0x80);
+    let gone = diagram(&mut st, model, 0x81, STRUCTURE_DIAGRAM, dead);
+    let emptied = bind(&mut st, model, 0x82, dead, gone);
+    st.set(emptied, DEFAULT_DIAGRAM, Value::Null).unwrap();
+    let mut s = over(st);
+    let answer = |state: &str, package: u8, binding: Option<u8>, diagram: Option<u8>| {
+        Ok(json!({ "package": id(package), "state": state, "binding": binding.map(id), "diagram": diagram.map(id) }))
+    };
+    assert_eq!(get(&mut s, &id(0x10), json!({})), answer("bound", 0x10, Some(0x13), Some(0x12)), "not the first-found 0x11");
+    assert_eq!(get(&mut s, &id(0x20), json!({})), answer("no_diagram_yet", 0x20, None, None));
+    assert_eq!(get(&mut s, &id(0x30), json!({})), answer("does_not_apply", 0x30, None, None));
+    let own = "choose one of its own structure diagrams as its default";
+    for (package, fault, named, mend) in [
+        (0x40, BindingFault::Missing, format!("(package {})", id(0x40)), own),
+        (0x50, BindingFault::Duplicate, format!("bindings {}, {})", id(0x52), id(0x53)), "choose which of its structure diagrams stays its default"),
+        (0x60, BindingFault::WrongKind, format!("binding {}, diagram {})", id(0x62), id(0x61)), own),
+        (0x70, BindingFault::WrongOwner, format!("binding {}, diagram {})", id(0x72), id(0x12)), own),
+        (0x80, BindingFault::DeadTarget, format!("binding {})", id(0x82)), own),
+    ] {
+        let Err((key, reason, said)) = get(&mut s, &id(package), json!({})) else { panic!("{fault:?} answered") };
+        assert_eq!((key.as_deref(), reason), (Some("package"), Some(Reason::InvalidBinding(fault))), "{said}");
+        assert!(said.contains(&named) && said.ends_with(mend), "{fault:?}: {said}");
+    }
+    let Err((key, None, said)) = get(&mut s, &id(0x11), json!({})) else { panic!("a diagram answered") };
+    assert_eq!((key.as_deref(), said), (Some("package"), format!("{} is not a package", id(0x11))));
+}
+
+/// Given the revision its caller read, the command answers only on it: another revision, another
+/// history or a token of another shape is refused as stale, naming the revision it runs on; left
+/// out or null, it answers.
+#[test]
+fn the_command_answers_only_on_the_revision_its_caller_read() {
+    let (mut st, model) = store();
+    add(&mut st, model, PACKAGE, 0x10);
+    let mut s = over(st);
+    let at = s.token();
+    let none_yet = Ok(json!({ "package": id(0x10), "state": "no_diagram_yet", "binding": null, "diagram": null }));
+    let token = |r: Revision| json!({ "history": r.history, "revision": r.revision });
+    assert_eq!(get(&mut s, &id(0x10), json!({ "expected_revision": token(at) })), none_yet);
+    assert_eq!(get(&mut s, &id(0x10), json!({ "expected_revision": null })), none_yet);
+    let (later, other) = (Revision { revision: at.revision + 1, ..at }, Revision { history: at.history + 1, ..at });
+    for (given, expected) in [(token(later), Some(later)), (token(other), Some(other)), (json!({ "history": at.history }), None)] {
+        let Err((key, reason, _)) = get(&mut s, &id(0x10), json!({ "expected_revision": given })) else { panic!("{given} answered") };
+        assert_eq!((key.as_deref(), reason), (Some("expected_revision"), Some(Reason::StaleRevision { expected, current: at })), "{given}");
+    }
+}
+
+/// The command is a query: never journaled nor undoable, which the MCP server offers as a
+/// read-only tool (`readOnlyHint`), its `expected_revision` an object it may leave out.
+#[test]
+fn the_command_is_offered_as_a_read_only_tool() {
+    let (st, _) = store();
+    let s = over(st);
+    assert_eq!(s.registry().is_query(GET), Some(true));
+    let info = s.registry().infos(&s.facts()).into_iter().find(|i| i.id == GET).unwrap();
+    assert_eq!((info.journal, info.undoable, info.enabled), (false, false, true));
+    let revision = info.params.iter().find(|p| p.key == "expected_revision").unwrap();
+    assert_eq!((revision.kind, revision.optional), ("object", true));
 }

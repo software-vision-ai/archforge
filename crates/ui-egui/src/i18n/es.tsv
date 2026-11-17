@@ -768,6 +768,11 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	Deshacer y rehacer no pueden formar parte de otro cambio.
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	El modelo ha cambiado desde que se leyó, o se leyó otro proyecto. Vuelva a leerlo e inténtelo de nuevo. No se ha cambiado nada.
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	El cambio no indica para qué revisión del modelo se hizo. Lea el modelo e inténtelo de nuevo. No se ha cambiado nada.
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	El paquete tiene diagramas de clases, pero ninguno es su diagrama predeterminado. Elija uno de ellos como diagrama predeterminado.
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	El paquete tiene más de un diagrama predeterminado. Elija cuál de sus diagramas de clases sigue siendo el predeterminado.
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	El diagrama predeterminado del paquete ya no existe. Elija uno de sus diagramas de clases como diagrama predeterminado.
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	El diagrama predeterminado del paquete no es un diagrama de clases. Elija uno de sus diagramas de clases como diagrama predeterminado.
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	El diagrama predeterminado del paquete pertenece a otro elemento. Elija uno de sus propios diagramas de clases como diagrama predeterminado.
 str		This could not be done because of an internal error. Nothing was changed.	No se pudo hacer por un error interno. No se ha cambiado nada.
 str		The text can't be empty.	El texto no puede estar vacío.
 str		It can't be longer than {max} characters.	Se admiten como máximo {max} caracteres.

@@ -1210,6 +1210,15 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             association_class_move
         ),
         cmd!(query "uml.package.list", "List packages", &["Package"], None, "", always, package_list),
+        cmd!(
+            query "uml.package.default.get",
+            "Package's default diagram",
+            &["Package", "Diagram"],
+            None,
+            "package: string; the id of the package, or of a profile, which has no default diagram\nexpected_revision: object?; the history and the revision the project state gives, {\"history\": h, \"revision\": r}; given, the default is read only on that revision",
+            always,
+            crate::defaults::default_get
+        ),
         cmd!(query "uml.class.list", "List classes", &["Class"], None, "package: string; the package's id", has_packages, class_list),
         cmd!(query "uml.interface.list", "List interfaces", &["Interface"], None, "package: string; the package's id", has_packages, interface_list),
         cmd!(
