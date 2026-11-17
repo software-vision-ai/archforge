@@ -50,8 +50,9 @@ class (UML: a package's class diagram) gets the element's first diagram of that 
 default as it is made: `defaults::new_diagram_bound`, which `diagram.add` calls, makes the diagram
 and a binding beside it in its home as one change, but only while the element has no diagram of
 that kind and no binding (`defaults::is_first`); an element with diagrams but no binding stays
-without one, its default diagnosed as missing, never bound silently (AR-579). Choosing another
-default in Properties and replacing a default as it is removed come later (AR-396, AR-397). A comparison lists a binding among the model's elements, not
+without one, its default diagnosed as missing, never bound silently (AR-579). UML's
+`uml.package.default.set` makes and retargets a binding (AR-580); Properties and replacing a default
+as it is removed come later (AR-396, AR-397). A comparison lists a binding among the model's elements, not
 the diagrams, worded by its package and diagram (`Sales → Sales overview`) under the kind word
 Default diagram (AR-553).
 

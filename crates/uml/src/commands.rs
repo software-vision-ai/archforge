@@ -1234,6 +1234,15 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             always,
             crate::defaults::default_get
         ),
+        cmd!(
+            "uml.package.default.set",
+            "Set default diagram",
+            &["Package", "Diagram"],
+            None,
+            "package: string; the package's id\ndiagram: string; the id of one of the package's own class diagrams, its default from now on; the one it is already changes nothing; a package with more than one default keeps one, naming this diagram, and the others are removed\nexpected_revision: object?; the history and the revision the project state gives, {\"history\": h, \"revision\": r}; refused when left out or when the model changed since",
+            has_packages,
+            crate::defaults::default_set
+        ),
         cmd!(query "uml.class.list", "List classes", &["Class"], None, "package: string; the package's id", has_packages, class_list),
         cmd!(query "uml.interface.list", "List interfaces", &["Interface"], None, "package: string; the package's id", has_packages, interface_list),
         cmd!(

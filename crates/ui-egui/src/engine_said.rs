@@ -8,7 +8,8 @@
 //! package's default diagram that cannot be read for its unsound binding (AR-576), and a diagram
 //! that stays because a package's binding names it as its default (AR-578).
 //!
-//! A package move or rename the root package or the package Types refuses is said here too (AR-563).
+//! A package move or rename the root package or the package Types refuses is said here too (AR-563),
+//! as is a default diagram chosen for no package or from another element's diagrams (AR-580).
 
 use archforge_engine::{BindingFault, EngineError, Reason};
 
@@ -54,9 +55,11 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 /// A refusal the engine types itself in the user's words: a change made for another revision of the
 /// model than the one it would run on, or for none, a package's default diagram that cannot be
 /// read, by what is wrong with its binding and the choice that mends it, a diagram a package's
-/// binding keeps, its own default or another element's diagram, with the choice to make first, and a
+/// binding keeps, its own default or another element's diagram, with the choice to make first, a
 /// package move or rename refused because the root package stays or the package Types keeps the
-/// built-in types; none for another reason, or for a kind of element the catalogues don't name.
+/// built-in types, and a package's default diagram chosen with no package, something that is none,
+/// or a class diagram of another element (AR-580); none for another reason, or for a kind of
+/// element the catalogues don't name.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
     Some(match reason {
@@ -100,6 +103,12 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
         Reason::DefaultDiagramOf { package, fault: Some(BindingFault::WrongOwner) } => fmt(
             &tr("{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first."),
             &[("package", package)],
+        ),
+        Reason::IdEmpty { kind: "package" } => tr("No package is given. Give its id."),
+        Reason::NotA { kind: "package", name } => fmt(&tr("{name} is not a package."), &[("name", name)]),
+        Reason::NotOwnDiagram { diagram, package } => fmt(
+            &tr("{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram."),
+            &[("diagram", diagram), ("package", package)],
         ),
         _ => return None,
     })

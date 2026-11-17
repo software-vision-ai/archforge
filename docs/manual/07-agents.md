@@ -614,6 +614,18 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   is refused, naming the package whose default it is, unless that package is removed in the same
   call. Choose a default of that package's own first. A nested package hands the diagram up to its
   parent and goes.
+- **Choosing a package's default diagram**: `uml_package_default_set`
+  (`uml.package.default.set`) makes one of the package's own class diagrams its default, given
+  `package`, `diagram` and `expected_revision`, which it needs: left out or changed since read, it
+  is refused and changes nothing. Something that is no package, a diagram that is gone, is no class
+  diagram (an ER diagram, say) or belongs to another element is refused the same way. The package
+  keeps one binding, the one its first class diagram came with, or one made now for a package that
+  has none; it keeps its id when another diagram is chosen. It is
+  also how a binding that `uml_package_default_get` refuses is mended; a package with more than one
+  default keeps the first binding, now naming the chosen diagram, and the others are removed. It
+  answers the ids of the package, the binding and the diagram, and those of the bindings removed.
+  Choosing the default a package with one binding has already changes nothing and adds no undo
+  step; any other choice, mending a duplicate included, is one undo step. While Archforge shows an earlier version, it is refused like every change.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element

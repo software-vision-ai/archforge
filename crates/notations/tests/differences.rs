@@ -794,6 +794,27 @@ fn a_default_diagram_set_or_cleared_is_added_or_removed() {
     }
 }
 
+/// A default diagram chosen again with `uml.package.default.set` is that binding changed, worded
+/// package → diagram, and nothing else (AR-580).
+#[test]
+fn a_default_diagram_chosen_again_is_one_changed_binding() {
+    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let overview = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales overview" }));
+    let detail = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales detail" }));
+    let choose = |s: &mut Session, diagram: &str| {
+        let at = s.token();
+        let p = json!({ "package": sales, "diagram": diagram, "expected_revision": { "history": at.history, "revision": at.revision } });
+        s.execute("uml.package.default.set", &p).unwrap().value["binding"].as_str().unwrap().to_string()
+    };
+    let binding = choose(&mut s, &overview);
+    let before = state(&s);
+    assert_eq!(choose(&mut s, &detail), binding, "the same binding names the detail");
+    let found = differences(&before, &state(&s));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(told(about(&found, &binding)), (ChangeKind::Changed, Some("Sales → Sales detail"), vec!["Commerce"]));
+}
+
 /// A binding's two sides read as an element's: cards with words made from its package and
 /// diagram, no fields of its own, and the project's model as its owner.
 #[test]
