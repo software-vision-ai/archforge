@@ -9614,7 +9614,9 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
 
 /// A package's card dragged over another package or an ancestor in the path bar only arranges the
 /// diagram: no ring, no prompt, its owner stays and one Undo puts the card back (AR-566). Its owner
-/// changes in Properties and in Models, which refuse it into a package it holds (AR-102).
+/// changes in Properties and in Models, which refuse it into a package it holds, said in the chosen
+/// language with history untouched (AR-102): its cards stay, their owner lines follow, nothing is
+/// added to the new owner's diagram, and Undo brings both back (AR-568).
 #[test]
 fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner_in_properties_and_models() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -9638,6 +9640,14 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
                 made.push((p, card));
             }
             (top, made[0].0, made[1].0, made[0].1, made[1].1)
+        };
+        // Sales shown on a second diagram of the root as well.
+        let (overview, sales_card2) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+            let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Overview" })).unwrap().value);
+            let at = serde_json::json!({ "diagram": d.to_string(), "element": sales.to_string(), "x": 80, "y": 120, "width": 240, "height": 148 });
+            (d, id(s.execute("diagram.place", &at).unwrap().value))
         };
         crate::canvas::open(h.state_mut(), top);
         h.run();
@@ -9718,22 +9728,38 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let at = rect_of(&h, "workspace.properties.package.parent.1").center();
         click(&mut h, at);
         assert_eq!(parent(&h, sales).as_deref(), Some("Billing"));
-        // Shown on a diagram, it goes onto its new home's diagram too, as a drop in Models takes it.
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}: one step");
+        assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Sales moved into Billing"), "{theme:?}");
+        // Its two cards stay, their owner lines naming Billing; Billing's diagram gets none (AR-568).
         let inner = {
             let st = h.state().session.as_ref().unwrap().doc();
-            let d = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
-            assert!(crate::editing::on_diagram(st, d, st.by_uuid(sales).unwrap()), "{theme:?}: on Billing's diagram");
-            st.uuid(d).unwrap()
+            st.uuid(archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap()).unwrap()
         };
-        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}: one step");
+        let lines_say = |h: &mut Harness<'static, Shell>, owner: &str| {
+            let mut said = Vec::new();
+            for (d, card) in [(overview, sales_card2), (top, sales_card)] {
+                crate::canvas::open(h.state_mut(), d);
+                h.run();
+                said.push(h.state().canvas.path_badges.iter().find(|b| b.node == card).map(|b| b.whole.clone()));
+            }
+            let st = h.state().session.as_ref().unwrap().doc();
+            let mut on: Vec<_> = archforge_diagram::views_of(st, st.by_uuid(sales).unwrap()).2.into_iter().map(|n| st.uuid(n).unwrap()).collect();
+            on.sort();
+            let mut cards = vec![sales_card, sales_card2];
+            cards.sort();
+            assert_eq!(on, cards, "{theme:?}: its two cards, no other");
+            assert_eq!(said, vec![Some(format!("Owner: {owner}")); 2], "{theme:?}: both owner lines");
+        };
+        lines_say(&mut h, "Commerce platform › Billing");
+        // Placed on Billing's diagram later, by its own step.
+        let card = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let at =
+                serde_json::json!({ "diagram": inner.to_string(), "element": sales.to_string(), "x": 80, "y": 120, "width": 240, "height": 148 });
+            id(s.execute("diagram.place", &at).unwrap().value)
+        };
         crate::canvas::open(h.state_mut(), inner);
         h.run();
-        let card = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let d = st.by_uuid(inner).unwrap();
-            let n = st.list(d, archforge_diagram::diagram::NODE).unwrap().iter().filter_map(archforge_mof::Value::as_ref).next().unwrap();
-            st.uuid(n).unwrap()
-        };
         // Held over the root in the path bar: neither ringed nor a prompt; let go, Sales only moves
         // on Billing's diagram, which stays open.
         let (from, pill, before) =
@@ -9756,14 +9782,18 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         assert_eq!(h.state().canvas.active, Some(inner), "{theme:?}: still on Billing's diagram");
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move"), "{theme:?}: a diagram step");
         assert_ne!(card_at(&h, card), before, "{theme:?}: the card moved");
-        // Undo puts the card back, then takes the Properties move back to the root.
+        // Undo puts the card back, takes the placement back, then the Properties move: the owner
+        // lines name the root again, and both cards stay.
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         h.run();
         assert_eq!((card_at(&h, card), parent(&h, sales).as_deref()), (before, Some("Billing")), "{theme:?}: only the card back");
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
-        h.run();
+        lines_say(&mut h, "Commerce platform › Billing");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
         assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: Properties' move undone");
-        // In Models, a package dropped onto a package it holds is refused, and says so.
+        lines_say(&mut h, "Commerce platform");
+        // In Models, a package dropped onto a package it holds is refused, said in German, and
+        // the history stays as it was.
         let lines = id(h
             .state_mut()
             .session
@@ -9773,32 +9803,47 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
             .unwrap()
             .value);
         h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().state.language = "de".into();
         let root = {
             let st = h.state().session.as_ref().unwrap().doc();
             st.uuid(archforge_uml::commands::root_package(st).unwrap()).unwrap()
         };
         h.state_mut().explorer.expanded.extend([root, sales]);
         h.run();
+        let history = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.undo_label().map(str::to_string), s.redo_label().map(str::to_string))
+        };
+        let was = history(&h);
         let (from, target) =
             (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{lines}")).center());
         drag(&mut h, from, target);
         assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: not moved");
-        let notice = h.state().explorer.notice.clone().unwrap_or_default();
-        // In plain words, as Properties says it: no command id, no engine wording (AR-427).
-        assert!(notice.starts_with("A package cannot go into itself") && !notice.contains("uml."), "{theme:?}: {notice}");
-        // Onto Billing's row: shown on a diagram, it goes onto Billing's diagram too.
+        let said = "Ein Paket kann nicht in sich selbst oder in ein Paket verschoben werden, das es enthält.";
+        assert_eq!(h.state().explorer.notice.as_deref(), Some(said), "{theme:?}");
+        assert_eq!(history(&h), was, "{theme:?}: history untouched");
+        h.state_mut().state.language = "en".into();
+        h.state_mut().explorer.notice = None;
+        h.run();
+        // Onto Billing's row: moved, its cards kept with their owner lines, none on Billing's diagram.
         let (from, target) =
             (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{billing}")).center());
         drag(&mut h, from, target);
         assert_eq!(parent(&h, sales).as_deref(), Some("Billing"), "{theme:?}: moved in Models");
-        let st = h.state().session.as_ref().unwrap().doc();
-        let bd = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
-        assert!(crate::editing::on_diagram(st, bd, st.by_uuid(sales).unwrap()), "{theme:?}: on Billing's diagram");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}: one step");
+        assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Sales moved into Billing"), "{theme:?}");
+        lines_say(&mut h, "Commerce platform › Billing");
+        // Undo brings the owner and the lines back.
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: Models' move undone");
+        lines_say(&mut h, "Commerce platform");
     }
+    crate::i18n::set_language("en");
 }
 
 /// A package moved back by Properties into a package whose diagram shows it already keeps that one
-/// card, and the move is not refused (AR-561); moved where it is not shown, it is placed there.
+/// card, and the move is not refused (AR-561); moved where it is not shown, it is not placed there,
+/// nor is a diagram made for its new owner (AR-568).
 #[test]
 fn a_package_moved_back_where_it_is_shown_keeps_its_one_card() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -9850,17 +9895,13 @@ fn a_package_moved_back_where_it_is_shown_keeps_its_one_card() {
         assert_eq!((parent(&h).as_deref(), shown(&h)), (Some("Billing"), vec![(top, card)]), "{theme:?}: undone");
         h.state_mut().session.as_mut().unwrap().redo().unwrap();
         assert_eq!(parent(&h).as_deref(), Some("Commerce platform"), "{theme:?}: redone");
-        // Into Billing, whose diagram does not show it: placed there, its card on the root's kept.
+        // Into Billing, which has no diagram: moved, its one card kept, and Billing still has none.
         pick(&mut h, "1");
         assert_eq!(h.state().panels.notice, None, "{theme:?}: not refused");
         assert_eq!(parent(&h).as_deref(), Some("Billing"), "{theme:?}: in Billing");
-        let inner = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            st.uuid(archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap()).unwrap()
-        };
-        let on = shown(&h);
-        assert_eq!(on.len(), 2, "{theme:?}: on two diagrams");
-        assert!(on.contains(&(top, card)) && on.iter().any(|(d, _)| *d == inner), "{theme:?}: kept on the root's, placed on Billing's");
+        assert_eq!(shown(&h), vec![(top, card)], "{theme:?}: the one card it had, none placed");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()), None, "{theme:?}: no diagram made");
     }
 }
 

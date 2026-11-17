@@ -575,7 +575,7 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         if let Some(i) = crate::panels::menu_paths(shell, ui, p, field, parent_id, &paths)
             && let Some((to, _)) = choices.get(i)
         {
-            // Shown on a diagram, it goes onto its new home's diagram too, as a drop in Models takes it.
+            // As a drop in Models moves it: its cards stay, none is added to its new owner's diagram.
             let to = shell.session.as_ref().and_then(|s| s.doc().by_uuid(*to));
             if let Some(to) = to {
                 shell.panels.notice = crate::package_nav::move_package(shell, package, to).err();
