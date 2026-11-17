@@ -2,15 +2,17 @@
 //! the one resolver every reader asks, which gives the bound structure diagram, says the package
 //! has none yet, or names what is wrong with its binding. It never falls back to the first diagram
 //! found, and it changes nothing. A profile has no default. `uml.package.default.get` answers it to
-//! agents (AR-576).
+//! agents (AR-576), and `uml.package.default.set` chooses it, the one explicit way to make or mend
+//! a binding (AR-580).
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
-use archforge_diagram::{ProjectView, defaults, diagram};
+use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, ProjectView, defaults, diagram};
 use archforge_engine::{BindingFault, CommandError, Ctx, EXPECTED_REVISION, Params, Reason, expected_revision};
-use archforge_mof::{Obj, Store, Uuid};
+use archforge_mof::{Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
-use crate::commands::{id_of, uuid_of};
+use crate::applications::{kind_param, name_or_id};
+use crate::commands::{fail, id_of, uuid_of};
 use crate::{PACKAGE, PROFILE, STRUCTURE_DIAGRAM};
 
 /// The most bindings a refusal of a duplicate names by their ids; it counts the others.
@@ -125,8 +127,49 @@ pub(crate) fn default_get(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> 
     Ok(json!({ "package": uuid_of(store, package)?, "state": state, "binding": binding, "diagram": diagram }))
 }
 
+/// `uml.package.default.set`: makes the class diagram under `diagram` the default of the package
+/// under `package`, only on the `expected_revision` its caller read, refused as
+/// [`Reason::StaleRevision`] on another or none. The diagram is a live structure diagram of that
+/// package, each refusal typed. The package's one binding is made, as a member of the project's
+/// Model, or keeps its identity and names the diagram; several are repaired, the first by id kept
+/// and the others removed, in the same undo step. The diagram it names already changes nothing and
+/// records no undo step. Gives the ids of the package, the binding and the diagram, and those of
+/// the bindings removed.
+pub(crate) fn default_set(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> Result<Json, CommandError> {
+    expected_revision(ctx, p)?;
+    let store = &*ctx.doc;
+    let package = kind_param(store, p, "package", "package", |o| store.class_of(o).ok() == Some(PACKAGE))?;
+    let chosen = kind_param(store, p, "diagram", "class diagram", |d| store.class_of(d).ok() == Some(DIAGRAM) && is_structure(store, d))?;
+    if store.get(chosen, diagram::ELEMENT).ok().and_then(|v| v.as_ref()) != Some(package) {
+        let (d, pkg) = (name_or_id(store, chosen), name_or_id(store, package));
+        let said = format!("the diagram {d} is not one of {pkg}'s own; choose one of its own structure diagrams as its default");
+        return Err(CommandError::about("diagram", said).because(Reason::NotOwnDiagram { diagram: d.into(), package: pkg.into() }));
+    }
+    let mut extra = by_id(store, defaults::bindings_of(store, package));
+    let kept = (!extra.is_empty()).then(|| extra.remove(0));
+    let removed = extra.iter().map(|b| uuid_of(store, *b)).collect::<Result<Vec<_>, _>>()?;
+    let binding = match kept {
+        Some(b) => b,
+        None => {
+            let model = crate::commands::model(ctx.doc)?;
+            let b = ctx.doc.create(DEFAULT_DIAGRAM_BINDING).map_err(fail)?;
+            ctx.doc.set(b, OWNER_ELEMENT, Value::Ref(package)).map_err(fail)?;
+            ctx.doc.push(model, archforge_core::model::MEMBER, Value::Ref(b)).map_err(fail)?;
+            b
+        }
+    };
+    // Naming the diagram it names already is no change, so it records no undo step.
+    ctx.doc.set(binding, DEFAULT_DIAGRAM, Value::Ref(chosen)).map_err(fail)?;
+    for b in extra {
+        ctx.doc.destroy(b).map_err(fail)?;
+    }
+    let store = &*ctx.doc;
+    Ok(json!({ "package": uuid_of(store, package)?, "binding": uuid_of(store, binding)?, "diagram": uuid_of(store, chosen)?, "removed": removed }))
+}
+
 /// `problem` with `package`'s binding as a refusal about `package`, typed by its fault: the problem,
-/// the ids of the package, its bindings and the diagram concerned, and the choice that mends it.
+/// the ids of the package, its bindings and the diagram concerned, and the choice that mends it,
+/// made with `uml.package.default.set`.
 fn invalid(store: &Store, package: Obj, problem: &BindingProblem) -> CommandError {
     let id = |o: &Obj| store.uuid(*o).map(|u| u.to_string()).unwrap_or_default();
     let mut named = format!("package {}", id(&package));
@@ -150,8 +193,10 @@ fn invalid(store: &Store, package: Obj, problem: &BindingProblem) -> CommandErro
         }
     };
     let mend = match fault {
-        BindingFault::Duplicate => "choose which of its structure diagrams stays its default",
-        _ => "choose one of its own structure diagrams as its default",
+        BindingFault::Duplicate => {
+            "choose which of its structure diagrams stays its default with uml.package.default.set, which removes the other bindings"
+        }
+        _ => "choose one of its own structure diagrams as its default with uml.package.default.set",
     };
     CommandError::about("package", format!("{problem} ({named}); {mend}")).because(Reason::InvalidBinding(fault))
 }
