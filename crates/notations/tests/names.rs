@@ -109,12 +109,12 @@ fn elements_of_different_kinds_share_a_name_through_every_command() {
     run(&mut s, "uml.dependency.add", json!({ "client": money, "supplier": order, "name": "Uses" }));
     run(&mut s, "uml.constraint.add", json!({ "context": order, "name": "advance", "expression": "total >= 0" }));
     run(&mut s, "uml.constraint.add", json!({ "context": order, "name": "Advance", "expression": "true" }));
-    // Diagrams named alike, by hand and as packages of one name in different parents name theirs.
+    // Diagrams named alike: by hand, and the own diagrams of two packages of one name in different parents.
     run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Main" }));
     run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "main" }));
-    run(&mut s, "uml.package.diagram", json!({ "package": line }));
+    run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": line, "name": "Line" }));
     let other_line = run(&mut s, "uml.package.add", json!({ "parent": elsewhere, "name": "Line" }));
-    run(&mut s, "uml.package.diagram", json!({ "package": other_line }));
+    run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": other_line, "name": "Line" }));
     reopens(s.doc()).unwrap();
 }
 

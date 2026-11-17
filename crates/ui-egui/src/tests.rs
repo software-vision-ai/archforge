@@ -9485,6 +9485,131 @@ fn rest(h: &mut Harness<'static, Shell>) {
     h.run();
 }
 
+/// A package's own class diagram, made as a workflow makes one (AR-581): by `diagram.add`, named
+/// like the package and its default from the start, the selection left as it was.
+fn own_diagram(s: &mut archforge_notations::Session, package: archforge_mof::Uuid) -> archforge_mof::Uuid {
+    let st = s.doc();
+    let name = archforge_core::name_of(st, st.by_uuid(package).unwrap());
+    let kept: Vec<String> = s.view().selection.iter().map(|o| st.uuid(*o).unwrap().to_string()).collect();
+    let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package.to_string(), "name": name });
+    let d = archforge_mof::Uuid::parse(s.execute("diagram.add", &p).unwrap().value["id"].as_str().unwrap()).unwrap();
+    s.execute("view.select", &serde_json::json!({ "ids": kept })).unwrap();
+    d
+}
+
+/// The packages, their diagrams and the default-diagram bindings in the open project, counted.
+fn packages_diagrams_bindings(h: &Harness<'static, Shell>) -> [usize; 3] {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let of = |class| st.alive().filter(|o| st.class_of(*o).ok() == Some(class)).count();
+    [of(archforge_uml::PACKAGE), of(archforge_diagram::DIAGRAM), archforge_diagram::defaults::bindings(st).len()]
+}
+
+/// The Package tool makes the package, its card, its own diagram and the binding that names that
+/// diagram its default as one undo step, and leaves the package selected; Escape before the click
+/// makes nothing (AR-581).
+#[test]
+fn the_package_tool_makes_the_package_its_diagram_and_its_default_as_one_undo_step() {
+    use archforge_uml::defaults::{DefaultDiagram, resolve};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let top = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+            let d = s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value;
+            archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
+        };
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        let made =
+            |h: &Harness<'static, Shell>| (packages_diagrams_bindings(h), h.state().session.as_ref().unwrap().undo_label().map(str::to_string));
+        let before = made(&h);
+        // Escape puts the tool down: nothing is made.
+        let tool = rect_of(&h, "workspace.tools.package").center();
+        click(&mut h, tool);
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "{theme:?}: the tool is put down");
+        let centre = rect_of(&h, "workspace.canvas").center();
+        click(&mut h, centre);
+        assert_eq!(made(&h), before, "{theme:?}: nothing made");
+        // Placed: the package, its diagram and its binding, one step.
+        click(&mut h, tool);
+        click(&mut h, centre);
+        let [packages, diagrams, bindings] = before.0;
+        assert_eq!(packages_diagrams_bindings(&h), [packages + 1, diagrams + 1, bindings + 1], "{theme:?}");
+        let s = h.state().session.as_ref().unwrap();
+        assert_eq!(s.undo_label(), Some("Add package"), "{theme:?}: one undo step");
+        let package = h.state().canvas.rename.as_ref().expect("named in place").entity;
+        let (st, p) = (s.doc(), s.doc().by_uuid(package).unwrap());
+        assert_eq!(s.view().selection, [p], "{theme:?}: the package selected, not its diagram");
+        let Ok(DefaultDiagram::Bound(d)) = resolve(st, p) else { panic!("{theme:?}: no default for the package") };
+        assert_eq!(st.get(d, archforge_diagram::diagram::ELEMENT).unwrap().as_ref(), Some(p), "{theme:?}: its own diagram");
+        assert_eq!(crate::diagrams::diagram_name(st, d), "Package 1", "{theme:?}: named like it");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!(packages_diagrams_bindings(&h), before.0, "{theme:?}: one Undo takes all three back");
+    }
+}
+
+/// A package dragged from Models onto a class diagram gets a diagram of its own, bound as its
+/// default in the same step, only when it has no structure diagram yet; one that has one keeps it
+/// and its default (AR-581).
+#[test]
+fn a_package_dropped_from_models_gets_a_default_diagram_only_when_it_has_none() {
+    use archforge_uml::defaults::{DefaultDiagram, resolve};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (root, top, sales, billing, billings) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let top = own_diagram(s, root);
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
+            (root, top, sales, billing, own_diagram(s, billing))
+        };
+        crate::canvas::open(h.state_mut(), top);
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().explorer.expanded.insert(root);
+        h.run();
+        let default = |h: &Harness<'static, Shell>, p: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            match resolve(st, st.by_uuid(p).unwrap()) {
+                Ok(DefaultDiagram::Bound(d)) => Some(st.uuid(d).unwrap()),
+                other => {
+                    assert_eq!(other, Ok(DefaultDiagram::NoDiagramYet), "{theme:?}");
+                    None
+                }
+            }
+        };
+        assert_eq!(default(&h, sales), None, "{theme:?}: Sales has no diagram yet");
+        let canvas = rect_of(&h, "workspace.canvas");
+        let before = packages_diagrams_bindings(&h);
+        // Sales, without one: placed, with its diagram and its binding, one step.
+        let from = rect_of(&h, &format!("workspace.explorer.row.{sales}")).center();
+        drag(&mut h, from, canvas.center() - egui::vec2(300.0, 0.0));
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place package"), "{theme:?}: {:?}", h.state().canvas.notice);
+        assert_eq!(packages_diagrams_bindings(&h), [before[0], before[1] + 1, before[2] + 1], "{theme:?}");
+        let made = default(&h, sales).expect("Sales's default");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(crate::diagrams::diagram_name(st, st.by_uuid(made).unwrap()), "Sales", "{theme:?}: named like it");
+        // Billing, which has one: placed, nothing made, its default as it was.
+        let from = rect_of(&h, &format!("workspace.explorer.row.{billing}")).center();
+        drag(&mut h, from, canvas.center() + egui::vec2(300.0, 0.0));
+        assert_eq!(packages_diagrams_bindings(&h), [before[0], before[1] + 1, before[2] + 1], "{theme:?}: no second diagram");
+        assert_eq!(default(&h, billing), Some(billings), "{theme:?}");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(crate::editing::on_diagram(st, st.by_uuid(top).unwrap(), st.by_uuid(billing).unwrap()), "{theme:?}: Billing placed");
+        // One Undo takes Billing's card back, the next Sales's card, diagram and binding.
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.undo().unwrap();
+        s.undo().unwrap();
+        h.run();
+        assert_eq!((packages_diagrams_bindings(&h), default(&h, sales)), (before, None), "{theme:?}");
+    }
+}
+
 #[test]
 fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path_keys_and_zoom() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -9636,7 +9761,7 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
                     )
                     .unwrap()
                     .value);
-                s.execute("uml.package.diagram", &serde_json::json!({ "package": p.to_string() })).unwrap();
+                own_diagram(s, p);
                 made.push((p, card));
             }
             (top, made[0].0, made[1].0, made[0].1, made[1].1)
@@ -9853,7 +9978,7 @@ fn a_package_moved_back_where_it_is_shown_keeps_its_one_card() {
         let (top, sales, billing, card) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-            let top = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": root })).unwrap().value);
+            let top = own_diagram(s, archforge_mof::Uuid::parse(&root).unwrap());
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
             let at = serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 80, "y": 80, "width": 240, "height": 148 });
@@ -9921,7 +10046,7 @@ fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from()
             &serde_json::json!({ "diagram": second.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
         )
         .unwrap();
-        s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap();
+        own_diagram(s, sales);
         (second, sales)
     };
     crate::canvas::open(h.state_mut(), second);
@@ -9953,7 +10078,7 @@ fn a_long_package_path_folds_its_first_ancestors_and_keeps_the_nearest_ones_clic
             parent = p.to_string();
             chain.push(p);
         }
-        let d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": parent })).unwrap().value);
+        let d = own_diagram(s, *chain.last().unwrap());
         (chain, d)
     };
     crate::canvas::open(h.state_mut(), deepest);
@@ -10035,7 +10160,7 @@ fn package_preview_harness(
             "diagram.place",
             serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
         );
-        let own = run("uml.package.diagram", serde_json::json!({ "package": sales.to_string() }));
+        let own = run("diagram.add", serde_json::json!({ "kind": "uml.class", "element": sales.to_string(), "name": "Sales" }));
         let order = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "Order" }));
         let line = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "OrderLine" }));
         run("uml.association.add", serde_json::json!({ "from": order.to_string(), "to": line.to_string() }));
@@ -10567,8 +10692,7 @@ fn zooming_out_to_ten_percent_climbs_one_level_per_gesture_each_at_a_hundred_and
                 id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" })).unwrap().value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
-            let sales_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap().value);
-            let orders_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": orders.to_string() })).unwrap().value);
+            let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
             s.execute(
                 "diagram.place",
                 &serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 100, "y": 100, "width": 240, "height": 148 }),
@@ -10649,8 +10773,7 @@ fn a_new_gesture_after_a_pause_goes_up_though_no_idle_frame_was_drawn_between() 
         let s = h.state_mut().session.as_mut().unwrap();
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
-        let sales_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap().value);
-        let orders_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": orders.to_string() })).unwrap().value);
+        let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
         (sales_d, orders_d)
     };
     crate::canvas::open(h.state_mut(), orders_d);
@@ -10681,8 +10804,7 @@ fn a_zoom_out_to_a_parent_without_the_packages_card_centres_the_parents_content(
         let s = h.state_mut().session.as_mut().unwrap();
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
-        let sales_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap().value);
-        let orders_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": orders.to_string() })).unwrap().value);
+        let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
         let ledger = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Ledger" })).unwrap().value);
         let card = id(s
             .execute("diagram.place", &serde_json::json!({ "diagram": sales_d.to_string(), "element": ledger.to_string(), "x": 2400, "y": 1800 }))
