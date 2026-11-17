@@ -764,10 +764,12 @@ pub enum SessionError {
 }
 
 impl From<archforge_notations::OpenError> for SessionError {
-    /// The notations' refusal of a model's rows, its diagrams of unknown kinds by their kinds.
+    /// The notations' refusal of a model's rows, its diagrams of unknown kinds by their kinds; broken
+    /// default-diagram bindings in the store's English words, as every other reason.
     fn from(e: archforge_notations::OpenError) -> SessionError {
         match e {
             archforge_notations::OpenError::UnknownKinds(refused) => SessionError::UnsupportedKinds { kinds: kinds_of(&refused) },
+            broken @ archforge_notations::OpenError::BrokenBindings(_) => SessionError::Engine(broken.to_string()),
             archforge_notations::OpenError::Unreadable(why) => SessionError::Engine(why),
         }
     }
@@ -814,10 +816,11 @@ pub(crate) fn unsupported_kinds(kinds: &[String]) -> String {
 }
 
 /// The notations' refusal of a model's rows as a sentence: diagrams of unknown kinds in the
-/// user's words, any other reason in the store's own.
+/// user's words, any other reason (broken default-diagram bindings among them) in the store's own.
 pub(crate) fn open_refusal(e: archforge_notations::OpenError) -> String {
     match e {
         archforge_notations::OpenError::UnknownKinds(refused) => unsupported_kinds(&kinds_of(&refused)),
+        broken @ archforge_notations::OpenError::BrokenBindings(_) => broken.to_string(),
         archforge_notations::OpenError::Unreadable(why) => why,
     }
 }

@@ -3267,6 +3267,24 @@ fn a_model_of_unsupported_diagram_kinds_says_why_in_the_status_bar() {
     }
 }
 
+/// AR-548: broken default-diagram bindings are no unsupported kind: the status bar and a refused
+/// restore or switch give the store's own English words for them, as before the kind check.
+#[test]
+fn broken_bindings_keep_the_stores_words() {
+    let broken = |n: u8| archforge_notations::BrokenBinding {
+        binding: archforge_mof::Uuid([n; 16]),
+        end: archforge_notations::BindingEnd::Diagram,
+        names: Some(archforge_mof::Uuid([n + 100; 16])),
+    };
+    for all in [vec![broken(1)], vec![broken(1), broken(2), broken(3)]] {
+        let e = archforge_notations::OpenError::BrokenBindings(all);
+        let said = e.to_string();
+        assert!(!said.is_empty(), "{e:?}");
+        assert_eq!(crate::SessionError::from(e.clone()), crate::SessionError::Engine(said.clone()));
+        assert_eq!(crate::open_refusal(e), said);
+    }
+}
+
 /// AR-548: a restore of a version, or a switch to a branch, holding diagrams of kinds Archforge
 /// does not support is refused in the user's words, never the store's, and the work stays.
 #[test]
