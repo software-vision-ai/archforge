@@ -193,7 +193,9 @@ diagram of a package show any package of the model: one of another branch, the r
 own package or an owner of it, but none outside the model. Placing one makes an appearance and
 never changes its owner. A profile's diagram still shows its stereotypes and their metaclasses
 alone. `uml.package.list` gives each package's `path`, the names of its owners from the root down,
-as its card's `owner_path` (AR-564).
+as its card's `owner_path` (AR-564). `uml.package.move` changes a package's owner alone (Decision
+26, AR-567): every appearance stays where it is under its id, with its notes' links, the default
+bindings stay as they were, and none is added to the new owner's diagram.
 
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.
@@ -212,7 +214,9 @@ read back. `tests/packages.rs` (AR-562): packages of another branch, the root, a
 diagram's own placed without a package made or an owner changed, undone and redone exactly, the rows
 read back; one shown already, one of another project's store and one on a profile's diagram
 refused, typed, with no undo step; one outside the model shown on no diagram; the list's paths.
-(AR-577): bound packages removed nested, under the root and with no
+(AR-567): a package moved keeps its appearances on diagrams of two branches, their bounds, a note's
+link and the bindings, and gains none, undone, redone and read back exactly; a refused move and one
+to its own parent change nothing, no undo step. (AR-577): bound packages removed nested, under the root and with no
 parent, each one undo step bringing the bindings back under their ids; a diagram that is no default
 removed alone. `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
