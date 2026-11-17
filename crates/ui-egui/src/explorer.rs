@@ -710,8 +710,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     {
         shell.explorer.dropped = None;
         let todo = row_at(at).filter(|t| t.id != dragged).and_then(|t| drop_of(shell, dragged, t));
-        // A package moved here goes as Properties and the canvas move it: shown on a diagram, it
-        // goes onto its new home's diagram too (AR-102).
+        // A package moved here goes as Properties moves it: one step with a toast offering Undo,
+        // its cards kept where they are and none added to its new owner's diagram (AR-568).
         let package_to = todo.as_ref().filter(|(cmd, _)| *cmd == "uml.package.move").and_then(|(_, params)| {
             let store = shell.session.as_ref()?.doc();
             Some((store.by_uuid(dragged)?, store.by_uuid(Uuid::parse(params.get("to")?.as_str()?)?)?))
