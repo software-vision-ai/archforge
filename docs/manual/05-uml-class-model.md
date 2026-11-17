@@ -512,7 +512,8 @@ click it to rename the package there. The tab grows as you type.
   on it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or the + key after
   clicking on empty canvas. Once the package covers most of the view, its diagram opens. However you go in,
   the package's diagram opens at 100 %, what it shows centred. It is the package's default
-  diagram, the first class diagram made for it. Going in never makes a diagram: a package with no
+  diagram: at first the first class diagram made for it, until a different one is chosen as its
+  default (for now, by an agent with `uml.package.default.set`). Going in never makes a diagram: a package with no
   class diagram yet, or whose default diagram can't be read, stays closed, and a note under the
   path bar says why. A double click still renames the package, as it does a class.
 - **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
