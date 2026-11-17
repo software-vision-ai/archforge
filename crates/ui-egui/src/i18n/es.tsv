@@ -1944,6 +1944,7 @@ str		Rename	Cambiar nombre
 str		Show in diagram	Mostrar en el diagrama
 str		No diagram shows it yet	Ningún diagrama lo muestra aún
 str		Delete from model	Eliminar del modelo
+str		Delete diagram	Eliminar diagrama
 str		A skill is removed from its tab	Una habilidad se elimina desde su pestaña
 str		New inside {name}	Nuevo dentro de {name}
 str		not inside a class	no dentro de una clase

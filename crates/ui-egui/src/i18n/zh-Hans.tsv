@@ -1944,6 +1944,7 @@ str		Rename	重命名
 str		Show in diagram	在图中显示
 str		No diagram shows it yet	尚无图显示它
 str		Delete from model	从模型中删除
+str		Delete diagram	删除图
 str		A skill is removed from its tab	技能在其标签页中删除
 str		New inside {name}	在 {name} 中新建
 str		not inside a class	不能在类中

@@ -1944,6 +1944,7 @@ str		Rename	名前を変更
 str		Show in diagram	図で表示
 str		No diagram shows it yet	まだどの図にも表示されていません
 str		Delete from model	モデルから削除
+str		Delete diagram	ダイアグラムを削除
 str		A skill is removed from its tab	スキルはそのタブから削除します
 str		New inside {name}	{name} の中に新規作成
 str		not inside a class	クラスの中には不可
