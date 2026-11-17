@@ -532,9 +532,10 @@ pub(crate) fn drop_moves(shell: &mut Shell, view: crate::canvas::View, canvas: R
 }
 
 /// Moves `package` into `to` with what it holds and its own diagram, and places it on the diagram
-/// of `to` (made when it has none), right of what that shows: one undo step, with a toast offering
-/// Undo, as a canvas drop, Properties' Parent package and a drop in Models all do (AR-102); a
-/// refusal (into itself or a package it holds) is given back in plain words for the caller to say.
+/// of `to` (made when it has none), right of what that shows, unless that diagram shows it already
+/// (AR-561): one undo step, with a toast offering Undo, as a canvas drop, Properties' Parent
+/// package and a drop in Models all do (AR-102); a refusal (into itself or a package it holds) is
+/// given back in plain words for the caller to say.
 pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) -> Result<(), String> {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return Ok(()) };
     let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return Ok(()) };
@@ -553,7 +554,11 @@ pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) -> Result
         b.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() }))?;
         let td = b.execute("uml.package.diagram", &json!({ "package": to_id.to_string() }))?;
         let td = td.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
-        b.execute("diagram.place", &json!({ "diagram": td, "element": package_id.to_string(), "x": x, "y": y, "width": w, "height": h }))?;
+        // A package may keep its appearances elsewhere (AR-395), so moved back it may be shown
+        // there already: placed again, it would be refused and take the move back with it.
+        if !shown_on(b.doc(), &td, package) {
+            b.execute("diagram.place", &json!({ "diagram": td, "element": package_id.to_string(), "x": x, "y": y, "width": w, "height": h }))?;
+        }
         Ok(())
     });
     match out {
@@ -564,6 +569,13 @@ pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) -> Result
         }
         Err(e) => Err(crate::panels::refusal(&e)),
     }
+}
+
+/// Whether the diagram with the id `diagram` shows `package` already, in a box nested or not, as
+/// `diagram.place` would refuse it; false for no such diagram.
+fn shown_on(store: &Store, diagram: &str, package: Obj) -> bool {
+    let Some(d) = Uuid::parse(diagram).and_then(|u| store.by_uuid(u)) else { return false };
+    archforge_diagram::views_of(store, package).2.into_iter().any(|n| archforge_diagram::diagram_of(store, n) == Some(d))
 }
 
 /// A package moved by Properties or Models into `to`: shown on a diagram, it goes onto its new
@@ -588,6 +600,34 @@ pub(crate) fn move_package(shell: &mut Shell, package: Obj, to: Obj) -> Result<(
 #[cfg(test)]
 mod tests {
     use egui::{Event, Key, Modifiers};
+
+    /// A package counts as shown on the diagram that holds its card, nested in a box too, and on
+    /// no other diagram, nor on an id that names none (AR-561).
+    #[test]
+    fn a_package_is_shown_on_the_diagram_holding_its_card_nested_or_not() {
+        let mut n: u128 = 0;
+        let mut s = archforge_notations::new_project_session(
+            "Shop",
+            Box::new(move || {
+                n += 1;
+                archforge_mof::Uuid(n.to_le_bytes())
+            }),
+        )
+        .unwrap();
+        let mut run = |id: &str, p: serde_json::Value| s.execute(id, &p).unwrap().value["id"].as_str().unwrap().to_string();
+        let root = run("uml.model.root", serde_json::json!({}));
+        let top = run("uml.package.diagram", serde_json::json!({ "package": root }));
+        let other = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root }));
+        let (sales, billing) =
+            (run("uml.package.add", serde_json::json!({ "name": "Sales" })), run("uml.package.add", serde_json::json!({ "name": "Billing" })));
+        let card = run("diagram.place", serde_json::json!({ "diagram": top, "element": billing, "x": 0, "y": 0, "width": 600, "height": 400 }));
+        run("diagram.place", serde_json::json!({ "diagram": top, "element": sales, "parent": card, "x": 40, "y": 60, "width": 240, "height": 148 }));
+        let st = s.doc();
+        let sales = st.by_uuid(archforge_mof::Uuid::parse(&sales).unwrap()).unwrap();
+        assert!(super::shown_on(st, &top, sales), "nested in Billing's card on the root's diagram");
+        assert!(!super::shown_on(st, &other, sales), "the root's other diagram holds no card of it");
+        assert!(!super::shown_on(st, "not an id", sales), "no diagram");
+    }
 
     /// What `pressed` reads from an input holding only `event`, and whether it took the press.
     fn read(event: &Event) -> ((bool, bool, bool, bool), bool) {

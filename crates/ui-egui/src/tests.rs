@@ -9653,6 +9653,102 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
     }
 }
 
+/// A package moved back by Properties into a package whose diagram shows it already keeps that one
+/// card, and the move is not refused (AR-561); moved where it is not shown, it is placed there.
+#[test]
+fn a_package_moved_back_where_it_is_shown_keeps_its_one_card() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Sales in Billing, as a move leaves it.
+        let (top, sales, billing) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+            let top = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": root })).unwrap().value);
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
+            s.execute("uml.package.move", &serde_json::json!({ "package": sales.to_string(), "to": billing.to_string() })).unwrap();
+            (top, sales, billing)
+        };
+        // Still on the root's diagram, as it will be once a package keeps its cards (AR-395); no
+        // command places it there yet, so the card goes into the model by hand.
+        let (tables, junctions) = archforge_notations::storage();
+        let old = h.state_mut().session.take().unwrap();
+        let rows = archforge_mof::rows::snapshot(old.doc(), &tables, &junctions).unwrap();
+        let mut n = 0u64;
+        let mint = move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            archforge_mof::Uuid::v7(1_761_670_900_000, r)
+        };
+        let st = archforge_notations::store(Box::new(mint)).unwrap();
+        let mut st = archforge_mof::rows::restore_into_empty(st, &rows, &tables, &junctions).unwrap();
+        let (d, e) = (st.by_uuid(top).unwrap(), st.by_uuid(sales).unwrap());
+        let card = st
+            .transaction(|st| {
+                use archforge_diagram::node;
+                let n = st.create(archforge_diagram::NODE)?;
+                st.set(n, node::ELEMENT, archforge_mof::Value::Ref(e))?;
+                for (prop, v) in [(node::X, 80.0), (node::Y, 80.0), (node::WIDTH, 240.0), (node::HEIGHT, 148.0)] {
+                    st.set(n, prop, archforge_mof::Value::Real(v))?;
+                }
+                st.push(d, archforge_diagram::diagram::NODE, archforge_mof::Value::Ref(n))?;
+                Ok(n)
+            })
+            .unwrap();
+        let card = st.uuid(card).unwrap();
+        let options = archforge_engine::Options::default();
+        h.state_mut().session = Some(archforge_engine::Session::with_view(
+            archforge_notations::registry().unwrap(),
+            st,
+            old.counter(),
+            options,
+            archforge_notations::view(),
+        ));
+        h.run();
+        // Where Sales is shown: the uuids of the diagrams of its cards, and of the cards.
+        let shown = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let nodes = archforge_diagram::views_of(st, st.by_uuid(sales).unwrap()).2;
+            let mut on: Vec<_> =
+                nodes.into_iter().map(|n| (st.uuid(archforge_diagram::diagram_of(st, n).unwrap()).unwrap(), st.uuid(n).unwrap())).collect();
+            on.sort();
+            on
+        };
+        let parent = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::commands::package_of(st, st.by_uuid(sales).unwrap()).map(|o| archforge_core::name_of(st, o))
+        };
+        assert_eq!(shown(&h), vec![(top, card)], "{theme:?}: shown on the root's diagram alone");
+        let pick = |h: &mut Harness<'static, Shell>, to: &str| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
+            h.state_mut().state.show_panel(crate::state::Panel::Properties);
+            h.run();
+            let at = rect_of(h, "workspace.properties.package.parent").center();
+            click(h, at);
+            let at = rect_of(h, &format!("workspace.properties.package.parent.{to}")).center();
+            click(h, at);
+        };
+        // Back into the root by Properties: moved, not refused, its one card kept.
+        pick(&mut h, "0");
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: not refused");
+        assert_eq!(parent(&h).as_deref(), Some("Commerce platform"), "{theme:?}: back in the root");
+        assert_eq!(shown(&h), vec![(top, card)], "{theme:?}: the one card it had");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}: one step");
+        // Into Billing, whose diagram does not show it: placed there, gone from the root's.
+        pick(&mut h, "1");
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: not refused");
+        assert_eq!(parent(&h).as_deref(), Some("Billing"), "{theme:?}: in Billing");
+        let inner = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap()).unwrap()
+        };
+        let on = shown(&h);
+        assert_eq!(on.iter().map(|(d, _)| *d).collect::<Vec<_>>(), vec![inner], "{theme:?}: placed on Billing's diagram alone");
+    }
+}
+
 #[test]
 fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
