@@ -10,7 +10,7 @@ use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
 use archforge_uml::qualifiers;
-use archforge_uml::{ALONE, CLASS_DIAGRAM, registry};
+use archforge_uml::{ALONE, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -129,7 +129,7 @@ fn shop(s: &mut S) -> Shop {
     let contains = run(s, "uml.association.add", json!({ "from": order, "to": line, "name": "contains" }));
     run(s, "uml.association.set-end", json!({ "association": contains, "end": 0, "role": "order", "multiplicity": "1" }));
     run(s, "uml.association.set-end", json!({ "association": contains, "end": 1, "role": "line", "multiplicity": "0..1" }));
-    let d = run(s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Orders", "element": shop }));
+    let d = run(s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Orders", "element": shop }));
     for (i, c) in [&order, &line, &product].into_iter().enumerate() {
         run(s, "diagram.place", json!({ "diagram": d, "element": c, "x": (i as f64) * 400.0, "y": 0.0 }));
     }
@@ -323,7 +323,7 @@ fn the_box_is_drawn_on_every_diagram_that_shows_the_line() {
     let mut s = session();
     let shop = shop(&mut s);
     run(&mut s, "uml.qualifier.add", json!({ "association": shop.contains, "end": 0, "name": "lineNo", "type": "Integer" }));
-    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Overview", "element": shop.shop }));
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Overview", "element": shop.shop }));
     for (c, x) in [(&shop.line, 0.0), (&shop.order, 500.0)] {
         run(&mut s, "diagram.place", json!({ "diagram": d2, "element": c, "x": x, "y": 200.0 }));
     }

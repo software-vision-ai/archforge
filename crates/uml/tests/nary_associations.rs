@@ -10,7 +10,7 @@ use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
 use archforge_uml::nary;
-use archforge_uml::{ALONE, CLASS_DIAGRAM, registry};
+use archforge_uml::{ALONE, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -129,7 +129,7 @@ fn shop(s: &mut S) -> Shop {
     let store = class(s, "Store");
     let mut diagrams = Vec::new();
     for name in ["Orders", "Again"] {
-        let d = run(s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": name, "element": shop }));
+        let d = run(s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": name, "element": shop }));
         for (i, c) in [&customer, &product, &catalog, &store].into_iter().enumerate() {
             run(s, "diagram.place", json!({ "diagram": d, "element": c, "x": (i as f64) * 400.0, "y": 0.0 }));
         }

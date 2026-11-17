@@ -12,7 +12,7 @@ use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
 use archforge_uml::constraints::{self, Form};
-use archforge_uml::{ALONE, CLASS_DIAGRAM, CONSTRAINT, registry};
+use archforge_uml::{ALONE, CONSTRAINT, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -119,7 +119,7 @@ fn shop(s: &mut S) -> [String; 7] {
     let order = run(s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
     let payment = run(s, "uml.class.add", json!({ "package": sales, "name": "Payment" }));
     let total = run(s, "uml.attribute.add", json!({ "class": order, "name": "total", "type": "Integer" }));
-    let d = run(s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Sales", "element": sales }));
+    let d = run(s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Sales", "element": sales }));
     let on = run(s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     let pn = run(s, "diagram.place", json!({ "diagram": d, "element": payment, "x": 400, "y": 0 }));
     [sales, order, payment, total, d, on, pn]
@@ -411,7 +411,7 @@ fn a_removed_nested_package_takes_its_own_constraints_and_reports_none_as_change
 fn braces_on_one_diagram_and_a_note_on_another_share_the_content() {
     let mut s = session();
     let [sales, order, payment, _, d, on, pn] = shop(&mut s);
-    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Overview", "element": sales }));
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Overview", "element": sales }));
     let on2 = run(&mut s, "diagram.place", json!({ "diagram": d2, "element": order, "x": 0, "y": 0 }));
     let pn2 = run(&mut s, "diagram.place", json!({ "diagram": d2, "element": payment, "x": 400, "y": 300 }));
     let c = run(&mut s, "uml.constraint.add", json!({ "context": order, "name": "nonEmpty", "expression": "lines->notEmpty()" }));

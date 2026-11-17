@@ -849,7 +849,7 @@ fn template_bindings_are_saved_and_opened_again() {
     run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "T" }));
     run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer" }));
     let b = run(&mut s, "uml.template-binding.add", json!({ "bound": bound, "template": repo, "arguments": { "T": order, "Key": "String" } }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": sales, "name": "Sales" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
     let from = run(&mut s, "diagram.place", json!({ "diagram": d, "element": bound, "x": 0, "y": 300 }));
     let to = run(&mut s, "diagram.place", json!({ "diagram": d, "element": repo, "x": 400, "y": 0 }));
     let e = run(&mut s, "diagram.connect", json!({ "diagram": d, "element": b, "source": from, "target": to }));

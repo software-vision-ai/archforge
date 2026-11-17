@@ -11,7 +11,7 @@ use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
-use archforge_uml::{ALONE, CLASS_DIAGRAM, DATA_TYPE, registry};
+use archforge_uml::{ALONE, DATA_TYPE, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -194,7 +194,7 @@ fn a_data_type_is_added_renamed_moved_and_removed_each_one_step_its_name_free_am
     // Removed through element.remove, with its card and its members: one step.
     run(&mut s, "uml.attribute.add", json!({ "class": money, "name": "amount", "type": "Real" }));
     run(&mut s, "uml.operation.add", json!({ "class": money, "name": "add" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": billing }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": billing }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": money, "x": 0, "y": 0 }));
     let before = picture(s.doc());
     s.execute("element.remove", &json!({ "ids": [money] })).unwrap();
@@ -218,7 +218,7 @@ fn a_data_type_draws_its_attributes_and_operations_which_the_member_commands_edi
     let mut s = session();
     let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let money = run(&mut s, "uml.data-type.add", json!({ "package": pkg, "name": "Money" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": money, "x": 0, "y": 0 }));
     // With no member, two empty compartments, as an empty class has.
     let empty = card(&s, &money, &d);
@@ -263,7 +263,7 @@ fn a_data_type_draws_its_attributes_and_operations_which_the_member_commands_edi
     assert!(e.contains(&status) && e.contains("a class, an interface, a data type or an association class does"), "{e}");
     // On another package's diagram, its package is named beside the keyword.
     let other = run(&mut s, "uml.package.add", json!({ "name": "billing" }));
-    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": other }));
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": other }));
     run(&mut s, "diagram.place", json!({ "diagram": d2, "element": money, "x": 0, "y": 0 }));
     let outsider = card(&s, &money, &d2);
     assert_eq!(outsider.eyebrow, archforge_diagram::figure::Text::Said("«dataType» · {package}", vec![("package", "sales".into())]));
@@ -301,7 +301,7 @@ fn a_data_type_types_members_listed_once_kept_through_a_rename_and_a_move_and_lo
     run(&mut s, "uml.data-type.rename", json!({ "data_type": money, "name": "Amount" }));
     run(&mut s, "uml.data-type.move", json!({ "data_type": money, "package": shared }));
     assert_eq!(typed(&mut s), (want("Amount"), want("Amount"), want("Amount")));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": sales }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     assert_eq!(rows_of(&card(&s, &order, &d)), [vec!["+ number : Integer", "+ total : Amount"], vec!["+ pay(amount : Amount) : Amount"]]);
     // Removed, it leaves them untyped, as one step; undone, they are typed by it again.
@@ -483,7 +483,7 @@ fn data_types_with_members_and_relationships_come_back_from_their_rows_identical
     let order = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Order" }));
     run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "total", "type": money }));
     run(&mut s, "uml.generalization.add", json!({ "specific": price, "general": money }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": money, "x": 0, "y": 0 }));
     let (tables, junctions) = tables();
     let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();

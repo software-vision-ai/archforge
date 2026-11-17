@@ -10,7 +10,7 @@ use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
 use archforge_uml::generalization_sets as sets;
-use archforge_uml::{ALONE, CLASS_DIAGRAM, GENERALIZATION_SET, registry};
+use archforge_uml::{ALONE, GENERALIZATION_SET, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -134,7 +134,7 @@ fn shop(s: &mut S) -> Shop {
         let c = class(s, name);
         gens.push(run(s, "uml.generalization.add", json!({ "specific": c, "general": general })));
     }
-    let d = run(s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Payments", "element": pay }));
+    let d = run(s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Payments", "element": pay }));
     let st = s.doc();
     let classes: Vec<String> =
         st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS)).map(|o| st.uuid(o).unwrap().to_string()).collect();
@@ -387,7 +387,7 @@ fn a_set_emptied_by_a_deletion_goes_in_the_same_step() {
 fn the_label_is_placed_on_two_diagrams_each_its_own_place() {
     let mut s = session();
     let shop = shop(&mut s);
-    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Overview", "element": shop.pay }));
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Overview", "element": shop.pay }));
     let st = s.doc();
     let classes: Vec<String> =
         st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS)).map(|o| st.uuid(o).unwrap().to_string()).collect();
@@ -420,7 +420,7 @@ fn the_label_is_placed_on_two_diagrams_each_its_own_place() {
     run(&mut s, "uml.generalization-set.set", json!({ "set": set, "name": "the method of payment" }));
     assert!(width(&s, &n1) > before && width(&s, &n2) > before);
     // A diagram showing none of its classifiers has nowhere to put it.
-    let empty = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Empty", "element": shop.pay }));
+    let empty = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Empty", "element": shop.pay }));
     let e = refused(&mut s, "uml.generalization-set.place", json!({ "diagram": empty, "set": set, "x": 0, "y": 0 }));
     assert!(e.contains("nothing to sit by"), "{e}");
 }

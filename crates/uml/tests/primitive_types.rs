@@ -12,7 +12,7 @@ use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
-use archforge_uml::{ALONE, CLASS_DIAGRAM, PRIMITIVE_TYPE, registry};
+use archforge_uml::{ALONE, PRIMITIVE_TYPE, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -212,7 +212,7 @@ fn a_primitive_type_is_added_renamed_moved_and_removed_each_one_step_its_name_fr
     let st = s.doc();
     assert_eq!(archforge_uml::commands::package_of(st, obj(st, &sku)), Some(obj(st, &billing)));
     // Removed through element.remove, with its card: one step.
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": billing }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": billing }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": sku, "x": 0, "y": 0 }));
     let before = picture(s.doc());
     s.execute("element.remove", &json!({ "ids": [sku] })).unwrap();
@@ -231,7 +231,7 @@ fn a_primitive_type_draws_its_name_alone_and_takes_no_member() {
     let mut s = session();
     let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let sku = run(&mut s, "uml.primitive-type.add", json!({ "package": pkg, "name": "Sku" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": sku, "x": 0, "y": 0 }));
     // Placed with no size named, its node is a header's height, as the shell places one.
     let st = s.doc();
@@ -265,7 +265,7 @@ fn a_primitive_type_draws_its_name_alone_and_takes_no_member() {
     );
     // On another package's diagram, its package is named beside the keyword.
     let other = run(&mut s, "uml.package.add", json!({ "name": "billing" }));
-    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": other }));
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": other }));
     run(&mut s, "diagram.place", json!({ "diagram": d2, "element": sku, "x": 0, "y": 0 }));
     let outsider = card(&s, &sku, &d2);
     assert_eq!(outsider.eyebrow, archforge_diagram::figure::Text::Said("«primitive» · {package}", vec![("package", "sales".into())]));
@@ -297,7 +297,7 @@ fn a_primitive_type_types_members_listed_once_kept_through_a_rename_and_a_move_a
     run(&mut s, "uml.primitive-type.rename", json!({ "primitive_type": sku, "name": "ProductCode" }));
     run(&mut s, "uml.primitive-type.move", json!({ "primitive_type": sku, "package": shared }));
     assert_eq!(typed(&mut s), (want("ProductCode"), want("ProductCode"), want("ProductCode")));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": sales }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     assert_eq!(
         rows_of(&card(&s, &order, &d)),
@@ -524,7 +524,7 @@ fn primitive_types_with_relationships_come_back_from_their_rows_identical() {
     run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer" }));
     run(&mut s, "uml.generalization.add", json!({ "specific": sku, "general": code }));
     let integer = built_in(&s, "Integer");
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": sku, "x": 0, "y": 0 }));
     let (tables, junctions) = tables();
     let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();

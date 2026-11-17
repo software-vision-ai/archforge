@@ -645,7 +645,7 @@ fn open_class_diagram(shell: &Shell) -> Option<(Uuid, Obj)> {
     let store = shell.session.as_ref()?.doc();
     let d = store.by_uuid(id)?;
     let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string));
-    (kind.as_deref() == Some(archforge_uml::CLASS_DIAGRAM)).then_some((id, d))
+    (kind.as_deref() == Some(archforge_uml::STRUCTURE_DIAGRAM)).then_some((id, d))
 }
 
 /// Show stereotype values on this diagram, while a class diagram is open: ticked, its cards list

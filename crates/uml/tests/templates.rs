@@ -11,7 +11,7 @@ use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
 use archforge_uml::templates;
-use archforge_uml::{ALONE, CLASS_DIAGRAM, registry};
+use archforge_uml::{ALONE, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -136,7 +136,7 @@ fn shop(s: &mut S) -> Shop {
     run(s, "uml.generalization.add", json!({ "specific": order, "general": entity }));
     let money = run(s, "uml.data-type.add", json!({ "package": shop, "name": "Money" }));
     let status = run(s, "uml.enumeration.add", json!({ "package": shop, "name": "Status" }));
-    let d = run(s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Repositories", "element": shop }));
+    let d = run(s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Repositories", "element": shop }));
     for (i, c) in [&repository, &order].into_iter().enumerate() {
         run(s, "diagram.place", json!({ "diagram": d, "element": c, "x": (i as f64) * 400.0, "y": 0.0 }));
     }
@@ -485,7 +485,7 @@ fn the_signature_box_is_drawn_on_every_diagram_that_shows_the_template() {
     let shop = shop(&mut s);
     run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "T" }));
     run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "Key", "kind": "data-type", "default": "Integer" }));
-    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Overview", "element": shop.shop }));
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Overview", "element": shop.shop }));
     run(&mut s, "diagram.place", json!({ "diagram": d2, "element": shop.repository, "x": 100.0, "y": 300.0 }));
     let st = s.doc();
     let nodes = archforge_diagram::views_of(st, obj(st, &shop.repository)).2;
@@ -664,7 +664,7 @@ fn a_binding_is_made_with_its_substitutions_in_one_undo_step() {
     let st = s.doc();
     assert!(!st.universe().conforms(archforge_uml::TEMPLATE_BINDING, archforge_mof::TypeRef::Class(archforge_uml::DEPENDENCY)));
     // Drawn on two diagrams from one element: the same label on each.
-    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Overview", "element": shop.shop }));
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Overview", "element": shop.shop }));
     for (c, x) in [(&order_repo, 0.0), (&shop.repository, 400.0)] {
         run(&mut s, "diagram.place", json!({ "diagram": d2, "element": c, "x": x, "y": 0.0 }));
     }

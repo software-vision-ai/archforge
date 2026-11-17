@@ -13,7 +13,7 @@ use crate::uml_classifier::{self, Classifier};
 use crate::uml_relate::Relate;
 
 const ER: Option<&str> = Some(archforge_er::DIAGRAM_KIND);
-const UML: Option<&str> = Some(archforge_uml::CLASS_DIAGRAM);
+const UML: Option<&str> = Some(archforge_uml::STRUCTURE_DIAGRAM);
 
 /// A row of diagrams of `$kind` (any, for `None`) that arms a tool through `$set`.
 macro_rules! row {

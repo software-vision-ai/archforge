@@ -9,7 +9,7 @@ use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
-use archforge_uml::{ALONE, CLASS_DIAGRAM, INTERFACE, registry};
+use archforge_uml::{ALONE, INTERFACE, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -143,7 +143,7 @@ fn an_interface_is_added_renamed_moved_and_removed_each_one_step_its_name_free_a
     let st = s.doc();
     assert_eq!(archforge_uml::commands::package_of(st, obj(st, &payable)), Some(obj(st, &billing)));
     // Removed through element.remove, with its views: one step.
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": billing }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": billing }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": payable, "x": 0, "y": 0 }));
     let before = picture(s.doc());
     s.execute("element.remove", &json!({ "ids": [payable] })).unwrap();
@@ -190,7 +190,7 @@ fn an_interface_takes_public_attributes_and_operations_through_the_member_comman
     }
     assert!(refused(&mut s, "uml.attribute.add", json!({ "class": payable, "name": "x", "visibility": "private" })).contains("public"));
     // Its card: «interface» in the eyebrow, its attributes, then its operations.
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": payable, "x": 0, "y": 0 }));
     let st = s.doc();
     let card = archforge_diagram::Notation::card(&archforge_uml::UmlNotation, st, obj(st, &payable), obj(st, &d)).unwrap();
@@ -200,7 +200,7 @@ fn an_interface_takes_public_attributes_and_operations_through_the_member_comman
     assert!(!card.slanted);
     // On another package's diagram, its package is named beside the keyword.
     let other = run(&mut s, "uml.package.add", json!({ "name": "billing" }));
-    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": other }));
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": other }));
     run(&mut s, "diagram.place", json!({ "diagram": d2, "element": payable, "x": 0, "y": 0 }));
     let st = s.doc();
     let card = archforge_diagram::Notation::card(&archforge_uml::UmlNotation, st, obj(st, &payable), obj(st, &d2)).unwrap();
@@ -276,7 +276,7 @@ fn interfaces_with_members_and_relationships_come_back_from_their_rows_identical
     run(&mut s, "uml.operation.add", json!({ "class": payable, "name": "refund", "returns": "Boolean" }));
     run(&mut s, "uml.generalization.add", json!({ "specific": refundable, "general": payable }));
     run(&mut s, "uml.association.add", json!({ "from": order, "to": payable, "kind": "directed" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": payable, "x": 0, "y": 0 }));
     let tables: Vec<_> = archforge_core::TABLES.iter().chain(archforge_diagram::TABLES).chain(archforge_uml::TABLES).copied().collect();
     let junctions: Vec<_> = archforge_core::JUNCTIONS.iter().chain(archforge_diagram::JUNCTIONS).chain(archforge_uml::JUNCTIONS).copied().collect();

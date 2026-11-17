@@ -99,7 +99,7 @@ fn run(shell: &mut Shell, command: &str, params: serde_json::Value) -> Result<St
 pub(super) fn sample(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     shell.adopt_project();
     let root = run(shell, "uml.model.root", json!({}))?;
-    let diagram = run(shell, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": root, "name": "Commerce" }))?;
+    let diagram = run(shell, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Commerce" }))?;
     let customer = run(shell, "uml.class.add", json!({ "package": root, "name": "Customer" }))?;
     let node = run(shell, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 160, "y": 140 }))?;
     let first = rows(shell)?;

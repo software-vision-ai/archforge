@@ -71,8 +71,10 @@ pub fn universe() -> Result<Arc<Universe>, MetaError> {
     Ok(Arc::new(Universe::new(vec![metamodel()?])?))
 }
 
-/// The class diagram kind: a diagram of a package that shows its classes as cards.
-pub const CLASS_DIAGRAM: &str = "uml.class";
+/// The UML structure diagram kind: a diagram of a package that holds its classes and packages and
+/// shows its classes as cards. Its stored value is still `uml.class`; AR-551 moves it to
+/// `uml.structure`.
+pub const STRUCTURE_DIAGRAM: &str = "uml.class";
 
 /// The kinds of classifier a class diagram places, each a card with its members: a class, an
 /// interface, an enumeration, whose members are its literals, a data type, a value without
@@ -133,8 +135,9 @@ impl Notation for UmlNotation {
         INDEX
     }
 
+    /// The one diagram kind UML draws: the UML structure diagram.
     fn kinds(&self) -> &'static [&'static str] {
-        &[CLASS_DIAGRAM]
+        &[STRUCTURE_DIAGRAM]
     }
 
     /// A class diagram is of a package, or of a profile, showing its stereotypes and the

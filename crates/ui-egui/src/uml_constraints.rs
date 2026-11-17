@@ -60,7 +60,7 @@ fn open_diagram(shell: &Shell) -> Option<Obj> {
     let store = shell.session.as_ref()?.doc();
     let d = store.by_uuid(shell.canvas.active?)?;
     let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string));
-    (store.is_alive(d) && kind.as_deref() == Some(archforge_uml::CLASS_DIAGRAM)).then_some(d)
+    (store.is_alive(d) && kind.as_deref() == Some(archforge_uml::STRUCTURE_DIAGRAM)).then_some(d)
 }
 
 /// A fresh name for a new constraint of `context`: `Constraint 1`, or the next free number.

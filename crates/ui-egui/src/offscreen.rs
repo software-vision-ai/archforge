@@ -755,7 +755,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         sample_diagram(&mut shell, true)?;
         crate::diagrams::open_new(&mut shell);
         if let Some(edit) = shell.diagrams.new.as_mut() {
-            edit.kind = archforge_uml::CLASS_DIAGRAM;
+            edit.kind = archforge_uml::STRUCTURE_DIAGRAM;
             edit.schema = None;
             edit.name = "Domain model".into();
             if screen == Screen::WorkspaceNewDiagramDetails {
@@ -1738,7 +1738,7 @@ fn sample_class_diagram(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let package = run(session, "uml.package.add", json!({ "name": "Commerce" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Commerce" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Commerce" }))?;
     let mut order = String::new();
     for (name, x, y) in [("Order", 120, 120), ("Customer", 480, 120), ("Payment", 120, 360)] {
         let class = run(session, "uml.class.add", json!({ "package": package, "name": name }))?;
@@ -1772,7 +1772,7 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let root = run(session, "uml.model.root", json!({}))?;
-    let top = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": root, "name": "Commerce platform" }))?;
+    let top = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Commerce platform" }))?;
     let customer = run(session, "uml.class.add", json!({ "package": root, "name": "Customer" }))?;
     run(session, "diagram.place", json!({ "diagram": top, "element": customer, "x": 80, "y": 120 }))?;
     let (w, h) = archforge_uml::PACKAGE_SIZE;
@@ -1828,8 +1828,8 @@ fn sample_diagrams(shell: &mut Shell) -> Result<(), String> {
     run(session, "diagram.add", json!({ "kind": "er", "element": schema, "name": "Shop schema" }))?;
     let sales = run(session, "uml.package.add", json!({ "name": "Sales" }))?;
     let orders = run(session, "uml.package.add", json!({ "name": "Orders", "parent": sales }))?;
-    run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": sales, "name": "Sales" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": orders, "name": "Orders" }))?;
+    run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": orders, "name": "Orders" }))?;
     for (name, x, y) in [("Order", 120, 120), ("OrderLine", 480, 120)] {
         let class = run(session, "uml.class.add", json!({ "package": orders, "name": name }))?;
         run(session, "diagram.place", json!({ "diagram": diagram, "element": class, "x": x, "y": y }))?;
@@ -1852,7 +1852,7 @@ fn sample_class_sizing(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let package = run(session, "uml.package.add", json!({ "name": "Billing" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Billing" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Billing" }))?;
     let members: [(&str, &[&str], &[&str], f64); 4] = [
         ("ReviewInvoice", &[], &["calculateTotal"], archforge_uml::CLASS_SIZE.1),
         ("Invoice", &["number", "issuedAt", "total"], &["send", "cancel"], crate::uml_ui::members_height(3, 2)),
@@ -1898,7 +1898,7 @@ fn sample_interfaces(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let package = run(session, "uml.package.add", json!({ "name": "Payments" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Payments" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Payments" }))?;
     let payable = run(session, "uml.interface.add", json!({ "package": package, "name": "Payable" }))?;
     run(session, "uml.attribute.add", json!({ "class": payable, "name": "amount", "type": "Real" }))?;
     run(
@@ -1955,7 +1955,7 @@ fn sample_enumerations(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let package = run(session, "uml.package.add", json!({ "name": "Orders" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Orders" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Orders" }))?;
     let status = run(session, "uml.enumeration.add", json!({ "package": package, "name": "OrderStatus" }))?;
     let priority = run(session, "uml.enumeration.add", json!({ "package": package, "name": "Priority" }))?;
     let order = run(session, "uml.class.add", json!({ "package": package, "name": "Order" }))?;
@@ -1999,7 +1999,7 @@ fn sample_data_types(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let package = run(session, "uml.package.add", json!({ "name": "Payments" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Payments" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Payments" }))?;
     let money = run(session, "uml.data-type.add", json!({ "package": package, "name": "Money" }))?;
     run(session, "uml.attribute.add", json!({ "class": money, "name": "amount", "type": "Real" }))?;
     run(session, "uml.attribute.add", json!({ "class": money, "name": "currency", "type": "String" }))?;
@@ -2054,7 +2054,7 @@ fn sample_primitive_types(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let package = run(session, "uml.package.add", json!({ "name": "Catalog" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Catalog" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Catalog" }))?;
     let sku = run(session, "uml.primitive-type.add", json!({ "package": package, "name": "Sku" }))?;
     let gtin = run(session, "uml.primitive-type.add", json!({ "package": package, "name": "Gtin" }))?;
     run(session, "uml.generalization.add", json!({ "specific": gtin, "general": sku }))?;
@@ -2128,7 +2128,7 @@ fn sample_realizations(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let package = run(session, "uml.package.add", json!({ "name": "Payments" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Payments" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Payments" }))?;
     let payable = run(session, "uml.interface.add", json!({ "package": package, "name": "Payable" }))?;
     run(
         session,
@@ -2178,7 +2178,7 @@ fn sample_association_class(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let package = run(session, "uml.package.add", json!({ "name": "Reviews" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Reviews" }))?;
     let customer = run(session, "uml.class.add", json!({ "package": package, "name": "Customer" }))?;
     run(session, "uml.attribute.add", json!({ "class": customer, "name": "name", "type": "String" }))?;
     let product = run(session, "uml.class.add", json!({ "package": package, "name": "Product" }))?;
@@ -2223,7 +2223,7 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let package = run(session, "uml.package.add", json!({ "name": "Orders" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Orders" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Orders" }))?;
     let money = run(session, "uml.data-type.add", json!({ "package": package, "name": "Money" }))?;
     let status = run(session, "uml.enumeration.add", json!({ "package": package, "name": "OrderStatus" }))?;
     for l in ["Placed", "Paid", "Shipped"] {
@@ -2311,7 +2311,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let root = run(session, "uml.model.root", json!({}))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": root, "name": "Commerce" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Commerce" }))?;
     let customer = run(session, "uml.class.add", json!({ "package": root, "name": "Customer" }))?;
     run(session, "uml.attribute.add", json!({ "class": customer, "name": "name", "type": "String" }))?;
     let order = run(session, "uml.class.add", json!({ "package": root, "name": "Order" }))?;
@@ -2574,7 +2574,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     let w = archforge_uml::CLASS_SIZE.0;
     // A class diagram of the root package, opened.
     let new_diagram = |shell: &mut Shell, name: &str| -> Result<Uuid, String> {
-        let d = id(&run(shell, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": root.to_string(), "name": name }))?)?;
+        let d = id(&run(shell, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": name }))?)?;
         crate::canvas::open(shell, d);
         Ok(d)
     };

@@ -762,7 +762,7 @@ fn show_values_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     let store: &Store = ctx.doc;
     let d = kind_param(store, p, "diagram", "class diagram", |d| {
         let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string));
-        store.class_of(d).ok() == Some(archforge_diagram::DIAGRAM) && kind.as_deref() == Some(crate::CLASS_DIAGRAM)
+        store.class_of(d).ok() == Some(archforge_diagram::DIAGRAM) && kind.as_deref() == Some(crate::STRUCTURE_DIAGRAM)
     })?;
     let on = p.bool("show").unwrap_or(false);
     show_values(ctx.doc, d, on)?;

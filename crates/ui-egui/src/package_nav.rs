@@ -73,7 +73,7 @@ fn is_package(store: &Store, o: Obj) -> bool {
 /// The package a class diagram is of.
 pub(crate) fn package_of_diagram(store: &Store, d: Obj) -> Option<Obj> {
     let kind = store.get(d, diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string))?;
-    if kind != archforge_uml::CLASS_DIAGRAM {
+    if kind != archforge_uml::STRUCTURE_DIAGRAM {
         return None;
     }
     store.get(d, diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|p| store.is_alive(*p) && is_package(store, *p))

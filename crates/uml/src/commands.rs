@@ -320,7 +320,7 @@ pub fn diagram_of(store: &Store, package: Obj) -> Option<Obj> {
     use archforge_diagram::diagram;
     store.alive().find(|d| {
         store.class_of(*d).ok() == Some(archforge_diagram::DIAGRAM)
-            && store.get(*d, diagram::KIND).ok().and_then(|v| v.as_str().map(|k| k == crate::CLASS_DIAGRAM)).unwrap_or(false)
+            && store.get(*d, diagram::KIND).ok().and_then(|v| v.as_str().map(|k| k == crate::STRUCTURE_DIAGRAM)).unwrap_or(false)
             && store.get(*d, diagram::ELEMENT).ok().and_then(|v| v.as_ref()) == Some(package)
     })
 }
@@ -335,7 +335,7 @@ fn package_diagram(ctx: &mut C<'_>, p: &Params) -> R {
     let m = model(ctx.doc)?;
     let name: String = name_of(ctx.doc, pkg).chars().take(archforge_diagram::rules::MAX_NAME).collect();
     // Made as diagram.add makes one, its lines at right angles around the classes.
-    let d = archforge_diagram::commands::new_diagram(ctx.doc, crate::CLASS_DIAGRAM, &name, Some(pkg), Some((m, archforge_core::model::MEMBER)))
+    let d = archforge_diagram::commands::new_diagram(ctx.doc, crate::STRUCTURE_DIAGRAM, &name, Some(pkg), Some((m, archforge_core::model::MEMBER)))
         .map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": true }))
 }
