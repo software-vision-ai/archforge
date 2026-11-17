@@ -423,14 +423,14 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.groups.iter().position(|g| g.origin == origin)
     }
 
-    /// The document's state: it changes with every change, and undo and redo bring an earlier
-    /// state's back, so a host can tell when there is something new to write.
     /// Which undo history this session has: every session's is its own, so a revision means
     /// something only alongside this number.
     pub fn history(&self) -> u64 {
         self.history
     }
 
+    /// The document's state: it changes with every change, and undo and redo bring an earlier
+    /// state's back, so a host can tell when there is something new to write.
     pub fn revision(&self) -> u64 {
         self.id
     }
@@ -583,10 +583,11 @@ impl<D: Document, V: View<D>> Session<D, V> {
     fn run_recorded(&mut self, spec: &CommandSpec<D, V>, run: crate::cmd::RunFn<D, V>, params: &Params) -> Result<Ran<D::Delta>, EngineError> {
         let view0 = self.view.clone();
         let next0 = self.counter;
+        let at = crate::cmd::Revision { history: self.history, revision: self.id };
         let (doc, view, counter) = (&mut self.doc, &mut self.view, &mut self.counter);
         let result = guard(spec.id, || {
             doc.begin();
-            run(&mut Ctx { doc, view, next: counter }, params).map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })
+            run(&mut Ctx { doc, view, next: counter, at }, params).map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })
         });
         let doc = &mut self.doc;
         let delta = match guard(spec.id, || Ok(doc.end())) {

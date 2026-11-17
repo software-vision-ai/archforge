@@ -33,6 +33,7 @@ is and clears the history it belonged to.
 | `cmd::edit::specs` | `edit.undo` and `edit.redo` for every table |
 | `Session::new` | `pub fn new(registry: Arc<Registry<D, V>>, doc: D, counter: u64, options: Options) -> Session<D, V>` |
 | `Session::counter`, `Ctx::fresh` | the counter new ids come from: outside undo, so an id is never given twice |
+| `Session::{history, revision}`, `Ctx::revision`, `Revision`, `expected_revision`, `EXPECTED_REVISION`, `Reason::StaleRevision` | the point in a session's undo history a call runs on: which history (every session has its own, so a revision of another session or an earlier opening never matches) and the revision within it, which undo and redo bring back; a command that changes the model only on the revision its caller read takes `expected_revision`, `{ "history", "revision" }`, and checks it first with `expected_revision`, which refuses another point, a token of another shape or none as `StaleRevision` about that parameter, naming both points (AR-574) |
 | `Session::execute` | `pub fn execute(&mut self, id: &str, params: &Value) -> Result<Outcome, EngineError>` |
 | `Session::{undo, redo, batch, replay}` | history, several commands as one step, a journal entry again |
 | `Session::{execute_from, batch_from}`, `Session::{undo_origin, redo_origin}` | a call or a batch on behalf of an origin (a chat): its step carries the origin, is labelled `<origin>: <label>` and never merges into another origin's step; the origin of the steps undo and redo would take |

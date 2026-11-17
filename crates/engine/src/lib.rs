@@ -20,7 +20,7 @@ mod snapshot;
 #[cfg(feature = "testing")]
 pub mod testing;
 
-pub use cmd::{CommandInfo, CommandSpec, Ctx, Facts, Handler, ParamInfo, Registry, always};
+pub use cmd::{CommandInfo, CommandSpec, Ctx, EXPECTED_REVISION, Facts, Handler, ParamInfo, Registry, Revision, always, expected_revision};
 pub use error::{
     Accepted, CommandError, DefaultKind, End, EngineError, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty, NotOneOf, Parameter,
     Reason, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,

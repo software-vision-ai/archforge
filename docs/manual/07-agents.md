@@ -574,7 +574,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   change or a restore), a request that would change it is refused and says so, and a request sent
   before another version, branch or project took its place is refused rather than run on that one.
 - **Read the model and the skills**: `skill_list` and `skill_effective` as tools, and as MCP
-  resources `archforge://project` (the open project, its revision, the selection),
+  resources `archforge://project` (the open project, its undo history and revision, the selection),
   `archforge://skills`, `archforge://element/{id}` (a schema with its tables, a table, a diagram, or
   a class, an interface, an enumeration with its literals, a data type, a primitive type or an
   association class, each with its attributes, operations and description) and

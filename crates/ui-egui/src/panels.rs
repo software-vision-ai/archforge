@@ -522,7 +522,8 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
                 .or_else(|| constraint_said(other))
                 .or_else(|| target_said(other))
                 .or_else(|| diagram_said(other))
-                .or_else(|| crate::er_said::said(other));
+                .or_else(|| crate::er_said::said(other))
+                .or_else(|| crate::engine_said::reason(other));
         }
     };
     let what = a_kind(kind)?;

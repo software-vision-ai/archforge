@@ -766,6 +766,8 @@ str		No stereotype is applied yet.	適用されたステレオタイプはまだ
 str		Another change is still under way. Try again once it ends.	別の変更がまだ進行中です。終わってからもう一度お試しください。
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	失敗の後、モデルを元の状態に戻せませんでした。続けるにはプロジェクトを開き直してください。
 str		Undo and redo cannot run as part of another change.	元に戻すとやり直しは、別の変更の一部としては実行できません。
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	モデルは読み込まれた後に変更されたか、別のプロジェクトが読み込まれました。もう一度読み込んでから、再度お試しください。何も変更されていません。
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	この変更には、どのリビジョンのモデルに対するものかが示されていません。モデルを読み込んでから、再度お試しください。何も変更されていません。
 str		This could not be done because of an internal error. Nothing was changed.	内部エラーのため実行できませんでした。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。
 str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。
