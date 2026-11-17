@@ -713,8 +713,10 @@ What is UML's own, beside the shared rules above.
   the diagram shows already says "Already on this diagram" and changes nothing. Every package
   placed on a canvas has its own class diagram, made with it in one undo step (an existing one is reused); renaming the package renames a diagram
   still named like it. Selected, its card shows Open; ⌘↓ opens it too, and zooming in until it
-  covers 60 % of the canvas does; each opens the package's diagram at 100 %, its content centred
-  (AR-110). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it
+  covers 60 % of the canvas does; each opens the package's default diagram, the one its binding
+  names, at 100 %, its content centred (AR-110). Entry never makes a diagram: a package with no
+  class diagram yet, or an unsound binding, stays closed and the notice under the path bar says why
+  (AR-582). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it
   opens the parent's diagram at 100 %, the package left centred; at the root, 10 % stays put with a
   notice ("This is the top package: zooming out goes no further"). The path bar at the canvas's top
   left (root to here, ancestors as buttons) and ⌘↑ go back to the parent as it was left. One level
