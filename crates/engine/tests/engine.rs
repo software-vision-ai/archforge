@@ -5,7 +5,7 @@ use std::sync::Arc;
 use archforge_engine::testing::round_trip;
 use archforge_engine::{
     CommandError, CommandSpec, Ctx, EngineError, Facts, JournalEntry, Options, Params, Reason, Registry, Replace, Revision, Session, Snapshot,
-    Snapshotted, View, always, cmd, expected_revision,
+    Snapshotted, View, always, cmd, expected_revision, history_start, seed_histories,
 };
 use serde_json::{Value, json};
 
@@ -1248,4 +1248,25 @@ fn undo_brings_back_the_revision_a_token_was_read_at() {
     })
     .unwrap();
     assert_eq!(names(&s), ["d", "c"]);
+}
+
+/// Two processes seeded from different entropy, even one apart, as two starts of the app a
+/// nanosecond apart, number their histories far apart, within the exact range of a JSON double.
+/// Seeding moves the next number there and never back, so a seed given again repeats no number
+/// (AR-574).
+#[test]
+fn histories_of_two_starts_do_not_meet() {
+    let starts = [0, 1, 1 << 32, u64::MAX].map(history_start);
+    for (i, a) in starts.iter().enumerate() {
+        assert!((1..1 << 52).contains(a), "{a}");
+        for b in &starts[i + 1..] {
+            assert!(a.abs_diff(*b) > 1 << 32, "{a} and {b} start close");
+        }
+    }
+    let entropy = 0x5eed;
+    seed_histories(entropy);
+    let first = session().history();
+    assert!(first >= history_start(entropy), "{first}");
+    seed_histories(entropy);
+    assert!(session().history() > first, "seeding again gives no number twice");
 }

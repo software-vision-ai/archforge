@@ -26,7 +26,7 @@ pub use error::{
     Reason, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
 };
 pub use params::{ParamDoc, Params, parse_params};
-pub use session::{Batch, Dropped, GroupEnd, JournalEntry, MAX_GROUPS, Options, Outcome, Session};
+pub use session::{Batch, Dropped, GroupEnd, JournalEntry, MAX_GROUPS, Options, Outcome, Session, history_start, seed_histories};
 pub use snapshot::{Replace, Snapshot, Snapshotted};
 
 /// What undo covers: the model, its layout, the project's settings. A handler changes it in place;

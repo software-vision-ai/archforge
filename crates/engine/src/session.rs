@@ -149,8 +149,31 @@ struct Ran<X> {
     next_changed: bool,
 }
 
-/// The number the next session's undo history gets.
+/// The number the next session's undo history gets: from 1 until the host seeds it
+/// ([`seed_histories`]).
 static NEXT_HISTORY: AtomicU64 = AtomicU64::new(1);
+
+/// The history numbers a seed starts at are below 2^52, so they stay exact as JSON numbers that a
+/// reader holds as doubles, with room to count up.
+const HISTORY_START_BITS: u64 = (1 << 52) - 1;
+
+/// Where a process's history numbers start for `entropy`, which the host draws once at start (the
+/// engine reads no clock and no randomness): the bits mixed, so near entropies start far apart,
+/// and kept between 1 and 2^52.
+pub fn history_start(entropy: u64) -> u64 {
+    // The splitmix64 finaliser: every bit of the entropy moves about half the bits of the start.
+    let mut z = entropy.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    ((z ^ (z >> 31)) & HISTORY_START_BITS).max(1)
+}
+
+/// Moves the next history number to [`history_start`] of `entropy`, never back, so the sessions of
+/// this process are numbered apart from another process's: a revision one process gave never
+/// matches a session of another, as an app started again. A number already given stays unique.
+pub fn seed_histories(entropy: u64) {
+    NEXT_HISTORY.fetch_max(history_start(entropy), Ordering::Relaxed);
+}
 
 pub struct Session<D: Document, V> {
     registry: Arc<Registry<D, V>>,

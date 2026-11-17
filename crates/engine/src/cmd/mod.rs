@@ -23,7 +23,8 @@ pub struct Ctx<'a, D, V> {
 
 /// A point in a session's undo history: which history, and the revision within it. A revision
 /// means something only within its own history, as every session counts its revisions from 0, so
-/// a point another session or an earlier opening of the project gave never matches by chance.
+/// a point another session, an earlier opening of the project or, once the host has seeded the
+/// numbering ([`crate::seed_histories`]), an earlier run gave never matches by chance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Revision {
     pub history: u64,
