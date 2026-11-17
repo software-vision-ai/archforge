@@ -68,6 +68,7 @@ impl Route {
     /// source passes `valid`, and gives that step with the ones removed before it. Every step
     /// looked at is consumed, so a route of nothing that can be shown ends empty; no step is
     /// added for the return.
+    #[cfg_attr(not(test), expect(dead_code, reason = "AR-664 (408-B2) is the first return to take one"))]
     pub(crate) fn take_return(&mut self, history: u64, mut valid: impl FnMut(Uuid) -> bool) -> Return {
         let mut out = Return::default();
         while let Some(step) = self.steps.pop_back() {
@@ -80,17 +81,25 @@ impl Route {
         out
     }
 
+    /// The steps, oldest first, left in the route.
+    pub(crate) fn steps(&self) -> impl DoubleEndedIterator<Item = &Step> {
+        self.steps.iter()
+    }
+
     /// Forgets every step.
+    #[cfg_attr(not(test), expect(dead_code, reason = "AR-671 (408-F) clears routes when the revision changes"))]
     pub(crate) fn clear(&mut self) {
         self.steps.clear();
     }
 
     /// How many steps the route holds.
+    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.steps.len()
     }
 
     /// Whether the route holds no step.
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.steps.is_empty()
     }
