@@ -45,8 +45,14 @@ owner is not the diagram's element (`defaults::diagram_removal_problem`); a nota
 `defaults::views_removal_problem` before it removes an element whose diagram a binding of an element
 that stays names, judged against everything the removal takes, and `defaults::remove_bindings_of`
 takes the bindings of all of it before any diagram goes, so the order of selection does not matter
-(AR-578). UML's `uml.package.default.set` makes and retargets a binding (AR-580); Properties and
-replacing a default as it is removed come later (AR-396, AR-397). A comparison lists a binding among the model's elements, not
+(AR-578). A notation whose `Notation::binds_default` says so for a diagram's kind and its element's
+class (UML: a package's class diagram) gets the element's first diagram of that kind bound as its
+default as it is made: `defaults::new_diagram_bound`, which `diagram.add` calls, makes the diagram
+and a binding beside it in its home as one change, but only while the element has no diagram of
+that kind and no binding (`defaults::is_first`); an element with diagrams but no binding stays
+without one, its default diagnosed as missing, never bound silently (AR-579). UML's
+`uml.package.default.set` makes and retargets a binding (AR-580); Properties and replacing a default
+as it is removed come later (AR-396, AR-397). A comparison lists a binding among the model's elements, not
 the diagrams, worded by its package and diagram (`Sales → Sales overview`) under the kind word
 Default diagram (AR-553).
 
@@ -62,7 +68,7 @@ tables.
 
 | Item | Signature |
 |---|---|
-| `DiagramView` | the view's policy, asked of the view: the open diagram and selection, `kinds`, `home`, `is_of`, `needs_element`, `shows`, `may_show`, `connects`, `ends`, `text_slots`, `default_size` |
+| `DiagramView` | the view's policy, asked of the view: the open diagram and selection, `kinds`, `home`, `is_of`, `needs_element`, `binds_default`, `shows`, `may_show`, `connects`, `ends`, `text_slots`, `default_size` |
 | `Notation`, `ProjectView` | what a notation answers for its own kinds and classes (the diagram policy, where skills sit, `remove`, `describe`); the view of a project holding several notations, which asks the right one (`of_kind`, `of_class`, `of_element`) and implements `DiagramView` and `SkillHost`: a diagram carries skills too and inherits those of the element it shows |
 | `figure::{Card, Row, Line, End, EndMark, Text, Tone, CARD_HEADER, CARD_FIRST_ROW, CARD_ROW, COMPARTMENT_GAP, CARD_FOOT}` | what a notation draws, without a toolkit: a node's card (eyebrow, name, compartments of rows, `Card::height` the height that shows them all by the card layout the canvas draws by, its tone: tinted, plain, tabbed, a constraint note, braces or an n-ary association's diamond, and a template's signature rows, drawn in a dashed box over its top-right corner), an edge's line (end marks and texts, roles, dashes, status, a note); `Notation::card`, `line` and `slot_text` give them and the canvas draws them alike; `Notation::links` gives the nodes a node is tied to by dashed links worked out from the model, never stored (a constraint note's); `Notation::nested_in` the element a node's element is nested in, whose node the canvas ties it to by a line ending in ⊕, never stored (a nested classifier's owner) |
 | `project::specs`, `project::{ELEMENT, NOTATION_ELEMENT}` | the shared commands: `view.select`, `element.remove` (each notation removes its own) and `element.describe`; the kinds their typed refusals name |

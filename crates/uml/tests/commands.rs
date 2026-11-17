@@ -166,7 +166,7 @@ fn a_class_diagram_shows_its_packages_classes_and_removing_the_package_takes_the
     // move up into the root, in one undo step.
     let before = picture(s.doc());
     let out = s.execute("element.remove", &json!({ "ids": [sales] })).unwrap();
-    assert_eq!(out.value["removed"], 1, "{}", out.value);
+    assert_eq!(out.value["removed"], 2, "the package and the binding its first diagram made: {}", out.value);
     let st = s.doc();
     let root = archforge_uml::commands::root_package(st).unwrap();
     let order_obj = obj(st, &order);
@@ -606,7 +606,7 @@ fn removing_an_element_takes_its_description_along() {
 fn a_note_or_another_comment_is_never_taken_for_the_description() {
     let mut s = session();
     let (pkg, all) = described_sample(&mut s);
-    let (order, status) = (all[1].clone(), obj(s.doc(), &all[3]));
+    let order = all[1].clone();
     let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     run(&mut s, "diagram.note", json!({ "diagram": d, "text": "Ships in May." }));
@@ -615,7 +615,8 @@ fn a_note_or_another_comment_is_never_taken_for_the_description() {
     // Two other comments the class owns, ahead of any description: one about another element,
     // one about nothing.
     let mut st = copy(s.doc());
-    let o = obj(&st, &order);
+    // Handles are the copy's own: one of the session's could name another element in it.
+    let (o, status) = (obj(&st, &order), obj(&st, &all[3]));
     let about_other = st.create(archforge_uml::COMMENT).unwrap();
     st.set(about_other, archforge_uml::comment::BODY, Value::str("See Status.")).unwrap();
     st.push(o, archforge_uml::element::OWNED_COMMENT, Value::Ref(about_other)).unwrap();

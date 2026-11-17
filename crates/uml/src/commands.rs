@@ -11,7 +11,7 @@
 //! `descriptions`); a nested package removed hands what it holds up to its
 //! parent (owner decision, for every notation).
 
-use archforge_diagram::ProjectView;
+use archforge_diagram::{DiagramView, ProjectView};
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
@@ -326,7 +326,8 @@ pub fn diagram_of(store: &Store, package: Obj) -> Option<Obj> {
 }
 
 /// The package's diagram, made when it has none: a class diagram of the package named like it,
-/// beside the model's other diagrams. `made` says which.
+/// beside the model's other diagrams, and its default in the same step, as `diagram.add` makes
+/// one (AR-579). `made` says which.
 fn package_diagram(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "package")?;
     if let Some(d) = diagram_of(ctx.doc, pkg) {
@@ -335,8 +336,9 @@ fn package_diagram(ctx: &mut C<'_>, p: &Params) -> R {
     let m = model(ctx.doc)?;
     let name: String = name_of(ctx.doc, pkg).chars().take(archforge_diagram::rules::MAX_NAME).collect();
     // Made as diagram.add makes one, its lines at right angles around the classes.
-    let d = archforge_diagram::commands::new_diagram(ctx.doc, crate::STRUCTURE_DIAGRAM, &name, Some(pkg), Some((m, archforge_core::model::MEMBER)))
-        .map_err(fail)?;
+    let (kind, home) = (crate::STRUCTURE_DIAGRAM, Some((m, archforge_core::model::MEMBER)));
+    let binds = ctx.view.binds_default(kind, PACKAGE);
+    let d = archforge_diagram::defaults::new_diagram_bound(ctx.doc, kind, &name, Some(pkg), home, binds).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": true }))
 }
 

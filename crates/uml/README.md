@@ -178,6 +178,10 @@ but no binding), `Duplicate`, `DeadTarget`, `WrongKind` (no structure diagram) o
 (another element's diagram, or a binding of something that is no package). It never falls back to
 the first diagram found and changes nothing. `defaults::problems` lists every problem in a store as
 a `Diagnosis`, ordered by the owner's id and then the binding's.
+A package's first class diagram is bound as its default as it is made (AR-579): UML's
+`binds_default` holds for a package's, never a profile's, so `diagram.add` and `uml.package.diagram`
+make the binding with the diagram in one undo step; a second diagram, and one of a package that has
+class diagrams but no binding (its default `Missing`), bind nothing.
 The query `uml.package.default.get` (AR-576) answers it for a `package` (a package or a profile):
 `{package, state, binding, diagram}`, `state` `bound` with the binding's and the diagram's ids,
 `no_diagram_yet` or `does_not_apply` with both null. A `BindingProblem` is refused about `package`

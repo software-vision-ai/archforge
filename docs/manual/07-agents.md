@@ -595,7 +595,11 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   history, or none at all is refused and changes nothing. While a drag in the window shows a
   preview, the revision given is the preview's own, which never matches: read again once the drag
   ends.
-- **A package's default diagram**: `uml_package_default_get` (`uml.package.default.get`) reads the
+- **A package's default diagram**: a package's first class diagram is its default from the
+  moment it is made: `diagram_add`, or `uml_package_diagram` when it makes one, binds it in the same
+  undo step. A second class diagram leaves the default as it is, a profile's diagram is no one's
+  default, and a package that has class diagrams but no default gets none by adding another.
+  `uml_package_default_get` (`uml.package.default.get`) reads the
   diagram a package opens to, from the one binding that names it, never the first diagram found.
   It gives the package's id with `state` `bound` and the ids of the binding and the diagram,
   `no_diagram_yet` for a package without a class diagram, or `does_not_apply` for a profile, which
@@ -615,7 +619,8 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   `package`, `diagram` and `expected_revision`, which it needs: left out or changed since read, it
   is refused and changes nothing. Something that is no package, a diagram that is gone, is no class
   diagram (an ER diagram, say) or belongs to another element is refused the same way. The package
-  keeps one binding: made the first time, it keeps its id when another diagram is chosen. It is
+  keeps one binding, the one its first class diagram came with, or one made now for a package that
+  has none; it keeps its id when another diagram is chosen. It is
   also how a binding that `uml_package_default_get` refuses is mended; a package with more than one
   default keeps the first binding, now naming the chosen diagram, and the others are removed. It
   answers the ids of the package, the binding and the diagram, and those of the bindings removed.
