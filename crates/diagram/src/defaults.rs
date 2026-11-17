@@ -54,13 +54,12 @@ pub fn diagram_removal_problem(store: &Store, d: Obj, key: &str, going: impl Fn(
     Some(CommandError::about(key, message).because(Reason::DefaultDiagramOf { package: package.into(), fault }))
 }
 
-/// Why removing the views of `element` and everything it contains ([`crate::remove_views_of`])
-/// is refused, as about `key`: one of their diagrams is the default of an element for which
-/// `going` is false, which keeps it ([`diagram_removal_problem`]); `going` covers the whole
-/// removal, every element selected with what it holds, whose bindings go with them (AR-577).
-/// None when nothing stands in the way, or `element` is gone.
-pub fn views_removal_problem(store: &Store, element: Obj, key: &str, going: impl Fn(Obj) -> bool) -> Option<CommandError> {
-    let diagrams = crate::within(store, element).ok()?.into_iter().flat_map(|e| crate::views_of(store, e).0);
+/// Why removing the diagrams of `elements` (of each one itself; a caller lists what they hold
+/// too, [`crate::within`]) is refused, as about `key`: one of them is the default of an element
+/// for which `going` is false, which keeps it ([`diagram_removal_problem`]); `going` covers the
+/// whole removal, whose bindings go with it (AR-577). None when nothing stands in the way.
+pub fn views_removal_problem(store: &Store, elements: impl IntoIterator<Item = Obj>, key: &str, going: impl Fn(Obj) -> bool) -> Option<CommandError> {
+    let diagrams = elements.into_iter().flat_map(|e| crate::views_of(store, e).0);
     diagrams.into_iter().find_map(|d| diagram_removal_problem(store, d, key, &going))
 }
 

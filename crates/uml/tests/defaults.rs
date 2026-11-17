@@ -3,7 +3,8 @@
 //! a wrong-kind and a foreign target, a profile, and every problem of a store in a stable order.
 //! Each state read through `uml.package.default.get`, on the revision its caller read, as a
 //! read-only tool that leaves no undo step (AR-576). A diagram a binding names stays: removing it,
-//! or an element of another one's, is refused typed with nothing changed (AR-578).
+//! or an element of another one's, is refused typed with nothing changed (AR-578), an association
+//! class's that goes with its end among them.
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
@@ -341,10 +342,15 @@ fn the_command_is_offered_as_a_read_only_tool() {
     assert_eq!((revision.kind, revision.optional), ("object", true));
 }
 
+/// The tables and junctions of the core, the diagrams and UML.
+fn tables() -> (Vec<archforge_mof::schema::Table>, Vec<archforge_mof::schema::Junction>) {
+    let tables = [archforge_uml::TABLES, archforge_diagram::TABLES, archforge_core::TABLES].concat();
+    (tables, [archforge_core::JUNCTIONS, archforge_diagram::JUNCTIONS, archforge_uml::JUNCTIONS].concat())
+}
+
 /// The store's rows, to compare a store before and after a command.
 fn rows_of(st: &Store) -> rows::Rows {
-    let tables = [archforge_uml::TABLES, archforge_diagram::TABLES, archforge_core::TABLES].concat();
-    let junctions = [archforge_core::JUNCTIONS, archforge_diagram::JUNCTIONS, archforge_uml::JUNCTIONS].concat();
+    let (tables, junctions) = tables();
     rows::snapshot(st, &tables, &junctions).unwrap()
 }
 
@@ -437,4 +443,30 @@ fn a_package_and_the_one_whose_diagram_its_binding_names_go_together_in_either_o
         s.execute("edit.undo", &json!({})).unwrap();
         assert!(rows_of(s.doc()) == before, "{order:x?}: one undo step brings all back");
     }
+}
+
+/// An association class goes with a class at one of its ends, and its diagram with it, so a
+/// binding of a package that stays naming that diagram refuses the removal before anything changes,
+/// typed, the store and its history as they were (AR-578).
+#[test]
+fn a_binding_keeps_the_diagram_of_an_association_class_going_with_its_end() {
+    let mut s = over(store().0);
+    let made = |s: &mut S, cmd: &str, p: Json| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
+    let sales = made(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let order = made(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let item = made(&mut s, "uml.class.add", json!({ "package": sales, "name": "Item" }));
+    let line = made(&mut s, "uml.association-class.add", json!({ "from": order, "to": item, "name": "Line" }));
+    // Read back into a store of its own, to give the association class a diagram and bind it by hand.
+    let (tables, junctions) = tables();
+    let mut st = bare();
+    rows::restore(&mut st, &rows_of(s.doc()), &tables, &junctions).unwrap();
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    let billing = add(&mut st, model, PACKAGE, 0x20);
+    let of_line = st.by_uuid(Uuid::parse(&line).unwrap()).unwrap();
+    let kept = diagram(&mut st, model, 0x21, STRUCTURE_DIAGRAM, of_line);
+    bind(&mut st, model, 0x22, billing, kept);
+    let mut s = over(st);
+    let (key, reason, said) = refused(&mut s, "element.remove", json!({ "ids": [order] }));
+    let wrong = Reason::DefaultDiagramOf { package: id(0x20).into(), fault: Some(BindingFault::WrongOwner) };
+    assert_eq!((key.as_deref(), reason), (Some("ids"), Some(wrong)), "{said}");
 }

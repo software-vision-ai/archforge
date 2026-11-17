@@ -190,7 +190,8 @@ diagrams up and its parent's binding stays; a top-level one takes the bindings o
 An element that would take along a diagram the binding of an element that stays names (unsoundly,
 `WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
 binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578).
-An element that stays is one outside every element selected and what each holds; the bindings of
+An element that stays is one outside every element selected and what each holds, and outside the
+relationships that go with the classifiers that go (an association class with what it holds); the bindings of
 all that goes go before any diagram, so the order of selection does not matter.
 
 **Packages from anywhere in the model** (AR-562). `UmlNotation::may_show` lets a structure
@@ -226,7 +227,8 @@ parent, each one undo step bringing the bindings back under their ids; a diagram
 removed alone. `tests/defaults.rs` (AR-578): a default diagram's removal refused with no undo step,
 another diagram's leaving the binding, and a foreign binding keeping its diagram and the package
 that holds it, while a nested package that holds one hands it up and goes; that package and the
-binding's owner removed together in either order, as one undo step. `tests/skills.rs`: skills on a package, a class, an
+binding's owner removed together in either order, as one undo step; the diagram of an association
+class that goes with its end kept the same way. `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and

@@ -786,15 +786,6 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     if let Some(refused) = crate::templates::removals_problem(store, &params) {
         return Err(refused);
     }
-    // Everything the removal takes along, whose bindings go with it (AR-578): each element with
-    // what it holds, a nested package alone, as it hands what it holds up to its parent.
-    let nested = |o: Obj| store.class_of(o).ok() == Some(PACKAGE) && package_of(store, o).is_some();
-    let plan: std::collections::BTreeSet<Obj> = objs
-        .iter()
-        .copied()
-        .filter(|o| store.is_alive(*o))
-        .flat_map(|o| if nested(o) { vec![o] } else { archforge_diagram::within(store, o).unwrap_or_default() })
-        .collect();
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
         if let Some(why) = crate::templates::parameter_element_problem(store, *o) {
@@ -832,10 +823,6 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             && let Some(parent) = package_of(store, *o)
         {
             hand_up_problem(store, *o, parent)?;
-        } else if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, *o, "ids", |b| plan.contains(&b)) {
-            // A diagram that would go stays while the binding of an element that stays names it,
-            // and so does what it is of (AR-578); a nested package hands its diagrams up instead.
-            return Err(refused);
         }
     }
     // A surviving template parameter's default, or a binding's argument, that would no longer
@@ -847,7 +834,20 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // A classifier a binding that stays uses as an argument stays too (AR-131): the binding would
     // be left naming nothing for its parameter.
     let classes: Vec<Obj> = gone_classes.iter().copied().collect();
-    let going: Vec<Obj> = going_with(store, &classes).into_iter().chain(objs.iter().copied()).collect();
+    let with = going_with(store, &classes);
+    // Everything the removal takes along, whose bindings go with it (AR-578): each element with
+    // what it holds, and the relationships that go with the classifiers that go, an association
+    // class with what it holds, whose diagrams go too; a nested package goes alone, as it hands
+    // what it holds and its diagrams up. A diagram that goes stays while the binding of an element
+    // that stays names it, and so does what it is of.
+    let nested = |o: Obj| store.class_of(o).ok() == Some(PACKAGE) && package_of(store, o).is_some();
+    let roots = objs.iter().copied().filter(|o| store.is_alive(*o) && !nested(*o)).chain(with.iter().copied());
+    let doomed: std::collections::BTreeSet<Obj> = roots.flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default()).collect();
+    let plan: std::collections::BTreeSet<Obj> = doomed.iter().copied().chain(objs.iter().copied().filter(|o| nested(*o))).collect();
+    if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, doomed.iter().copied(), "ids", |b| plan.contains(&b)) {
+        return Err(refused);
+    }
+    let going: Vec<Obj> = with.into_iter().chain(objs.iter().copied()).collect();
     if let Some(why) = crate::bindings::argument_removal_problem(store, &classes, &going) {
         return Err(refuse("ids", why));
     }
