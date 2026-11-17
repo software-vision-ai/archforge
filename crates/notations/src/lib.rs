@@ -8,9 +8,11 @@
 pub mod differences;
 mod labels;
 
+use std::fmt;
 use std::sync::Arc;
 
-use archforge_diagram::{Notation, ProjectView};
+use archforge_diagram::{DiagramView, Notation, ProjectView};
+use archforge_mof::rows::{Cell, Rows};
 use archforge_mof::schema::{Junction, Table};
 use archforge_mof::{ClassId, CompositeSlabs, MetaError, Metamodel, NameKind, Slabs, Store, Universe, Uuid};
 
@@ -124,6 +126,125 @@ pub fn storage() -> (Vec<Table>, Vec<Junction>) {
     (tables, junctions)
 }
 
+/// A diagram of a kind no notation of the project knows, such as one an earlier version stored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownDiagram {
+    /// Its id (nil when the rows hold none), and its name, empty when it has none or the rows
+    /// checked do not hold it.
+    pub id: Uuid,
+    pub name: String,
+    /// Its kind as stored, empty for none.
+    pub kind: String,
+}
+
+/// Why a model is refused as it opens: it holds diagrams of kinds no notation knows. It is never
+/// shown in part or under another kind, and nothing in it is migrated, renamed or removed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownKinds {
+    /// Every such diagram, in the order read; never empty.
+    pub diagrams: Vec<UnknownDiagram>,
+    /// The kinds the project's notations know, in the order of [`NOTATIONS`].
+    pub accepted: Vec<&'static str>,
+}
+
+impl fmt::Display for UnknownKinds {
+    /// The reason in English, naming the first diagram; a screen words it through `tr`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(first) = self.diagrams.first() {
+            let named = if first.name.is_empty() { String::new() } else { format!("{:?} ", first.name) };
+            write!(f, "the diagram {named}({}) is of the kind {:?}, which no notation knows", first.id, first.kind)?;
+        }
+        let more = self.diagrams.len().saturating_sub(1);
+        if more > 0 {
+            write!(f, ", and so are {more} more")?;
+        }
+        write!(f, "; the kinds known are {}", self.accepted.join(", "))
+    }
+}
+
+impl std::error::Error for UnknownKinds {}
+
+/// Why a project's rows do not open as a session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OpenError {
+    /// Diagrams of kinds no notation knows: refused before anything is built from the rows.
+    UnknownKinds(UnknownKinds),
+    /// Any other reason, in English as the store gives it.
+    Unreadable(String),
+}
+
+impl fmt::Display for OpenError {
+    /// The reason in English; a screen words it through `tr`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OpenError::UnknownKinds(e) => e.fmt(f),
+            OpenError::Unreadable(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for OpenError {}
+
+impl From<String> for OpenError {
+    /// A reason the store or the commands give in English.
+    fn from(why: String) -> OpenError {
+        OpenError::Unreadable(why)
+    }
+}
+
+impl From<OpenError> for String {
+    /// The reason in English, for callers that show text alone.
+    fn from(e: OpenError) -> String {
+        e.to_string()
+    }
+}
+
+/// The table a project stores its diagrams in, under this name in every shape its tables have had.
+const DIAGRAMS: &str = "diagram_diagram";
+
+/// Refused when any of `diagrams` is of a kind none of [`NOTATIONS`] knows, naming them all.
+fn known_kinds(diagrams: impl Iterator<Item = UnknownDiagram>) -> Result<(), UnknownKinds> {
+    let accepted = view().kinds();
+    let diagrams: Vec<UnknownDiagram> = diagrams.filter(|d| !accepted.contains(&d.kind.as_str())).collect();
+    if diagrams.is_empty() {
+        return Ok(());
+    }
+    Err(UnknownKinds { diagrams, accepted })
+}
+
+/// Refuses a store holding diagrams whose kinds none of [`NOTATIONS`] knows.
+pub fn check_kinds(store: &Store) -> Result<(), UnknownKinds> {
+    let text = |d, prop| store.get(d, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+    known_kinds(store.alive().filter(|o| store.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).map(|d| UnknownDiagram {
+        id: store.uuid(d).unwrap_or(Uuid([0; 16])),
+        name: text(d, archforge_diagram::diagram::NAME),
+        kind: text(d, archforge_diagram::diagram::KIND),
+    }))
+}
+
+/// [`check_kinds`] over rows read in the shape `tables`, before anything is built from them:
+/// only the diagram table's `id`, `kind` and, when the shape has it, `name` columns are read, found
+/// by name, so the rows of an earlier shape, or of the diagram table alone, are checked before the
+/// project's tables are brought up to date. A shape without the diagram table holds no diagram; a
+/// diagram whose kind column is missing or holds no text is of no kind any notation knows.
+pub fn check_kinds_in_rows(rows: &Rows, tables: &[Table]) -> Result<(), UnknownKinds> {
+    let Some((at, table)) = tables.iter().enumerate().find(|(_, t)| t.name == DIAGRAMS) else { return Ok(()) };
+    let column = |name: &str| table.columns.iter().position(|c| c.name == name);
+    let (id, name, kind) = (column("id"), column("name"), column("kind"));
+    let text = |row: &[Cell], at: Option<usize>| match at.and_then(|i| row.get(i)) {
+        Some(Cell::Text(t)) => t.to_string(),
+        _ => String::new(),
+    };
+    known_kinds(rows.tables.get(at).into_iter().flatten().map(|row| UnknownDiagram {
+        id: match id.and_then(|i| row.get(i)) {
+            Some(Cell::Id(u)) => *u,
+            _ => Uuid([0; 16]),
+        },
+        name: text(row, name),
+        kind: text(row, kind),
+    }))
+}
+
 /// The commands: the edit area, the shared element commands, every notation's own, the diagrams'
 /// and the skills'.
 pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>, String> {
@@ -161,8 +282,9 @@ pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> 
 }
 
 /// The session of a project read back from its rows: the store rebuilt from them and checked,
-/// saved as it is. `ids` mints the ids of the elements made from now on.
-pub fn session_from_rows(rows: &archforge_mof::rows::Rows, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String> {
+/// saved as it is; refused, with nothing built, when a diagram is of a kind no notation knows
+/// ([`check_kinds_in_rows`]). `ids` mints the ids of the elements made from now on.
+pub fn session_from_rows(rows: &archforge_mof::rows::Rows, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, OpenError> {
     session_from_rows_repaired(rows, ids, |_| {})
 }
 
@@ -173,21 +295,25 @@ pub fn session_from_rows_repaired(
     rows: &archforge_mof::rows::Rows,
     ids: Box<dyn FnMut() -> Uuid + Send>,
     repair: impl FnOnce(&mut Store),
-) -> Result<Session, String> {
+) -> Result<Session, OpenError> {
     let registry = registry()?;
     let (tables, junctions) = storage();
+    // A diagram no notation knows refuses the model before anything is built from it.
+    check_kinds_in_rows(rows, &tables).map_err(OpenError::UnknownKinds)?;
     // Built without an undo log, so a model of any size the read budgets let through opens.
     let mut st = archforge_mof::rows::restore_into_empty(store(ids)?, rows, &tables, &junctions).map_err(|e| e.to_string())?;
     repair(&mut st);
+    // The repair changes layout alone; a kind it would change is refused all the same.
+    check_kinds(&st).map_err(OpenError::UnknownKinds)?;
     // Only elements of one kind clash by name in one owner (AR-208); skills by their own rule.
     if let Some(problem) = st.first_problem_by(name_kind) {
-        return Err(format!("the model does not hold together: {problem:?}"));
+        return Err(format!("the model does not hold together: {problem:?}").into());
     }
     if let Some(problem) = archforge_core::skills::first_duplicate(&st) {
-        return Err(format!("the model does not hold together: {problem:?}"));
+        return Err(format!("the model does not hold together: {problem:?}").into());
     }
     if !st.alive().any(|o| st.class_of(o).ok() == Some(archforge_core::MODEL)) {
-        return Err("the project has no model root".into());
+        return Err(OpenError::Unreadable("the project has no model root".into()));
     }
     let mut session = Session::with_view(registry, st, FIRST_COUNTER, archforge_engine::Options::default(), view());
     session.mark_saved().map_err(|e| e.to_string())?;
