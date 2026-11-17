@@ -43,6 +43,7 @@ pub mod commands;
 pub mod constraints;
 pub mod defaults;
 pub mod descriptions;
+pub mod effective;
 pub mod figures;
 pub mod generalization_sets;
 mod generated;
