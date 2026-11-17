@@ -8,9 +8,11 @@
 pub mod differences;
 mod labels;
 
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 
+use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DiagramView, Notation, ProjectView};
 use archforge_mof::rows::{Cell, Rows};
 use archforge_mof::schema::{Junction, Table};
@@ -169,6 +171,9 @@ impl std::error::Error for UnknownKinds {}
 pub enum OpenError {
     /// Diagrams of kinds no notation knows: refused before anything is built from the rows.
     UnknownKinds(UnknownKinds),
+    /// Default-diagram bindings that name nothing the project holds: refused before anything is
+    /// built from the rows, never cleared or replaced. Never empty.
+    BrokenBindings(Vec<BrokenBinding>),
     /// Any other reason, in English as the store gives it.
     Unreadable(String),
 }
@@ -178,6 +183,15 @@ impl fmt::Display for OpenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             OpenError::UnknownKinds(e) => e.fmt(f),
+            OpenError::BrokenBindings(all) => {
+                if let Some(first) = all.first() {
+                    first.fmt(f)?;
+                }
+                match all.len().saturating_sub(1) {
+                    0 => Ok(()),
+                    more => write!(f, ", and so do {more} more"),
+                }
+            }
             OpenError::Unreadable(why) => f.write_str(why),
         }
     }
@@ -245,6 +259,74 @@ pub fn check_kinds_in_rows(rows: &Rows, tables: &[Table]) -> Result<(), UnknownK
     }))
 }
 
+/// The end of a default-diagram binding that names nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingEnd {
+    /// `ownerElement`, the element whose default the binding names.
+    Owner,
+    /// `defaultDiagram`, the diagram it names: a dead target.
+    Diagram,
+}
+
+/// A default-diagram binding whose `end` names nothing the project holds (Decision 12).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrokenBinding {
+    /// The binding's id.
+    pub binding: Uuid,
+    pub end: BindingEnd,
+    /// The id the end names, none when it names none.
+    pub names: Option<Uuid>,
+}
+
+impl fmt::Display for BrokenBinding {
+    /// The reason in English; a screen words it through `tr`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let end = match self.end {
+            BindingEnd::Owner => "owner",
+            BindingEnd::Diagram => "default diagram",
+        };
+        match self.names {
+            Some(id) => write!(f, "the default-diagram binding {} names the {end} {id}, which the project does not hold", self.binding),
+            None => write!(f, "the default-diagram binding {} names no {end}", self.binding),
+        }
+    }
+}
+
+impl std::error::Error for BrokenBinding {}
+
+/// The default-diagram bindings in rows read in the shape `tables` whose owner or diagram is no
+/// row of any table, or which name none, in the order read, an owner before a diagram; read before
+/// anything is built from the rows. Rows without the binding table, or of a shape without its
+/// ends, hold none.
+pub fn check_bindings_in_rows(rows: &Rows, tables: &[Table]) -> Result<(), Vec<BrokenBinding>> {
+    let Some((at, table)) = tables.iter().enumerate().find(|(_, t)| t.class == archforge_diagram::DEFAULT_DIAGRAM_BINDING) else { return Ok(()) };
+    let column = |prop| table.columns.iter().position(|c| c.prop == Some(prop));
+    let (Some(owner), Some(diagram)) = (column(OWNER_ELEMENT), column(DEFAULT_DIAGRAM)) else { return Ok(()) };
+    let id_of = |t: &Table| t.columns.iter().position(|c| c.prop.is_none());
+    let named = |row: &[Cell], i: Option<usize>| match i.and_then(|i| row.get(i)) {
+        Some(Cell::Id(u)) => Some(*u),
+        _ => None,
+    };
+    let bindings = rows.tables.get(at).map(Vec::as_slice).unwrap_or_default();
+    let ends = [(BindingEnd::Owner, owner), (BindingEnd::Diagram, diagram)];
+    // Only the ids the bindings name are looked for among every table's rows.
+    let wanted: HashSet<Uuid> = bindings.iter().flat_map(|row| ends.map(|(_, i)| named(row, Some(i)))).flatten().collect();
+    let held: HashSet<Uuid> = tables
+        .iter()
+        .zip(&rows.tables)
+        .flat_map(|(t, table_rows)| table_rows.iter().filter_map(move |row| named(row, id_of(t))))
+        .filter(|u| wanted.contains(u))
+        .collect();
+    // A row without an id is refused as the rows are built.
+    let broken: Vec<BrokenBinding> = bindings
+        .iter()
+        .filter_map(|row| named(row, id_of(table)).map(|binding| ends.map(|(end, i)| BrokenBinding { binding, end, names: named(row, Some(i)) })))
+        .flatten()
+        .filter(|b| !b.names.is_some_and(|u| held.contains(&u)))
+        .collect();
+    if broken.is_empty() { Ok(()) } else { Err(broken) }
+}
+
 /// The commands: the edit area, the shared element commands, every notation's own, the diagrams'
 /// and the skills'.
 pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>, String> {
@@ -283,7 +365,8 @@ pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> 
 
 /// The session of a project read back from its rows: the store rebuilt from them and checked,
 /// saved as it is; refused, with nothing built, when a diagram is of a kind no notation knows
-/// ([`check_kinds_in_rows`]). `ids` mints the ids of the elements made from now on.
+/// ([`check_kinds_in_rows`]) or a binding names nothing ([`check_bindings_in_rows`]). `ids` mints
+/// the ids of the elements made from now on.
 pub fn session_from_rows(rows: &archforge_mof::rows::Rows, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, OpenError> {
     session_from_rows_repaired(rows, ids, |_| {})
 }
@@ -296,15 +379,45 @@ pub fn session_from_rows_repaired(
     ids: Box<dyn FnMut() -> Uuid + Send>,
     repair: impl FnOnce(&mut Store),
 ) -> Result<Session, OpenError> {
+    session_from_rows_diagnosed(rows, ids, repair).map(|opened| opened.session)
+}
+
+/// A project's session as it opens, with what is wrong with its default-diagram bindings.
+pub struct Opened {
+    pub session: Session,
+    /// The binding problems the rows hold, as [`archforge_uml::defaults::problems`] gives them for
+    /// the session's store: reported, never repaired, so the model opens as it was stored.
+    pub problems: Vec<archforge_uml::defaults::Diagnosis>,
+}
+
+/// [`session_from_rows_repaired`], with the binding problems the rows hold. A version opened to be
+/// looked at reports those of its own revision. No repair changes a binding: one that would is
+/// refused.
+pub fn session_from_rows_diagnosed(
+    rows: &archforge_mof::rows::Rows,
+    ids: Box<dyn FnMut() -> Uuid + Send>,
+    repair: impl FnOnce(&mut Store),
+) -> Result<Opened, OpenError> {
     let registry = registry()?;
     let (tables, junctions) = storage();
     // A diagram no notation knows refuses the model before anything is built from it.
     check_kinds_in_rows(rows, &tables).map_err(OpenError::UnknownKinds)?;
+    // So does a binding that names nothing; one that names the wrong thing is reported.
+    check_bindings_in_rows(rows, &tables).map_err(OpenError::BrokenBindings)?;
     // Built without an undo log, so a model of any size the read budgets let through opens.
     let mut st = archforge_mof::rows::restore_into_empty(store(ids)?, rows, &tables, &junctions).map_err(|e| e.to_string())?;
+    let problems = archforge_uml::defaults::problems(&st);
+    let bound = |st: &Store| {
+        let end = |b, prop| st.get(b, prop).ok().and_then(|v| v.as_ref());
+        archforge_diagram::defaults::bindings(st).into_iter().map(|b| (b, end(b, OWNER_ELEMENT), end(b, DEFAULT_DIAGRAM))).collect::<Vec<_>>()
+    };
+    let stored = bound(&st);
     repair(&mut st);
-    // The repair changes layout alone; a kind it would change is refused all the same.
+    // The repair changes layout alone; a kind or a binding it would change is refused all the same.
     check_kinds(&st).map_err(OpenError::UnknownKinds)?;
+    if bound(&st) != stored {
+        return Err(OpenError::Unreadable("the repair as the project opened changed a default-diagram binding".into()));
+    }
     // Only elements of one kind clash by name in one owner (AR-208); skills by their own rule.
     if let Some(problem) = st.first_problem_by(name_kind) {
         return Err(format!("the model does not hold together: {problem:?}").into());
@@ -317,5 +430,5 @@ pub fn session_from_rows_repaired(
     }
     let mut session = Session::with_view(registry, st, FIRST_COUNTER, archforge_engine::Options::default(), view());
     session.mark_saved().map_err(|e| e.to_string())?;
-    Ok(session)
+    Ok(Opened { session, problems })
 }
