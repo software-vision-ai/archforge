@@ -17,7 +17,10 @@ is taken over them in that order: a metamodel joins at the end, and the fingerpr
 goes to the project crate's `EARLIER_MODELS`, so a project of the earlier list is brought up to date.
 A project's database holds only the tables rows have gone to, so a notation's tables cost nothing
 until the project uses it. A session starts with `view()`, never the empty default view, which
-holds no notation and so knows no diagram kind.
+holds no notation and so knows no diagram kind. A model holding a diagram of a kind none of
+`NOTATIONS` knows, such as one an earlier version stored, is refused as it opens, with the typed
+`UnknownKinds` naming every such diagram and the kinds known, before anything is built from its
+rows; nothing in it is migrated, renamed or removed, and it is never shown under another kind.
 
 **Public API.**
 
@@ -30,4 +33,6 @@ holds no notation and so knows no diagram kind.
 | `storage` | every metamodel's tables and list tables, in the order of `PARTS` |
 | `registry`, `Session` | the edit area, the shared element commands, every notation's own, the diagrams' and the skills'; a project's session, `Session<Store, ProjectView>` |
 | `new_project_session` | a session with the project's Model root named `name`; the host supplies the ids |
-| `session_from_rows`, `session_from_rows_repaired` | a session rebuilt from a project's rows and checked (by `name_kind`), saved as it is; the second runs a repair on the store first |
+| `session_from_rows`, `session_from_rows_repaired` | a session rebuilt from a project's rows and checked (by `check_kinds_in_rows`, then `name_kind`), saved as it is; the second runs a repair on the store first; refused with an `OpenError` |
+| `OpenError` | why rows do not open: `UnknownKinds`, which callers match, or any other reason in English |
+| `check_kinds`, `check_kinds_in_rows`, `UnknownKinds`, `UnknownDiagram` | the diagrams of kinds no notation knows, in a store or in rows of any shape whose diagram table has its `id` and `kind` columns, read by name alone, so a host checks a project before it brings its tables up to date |

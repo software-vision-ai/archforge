@@ -1445,9 +1445,9 @@ impl Shell {
                         }
                         s
                     }),
-                    None => archforge_notations::new_project_session(&project.name, ids),
+                    None => archforge_notations::new_project_session(&project.name, ids).map_err(archforge_notations::OpenError::from),
                 }
-                .map_err(SessionError::Engine)
+                .map_err(|e| SessionError::Engine(e.to_string()))
             }
             None => Err(SessionError::NoIdSource),
         };
