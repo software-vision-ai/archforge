@@ -211,7 +211,8 @@ fn select<V: DiagramView>(ctx: &mut C<'_, V>, objs: Vec<Obj>) {
 
 /// `diagram.add`: a diagram of a kind a notation knows, named, of an element where its kind is; a
 /// kind that is no plain word or none the notations know, an element missing where the kind needs
-/// one, and one the kind cannot be of, refused with its reason typed.
+/// one, and one the kind cannot be of, refused with its reason typed. The element's first diagram
+/// of a kind its notation binds becomes its default in the same step (AR-579).
 fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let kind = str_of(p, "kind");
     check_kind("kind", kind, "kind")?;
@@ -225,12 +226,12 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     }
     let name = str_of(p, "name");
     check_text("name", name, MAX_NAME)?;
-    let element = if str_of(p, "element").is_empty() {
+    let (element, binds) = if str_of(p, "element").is_empty() {
         if ctx.view.needs_element(kind) {
             let none = Reason::IdEmpty { kind: "element" };
             return Err(refuse("element", format!("a {kind} diagram is of an element; name it")).because(none));
         }
-        None
+        (None, false)
     } else {
         let e = any_of(ctx.doc, p, "element")?;
         let class = ctx.doc.class_of(e).map_err(fail)?;
@@ -238,10 +239,10 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
             let said = format!("a {kind} diagram is not of a {}", class_name(ctx.doc, class).to_lowercase());
             return Err(refuse("element", said).because(Reason::NotA { kind: DIAGRAM_ELEMENT, name: name_or_id(ctx.doc, e) }));
         }
-        Some(e)
+        (Some(e), ctx.view.binds_default(kind, class))
     };
     let home = ctx.view.home(ctx.doc).map_err(CommandError::new)?;
-    let d = new_diagram(ctx.doc, kind, name, element, home).map_err(fail)?;
+    let d = crate::defaults::new_diagram_bound(ctx.doc, kind, name, element, home, binds).map_err(fail)?;
     ctx.view.set_open_diagram(Some(d));
     select(ctx, vec![d]);
     Ok(json!({ "id": uuid_of(ctx.doc, d)? }))

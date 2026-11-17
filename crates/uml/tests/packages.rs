@@ -394,7 +394,7 @@ fn count(s: &S, class: archforge_mof::ClassId) -> usize {
 
 /// A package moved changes its owner alone (Decision 26): shown on diagrams of two branches, it
 /// keeps every appearance under its id at its bounds, a note's link to one of them and the
-/// hand-made default bindings, its own included, and gains none on its new owner's diagram; one
+/// default bindings their first diagrams made, its own included, and gains none on its new owner's diagram; one
 /// undo step undone and redone exactly, the rows read back the same; moved back to the root alike
 /// (AR-567).
 #[test]
@@ -413,15 +413,8 @@ fn a_package_moved_keeps_its_appearances_their_links_and_the_bindings_and_gains_
     let note = run(&mut s, "diagram.note", json!({ "diagram": ops_d, "text": "Kept", "x": 0, "y": 300 }));
     let link = run(&mut s, "diagram.link-note", json!({ "diagram": ops_d, "note": note, "target": there }));
     run(&mut s, "diagram.place", json!({ "diagram": billing_d, "element": operations, "x": 0, "y": 0 }));
-    // The package moved, its old owner, its new one and Operations each bound to a diagram by hand.
-    let mut st = reread(&s);
-    let mut bind_at = |id: u8, owner: &String, target: &String| {
-        let (o, t) = (st.by_uuid(Uuid::parse(owner).unwrap()).unwrap(), st.by_uuid(Uuid::parse(target).unwrap()).unwrap());
-        (bind(&mut st, id, o, t), owner.clone(), target.clone())
-    };
-    let bindings =
-        [bind_at(0xb0, &orders, &orders_d), bind_at(0xb1, &sales, &sales_d), bind_at(0xb2, &billing, &billing_d), bind_at(0xb3, &operations, &ops_d)];
-    let mut s = over(st);
+    // The package moved, its old owner, its new one and Operations each bound to its one diagram.
+    let bindings = [made(&s, &orders, &orders_d), made(&s, &sales, &sales_d), made(&s, &billing, &billing_d), made(&s, &operations, &ops_d)];
     let kept = |s: &S| {
         bindings
             .iter()
@@ -553,8 +546,8 @@ fn a_package_card_names_at_most_its_nearest_owners() {
     assert_eq!((path[0].as_str(), path[255].as_str()), ("P44", "P299"), "the root and the farthest owners are left out");
 }
 
-/// `s`'s model read back from its rows into a store of its own, to make bindings in by hand, as no
-/// command makes one yet; its new ids counted far from those in use.
+/// `s`'s model read back from its rows into a store of its own, to change by hand what no command
+/// changes; its new ids counted far from those in use.
 fn reread(s: &S) -> Store {
     let (tables, junctions) = tables();
     let mut st = store(1 << 40);
@@ -571,6 +564,15 @@ fn bind(st: &mut Store, id: u8, owner: Obj, target: Obj) -> String {
     st.set(b, OWNER_ELEMENT, Value::Ref(owner)).unwrap();
     st.set(b, DEFAULT_DIAGRAM, Value::Ref(target)).unwrap();
     Uuid([id; 16]).to_string()
+}
+
+/// The one binding `diagram.add` made for `owner`'s first diagram, which it names, `target`:
+/// (binding, owner, target).
+fn made(s: &S, owner: &str, target: &str) -> (String, String, String) {
+    let [binding] = archforge_diagram::defaults::bindings_of(s.doc(), obj(s, owner))[..] else { panic!("{owner} has not one binding") };
+    let id = s.doc().uuid(binding).unwrap().to_string();
+    assert_eq!(refers(s, &id, DEFAULT_DIAGRAM), Some(obj(s, target)), "{owner}'s first diagram is its default");
+    (id, owner.to_string(), target.to_string())
 }
 
 /// What `prop` of the object under `id` refers to.
@@ -591,17 +593,11 @@ fn a_bound_package_removed_takes_its_binding_along_and_its_parent_keeps_its_own(
     let lines = run(&mut s, "uml.package.add", json!({ "name": "Lines", "parent": orders }));
     let root = archforge_uml::commands::root_package(s.doc()).map(|r| s.doc().uuid(r).unwrap().to_string()).unwrap();
     let mut diagram = |of: &str, name: &str| run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": of, "name": name }));
-    let (top, sales_d, overview, detail, lines_d) =
-        (diagram(&root, "Model"), diagram(&sales, "Sales"), diagram(&orders, "Orders"), diagram(&orders, "Order detail"), diagram(&lines, "Lines"));
-    // Each package bound to one of its diagrams: (binding, package, diagram).
-    let mut st = reread(&s);
-    let mut bind_at = |id: u8, owner: &String, target: &String| {
-        let (o, t) = (st.by_uuid(Uuid::parse(owner).unwrap()).unwrap(), st.by_uuid(Uuid::parse(target).unwrap()).unwrap());
-        (bind(&mut st, id, o, t), owner.clone(), target.clone())
-    };
-    let (b_root, b_sales) = (bind_at(0xb0, &root, &top), bind_at(0xb1, &sales, &sales_d));
-    let (b_orders, b_lines) = (bind_at(0xb2, &orders, &detail), bind_at(0xb3, &lines, &lines_d));
-    let mut s = over(st);
+    let (top, sales_d, detail, overview, lines_d) =
+        (diagram(&root, "Model"), diagram(&sales, "Sales"), diagram(&orders, "Order detail"), diagram(&orders, "Orders"), diagram(&lines, "Lines"));
+    // Each package bound to its first diagram: (binding, package, diagram).
+    let (b_root, b_sales) = (made(&s, &root, &top), made(&s, &sales, &sales_d));
+    let (b_orders, b_lines) = (made(&s, &orders, &detail), made(&s, &lines, &lines_d));
     let kept = |s: &S, (b, owner, target): &(String, String, String)| {
         alive(s, b) && refers(s, b, OWNER_ELEMENT) == Some(obj(s, owner)) && refers(s, b, DEFAULT_DIAGRAM) == Some(obj(s, target))
     };

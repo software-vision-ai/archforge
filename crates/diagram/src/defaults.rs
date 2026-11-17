@@ -1,10 +1,11 @@
 //! The default-diagram bindings a store holds, read without judging them: which name an element
 //! as their owner and which name a diagram as its default. What a binding may name, and what is
 //! wrong with one, is the notation's to say (UML's `defaults`). A diagram a binding names stays
-//! until that binding goes or names another (AR-578).
+//! until that binding goes or names another (AR-578). A notation that binds one names an
+//! element's first diagram its default as the diagram is made (AR-579).
 
 use archforge_engine::{BindingFault, CommandError, Reason};
-use archforge_mof::{Invalid, Obj, PropId, Store};
+use archforge_mof::{Invalid, Obj, PropId, Store, Value};
 
 use crate::commands::name_or_id;
 use crate::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
@@ -18,6 +19,41 @@ pub fn bindings_of(store: &Store, owner: Obj) -> Vec<Obj> {
 /// The bindings whose `defaultDiagram` is `diagram`, in handle order.
 pub fn bindings_to(store: &Store, diagram: Obj) -> Vec<Obj> {
     referring(store, diagram, DEFAULT_DIAGRAM)
+}
+
+/// Whether a diagram of `kind` made now of `element` is its first, which a notation that binds
+/// one names its default ([`crate::Notation::binds_default`]): `element` has no diagram of `kind`
+/// and no binding yet. One with diagrams of `kind` but no binding stays without one, its default
+/// diagnosed as missing rather than bound silently (AR-579).
+pub fn is_first(store: &Store, kind: &str, element: Obj) -> bool {
+    let of_kind = |d: &Obj| store.get(*d, crate::diagram::KIND).ok().and_then(|v| v.as_str().map(|k| k == kind)).unwrap_or(false);
+    bindings_of(store, element).is_empty() && !crate::views_of(store, element).0.iter().any(of_kind)
+}
+
+/// A new diagram as [`crate::commands::new_diagram`] makes it and, when `binds` and it is the
+/// first of `element` ([`is_first`]), a binding naming it `element`'s default, put beside it in
+/// `home`: one change, so the diagram and its binding come, and are taken back, together.
+pub fn new_diagram_bound(
+    store: &mut Store,
+    kind: &str,
+    name: &str,
+    element: Option<Obj>,
+    home: Option<(Obj, PropId)>,
+    binds: bool,
+) -> Result<Obj, Invalid> {
+    let first = element.filter(|e| binds && is_first(store, kind, *e));
+    store.transaction(|st| {
+        let d = crate::commands::new_diagram(st, kind, name, element, home)?;
+        if let Some(owner) = first {
+            let binding = st.create(crate::DEFAULT_DIAGRAM_BINDING)?;
+            st.set(binding, OWNER_ELEMENT, Value::Ref(owner))?;
+            st.set(binding, DEFAULT_DIAGRAM, Value::Ref(d))?;
+            if let Some((container, prop)) = home {
+                st.push(container, prop, Value::Ref(binding))?;
+            }
+        }
+        Ok(d)
+    })
 }
 
 /// Every live binding in the store, in handle order, whatever its ends hold.

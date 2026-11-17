@@ -39,6 +39,12 @@ pub trait Notation: Send + Sync + 'static {
         let _ = (kind, class);
         false
     }
+    /// Whether the first diagram of `kind` of an element of `class` becomes that element's default
+    /// as it is made, a binding naming it (Decision 10, AR-579). None does by default.
+    fn binds_default(&self, kind: &str, class: ClassId) -> bool {
+        let _ = (kind, class);
+        false
+    }
     /// Whether a diagram of `kind` shows elements of `class` as nodes.
     fn shows(&self, kind: &str, class: ClassId) -> bool {
         let _ = (kind, class);
@@ -239,6 +245,11 @@ impl DiagramView for ProjectView {
 
     fn needs_element(&self, kind: &str) -> bool {
         self.of_kind(kind).is_some_and(|n| n.needs_element(kind))
+    }
+
+    /// As the notation whose diagrams are of `kind` says; none for a kind no notation has.
+    fn binds_default(&self, kind: &str, class: ClassId) -> bool {
+        self.of_kind(kind).is_some_and(|n| n.binds_default(kind, class))
     }
 
     fn shows(&self, kind: &str, class: ClassId) -> bool {

@@ -1,10 +1,11 @@
 //! A package's default diagram through its binding (AR-575): each state built by hand in a store
-//! under fixed ids, as no command makes a binding yet: bound, none yet, missing, duplicate, a dead,
-//! a wrong-kind and a foreign target, a profile, and every problem of a store in a stable order.
+//! under fixed ids: bound, none yet, missing, duplicate, a dead, a wrong-kind and a foreign target,
+//! a profile, and every problem of a store in a stable order.
 //! Each state read through `uml.package.default.get`, on the revision its caller read, as a
 //! read-only tool that leaves no undo step (AR-576). A diagram a binding names stays: removing it,
 //! or an element of another one's, is refused typed with nothing changed (AR-578), an association
-//! class's that goes with its end among them.
+//! class's that goes with its end among them. A package's first class diagram is bound as its
+//! default as it is made, and only that one (AR-579).
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
@@ -469,4 +470,86 @@ fn a_binding_keeps_the_diagram_of_an_association_class_going_with_its_end() {
     let (key, reason, said) = refused(&mut s, "element.remove", json!({ "ids": [order] }));
     let wrong = Reason::DefaultDiagramOf { package: id(0x20).into(), fault: Some(BindingFault::WrongOwner) };
     assert_eq!((key.as_deref(), reason), (Some("ids"), Some(wrong)), "{said}");
+}
+
+/// The id `cmd` given `p` answers with, as it made something.
+fn made(s: &mut S, cmd: &str, p: Json) -> String {
+    s.execute(cmd, &p).unwrap_or_else(|e| panic!("{cmd} {p}: {e}")).value["id"].as_str().unwrap().to_string()
+}
+
+/// The object the id `id` names in the session's store.
+fn at(s: &S, id: &str) -> Obj {
+    s.doc().by_uuid(Uuid::parse(id).unwrap()).unwrap()
+}
+
+/// A package's first class diagram is its default from the start: `diagram.add` and
+/// `uml.package.diagram` alike make the binding with it, a member of the project's Model naming
+/// the package and the diagram, which `uml.package.default.get` reads back. One undo step takes the
+/// diagram and its binding back together, and redo brings both back under their ids, as do the
+/// project's rows read back (AR-579).
+#[test]
+fn a_packages_first_class_diagram_is_bound_as_its_default_in_the_same_step() {
+    let mut s = over(store().0);
+    let model = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    for (cmd, name) in [("diagram.add", "Sales"), ("uml.package.diagram", "Billing")] {
+        let package = made(&mut s, "uml.package.add", json!({ "name": name }));
+        let p = if cmd == "diagram.add" { json!({ "kind": STRUCTURE_DIAGRAM, "element": package }) } else { json!({ "package": package }) };
+        let before = rows_of(s.doc());
+        let d = made(&mut s, cmd, p);
+        let st = s.doc();
+        let [binding] = archforge_diagram::defaults::bindings_of(st, at(&s, &package))[..] else { panic!("{cmd}: not one binding") };
+        assert_eq!(st.container(binding).unwrap(), Some((model, archforge_core::model::MEMBER)), "{cmd}: a member of the Model");
+        assert_eq!(resolve(st, at(&s, &package)), Ok(DefaultDiagram::Bound(at(&s, &d))), "{cmd}");
+        let binding = st.uuid(binding).unwrap().to_string();
+        let answer = s.execute(GET, &json!({ "package": package })).unwrap().value;
+        assert_eq!(answer, json!({ "package": package, "state": "bound", "binding": binding, "diagram": d }), "{cmd}");
+        let after = rows_of(s.doc());
+        s.undo().unwrap();
+        assert!(rows_of(s.doc()) == before, "{cmd}: one undo step takes the diagram and its binding back");
+        s.redo().unwrap();
+        assert!(rows_of(s.doc()) == after, "{cmd}: redo brings both back under their ids");
+        // Saved and read back: the binding under its id, still naming both by theirs.
+        let mut back = bare();
+        rows::restore(&mut back, &after, &tables().0, &tables().1).unwrap();
+        let again = back.by_uuid(Uuid::parse(&binding).unwrap()).expect("the binding keeps its id");
+        assert_eq!(
+            resolve(&back, back.by_uuid(Uuid::parse(&package).unwrap()).unwrap()),
+            Ok(DefaultDiagram::Bound(back.by_uuid(Uuid::parse(&d).unwrap()).unwrap()))
+        );
+        assert!(back.container(again).unwrap().is_some() && rows_of(&back) == after, "{cmd}: a member still, the rows as written");
+    }
+}
+
+/// Only a package's first class diagram is bound: a second leaves its default as it was, a
+/// profile's diagram binds nothing whether `diagram.add` or `uml.profile.diagram` makes it, a
+/// package with class diagrams but no binding stays without one, its default still missing rather
+/// than bound silently, and one that has a binding already gets no second (AR-579).
+#[test]
+fn a_second_diagram_a_profiles_or_one_of_a_package_without_a_binding_binds_nothing() {
+    let mut s = over(store().0);
+    let sales = made(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let first = made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales }));
+    let binding = archforge_diagram::defaults::bindings(s.doc());
+    made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales, "name": "Second" }));
+    assert_eq!(s.execute("uml.package.diagram", &json!({ "package": sales })).unwrap().value["id"], first.as_str(), "the first is entered");
+    assert_eq!(resolve(s.doc(), at(&s, &sales)), Ok(DefaultDiagram::Bound(at(&s, &first))), "the second does not take over");
+    let persistence = made(&mut s, "uml.profile.add", json!({ "name": "Persistence" }));
+    made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": persistence }));
+    let audit = made(&mut s, "uml.profile.add", json!({ "name": "Audit" }));
+    made(&mut s, "uml.profile.diagram", json!({ "profile": audit }));
+    assert_eq!(archforge_diagram::defaults::bindings(s.doc()), binding, "Sales's binding alone");
+    assert_eq!(resolve(s.doc(), at(&s, &persistence)), Ok(DefaultDiagram::DoesNotApply));
+    // A package whose class diagram came without a binding, as one made before bindings existed,
+    // and one with no diagram but a binding naming another's, which a second would duplicate.
+    let (mut st, model) = store();
+    let orders = add(&mut st, model, PACKAGE, 0x30);
+    let unbound = diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, orders);
+    let billing = add(&mut st, model, PACKAGE, 0x40);
+    let foreign = bind(&mut st, model, 0x41, billing, unbound);
+    let mut s = over(st);
+    made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": id(0x30) }));
+    made(&mut s, "uml.package.diagram", json!({ "package": id(0x30) }));
+    made(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": id(0x40) }));
+    assert_eq!(archforge_diagram::defaults::bindings(s.doc()), [foreign], "nothing bound silently");
+    assert_eq!(resolve(s.doc(), orders), Err(BindingProblem::Missing));
 }

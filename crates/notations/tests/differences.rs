@@ -711,18 +711,23 @@ fn an_unknown_element_is_none_and_an_unreadable_side_is_named() {
     assert!(matches!(element_sides(&good, &Rows::default(), id, |_| {}), Err(ClassifyError::Unreadable { side: "after", .. })));
 }
 
-/// The id a test gives a package's default-diagram binding, which no session makes.
+/// The id a test gives a package's default-diagram binding in place of the one its session made.
 const BINDING: Uuid = Uuid([0xb1; 16]);
 
 /// A project with a UML package Sales and its two diagrams, Sales overview and Sales detail, and
-/// the rows before and after a binding names the overview the package's default: (rows without,
-/// rows with, the package, the overview, the detail). No command makes a binding yet (AR-396).
+/// the rows before and after a binding under [`BINDING`] names the overview the package's default:
+/// (rows without, rows with, the package, the overview, the detail).
 fn bound_project() -> (Rows, Rows, String, String, String) {
     let mut s = new_project_session("Commerce", ids()).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let overview = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales overview" }));
     let detail = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales detail" }));
-    let without = state(&s);
+    // Without the binding the overview was made with (AR-579), to bind it under a fixed id.
+    let without = edited(&state(&s), |st| {
+        for made in archforge_diagram::defaults::bindings(st) {
+            st.destroy(made).unwrap();
+        }
+    });
     let with = edited(&without, |st| {
         use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
         let (package, diagram) = (st.by_uuid(uuid(&sales)).unwrap(), st.by_uuid(uuid(&overview)).unwrap());
@@ -745,6 +750,23 @@ fn retargeted(rows: &Rows, diagram: &str) -> Rows {
         let to = st.by_uuid(uuid(diagram)).unwrap();
         st.set(st.by_uuid(BINDING).unwrap(), archforge_diagram::default_diagram_binding::DEFAULT_DIAGRAM, Value::Ref(to)).unwrap();
     })
+}
+
+/// A package's first class diagram comes with its binding: the project before and after
+/// `diagram.add` differ by the diagram and by the binding added as a model element, worded
+/// package → diagram (AR-579).
+#[test]
+fn a_first_diagram_comes_with_its_binding_added() {
+    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let before = state(&s);
+    let overview = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales overview" }));
+    let [binding] = archforge_diagram::defaults::bindings(s.doc())[..] else { panic!("the first diagram is bound") };
+    let found = differences(&before, &state(&s));
+    let binding = about(&found, &s.doc().uuid(binding).unwrap().to_string());
+    assert_eq!((binding.class, binding.area), (archforge_diagram::DEFAULT_DIAGRAM_BINDING, Area::Model));
+    assert_eq!(told(binding), (ChangeKind::Added, Some("Sales → Sales overview"), vec!["Commerce"]));
+    assert_eq!(about(&found, &overview).kind, ChangeKind::Added, "{found:?}");
 }
 
 /// A package's default diagram is a fact of the model: a binding that names another diagram is one

@@ -14419,6 +14419,33 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     assert_eq!(st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), 1);
 }
 
+/// The class diagram New diagram makes first is its package's default, bound as an agent's
+/// `diagram.add` binds it: `uml.package.default.get` answers it, and a second made the same way
+/// leaves the default where it was (AR-579). In both appearances.
+#[test]
+fn the_first_class_diagram_new_diagram_makes_is_its_packages_default() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let mut made = |name: &str| {
+            for id in ["workspace.tabs.add", "workspace.new-diagram.type.uml.class", "workspace.new-diagram.continue"] {
+                let at = rect_of(&h, id).center();
+                click(&mut h, at);
+            }
+            h.state_mut().diagrams.new.as_mut().expect("the dialog is open").name = name.into();
+            let at = rect_of(&h, "workspace.new-diagram.create").center();
+            click(&mut h, at);
+            h.state().canvas.active.expect("the new diagram is open")
+        };
+        let (first, second) = (made("Domain"), made("Detail"));
+        assert_ne!(first, second, "{theme:?}");
+        let session = h.state_mut().session.as_mut().unwrap();
+        let root = archforge_uml::commands::root_package(session.doc()).map(|r| session.doc().uuid(r).unwrap().to_string()).unwrap();
+        let answer = session.execute("uml.package.default.get", &serde_json::json!({ "package": root })).unwrap().value;
+        assert_eq!((answer["state"].as_str(), answer["diagram"].as_str()), (Some("bound"), Some(first.to_string().as_str())), "{theme:?}");
+        assert_eq!(archforge_diagram::defaults::bindings(session.doc()).len(), 1, "{theme:?}: the second binds nothing");
+    }
+}
+
 #[test]
 fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes_one_too() {
     let (mut h, _customer, er_diagram) = diagram_harness();
