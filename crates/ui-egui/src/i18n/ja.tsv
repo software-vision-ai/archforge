@@ -779,6 +779,9 @@ str		The package's default diagram is not a class diagram. Choose one of its cla
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	このパッケージの既定の図は別の要素のものです。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	この図は {package} の既定の図です。先に別のクラス図を {package} の既定の図として選んでください。
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} は別の要素の図を既定の図にしているため、その図は残ります。先に {package} 自身のクラス図のいずれかを選んでください。
+str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	図は削除されるときに自分自身を置き換えることはできません。置き換える図として別の図を選んでください。
+str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} は既定の図ではないため、置き換えなしで削除されます。
+str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} は {package} の同じ種類の別の図ではないため、削除する図を置き換えられません。
 str		No package is given. Give its id.	パッケージが指定されていません。その ID を指定してください。
 str		{name} is not a package.	{name} はパッケージではありません。
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} は {package} のクラス図ではありません。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
