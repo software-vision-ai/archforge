@@ -3053,6 +3053,7 @@ fn a_cards_height_is_where_the_canvas_ends_its_last_place() {
         slanted: false,
         braces: None,
         template: Vec::new(),
+        owner_path: Vec::new(),
     };
     for compartments in [vec![], vec![vec![]], vec![vec![row()]], vec![vec![], vec![]], vec![vec![row(), row()], vec![], vec![row(); 3]]] {
         let c = card(compartments);

@@ -85,6 +85,7 @@ pub fn card(store: &Store, table: Obj, diagram: Obj) -> Option<Card> {
         slanted: false,
         braces: None,
         template: Vec::new(),
+        owner_path: Vec::new(),
     })
 }
 
