@@ -777,6 +777,8 @@ str		The package has more than one default diagram. Choose the one of its class 
 str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets existiert nicht mehr. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
 str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets ist kein Klassendiagramm. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Das Standarddiagramm des Pakets gehört zu einem anderen Element. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Dieses Diagramm ist das Standarddiagramm von {package}. Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von {package}.
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. Wählen Sie zuerst eines seiner eigenen Klassendiagramme.
 str		This could not be done because of an internal error. Nothing was changed.	Dies war wegen eines internen Fehlers nicht möglich. Es wurde nichts geändert.
 str		The text can't be empty.	Der Text darf nicht leer sein.
 str		It can't be longer than {max} characters.	Höchstens {max} Zeichen sind möglich.

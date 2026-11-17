@@ -6668,8 +6668,9 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// unknown command, a parameter refused and an internal error as one sentence that repeats no
 /// engine text. In light and dark (AR-440). A change made for another revision of the model, or for
 /// none, is said in its sentence too (AR-574), as is each way a package's default diagram binding
-/// can be unsound, with the choice that mends it (AR-576), and each package move or rename the root
-/// package or the package Types refuses (AR-563).
+/// can be unsound, with the choice that mends it (AR-576), and a diagram a package's binding keeps,
+/// its own default or another element's diagram, with the package named (AR-578). Each package move
+/// or rename the root package or the package Types refuses is said in its own sentence (AR-563).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -6726,6 +6727,17 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         distinct.dedup();
         assert_eq!(distinct.len(), 5, "{theme:?}: each fault its own sentence {unsound:?}");
         assert!(unsound.iter().all(|s| s.contains("Standarddiagramm")), "{theme:?}: {unsound:?}");
+        let kept = |fault| {
+            let reason = archforge_engine::Reason::DefaultDiagramOf { package: "Vertrieb".into(), fault };
+            let error = archforge_engine::CommandError::about("diagram", "kept").because(reason);
+            crate::panels::refusal(&EngineError::Failed { id: "diagram.remove".into(), error })
+        };
+        let own = "Dieses Diagramm ist das Standarddiagramm von Vertrieb. \
+                   Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von Vertrieb.";
+        assert_eq!(kept(None), own, "{theme:?}");
+        let foreign = "Vertrieb hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. \
+                       Wählen Sie zuerst eines seiner eigenen Klassendiagramme.";
+        assert_eq!(kept(Some(WrongOwner)), foreign, "{theme:?}");
         // A package move or rename the root package or the package Types refuses, each its own sentence.
         use archforge_engine::Reason::{HoldsBuiltInName, RootPackageStays, TypesPackageExists, TypesPackageKept};
         let held = HoldsBuiltInName { kind: "class", name: "String".into() };

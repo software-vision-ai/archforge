@@ -484,6 +484,11 @@ pub enum Reason {
     /// A package's default diagram cannot be read, as its default-diagram binding is unsound in
     /// the way the fault names; one of the package's own diagrams has to be chosen as its default.
     InvalidBinding(BindingFault),
+    /// The diagram stays while the default-diagram binding of `package` (its name, or its id when
+    /// it has none) names it: with no fault, it is that package's own default, which another has to
+    /// replace first; with [`BindingFault::WrongOwner`], it is another element's diagram, which the
+    /// binding names unsoundly, so a diagram of the package's own has to be chosen first (AR-578).
+    DefaultDiagramOf { package: Box<str>, fault: Option<BindingFault> },
 }
 
 /// What is wrong with a package's default-diagram binding, in a [`Reason::InvalidBinding`].

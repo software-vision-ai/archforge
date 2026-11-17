@@ -282,8 +282,13 @@ fn diagram_rename<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
 }
 
+/// `diagram.remove`: a diagram removed with what is on it; one a default-diagram binding names
+/// is refused typed before anything changes, until another default is chosen (AR-578).
 fn diagram_remove<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
+    if let Some(refused) = crate::defaults::diagram_removal_problem(ctx.doc, d, "diagram", |_| false) {
+        return Err(refused);
+    }
     let gone = archforge_core::destroy_with_links(ctx.doc, d).map_err(fail)?;
     Ok(json!({ "removed": gone }))
 }

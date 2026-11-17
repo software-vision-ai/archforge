@@ -776,6 +776,8 @@ str		The package has more than one default diagram. Choose the one of its class 
 str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.
 str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.
 str		This could not be done because of an internal error. Nothing was changed.	This could not be done because of an internal error. Nothing was changed.
 str		The text can't be empty.	The text can't be empty.
 str		It can't be longer than {max} characters.	It can't be longer than {max} characters.

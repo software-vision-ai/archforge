@@ -777,6 +777,8 @@ str		The package has more than one default diagram. Choose the one of its class 
 str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	Le diagramme par défaut du paquetage n’existe plus. Choisissez l’un de ses diagrammes de classes comme diagramme par défaut.
 str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	Le diagramme par défaut du paquetage n’est pas un diagramme de classes. Choisissez l’un de ses diagrammes de classes comme diagramme par défaut.
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Le diagramme par défaut du paquetage appartient à un autre élément. Choisissez l’un de ses propres diagrammes de classes comme diagramme par défaut.
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Ce diagramme est le diagramme par défaut de {package}. Choisissez d’abord un autre diagramme de classes comme diagramme par défaut de {package}.
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} a pour diagramme par défaut le diagramme d’un autre élément, ce diagramme reste donc. Choisissez d’abord l’un de ses propres diagrammes de classes.
 str		This could not be done because of an internal error. Nothing was changed.	Cela n’a pas pu être fait à cause d’une erreur interne. Rien n’a été modifié.
 str		The text can't be empty.	Le texte ne peut pas être vide.
 str		It can't be longer than {max} characters.	{max} caractères au maximum.
