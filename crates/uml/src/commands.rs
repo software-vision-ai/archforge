@@ -747,7 +747,8 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// data type or an association class its attributes and operations, an association its ends) and the
 /// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
 /// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
-/// top-level package takes them along. A classifier takes the relationships that touch it along,
+/// top-level package takes them along. Either takes its default-diagram binding along, with no
+/// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). A classifier takes the relationships that touch it along,
 /// and an association class among them takes its own ([`going_with`]); a member's type that goes is
 /// dropped from what had it, and so is a default that is a literal that goes (AR-126), as the
 /// property's own type would be. An element a constraint names leaves the constraint's elements, and

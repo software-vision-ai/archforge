@@ -1,17 +1,26 @@
 //! Packages through the engine: nested as deep as needed, names told apart among
 //! siblings, classes and packages moved, a nested package removed handing its contents and
 //! diagrams up to its parent (owner decision, for every notation), a top-level one taking them
-//! along, and a class of another package drawn as an outsider; each one undo step; the sweep.
+//! along, either taking its default-diagram bindings along (AR-577), and a class of another package
+//! drawn as an outsider; each one undo step; the sweep.
 
-use archforge_diagram::ProjectView;
+use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
+use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
-use archforge_mof::{CompositeSlabs, Store, Uuid, Value};
-use archforge_uml::{ALONE, registry};
+use archforge_mof::{CompositeSlabs, Obj, PropId, Store, Uuid, Value};
+use archforge_uml::defaults::problems;
+use archforge_uml::{ALONE, PACKAGE, STRUCTURE_DIAGRAM, registry};
 use serde_json::{Value as Json, json};
 type S = Session<Store, ProjectView>;
+/// A session over a store holding only the project's Model.
 fn session() -> S {
-    let mut n: u64 = 0;
+    let mut st = store(0);
+    st.create(archforge_core::MODEL).unwrap();
+    over(st)
+}
+/// An empty store of the core, the diagrams and UML, its new ids counted on from `n`.
+fn store(mut n: u64) -> Store {
     let ids = Box::new(move || {
         n += 1;
         let mut r = [0u8; 10];
@@ -27,8 +36,10 @@ fn session() -> S {
             .unwrap(),
     )
     .unwrap();
-    let mut st = Store::new(universe, Box::new(slabs), ids);
-    st.create(archforge_core::MODEL).unwrap();
+    Store::new(universe, Box::new(slabs), ids)
+}
+/// A session over `st`.
+fn over(st: Store) -> S {
     Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE))
 }
 fn run(s: &mut S, cmd: &str, p: Json) -> String {
@@ -307,4 +318,111 @@ fn a_package_card_builds_no_rows_however_much_it_holds() {
     let card = archforge_diagram::Notation::card(&archforge_uml::UmlNotation, s.doc(), obj(&s, &crowded), obj(&s, &d)).unwrap();
     // Its card shows its own diagram in small instead (AR-113): nothing listed, nothing counted.
     assert_eq!((card.compartments.len(), card.hidden, card.name.as_str()), (0, 0, "Crowded"));
+}
+
+/// `s`'s model read back from its rows into a store of its own, to make bindings in by hand, as no
+/// command makes one yet; its new ids counted far from those in use.
+fn reread(s: &S) -> Store {
+    let (tables, junctions) = tables();
+    let mut st = store(1 << 40);
+    archforge_mof::rows::restore(&mut st, &archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap(), &tables, &junctions).unwrap();
+    st
+}
+
+/// A binding under the id `[id; 16]`, a member of the Model, naming `target` the default diagram
+/// of `owner`; gives its id.
+fn bind(st: &mut Store, id: u8, owner: Obj, target: Obj) -> String {
+    let model = archforge_uml::commands::model(st).unwrap();
+    let b = st.create_with_uuid(DEFAULT_DIAGRAM_BINDING, Uuid([id; 16])).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(b)).unwrap();
+    st.set(b, OWNER_ELEMENT, Value::Ref(owner)).unwrap();
+    st.set(b, DEFAULT_DIAGRAM, Value::Ref(target)).unwrap();
+    Uuid([id; 16]).to_string()
+}
+
+/// What `prop` of the object under `id` refers to.
+fn refers(s: &S, id: &str, prop: PropId) -> Option<Obj> {
+    s.doc().get(obj(s, id), prop).unwrap().as_ref()
+}
+
+/// A bound package removed takes its binding along (AR-577), as one undo step that brings the
+/// package, its diagrams and its binding back under their ids. Nested, it hands its diagrams up and
+/// its parent's binding stays as it was, as does that of the package it hands up; held by the root,
+/// it hands them up to the root alike. A diagram that is no default goes alone. No binding problem
+/// at any point.
+#[test]
+fn a_bound_package_removed_takes_its_binding_along_and_its_parent_keeps_its_own() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let lines = run(&mut s, "uml.package.add", json!({ "name": "Lines", "parent": orders }));
+    let root = archforge_uml::commands::root_package(s.doc()).map(|r| s.doc().uuid(r).unwrap().to_string()).unwrap();
+    let mut diagram = |of: &str, name: &str| run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": of, "name": name }));
+    let (top, sales_d, overview, detail, lines_d) =
+        (diagram(&root, "Model"), diagram(&sales, "Sales"), diagram(&orders, "Orders"), diagram(&orders, "Order detail"), diagram(&lines, "Lines"));
+    // Each package bound to one of its diagrams: (binding, package, diagram).
+    let mut st = reread(&s);
+    let mut bind_at = |id: u8, owner: &String, target: &String| {
+        let (o, t) = (st.by_uuid(Uuid::parse(owner).unwrap()).unwrap(), st.by_uuid(Uuid::parse(target).unwrap()).unwrap());
+        (bind(&mut st, id, o, t), owner.clone(), target.clone())
+    };
+    let (b_root, b_sales) = (bind_at(0xb0, &root, &top), bind_at(0xb1, &sales, &sales_d));
+    let (b_orders, b_lines) = (bind_at(0xb2, &orders, &detail), bind_at(0xb3, &lines, &lines_d));
+    let mut s = over(st);
+    let kept = |s: &S, (b, owner, target): &(String, String, String)| {
+        alive(s, b) && refers(s, b, OWNER_ELEMENT) == Some(obj(s, owner)) && refers(s, b, DEFAULT_DIAGRAM) == Some(obj(s, target))
+    };
+    assert_eq!(problems(s.doc()), []);
+    // A diagram that is no default goes alone.
+    round_trip(&mut s, "diagram.remove", json!({ "diagram": overview }));
+    assert!(!alive(&s, &overview) && kept(&s, &b_orders));
+    // Orders goes with its binding; its diagram and Lines move up into Sales, their bindings kept.
+    round_trip(&mut s, "element.remove", json!({ "ids": [orders] }));
+    assert!(!alive(&s, &orders) && !alive(&s, &b_orders.0), "its binding goes with it");
+    assert_eq!(refers(&s, &detail, archforge_diagram::diagram::ELEMENT), Some(obj(&s, &sales)), "its diagram is handed up");
+    assert!([&b_root, &b_sales, &b_lines].into_iter().all(|b| kept(&s, b)), "the others stay as they were");
+    assert_eq!(problems(s.doc()), []);
+    // One undo step brings the package, its diagram and its binding back, under their ids.
+    s.undo().unwrap();
+    assert!(kept(&s, &b_orders) && refers(&s, &detail, archforge_diagram::diagram::ELEMENT) == Some(obj(&s, &orders)));
+    assert_eq!(problems(s.doc()), []);
+    s.redo().unwrap();
+    // Sales, held by the root, hands up to the root in turn, whose binding stays.
+    round_trip(&mut s, "element.remove", json!({ "ids": [sales] }));
+    assert!(!alive(&s, &sales) && !alive(&s, &b_sales.0) && alive(&s, &sales_d) && alive(&s, &detail));
+    assert!(kept(&s, &b_root) && kept(&s, &b_lines));
+    assert_eq!(problems(s.doc()), []);
+}
+
+/// A bound package with no parent removed takes its diagrams along, and with them its binding and
+/// that of the package it holds (AR-577): never refused, as one undo step that brings all back.
+#[test]
+fn a_package_with_no_parent_takes_its_diagrams_and_every_binding_in_it_along() {
+    let mut st = store(0);
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let member = |st: &mut Store, class, id: u8| {
+        let o = st.create_with_uuid(class, Uuid([id; 16])).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(o)).unwrap();
+        o
+    };
+    let outer = member(&mut st, PACKAGE, 0x10);
+    let inner = st.create_with_uuid(PACKAGE, Uuid([0x20; 16])).unwrap();
+    st.push(outer, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(inner)).unwrap();
+    for (package, id) in [(outer, 0x11), (inner, 0x21)] {
+        let d = member(&mut st, DIAGRAM, id);
+        DiagramObj::set_kind(&mut st, d, Some(STRUCTURE_DIAGRAM)).unwrap();
+        DiagramObj::set_element(&mut st, d, Some(package)).unwrap();
+        bind(&mut st, id + 1, package, d);
+    }
+    let mut s = over(st);
+    let ids: Vec<String> = [0x10, 0x11, 0x12, 0x20, 0x21, 0x22].map(|n| Uuid([n; 16]).to_string()).into();
+    assert!(parent_of(&s, &ids[0]).is_none() && problems(s.doc()).is_empty());
+    round_trip(&mut s, "element.remove", json!({ "ids": [ids[0]] }));
+    assert!(ids.iter().all(|id| !alive(&s, id)), "the packages, their diagrams and their bindings go");
+    assert_eq!(problems(s.doc()), []);
+    s.undo().unwrap();
+    assert!(ids.iter().all(|id| alive(&s, id)));
+    assert_eq!(refers(&s, &ids[5], OWNER_ELEMENT), Some(obj(&s, &ids[3])));
+    assert_eq!(refers(&s, &ids[5], DEFAULT_DIAGRAM), Some(obj(&s, &ids[4])));
+    assert_eq!(problems(s.doc()), []);
 }

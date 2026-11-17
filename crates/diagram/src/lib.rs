@@ -192,11 +192,12 @@ pub fn views_of(store: &Store, element: Obj) -> (Vec<Obj>, Vec<Obj>, Vec<Obj>) {
     (diagrams, edges, nodes)
 }
 
-/// Removes every view of `element` and of everything it contains: the diagrams of them, the edges
-/// that show them, the nodes that show them with the edges on those nodes. A notation calls it
-/// before it destroys a model element, so no node stays behind showing nothing (the MOF core alone
-/// would drop the optional reference and leave the shape). All or nothing; gives how many objects
-/// went.
+/// Removes every view of `element` and of everything it contains: the default-diagram bindings
+/// they own, with no replacement (AR-577), then the diagrams of them, the edges that show them,
+/// the nodes that show them with the edges on those nodes. A notation calls it before it destroys
+/// a model element, so no node stays behind showing nothing (the MOF core alone would drop the
+/// optional reference and leave the shape) and no binding keeps the store from destroying the
+/// element or its diagrams. All or nothing; gives how many objects went.
 pub fn remove_views_of(store: &mut Store, element: Obj) -> Result<usize, Invalid> {
     let mut elements = Vec::new();
     let mut stack = vec![element];
@@ -208,8 +209,9 @@ pub fn remove_views_of(store: &mut Store, element: Obj) -> Result<usize, Invalid
         elements.push(o);
         stack.extend(store.owned_elements(o)?);
     }
-    let (mut diagrams, mut edges, mut nodes) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut bindings, mut diagrams, mut edges, mut nodes) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for e in elements {
+        bindings.extend(defaults::bindings_of(store, e));
         let (d, ed, n) = views_of(store, e);
         diagrams.extend(d);
         edges.extend(ed);
@@ -217,6 +219,9 @@ pub fn remove_views_of(store: &mut Store, element: Obj) -> Result<usize, Invalid
     }
     store.transaction(|st| {
         let mut gone = 0;
+        for b in bindings {
+            gone += st.destroy(b)?;
+        }
         for d in diagrams {
             if st.is_alive(d) {
                 gone += archforge_core::destroy_with_links(st, d)?;

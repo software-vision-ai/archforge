@@ -178,6 +178,8 @@ but no binding), `Duplicate`, `DeadTarget`, `WrongKind` (no structure diagram) o
 (another element's diagram, or a binding of something that is no package). It never falls back to
 the first diagram found and changes nothing. `defaults::problems` lists every problem in a store as
 a `Diagnosis`, ordered by the owner's id and then the binding's. No command uses it yet (AR-396).
+Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
+diagrams up and its parent's binding stays; a top-level one takes the bindings of what it holds too.
 
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.
@@ -192,7 +194,9 @@ the million-object test (release only). `tests/defaults.rs` (AR-575): each
 state of a package's default built by hand under fixed ids: bound to a diagram that is not the first
 made, none yet, missing, duplicate, a wrong-kind and a foreign target, a dead target read from
 rows (a dangling id refused as they are read), a profile; a store's problems in id order, the same
-read back. `tests/skills.rs`: skills on a package, a class, an
+read back. `tests/packages.rs` (AR-577): bound packages removed nested, under the root and with no
+parent, each one undo step bringing the bindings back under their ids; a diagram that is no default
+removed alone. `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and
