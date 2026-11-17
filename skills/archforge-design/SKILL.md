@@ -714,12 +714,13 @@ What is UML's own, beside the shared rules above.
   left (root to here, ancestors as buttons) and ⌘↑ go back to the parent as it was left. One level
   per gesture: a switch waits for the zoom to rest 0.3 s and for 0.6 s to pass since the last; a
   switch fades in over 0.2 s. A double click renames, never navigates.
-- A package moves (AR-102) by dragging its card onto another package's card (ringed, with a
-  "Move … into …" tag while held) or onto an ancestor in the path bar, its row in Models onto
-  another package's, or Properties' Parent package (the keyboard's way; never itself or one it
-  holds). It goes with what it holds and its own diagram, onto its new home's diagram, its card
-  leaving diagrams of a package that no longer holds it; one undo step, with a toast offering Undo.
-  Into itself or a package it holds is refused with the reason; Models rings such a row in amber.
+- A package moves (AR-102) by its row in Models onto another package's, or Properties' Parent
+  package (the keyboard's way; never itself or one it holds). It goes with what it holds and its
+  own diagram, onto its new home's diagram, its card leaving diagrams of a package that no longer
+  holds it; one undo step, with a toast offering Undo. Into itself or a package it holds is refused
+  with the reason; Models rings such a row in amber. Dragging on the canvas only arranges (owner,
+  2026-11-11, AR-566): a card let go over another package's card or a path-bar ancestor keeps its
+  owner, with no ring and no prompt, and a moved selection is one diagram undo step.
 - A class is a plain card: the surface's white with the plain border, its eyebrow CLASS, its name,
   then two compartments under dividing lines, attributes and operations, each shown even when
   empty. Every compartment is padded as the card is: its first row as far under its line as under
