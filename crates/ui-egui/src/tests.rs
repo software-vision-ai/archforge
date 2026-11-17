@@ -6672,7 +6672,9 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// its own default or another element's diagram, with the package named (AR-578). Each package move
 /// or rename the root package or the package Types refuses is said in its own sentence (AR-563), as
 /// is a default diagram chosen for no package, for something that is none or among another
-/// element's diagrams (AR-580).
+/// element's diagrams (AR-580), and a default's replacement that is the diagram removed, is no
+/// other diagram of the same kind of its package, or is named for a diagram that is no default,
+/// each in a sentence of its own that speaks of replacing, not of choosing a default (AR-640).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -6748,6 +6750,14 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
             "Rechnungen ist keines der Klassendiagramme von Vertrieb. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.";
         let chosen_said = ["Es ist kein Paket angegeben. Geben Sie seine ID an.", "Vertrieb ist kein Paket.", theirs].map(|s| Some(s.to_string()));
         assert_eq!(chosen, chosen_said, "{theme:?}");
+        // A replacement that is the diagram removed, or one named for a diagram that is no default (AR-640).
+        use archforge_engine::Reason::{NotReplacement, ReplacementIsRemoved, ReplacementNotNeeded};
+        let foreign = NotReplacement { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
+        let replaced = [ReplacementIsRemoved, ReplacementNotNeeded { diagram: "Rechnungen".into() }, foreign].map(|r| crate::panels::said(&r));
+        let itself = "Ein Diagramm kann sich beim Entfernen nicht selbst ersetzen. Wählen Sie ein anderes Diagramm als Ersatz.";
+        let not_needed = "Rechnungen ist kein Standarddiagramm und wird daher ohne Ersatz entfernt.";
+        let not_own = "Rechnungen ist kein anderes Diagramm derselben Art von Vertrieb und kann das zu entfernende Diagramm daher nicht ersetzen.";
+        assert_eq!(replaced, [itself, not_needed, not_own].map(|s| Some(s.to_string())), "{theme:?}");
         // A package move or rename the root package or the package Types refuses, each its own sentence.
         use archforge_engine::Reason::{HoldsBuiltInName, RootPackageStays, TypesPackageExists, TypesPackageKept};
         let held = HoldsBuiltInName { kind: "class", name: "String".into() };
