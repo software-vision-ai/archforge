@@ -43,12 +43,15 @@ binding may name (AR-575). `remove_views_of` takes the bindings it finds along (
 `Reason::DefaultDiagramOf` with the binding's owner, and with `BindingFault::WrongOwner` when that
 owner is not the diagram's element (`defaults::diagram_removal_problem`), unless it names a
 `replacement_diagram` on the `expected_revision` read (AR-640): another live diagram of the same
-element and kind, to which one step retargets the binding, keeping its id, before the diagram goes.
-The diagram itself is refused as `ReplacementIsRemoved`, another element's diagram or another kind
-as `NotOwnDiagram`, a replacement for a diagram that is no default as `ReplacementNotNeeded`, and a
+element and kind, to which one step retargets the binding, keeping its id, before the diagram goes;
+an element with several bindings keeps the first by id and loses the others in that step, as UML's
+`uml.package.default.set` mends them. The diagram itself is refused as `ReplacementIsRemoved`,
+another element's diagram or another kind as `NotReplacement`, a replacement for a diagram that is no default as `ReplacementNotNeeded`, and a
 revision absent with a replacement, or stale whenever given, as `StaleRevision`; a `WrongOwner`
-binding is refused still. It answers `{removed, diagram, replacement, binding, created}`, `removed`
-the count of objects that went, the replacement and binding null for a plain removal; a notation asks
+binding is refused still. It answers `{removed, diagram, replacement, binding, bindings_removed,
+created}`: `removed` the count of objects that went, `binding` the one kept, `bindings_removed` the
+ids of the others, and `created` false, as no diagram is made (AR-397 adds one made in the same
+step); the replacement and binding are null and no binding goes for a plain removal; a notation asks
 `defaults::views_removal_problem` before it removes an element whose diagram a binding of an element
 that stays names, judged against everything the removal takes, and `defaults::remove_bindings_of`
 takes the bindings of all of it before any diagram goes, so the order of selection does not matter

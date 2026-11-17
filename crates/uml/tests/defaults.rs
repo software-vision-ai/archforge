@@ -410,7 +410,8 @@ fn removing_a_default_diagram_is_refused_and_another_leaves_the_binding() {
     let named = "name another of its diagrams as replacement_diagram, with the expected_revision the project state gives";
     assert_eq!(said, format!("the diagram {} is the default diagram of Sales; {named}", id(0x12)));
     let answer = s.execute("diagram.remove", &json!({ "diagram": id(0x11) })).unwrap().value;
-    let plain = json!({ "removed": answer["removed"], "diagram": id(0x11), "replacement": null, "binding": null, "created": false });
+    let plain =
+        json!({ "removed": answer["removed"], "diagram": id(0x11), "replacement": null, "binding": null, "bindings_removed": [], "created": false });
     assert_eq!(answer, plain);
     let st = s.doc();
     assert!(!st.is_alive(first) && st.is_alive(detail));
@@ -493,7 +494,9 @@ fn a_default_removed_with_a_replacement_retargets_its_binding_in_one_undo_step()
     let (before, layout) = (rows_of(s.doc()), shown(&mut s));
     let p = json!({ "diagram": id(0x12), "replacement_diagram": id(0x11), "expected_revision": token(&s) });
     let answer = s.execute("diagram.remove", &p).unwrap().value;
-    let expected = json!({ "removed": answer["removed"], "diagram": id(0x12), "replacement": id(0x11), "binding": id(0x13), "created": false });
+    let (removed, replacement) = (answer["removed"].clone(), id(0x11));
+    let expected =
+        json!({ "removed": removed, "diagram": id(0x12), "replacement": replacement, "binding": id(0x13), "bindings_removed": [], "created": false });
     assert_eq!(answer, expected);
     assert!(answer["removed"].as_u64().unwrap() >= 2, "the diagram and its box: {answer}");
     let st = s.doc();
@@ -505,6 +508,25 @@ fn a_default_removed_with_a_replacement_retargets_its_binding_in_one_undo_step()
     assert!(rows_of(s.doc()) == before, "one undo step brings the diagram, its box and the old default back");
     s.execute("edit.redo", &json!({})).unwrap();
     assert!(rows_of(s.doc()) == after, "redo repeats it exactly");
+}
+
+/// A package with several bindings, the one naming the default removed not the first by id, keeps
+/// the first by id, now naming the replacement, and loses the others in the same undo step, each
+/// named in the answer, as `uml.package.default.set` mends them (AR-580, AR-640).
+#[test]
+fn a_default_removed_with_a_replacement_mends_duplicate_bindings_as_choosing_one_does() {
+    let (mut st, model, sales, first, detail, binding) = bound_sales();
+    let kept = bind(&mut st, model, 0x05, sales, first);
+    let mut s = over(st);
+    let before = rows_of(s.doc());
+    let p = json!({ "diagram": id(0x12), "replacement_diagram": id(0x11), "expected_revision": token(&s) });
+    let answer = s.execute("diagram.remove", &p).unwrap().value;
+    assert_eq!((&answer["binding"], &answer["bindings_removed"]), (&json!(id(0x05)), &json!([id(0x13)])), "{answer}");
+    let st = s.doc();
+    assert!(!st.is_alive(detail) && !st.is_alive(binding));
+    assert_eq!((archforge_diagram::defaults::bindings_of(st, sales), resolve(st, sales)), (vec![kept], Ok(DefaultDiagram::Bound(first))));
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(rows_of(s.doc()) == before, "one undo step brings both bindings back");
 }
 
 /// Every replacement that cannot take the default's place is refused typed, about the parameter
@@ -520,7 +542,7 @@ fn a_replacement_that_cannot_take_the_defaults_place_is_refused_with_nothing_cha
     let mut s = over(st);
     let (at, token) = (s.token(), token(&s));
     let stale = Revision { revision: at.revision + 1, ..at };
-    let not_own = |d: u8| Reason::NotOwnDiagram { diagram: id(d).into(), package: "Sales".into() };
+    let not_own = |d: u8| Reason::NotReplacement { diagram: id(d).into(), package: "Sales".into() };
     let stale_given = json!({ "history": stale.history, "revision": stale.revision });
     let (r, e) = ("replacement_diagram", "expected_revision");
     let cases = [

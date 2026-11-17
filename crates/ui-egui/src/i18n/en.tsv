@@ -780,6 +780,7 @@ str		This diagram is the default diagram of {package}. Choose another class diag
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.
 str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} is not a default diagram, so it is removed without a replacement.
+str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.
 str		No package is given. Give its id.	No package is given. Give its id.
 str		{name} is not a package.	{name} is not a package.
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.

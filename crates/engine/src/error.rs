@@ -501,6 +501,10 @@ pub enum Reason {
     /// A replacement is named for the diagram `diagram` (its name, or its id when it has none),
     /// which is no element's default, so it is removed without one (AR-640).
     ReplacementNotNeeded { diagram: Box<str> },
+    /// The diagram `diagram` named to replace a default diagram as it is removed is not another
+    /// diagram of the same kind of `package` (each its name, or its id when it has none), so it
+    /// cannot take that default's place (AR-640).
+    NotReplacement { diagram: Box<str>, package: Box<str> },
 }
 
 /// What is wrong with a package's default-diagram binding, in a [`Reason::InvalidBinding`].

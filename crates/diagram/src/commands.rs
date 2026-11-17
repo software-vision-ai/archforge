@@ -291,11 +291,13 @@ const REPLACEMENT: &str = "replacement_diagram";
 
 /// `diagram.remove`: a diagram removed with what is on it. One a default-diagram binding names goes
 /// only with a `replacement_diagram`, another live diagram of the same element and kind, on the
-/// `expected_revision` read: one step retargets the binding, keeping its id, and removes the
-/// diagram (AR-640). Refused typed before anything changes: a default without one (AR-578), a
-/// binding of another element naming it, a replacement for a diagram that is no default, and a
-/// revision stale or, with a replacement, absent. Gives how many objects went and the ids of the
-/// diagram, the replacement and the binding retargeted, those two null for a plain removal.
+/// `expected_revision` read: one step retargets the element's binding, keeping its id, and removes
+/// the diagram (AR-640); an element with several keeps the first by id, as
+/// `uml.package.default.set` mends them, and the others go in the same step. Refused typed before
+/// anything changes: a default without one (AR-578), a binding of another element naming it, a
+/// replacement for a diagram that is no default, and a revision stale or, with a replacement,
+/// absent. Gives how many objects went, the ids of the diagram, the replacement and the binding
+/// kept, those two null for a plain removal, and those of the bindings removed.
 fn diagram_remove<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let named = !str_of(p, REPLACEMENT).is_empty();
@@ -326,21 +328,28 @@ fn diagram_remove<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         Some(package) => Some(replacement_of(store, p, d, &package)?),
         None => None,
     };
-    let bindings = if replacement.is_some() { crate::defaults::bindings_to(store, d) } else { Vec::new() };
-    let binding = bindings.first().map(|b| uuid_of(store, *b)).transpose()?;
+    // The default's binding is its element's own (no fault), so the diagram's element owns it.
+    let owner = replacement.and(element_of(store, d, diagram::ELEMENT));
+    let mut extra = owner.map(|o| crate::defaults::bindings_of(store, o)).unwrap_or_default();
+    extra.sort_by_key(|b| store.uuid(*b).ok());
+    let kept = (!extra.is_empty()).then(|| extra.remove(0));
+    let binding = kept.map(|b| uuid_of(store, b)).transpose()?;
+    let bindings_removed = extra.iter().map(|b| uuid_of(store, *b)).collect::<Result<Vec<_>, _>>()?;
     let replacement_id = replacement.map(|r| uuid_of(store, r)).transpose()?;
     let gone = ctx
         .doc
         .transaction(|st| {
-            for b in &bindings {
-                if let Some(r) = replacement {
-                    st.set(*b, crate::default_diagram_binding::DEFAULT_DIAGRAM, Value::Ref(r))?;
-                }
+            if let (Some(b), Some(r)) = (kept, replacement) {
+                st.set(b, crate::default_diagram_binding::DEFAULT_DIAGRAM, Value::Ref(r))?;
+            }
+            for b in &extra {
+                st.destroy(*b)?;
             }
             archforge_core::destroy_with_links(st, d)
         })
         .map_err(fail)?;
-    Ok(json!({ "removed": gone, "diagram": id, "replacement": replacement_id, "binding": binding, "created": false }))
+    let (replacement, removed) = (replacement_id, bindings_removed);
+    Ok(json!({ "removed": gone, "diagram": id, "replacement": replacement, "binding": binding, "bindings_removed": removed, "created": false }))
 }
 
 /// The diagram under [`REPLACEMENT`] that takes the place of the default `d` of `package` (its
@@ -355,7 +364,7 @@ fn replacement_of(store: &Store, p: &Params, d: Obj, package: &str) -> Result<Ob
     if of(r) != of(d) {
         let (name, kind) = (name_or_id(store, r), kind_of(store, d));
         let said = format!("the diagram {name} is not a {kind} diagram of {package}; name one of its own as {REPLACEMENT}");
-        return Err(refuse(REPLACEMENT, said).because(Reason::NotOwnDiagram { diagram: name.into(), package: package.into() }));
+        return Err(refuse(REPLACEMENT, said).because(Reason::NotReplacement { diagram: name.into(), package: package.into() }));
     }
     Ok(r)
 }
