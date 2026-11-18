@@ -735,3 +735,38 @@ fn a_binding_that_names_nothing_refuses_its_model_before_anything_is_built() {
     let said = format!("the default-diagram binding {binding} names the owner {gone}, which the project does not hold, and so do 1 more");
     assert_eq!(session_from_rows(&both, ids(1 << 40)).err().unwrap().to_string(), said);
 }
+
+/// A commit check for the test alone: it refuses a change that leaves a diagram named Refused.
+fn no_diagram_named_refused(st: &Store, _: &archforge_mof::Delta) -> Result<(), CommandError> {
+    let named = |o: Obj| st.get(o, archforge_diagram::diagram::NAME).ok().and_then(|v| v.as_str().map(|n| n == "Refused"));
+    let refused = st.alive().any(|o| st.class_of(o).ok() == Some(archforge_diagram::DIAGRAM) && named(o) == Some(true));
+    if refused { Err(CommandError::new("no diagram is named Refused")) } else { Ok(()) }
+}
+
+/// A default removed with a new empty replacement whose commit is refused is taken back whole: no
+/// diagram made is left, the binding names the old default, which stays, and no undo step is kept.
+/// The same session keeps one under another name, so the check alone refused it (AR-641).
+#[test]
+fn a_new_replacement_whose_commit_is_refused_is_taken_back_whole() {
+    let mut st = store(ids(0)).unwrap();
+    st.create(archforge_core::MODEL).unwrap();
+    let checked = archforge_notations::registry_checked(no_diagram_named_refused).unwrap();
+    let mut s = Session::with_view(checked, st, 1, Options::default(), archforge_notations::view());
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let d = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let (tables, junctions) = storage();
+    let state =
+        |s: &Session| (rows::snapshot(s.doc(), &tables, &junctions).unwrap(), s.token(), s.undo_label().map(str::to_string), s.undo_revision());
+    let remove = |s: &Session, name: &str| {
+        let at = s.token();
+        json!({ "diagram": d, "create_replacement": { "name": name }, "expected_revision": { "history": at.history, "revision": at.revision } })
+    };
+    let before = state(&s);
+    let Err(archforge_engine::EngineError::Failed { error, .. }) = s.execute("diagram.remove", &remove(&s, "Refused")) else {
+        panic!("the commit check refuses the new replacement")
+    };
+    assert_eq!(error.message, "no diagram is named Refused");
+    assert!(state(&s) == before, "no diagram made, the binding as it was, no undo step");
+    let kept = s.execute("diagram.remove", &remove(&s, "Sales map")).unwrap().value;
+    assert_eq!((&kept["diagram"], &kept["created"]), (&json!(d), &json!(true)));
+}

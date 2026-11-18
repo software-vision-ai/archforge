@@ -289,58 +289,89 @@ fn diagram_rename<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 /// one removed (AR-640).
 const REPLACEMENT: &str = "replacement_diagram";
 
+/// The parameter of `diagram.remove` asking for a new empty diagram, `{"name": n}`, to become the
+/// default in place of the one removed (AR-641).
+const CREATE: &str = "create_replacement";
+
+/// What takes a removed default's place: another diagram there is, or a new empty one of this name.
+#[derive(Clone, Copy)]
+enum Replacement<'a> {
+    Existing(Obj),
+    New(&'a str),
+}
+
 /// `diagram.remove`: a diagram removed with what is on it. One a default-diagram binding names goes
-/// only with a `replacement_diagram`, another live diagram of the same element and kind, on the
-/// `expected_revision` read: one step retargets the element's binding, keeping its id, and removes
-/// the diagram (AR-640); an element with several keeps the first by id, as
-/// `uml.package.default.set` mends them, and the others go in the same step. Refused typed before
-/// anything changes: a default without one (AR-578), a binding of another element naming it, a
-/// replacement for a diagram that is no default, and a revision stale or, with a replacement,
-/// absent. Gives how many objects went, the bindings removed and their links among them, the ids
-/// of the diagram, the replacement and the binding kept, those two null for a plain removal, and
-/// those of the bindings removed.
+/// only with exactly one replacement on the `expected_revision` read: a `replacement_diagram`,
+/// another live diagram of the same element and kind (AR-640), or a `create_replacement`, a new
+/// empty diagram of that element and kind made in the model's home (AR-641). One step makes it,
+/// retargets the element's binding, keeping its id, and removes the diagram; an element with
+/// several bindings keeps the first by id, as `uml.package.default.set` mends them, and the others
+/// go in the same step. Refused typed before anything changes: a default without a replacement
+/// (AR-578), both replacements, a new one's name blank or against the name rules, a binding of
+/// another element naming it, a replacement for a diagram that is no default, and a revision stale
+/// or, with a replacement, absent. Gives how many objects went, the bindings removed and their
+/// links among them, the ids of the diagram, the replacement and the binding kept, those two null
+/// for a plain removal, those of the bindings removed, and whether the replacement was made.
 fn diagram_remove<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
-    let named = !str_of(p, REPLACEMENT).is_empty();
-    if named || p.get(EXPECTED_REVISION).is_some() {
+    let (named, create) = (!str_of(p, REPLACEMENT).is_empty(), p.get(CREATE));
+    if named && create.is_some() {
+        let said = format!("give {REPLACEMENT} or {CREATE}, not both");
+        return Err(refuse(CREATE, said).because(Reason::OneReplacement));
+    }
+    let new_name = create.map(replacement_name).transpose()?;
+    let (replacing, key) = (named || create.is_some(), if named { REPLACEMENT } else { CREATE });
+    if replacing || p.get(EXPECTED_REVISION).is_some() {
         expected_revision(ctx, p)?;
     }
     let store = &*ctx.doc;
     let (id, problem) = (uuid_of(store, d)?, crate::defaults::diagram_removal_problem(store, d, "diagram", |_| false));
     let package = match problem {
-        None if named => {
+        None if replacing => {
             let name = name_or_id(store, d);
-            let said = format!("the diagram {name} is no default diagram, so it is removed without a replacement; leave {REPLACEMENT} out");
-            return Err(refuse(REPLACEMENT, said).because(Reason::ReplacementNotNeeded { diagram: name.into() }));
+            let said = format!("the diagram {name} is no default diagram, so it is removed without a replacement; leave {key} out");
+            return Err(refuse(key, said).because(Reason::ReplacementNotNeeded { diagram: name.into() }));
         }
         None => None,
         Some(mut refused) => match refused.reason.clone() {
-            Some(Reason::DefaultDiagramOf { package, fault: None }) if named => Some(package),
+            Some(Reason::DefaultDiagramOf { package, fault: None }) if replacing => Some(package),
             Some(Reason::DefaultDiagramOf { package, fault: None }) => {
                 refused.message = format!(
-                    "the diagram {id} is the default diagram of {package}; name another of its diagrams as {REPLACEMENT}, with the {EXPECTED_REVISION} the project state gives"
+                    "the diagram {id} is the default diagram of {package}; name another of its diagrams as {REPLACEMENT}, or a new one as {CREATE}, with the {EXPECTED_REVISION} the project state gives"
                 );
                 return Err(refused);
             }
             _ => return Err(refused),
         },
     };
-    let replacement = match package {
-        Some(package) => Some(replacement_of(store, p, d, &package)?),
-        None => None,
+    let replacement = match (package, new_name) {
+        (Some(_), Some(name)) => Some(Replacement::New(name)),
+        (Some(package), None) => Some(Replacement::Existing(replacement_of(store, p, d, &package)?)),
+        (None, _) => None,
     };
+    // A new replacement goes where `diagram.add` puts a diagram, of the removed one's kind and element.
+    let home = match replacement {
+        Some(Replacement::New(_)) => ctx.view.home(store).map_err(CommandError::new)?,
+        _ => None,
+    };
+    let (kind, element) = (kind_of(store, d), element_of(store, d, diagram::ELEMENT));
     // The default's binding is its element's own (no fault), so the diagram's element owns it.
-    let owner = replacement.and(element_of(store, d, diagram::ELEMENT));
+    let owner = replacement.as_ref().and(element);
     let mut extra = owner.map(|o| crate::defaults::bindings_of(store, o)).unwrap_or_default();
     extra.sort_by_key(|b| store.uuid(*b).ok());
     let kept = (!extra.is_empty()).then(|| extra.remove(0));
     let binding = kept.map(|b| uuid_of(store, b)).transpose()?;
     let bindings_removed = extra.iter().map(|b| uuid_of(store, *b)).collect::<Result<Vec<_>, _>>()?;
-    let replacement_id = replacement.map(|r| uuid_of(store, r)).transpose()?;
-    let gone = ctx
+    let created = matches!(replacement, Some(Replacement::New(_)));
+    let (gone, r) = ctx
         .doc
         .transaction(|st| {
-            if let (Some(b), Some(r)) = (kept, replacement) {
+            let r = match replacement {
+                Some(Replacement::Existing(r)) => Some(r),
+                Some(Replacement::New(name)) => Some(new_diagram(st, &kind, name, element, home)?),
+                None => None,
+            };
+            if let (Some(b), Some(r)) = (kept, r) {
                 st.set(b, crate::default_diagram_binding::DEFAULT_DIAGRAM, Value::Ref(r))?;
             }
             // A binding may be a trace link's end, so each goes with its links, all counted.
@@ -348,11 +379,34 @@ fn diagram_remove<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
             for b in &extra {
                 gone = gone.saturating_add(archforge_core::destroy_with_links(st, *b)?);
             }
-            Ok(gone.saturating_add(archforge_core::destroy_with_links(st, d)?))
+            Ok((gone.saturating_add(archforge_core::destroy_with_links(st, d)?), r))
         })
         .map_err(fail)?;
-    let (replacement, removed) = (replacement_id, bindings_removed);
-    Ok(json!({ "removed": gone, "diagram": id, "replacement": replacement, "binding": binding, "bindings_removed": removed, "created": false }))
+    let (replacement, removed) = (r.map(|r| uuid_of(ctx.doc, r)).transpose()?, bindings_removed);
+    Ok(json!({ "removed": gone, "diagram": id, "replacement": replacement, "binding": binding, "bindings_removed": removed, "created": created }))
+}
+
+/// The name a [`CREATE`] object gives the new empty diagram replacing a default: an object holding
+/// only `name`, text that is not blank and keeps the rules of a diagram's name; each refusal typed,
+/// but for a name that is no text.
+fn replacement_name(given: &Json) -> Result<&str, CommandError> {
+    const TAKES: &[&str] = &["name"];
+    let fields = given.as_object().ok_or_else(|| refuse(CREATE, format!("{CREATE} is an object, {{\"name\": n}}")))?;
+    if let Some(other) = fields.keys().find(|k| !TAKES.contains(&k.as_str())) {
+        let key: String = other.chars().take(40).collect();
+        let said = format!("{CREATE} holds {key:?}, where it takes only name");
+        return Err(refuse(CREATE, said).because(Reason::UnknownKey { key, takes: TAKES }));
+    }
+    let name = match fields.get("name") {
+        None | Some(Json::Null) => "",
+        Some(Json::String(name)) => name.as_str(),
+        Some(_) => return Err(refuse(CREATE, format!("the name in {CREATE} is text"))),
+    };
+    if name.trim().is_empty() {
+        return Err(refuse(CREATE, format!("the name in {CREATE} is blank; give the new diagram a name")).because(Reason::NameEmpty));
+    }
+    check_text(CREATE, name, MAX_NAME)?;
+    Ok(name)
 }
 
 /// The diagram under [`REPLACEMENT`] that takes the place of the default `d` of `package` (its
@@ -1102,9 +1156,9 @@ fn diagram_get<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(out)
 }
 
-/// What `diagram.remove` takes: the diagram, and for a default the diagram that replaces it with the
-/// revision read (AR-640).
-const REMOVE_PARAMS: &str = "diagram: string; the diagram's id\nreplacement_diagram: string = \"\"; for a default diagram, the id of another diagram of its element and kind, its element's default from now on; nothing for any other diagram\nexpected_revision: object?; the history and the revision the project state gives, {\"history\": h, \"revision\": r}; needed with replacement_diagram, and checked whenever given";
+/// What `diagram.remove` takes: the diagram, and for a default the diagram that replaces it (AR-640)
+/// or the name of a new empty one that does (AR-641), with the revision read.
+const REMOVE_PARAMS: &str = "diagram: string; the diagram's id\nreplacement_diagram: string = \"\"; for a default diagram, the id of another diagram of its element and kind, its element's default from now on; nothing for any other diagram\ncreate_replacement: object?; for a default diagram, instead of replacement_diagram, {\"name\": n}: a new empty diagram of its element and kind named n, its element's default from now on\nexpected_revision: object?; the history and the revision the project state gives, {\"history\": h, \"revision\": r}; needed with a replacement, and checked whenever given";
 const PLACE_PARAMS: &str = "diagram: string; the diagram's id\nelement: string; the id of the element shown\nx: number = 0, -1000000..1000000; the left edge\ny: number = 0, -1000000..1000000; the top edge\nwidth: number = 0, 0..10000; the width, 0 for the kind's default, else 20 or more\nheight: number = 0, 0..10000; the height, 0 for the kind's default, else 20 or more\nparent: string = \"\"; the node it nests in, or nothing\nkind: string = \"\"; a role such as compartment or port, or nothing";
 const NOTE_PARAMS: &str = "diagram: string; the diagram's id\ntext: string; the note's text\nx: number = 0, -1000000..1000000; the left edge\ny: number = 0, -1000000..1000000; the top edge\nwidth: number = 0, 0..10000; the width, 0 for the default, else 20 or more\nheight: number = 0, 0..10000; the height, 0 for the default, else 20 or more\nparent: string = \"\"; the node it nests in, or nothing";
 const MOVE_PARAMS: &str = "nodes: array; the ids of the nodes moved, with what they contain\ndx: number, -2000000..2000000; how far right\ndy: number, -2000000..2000000; how far down";

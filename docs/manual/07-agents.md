@@ -612,17 +612,22 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   one whose binding is unsound is refused as `uml_package_default_get` refuses it; make a diagram
   with `diagram_add` or choose one with `uml_package_default_set` first. A package's default diagram
   is not removed on its own: `diagram_remove` of it is refused, naming the package, unless it
-  names a `replacement_diagram`, another of the package's class diagrams, with the
-  `expected_revision` the project state gives. Then, in one undo step, the package's binding keeps
-  its id and names the replacement, which keeps its boxes as they were, and the diagram goes; the
-  model elements it showed stay. A package with more than one binding keeps the first, as
+  names exactly one replacement, with the `expected_revision` the project state gives: a
+  `replacement_diagram`, another of the package's class diagrams, or a `create_replacement`,
+  `{"name": …}`, a new empty class diagram of the package of that name. Then, in one undo step, the
+  new diagram is made in the model when asked for, the package's binding keeps its id and names the
+  replacement, which keeps its boxes as they were, and the diagram goes; the model elements it
+  showed stay. Undo takes a diagram made this way away again, never one that was there before. A package with more than one binding keeps the first, as
   `uml_package_default_set` mends them, and the others are removed in the same step. The diagram itself, an id of nothing, another package's diagram or
-  a diagram of another kind as the replacement, a replacement for a diagram that is no default, and
-  a revision left out or changed since read are each refused and change nothing. Its other diagrams
+  a diagram of another kind as the replacement, both replacements at once, a new one's name that is
+  blank, holds a control character, starts or ends with a space or is too long, a replacement for a
+  diagram that is no default, and a revision left out or changed since read are each refused and
+  change nothing. Its other diagrams
   are removed as before, with no revision needed, and leave the default as it is; a revision given
   is checked all the same. `diagram_remove` answers `removed` (how many objects went), the
   `diagram`'s id, the ids of the `replacement` and the `binding` kept (null when there is none),
-  `bindings_removed`, the ids of the other bindings removed, and `created`, false. A diagram another package names as its default, which is unsound, is kept the
+  `bindings_removed`, the ids of the other bindings removed, and `created`, true when the
+  replacement was made new. A diagram another package names as its default, which is unsound, is kept the
   same way: `element_remove` of a package with no parent that holds it, its own package among them,
   is refused, naming the package whose default it is, unless that package is removed in the same
   call. Choose a default of that package's own first. A nested package hands the diagram up to its

@@ -501,6 +501,9 @@ pub enum Reason {
     /// A replacement is named for the diagram `diagram` (its name, or its id when it has none),
     /// which is no element's default, so it is removed without one (AR-640).
     ReplacementNotNeeded { diagram: Box<str> },
+    /// A default diagram being removed is given both another diagram to replace it and a name for a
+    /// new one, where it takes exactly one of them (AR-641).
+    OneReplacement,
     /// The diagram `diagram` named to replace a default diagram as it is removed is not another
     /// diagram of the same kind of `package` (each its name, or its id when it has none), so it
     /// cannot take that default's place (AR-640).
