@@ -620,7 +620,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   showed stay. Undo takes a diagram made this way away again, never one that was there before. A package with more than one binding keeps the first, as
   `uml_package_default_set` mends them, and the others are removed in the same step. The diagram itself, an id of nothing, another package's diagram or
   a diagram of another kind as the replacement, both replacements at once, a new one's name that is
-  blank, holds a control character, starts or ends with a space or is too long, a replacement for a
+  blank, is no text, holds a control character, starts or ends with a space or is too long, a replacement for a
   diagram that is no default, and a revision left out or changed since read are each refused and
   change nothing. Its other diagrams
   are removed as before, with no revision needed, and leave the default as it is; a revision given

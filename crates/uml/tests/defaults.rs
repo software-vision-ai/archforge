@@ -605,7 +605,7 @@ fn a_default_removed_with_a_new_replacement_makes_binds_and_removes_in_one_undo_
 
 /// A new replacement is refused typed, about the parameter at fault, with no diagram made and the
 /// store and its history as they were: given with an existing one too, neither given, a name blank,
-/// left out, holding a control character or past the limit, a key other than the name, one for a
+/// left out, no text, holding a control character or past the limit, a key other than the name, one for a
 /// diagram that is no default, and a revision left out (AR-641).
 #[test]
 fn a_new_replacement_given_twice_misnamed_or_not_needed_is_refused_with_nothing_changed() {
@@ -621,6 +621,7 @@ fn a_new_replacement_given_twice_misnamed_or_not_needed_is_refused_with_nothing_
         (0x12, String::new(), named(""), token.clone(), c, Reason::NameEmpty),
         (0x12, String::new(), named("  "), token.clone(), c, Reason::NameEmpty),
         (0x12, String::new(), json!({}), token.clone(), c, Reason::NameEmpty),
+        (0x12, String::new(), json!({ "name": 5 }), token.clone(), c, Reason::NameNotText),
         (0x12, String::new(), named("Sales\u{7}map"), token.clone(), c, Reason::ControlCharacter),
         (0x12, String::new(), named(&"m".repeat(max + 1)), token.clone(), c, Reason::TooLong { max }),
         (0x12, String::new(), json!({ "name": "Sales map", "title": "x" }), token.clone(), c, unknown),

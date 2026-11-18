@@ -130,6 +130,8 @@ pub enum Reason {
     HoldsBuiltInName { kind: &'static str, name: String },
     /// A name is empty.
     NameEmpty,
+    /// A name is given as something other than text, such as a number (AR-641).
+    NameNotText,
     /// A text that has to say something, as a note's, is empty.
     TextEmpty,
     /// A name or a text is longer than `max` characters.
@@ -303,8 +305,8 @@ pub enum Reason {
     IdsExpected { kind: &'static str },
     /// An item of a list of ids, given as an object, holds `key`, where it holds only `id` and `name`.
     NotAnItemKey { key: String },
-    /// An item of a list, given as an object, holds `key`, cut to its first characters, where it
-    /// takes only the keys `takes`.
+    /// An item of a list, given as an object, or a parameter that is an object (AR-641), holds
+    /// `key`, cut to its first characters, where it takes only the keys `takes`.
     UnknownKey { key: String, takes: &'static [&'static str] },
     /// No element of the model has the id `id`, cut to its first characters.
     NoElement { id: String },

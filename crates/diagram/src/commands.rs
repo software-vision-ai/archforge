@@ -388,7 +388,7 @@ fn diagram_remove<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 
 /// The name a [`CREATE`] object gives the new empty diagram replacing a default: an object holding
 /// only `name`, text that is not blank and keeps the rules of a diagram's name; each refusal typed,
-/// but for a name that is no text.
+/// but for no object, which the engine refuses first.
 fn replacement_name(given: &Json) -> Result<&str, CommandError> {
     const TAKES: &[&str] = &["name"];
     let fields = given.as_object().ok_or_else(|| refuse(CREATE, format!("{CREATE} is an object, {{\"name\": n}}")))?;
@@ -400,7 +400,7 @@ fn replacement_name(given: &Json) -> Result<&str, CommandError> {
     let name = match fields.get("name") {
         None | Some(Json::Null) => "",
         Some(Json::String(name)) => name.as_str(),
-        Some(_) => return Err(refuse(CREATE, format!("the name in {CREATE} is text"))),
+        Some(other) => return Err(refuse(CREATE, format!("the name in {CREATE} is text, not {other}")).because(Reason::NameNotText)),
     };
     if name.trim().is_empty() {
         return Err(refuse(CREATE, format!("the name in {CREATE} is blank; give the new diagram a name")).because(Reason::NameEmpty));
