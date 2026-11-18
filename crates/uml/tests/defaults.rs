@@ -943,10 +943,9 @@ fn a_handoff_inside_a_package_with_no_parent_that_goes_is_not_judged() {
     );
 }
 
-/// Removing T, nested in R, with C, below T in P, which has no diagram: T hands P up to R, but C's
-/// class diagram goes past P, below T, to R, the first package above all that go, and R, not P, is
-/// judged. With no diagram yet R is refused, named; with a bound one T and C go in either order, P
-/// lands in R with no diagram still, and C's diagram is R's beside R's default (AR-673).
+/// Removing T, in R, with C, in P below T: T hands P up to R, but C's class diagram goes past P to R,
+/// the first package above all that go, judged in P's place: refused, named, with no diagram yet; with
+/// a bound one T and C go in either order, P lands in R diagramless, C's diagram is R's (AR-673).
 #[test]
 fn a_handoff_past_a_removed_ancestor_goes_to_the_first_package_above_it_that_stays() {
     let built = |bound: bool| {
@@ -977,11 +976,11 @@ fn a_handoff_past_a_removed_ancestor_goes_to_the_first_package_above_it_that_sta
     }
 }
 
-/// A and B hold each other, a loop the store refuses as it is written and a project's reading
-/// refuses too: only a recorded move of A into B, applied again after B moved into A, makes it.
-/// Removing C, with a class diagram, and P, which holds C and has no diagram, ends within the
-/// guard's time: P goes and no package above goes, so B, which holds P and is the first that stays,
-/// would take the diagram, and having none yet it is refused, named, with nothing changed (AR-673).
+/// A and B hold each other, a loop the store and a project's reading refuse, made by a recorded move
+/// of A into B applied again after B moved into A. Removing C, with a class diagram, and P, holding
+/// C, ends in the guard's time: B, first to stay, would take the diagram; with none yet it is refused,
+/// named, nothing changed, with A going too as well, the walk going round once more. With B too no
+/// package takes it: a loose template parameter, named after C, is what is refused (AR-673).
 #[test]
 fn a_handoff_up_a_loop_of_packages_ends_and_is_judged_by_the_first_that_stays() {
     use archforge_engine::Document;
@@ -1006,13 +1005,17 @@ fn a_handoff_up_a_loop_of_packages_ends_and_is_judged_by_the_first_that_stays() 
         let c = nested(&mut st, p, 0x30, "C");
         let handed = diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, c);
         bind(&mut st, model, 0x32, c, handed);
+        st.create_with_uuid(archforge_uml::CLASSIFIER_TEMPLATE_PARAMETER, Uuid([0x50; 16])).unwrap();
         let mut s = over(st);
-        let _ = tx.send(refused(&mut s, "element.remove", json!({ "ids": [id(0x30), id(0x40)] })));
+        let ids = [vec![id(0x30), id(0x40)], vec![id(0x30), id(0x50), id(0x40), id(0x10)], vec![id(0x30), id(0x50), id(0x40), id(0x20), id(0x10)]];
+        let _ = tx.send(ids.map(|ids| refused(&mut s, "element.remove", json!({ "ids": ids })).1));
     });
     let got = rx.recv_timeout(std::time::Duration::from_secs(30));
     assert!(!matches!(got, Err(std::sync::mpsc::RecvTimeoutError::Timeout)), "the walk up the loop never ended");
-    let (_, reason, said) = got.expect("element.remove was refused with nothing changed");
-    assert_eq!(reason, Some(Reason::ParentDefaultUnsound { parent: "B".into(), fault: None }), "{said}");
+    let [below, past_a, all] = got.expect("element.remove was refused with nothing changed");
+    let unsound = Some(Reason::ParentDefaultUnsound { parent: "B".into(), fault: None });
+    assert_eq!((below, past_a), (unsound.clone(), unsound), "B takes it, past A too");
+    assert!(matches!(all, Some(Reason::ElementNotRemovable { .. })), "with A and B going no package takes it: {all:?}");
 }
 
 /// Mending a package with three bindings, one the end of a trace link, takes that link along with

@@ -698,17 +698,15 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
     Ok(())
 }
 
-/// The package that takes the diagrams a nested package of `parent` hands up as `objs` go: the
-/// first package above every one of `objs` among its ancestors, so `parent` when it stays, and
-/// never a package that only stays because a package that goes hands it up (owner decision,
-/// 2026-11-18). None when the topmost package above goes: having no parent, it takes everything
-/// below it along, so nothing is handed up for good (AR-673). Packages that hold each other in a
-/// loop, which only a damaged store holds, have no topmost package: there the walk ends where it
-/// meets a package again, with the first that stays above the last that goes on the way.
+/// The package that takes the diagrams a nested package of `parent` hands up as `objs` go: the first
+/// above all of `objs` among its ancestors, `parent` when it stays, never one that only stays as one
+/// that goes hands it up (owner decision, 2026-11-18). None when the topmost package above goes: it
+/// takes everything below it along (AR-673). In a loop of packages, which only a damaged store holds,
+/// the walk goes round once more if need be, for the first that stays after the last that goes.
 fn receiver(store: &Store, objs: &[Obj], parent: Obj) -> Option<Obj> {
-    let (mut at, mut taker, mut seen) = (parent, None, std::collections::BTreeSet::new());
-    // The seen-set bounds the walk up, whatever the store holds.
-    while seen.insert(at) {
+    let (mut at, mut taker, mut seen, mut again) = (parent, None, std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
+    // The seen-sets bound the walk: one round of a loop, and a second while the last met goes.
+    while seen.insert(at) || (taker.is_none() && again.insert(at)) {
         if objs.contains(&at) {
             taker = None;
         } else if taker.is_none() {
@@ -742,7 +740,7 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// nested package hands what it holds up to its parent first, and its diagrams up (owner decision); a
 /// top-level package takes them along. Either takes its default-diagram binding along, with no
 /// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). A
-/// nested package's diagrams go to the first package above every package that goes ([`receiver`]),
+/// nested package's diagrams go to the first package above all its ancestors that go ([`receiver`]),
 /// its contents to its parent; one that would hand a structure diagram up to a package with no
 /// sound default, unless a package with no parent that goes takes it along, is refused typed as
 /// [`Reason::ParentDefaultUnsound`], before anything moves (AR-673). An

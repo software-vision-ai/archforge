@@ -210,9 +210,9 @@ session, as a version viewed, refuses it before it runs.
 Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
 diagrams up and its parent's binding stays; a top-level one takes the bindings of what it holds too.
 A nested package that hands up a structure diagram is refused before anything moves while the
-package that takes it (its parent, or, when the parent goes too, the first package above every
-package that goes, even past one a removed package hands up, which keeps its contents; owner
-decision 2026-11-18) has no structure diagram yet or an unsound binding, typed as `Reason::ParentDefaultUnsound`
+package that takes it (its parent, or, when the parent goes too, the first package above the
+highest of its ancestors that go, even past one a removed package hands up, which keeps its
+contents; owner decision 2026-11-18) has no structure diagram yet or an unsound binding, typed as `Reason::ParentDefaultUnsound`
 with that package's name or id and its `BindingFault`, none for no diagram yet (AR-673,
 `defaults::handoff_problem`); one that hands up none goes whatever its parent's default, and so
 does one inside a package with no parent removed with it, which takes that package along.

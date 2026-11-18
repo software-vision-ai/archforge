@@ -629,10 +629,12 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   parent and goes. Its class diagrams join the parent's, whose default stays, so `element_remove`
   of a nested package that has class diagrams is refused while its parent has no class diagram
   yet or its default is unsound, naming the parent; make a diagram for the parent or choose its
-  default first. Removed together with its parent, or with any package above it, it hands them to
-  the first package above every package removed in the call, which is judged instead; a package
-  between them that a removed package hands up stays, but does not take the diagrams. Inside a package with no parent removed in the same call, nothing
-  is judged: that package takes everything below it along, as it does when removed alone.
+  default first. Removed together with its parent, or with any other package above it, it hands
+  them to the first package above the highest of its own ancestors removed in the call, which is
+  judged and named instead (packages removed on other branches play no part); a package between
+  them that a removed package hands up stays, but does not take the diagrams. Inside a package with
+  no parent removed in the same call, nothing is judged: that package takes everything below it
+  along, as it does when removed alone.
 - **Choosing a package's default diagram**: `uml_package_default_set`
   (`uml.package.default.set`) makes one of the package's own class diagrams its default, given
   `package`, `diagram` and `expected_revision`, which it needs: left out or changed since read, it
