@@ -701,7 +701,9 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
 /// The package that takes what a nested package of `parent` hands up as `objs` go: `parent`, or,
 /// when it goes too, the first package above it that stays. None when the topmost package above
 /// goes: having no parent, it takes everything below it along, the package that would take what
-/// is handed up among them, so nothing is handed up for good (AR-673).
+/// is handed up among them, so nothing is handed up for good (AR-673). Packages that hold each
+/// other in a loop, which only a damaged store holds, have no topmost package to take them along,
+/// so the first above that stays is the receiver there too.
 fn receiver(store: &Store, objs: &[Obj], parent: Obj) -> Option<Obj> {
     let (mut at, mut taker, mut seen) = (parent, None, std::collections::BTreeSet::new());
     // The seen-set bounds the walk up, whatever the store holds.
@@ -714,7 +716,7 @@ fn receiver(store: &Store, objs: &[Obj], parent: Obj) -> Option<Obj> {
             None => return taker.filter(|_| !objs.contains(&at)),
         }
     }
-    None
+    taker
 }
 
 /// Why `o` is not removed yet, as "{id} cannot be removed yet", typed with its name, or its id

@@ -937,6 +937,43 @@ fn a_handoff_inside_a_package_with_no_parent_that_goes_is_not_judged() {
     assert_eq!(refused(&mut kept, "element.remove", json!({ "ids": [id(0x50), id(0x70)] })).1, Some(unsound), "Accounts stays");
 }
 
+/// A and B hold each other, a loop the store refuses as it is written and a project's reading
+/// refuses too: only a recorded move of A into B, applied again after B moved into A, makes it.
+/// Removing C, which B holds, with a class diagram, ends within the guard's time: no package above
+/// goes, so B, the first that stays, would take the diagram, and having none yet it is refused,
+/// named, with nothing changed (AR-673).
+#[test]
+fn a_handoff_up_a_loop_of_packages_ends_and_is_judged_by_the_first_that_stays() {
+    use archforge_engine::Document;
+    use archforge_uml::package::PACKAGED_ELEMENT;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let (mut st, model) = store();
+        let a = add(&mut st, model, PACKAGE, 0x10);
+        let b = add(&mut st, model, PACKAGE, 0x20);
+        st.set(b, archforge_uml::named_element::NAME, Value::str("B")).unwrap();
+        st.begin();
+        st.remove_value(model, archforge_core::model::MEMBER, &Value::Ref(a)).unwrap();
+        st.push(b, PACKAGED_ELEMENT, Value::Ref(a)).unwrap();
+        let a_into_b = st.end().unwrap();
+        st.apply(&Store::invert(&a_into_b)).unwrap();
+        st.remove_value(model, archforge_core::model::MEMBER, &Value::Ref(b)).unwrap();
+        st.push(a, PACKAGED_ELEMENT, Value::Ref(b)).unwrap();
+        st.apply(&a_into_b).unwrap();
+        let up = |o| st.container(o).unwrap().map(|(c, _)| c);
+        assert_eq!((up(a), up(b)), (Some(b), Some(a)), "A and B hold each other");
+        let c = nested(&mut st, b, 0x30, "C");
+        let handed = diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, c);
+        bind(&mut st, model, 0x32, c, handed);
+        let mut s = over(st);
+        let _ = tx.send(refused(&mut s, "element.remove", json!({ "ids": [id(0x30)] })));
+    });
+    let got = rx.recv_timeout(std::time::Duration::from_secs(30));
+    assert!(!matches!(got, Err(std::sync::mpsc::RecvTimeoutError::Timeout)), "the walk up the loop never ended");
+    let (_, reason, said) = got.expect("element.remove was refused with nothing changed");
+    assert_eq!(reason, Some(Reason::ParentDefaultUnsound { parent: "B".into(), fault: None }), "{said}");
+}
+
 /// Mending a package with three bindings, one the end of a trace link, takes that link along with
 /// its binding instead of being refused: the first binding by id stays and names the chosen
 /// diagram, the other two and the link go, each named in the answer, and one undo step brings every
