@@ -5,7 +5,7 @@
 
 pub mod keys;
 
-use std::sync::Arc;
+use std::{collections::HashSet, iter::successors, sync::Arc};
 
 use archforge_mof::Uuid;
 
@@ -126,22 +126,28 @@ impl EffectiveResult {
         elements.chain(self.members.iter().map(|m| &m.key)).chain(self.relationships.iter().map(|r| &r.key))
     }
 
-    /// The bytes the result holds, for its cache's and its cap's account: every record, string,
-    /// key and nested collection, an inspected version's commit wherever it is named.
+    /// The bytes the result holds, for its cache's and its cap's account: every record, string and
+    /// nested collection, an inspected version's commit wherever it is named, and each key allocation
+    /// once by its address, however many record keys, ends, contribution results and parents share it.
     pub fn accounted_bytes(&self) -> usize {
         let commit = |i: &Inspected| match i {
             Inspected::Working { .. } => 0,
             Inspected::Version { commit } => commit.len(),
         };
-        let ends = |r: &Relationship| r.ends.len().saturating_mul(size_of::<Arc<LocalKey>>());
         let records = self.elements.iter().chain(&self.members);
-        let records = records.map(|r| sum(&[size_of::<Record>(), r.key.accounted_bytes(), r.name.len(), r.path.len()]));
-        let relationships = self.relationships.iter().map(|r| sum(&[size_of::<Relationship>(), r.key.accounted_bytes(), ends(r)]));
+        let records = records.map(|r| sum(&[size_of::<Record>(), r.name.len(), r.path.len()]));
+        let relationships = self.relationships.iter().map(|r| sum(&[size_of::<Relationship>(), size_of_val(&*r.ends)]));
         let sources =
             self.provenance.contributions.iter().map(|c| sum(&[size_of::<Contribution>(), commit(&c.source.inspected), c.source.path.len()]));
         let header = sum(&[size_of::<Self>(), commit(&self.header.context.inspected), self.header.path.len()]);
         let routes = self.provenance.routes.len().saturating_mul(size_of::<RouteEdge>());
-        records.chain(relationships).chain(sources).fold(header.saturating_add(routes), usize::saturating_add)
+        // A walk up from a key stops at the first allocation already counted, whose parents are too.
+        let (mut seen, mut keys, ends) = (HashSet::new(), 0usize, self.relationships.iter().flat_map(|r| &r.ends));
+        for key in self.keys().chain(ends).chain(self.provenance.contributions.iter().map(|c| &c.result)) {
+            let fresh = successors(Some(key), |&k| k.parent()).take_while(|k| seen.insert(Arc::as_ptr(*k)));
+            keys = fresh.fold(keys, |total, k| total.saturating_add(k.accounted_bytes()));
+        }
+        records.chain(relationships).chain(sources).fold(sum(&[header, routes, keys]), usize::saturating_add)
     }
 }
 

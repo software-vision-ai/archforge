@@ -1,6 +1,6 @@
 //! Effective result keys and records (AR-642): the whole tuple decides, even when every hash
 //! collides; source order, repeats and display paths do not; a counterpart is the one match or
-//! none; accounted bytes count every string and collection.
+//! none; accounted bytes count every string and collection, and each key allocation once.
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
@@ -110,9 +110,10 @@ fn a_counterpart_is_the_one_match_or_none() {
     assert_eq!((counterpart(&order, &held), counterpart(&line, &held)), (Some(&order), Some(&line)), "members and relationships");
 }
 
-/// Every string, source, record, end and route edge adds its bytes to the account.
+/// Every string, source, record, end and route edge adds its bytes, and each key allocation once:
+/// a contribution's result and its parents to the root, and a fresh end, but not a shared one.
 #[test]
-fn accounted_bytes_grow_with_every_string() {
+fn accounted_bytes_count_every_string_and_each_key_once() {
     let base = result(&[(&class(&[10]), "Sales")]);
     let mut longer = base.clone();
     longer.elements[0].path = "Commerce::Sales".into();
@@ -123,11 +124,12 @@ fn accounted_bytes_grow_with_every_string() {
     let commit = || Inspected::Version { commit: "abcd".into() };
     longer.header.context.inspected = commit();
     let source = SourceRef { source: id(10), package: id(2), inspected: commit(), route: None, path: "Sales::Order".into() };
-    longer.provenance.contributions.push(Contribution { result: class(&[10]), source });
-    longer.relationships.push(Relationship { key: class(&[13]), ends: Box::new([class(&[10])]), origins: Origins::default() });
+    let under = |parent, n| Arc::new(LocalKey::new(Role::Member, PROPERTY, Some(parent), [id(n)]));
+    longer.provenance.contributions.push(Contribution { result: under(under(class(&[15]), 16), 17), source });
+    let ends = Box::new([Arc::clone(&base.elements[0].key), class(&[18])]);
+    longer.relationships.push(Relationship { key: class(&[13]), ends, origins: Origins::default() });
     longer.provenance.routes.push(RouteEdge { relationship: id(14), kind: RouteKind::Import, from: id(2), to: id(3) });
-    let (strings, sources) = (10 + 10 + 5 + 4 + 4 + 12, 2 * size_of::<Uuid>());
-    let records = size_of::<Record>() + class(&[10]).accounted_bytes() + 5 + 5 + size_of::<Contribution>() + size_of::<RouteEdge>();
-    let records = records + size_of::<Relationship>() + class(&[13]).accounted_bytes() + size_of::<Arc<LocalKey>>();
-    assert_eq!(longer.accounted_bytes(), base.accounted_bytes() + strings + sources + records);
+    let (strings, sources, one) = (10 + 10 + 5 + 4 + 4 + 12, 2 * size_of::<Uuid>(), class(&[10]).accounted_bytes()); // keys of one source
+    let records = size_of::<Record>() + 5 + 5 + size_of::<Contribution>() + size_of::<RouteEdge>() + size_of::<Relationship>();
+    assert_eq!(longer.accounted_bytes(), base.accounted_bytes() + strings + sources + records + 6 * one + 2 * size_of::<Arc<LocalKey>>());
 }

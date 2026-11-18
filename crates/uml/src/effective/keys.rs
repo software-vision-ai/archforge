@@ -71,7 +71,7 @@ impl LocalKey {
         &self.sources
     }
 
-    /// The bytes this key adds to a result: its record and sources; its parent counts as its own.
+    /// The bytes this key holds itself, its record and sources; its parent is a key of its own.
     pub fn accounted_bytes(&self) -> usize {
         size_of::<LocalKey>().saturating_add(self.sources.len().saturating_mul(size_of::<Uuid>()))
     }

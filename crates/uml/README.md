@@ -240,8 +240,9 @@ sources, compared, ordered and hashed as the whole tuple; merge results (AR-615)
 version by commit, receiving package). Neither converts to a `Uuid` or an `Obj`, so no key reaches a
 command that edits the model. `counterpart` finds the one result of a newer result with an old key,
 none when there is none or more than one. `EffectiveResult::accounted_bytes` counts every record,
-string, key and collection for the caps and the cache. `findings` stays empty until import
-findings come (398-D2).
+string and collection for the caps and the cache, and each key allocation once by its address,
+however many record keys, ends, contribution results and parents share it. `findings` stays empty
+until import findings come (398-D2).
 
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.
@@ -254,7 +255,8 @@ store (both ends of `ownedAttribute` and `class`, containment, `ownedElement`, `
 `attribute`, defaults, destroy and undo); the adversarial sweep over a session of generic commands;
 the million-object test (release only). `tests/effective_keys.rs` (AR-642): the whole key tuple decides
 even when every hash collides, source order, repeats and display paths do not, `counterpart` finds
-one match or none, and accounted bytes grow with every string. `tests/defaults.rs` (AR-575): each
+one match or none, and accounted bytes count every string and each key allocation once, a
+contribution's result and its parents to the root included. `tests/defaults.rs` (AR-575): each
 state of a package's default built by hand under fixed ids: bound to a diagram that is not the first
 made, none yet, missing, duplicate, a wrong-kind and a foreign target, a dead target read from
 rows (a dangling id refused as they are read), a profile; a store's problems in id order, the same
