@@ -278,9 +278,13 @@ impl Shell {
 
     /// Opens, in the order asked, each project that waited for its tab's closing once it can: the
     /// tab kept by a refused closing shows at once; a project closed opens afresh when no other
-    /// opening or New project dialog is under way, past which [`Shell::open_path`] would drop it,
-    /// and behind a hold as any opening.
+    /// opening or New project dialog is under way, past which [`Shell::open_path`] would drop it.
+    /// Nothing opens while a hold runs, nor once a quit is asked for, until it is called off.
     pub(crate) fn reopen_after_closing(&mut self) {
+        // Kept here, not queued behind the hold, where an opening queued before it would drop it.
+        if self.is_held() || self.quitting() || self.quit_confirmed {
+            return;
+        }
         // Each looked at once a frame, so nothing put back meanwhile can keep the frame going.
         for path in std::mem::take(&mut self.holding.reopen) {
             let ready = match self.tabs.iter().find(|t| t.path == path) {

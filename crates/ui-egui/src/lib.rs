@@ -1979,6 +1979,7 @@ impl Shell {
             || writing
             || closing
             || self.holding.pending()
+            || !self.holding.reopen.is_empty()
             || self.agents.busy()
             || chat_panel::waiting(self)
             || chat_delete::waiting(self)
