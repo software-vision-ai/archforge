@@ -295,7 +295,7 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
         .state
         .pinned
         .iter()
-        .filter(|f| typed.in_any(&[&f.to_string_lossy()]))
+        .filter(|f| typed.in_any(&[&f.to_string_lossy(), &f.file_name().unwrap_or_default().to_string_lossy()]))
         .take(MAX_FOLDERS)
         .map(|f| Hit {
             target: Target::Folder(f.clone()),
@@ -557,19 +557,21 @@ mod tests {
     fn the_search_ignores_capitals_and_accents_and_keeps_the_order() {
         let (mut shell, ..) = shell();
         for name in ["ﾞDraft", "Prüfstand", "Straße", "Bestellungen prüfen"] {
-            shell.state.remember(name, &std::path::PathBuf::from(format!("/tmp/{name}.archforge")), 1);
+            shell.state.remember(name, &std::env::temp_dir().join(format!("{name}.archforge")), 1);
         }
-        let projects = |query: &str| {
+        shell.state.pin(&std::env::temp_dir().join("ﾞDraft"));
+        let rows = |group: &str, query: &str| {
             let groups = hits(&shell, query);
-            let found = groups.into_iter().find(|(heading, _)| heading == "Projects");
+            let found = groups.into_iter().find(|(heading, _)| heading == group);
             found.map(|(_, rows)| rows.into_iter().map(|h| h.label).collect::<Vec<_>>()).unwrap_or_default()
         };
-        assert_eq!(projects("bestellung"), ["Bestellungen prüfen"]);
-        assert_eq!(projects("prufen"), ["Bestellungen prüfen"]);
-        assert_eq!(projects("STRASSE"), ["Straße"]);
-        assert_eq!(projects("PRÜF"), ["Bestellungen prüfen", "Prüfstand"]);
-        assert_eq!(projects("pruf stand"), ["Prüfstand"]);
-        assert_eq!(projects("ﾞDraft"), ["ﾞDraft"], "a name that starts with a mark finds itself");
+        assert_eq!(rows("Projects", "bestellung"), ["Bestellungen prüfen"]);
+        assert_eq!(rows("Projects", "prufen"), ["Bestellungen prüfen"]);
+        assert_eq!(rows("Projects", "STRASSE"), ["Straße"]);
+        assert_eq!(rows("Projects", "PRÜF"), ["Bestellungen prüfen", "Prüfstand"]);
+        assert_eq!(rows("Projects", "pruf stand"), ["Prüfstand"]);
+        assert_eq!(rows("Projects", "ﾞDraft"), ["ﾞDraft"], "a name that starts with a mark finds itself");
+        assert_eq!(rows("Pinned folders", "ﾞDraft"), ["ﾞDraft"], "and so does a pinned folder by its name");
     }
 
     /// What folds to nothing is not typed, and a ligature of several words gives each of them.
