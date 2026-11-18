@@ -142,7 +142,10 @@ fn the_origin_comes_from_the_command_line_alone_and_read_only_refuses_changes_in
     assert_eq!(replies[0]["result"]["isError"], false, "{}", replies[0]);
     let text: Value = serde_json::from_str(replies[0]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!((text["undo"].as_str(), text["origin"].as_str()), (Some("Chat 1: Add entity"), Some("Chat 1")));
-    assert!(replies[1]["result"]["content"][0]["text"].as_str().unwrap().contains("unknown argument `origin`"), "{}", replies[1]);
+    // Refused as a tool result naming the tool, the argument and the kind, whatever craft's wording.
+    let refusal = replies[1]["result"]["content"][0]["text"].as_str().unwrap();
+    assert_eq!(replies[1]["result"]["isError"], true, "{}", replies[1]);
+    assert!(["execute_command", "origin", "unknown"].iter().all(|part| refusal.contains(part)), "{}", replies[1]);
     let got = seen.lock().unwrap().clone();
     assert_eq!(got.len(), 2, "the refused call reached nothing: {got:?}");
     assert!(got.iter().all(|(_, _, o)| o.as_deref() == Some("Chat 1")), "{got:?}");

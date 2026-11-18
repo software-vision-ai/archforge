@@ -229,6 +229,16 @@ fn only_the_reads_say_they_are_read_only() {
     }
 }
 
+/// The text of `r`, after checking that it is a tool's refusal of an argument: an error result
+/// naming the tool, the argument `key` and the kind of refusal (a word such as "unknown"), without
+/// fixing craft-mcp-server's wording. The key is looked for beside the tool's name, never within it.
+fn refused(r: &Value, tool: &str, key: &str, kind: &str) -> String {
+    assert_eq!(r["result"]["isError"], true, "{r}");
+    let text = r["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
+    assert!(text.contains(tool) && text.replace(tool, "").contains(key) && text.contains(kind), "{tool}, {key}, {kind} in {text}");
+    text
+}
+
 #[test]
 fn a_tool_calls_its_method_and_refuses_unknown_arguments() {
     let fake = Fake::ok();
@@ -240,14 +250,12 @@ fn a_tool_calls_its_method_and_refuses_unknown_arguments() {
     assert_eq!(fake.calls.borrow()[0], ("engine.execute".into(), json!({ "command": "er.entity.add", "params": { "name": "A" } })));
     call("call_app", json!({ "method": "ui.inspect" }));
     assert_eq!(fake.calls.borrow()[1], ("ui.inspect".into(), json!({})));
-    let r = call("execute_command", json!({ "command": "x", "cmd": "x" }));
-    let text = r["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(r["result"]["isError"].as_bool().unwrap() && text.contains("unknown argument `cmd`; its arguments are: command, params"), "{text}");
-    let r = call("describe_command", json!({}));
-    assert_eq!(r["result"]["content"][0]["text"], "describe_command: missing required argument `command`");
+    // An unknown argument's refusal names the ones the tool takes (CS-3).
+    let text = refused(&call("execute_command", json!({ "command": "x", "cmd": "x" })), "execute_command", "cmd", "unknown");
+    assert!(text.contains("params"), "{text}");
+    refused(&call("describe_command", json!({})), "describe_command", "command", "missing");
     // A fixed tool's arguments are checked by type too.
-    let r = call("execute_command", json!({ "command": "x", "params": "no" }));
-    assert_eq!(r["result"]["content"][0]["text"], "execute_command: argument `params` must be of type \"object\"");
+    refused(&call("execute_command", json!({ "command": "x", "params": "no" })), "execute_command", "params", "type");
     assert_eq!(fake.calls.borrow().len(), 2, "refused calls reach nothing");
     let r = call("format_disk", json!({}));
     assert_eq!(r["error"]["code"], -32602);
@@ -369,21 +377,24 @@ fn a_command_tool_runs_its_command_and_refuses_what_it_does_not_take() {
         fake.calls.borrow()[0],
         ("engine.execute".into(), json!({ "command": "er.entity.add", "params": { "schema": "s1", "name": "Invoice" } }))
     );
-    // Each refusal is a tool result that names the tool and what is wrong.
-    for (args, why) in [
-        (json!({ "schema": "s", "colour": "red" }), "unknown argument `colour`; its arguments are: coalesce, kind, name, schema, unique, width"),
-        (json!({ "name": "x" }), "missing required argument `schema`"),
-        (json!({ "schema": "s", "width": "wide" }), "argument `width` must be of type \"integer\""),
-        (json!({ "schema": "s", "kind": "chair" }), "`kind` must be one of [\"table\",\"view\"]"),
+    // Each refusal is a tool result that names the tool, the argument and what is wrong with it.
+    for (args, key, kind) in [
+        (json!({ "schema": "s", "colour": "red" }), "colour", "unknown"),
+        (json!({ "name": "x" }), "schema", "missing"),
+        (json!({ "schema": "s", "width": "wide" }), "width", "type"),
+        (json!({ "schema": "s", "kind": "chair" }), "kind", "one of"),
         // A required key set to null counts as missing, as the engine counts it.
-        (json!({ "schema": null }), "missing required argument `schema`"),
+        (json!({ "schema": null }), "schema", "missing"),
         // A float with a fraction, or past 2^53, is no integer, as the engine reads it.
-        (json!({ "schema": "s", "width": 300.5 }), "argument `width` must be of type \"integer\""),
-        (json!({ "schema": "s", "width": 1e20 }), "argument `width` must be of type \"integer\""),
+        (json!({ "schema": "s", "width": 300.5 }), "width", "type"),
+        (json!({ "schema": "s", "width": 1e20 }), "width", "type"),
     ] {
-        let r = call("er_entity_add", args);
-        assert_eq!(r["result"]["isError"], true, "{r}");
-        assert_eq!(r["result"]["content"][0]["text"], format!("er_entity_add: {why}"));
+        let text = refused(&call("er_entity_add", args), "er_entity_add", key, kind);
+        if kind == "unknown" {
+            for taken in ["coalesce", "kind", "name", "schema", "unique", "width"] {
+                assert!(text.contains(taken), "{taken} in {text}");
+            }
+        }
     }
     assert_eq!(fake.calls.borrow().len(), 1, "refused calls reach nothing");
     // An integer written as a float without a fraction passes, as the engine takes it, and goes on
