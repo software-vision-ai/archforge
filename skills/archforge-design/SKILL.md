@@ -724,7 +724,7 @@ What is UML's own, beside the shared rules above.
   adds none, since a return is no entry. With no step left it opens the parent's default; at the
   root, 10 % stays put with a notice ("This is the top package: zooming out goes no further"). The path bar at the canvas's top
   left (root to here, ancestors as buttons) and ⌘↑ follow ownership, never the route: they open the
-  ancestor's default as it was left, and start that tab's route empty, with no step made up from
+  ancestor's default as it was last left (by navigation, a tab switch or a close), and start that tab's route empty, with no step made up from
   the package left (AR-666), so a later zoom out there falls back to ownership. One switch
   per gesture: a switch waits for the zoom to rest 0.3 s and for 0.6 s to pass since the last; a
   switch fades in over 0.2 s. A double click renames, never navigates.

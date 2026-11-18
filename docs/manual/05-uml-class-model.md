@@ -530,7 +530,7 @@ card where nothing lies over it to select the package.
 - **Come back by the path bar.** The path bar at the canvas's top left names the packages from
   your project's root down to the one open: the packages that hold it, whichever diagram you went
   in from. Choose one of them, or press ⌘↑ (Ctrl+↑) for the parent: that package's default
-  diagram opens, as you left it. Coming back this way starts afresh: zooming out from there goes
+  diagram opens, as you last left it, however you left it. Coming back this way starts afresh: zooming out from there goes
   to its parent package's default diagram, not back the way you came in before.
 
 One gesture makes one switch: after a switch, keep zooming and you stay where you landed. Pause,

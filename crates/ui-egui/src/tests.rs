@@ -11498,6 +11498,52 @@ fn the_path_bar_and_command_up_follow_ownership_and_start_a_new_route() {
     }
 }
 
+/// The path bar restores a diagram as it was last left, however it was left (AR-666): the root's
+/// First is left once by entering Sales, then shown again by its tab, zoomed out and left by an
+/// ordinary tab switch, or by closing its tab. The path bar from Sales then opens First at that
+/// latest view, not the one entering Sales kept.
+#[test]
+fn the_path_bar_restores_the_view_a_diagram_was_last_left_with_by_a_tab_switch_or_close() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for by_close in [false, true] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+            let (first, sales, sales_d) = {
+                let s = h.state_mut().session.as_mut().unwrap();
+                let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+                let first =
+                    id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap().value);
+                let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+                let p = serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                s.execute("diagram.place", &p).unwrap();
+                (first, sales, own_diagram(s, sales))
+            };
+            crate::canvas::open(h.state_mut(), first);
+            h.run();
+            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.run();
+            rest(&mut h);
+            let at = rect_of(&h, &format!("workspace.tabs.{first}")).center();
+            click(&mut h, at);
+            assert_eq!(h.state().canvas.active, Some(first), "{theme:?}");
+            let latest = (egui::vec2(-37.0, 52.0), 0.5);
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = latest;
+            h.run();
+            let tab = if by_close { format!("workspace.tabs.{first}.close") } else { format!("workspace.tabs.{sales_d}") };
+            let at = rect_of(&h, &tab).center();
+            click(&mut h, at);
+            assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?} by close {by_close}");
+            // Sales gets a view of its own, so only the view kept for First can bring `latest` back.
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(11.0, -7.0), 1.25);
+            rest(&mut h);
+            let at = rect_of(&h, "workspace.canvas.path.0").center();
+            click(&mut h, at);
+            assert_eq!(h.state().canvas.active, Some(first), "{theme:?} by close {by_close}");
+            assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), latest, "{theme:?} by close {by_close}: the view First was last left with");
+        }
+    }
+}
+
 #[test]
 fn a_new_gesture_after_a_pause_goes_up_though_no_idle_frame_was_drawn_between() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));

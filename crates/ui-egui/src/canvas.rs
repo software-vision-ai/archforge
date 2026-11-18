@@ -278,10 +278,22 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     }
 }
 
+/// Keeps the pan and zoom the active tab has now as the view it was left with, for package
+/// navigation to restore ([`crate::package_nav::leave`]). Every way of leaving a tab comes here
+/// first, an ordinary switch, a close or a step of package navigation, so the view kept is always
+/// the one it was last left with (AR-666).
+fn keep_left_view(state: &mut State) {
+    if let Some(from) = state.active {
+        state.nav.views.insert(from, (state.pan, state.zoom));
+    }
+}
+
 /// Opens a diagram in the centre: its tab, added when it has none, becomes the active one, the
 /// view's open diagram follows, and the diagram is selected so Properties shows it. A skill opens
-/// in its own tab the same way, with its text in place of the canvas.
+/// in its own tab the same way, with its text in place of the canvas. The view of the tab left is
+/// kept first.
 pub fn open(shell: &mut Shell, id: Uuid) {
+    keep_left_view(&mut shell.canvas);
     // What is opened shows in the centre, where a version's details or a changed element would hide it.
     (shell.versions.details, shell.versions.element) = (None, None);
     if shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), id)) {
@@ -301,11 +313,13 @@ pub fn open(shell: &mut Shell, id: Uuid) {
     shell.canvas.active = Some(id);
 }
 
-/// Closes a tab; when it was the active one, the tab before it (else after it) takes over and
-/// what was said about it ends. A skill's tab whose text the store refused stays open on it,
-/// showing why, so nothing typed is lost.
+/// Closes a tab, keeping the view of the active one first, since closing may leave it; when the tab
+/// closed was the active one, the tab before it (else after it) takes over and what was said about
+/// it ends. A skill's tab whose text the store refused stays open on it, showing why, so nothing
+/// typed is lost.
 pub fn close_tab(shell: &mut Shell, id: Uuid) {
     let Some(i) = shell.canvas.tabs.iter().position(|t| *t == id) else { return };
+    keep_left_view(&mut shell.canvas);
     crate::skill_tab::sync(shell, 0.0, true, Some(id));
     if shell.canvas.skills.iter().any(|d| d.skill == id && d.text != d.saved) {
         crate::skill_tab::open(shell, id);
