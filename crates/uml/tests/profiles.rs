@@ -1030,6 +1030,7 @@ fn the_picker_offers_what_extends_the_element_in_scope() {
     one_step(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": tracked }));
     one_step(&mut s, "uml.stereotype.apply", json!({ "element": id_attr, "stereotype": id }));
     assert_eq!(read(&mut s, "uml.stereotype.list-applied", json!({ "element": order }))["keywords"], "«Entity, Tracked»");
+    assert_eq!(archforge_uml::figures::stereotypes(s.doc(), obj(s.doc(), &order)), ["Entity", "Tracked"], "in the keywords' order");
     // What takes no stereotype: a stereotype, UML's own metaclasses, an application, a template
     // parameter's classifier.
     let class = {

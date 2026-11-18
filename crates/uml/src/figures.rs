@@ -18,9 +18,8 @@
 //! keyword kind keeps its keyword first), start a member's row and sit at a line's middle; a diagram
 //! that shows them lists the values set in a compartment per stereotype. A package's card names
 //! its owners from the model's root down to its parent (AR-564), and is drawn under the diagram's
-//! other figures (AR-570). The canvas draws these descriptions. A member's row, an end's texts and
-//! a classifier's keywords are written from plain values the card code reads from the model, so
-//! what is read from elsewhere writes the same (AR-669).
+//! other figures (AR-570). The canvas draws these descriptions; rows, ends and keywords are written
+//! from plain values the cards fill from the model, as values from elsewhere can be (AR-669).
 
 use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
