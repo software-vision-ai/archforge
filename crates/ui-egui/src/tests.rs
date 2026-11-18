@@ -10684,41 +10684,43 @@ fn a_package_moved_back_where_it_is_shown_keeps_its_one_card() {
     }
 }
 
+/// The path bar follows ownership, never the way in (AR-666): Sales was entered from the root's
+/// Second, yet the root's pill opens the root's default, First, and starts a new route in its tab.
 #[test]
-fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from() {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-    // The root has two class diagrams; Sales is on the second.
-    let (second, sales) = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-        s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap();
-        let second = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Second" })).unwrap().value);
-        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
-        s.execute(
-            "diagram.place",
-            &serde_json::json!({ "diagram": second.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
-        )
-        .unwrap();
-        own_diagram(s, sales);
-        (second, sales)
-    };
-    crate::canvas::open(h.state_mut(), second);
-    h.run();
-    let left = (h.state().canvas.pan, h.state().canvas.zoom);
-    crate::package_nav::enter(h.state_mut(), sales, 0.0);
-    h.run();
-    rest(&mut h);
-    let at = rect_of(&h, "workspace.canvas.path.0").center();
-    click(&mut h, at);
-    assert_eq!(h.state().canvas.active, Some(second), "back on Second, not the root's first diagram");
-    assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "as it was left");
+fn the_path_bar_opens_the_parents_default_not_the_diagram_it_was_entered_from() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // The root has two class diagrams, First its default; Sales is on the second.
+        let (first, second, sales) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+            let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap().value);
+            let second = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Second" })).unwrap().value);
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let p =
+                serde_json::json!({ "diagram": second.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+            s.execute("diagram.place", &p).unwrap();
+            own_diagram(s, sales);
+            (first, second, sales)
+        };
+        crate::canvas::open(h.state_mut(), second);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        rest(&mut h);
+        let at = rect_of(&h, "workspace.canvas.path.0").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: the root's default, not Second");
+        assert_eq!(route_of(&h, first), vec![], "{theme:?}: a new route");
+    }
 }
 
 /// Each tab keeps the route it was entered by (AR-662): entering gives the new tab the route of the
 /// tab left plus one step, which names the diagram left, its view and the session's history, and
-/// leaves the tab left its own. Going back takes the newest way in through the parent, and
-/// browsing changes nothing in the model, its undo history or what is saved.
+/// leaves the tab left its own. Going back by the path bar opens the parent's default and starts a
+/// new route in its tab (AR-666), and browsing changes nothing in the model, its undo history or
+/// what is saved.
 #[test]
 fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -10769,8 +10771,8 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
         h.run();
         assert_eq!(route(&h, orders_d), vec![(second, sales_d), (sales_d, orders_d)], "{theme:?}");
         assert_eq!(route(&h, sales_d), vec![(second, sales_d)], "{theme:?}: Sales' tab keeps its own route");
-        // Back to Sales, then into the root's First and from it into Sales again: Sales' tab now
-        // came by First, the newest way in, though Second is on its route too.
+        // Back to Sales by the path bar, which starts Sales' tab a new route, then into the root's
+        // First and from it into Sales again: Sales' tab came by First, and Second is gone from it.
         rest(&mut h);
         let at = rect_of(&h, "workspace.canvas.path.1").center();
         click(&mut h, at);
@@ -10782,11 +10784,11 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
         rest(&mut h);
         crate::package_nav::enter(h.state_mut(), sales, 0.0);
         h.run();
-        assert_eq!(route(&h, sales_d), vec![(second, sales_d), (sales_d, first), (first, sales_d)], "{theme:?}");
+        assert_eq!(route(&h, sales_d), vec![(sales_d, first), (first, sales_d)], "{theme:?}");
         rest(&mut h);
         let at = rect_of(&h, "workspace.canvas.path.0").center();
         click(&mut h, at);
-        assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: back the newest way in");
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: the root's default");
         assert_eq!(unchanged(&h), before, "{theme:?}: no change, no undo step, nothing to save");
     }
 }
@@ -11778,6 +11780,73 @@ fn zooming_out_past_a_removed_way_in_opens_the_owning_parents_default() {
     }
 }
 
+/// Leaving by the path bar or ⌘↑ follows ownership and starts a new route (AR-666, Decision 4):
+/// after Archive, owned by Operations, is entered from the Commerce overview, the Operations pill
+/// and ⌘↑ both open Operations' default, not the overview. That tab came from the overview before,
+/// yet its route starts empty, so the next zoom out goes up by ownership to the root's default
+/// rather than back to the overview. Browsing changes nothing in the model or its undo history.
+#[test]
+fn the_path_bar_and_command_up_follow_ownership_and_start_a_new_route() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for by_key in [false, true] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+            // Root > Commerce and Root > Operations > Archive; Commerce's overview shows Operations
+            // and Archive.
+            let (top, overview, operations, operations_d, archive, archive_d) = {
+                let s = h.state_mut().session.as_mut().unwrap();
+                let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+                let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" });
+                let top = id(s.execute("diagram.add", &p).unwrap().value);
+                let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+                let operations = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Operations" })).unwrap().value);
+                let archive =
+                    id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": operations.to_string() })).unwrap().value);
+                let overview = own_diagram(s, commerce);
+                let (operations_d, archive_d) = (own_diagram(s, operations), own_diagram(s, archive));
+                for (what, x) in [(operations, 200), (archive, 600)] {
+                    let p = serde_json::json!({ "diagram": overview.to_string(), "element": what.to_string(), "x": x, "y": 160, "width": 240, "height": 148 });
+                    s.execute("diagram.place", &p).unwrap();
+                }
+                s.mark_saved().unwrap();
+                (top, overview, operations, operations_d, archive, archive_d)
+            };
+            let unchanged = |h: &Harness<'static, Shell>| {
+                let s = h.state().session.as_ref().unwrap();
+                (s.revision(), s.can_undo(), s.can_redo(), s.is_dirty())
+            };
+            let before = unchanged(&h);
+            // Operations' tab first comes from the overview; then Archive is entered from it too.
+            crate::canvas::open(h.state_mut(), overview);
+            h.run();
+            crate::package_nav::enter(h.state_mut(), operations, 0.0);
+            h.run();
+            assert_eq!(route_of(&h, operations_d), vec![(overview, operations_d)], "{theme:?}");
+            rest(&mut h);
+            crate::canvas::open(h.state_mut(), overview);
+            h.run();
+            crate::package_nav::enter(h.state_mut(), archive, 0.0);
+            h.run();
+            assert_eq!(route_of(&h, archive_d), vec![(overview, archive_d)], "{theme:?}");
+            rest(&mut h);
+            if by_key {
+                h.state_mut().canvas.focused = true;
+                h.run();
+                key(&mut h, egui::Key::ArrowUp, egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND);
+            } else {
+                // The path bar: the root, Operations, Archive.
+                let at = rect_of(&h, "workspace.canvas.path.1").center();
+                click(&mut h, at);
+            }
+            assert_eq!(h.state().canvas.active, Some(operations_d), "{theme:?} by key {by_key}: Operations' default, not the overview");
+            assert_eq!(route_of(&h, operations_d), vec![], "{theme:?} by key {by_key}: a new route, no step made up from Archive");
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![operations_d, top], "{theme:?} by key {by_key}: up by ownership");
+            assert_eq!(unchanged(&h), before, "{theme:?} by key {by_key}: no change, no undo step, nothing to save");
+        }
+    }
+}
+
 /// The root's class diagram First with the card of the package Sales, and Sales' own diagram:
 /// `(root, first, sales, sales_d)`.
 fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid) {
@@ -12044,7 +12113,7 @@ fn a_landing_in_place_left_before_it_draws_keeps_no_view_never_drawn() {
         h.run();
         crate::package_nav::enter(h.state_mut(), sales, 0.0);
         assert_eq!((h.state().canvas.active, h.state().canvas.zoom), (Some(sales_d), 1.0), "{theme:?}: landing in place");
-        crate::package_nav::leave(h.state_mut(), archforge_mof::Uuid::parse(&root).unwrap(), None, 0.0);
+        crate::package_nav::leave(h.state_mut(), archforge_mof::Uuid::parse(&root).unwrap(), 0.0);
         assert_eq!(h.state().canvas.active, Some(first), "{theme:?}");
         let kept = h.state().canvas.nav.views.get(&sales_d).copied();
         assert!(kept.is_none() || kept == Some(drawn), "{theme:?}: Sales keeps no view it was never drawn with, {kept:?}");
