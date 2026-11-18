@@ -626,7 +626,7 @@ fn choosing_a_default_makes_its_binding_then_retargets_it() {
     assert_eq!(resolve(s.doc(), sales), Err(BindingProblem::Missing));
     let made = set(&mut s, 0x10, 0x11);
     let binding = Uuid::parse(made["binding"].as_str().unwrap()).unwrap();
-    assert_eq!(made, json!({ "package": id(0x10), "binding": binding.to_string(), "diagram": id(0x11), "removed": [] }));
+    assert_eq!(made, json!({ "package": id(0x10), "binding": binding.to_string(), "diagram": id(0x11), "removed": [], "links_removed": [] }));
     let st = s.doc();
     let b = st.by_uuid(binding).unwrap();
     assert_eq!((resolve(st, sales), st.container(b).unwrap()), (Ok(DefaultDiagram::Bound(overview)), Some((model, archforge_core::model::MEMBER))));
@@ -663,7 +663,7 @@ fn choosing_a_default_of_a_package_with_several_keeps_one_binding() {
     let mut s = over(st);
     let before = rows_of(s.doc());
     let made = set(&mut s, 0x10, 0x12);
-    assert_eq!(made, json!({ "package": id(0x10), "binding": id(0x1a), "diagram": id(0x12), "removed": [id(0x1b), id(0x1c)] }));
+    assert_eq!(made, json!({ "package": id(0x10), "binding": id(0x1a), "diagram": id(0x12), "removed": [id(0x1b), id(0x1c)], "links_removed": [] }));
     let st = s.doc();
     assert!(st.is_alive(first) && !st.is_alive(middle) && !st.is_alive(later));
     assert_eq!((resolve(st, sales), problems(st)), (Ok(DefaultDiagram::Bound(detail)), vec![]));
@@ -935,4 +935,29 @@ fn a_handoff_inside_a_package_with_no_parent_that_goes_is_not_judged() {
     let mut kept = shop_with(true);
     let unsound = Reason::ParentDefaultUnsound { parent: id(0x60).into(), fault: None };
     assert_eq!(refused(&mut kept, "element.remove", json!({ "ids": [id(0x50), id(0x70)] })).1, Some(unsound), "Accounts stays");
+}
+
+/// Mending a package with three bindings, one the end of a trace link, takes that link along with
+/// its binding instead of being refused: the first binding by id stays and names the chosen
+/// diagram, the other two and the link go, each named in the answer, and one undo step brings every
+/// row back (AR-733).
+#[test]
+fn choosing_a_default_removes_a_duplicate_binding_with_its_trace_link() {
+    let (mut st, model, sales, overview, detail) = unbound_sales();
+    let first = bind(&mut st, model, 0x1a, sales, overview);
+    let linked = bind(&mut st, model, 0x1b, sales, detail);
+    let other = bind(&mut st, model, 0x1c, sales, detail);
+    let trace = archforge_core::link(&mut st, model, archforge_core::LinkKind::Trace, linked, sales, None).unwrap();
+    let trace_id = st.uuid(trace).unwrap().to_string();
+    let mut s = over(st);
+    let (before, alive) = (rows_of(s.doc()), s.doc().alive().count());
+    let made = set(&mut s, 0x10, 0x12);
+    let removed = json!([id(0x1b), id(0x1c)]);
+    assert_eq!(made, json!({ "package": id(0x10), "binding": id(0x1a), "diagram": id(0x12), "removed": removed, "links_removed": [trace_id] }));
+    let st = s.doc();
+    assert_eq!(alive - st.alive().count(), 3, "two bindings and the link went, nothing else");
+    assert!(st.is_alive(first) && !st.is_alive(linked) && !st.is_alive(other) && !st.is_alive(trace));
+    assert_eq!((resolve(st, sales), problems(st)), (Ok(DefaultDiagram::Bound(detail)), vec![]));
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(rows_of(s.doc()) == before, "one undo step brings the bindings and the link back");
 }

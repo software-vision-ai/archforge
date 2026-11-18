@@ -1949,6 +1949,7 @@ str		Rename	Mudar o nome
 str		Show in diagram	Mostrar no diagrama
 str		No diagram shows it yet	Nenhum diagrama o mostra ainda
 str		Delete from model	Eliminar do modelo
+str		Delete diagram	Eliminar diagrama
 str		A skill is removed from its tab	Uma competência é removida no seu separador
 str		New inside {name}	Novo dentro de {name}
 str		not inside a class	não dentro de uma classe

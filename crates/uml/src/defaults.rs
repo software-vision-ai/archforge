@@ -6,6 +6,8 @@
 //! a binding (AR-580). `uml.package.diagram` gives the diagram a package opens to from it, and
 //! makes none (AR-582).
 
+use std::collections::BTreeMap;
+
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, ProjectView, defaults, diagram};
 use archforge_engine::{BindingFault, CommandError, Ctx, EXPECTED_REVISION, Params, Reason, expected_revision};
@@ -153,8 +155,9 @@ pub(crate) fn entry(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> Result
 /// package, each refusal typed. The package's one binding is made, as a member of the project's
 /// Model, or keeps its identity and names the diagram; several are repaired, the first by id kept
 /// and the others removed, in the same undo step. The diagram it names already changes nothing and
-/// records no undo step. Gives the ids of the package, the binding and the diagram, and those of
-/// the bindings removed.
+/// records no undo step. A binding removed takes the links that have it as an end along (AR-733).
+/// Gives the ids of the package, the binding and the diagram, those of the bindings removed and
+/// those of the links that went with them, in the order of their ids.
 pub(crate) fn default_set(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> Result<Json, CommandError> {
     expected_revision(ctx, p)?;
     let store = &*ctx.doc;
@@ -168,6 +171,13 @@ pub(crate) fn default_set(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> 
     let mut extra = by_id(store, defaults::bindings_of(store, package));
     let kept = (!extra.is_empty()).then(|| extra.remove(0));
     let removed = extra.iter().map(|b| uuid_of(store, *b)).collect::<Result<Vec<_>, _>>()?;
+    // The links each removed binding takes along, by id: two of them may share one.
+    let mut linked = BTreeMap::new();
+    for b in &extra {
+        for l in archforge_core::links_of(store, *b).map_err(fail)? {
+            linked.insert(uuid_of(store, l)?, l);
+        }
+    }
     let binding = match kept {
         Some(b) => b,
         None => {
@@ -180,11 +190,14 @@ pub(crate) fn default_set(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> 
     };
     // Naming the diagram it names already is no change, so it records no undo step.
     ctx.doc.set(binding, DEFAULT_DIAGRAM, Value::Ref(chosen)).map_err(fail)?;
+    // A binding may be a trace link's end, so each goes with its links (AR-733).
     for b in extra {
-        ctx.doc.destroy(b).map_err(fail)?;
+        archforge_core::destroy_with_links(ctx.doc, b).map_err(fail)?;
     }
     let store = &*ctx.doc;
-    Ok(json!({ "package": uuid_of(store, package)?, "binding": uuid_of(store, binding)?, "diagram": uuid_of(store, chosen)?, "removed": removed }))
+    let links: Vec<String> = linked.into_iter().filter(|(_, l)| !store.is_alive(*l)).map(|(id, _)| id).collect();
+    let (package, binding, chosen) = (uuid_of(store, package)?, uuid_of(store, binding)?, uuid_of(store, chosen)?);
+    Ok(json!({ "package": package, "binding": binding, "diagram": chosen, "removed": removed, "links_removed": links }))
 }
 
 /// `problem` with `package`'s binding as a refusal about `package`, typed by its fault: the problem,

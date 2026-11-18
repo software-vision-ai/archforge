@@ -138,6 +138,11 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         if cols.explorer.is_none() || shell.state.explorer != Explorer::Models {
             shell.explorer.focused = false;
         }
+        // A diagram row's menu goes with the Diagrams explorer, and its hold on the canvas's keys
+        // with it (AR-644).
+        if cols.explorer.is_none() || shell.state.explorer != Explorer::Diagrams {
+            shell.diagrams.menu = None;
+        }
         if let Some(r) = cols.explorer {
             explorer(shell, ui, &p, r);
             resize(shell, ui, &p, r.right(), body, "workspace.explorer.resize", true);

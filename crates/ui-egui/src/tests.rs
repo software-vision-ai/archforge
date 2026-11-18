@@ -9343,6 +9343,149 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
     }
 }
 
+/// A project to delete diagrams in (AR-644): the package Sales with its own default diagram and a
+/// second one, Sales details, showing the class Order, and the schema Shop's ER diagram; Sales and
+/// then Sales details open in tabs, the Diagrams explorer showing. Gives Order and the diagrams.
+fn deletable_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, [archforge_mof::Uuid; 4]) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let made = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        let default = own_diagram(s, sales);
+        let order = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Order" })).unwrap().value);
+        let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales details" });
+        let details = id(s.execute("diagram.add", &p).unwrap().value);
+        let place = serde_json::json!({ "diagram": details.to_string(), "element": order.to_string(), "x": 0, "y": 0, "width": 240, "height": 72 });
+        s.execute("diagram.place", &place).unwrap();
+        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+        let shop = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema.to_string(), "name": "Shop" })).unwrap().value);
+        [order, default, details, shop]
+    };
+    crate::canvas::open(h.state_mut(), made[1]);
+    crate::canvas::open(h.state_mut(), made[2]);
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    (h, made)
+}
+
+/// Whether the element `id` is in the open project's model.
+fn alive_in(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> bool {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.by_uuid(id).is_some_and(|o| st.is_alive(o))
+}
+
+/// The boxes the diagram `d` shows.
+fn boxes_of(h: &Harness<'static, Shell>, d: archforge_mof::Uuid) -> usize {
+    let st = h.state().session.as_ref().unwrap().doc();
+    crate::canvas::refs(st, st.by_uuid(d).unwrap(), archforge_diagram::diagram::NODE).len()
+}
+
+/// A diagram row's menu deletes a diagram that is no package's default at once, as one undo step:
+/// the class it showed stays, its tab goes to the one before, and the toast's Undo brings it back
+/// with its boxes. A package's default stays: its row is off (AR-644).
+#[test]
+fn a_diagram_rows_menu_deletes_the_diagram_at_once_and_undo_brings_it_back() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, [order, default, details, _]) = deletable_diagrams(theme);
+        assert_eq!((h.state().canvas.active, boxes_of(&h, details)), (Some(details), 1), "{theme:?}");
+        // While the menu is open the canvas takes none of its keys: Delete would take Order off.
+        let node = ids(&h).into_iter().find(|i| i.starts_with("workspace.canvas.node.") && i.matches('.').count() == 3).unwrap();
+        let (node, at) = (rect_of(&h, &node).center(), rect_of(&h, &format!("workspace.diagrams.row.{details}")).center());
+        click(&mut h, node);
+        right_click(&mut h, at);
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert_eq!(boxes_of(&h, details), 1, "{theme:?}: the box stays");
+        // The menu goes with the explorer, and so does its hold on the keys.
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.run();
+        click(&mut h, node);
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert_eq!(boxes_of(&h, details), 0, "{theme:?}: once the menu is gone, it does");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
+        h.run();
+        right_click(&mut h, at);
+        let item = rect_of(&h, "workspace.diagrams.contextMenu.delete").center();
+        click(&mut h, item);
+        assert!(!alive_in(&h, details), "{theme:?}: deleted at once, with no question");
+        assert!(alive_in(&h, order), "{theme:?}: the class stays in the model");
+        assert_eq!((h.state().canvas.tabs.clone(), h.state().canvas.active), (vec![default], Some(default)), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Remove diagram"), "{theme:?}: one undo step");
+        assert_eq!(painted_times(&h, "Sales details deleted"), 1, "{theme:?}: {:?}", painted(&h));
+        let undo = rect_of(&h, "workspace.toast.undo").center();
+        click(&mut h, undo);
+        assert!(alive_in(&h, details) && boxes_of(&h, details) == 1, "{theme:?}: back with its box");
+        // A package's default: the row is there, off, and a click on it deletes nothing.
+        let undo_label = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        let before = undo_label(&h);
+        let at = rect_of(&h, &format!("workspace.diagrams.row.{default}")).center();
+        right_click(&mut h, at);
+        let item = rect_of(&h, "workspace.diagrams.contextMenu.delete").center();
+        click(&mut h, item);
+        assert!(alive_in(&h, default), "{theme:?}: the default stays");
+        assert_eq!(undo_label(&h), before, "{theme:?}: nothing new to undo");
+        assert_eq!(h.state().diagrams.menu.as_ref().map(|m| m.diagram), Some(default), "{theme:?}: still open");
+        // It says why, to a screen reader too: the engine's reason for keeping a default.
+        let why = crate::panels::said(&archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
+        let off = {
+            use egui_kittest::kittest::{NodeT, Queryable};
+            h.get_by_label("Delete diagram").accesskit_node().data().clone()
+        };
+        assert!(off.is_disabled() && off.description() == why.as_deref(), "{theme:?}");
+    }
+}
+
+/// On a focused diagram row Delete or Backspace deletes the diagram, an ER one alike, and ⇧F10
+/// opens the menu with its row reached for Enter; Escape gives the row the keyboard back. A
+/// package's default stays and the notice says why, as the engine does (AR-644).
+#[test]
+fn a_focused_diagram_row_deletes_its_diagram_by_key_and_says_why_a_default_stays() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, [order, default, details, shop]) = deletable_diagrams(theme);
+        let row = |d: archforge_mof::Uuid| crate::widgets::egui_id(&format!("workspace.diagrams.row.{d}"));
+        // Only Shop open: once it goes no diagram shows, and the toast shows over the empty centre.
+        crate::canvas::close_tab(h.state_mut(), default);
+        crate::canvas::close_tab(h.state_mut(), details);
+        crate::canvas::open(h.state_mut(), shop);
+        h.run();
+        h.ctx.memory_mut(|m| m.request_focus(row(shop)));
+        h.run();
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert!(!alive_in(&h, shop), "{theme:?}: the ER diagram is deleted alike");
+        assert_eq!(h.state().canvas.active, None, "{theme:?}");
+        assert_eq!(painted_times(&h, "Shop deleted"), 1, "{theme:?}: {:?}", painted(&h));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert!(alive_in(&h, shop), "{theme:?}");
+        // ⇧F10 opens the menu, its row reached: Enter deletes.
+        h.ctx.memory_mut(|m| m.request_focus(row(details)));
+        h.run();
+        key(&mut h, egui::Key::F10, egui::Modifiers::SHIFT);
+        assert_eq!(h.state().diagrams.menu.as_ref().map(|m| (m.diagram, m.reached)), Some((details, true)), "{theme:?}");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(!alive_in(&h, details) && alive_in(&h, order), "{theme:?}");
+        // Escape closes the menu and hands the row the keyboard back.
+        h.ctx.memory_mut(|m| m.request_focus(row(default)));
+        h.run();
+        key(&mut h, egui::Key::F10, egui::Modifiers::SHIFT);
+        assert!(h.state().diagrams.menu.is_some(), "{theme:?}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().diagrams.menu.is_none(), "{theme:?}");
+        assert_eq!(h.ctx.memory(|m| m.focused()), Some(row(default)), "{theme:?}");
+        // Backspace on a package's default deletes nothing and says why.
+        let undo = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        assert!(alive_in(&h, default), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo, "{theme:?}");
+        let why = crate::panels::said(&archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
+        assert_eq!(h.state().diagrams.notice, why, "{theme:?}");
+        let why = why.unwrap();
+        let whole = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Text(t) if t.galley.text() == why && !t.galley.elided));
+        assert!(whole, "{theme:?}: the reason reads whole, not cut");
+    }
+}
+
 #[test]
 fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     // A model with a folder holding a class diagram, as a project may keep one.
@@ -10256,6 +10399,82 @@ fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from()
     click(&mut h, at);
     assert_eq!(h.state().canvas.active, Some(second), "back on Second, not the root's first diagram");
     assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "as it was left");
+}
+
+/// Each tab keeps the route it was entered by (AR-662): entering gives the new tab the route of the
+/// tab left plus one step, which names the diagram left, its view and the session's history, and
+/// leaves the tab left its own. Going back takes the newest way in through the parent, and
+/// browsing changes nothing in the model, its undo history or what is saved.
+#[test]
+fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Root > Sales > Orders. The root's First and Second both show Sales; Sales' diagram shows
+        // Orders and the root.
+        let (first, second, root, sales, orders, sales_d, orders_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let add = |s: &mut archforge_notations::Session, name: &str| {
+                let p = serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": name });
+                id(s.execute("diagram.add", &p).unwrap().value)
+            };
+            let (first, second) = (add(s, "First"), add(s, "Second"));
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
+            let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
+            for (on, what) in [(first, sales), (second, sales), (sales_d, orders), (sales_d, root)] {
+                let p =
+                    serde_json::json!({ "diagram": on.to_string(), "element": what.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                s.execute("diagram.place", &p).unwrap();
+            }
+            s.mark_saved().unwrap();
+            (first, second, root, sales, orders, sales_d, orders_d)
+        };
+        let unchanged = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.can_undo(), s.can_redo(), s.is_dirty())
+        };
+        let before = unchanged(&h);
+        let history = h.state().session.as_ref().unwrap().history();
+        let route = |h: &Harness<'static, Shell>, tab| -> Vec<(archforge_mof::Uuid, archforge_mof::Uuid)> {
+            h.state().canvas.nav.routes.get(&tab).map(|r| r.steps().map(|s| (s.source, s.destination)).collect()).unwrap_or_default()
+        };
+        crate::canvas::open(h.state_mut(), second);
+        h.run();
+        let left = (h.state().canvas.pan, h.state().canvas.zoom);
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        let entry = h.state().canvas.nav.routes.get(&sales_d).and_then(|r| r.steps().next_back()).cloned().unwrap();
+        let expected = crate::nav_route::Step { source: second, destination: sales_d, source_name: "Second".into(), view: Some(left), history };
+        assert_eq!(entry, expected, "{theme:?}: the step names what was left, its view and the history");
+        assert_eq!(route(&h, second), vec![], "{theme:?}: the tab left had no route and still has none");
+        // Sales > Orders: the Orders tab carries the way into Sales too; Sales keeps its own.
+        rest(&mut h);
+        crate::package_nav::enter(h.state_mut(), orders, 0.0);
+        h.run();
+        assert_eq!(route(&h, orders_d), vec![(second, sales_d), (sales_d, orders_d)], "{theme:?}");
+        assert_eq!(route(&h, sales_d), vec![(second, sales_d)], "{theme:?}: Sales' tab keeps its own route");
+        // Back to Sales, then into the root's First and from it into Sales again: Sales' tab now
+        // came by First, the newest way in, though Second is on its route too.
+        rest(&mut h);
+        let at = rect_of(&h, "workspace.canvas.path.1").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}");
+        rest(&mut h);
+        crate::package_nav::enter(h.state_mut(), root, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: the root's default");
+        rest(&mut h);
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        assert_eq!(route(&h, sales_d), vec![(second, sales_d), (sales_d, first), (first, sales_d)], "{theme:?}");
+        rest(&mut h);
+        let at = rect_of(&h, "workspace.canvas.path.0").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: back the newest way in");
+        assert_eq!(unchanged(&h), before, "{theme:?}: no change, no undo step, nothing to save");
+    }
 }
 
 #[test]

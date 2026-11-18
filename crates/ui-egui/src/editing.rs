@@ -2101,6 +2101,8 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         // A Chat history row's menu or the confirmation of a deletion takes the keys (AR-217).
         || shell.chat_panel.row_menu.is_some()
         || shell.chat_panel.ask.is_some()
+        // So does a diagram row's menu (AR-644).
+        || shell.diagrams.menu.is_some()
     {
         return;
     }

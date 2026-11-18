@@ -24,6 +24,7 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::tr;
+use crate::nav_route::{Route, Step};
 use crate::ux::{self, Palette, icons, types};
 
 /// The share of the canvas one package covers once zooming in opens it.
@@ -46,9 +47,10 @@ pub struct Nav {
     pub(crate) intent: f32,
     /// The view each diagram had when it was left for another level, by diagram.
     pub(crate) views: HashMap<Uuid, (Vec2, f32)>,
-    /// The diagram each package's diagram was entered from, by the diagram entered: going back
-    /// returns there, though the parent package has other class diagrams too.
-    pub(crate) came_from: HashMap<Uuid, Uuid>,
+    /// The return route of each tab, by the tab's diagram: the package entries that led to it, so
+    /// going back returns the way the user came in, though the parent package has other class
+    /// diagrams too. Browsing state only: never written into the model, and no undo step.
+    pub(crate) routes: HashMap<Uuid, Route>,
     /// When the last switch happened, and when it began to fade in.
     pub(crate) switched: Option<f64>,
     /// The package to centre at [`LANDING`] on the next frame, after a zoom out.
@@ -128,13 +130,22 @@ fn default_of(shell: &mut Shell, package: Uuid) -> Option<Uuid> {
     }
 }
 
-/// Opens the diagram of `package`, fitted, keeping the view of the diagram left.
+/// Opens the diagram of `package`, fitted, keeping the view of the diagram left. The diagram's tab
+/// takes the route of the tab left plus this entry; entering the diagram already open records
+/// nothing.
 pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
     let Some(from) = shell.canvas.active else { return };
     let Some(d) = default_of(shell, package) else { return };
-    shell.canvas.nav.views.insert(from, (shell.canvas.pan, shell.canvas.zoom));
-    if d != from {
-        shell.canvas.nav.came_from.insert(d, from);
+    let view = (shell.canvas.pan, shell.canvas.zoom);
+    shell.canvas.nav.views.insert(from, view);
+    if d != from
+        && let Some(session) = shell.session.as_ref()
+    {
+        let store = session.doc();
+        let source_name = store.by_uuid(from).map(|o| archforge_core::name_of(store, o)).unwrap_or_default();
+        let mut route = shell.canvas.nav.routes.get(&from).cloned().unwrap_or_default();
+        route.push(Step { source: from, destination: d, source_name, view: Some(view), history: session.history() });
+        shell.canvas.nav.routes.insert(d, route);
     }
     crate::canvas::open(shell, d);
     // At 100 %, its content centred on the next frame (AR-110).
@@ -174,20 +185,13 @@ pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now:
     shell.canvas.nav.disarmed = true;
 }
 
-/// The diagram of `package` on the way that led to the diagram `from`, walking back the levels
-/// entered.
+/// The diagram of `package` on the way that led to the diagram `from`: the newest source on its
+/// tab's route that is a diagram of `package`, walking back the levels entered.
 fn entered_from(shell: &Shell, from: Uuid, package: Uuid) -> Option<Uuid> {
     let store = shell.session.as_ref()?.doc();
     let package = store.by_uuid(package)?;
-    let mut at = from;
-    for _ in 0..MAX_DEPTH {
-        let up = *shell.canvas.nav.came_from.get(&at)?;
-        if store.by_uuid(up).and_then(|d| package_of_diagram(store, d)) == Some(package) {
-            return Some(up);
-        }
-        at = up;
-    }
-    None
+    let route = shell.canvas.nav.routes.get(&from)?;
+    route.steps().rev().map(|s| s.source).find(|up| store.by_uuid(*up).and_then(|d| package_of_diagram(store, d)) == Some(package))
 }
 
 /// Before the canvas draws: shows the package a zoom out left, takes ⌘↓, ⌘↑ and the zoom keys,
