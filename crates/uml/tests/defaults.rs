@@ -907,65 +907,73 @@ fn a_handoff_of_no_class_diagram_goes_and_one_past_a_parent_going_too_is_judged_
 
 /// Ledger in Accounts (no diagram yet) in Shop, a package with no parent: removing Shop with Ledger
 /// takes everything along, Accounts and Ledger's diagram among them, exactly as removing Shop
-/// alone does, so nothing is refused. Under a package that stays, Accounts would keep Ledger's
-/// diagram, and the same selection is refused, naming Accounts (AR-673).
+/// alone does, so nothing is refused. Under Sales, a package that stays, Shop hands Accounts up to
+/// Sales, but Ledger's diagram goes past Accounts, below Shop, to Sales, which is judged (AR-673).
 #[test]
 fn a_handoff_inside_a_package_with_no_parent_that_goes_is_not_judged() {
     let shop_with = |under: bool| {
         let (mut st, model) = store();
         let shop = add(&mut st, model, PACKAGE, 0x50);
-        if under {
+        let sales = under.then(|| {
             let sales = add(&mut st, model, PACKAGE, 0x40);
             let default = diagram(&mut st, model, 0x41, STRUCTURE_DIAGRAM, sales);
             bind(&mut st, model, 0x42, sales, default);
             st.remove_value(model, archforge_core::model::MEMBER, &Value::Ref(shop)).unwrap();
             st.push(sales, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(shop)).unwrap();
-        }
+            (sales, default)
+        });
         let accounts = nested(&mut st, shop, 0x60, "");
         let ledger = nested(&mut st, accounts, 0x70, "Ledger");
         let handed = diagram(&mut st, model, 0x71, STRUCTURE_DIAGRAM, ledger);
         bind(&mut st, model, 0x72, ledger, handed);
-        over(st)
+        (over(st), sales, accounts, handed)
     };
-    let (mut both, mut alone) = (shop_with(false), shop_with(false));
+    let ((mut both, ..), (mut alone, ..)) = (shop_with(false), shop_with(false));
     both.execute("element.remove", &json!({ "ids": [id(0x50), id(0x70)] })).unwrap();
     alone.execute("element.remove", &json!({ "ids": [id(0x50)] })).unwrap();
     assert!(rows_of(both.doc()) == rows_of(alone.doc()), "the same as Shop alone");
     assert!(both.doc().by_uuid(Uuid([0x71; 16])).is_none_or(|d| !both.doc().is_alive(d)), "Ledger's diagram went with Shop");
-    let mut kept = shop_with(true);
-    let unsound = Reason::ParentDefaultUnsound { parent: id(0x60).into(), fault: None };
-    assert_eq!(refused(&mut kept, "element.remove", json!({ "ids": [id(0x50), id(0x70)] })).1, Some(unsound), "Accounts stays");
+    let (mut kept, Some((sales, default)), accounts, handed) = shop_with(true) else { panic!("Sales was made") };
+    kept.execute("element.remove", &json!({ "ids": [id(0x50), id(0x70)] })).unwrap();
+    let st = kept.doc();
+    assert_eq!((st.container(accounts).unwrap().map(|(o, _)| o), resolve(st, accounts)), (Some(sales), Ok(DefaultDiagram::NoDiagramYet)));
+    assert_eq!(
+        (st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), resolve(st, sales)),
+        (Value::Ref(sales), Ok(DefaultDiagram::Bound(default)))
+    );
 }
 
-/// Removing T, nested in R, with C, below T in P, which has no diagram: T hands P up to R, so P
-/// stays and takes C's class diagram, and P, not R, is judged. With no diagram yet P is refused,
-/// named; with a bound one both go in either order, P lands in R holding C's diagram, and R, which
-/// has no diagram of its own, is never judged (AR-673).
+/// Removing T, nested in R, with C, below T in P, which has no diagram: T hands P up to R, but C's
+/// class diagram goes past P, below T, to R, the first package above all that go, and R, not P, is
+/// judged. With no diagram yet R is refused, named; with a bound one T and C go in either order, P
+/// lands in R with no diagram still, and C's diagram is R's beside R's default (AR-673).
 #[test]
-fn a_package_handed_up_by_a_removed_parent_stays_and_takes_the_diagram() {
+fn a_handoff_past_a_removed_ancestor_goes_to_the_first_package_above_it_that_stays() {
     let built = |bound: bool| {
         let (mut st, model) = store();
         let r = add(&mut st, model, PACKAGE, 0x10);
+        st.set(r, archforge_uml::named_element::NAME, Value::str("R")).unwrap();
+        let own = bound.then(|| diagram(&mut st, model, 0x11, STRUCTURE_DIAGRAM, r));
+        if let Some(own) = own {
+            bind(&mut st, model, 0x12, r, own);
+        }
         let t = nested(&mut st, r, 0x20, "T");
         let p = nested(&mut st, t, 0x30, "P");
-        let own = bound.then(|| diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, p));
-        if let Some(own) = own {
-            bind(&mut st, model, 0x32, p, own);
-        }
         let c = nested(&mut st, p, 0x40, "C");
         let handed = diagram(&mut st, model, 0x41, STRUCTURE_DIAGRAM, c);
         bind(&mut st, model, 0x42, c, handed);
-        (over(st), r, p, own, handed)
+        (over(st), [r, t, p, c], own, handed)
     };
-    let unsound = Reason::ParentDefaultUnsound { parent: "P".into(), fault: None };
-    assert_eq!(refused(&mut built(false).0, "element.remove", json!({ "ids": [id(0x20), id(0x40)] })).1, Some(unsound), "P stays");
+    let unsound = Reason::ParentDefaultUnsound { parent: "R".into(), fault: None };
+    assert_eq!(refused(&mut built(false).0, "element.remove", json!({ "ids": [id(0x20), id(0x40)] })).1, Some(unsound), "R takes it");
     for ids in [[id(0x20), id(0x40)], [id(0x40), id(0x20)]] {
-        let (mut s, r, p, own, handed) = built(true);
+        let (mut s, [r, t, p, c], own, handed) = built(true);
         s.execute("element.remove", &json!({ "ids": ids })).unwrap();
         let st = s.doc();
-        assert_eq!((st.container(p).unwrap().map(|(o, _)| o), resolve(st, r)), (Some(r), Ok(DefaultDiagram::NoDiagramYet)), "{ids:?}");
-        let p_default = own.map(|d| Ok(DefaultDiagram::Bound(d)));
-        assert_eq!((st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), Some(resolve(st, p))), (Value::Ref(p), p_default), "{ids:?}");
+        assert!(!st.is_alive(t) && !st.is_alive(c), "{ids:?}: T and C went");
+        assert_eq!((st.container(p).unwrap().map(|(o, _)| o), resolve(st, p)), (Some(r), Ok(DefaultDiagram::NoDiagramYet)), "{ids:?}");
+        let r_default = own.map(|d| Ok(DefaultDiagram::Bound(d)));
+        assert_eq!((st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), Some(resolve(st, r))), (Value::Ref(r), r_default), "{ids:?}");
     }
 }
 
