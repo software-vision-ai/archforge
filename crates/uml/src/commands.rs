@@ -651,7 +651,7 @@ fn primitive_type_list(ctx: &mut C<'_>, p: &Params) -> R {
 /// What a nested package hands up to its parent when it is removed: everything it holds but the
 /// dependencies it is the client of, which go with it (AR-696).
 fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
-    let own = own_dependencies(store, pkg);
+    let own: std::collections::BTreeSet<Obj> = own_dependencies(store, pkg).into_iter().collect();
     store
         .list(pkg, package::PACKAGED_ELEMENT)
         .unwrap_or_default()
@@ -689,7 +689,7 @@ fn supplier_problem(store: &Store, objs: &[Obj], goes: &std::collections::BTreeS
     let (pkg, d) = packages
         .iter()
         .flat_map(|p| store.referrers(*p).into_iter().map(move |(d, _)| (*p, d)))
-        .find(|(p, d)| stays(*d) && dependency_end(store, *d, crate::dependency::SUPPLIER) == Some(*p) && !with_client(*d))?;
+        .find(|(p, d)| stays(*d) && store.list(*d, crate::dependency::SUPPLIER).is_ok_and(|l| l.contains(&Value::Ref(*p))) && !with_client(*d))?;
     let client = dependency_end(store, d, crate::dependency::CLIENT).map(|c| crate::applications::name_or_id(store, c)).unwrap_or_default();
     let (package, dependency) = (crate::applications::name_or_id(store, pkg), uuid_of(store, d).unwrap_or_default());
     let message = format!("{package} is the supplier of the dependency {dependency} from {client}, which stays; remove that dependency first");

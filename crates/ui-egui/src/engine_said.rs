@@ -112,8 +112,8 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
             &[("package", package)],
         ),
         Reason::DependencySupplier(of) => fmt(
-            &tr("A dependency from {client} depends on {package}, so {package} stays. Remove that dependency first."),
-            &[("package", &of.package), ("client", &of.client)],
+            &tr("The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first."),
+            &[("package", &of.package), ("client", &of.client), ("dependency", &of.dependency)],
         ),
         Reason::ReplacementIsRemoved => tr("A diagram cannot replace itself as it is removed. Choose another diagram as the replacement."),
         Reason::OneReplacement => tr("Choose either an existing diagram or a new one as the replacement, not both."),

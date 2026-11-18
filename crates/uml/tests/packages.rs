@@ -307,11 +307,10 @@ fn kept(package: &str, client: &str, dependency: &str) -> Option<archforge_engin
     Some(archforge_engine::Reason::DependencySupplier(Box::new(of)))
 }
 
-/// A package that is the supplier of a dependency that stays is not removed, nested deeper or
-/// right under the root package: the refusal names it and the dependency's client, and changes
-/// nothing. Once the dependency is removed, the package goes, a package it holds handed up with
-/// its own dependency kept. A package client takes its dependencies with it, as does a removal of
-/// both ends (AR-696).
+/// A package a staying dependency has as supplier, deeper or right under the root, is kept, the
+/// refusal naming it, the dependency and its client (AR-696); it goes once the dependency goes, or
+/// its client with it, a package it holds handed up with its dependency. A package client takes its
+/// own dependencies along, with constraints naming only them, as does a removal of both ends.
 #[test]
 fn a_package_a_dependency_stays_on_is_kept_and_a_package_client_takes_its_dependencies_along() {
     let mut s = session();
@@ -351,8 +350,8 @@ fn a_package_a_dependency_stays_on_is_kept_and_a_package_client_takes_its_depend
     assert!(alive(&s, &tax) && alive(&s, &sales));
 }
 
-/// A package with no parent takes the packages it holds along, so one of them that a dependency
-/// staying elsewhere is on keeps it, as a loaded document may have it (AR-696).
+/// A parentless package, as a loaded document may hold, is kept while a package it takes along is
+/// any supplier of a dependency that stays elsewhere (AR-696).
 #[test]
 fn a_package_with_no_parent_is_kept_while_a_package_it_takes_along_is_a_dependency_s_supplier() {
     use archforge_uml::{dependency, named_element, package};
@@ -369,6 +368,8 @@ fn a_package_with_no_parent_is_kept_while_a_package_it_takes_along_is_a_dependen
         st.push(owner, package::PACKAGED_ELEMENT, Value::Ref(held)).unwrap();
     }
     st.push(d, dependency::CLIENT, Value::Ref(order)).unwrap();
+    // A second supplier past a first that stays, as a loaded document may have it.
+    st.push(d, dependency::SUPPLIER, Value::Ref(other)).unwrap();
     st.push(d, dependency::SUPPLIER, Value::Ref(inner)).unwrap();
     let (top, d) = (st.uuid(top).unwrap().to_string(), st.uuid(d).unwrap().to_string());
     let mut s = over(st);

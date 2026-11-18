@@ -34,11 +34,10 @@
 //! property's with the attribute commands and `uml.association.set-end`, an operation's with the
 //! operation commands.
 //!
-//! A dependency (AR-696) joins two packages or classifiers in any mix, its client depending on its
-//! supplier; anything else at either end is refused as the wrong end, and a cycle of dependencies
-//! is allowed. A package client owns its dependencies; a classifier client's home package owns
-//! them otherwise, and a new client takes a dependency along. That a dependency has two ends,
-//! never depends on itself and joins elements of one model are Archforge's own rules, not UML's.
+//! A dependency (AR-696) joins two packages or classifiers in any mix, client to supplier; any
+//! other end is refused as the wrong end, and a cycle is allowed. A package client owns its
+//! dependencies, else the client's home package does, and a new client takes one along. Two ends,
+//! no dependency on itself and both ends in one model are Archforge's own rules, not UML's.
 //!
 //! An association class (AR-125) is one element, UML's AssociationClass: a class and an
 //! association at once. It is made between two classes as a plain association is, owning both its
@@ -1172,10 +1171,11 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         let owner = if source { Some(dependency_owner(ctx.doc, c, "class")?) } else { None };
         ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;
         ctx.doc.push(r, prop, Value::Ref(c)).map_err(fail)?;
-        if let (Some(owner), Some((was, by))) = (owner, held)
-            && owner != was
-        {
-            ctx.doc.remove_value(was, by, &Value::Ref(r)).map_err(fail)?;
+        // One held nowhere, as a loaded document may have it, is attached there.
+        if let Some(owner) = owner.filter(|o| held.map(|(was, _)| was) != Some(*o)) {
+            if let Some((was, by)) = held {
+                ctx.doc.remove_value(was, by, &Value::Ref(r)).map_err(fail)?;
+            }
             ctx.doc.push(owner, package::PACKAGED_ELEMENT, Value::Ref(r)).map_err(fail)?;
         }
     }
