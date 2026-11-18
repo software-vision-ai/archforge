@@ -178,10 +178,10 @@ struct Group {
 
 impl Group {
     /// Whether a diagram of `kind` shows in the group, `named` saying whether its name holds the
-    /// typed filter.
-    fn shows(&self, known: &[&str], kind: &str, named: bool) -> bool {
+    /// typed filter; asked only for a diagram of the group's kind in a group the filter narrows.
+    fn shows(&self, known: &[&str], kind: &str, named: impl FnOnce() -> bool) -> bool {
         let ours = if self.kind.is_empty() { !known.contains(&kind) } else { kind == self.kind };
-        ours && (!self.filtered || named)
+        ours && (!self.filtered || named())
     }
 }
 
@@ -217,9 +217,9 @@ fn tally(store: &Store, owner: Obj, prop: archforge_mof::PropId, groups: &[Group
                 }
             }
             Some(c) if c == DIAGRAM => {
-                let (kind, named) = (kind_word(store, m), t.typed.in_any(&[&diagram_name(store, m)]));
+                let (kind, mut named) = (kind_word(store, m), None);
                 for (i, g) in groups.iter().enumerate() {
-                    here[i] += usize::from(g.shows(known, &kind, named));
+                    here[i] += usize::from(g.shows(known, &kind, || *named.get_or_insert_with(|| t.typed.in_any(&[&diagram_name(store, m)]))));
                 }
             }
             _ => {}
@@ -326,7 +326,7 @@ impl Walk<'_> {
                 }
                 Some(c) if c == DIAGRAM => {
                     let label = diagram_name(self.store, m);
-                    if self.g.shows(self.known, &kind_word(self.store, m), self.typed.in_any(&[&label])) {
+                    if self.g.shows(self.known, &kind_word(self.store, m), || self.typed.in_any(&[&label])) {
                         out.push(Row { id, obj: m, depth, kind: Kind::Diagram, label, expandable: false, expanded: false, count: 0 });
                     }
                 }

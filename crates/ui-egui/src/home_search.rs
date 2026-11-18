@@ -173,16 +173,18 @@ pub(crate) struct Typed {
 }
 
 impl Typed {
-    /// Each word of `query` on its own: a text answers when it holds every one.
+    /// Each word of `query` on its own: a text answers when it holds every one. The query is
+    /// folded before it is split, so a ligature that stands for several words (`ﷻ`) gives each
+    /// of them, and a word of invisible characters only (a pasted zero-width space) is none.
     pub(crate) fn words(query: &str) -> Typed {
         let folder = folder();
-        Typed { words: query.split_whitespace().map(|w| folder.fold(w)).collect(), folder }
+        Typed { words: folder.key(query).split_whitespace().map(|w| folder.fold(w)).collect(), folder }
     }
 
-    /// `text` as one piece, spaces and all; nothing when it is empty.
+    /// `text` as one piece, spaces and all; nothing when it folds to nothing.
     pub(crate) fn phrase(text: &str) -> Typed {
         let folder = folder();
-        Typed { words: (!text.is_empty()).then(|| folder.fold(text)).into_iter().collect(), folder }
+        Typed { words: Some(folder.fold(text)).filter(|w| !w.as_str().is_empty()).into_iter().collect(), folder }
     }
 
     /// Whether nothing was typed, so everything answers.
@@ -190,9 +192,9 @@ impl Typed {
         self.words.is_empty()
     }
 
-    /// The first word folded, to rank names by; empty when nothing was typed.
-    pub(crate) fn first(&self) -> &str {
-        self.words.first().map_or("", Folded::as_str)
+    /// The first word folded, to rank names by; none when nothing was typed.
+    pub(crate) fn first(&self) -> Option<&Folded> {
+        self.words.first()
     }
 
     /// Whether every word is in one of `texts`, already folded by [`fold`].
@@ -537,6 +539,16 @@ mod tests {
         assert_eq!(projects("STRASSE"), ["Straße"]);
         assert_eq!(projects("PRÜF"), ["Bestellungen prüfen", "Prüfstand"]);
         assert_eq!(projects("pruf stand"), ["Prüfstand"]);
+    }
+
+    /// What folds to nothing is not typed, and a ligature of several words gives each of them.
+    #[test]
+    fn invisible_words_are_dropped_and_a_ligature_gives_its_words() {
+        assert!(Typed::phrase("\u{200B}").is_empty() && Typed::words("\u{AD} \u{200B}").is_empty());
+        assert_eq!(Typed::words("\u{200B} Order").first().map(Folded::as_str), Some("order"));
+        // ﷻ folds to two Arabic words; a name holding both apart, with a comma, is found.
+        assert!(Typed::words("\u{FDFB}").in_any(&["جل، جلاله"]));
+        assert!(!Typed::words("\u{FDFB}").in_any(&["جل"]));
     }
 
     /// Running a row closes the search and runs its action.

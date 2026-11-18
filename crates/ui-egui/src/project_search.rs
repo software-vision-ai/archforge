@@ -9,6 +9,8 @@ use archforge_diagram::{DIAGRAM, NODE, diagram, node};
 use archforge_mof::{Obj, Store, Uuid};
 use serde_json::json;
 
+use craft_i18n::Folded;
+
 use crate::Shell;
 use crate::i18n::tr;
 use crate::ux::{self, icons};
@@ -35,8 +37,8 @@ pub(crate) struct Entry {
     pub label: String,
     pub detail: String,
     kind: u8,
-    name: String,
-    text: craft_i18n::Folded,
+    name: Folded,
+    text: Folded,
 }
 
 fn cut(s: &str) -> String {
@@ -56,7 +58,7 @@ pub(crate) fn index(
         }
         let (label, detail) = (cut(&label), cut(&detail));
         let text = crate::home_search::fold(&format!("{label}\n{detail}"));
-        let name = crate::home_search::fold(&label).as_str().to_owned();
+        let name = crate::home_search::fold(&label);
         out.push(Entry { found, icon, label, detail, kind, name, text });
     };
     for o in store.alive() {
@@ -86,31 +88,36 @@ pub(crate) fn index(
             }
         }
     }
-    out.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)).then_with(|| a.detail.cmp(&b.detail)));
+    out.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.as_str().cmp(b.name.as_str())).then_with(|| a.detail.cmp(&b.detail)));
     out
 }
 
-/// How well a row's folded name answers the query's first word, folded: the name itself, its
-/// start, a word's start inside it, anywhere.
-fn rank(e: &Entry, first: &str) -> u8 {
-    if e.name == first {
-        0
-    } else if e.name.starts_with(first) {
-        1
-    } else if e.name.split(|c: char| !c.is_alphanumeric()).any(|w| w.starts_with(first)) {
-        2
-    } else {
-        3
+/// How well a row's name answers the query's first word, both folded: the name itself, its
+/// start, a word's start inside it, anywhere. A start counts only where the search itself would
+/// match, so `ハ` doesn't start `バ`, whose voicing mark makes it another letter.
+fn rank(e: &Entry, first: &Folded) -> u8 {
+    if e.name.as_str() == first.as_str() {
+        return 0;
     }
+    let start = e.name.source_range(0..0).start;
+    let mut best = 3;
+    for found in e.name.matches(first) {
+        if found.start == start {
+            return 1;
+        }
+        if e.label.get(..found.start).and_then(|before| before.chars().next_back()).is_some_and(|c| !c.is_alphanumeric()) {
+            best = 2;
+        }
+    }
+    best
 }
 
 /// The diagrams and the elements whose name or place holds every word of `query`, whatever its
 /// capitals and accents: the best answers first, at most [`MAX_DIAGRAMS`] and [`MAX_ELEMENTS`].
 pub(crate) fn hits<'a>(index: &'a [Entry], query: &str) -> (Vec<&'a Entry>, Vec<&'a Entry>) {
     let typed = crate::home_search::Typed::words(query);
-    let first = typed.first();
     let mut found: Vec<&Entry> = index.iter().filter(|e| typed.in_folded(&[&e.text])).collect();
-    if !first.is_empty() {
+    if let Some(first) = typed.first() {
         found.sort_by_key(|e| (rank(e, first), e.kind));
     }
     let diagrams = found.iter().filter(|e| matches!(e.found, Found::Diagram(_))).take(MAX_DIAGRAMS).copied().collect();
@@ -214,5 +221,26 @@ mod tests {
         assert_eq!(labels("bestellung"), ["Bestellungen prüfen"]);
         assert_eq!(labels("prufen"), ["Bestellungen prüfen"]);
         assert_eq!(labels("STRASSE"), ["Straße"]);
+        // A zero-width space before the first word leaves the ranking to it.
+        assert_eq!(labels("\u{200B} PRUFUNG"), ["Prüfung", "prüfung_id", "Kunde_prüfung"]);
+    }
+
+    /// A name starts with the first word only where the search would match it, after what folds
+    /// to nothing: `ハ` doesn't start `バ`, whose voicing mark makes it another letter.
+    #[test]
+    fn a_name_starts_with_a_word_only_where_the_search_matches_it() {
+        let fold = crate::home_search::fold;
+        let entry = |label: &str| Entry {
+            found: Found::Element(Uuid([1; 16])),
+            icon: &icons::TABLE,
+            label: label.into(),
+            detail: String::new(),
+            kind: 2,
+            name: fold(label),
+            text: fold(label),
+        };
+        let ranks = ["Prüfung", "\u{AD}Prüfungen", "Kunde_prüfung", "Abprüfung"].map(|label| rank(&entry(label), &fold("PRUFUNG")));
+        assert_eq!(ranks, [0, 1, 2, 3]);
+        assert_eq!((rank(&entry("ハ予定"), &fold("ハ")), rank(&entry("バ"), &fold("ハ"))), (1, 3));
     }
 }
