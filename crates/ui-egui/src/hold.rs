@@ -2,7 +2,8 @@
 //! the project still from before its first step until it has ended, one at a time. Showing another
 //! tab or Home, opening, closing and quitting wait and run when it ends; a close or a quit that
 //! waited through a failed hold asks again, so it never acts on a state the person did not see.
-//! An opening of a project whose tab is closing waits there too, for the closing to end (AR-748).
+//! An opening of a project whose tab is closing waits apart, for the closing to end, and holds
+//! nothing up meanwhile (AR-748).
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -73,6 +74,9 @@ pub(crate) struct Holding {
     held: Option<(PathBuf, String)>,
     /// The hold of a project held until closed, while its closing is under way, with its path.
     closing: Option<(PathBuf, Hold)>,
+    /// The projects asked to open while their tabs were closing, once each, in the order asked
+    /// (AR-748). They are no change under way: a hold in another tab starts meanwhile.
+    pub(crate) reopen: Vec<PathBuf>,
 }
 
 impl Holding {
@@ -222,16 +226,21 @@ impl Shell {
     }
 
     /// While held, keeps `action` for when the hold ends (a quit once) and gives true; an opening
-    /// of a project whose tab is closing is kept for when that closing has ended, held or not.
+    /// of a project whose tab is closing is kept, once, for [`Shell::reopen_after_closing`].
     pub(crate) fn remember(&mut self, action: Waiting) -> bool {
+        // Shown now, the tab would go with its closing, and the opening asked for with it (AR-748).
+        if let Waiting::Open(path) = &action
+            && self.tabs.iter().any(|t| t.path == *path && t.closing())
+        {
+            if !self.holding.reopen.contains(path) {
+                self.holding.reopen.push(path.clone());
+            }
+            return true;
+        }
         // Closing is what ends a hold kept until closed, and only without writing anything back.
         // A quit waits for a held project's closing too: a refusal must find the window still there.
         let behind_closing = matches!(action, Waiting::Quit) && self.holding.closing.is_some();
-        // Shown now, the tab would go with its closing, and the opening asked for with it (AR-748).
-        let reopening = matches!(&action, Waiting::Open(path) if self.tab_closing(path));
-        if !(self.is_held() || behind_closing || reopening)
-            || (self.holding.until_closed() && matches!(action, Waiting::Close(_) | Waiting::Discard(_, false)))
-        {
+        if !(self.is_held() || behind_closing) || (self.holding.until_closed() && matches!(action, Waiting::Close(_) | Waiting::Discard(_, false))) {
             return false;
         }
         if !(matches!(action, Waiting::Quit) && self.holding.waiting.iter().any(|w| matches!(w, Waiting::Quit))) {
@@ -243,10 +252,6 @@ impl Shell {
     /// Runs what waited for the hold, each action once the question or quit before it is answered.
     pub(crate) fn run_after_hold(&mut self, ctx: &egui::Context) {
         while !self.is_held() && self.holding.closing.is_none() && self.ask.is_none() && !self.quitting() {
-            // An opening that cannot act yet waits, and what came after it with it, so none is lost.
-            if self.holding.waiting.front().is_some_and(|w| matches!(w, Waiting::Open(path) if self.open_waits(path))) {
-                return;
-            }
             let Some(action) = self.holding.waiting.pop_front() else { return };
             let failed = self.holding.failed;
             match action {
@@ -271,16 +276,23 @@ impl Shell {
         }
     }
 
-    /// Whether the project at `path` has a tab that is closing.
-    fn tab_closing(&self, path: &Path) -> bool {
-        self.tabs.iter().any(|t| t.path == path && t.closing())
-    }
-
-    /// Whether an opening of the project at `path` that waited cannot act yet, which
-    /// [`Shell::open_path`] would drop: its tab is still closing, or another opening or the New
-    /// project dialog is under way. Once a closing is refused, the opening shows the tab it kept.
-    fn open_waits(&self, path: &Path) -> bool {
-        self.tab_closing(path) || self.opening.is_some() || self.new_project.is_some()
+    /// Opens, in the order asked, each project that waited for its tab's closing once it can: the
+    /// tab kept by a refused closing shows at once; a project closed opens afresh when no other
+    /// opening or New project dialog is under way, past which [`Shell::open_path`] would drop it,
+    /// and behind a hold as any opening.
+    pub(crate) fn reopen_after_closing(&mut self) {
+        // Each looked at once a frame, so nothing put back meanwhile can keep the frame going.
+        for path in std::mem::take(&mut self.holding.reopen) {
+            let ready = match self.tabs.iter().find(|t| t.path == path) {
+                Some(tab) => !tab.closing(),
+                None => self.opening.is_none() && self.new_project.is_none(),
+            };
+            if ready {
+                self.open_path(&path);
+            } else {
+                self.holding.reopen.push(path);
+            }
+        }
     }
 
     /// After a failed hold: the question a closing asks, or, with nothing unsaved, whether to close.

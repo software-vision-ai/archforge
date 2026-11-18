@@ -2032,6 +2032,7 @@ impl Shell {
         self.drive_loads();
         self.drive_replacement();
         self.run_after_hold(ctx);
+        self.reopen_after_closing();
         self.say_skip();
     }
 
