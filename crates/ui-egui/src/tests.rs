@@ -10219,6 +10219,82 @@ fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from()
     assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "as it was left");
 }
 
+/// Each tab keeps the route it was entered by (AR-662): entering gives the new tab the route of the
+/// tab left plus one step, which names the diagram left, its view and the session's history, and
+/// leaves the tab left its own. Going back takes the newest way in through the parent, and
+/// browsing changes nothing in the model, its undo history or what is saved.
+#[test]
+fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Root > Sales > Orders. The root's First and Second both show Sales; Sales' diagram shows
+        // Orders and the root.
+        let (first, second, root, sales, orders, sales_d, orders_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let add = |s: &mut archforge_notations::Session, name: &str| {
+                let p = serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": name });
+                id(s.execute("diagram.add", &p).unwrap().value)
+            };
+            let (first, second) = (add(s, "First"), add(s, "Second"));
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
+            let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
+            for (on, what) in [(first, sales), (second, sales), (sales_d, orders), (sales_d, root)] {
+                let p =
+                    serde_json::json!({ "diagram": on.to_string(), "element": what.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                s.execute("diagram.place", &p).unwrap();
+            }
+            s.mark_saved().unwrap();
+            (first, second, root, sales, orders, sales_d, orders_d)
+        };
+        let unchanged = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.can_undo(), s.can_redo(), s.is_dirty())
+        };
+        let before = unchanged(&h);
+        let history = h.state().session.as_ref().unwrap().history();
+        let route = |h: &Harness<'static, Shell>, tab| -> Vec<(archforge_mof::Uuid, archforge_mof::Uuid)> {
+            h.state().canvas.nav.routes.get(&tab).map(|r| r.steps().map(|s| (s.source, s.destination)).collect()).unwrap_or_default()
+        };
+        crate::canvas::open(h.state_mut(), second);
+        h.run();
+        let left = (h.state().canvas.pan, h.state().canvas.zoom);
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        let entry = h.state().canvas.nav.routes.get(&sales_d).and_then(|r| r.steps().next_back()).cloned().unwrap();
+        let expected = crate::nav_route::Step { source: second, destination: sales_d, source_name: "Second".into(), view: Some(left), history };
+        assert_eq!(entry, expected, "{theme:?}: the step names what was left, its view and the history");
+        assert_eq!(route(&h, second), vec![], "{theme:?}: the tab left had no route and still has none");
+        // Sales > Orders: the Orders tab carries the way into Sales too; Sales keeps its own.
+        rest(&mut h);
+        crate::package_nav::enter(h.state_mut(), orders, 0.0);
+        h.run();
+        assert_eq!(route(&h, orders_d), vec![(second, sales_d), (sales_d, orders_d)], "{theme:?}");
+        assert_eq!(route(&h, sales_d), vec![(second, sales_d)], "{theme:?}: Sales' tab keeps its own route");
+        // Back to Sales, then into the root's First and from it into Sales again: Sales' tab now
+        // came by First, the newest way in, though Second is on its route too.
+        rest(&mut h);
+        let at = rect_of(&h, "workspace.canvas.path.1").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}");
+        rest(&mut h);
+        crate::package_nav::enter(h.state_mut(), root, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: the root's default");
+        rest(&mut h);
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        assert_eq!(route(&h, sales_d), vec![(second, sales_d), (sales_d, first), (first, sales_d)], "{theme:?}");
+        rest(&mut h);
+        let at = rect_of(&h, "workspace.canvas.path.0").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: back the newest way in");
+        assert_eq!(unchanged(&h), before, "{theme:?}: no change, no undo step, nothing to save");
+    }
+}
+
 #[test]
 fn a_long_package_path_folds_its_first_ancestors_and_keeps_the_nearest_ones_clickable() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1400.0, 900.0));
