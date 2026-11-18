@@ -8,10 +8,12 @@
 //! - **In**: a selected package's Open, ⌘↓, or zooming in until one package covers
 //!   [`ENTER_COVER`] of the canvas opens the package's diagram at 100 %, its content centred.
 //! - **Out by zoom**: a package's diagram stays open until the zoom reaches its least, 10 %
-//!   ([`crate::canvas::ZOOM_RANGE`]); there the parent's diagram opens at 100 %, the package left
-//!   centred. At the root, 10 % stays put and says so.
+//!   ([`crate::canvas::ZOOM_RANGE`]); there the diagram it was entered from opens again at 100 %,
+//!   the package left centred, even when that diagram is in another branch (Decision 4). The
+//!   return takes its step off the tab's route and makes none. With no way in left, the parent's
+//!   default opens instead; at the root, 10 % stays put and says so.
 //! - **Out by the path bar or ⌘↑**: the ancestor's diagram as it was left.
-//! - One level per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
+//! - One switch per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
 //!   seconds must pass, before the next switch. A switch fades in over [`FADE`] seconds.
 
 use std::collections::HashMap;
@@ -163,7 +165,14 @@ pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now:
     let from = shell.canvas.active;
     // The diagram of `package` the way in came through, while it is still of it; else its default.
     let Some(d) = from.and_then(|f| entered_from(shell, f, package)).or_else(|| default_of(shell, package)) else { return };
-    if let Some(from) = from {
+    switch_out(shell, d, reveal, now);
+}
+
+/// Opens the diagram `d` on the way out of the open one, keeping the view of the diagram left: after a zoom
+/// out (`reveal`, the package just left) at 100 % with that package centred; else as `d` was left,
+/// or fitted when it never was.
+fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Uuid>, now: f64) {
+    if let Some(from) = shell.canvas.active {
         shell.canvas.nav.views.insert(from, (shell.canvas.pan, shell.canvas.zoom));
     }
     crate::canvas::open(shell, d);
@@ -183,6 +192,22 @@ pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now:
     shell.canvas.nav.centre = false;
     shell.canvas.nav.switched = Some(now);
     shell.canvas.nav.disarmed = true;
+}
+
+/// The way back from the open diagram by zoom: the newest step on its tab's route made in this
+/// session's history whose source is still a diagram, taken off the route with every newer one
+/// passed over. Gives that source, which may be in another branch than the open diagram; the tab
+/// of the source keeps what is left of the route, the one left keeps none, and nothing is added,
+/// since a return is no entry. Gives none, the route spent, when no step leads anywhere.
+fn take_return(shell: &mut Shell) -> Option<Uuid> {
+    let from = shell.canvas.active?;
+    let session = shell.session.as_ref()?;
+    let store = session.doc();
+    let mut route = shell.canvas.nav.routes.remove(&from)?;
+    let shown = |s: Uuid| store.by_uuid(s).is_some_and(|d| store.is_alive(d) && store.class_of(d).ok() == Some(archforge_diagram::DIAGRAM));
+    let step = route.take_return(session.history(), shown).reached?;
+    shell.canvas.nav.routes.insert(step.source, route);
+    Some(step.source)
 }
 
 /// The diagram of `package` on the way that led to the diagram `from`: the newest source on its
@@ -263,14 +288,15 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
             enter(shell, id, now);
         }
     } else if shell.canvas.zoom <= crate::canvas::ZOOM_RANGE.0 + f32::EPSILON {
-        // Out: the zoom has reached its least, 10 %: one level up, or at the root, no further.
-        match archforge_uml::commands::package_of(store, here) {
-            Some(parent) => {
-                if let (Ok(parent), Ok(here)) = (store.uuid(parent), store.uuid(here)) {
-                    leave(shell, parent, Some(here), now);
-                }
-            }
-            None => {
+        // Out: the zoom has reached its least, 10 %: back the way in came, even into another
+        // branch; with no way in, one level up; at the root, no further.
+        let Ok(left) = store.uuid(here) else { return };
+        let parent = archforge_uml::commands::package_of(store, here).map(|p| store.uuid(p));
+        match (take_return(shell), parent) {
+            (Some(back), _) => switch_out(shell, back, Some(left), now),
+            (None, Some(Ok(parent))) => leave(shell, parent, Some(left), now),
+            (None, Some(Err(_))) => {}
+            (None, None) => {
                 // Said under the path bar until the next action.
                 shell.canvas.notice = Some(tr("This is the top package: zooming out goes no further"));
                 shell.canvas.nav.disarmed = true;

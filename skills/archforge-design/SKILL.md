@@ -719,8 +719,10 @@ What is UML's own, beside the shared rules above.
   names, at 100 %, its content centred (AR-110). Entry never makes a diagram: a package with no
   class diagram yet, or an unsound binding, stays closed and the notice under the path bar says why
   (AR-582). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it
-  opens the parent's diagram at 100 %, the package left centred; at the root, 10 % stays put with a
-  notice ("This is the top package: zooming out goes no further"). The path bar at the canvas's top
+  opens the diagram the package was entered from at 100 %, the package left centred, even in
+  another branch (Decision 4, AR-664): the return takes the newest step off the tab's route and
+  adds none, since a return is no entry. With no step left it opens the parent's default; at the
+  root, 10 % stays put with a notice ("This is the top package: zooming out goes no further"). The path bar at the canvas's top
   left (root to here, ancestors as buttons) and ⌘↑ go back to the parent as it was left. One level
   per gesture: a switch waits for the zoom to rest 0.3 s and for 0.6 s to pass since the last; a
   switch fades in over 0.2 s. A double click renames, never navigates.

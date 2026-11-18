@@ -11263,6 +11263,172 @@ fn zooming_out_to_ten_percent_climbs_one_level_per_gesture_each_at_a_hundred_and
     }
 }
 
+/// One zoom-out gesture over the canvas of at most `ticks` frames, ending at the first switch when
+/// `stop` is set; gives the diagrams it showed, in turn.
+fn zoom_out_gesture(h: &mut Harness<'static, Shell>, ticks: usize, stop: bool) -> Vec<archforge_mof::Uuid> {
+    h.event(egui::Event::PointerMoved(rect_of(h, "workspace.canvas").center()));
+    let mut shown: Vec<_> = h.state().canvas.active.into_iter().collect();
+    for _ in 0..ticks {
+        h.event(egui::Event::Zoom(0.8));
+        h.step();
+        if let Some(now) = h.state().canvas.active.filter(|now| shown.last() != Some(now)) {
+            shown.push(now);
+            if stop {
+                break;
+            }
+        }
+    }
+    h.run();
+    shown
+}
+
+/// The (source, destination) of each step on the route of `tab`'s tab, oldest first.
+fn route_of(h: &Harness<'static, Shell>, tab: archforge_mof::Uuid) -> Vec<(archforge_mof::Uuid, archforge_mof::Uuid)> {
+    h.state().canvas.nav.routes.get(&tab).map(|r| r.steps().map(|s| (s.source, s.destination)).collect()).unwrap_or_default()
+}
+
+/// Zooming out at 10 % returns to the diagram a package was entered from though it is in another
+/// branch (AR-664, Decision 4): the Commerce overview shows Archive, owned by Operations; inside
+/// Archive the path bar shows Operations, yet zooming out lands on the overview. The return takes
+/// its step and makes none: one gesture makes one switch, and the next goes up by ownership instead
+/// of bouncing back into Archive. Browsing changes nothing in the model or its undo history.
+#[test]
+fn zooming_out_returns_across_branches_to_the_diagram_entered_from_without_a_bounce() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Root > Commerce and Root > Operations > Archive; Commerce's overview shows Archive.
+        let (top, overview, operations_d, archive, archive_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let add = |s: &mut archforge_notations::Session, on: archforge_mof::Uuid, name: &str| {
+                let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": on.to_string(), "name": name });
+                id(s.execute("diagram.add", &p).unwrap().value)
+            };
+            let top = add(s, root, "Top");
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let operations = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Operations" })).unwrap().value);
+            let archive =
+                id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": operations.to_string() })).unwrap().value);
+            let overview = add(s, commerce, "Commerce overview");
+            let (operations_d, archive_d) = (own_diagram(s, operations), own_diagram(s, archive));
+            let p = serde_json::json!({ "diagram": overview.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+            s.execute("diagram.place", &p).unwrap();
+            s.mark_saved().unwrap();
+            (top, overview, operations_d, archive, archive_d)
+        };
+        let unchanged = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.can_undo(), s.can_redo(), s.is_dirty())
+        };
+        let before = unchanged(&h);
+        crate::canvas::open(h.state_mut(), overview);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}");
+        // The path bar follows ownership, not the way in: the root, Operations, Archive.
+        let path: Vec<String> = texts_in(&h, rect_of(&h, "workspace.canvas.path")).into_iter().map(|(t, _)| t).collect();
+        assert_eq!(path.get(1..), Some(&["Operations".to_string(), "Archive".to_string()][..]), "{theme:?}: {path:?}");
+        // One long gesture: back on the overview, not Operations' diagram, and no further.
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, false), vec![archive_d, overview], "{theme:?}: one switch, across branches");
+        assert_ne!(h.state().canvas.active, Some(operations_d), "{theme:?}");
+        assert_eq!(route_of(&h, overview), vec![], "{theme:?}: the step taken, no reverse entry made");
+        assert_eq!(route_of(&h, archive_d), vec![], "{theme:?}: Archive's tab has no way back left");
+        // The next gesture has no route: up by ownership to the root's diagram, not back into Archive.
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, false), vec![overview, top], "{theme:?}: no bounce");
+        assert_eq!(unchanged(&h), before, "{theme:?}: no change, no undo step, nothing to save");
+    }
+}
+
+/// Repeated visits A → B → A → B return B → A → B → A, one step a gesture, each landing at 100 %
+/// with the package left centred; once the route is spent, the owning parent's default opens.
+#[test]
+fn zooming_out_walks_repeated_visits_back_one_step_a_gesture_then_follows_ownership() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // A is Commerce's diagram and shows Archive; B is Archive's and shows Commerce.
+        let (top, commerce, archive, a, b, archive_card, commerce_card) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" });
+            let top = id(s.execute("diagram.add", &p).unwrap().value);
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let operations = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Operations" })).unwrap().value);
+            let archive =
+                id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": operations.to_string() })).unwrap().value);
+            let (a, b) = (own_diagram(s, commerce), own_diagram(s, archive));
+            let mut place = |on: archforge_mof::Uuid, what: archforge_mof::Uuid| {
+                let p =
+                    serde_json::json!({ "diagram": on.to_string(), "element": what.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                id(s.execute("diagram.place", &p).unwrap().value)
+            };
+            let (archive_card, commerce_card) = (place(a, archive), place(b, commerce));
+            (top, commerce, archive, a, b, archive_card, commerce_card)
+        };
+        crate::canvas::open(h.state_mut(), a);
+        h.run();
+        for package in [archive, commerce, archive] {
+            crate::package_nav::enter(h.state_mut(), package, 0.0);
+            h.run();
+            rest(&mut h);
+        }
+        assert_eq!(h.state().canvas.active, Some(b), "{theme:?}");
+        assert_eq!(route_of(&h, b), vec![(a, b), (b, a), (a, b)], "{theme:?}");
+        // Back B → A → B → A: each gesture one switch and one step consumed, none added.
+        for (from, to, card, left) in [(b, a, archive_card, vec![(a, b), (b, a)]), (a, b, commerce_card, vec![(a, b)]), (b, a, archive_card, vec![])]
+        {
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![from, to], "{theme:?}");
+            assert_eq!(route_of(&h, to), left, "{theme:?}: from {from} to {to}");
+            assert_eq!(route_of(&h, from), vec![], "{theme:?}: the tab left keeps no way back");
+            assert_eq!(h.state().canvas.zoom, 1.0, "{theme:?}: at 100 %");
+            let canvas = rect_of(&h, "workspace.canvas");
+            let shown = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+            assert!((shown.center() - canvas.center()).length() < 2.0, "{theme:?}: the package left, centred: {shown:?} in {canvas:?}");
+            rest(&mut h);
+        }
+        // The route spent: Commerce's owning parent's default.
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![a, top], "{theme:?}: by ownership");
+    }
+}
+
+/// A zoom out whose way in leads only to a removed diagram spends the route and opens the owning
+/// parent's default instead of staying put on a diagram that is gone.
+#[test]
+fn zooming_out_past_a_removed_way_in_opens_the_owning_parents_default() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Commerce's second diagram, the overview, shows Archive, owned by Operations.
+        let (overview, operations_d, archive, archive_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let operations = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Operations" })).unwrap().value);
+            let archive =
+                id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": operations.to_string() })).unwrap().value);
+            own_diagram(s, commerce);
+            let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": commerce.to_string(), "name": "Commerce overview" });
+            let overview = id(s.execute("diagram.add", &p).unwrap().value);
+            let (operations_d, archive_d) = (own_diagram(s, operations), own_diagram(s, archive));
+            let p = serde_json::json!({ "diagram": overview.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+            s.execute("diagram.place", &p).unwrap();
+            (overview, operations_d, archive, archive_d)
+        };
+        crate::canvas::open(h.state_mut(), overview);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        h.state_mut().session.as_mut().unwrap().execute("diagram.remove", &serde_json::json!({ "diagram": overview.to_string() })).unwrap();
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![archive_d, operations_d], "{theme:?}: Operations' default");
+        assert_eq!(route_of(&h, archive_d), vec![], "{theme:?}: the route spent");
+    }
+}
+
 #[test]
 fn a_new_gesture_after_a_pause_goes_up_though_no_idle_frame_was_drawn_between() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
