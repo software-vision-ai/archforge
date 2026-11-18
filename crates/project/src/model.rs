@@ -62,8 +62,11 @@ pub(crate) const MAX_TABLES: usize = 4096;
 const DIAGRAMS: &str = "diagram_diagram";
 /// The most kinds outside the known ones [`Project::unknown_diagram_kinds`] gives.
 pub const MOST_UNKNOWN_KINDS: usize = 16;
-/// The most of a diagram's kind that is read: a longer kind is cut there, and is no known kind.
+/// The most characters of a diagram's kind that are read: enough for [`KIND_BYTES`] of any text.
 const KIND_READ: usize = 256;
+/// The most bytes of a diagram's kind given: a longer kind is cut there, at a character's end, and
+/// is no known kind.
+const KIND_BYTES: usize = 256;
 
 /// The model's tables as the project stores them: the generated tables and junctions with the SQL
 /// type of each junction's value, and their fingerprint.
@@ -329,12 +332,14 @@ impl Project {
 
     /// The kinds of the diagrams `branch` holds that are not among `known`, each once and in byte
     /// order, at most [`MOST_UNKNOWN_KINDS`] of them: a kind left empty reads as `""`, and one is
-    /// compared byte for byte, then given as text for display. Only `diagram_diagram.kind` is read,
-    /// raw and at most [`KIND_READ`] of each, so it works on every shape that table has had, before
-    /// the project is prepared, and writes nothing; a branch without that table holds no diagrams.
+    /// compared as UTF-8 text byte for byte, whatever the column's character set, then given cut to
+    /// [`KIND_BYTES`]. Only `diagram_diagram.kind` is read, raw and at most [`KIND_READ`] characters
+    /// of each, so it works on every shape that table has had, before the project is prepared, and
+    /// writes nothing; a branch without that table holds no diagrams. A branch whose rename is
+    /// unclear is held as for every other reading ([`Error::BranchUnclear`]).
     pub fn unknown_diagram_kinds(&self, branch: &SafeBranch, known: &[&str]) -> Result<Vec<String>, Error> {
         let damaged = |why: String| Error::Damaged { path: self.path().to_path_buf(), why };
-        let mut c = database_connection(&self.server().connector(), branch)?;
+        let mut c = self.connection_to(branch)?;
         let held: Option<mysql::Row> = c
             .exec_first(
                 "SELECT LEFT(CAST(table_type AS CHAR), 32) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
@@ -345,10 +350,13 @@ impl Project {
         if held.get_opt::<String, usize>(0).and_then(Result::ok).as_deref() != Some("BASE TABLE") {
             return Err(damaged(format!("{DIAGRAMS} is not a table")));
         }
-        // Distinct as bytes, so kinds differing only in case stay apart: of these, at most `known`'s
-        // count are known, so the rest still holds the most that are not.
+        // As UTF-8 text, then distinct as bytes, so kinds differing only in case stay apart: of
+        // these, at most `known`'s count are known, so the rest still holds the most that are not.
+        // `LEFT` counts characters, so the cut to bytes is made here, once a kind is decided.
         let most = known.len().saturating_add(MOST_UNKNOWN_KINDS);
-        let query = format!("SELECT DISTINCT LEFT(CAST(`kind` AS BINARY), {KIND_READ}) AS k FROM `{DIAGRAMS}` ORDER BY k LIMIT {most}");
+        let query = format!(
+            "SELECT DISTINCT CAST(CONVERT(LEFT(`kind`, {KIND_READ}) USING utf8mb4) AS BINARY) AS k FROM `{DIAGRAMS}` ORDER BY k LIMIT {most}"
+        );
         let unreadable = |e: mysql::Error| damaged(format!("the diagrams' kinds cannot be read: {e}"));
         let mut unknown = Vec::new();
         for row in c.query_iter(query).map_err(unreadable)? {
@@ -357,7 +365,7 @@ impl Project {
                 Some(mysql::Value::NULL) | None => Vec::new(),
                 Some(_) => return Err(damaged("a diagram's kind is not text".into())),
             };
-            let shown = String::from_utf8_lossy(&kind).into_owned();
+            let shown = crate::chat::cut_bytes(&String::from_utf8_lossy(&kind), KIND_BYTES).0.to_string();
             if !known.iter().any(|k| k.as_bytes() == kind) && !unknown.contains(&shown) && unknown.len() < MOST_UNKNOWN_KINDS {
                 unknown.push(shown);
             }

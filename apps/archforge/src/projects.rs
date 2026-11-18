@@ -33,7 +33,7 @@ use archforge_mof::rows::Rows;
 use archforge_notations::differences::{ClassifyError, Difference};
 use archforge_project::{
     Author, BRANCH_NAME_CHARS, BranchCreated, BranchCreationError, BranchNameProblem, DESCRIPTION_CHARS, DeleteBranchError, DescriptionProblem,
-    Hooks, MAX_BRANCHES, ModelSchema, Project, RenameBranchError, SafeBranch, VersionReader, check_description,
+    Hooks, MAX_BRANCHES, MOST_UNKNOWN_KINDS, ModelSchema, Project, RenameBranchError, SafeBranch, VersionReader, check_description,
 };
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
@@ -1252,10 +1252,13 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
         let project = Project::open(&dolt, &opts, path).map_err(kind)?;
         // Before anything that writes (recovery, the stored branch's checks, the preparation):
         // refused as it is, with no tab opened.
-        if let Err(e) = known_kinds_only(&project, stored) {
-            let _ = project.close();
-            return Err(e);
-        }
+        let fallback = match known_kinds_only(&project, stored) {
+            Ok(fallback) => fallback,
+            Err(e) => {
+                let _ = project.close();
+                return Err(e);
+            }
+        };
         // Provisional, for recovery alone: told which branch it may open on, so that recovery keeps
         // it, before anything lists or reads branches. `open_on_stored` below settles the branch.
         // A record naming a stored branch that has gone is logged as protected, not as no branch;
@@ -1266,6 +1269,10 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
         project.recover_creation();
         let read = schema(inner).and_then(|s| {
             let notice = stored.and_then(|name| project.open_on_stored(name, &s).err().map(|e| branch_notice(name, e)));
+            // Fallen back to a `main` whose kinds could not be read: refused with why, unwritten.
+            if let Some(e) = fallback.filter(|_| project.current_branch().same_branch(&SafeBranch::default())) {
+                return Err(e);
+            }
             project.prepare_model(&s).map_err(kind)?;
             let rows = project.read_model(&s).map_err(kind)?;
             // Damaged conversations never keep the model from opening: the chat panel says why.
@@ -1304,21 +1311,46 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
 
 /// Refuses a project just opened when the diagrams of a branch it could open on, the one `stored`
 /// names and `main`, are of kinds no notation knows, naming those kinds as stored, the stored
-/// branch's first: read raw, so before anything is written. A stored branch that is gone, or whose
-/// name is not one, opens nowhere and is not read; one whose kinds cannot be read is left to its own
-/// checks, which open `main` with the reason when they fail too, so a damaged branch never keeps
-/// the project from opening.
-fn known_kinds_only(project: &Project, stored: Option<&str>) -> Result<(), CreateError> {
-    let known = archforge_notations::kinds();
-    let mut kinds = Vec::new();
-    if let Some(branch) = stored.and_then(|name| project.branch_named(name).ok()) {
+/// branch's first, each once and at most [`MOST_UNKNOWN_KINDS`]: read raw, so before anything is
+/// written. A stored branch that is gone, or whose name is not one, opens nowhere and is not read;
+/// one whose kinds cannot be read is left to its own checks, which open `main` with the reason when
+/// they fail too, so a damaged branch never keeps the project from opening. Once the stored branch
+/// is read, `main` is only where the opening falls back to: a `main` whose kinds cannot be read then
+/// refuses only that fallback, with the reason given back here.
+fn known_kinds_only(project: &Project, stored: Option<&str>) -> Result<Option<CreateError>, CreateError> {
+    let (known, main) = (archforge_notations::kinds(), SafeBranch::default());
+    let (mut kinds, mut read) = (Vec::new(), false);
+    if let Some(branch) = stored.and_then(|name| project.branch_named(name).ok()).filter(|b| !b.same_branch(&main)) {
         match project.unknown_diagram_kinds(&branch, &known) {
-            Ok(found) => kinds = found,
+            Ok(found) => (kinds, read) = (found, true),
             Err(e) => log::warn!("the diagram kinds of {} on {} were not read: {e}", project.path().display(), branch.stored()),
         }
     }
-    kinds.extend(project.unknown_diagram_kinds(&SafeBranch::default(), &known).map_err(kind)?);
-    if kinds.is_empty() { Ok(()) } else { Err(CreateError::UnsupportedKinds { kinds }) }
+    let fallback = match project.unknown_diagram_kinds(&main, &known) {
+        Ok(found) => {
+            add_kinds(&mut kinds, found);
+            None
+        }
+        Err(e) if read => {
+            log::warn!("the diagram kinds of {} on main were not read: {e}", project.path().display());
+            Some(kind(e))
+        }
+        Err(e) => return Err(kind(e)),
+    };
+    if kinds.is_empty() { Ok(fallback) } else { Err(CreateError::UnsupportedKinds { kinds }) }
+}
+
+/// Adds `more` to `kinds` after them, a kind already there not again, until there are
+/// [`MOST_UNKNOWN_KINDS`].
+fn add_kinds(kinds: &mut Vec<String>, more: Vec<String>) {
+    for kind in more {
+        if kinds.len() >= MOST_UNKNOWN_KINDS {
+            break;
+        }
+        if !kinds.contains(&kind) {
+            kinds.push(kind);
+        }
+    }
 }
 
 /// The window's words for why the branch `stored` did not open. A name made in Archforge is shown
@@ -5351,6 +5383,8 @@ mod tests {
         unclear(lock(&host.inner.open)[0].rename_branch_faulted(&from, &to, false, false, false));
         let answer = switch_to(host, &path, "main");
         assert!(matches!(answer, Err(SwitchError::Checks(archforge_project::Error::BranchUnclear { .. }))), "{answer:?}");
+        let kinds = lock(&host.inner.open)[0].unknown_diagram_kinds(&to, &[]);
+        assert!(matches!(kinds, Err(archforge_project::Error::BranchUnclear { .. })), "no kinds are read either: {kinds:?}");
         close(host, &path).unwrap();
         wait(&host.open(&path)).unwrap();
         host.write(&path, model("after"));
@@ -5973,7 +6007,9 @@ mod tests {
         stopped_creation(&path, "scripted", "main", &start);
         let before = on_disk(host, &path);
         let refused = |kinds: &[&str]| Err(CreateError::UnsupportedKinds { kinds: kinds.iter().map(|k| k.to_string()).collect() });
-        for (stored, kinds) in [(None, refused(&["legacy.kind"])), (Some("KINDS"), refused(&["other.kind", "legacy.kind"]))] {
+        let cases =
+            [(None, refused(&["legacy.kind"])), (Some("KINDS"), refused(&["other.kind", "legacy.kind"])), (Some("MAIN"), refused(&["legacy.kind"]))];
+        for (stored, kinds) in cases {
             assert_eq!(wait(&host.open_on(&path, stored)), kinds, "{stored:?}");
             assert_eq!(open_paths(host), vec![other.clone()], "{stored:?}: no tab, and the other stays open");
             assert_eq!(on_disk(host, &path), before, "{stored:?}: nothing written");
@@ -5993,6 +6029,56 @@ mod tests {
         let opened = wait(&host.open_on(&path, Some("kinds"))).unwrap();
         assert!(matches!(&opened.notice, Some(BranchNotice::CannotOpen { name, .. }) if name == "kinds"), "{:?}", opened.notice);
         assert_eq!(lock(&host.inner.open).iter().find(|p| p.path() == path).unwrap().current_branch().stored(), "main");
+    }
+
+    /// Once the branch it was left on is read, a `main` whose kinds cannot be read keeps the project
+    /// from opening there neither when that branch's kinds are known nor, naming them, when they are
+    /// not; an opening that falls back to that `main`, or needs it, is refused with why, before
+    /// anything is written to it.
+    #[test]
+    fn a_main_whose_kinds_cannot_be_read_refuses_only_an_opening_that_needs_it() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        host.write(&path, short_and_fitted_box().0);
+        assert_eq!(saved(host, &path), Ok(true));
+        close(host, &path).unwrap();
+        closed(host, &path, |p| {
+            p.run_on_branch("main", "CALL DOLT_BRANCH('kinds')")?;
+            p.run_on_branch("main", "ALTER TABLE diagram_diagram DROP COLUMN kind")
+        });
+        let opened = wait(&host.open_on(&path, Some("kinds"))).unwrap();
+        assert_eq!(opened.notice, None);
+        assert_eq!(lock(&host.inner.open)[0].current_branch().stored(), "kinds");
+        close(host, &path).unwrap();
+        closed(host, &path, |p| p.run_on_branch("kinds", "UPDATE diagram_diagram SET kind = 'other.kind'"));
+        let refused = Err(CreateError::UnsupportedKinds { kinds: vec!["other.kind".into()] });
+        assert_eq!(wait(&host.open_on(&path, Some("kinds"))), refused);
+        // The branch failing its own checks, the opening would fall back to `main`.
+        closed(host, &path, |p| {
+            p.run_on_branch("kinds", "UPDATE diagram_diagram SET kind = 'er'")?;
+            p.run_on_branch("kinds", "UPDATE settings SET `value` = 'nonsense' WHERE `key` = 'model_schema'")
+        });
+        let main = || closed(host, &path, |p| p.first_on_branch("main", "SELECT CAST(DOLT_HASHOF_DB('WORKING') AS CHAR)"));
+        let before = main();
+        for stored in [Some("kinds"), None] {
+            let answer = wait(&host.open_on(&path, stored));
+            assert!(matches!(&answer, Err(CreateError::Failed { detail }) if detail.contains("kinds cannot be read")), "{stored:?}: {answer:?}");
+            assert!(open_paths(host).is_empty(), "{stored:?}");
+            assert_eq!(main(), before, "{stored:?}: nothing written to main");
+        }
+    }
+
+    /// The kinds of two branches are given each once, the first branch's first, at most
+    /// [`MOST_UNKNOWN_KINDS`] in all.
+    #[test]
+    fn the_kinds_of_two_branches_are_given_each_once_up_to_the_most() {
+        let names = |range: std::ops::Range<usize>| range.map(|n| format!("k{n:02}")).collect::<Vec<_>>();
+        let mut kinds = vec!["b".to_string(), "a".into()];
+        add_kinds(&mut kinds, vec!["a".into(), "c".into(), "b".into()]);
+        assert_eq!(kinds, ["b", "a", "c"]);
+        let mut kinds = names(0..10);
+        add_kinds(&mut kinds, names(5..30));
+        assert_eq!(kinds, names(0..MOST_UNKNOWN_KINDS));
     }
 
     /// A saved model and unsaved work on the source that differ in the rows and diagrams.
