@@ -11544,6 +11544,59 @@ fn the_path_bar_restores_the_view_a_diagram_was_last_left_with_by_a_tab_switch_o
     }
 }
 
+/// A view is kept only once the canvas has drawn it for its tab (AR-666). Zooming out of Sales
+/// lands on First at 100 % with Sales centred on First's next frame, while First's pan is still
+/// Sales'; entering Sales and opening First again before a frame shows First at Sales' 100 %.
+/// Leaving First for Sales before that frame keeps nothing for First, so the path bar later opens
+/// First as it was last shown, not at a mix of two views.
+#[test]
+fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
+    for (theme, at_once) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (first, sales, sales_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+            let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap().value);
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let p =
+                serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+            s.execute("diagram.place", &p).unwrap();
+            (first, sales, own_diagram(s, sales))
+        };
+        crate::canvas::open(h.state_mut(), first);
+        h.run();
+        let shown = (egui::vec2(-37.0, 52.0), 0.5);
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = shown;
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        if at_once {
+            crate::canvas::open(h.state_mut(), first);
+        } else {
+            h.run();
+            rest(&mut h);
+            // Out to First, one frame at a time, stopping on the frame of the switch.
+            h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
+            for _ in 0..40 {
+                if h.state().canvas.active == Some(first) {
+                    break;
+                }
+                h.event(egui::Event::Zoom(0.8));
+                h.step();
+            }
+            assert!(h.state().canvas.nav.reveal.is_some(), "{theme:?}: First not drawn yet, Sales still to be centred on it");
+        }
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?} at once {at_once}: back on First");
+        crate::canvas::open(h.state_mut(), sales_d);
+        h.run();
+        rest(&mut h);
+        let at = rect_of(&h, "workspace.canvas.path.0").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?} at once {at_once}");
+        assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), shown, "{theme:?} at once {at_once}: First as it was last shown");
+    }
+}
+
 #[test]
 fn a_new_gesture_after_a_pause_goes_up_though_no_idle_frame_was_drawn_between() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));

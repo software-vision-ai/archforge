@@ -51,6 +51,9 @@ pub struct Nav {
     /// The view each diagram had when it was last left, by any way, by diagram
     /// ([`crate::canvas::open`] and [`crate::canvas::close_tab`] keep it).
     pub(crate) views: HashMap<Uuid, (Vec2, f32)>,
+    /// The tab whose view the canvas has drawn since it was opened: none while the view is still
+    /// the one of the tab before, to be fitted or centred on the next frame.
+    pub(crate) shown: Option<Uuid>,
     /// The return route of each tab, by the tab's diagram: the package entries that led to it, so
     /// going back returns the way the user came in, though the parent package has other class
     /// diagrams too. Browsing state only: never written into the model, and no undo step.

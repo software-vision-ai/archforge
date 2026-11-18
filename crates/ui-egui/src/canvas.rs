@@ -281,9 +281,12 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
 /// Keeps the pan and zoom the active tab has now as the view it was left with, for package
 /// navigation to restore ([`crate::package_nav::leave`]). Every way of leaving a tab comes here
 /// first, an ordinary switch, a close or a step of package navigation, so the view kept is always
-/// the one it was last left with (AR-666).
+/// the one it was last left with (AR-666). Only a view the canvas has drawn for that tab counts:
+/// one still to be fitted or centred is the view of the diagram before it, so its entry stays.
 fn keep_left_view(state: &mut State) {
-    if let Some(from) = state.active {
+    if let Some(from) = state.active
+        && state.nav.shown == Some(from)
+    {
         state.nav.views.insert(from, (state.pan, state.zoom));
     }
 }
@@ -294,6 +297,7 @@ fn keep_left_view(state: &mut State) {
 /// kept first.
 pub fn open(shell: &mut Shell, id: Uuid) {
     keep_left_view(&mut shell.canvas);
+    shell.canvas.nav.shown = None;
     // What is opened shows in the centre, where a version's details or a changed element would hide it.
     (shell.versions.details, shell.versions.element) = (None, None);
     if shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), id)) {
@@ -706,7 +710,10 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     if !shell.canvas.pan.is_finite() {
         shell.canvas.pan = Vec2::ZERO;
     }
-    // A zoom across a package's threshold, ⌘↓ or ⌘↑ moves to another level (AR-95).
+    // The view is this diagram's from here on, once a landing pending from package navigation is
+    // placed at the start of `before_draw`; a zoom across a package's threshold, ⌘↓ or ⌘↑ then
+    // moves to another level (AR-95).
+    shell.canvas.nav.shown = shell.canvas.active;
     crate::package_nav::before_draw(shell, ui, r, d);
     let view = View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
     // An element dragged from the Models explorer lands where it was let go (slice S7), as the
