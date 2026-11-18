@@ -646,6 +646,18 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   (`links_removed`).
   Choosing the default a package with one binding has already changes nothing and adds no undo
   step; any other choice, mending a duplicate included, is one undo step. While Archforge shows an earlier version, it is refused like every change.
+- **Dependencies**: `uml_dependency_add` draws a dependency from `client` to `supplier`, each
+  the id of a package or of a class, an interface, an enumeration, a data type, a primitive type
+  or an association class, in any mix, with an optional `name`. A package client owns the
+  dependency; for a classifier client, the classifier's package owns it. Anything else at either
+  end, such as an attribute, a comment, a diagram or a profile, is refused as the wrong end and
+  changes nothing, as are UML's own library and metaclasses, a template parameter's own
+  classifier and a package outside the model. An element cannot depend on itself, while a cycle
+  of dependencies is allowed. Two ends, no dependency on itself and both ends in one model are
+  Archforge's own rules, not UML's. `element_remove` refuses a package, or a package taken along
+  with another, while a dependency that stays has it as its supplier, naming the package and the
+  dependency's client; remove the dependency first. A package client's own dependencies go with
+  it.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element

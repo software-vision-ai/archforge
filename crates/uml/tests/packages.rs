@@ -2,7 +2,8 @@
 //! siblings, classes and packages moved, a nested package removed handing its contents and
 //! diagrams up to its parent (owner decision, for every notation), a top-level one taking them
 //! along, either taking its default-diagram bindings along (AR-577), and a class of another package
-//! drawn as an outsider; a package's card naming its owners from the root down (AR-564); each one
+//! drawn as an outsider; a package's card naming its owners from the root down (AR-564); a package
+//! a dependency stays on kept, and a package client's dependencies taken along (AR-696); each one
 //! undo step; the sweep.
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
@@ -298,6 +299,73 @@ fn refusal(s: &mut S, cmd: &str, p: Json) -> (Option<archforge_engine::Reason>, 
     let Err(archforge_engine::EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
     assert_eq!((snapshot(s), s.revision(), s.undo_label().map(str::to_string)), (before, revision, label), "{cmd} {p} changed nothing");
     (error.reason, error.message)
+}
+
+/// A package that is the supplier of a dependency that stays is not removed, nested deeper or
+/// right under the root package: the refusal names it and the dependency's client, and changes
+/// nothing. Once the dependency is removed, the package goes, a package it holds handed up with
+/// its own dependency kept. A package client takes its dependencies with it, as does a removal of
+/// both ends (AR-696).
+#[test]
+fn a_package_a_dependency_stays_on_is_kept_and_a_package_client_takes_its_dependencies_along() {
+    use archforge_engine::Reason::DependencySupplier;
+    let mut s = session();
+    let add = |s: &mut S, name: &str, parent: Option<&str>| run(s, "uml.package.add", json!({ "name": name, "parent": parent }));
+    let sales = add(&mut s, "sales", None);
+    let billing = add(&mut s, "billing", None);
+    let ledger = add(&mut s, "ledger", Some(&billing));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let depend = |s: &mut S, client: &str, supplier: &str| run(s, "uml.dependency.add", json!({ "client": client, "supplier": supplier }));
+    let on_ledger = depend(&mut s, &order, &ledger);
+    let on_billing = depend(&mut s, &sales, &billing);
+    let kept = |package: &str, client: &str| Some(DependencySupplier { package: package.into(), client: client.into() });
+    for (package, client, name) in [(&ledger, "Order", "ledger"), (&billing, "sales", "billing")] {
+        let (reason, message) = refusal(&mut s, "element.remove", json!({ "ids": [package] }));
+        assert_eq!(reason, kept(name, client));
+        assert!(message.contains("remove that dependency first"), "{message}");
+    }
+    run(&mut s, "element.remove", json!({ "ids": [on_billing] }));
+    round_trip(&mut s, "element.remove", json!({ "ids": [billing] }));
+    assert!(alive(&s, &ledger) && alive(&s, &on_ledger), "ledger went up with its dependency");
+    // A dependency that goes with its classifier client lets its supplier go in the same step.
+    round_trip(&mut s, "element.remove", json!({ "ids": [order, ledger] }));
+    assert!(!alive(&s, &on_ledger) && !alive(&s, &ledger));
+    // A package client, deeper or right under the root package, and both ends at once, take the
+    // dependency along.
+    let tax = add(&mut s, "tax", None);
+    let audit = add(&mut s, "audit", Some(&sales));
+    let reports = add(&mut s, "reports", None);
+    let rates = add(&mut s, "rates", Some(&sales));
+    let deps = [depend(&mut s, &audit, &tax), depend(&mut s, &reports, &tax), depend(&mut s, &audit, &rates)];
+    round_trip(&mut s, "element.remove", json!({ "ids": [audit, rates] }));
+    round_trip(&mut s, "element.remove", json!({ "ids": [reports] }));
+    assert!(deps.iter().all(|d| !alive(&s, d)), "each went with its client");
+    assert!(alive(&s, &tax) && alive(&s, &sales));
+}
+
+/// A package with no parent takes the packages it holds along, so one of them that a dependency
+/// staying elsewhere is on keeps it, as a loaded document may have it (AR-696).
+#[test]
+fn a_package_with_no_parent_is_kept_while_a_package_it_takes_along_is_a_dependency_s_supplier() {
+    use archforge_uml::{dependency, named_element, package};
+    let mut st = store(0);
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let [top, inner, other] = [(); 3].map(|_| st.create(PACKAGE).unwrap());
+    let (order, d) = (st.create(archforge_uml::CLASS).unwrap(), st.create(archforge_uml::DEPENDENCY).unwrap());
+    for p in [top, other] {
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
+    }
+    st.set(order, named_element::NAME, Value::Str("Order".into())).unwrap();
+    st.set(inner, named_element::NAME, Value::Str("ledger".into())).unwrap();
+    for (owner, held) in [(top, inner), (other, order), (other, d)] {
+        st.push(owner, package::PACKAGED_ELEMENT, Value::Ref(held)).unwrap();
+    }
+    st.push(d, dependency::CLIENT, Value::Ref(order)).unwrap();
+    st.push(d, dependency::SUPPLIER, Value::Ref(inner)).unwrap();
+    let top = st.uuid(top).unwrap().to_string();
+    let mut s = over(st);
+    let (reason, _) = refusal(&mut s, "element.remove", json!({ "ids": [top] }));
+    assert_eq!(reason, Some(archforge_engine::Reason::DependencySupplier { package: "ledger".into(), client: "Order".into() }));
 }
 
 /// A package of another branch, the root, an owner of the diagram's package and that package

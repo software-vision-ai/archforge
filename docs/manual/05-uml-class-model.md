@@ -1675,6 +1675,9 @@ the model; **Delete from the model…** (⇧⌫) asks first, then deletes it eve
   goes with it.
 - Deleting an association class takes its ends, attributes and operations with it. Removing a
   class at either end takes the association class along.
+- A package that a dependency depends on is not deleted while that dependency stays: Archforge
+  names the dependency's client, and you delete the dependency first. A package that depends on
+  something takes its own dependencies with it.
 - An association class's row in **Models** can be dragged onto a diagram to place its card; where
   the diagram shows both its classes, its line comes too. A diagram may also show the line
   without the card: the line then carries the name at its middle, and Delete on it takes it only

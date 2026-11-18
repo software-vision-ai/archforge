@@ -57,7 +57,7 @@ pub(crate) fn has_packages(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'st
 
 /// The live element the id under `key` names, of whatever class; never a template parameter's
 /// classifier, which is its template's own (AR-130).
-fn element_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
+pub(crate) fn element_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let id = text(p, key);
     let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
     let obj = store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
@@ -648,9 +648,45 @@ fn primitive_type_list(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "primitive_types": items }))
 }
 
-/// What a nested package hands up to its parent when it is removed: everything it holds.
+/// What a nested package hands up to its parent when it is removed: everything it holds but the
+/// dependencies it is the client of, which go with it (AR-696).
 fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
-    store.list(pkg, package::PACKAGED_ELEMENT).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|o| store.is_alive(*o)).collect()
+    let own = |o: &Obj| store.class_of(*o).ok() == Some(crate::DEPENDENCY) && dependency_end(store, *o, crate::dependency::CLIENT) == Some(pkg);
+    store
+        .list(pkg, package::PACKAGED_ELEMENT)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(Value::as_ref)
+        .filter(|o| store.is_alive(*o) && !own(o))
+        .collect()
+}
+
+/// The dependency `d`'s first live end under `prop`, its client or its supplier.
+fn dependency_end(store: &Store, d: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
+    store.list(d, prop).ok()?.iter().filter_map(Value::as_ref).find(|o| store.is_alive(*o))
+}
+
+/// Why removing `objs` would leave an ordinary dependency that stays without its supplier, when a
+/// package that goes (named in `objs`, or among what `goes` with a top-level one) is one: refused,
+/// naming the package and the dependency's client, so the dependency is removed first (AR-696).
+/// A dependency goes when it is named, among what `goes`, or held by its own client package that
+/// goes. 402-C (AR-698) replaces this refusal by removing such dependencies with the package.
+fn supplier_problem(store: &Store, objs: &[Obj], goes: &std::collections::BTreeSet<Obj>) -> Option<CommandError> {
+    let packages: std::collections::BTreeSet<Obj> =
+        goes.iter().chain(objs).copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
+    let with_client = |d: Obj| {
+        let client = dependency_end(store, d, crate::dependency::CLIENT);
+        client.is_some_and(|c| packages.contains(&c) && store.container(d).ok().flatten().map(|(o, _)| o) == Some(c))
+    };
+    let stays = |d: Obj| store.is_alive(d) && store.class_of(d).ok() == Some(crate::DEPENDENCY) && !goes.contains(&d) && !objs.contains(&d);
+    let (pkg, d) = packages
+        .iter()
+        .flat_map(|p| store.referrers(*p).into_iter().map(move |(d, _)| (*p, d)))
+        .find(|(p, d)| stays(*d) && dependency_end(store, *d, crate::dependency::SUPPLIER) == Some(*p) && !with_client(*d))?;
+    let client = dependency_end(store, d, crate::dependency::CLIENT).map(|c| crate::applications::name_or_id(store, c)).unwrap_or_default();
+    let package = crate::applications::name_or_id(store, pkg);
+    let message = format!("{package} is the supplier of a dependency from {client}, which stays; remove that dependency first");
+    Some(refuse("ids", message).because(Reason::DependencySupplier { package: package.into(), client: client.into() }))
 }
 
 /// Every classifier inside a package, at any depth, those nested in its classifiers among them
@@ -822,6 +858,9 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     let doomed: std::collections::BTreeSet<Obj> = roots.flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default()).collect();
     let plan: std::collections::BTreeSet<Obj> = doomed.iter().copied().chain(objs.iter().copied().filter(|o| nested(*o))).collect();
     if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, doomed.iter().copied(), "ids", |b| plan.contains(&b)) {
+        return Err(refused);
+    }
+    if let Some(refused) = supplier_problem(store, objs, &doomed) {
         return Err(refused);
     }
     let going: Vec<Obj> = with.into_iter().chain(objs.iter().copied()).collect();

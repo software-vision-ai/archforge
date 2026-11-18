@@ -778,6 +778,7 @@ str		The package's default diagram is not a class diagram. Choose one of its cla
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.
+str		A dependency from {client} depends on {package}, so {package} stays. Remove that dependency first.	A dependency from {client} depends on {package}, so {package} stays. Remove that dependency first.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Choose either an existing diagram or a new one as the replacement, not both.
 str		A name has to be text.	A name has to be text.

@@ -17,8 +17,7 @@
 //! association to or from an enumeration, a data type or a primitive type (whose values are no
 //! instances to link), a classifier
 //! that specializes itself, directly or round a cycle, a classifier that specializes a final one (UML's
-//! `isFinalSpecialization`, set with `uml.classifier.set`), the same generalization twice, a class depending
-//! on itself, both ends of an association aggregating, a composition whose whole's end allows more
+//! `isFinalSpecialization`, set with `uml.classifier.set`), the same generalization twice, both ends of an association aggregating, a composition whose whole's end allows more
 //! than one, two ends of one association with the same role, and an interface realization from
 //! anything but a class, to anything but an interface, or from a class to an interface it realizes
 //! already. A realization is owned by its implementing class, as UML has it.
@@ -34,6 +33,12 @@
 //! rules. Clearing it changes nothing else. A classifier's is set with `uml.classifier.set`, a
 //! property's with the attribute commands and `uml.association.set-end`, an operation's with the
 //! operation commands.
+//!
+//! A dependency (AR-696) joins two packages or classifiers in any mix, its client depending on its
+//! supplier; anything else at either end is refused as the wrong end, and a cycle of dependencies
+//! is allowed. A package client owns its dependencies; a classifier client's home
+//! package owns them otherwise. That a dependency has two ends, never depends on itself and joins
+//! elements of one model are Archforge's own rules, not UML's.
 //!
 //! An association class (AR-125) is one element, UML's AssociationClass: a class and an
 //! association at once. It is made between two classes as a plain association is, owning both its
@@ -51,8 +56,9 @@ use serde_json::{Value as Json, json};
 
 use crate::commands::{a_what, classifier_of, fail, id_of, name_of, refuse, set_name, text, uuid_of, what};
 use crate::{
-    ASSOCIATION, ASSOCIATION_CLASS, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PRIMITIVE_TYPE,
-    PROPERTY, association, behaviored_classifier, classifier, dependency, generalization, interface_realization, package, property, typed_element,
+    ASSOCIATION, ASSOCIATION_CLASS, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PACKAGE,
+    PRIMITIVE_TYPE, PROPERTY, association, behaviored_classifier, classifier, dependency, generalization, interface_realization, package, property,
+    typed_element,
 };
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
@@ -659,10 +665,43 @@ fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, g)? }))
 }
 
-/// `uml.dependency.add`: a client depends on a supplier, never on itself.
+/// Whether a dependency may be drawn: a classifier or a package exists, either of which may be its
+/// end.
+fn has_dependency_ends(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
+    let fits = |o| f.doc.class_of(o).is_ok_and(|c| crate::is_classifier(c) || c == PACKAGE);
+    if f.doc.alive().any(fits) { Ok(()) } else { Err(crate::constraints::NO_CONTEXTS) }
+}
+
+/// The dependency's end under `key`: a package or a classifier of the project's model, never the
+/// UML library or one of its metaclasses; anything else is refused as the wrong `end`. Joining
+/// two elements of one model is Archforge's rule, not UML's.
+fn dependency_end(store: &Store, p: &Params, key: &str, end: End) -> Result<Obj, CommandError> {
+    let o = crate::commands::element_of(store, p, key)?;
+    if let Some(refused) = crate::profiles::library_refusal(store, key, o) {
+        return Err(refused);
+    }
+    if !store.class_of(o).is_ok_and(|c| crate::is_classifier(c) || c == PACKAGE) {
+        let why = Reason::WrongEnd { relationship: "dependency", end, kind: what(store, o) };
+        let message = format!("{} is {}; a dependency here joins packages and classifiers only", text(p, key), a_what(store, o));
+        return Err(refuse(key, message).because(why));
+    }
+    if !crate::constraints::in_model(store, o) {
+        return Err(refuse(key, format!("{} is outside this project's model; a dependency here joins elements of one model", text(p, key))));
+    }
+    Ok(o)
+}
+
+/// `uml.dependency.add`: a client depends on a supplier, each a package or a classifier, never on
+/// itself (Archforge's rule, not UML's); a package client owns the dependency, a classifier
+/// client's home package does otherwise.
 fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
-    let (client, pkg) = class_in_package(ctx.doc, p, "client")?;
-    let supplier = classifier_of(ctx.doc, p, "supplier")?;
+    let client = dependency_end(ctx.doc, p, "client", End::Source)?;
+    let supplier = dependency_end(ctx.doc, p, "supplier", End::Target)?;
+    let owner = if ctx.doc.class_of(client).ok() == Some(PACKAGE) {
+        client
+    } else {
+        crate::nesting::home_package(ctx.doc, client).ok_or_else(|| refuse("client", format!("the {} is in no package", what(ctx.doc, client))))?
+    };
     if client == supplier {
         let why = Reason::DependsOnItself { kind: crate::commands::what(ctx.doc, client) };
         return Err(refuse("supplier", format!("{} cannot depend on itself", a_what(ctx.doc, client))).because(why));
@@ -671,7 +710,7 @@ fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     check_name(name)?;
     let d = ctx.doc.create(DEPENDENCY).map_err(fail)?;
     set_name(ctx.doc, d, name)?;
-    ctx.doc.push(pkg, package::PACKAGED_ELEMENT, Value::Ref(d)).map_err(fail)?;
+    ctx.doc.push(owner, package::PACKAGED_ELEMENT, Value::Ref(d)).map_err(fail)?;
     ctx.doc.push(d, dependency::CLIENT, Value::Ref(client)).map_err(fail)?;
     ctx.doc.push(d, dependency::SUPPLIER, Value::Ref(supplier)).map_err(fail)?;
     ctx.view.selection = vec![d];
@@ -1116,7 +1155,7 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
             crate::bindings::reconnect(ctx.doc, r, source, c)?;
         }
     } else {
-        let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two classifiers"))?;
+        let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two elements"))?;
         let (cl, su) = if source { (c, supplier) } else { (client, c) };
         if cl == su {
             let why = Reason::DependsOnItself { kind: crate::commands::what(ctx.doc, cl) };
@@ -1283,8 +1322,12 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add dependency",
             &["Dependency"],
             None,
-            "client: string; the id of the class, interface, enumeration, data type or primitive type that depends\nsupplier: string; the id of the class, interface, enumeration, data type or primitive type it depends on\nname: string = \"\"; the dependency's name, or nothing",
-            has_classes,
+            concat!(
+                "client: string; the id of the package, class, interface, enumeration, data type, primitive type or association class that depends; a package owns the dependency, a classifier's package does otherwise\n",
+                "supplier: string; the id of the package, class, interface, enumeration, data type, primitive type or association class it depends on, never the client itself\n",
+                "name: string = \"\"; the dependency's name, or nothing"
+            ),
+            has_dependency_ends,
             dependency_add
         ),
         cmd!(

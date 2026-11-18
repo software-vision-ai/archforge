@@ -6743,6 +6743,10 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let foreign = "Vertrieb hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. \
                        Wählen Sie zuerst eines seiner eigenen Klassendiagramme.";
         assert_eq!(kept(Some(WrongOwner)), foreign, "{theme:?}");
+        // A package a dependency that stays depends on is kept (AR-696).
+        let supplier = archforge_engine::Reason::DependencySupplier { package: "Buchhaltung".into(), client: "Auftrag".into() };
+        let said = "Eine Abhängigkeit von Auftrag hängt von Buchhaltung ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
+        assert_eq!(crate::panels::said(&supplier).as_deref(), Some(said), "{theme:?}");
         // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
         use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
         let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
