@@ -548,8 +548,11 @@ itself stays. Its class diagrams go up too, as more diagrams of the package arou
 default diagram stays. When packages around it are removed at the same time, its class diagrams
 go to the first package above all of them that stays, even past a package that is only moved
 up. When the package that would take them has no diagram yet, or no valid default diagram, the
-package is kept and the message names that package: create a diagram for it, or choose its
-default diagram, first.
+package is kept and the message names that package: create a class diagram for it, which
+becomes its default when it has none at all, or choose one of its class diagrams as its default
+(for now, by an agent with `uml.package.default.set`). When its default names a diagram that is
+gone or another package's and it has no class diagram of its own, do both: create the class
+diagram first, then choose it as the default.
 
 ### Move a package
 
