@@ -48,8 +48,7 @@ const MAX_DEPTH: usize = 256;
 pub struct Nav {
     /// The zoom the user asked for this frame, as a factor; zero for none.
     pub(crate) intent: f32,
-    /// The view each diagram had when it was last left, by any way, by diagram
-    /// ([`crate::canvas::open`] and [`crate::canvas::close_tab`] keep it).
+    /// The view each diagram was last left with, by diagram, as `crate::canvas` keeps it.
     pub(crate) views: HashMap<Uuid, (Vec2, f32)>,
     /// The tab whose view the canvas has drawn since it was opened: none while the view is still
     /// the one of the tab before, to be fitted or centred on the next frame.

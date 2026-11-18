@@ -278,11 +278,10 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     }
 }
 
-/// Keeps the pan and zoom the active tab has now as the view it was left with, for package
-/// navigation to restore ([`crate::package_nav::leave`]). Every way of leaving a tab comes here
-/// first, an ordinary switch, a close or a step of package navigation, so the view kept is always
-/// the one it was last left with (AR-666). Only a view the canvas has drawn for that tab counts:
-/// one still to be fitted or centred is the view of the diagram before it, so its entry stays.
+/// Keeps the active tab's pan and zoom as the view it was left with, for package navigation to
+/// restore ([`crate::package_nav::leave`]). Every way of leaving a tab comes here first, so the
+/// view kept is always the last (AR-666). Only a view drawn for that tab counts: one still to be
+/// fitted or centred belongs to the tab before, so the tab's entry stays.
 fn keep_left_view(state: &mut State) {
     if let Some(from) = state.active
         && state.nav.shown == Some(from)
@@ -293,10 +292,14 @@ fn keep_left_view(state: &mut State) {
 
 /// Drops the landing package navigation left pending for the active tab when `next` takes its
 /// place, so it never places another tab; navigation schedules its own landing after it opens one
-/// (AR-666).
+/// (AR-666). The view was half made for that landing, so `next` shows as last left, or fitted.
 fn forget_landing(state: &mut State, next: Option<Uuid>) {
-    if state.active != next {
+    if state.active != next && (state.nav.reveal.is_some() || state.nav.centre) {
         (state.nav.reveal, state.nav.centre) = (None, false);
+        match next.and_then(|n| state.nav.views.get(&n).copied()) {
+            Some(view) => (state.pan, state.zoom) = view,
+            None => state.fit_pending = true,
+        }
     }
 }
 
@@ -327,10 +330,9 @@ pub fn open(shell: &mut Shell, id: Uuid) {
     shell.canvas.active = Some(id);
 }
 
-/// Closes a tab, keeping the view of the active one first, since closing may leave it; when the tab
-/// closed was the active one, the tab before it (else after it) takes over and what was said about
-/// it ends. A skill's tab whose text the store refused stays open on it, showing why, so nothing
-/// typed is lost.
+/// Closes a tab, keeping the active tab's view first; when it was the active one, the tab before it
+/// (else after it) takes over and what was said about it ends. A skill's tab whose text the store
+/// refused stays open on it, showing why, so nothing typed is lost.
 pub fn close_tab(shell: &mut Shell, id: Uuid) {
     let Some(i) = shell.canvas.tabs.iter().position(|t| *t == id) else { return };
     keep_left_view(&mut shell.canvas);
@@ -721,9 +723,8 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     if !shell.canvas.pan.is_finite() {
         shell.canvas.pan = Vec2::ZERO;
     }
-    // The view is this diagram's from here on, once a landing pending from package navigation is
-    // placed at the start of `before_draw`; a zoom across a package's threshold, ⌘↓ or ⌘↑ then
-    // moves to another level (AR-95).
+    // The view is this diagram's once `before_draw` places a pending landing first; a zoom across
+    // a package's threshold, ⌘↓ or ⌘↑ then moves to another level (AR-95).
     shell.canvas.nav.shown = shell.canvas.active;
     crate::package_nav::before_draw(shell, ui, r, d);
     let view = View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };

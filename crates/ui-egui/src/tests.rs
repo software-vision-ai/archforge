@@ -11528,10 +11528,9 @@ fn zoom_out_to(h: &mut Harness<'static, Shell>, to: archforge_mof::Uuid) {
     assert!(h.state().canvas.nav.reveal.is_some(), "not drawn yet: the package left still to be centred on it");
 }
 
-/// The path bar restores a diagram as it was last left, however it was left (AR-666): the root's
-/// First is left once by entering Sales, then shown again by its tab, zoomed out and left by an
-/// ordinary tab switch, or by closing its tab. The path bar from Sales then opens First at that
-/// latest view, not the one entering Sales kept.
+/// The path bar restores a diagram as it was last left, however it was left (AR-666): First, left
+/// once by entering Sales, is shown again by its tab, zoomed out and left by a tab switch or by
+/// closing its tab; the path bar from Sales then opens First at that latest view.
 #[test]
 fn the_path_bar_restores_the_view_a_diagram_was_last_left_with_by_a_tab_switch_or_close() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -11564,9 +11563,8 @@ fn the_path_bar_restores_the_view_a_diagram_was_last_left_with_by_a_tab_switch_o
     }
 }
 
-/// A view is kept only once the canvas has drawn it for its tab (AR-666). Zooming out of Sales
-/// lands on First at 100 % with Sales centred on First's next frame, while First's pan is still
-/// Sales'; entering Sales and opening First again before a frame shows First at Sales' 100 %.
+/// A view is kept only once the canvas has drawn it for its tab (AR-666). After a zoom out of
+/// Sales, or entering Sales and opening First again, First has Sales' pan until its next frame.
 /// Leaving First for Sales before that frame keeps nothing for First, so the path bar later opens
 /// First as it was last shown, not at a mix of two views.
 #[test]
@@ -11600,12 +11598,13 @@ fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
 
 /// A landing package navigation leaves pending is for the tab it opened (AR-666). Support, a wide
 /// diagram opened in a new tab before First or Sales draws, is fitted below 100 %, neither landed
-/// at 100 % nor centred. When First is removed before it draws, Support takes over as it is. First
-/// opened again before it draws still lands, Sales' card centred at 100 %.
+/// at 100 % nor centred. When First is removed before it draws, Support takes over as it was last
+/// shown, or fitted when it never was. First opened again before it draws still lands, Sales' card
+/// centred at 100 %.
 #[test]
 fn a_landing_pending_for_one_tab_never_places_another() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        for case in ["out, then Support", "in, then Support", "out, First removed", "out, First again"] {
+        for case in ["out, then Support", "in, then Support", "out, First removed", "out, First removed, Support unseen", "out, First again"] {
             let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
             let (root, first, sales, sales_d) = first_and_sales(&mut h);
             let support = {
@@ -11619,21 +11618,25 @@ fn a_landing_pending_for_one_tab_never_places_another() {
                 }
                 d
             };
-            if case == "out, First removed" {
+            let shown = (egui::vec2(5.0, 6.0), 0.3);
+            if case.starts_with("out, First removed") {
                 crate::canvas::open(h.state_mut(), support);
-                h.run();
+                if case == "out, First removed" {
+                    h.run();
+                    (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = shown;
+                }
             }
             crate::canvas::open(h.state_mut(), first);
             h.run();
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(-50.0, 30.0), 0.6);
             crate::package_nav::enter(h.state_mut(), sales, 0.0);
             if case != "in, then Support" {
                 h.run();
                 rest(&mut h);
                 zoom_out_to(&mut h, first);
             }
-            let before = (h.state().canvas.pan, h.state().canvas.zoom);
             match case {
-                "out, First removed" => {
+                c if c.starts_with("out, First removed") => {
                     crate::canvas::close_tab(h.state_mut(), sales_d);
                     let s = h.state_mut().session.as_mut().unwrap();
                     let (at, d) = (s.token(), first.to_string());
@@ -11650,7 +11653,7 @@ fn a_landing_pending_for_one_tab_never_places_another() {
                     let card = pan + egui::vec2(320.0, 234.0) * zoom;
                     assert!(zoom == 1.0 && (card - size / 2.0).length() < 1.0, "{theme:?}: Sales' card centred at 100 %, {pan:?} {zoom}");
                 }
-                "out, First removed" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(support), before), "{theme:?}: as it was"),
+                "out, First removed" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(support), shown), "{theme:?}: as last shown"),
                 _ => assert!(h.state().canvas.active == Some(support) && zoom < 0.5, "{theme:?} {case}: Support fitted, not landed at {zoom}"),
             }
         }
