@@ -25120,6 +25120,7 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
             ..Services::default()
         });
         shell.state.theme = theme;
+        shell.state.remember("Library", std::path::Path::new("/tmp/Library.archforge"), 0);
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
             |ui, shell: &mut Shell| {
                 shell.logic(ui.ctx());
@@ -25143,6 +25144,15 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         let new = rect_of(&h, "home.start.new-project").center();
         click(&mut h, new);
         assert!(!crate::actions::available(h.state(), "file.new") && h.state().new_project.is_none(), "{theme:?}: New project off");
+        // Home's ways to open a project look off, so no opening meets the answer: no pointing hand.
+        let hand = |h: &mut Harness<'static, Shell>, id: &str| {
+            h.event(egui::Event::PointerMoved(rect_of(h, id).center()));
+            h.run();
+            h.output().platform_output.cursor_icon == egui::CursorIcon::PointingHand
+        };
+        for id in ["home.recent.0", "home.start.open-project", "home.pin-folder"] {
+            assert!(!hand(&mut h, id), "{theme:?}: {id} is off while the pick waits");
+        }
         h.state_mut().pin_from_picker();
         h.state_mut().open_from_picker();
         h.run();
@@ -25154,6 +25164,7 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         assert_eq!(h.state().picker_error.as_deref(), Some("no folder picker here"));
         assert!(painted(&h).iter().any(|t| t == "no folder picker here"), "{theme:?}: {:?}", painted(&h));
         assert!(crate::actions::available(h.state(), "home.pin-folder") && h.state().can_open_project(), "{theme:?}: both pickers back");
+        assert!(["home.recent.0", "home.start.open-project", "home.pin-folder"].iter().all(|id| hand(&mut h, id)), "{theme:?}: and Home's");
         h.state_mut().pin_from_picker();
         answer(&mut h, Some(Picked::Folder(pinned()[0].clone())));
         assert_eq!((h.state().state.pinned.clone(), h.state().picker_error.clone()), (pinned(), None), "{theme:?}: the folder chosen is pinned");
@@ -25166,50 +25177,6 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         assert_eq!((h.state().state.pinned.clone(), h.state().picker_error.clone()), (pinned(), None), "{theme:?}: a host gone is a cancel");
         assert!(crate::actions::available(h.state(), "home.pin-folder"), "{theme:?}: and Pin a folder is back");
         assert!(crate::actions::available(h.state(), "file.new"), "{theme:?}: and New project");
-    }
-}
-
-/// Open's answer waits while a recent project opens (AR-737): the project chosen in the picker
-/// opens after it, never dropped.
-#[test]
-fn a_project_picked_while_a_recent_one_opens_opens_after_it() {
-    let opened = |name: &str| crate::Opened { name: name.into(), path: format!("/tmp/{name}.archforge").into(), ..Default::default() };
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        crate::i18n::set_language("en");
-        let host = std::sync::Arc::new(SavingHost::default());
-        let waiting = std::sync::Arc::new(std::sync::Mutex::new(Vec::<std::sync::mpsc::Sender<Picked>>::new()));
-        let asked = waiting.clone();
-        let mut shell = Shell::new(Services {
-            projects: Some(host.clone()),
-            pick_project: Some(std::sync::Arc::new(move |_| {
-                let (tx, rx) = std::sync::mpsc::channel();
-                asked.lock().unwrap().push(tx);
-                rx
-            })),
-            ..Services::default()
-        });
-        shell.state.theme = theme;
-        shell.state.remember("Library", std::path::Path::new("/tmp/Library.archforge"), 0);
-        let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
-            |ui, shell: &mut Shell| {
-                shell.logic(ui.ctx());
-                shell.ui(ui);
-            },
-            shell,
-        );
-        h.run();
-        h.state_mut().open_from_picker();
-        let row = rect_of(&h, "home.recent.0").center();
-        click(&mut h, row);
-        let asked_to_open = |host: &SavingHost| host.opens.lock().unwrap().iter().map(|(p, _)| p.clone()).collect::<Vec<_>>();
-        assert_eq!(asked_to_open(&host), [std::path::PathBuf::from("/tmp/Library.archforge")], "{theme:?}: the recent project opens");
-        waiting.lock().unwrap().pop().expect("a pick was asked for").send(Picked::Folder("/tmp/Shop.archforge".into())).unwrap();
-        h.run_steps(4);
-        assert_eq!(asked_to_open(&host).len(), 1, "{theme:?}: the pick waits for the opening");
-        let library = host.opens.lock().unwrap().remove(0).1;
-        library.send(Ok(opened("Library"))).unwrap();
-        h.run_steps(4);
-        assert_eq!(asked_to_open(&host), [std::path::PathBuf::from("/tmp/Shop.archforge")], "{theme:?}: then the project chosen opens");
     }
 }
 

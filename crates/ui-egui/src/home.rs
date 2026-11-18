@@ -94,9 +94,16 @@ fn start_live(shell: &Shell, id: &str) -> bool {
     (id == "new-project" && shell.tabs.len() < crate::MAX_TABS && shell.picking.is_none()) || (id == "open-project" && can_open(shell))
 }
 
-/// Whether projects can be opened: the host picks and opens them, and a tab is free.
+/// Whether projects can be opened: the host picks and opens them, a tab is free, and no folder
+/// pick waits.
 pub(crate) fn can_open(shell: &Shell) -> bool {
-    shell.services.pick_project.is_some() && shell.services.projects.is_some() && shell.tabs.len() < crate::MAX_TABS
+    shell.services.pick_project.is_some() && can_open_recent(shell) && shell.tabs.len() < crate::MAX_TABS
+}
+
+/// Whether a recent project can be asked to open: the host opens projects, and no folder pick
+/// waits, whose answer would meet the opening.
+fn can_open_recent(shell: &Shell) -> bool {
+    shell.services.projects.is_some() && shell.picking.is_none()
 }
 
 /// The four start cards: automation id, title, line, link, icon and colour.
@@ -447,7 +454,7 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     }
     if shell.state.pinned.len() < crate::state::MAX_PINNED {
         let pin = Rect::from_min_size(at(x, tiles_top), vec2(234.0f32.min(inner), 66.0));
-        let live = shell.services.pick_folder.is_some();
+        let live = crate::actions::available(shell, "home.pin-folder");
         let resp = control(shell, ui, "home.pin-folder", "button", pin, live);
         paint.rect_stroke(pin, 10.0, Stroke::new(1.0, if live && resp.hovered() { p.border_hover } else { p.border }), StrokeKind::Inside);
         ux::icon(&paint, pin.min + vec2(20.0, 24.0), &icons::PLUS, 18.0, p.text_secondary);
@@ -759,7 +766,7 @@ fn recent_card(
     project: &crate::state::RecentProject,
     now: u64,
 ) -> bool {
-    let live = shell.services.projects.is_some();
+    let live = can_open_recent(shell);
     let mut resp = control(shell, ui, &format!("home.recent.{i}"), "card", r, live);
     if live {
         resp = resp.on_hover_text(project.path.display().to_string());
@@ -815,7 +822,7 @@ fn recent_more(
     }
     let anchor = Rect::from_min_max(pos2(more.right() - 220.0, more.top()), more.max);
     // Opening is offered only while a project can open; removing from the list always.
-    let live = shell.services.projects.is_some();
+    let live = can_open_recent(shell);
     let items: Vec<String> = if live { vec![tr("Open"), tr("Remove from recent projects")] } else { vec![tr("Remove from recent projects")] };
     match crate::panels::menu(shell, ui, p, anchor, &format!("home.recent.{i}.menu"), &items) {
         Some(0) if live => true,
@@ -839,7 +846,7 @@ fn recent_row(
     project: &crate::state::RecentProject,
     now: u64,
 ) -> bool {
-    let live = shell.services.projects.is_some();
+    let live = can_open_recent(shell);
     let mut resp = control(shell, ui, &format!("home.recent.{i}"), "row", r, live);
     if live {
         resp = resp.on_hover_text(project.path.display().to_string());

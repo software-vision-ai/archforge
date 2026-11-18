@@ -634,7 +634,7 @@ pub(crate) mod tests {
     #[test]
     fn every_action_follows_one_rule_in_every_state() {
         type Setup = fn(&mut Shell);
-        let states: [(&str, Setup, &[&str]); 19] = [
+        let states: [(&str, Setup, &[&str]); 21] = [
             ("a project", |_| {}, &[]),
             ("saving", |s| unsaved(s).save(), &[SAVE]),
             ("held", |s| s.begin_hold().unwrap(), &[SAVE]),
@@ -647,6 +647,8 @@ pub(crate) mod tests {
             ("a panel's dialog", |s| crate::diagrams::open_new_of(s, None), &BEHIND_A_DIALOG),
             ("an opening under way", |s| s.opening = Some(channel().1), &[OPEN]),
             ("a folder pick under way", |s| s.ask_pick(crate::Pick::Pin, || channel().1), &[NEW, OPEN, PIN]),
+            ("an opening waiting for the hold", |s| s.begin_hold().map(|()| s.open_path(Path::new("/tmp/Later.archforge"))).unwrap(), &[SAVE, OPEN]),
+            ("a project opened waiting for the hold", |s| s.begin_hold().map(|()| s.open_project(Opened::default())).unwrap(), &[SAVE, OPEN]),
             ("every tab taken", |s| s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect(), &[NEW, OPEN]),
             ("every pin taken", |s| s.state.pinned = (0..crate::state::MAX_PINNED).map(|i| i.to_string().into()).collect(), &[PIN]),
             ("no folder picker", |s| s.services.pick_folder = None, &[PIN]),

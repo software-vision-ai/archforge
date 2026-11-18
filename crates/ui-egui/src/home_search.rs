@@ -202,7 +202,8 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
         .filter(|f| !shell.state.recent.iter().any(|r| r.path == f.path) && words.iter().all(|w| f.text.contains(w.as_str())))
         .map(|f| Hit { target: Target::Project(f.path.clone()), icon: &icons::ER_DIAGRAM, label: f.label.clone(), detail: f.detail.clone() });
     let projects: Vec<Hit> = recent.chain(found).take(MAX_PROJECTS).collect();
-    if !projects.is_empty() {
+    // Projects and pinned folders open nothing while a folder pick waits.
+    if !projects.is_empty() && shell.picking.is_none() {
         groups.push((tr("Projects"), projects));
     }
     let folders: Vec<Hit> = shell
@@ -218,7 +219,7 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
             detail: tr("Open a project here"),
         })
         .collect();
-    if !folders.is_empty() {
+    if !folders.is_empty() && shell.picking.is_none() {
         groups.push((tr("Pinned folders"), folders));
     }
     let actions: Vec<Hit> = actions(shell).into_iter().filter(|h| matches(query, &[&h.label])).collect();
@@ -464,6 +465,13 @@ mod tests {
         assert!(shown(&shell).contains(&open) && crate::actions::available(&shell, "file.open"));
         shell.services.projects = None;
         assert!(!shown(&shell).contains(&open) && !shown(&shell).contains(&Target::Action("file.new")));
+        // Projects and pinned folders show only while no folder pick waits, whose answer opens one.
+        (shell.state.recent, shell.state.pinned) = (Vec::new(), vec!["/pinned".into()]);
+        shell.state.remember("Shop", std::path::Path::new("/shop.archforge"), 0);
+        let groups = |shell: &Shell| hits(shell, "").into_iter().map(|(heading, _)| heading).collect::<Vec<_>>();
+        assert_eq!(groups(&shell)[..2], [tr("Projects"), tr("Pinned folders")]);
+        shell.picking = Some((crate::Pick::Pin, std::sync::mpsc::channel().1));
+        assert!(!groups(&shell).iter().any(|g| *g == tr("Projects") || *g == tr("Pinned folders")), "{:?}", groups(&shell));
     }
 
     /// Running a row closes the search and runs its action.

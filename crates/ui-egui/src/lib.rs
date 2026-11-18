@@ -1690,13 +1690,8 @@ impl Shell {
     /// project, Pin a folder pins the folder, Change… makes it the new project's folder. A pick
     /// that chose nothing says why when the picker could not appear and nothing on a cancel; a
     /// host gone without answering counts as a cancel, without asking why no picker appeared.
-    /// Open's answer waits while another opening runs (from Home's recent projects or the search),
-    /// so the project chosen opens after it, never dropped.
     fn take_pick(&mut self) {
-        let Some((pick, answer)) = &self.picking else { return };
-        if *pick == Pick::Open && (self.opening.is_some() || self.new_project.is_some()) {
-            return;
-        }
+        let Some((_, answer)) = &self.picking else { return };
         let chosen = match answer.try_recv() {
             Ok(Picked::Folder(path)) => Ok(path),
             Ok(Picked::Nothing) => Err(self.services.picker_unavailable.as_ref().and_then(|probe| probe())),
@@ -1857,12 +1852,12 @@ impl Shell {
         generate::open(self);
     }
 
-    /// Whether Open can act now: the host opens projects, no opening or folder pick is under way,
-    /// the New project dialog is closed and a tab is free.
+    /// Whether Open can act now: the host opens projects, no opening or folder pick is under way
+    /// or waits for the hold, the New project dialog is closed and a tab is free.
     pub fn can_open_project(&self) -> bool {
         home::can_open(self)
             && self.opening.is_none()
-            && self.picking.is_none()
+            && !self.open_waits()
             && self.new_project.is_none()
             && self.about.is_none()
             && self.versions.dialog.is_none()
