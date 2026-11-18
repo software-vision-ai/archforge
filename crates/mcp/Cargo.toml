@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 archforge-control.workspace = true
+craft-mcp-server.workspace = true
 serde_json.workspace = true
 
 [lints]

@@ -10,7 +10,8 @@
 //! With `compact` the command tools are not listed and `search_tools` finds them, each to run
 //! through `execute_command` (CS-14). The model and its skills are read-only resources too
 //! (`resources`), in both modes. Only the reads say they are read-only (CS-13); unknown tools, methods and
-//! argument keys are refused, naming the accepted ones (CS-3).
+//! argument keys are refused, naming the accepted ones (CS-3), and so are a missing key, a wrong type
+//! and a value outside the choices, each naming the tool (craft-mcp-server's check).
 //!
 //! With `read_only` the server offers only the tools whose `readOnlyHint` is true, and refuses a
 //! call of any other with the typed error [`READ_ONLY`] naming the tool. Both the listing and the
@@ -500,8 +501,9 @@ pub fn handle(line: &[u8], backend: &dyn Backend, catalog: &Catalog) -> Option<V
     })
 }
 
-/// Runs a tool: its arguments checked against its schema's keys, then its control method, or for
-/// a command's tool `engine.execute` with that command.
+/// Runs a tool: its arguments checked against the definition the listing gives it (keys, required
+/// keys, types and choices, by craft-mcp-server's check), then its control method, or for a
+/// command's tool `engine.execute` with that command.
 fn call(id: Value, params: &Value, backend: &dyn Backend, catalog: &Catalog) -> Value {
     let Some(name) = params.get("name").and_then(Value::as_str) else { return error(id, -32602, "tools/call needs name") };
     let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
@@ -521,7 +523,7 @@ fn call(id: Value, params: &Value, backend: &dyn Backend, catalog: &Catalog) -> 
             },
         });
     }
-    let schema = entry.schema();
+    let definition = entry.listing();
     let (method, request) = match entry.kind {
         Kind::Fixed(tool) => match tool.method {
             Some(m) => (m.to_string(), args.clone()),
@@ -538,7 +540,8 @@ fn call(id: Value, params: &Value, backend: &dyn Backend, catalog: &Catalog) -> 
             };
         }
     };
-    if let Err(why) = check(name, &schema, given) {
+    let checked = integral(&args);
+    if let Err(why) = craft_mcp_server::check_arguments(std::slice::from_ref(&definition), name, &checked) {
         return tool_error(id, &why);
     }
     let started = std::time::Instant::now();
@@ -640,17 +643,20 @@ fn wait_for_save(backend: &dyn Backend, begun: Value, started: std::time::Instan
     }
 }
 
-/// Refuses an argument the schema does not name and a required one missing.
-fn check(name: &str, schema: &Value, given: &serde_json::Map<String, Value>) -> Result<(), String> {
-    let keys: Vec<&str> = schema["properties"].as_object().map(|p| p.keys().map(String::as_str).collect()).unwrap_or_default();
-    if let Some(key) = given.keys().find(|k| !keys.contains(&k.as_str())) {
-        return Err(format!("{name} has no argument {key:?}; it takes {}", if keys.is_empty() { "none".to_string() } else { keys.join(", ") }));
+/// The largest integer a float holds exactly (2^53), as the engine bounds an integer written as one.
+const SAFE_INTEGER: f64 = 9_007_199_254_740_992.0;
+
+/// `args` with each argument given as a float without a fraction within 2^53 (`3.0`, `1e2`) written
+/// as that integer, for the check alone: the engine takes such a float for an integer, and
+/// craft-mcp-server's check counts only JSON integers, so it must not refuse what the engine takes.
+fn integral(args: &Value) -> Value {
+    let mut args = args.clone();
+    for v in args.as_object_mut().into_iter().flat_map(|a| a.values_mut()) {
+        if let Some(n) = v.as_f64().filter(|n| v.is_f64() && n.fract() == 0.0 && n.abs() <= SAFE_INTEGER) {
+            *v = json!(n as i64);
+        }
     }
-    let required = schema["required"].as_array().cloned().unwrap_or_default();
-    match required.iter().filter_map(Value::as_str).find(|k| !given.contains_key(*k)) {
-        Some(missing) => Err(format!("{name} needs {missing:?}")),
-        None => Ok(()),
-    }
+    args
 }
 
 /// The command tools whose name, command or description holds every word of `query`, at most 20.
