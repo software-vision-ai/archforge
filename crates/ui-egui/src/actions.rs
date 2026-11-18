@@ -111,7 +111,8 @@ pub static ACTIONS: &[Action] = &[
     Action {
         id: NEW,
         label: |_| tr("New project…"),
-        available: |s| free(s) && s.services.projects.is_some() && s.tabs.len() < crate::MAX_TABS,
+        // A folder pick waiting keeps it off: its answer would find the dialog in the way.
+        available: |s| free(s) && s.picking.is_none() && s.services.projects.is_some() && s.tabs.len() < crate::MAX_TABS,
         run: crate::new_project::open,
         keys: None,
         search: Some(InSearch { icon: |_| &icons::PLUS, label: Some(|| tr("New project")) }),
@@ -645,7 +646,7 @@ pub(crate) mod tests {
             ("a question open", |s| s.ask = Some(question()), &BEHIND_A_DIALOG),
             ("a panel's dialog", |s| crate::diagrams::open_new_of(s, None), &BEHIND_A_DIALOG),
             ("an opening under way", |s| s.opening = Some(channel().1), &[OPEN]),
-            ("a folder pick under way", |s| s.ask_pick(crate::Pick::Pin, || channel().1), &[OPEN, PIN]),
+            ("a folder pick under way", |s| s.ask_pick(crate::Pick::Pin, || channel().1), &[NEW, OPEN, PIN]),
             ("every tab taken", |s| s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect(), &[NEW, OPEN]),
             ("every pin taken", |s| s.state.pinned = (0..crate::state::MAX_PINNED).map(|i| i.to_string().into()).collect(), &[PIN]),
             ("no folder picker", |s| s.services.pick_folder = None, &[PIN]),

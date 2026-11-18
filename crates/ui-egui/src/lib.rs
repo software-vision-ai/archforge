@@ -1689,20 +1689,17 @@ impl Shell {
     /// Takes the folder pick's answer once it has come, for what it was asked for: Open opens the
     /// project, Pin a folder pins the folder, Change… makes it the new project's folder. A pick
     /// that chose nothing says why when the picker could not appear and nothing on a cancel; a
-    /// host gone without answering counts as a cancel.
+    /// host gone without answering counts as a cancel, without asking why no picker appeared.
     fn take_pick(&mut self) {
         let Some((_, answer)) = &self.picking else { return };
-        let picked = match answer.try_recv() {
-            Ok(picked) => picked,
+        let chosen = match answer.try_recv() {
+            Ok(Picked::Folder(path)) => Ok(path),
+            Ok(Picked::Nothing) => Err(self.services.picker_unavailable.as_ref().and_then(|probe| probe())),
+            Ok(Picked::Unavailable(why)) => Err(Some(why)),
             Err(std::sync::mpsc::TryRecvError::Empty) => return,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => Picked::Nothing,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(None),
         };
         let Some((pick, _)) = self.picking.take() else { return };
-        let chosen = match picked {
-            Picked::Folder(path) => Ok(path),
-            Picked::Nothing => Err(self.services.picker_unavailable.as_ref().and_then(|probe| probe())),
-            Picked::Unavailable(why) => Err(Some(why)),
-        };
         match (pick, chosen) {
             (Pick::Location, chosen) => new_project::take_location(self, chosen),
             (_, Err(why)) => self.picker_error = why,
