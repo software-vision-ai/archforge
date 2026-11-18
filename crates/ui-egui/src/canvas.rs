@@ -513,6 +513,11 @@ pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         }
         None => canvas(shell, ui, p, canvas_rect),
     };
+    // With no diagram showing, as after the last open one was deleted, the toast and its Undo
+    // show over the empty centre all the same (AR-644).
+    if active_diagram(shell).is_none() {
+        crate::connect::toast(shell, ui, p, canvas_rect);
+    }
     if canvas_rect.width() > 0.0 && canvas_rect.height() > 0.0 {
         if shell.canvas.notice_is_refused_step() {
             refused_toast(shell, ui, p, canvas_rect);

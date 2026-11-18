@@ -5,6 +5,8 @@
 //! A click opens the diagram in the centre and selects it, so Properties shows it. The `+`, like
 //! the one in the tab strip, opens the New diagram dialog: a name, the kind and the schema the
 //! diagram is of, or a new schema when the model has none yet (owner decision).
+//! A diagram row's menu, or Delete on the row, deletes a diagram that is no package's default at
+//! once, with Undo in a toast; a default's row says why it stays (AR-644).
 //! Every change goes through the engine, so undo and redo cover it.
 //!
 //! The geometry is the Models tree's: rows 34 px apart from y 119, a level 13 px deeper than its
@@ -36,6 +38,9 @@ const MAX_NAME: usize = archforge_diagram::rules::MAX_NAME;
 const FOOTER_LINE: f32 = 128.0;
 const FOOTER_TITLE: f32 = 105.0;
 const FOOTER_TEXT: f32 = 80.0;
+/// A row menu's width and the height of its row, as the Models explorer's.
+const MENU_WIDTH: f32 = 232.0;
+const MENU_ROW: f32 = 30.0;
 
 /// What the explorer keeps between frames: nothing the model holds.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -52,6 +57,17 @@ pub struct State {
     pub notice: Option<String>,
     /// How far the tree is scrolled, and the row it last brought into view.
     pub scroll: crate::explorer::TreeScroll,
+    /// A diagram row's menu, while it is open (AR-644).
+    pub menu: Option<RowMenu>,
+}
+
+/// A diagram row's menu: the diagram, where it opens, and whether the keyboard has reached its one
+/// row, Delete diagram.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RowMenu {
+    pub diagram: Uuid,
+    pub at: egui::Pos2,
+    pub reached: bool,
 }
 
 /// The New diagram dialog's fields: the step it is at, the name, the kind, the element the
@@ -508,8 +524,12 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     if footer {
         footer_lines(shell, &paint, p, r);
     }
+    row_menu(shell, ui, p);
     if let Some(notice) = shell.diagrams.notice.clone() {
-        let area = ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        // Two rows from the foot, so a reason such as why a default stays reads whole (AR-644).
+        let g = ux::galley_rows(&paint, &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)), 2);
+        let area = Rect::from_min_size(pos2(r.left() + 16.0, r.bottom() - 12.0 - g.size().y), g.size());
+        paint.galley(area.min, g, p.amber);
         widgets::announce(ui, &mut shell.registry, "workspace.diagrams.notice", area, &notice);
     }
 }
@@ -632,6 +652,9 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         open_new_of(shell, Some(k));
         return;
     }
+    if row.kind == Kind::Diagram && !shell.looking_only() {
+        row_keys(shell, ui, &resp, row.id, hit);
+    }
     if resp.clicked() {
         match row.kind {
             Kind::Group(kind) => {
@@ -654,6 +677,127 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
             }
         }
     }
+}
+
+/// A diagram row's own keys and its menu (AR-644): on the focused row, Delete or Backspace pressed
+/// alone deletes the diagram, the menu key or ⇧F10 opens its menu under it; a right click opens the
+/// menu where it was pressed. The menu takes the keys while it is open, so the row gives the
+/// keyboard up.
+fn row_keys(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, id: Uuid, hit: Rect) {
+    let mut at = None;
+    if resp.has_focus() && shell.diagrams.menu.is_none() {
+        let shift_f10 = crate::actions::Keys { modifiers: egui::Modifiers::SHIFT, key: egui::Key::F10 };
+        let (delete, menu) = ui.input_mut(|k| {
+            let delete = crate::actions::take_alone(k, egui::Key::Delete) || crate::actions::take_alone(k, egui::Key::Backspace);
+            (delete, crate::actions::take_alone(k, egui::Key::Menu) || crate::actions::take(k, &shift_f10))
+        });
+        if delete {
+            delete_diagram(shell, id);
+            return;
+        }
+        at = menu.then(|| (pos2(hit.left() + 45.0, hit.bottom()), true));
+    }
+    if resp.secondary_clicked() {
+        at = Some((ui.input(|i| i.pointer.interact_pos()).unwrap_or(hit.center()), false));
+    }
+    if let Some((at, reached)) = at {
+        ui.memory_mut(|m| m.surrender_focus(resp.id));
+        shell.diagrams.menu = Some(RowMenu { diagram: id, at, reached });
+    }
+}
+
+/// Why the diagram `d` is not deleted from the explorer, in the user's words: it is a package's
+/// default, which only the default-deletion dialog replaces ([`archforge_diagram::defaults`]).
+fn kept_because(store: &Store, d: Obj) -> Option<String> {
+    let refused = archforge_diagram::defaults::diagram_removal_problem(store, d, "diagram", |_| false)?;
+    Some(refused.reason.as_ref().and_then(crate::panels::said).unwrap_or(refused.message))
+}
+
+/// Deletes the diagram `id` at once, as one undo step, and says so in a toast with Undo; what it
+/// showed stays in the model. A package's default is kept: the engine refuses it, and its reason
+/// is said under the tree.
+pub(crate) fn delete_diagram(shell: &mut Shell, id: Uuid) {
+    shell.diagrams.menu = None;
+    shell.diagrams.notice = None;
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()).filter(|_| !shell.looking_only()) else { return };
+    let Some(d) = store.by_uuid(id).filter(|d| store.is_alive(*d) && store.class_of(*d).ok() == Some(DIAGRAM)) else { return };
+    let text = crate::i18n::fmt(&tr("{name} deleted"), &[("name", &subject_name(store, d))]);
+    match run(shell, "diagram.remove", json!({ "diagram": id.to_string() })) {
+        Ok(_) => {
+            let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+            shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+        }
+        Err(e) => shell.diagrams.notice = Some(e),
+    }
+}
+
+/// The open row menu, at the place it was asked for and inside the window: Delete diagram, with
+/// its key, or off with the reason when the diagram is a package's default. ↓ and ↑ reach the row,
+/// Enter picks it and Escape closes the menu and gives the row the keyboard back, each pressed
+/// alone; a press elsewhere closes it.
+fn row_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
+    let Some(menu) = shell.diagrams.menu.clone() else { return };
+    let store = shell.session.as_ref().map(|s| s.doc());
+    let alive = store.and_then(|st| st.by_uuid(menu.diagram).filter(|d| st.is_alive(*d)).map(|d| (st, d)));
+    let Some((store, d)) = alive.filter(|_| !shell.looking_only()) else {
+        shell.diagrams.menu = None;
+        return;
+    };
+    let why = kept_because(store, d);
+    let (down_up, enter, escape) = ui.input_mut(|i| {
+        let down_up = crate::actions::take_alone(i, egui::Key::ArrowDown) | crate::actions::take_alone(i, egui::Key::ArrowUp);
+        (down_up, crate::actions::take_alone(i, egui::Key::Enter), crate::actions::take_alone(i, egui::Key::Escape))
+    });
+    let row_id = widgets::egui_id(&format!("workspace.diagrams.row.{}", menu.diagram));
+    if escape {
+        shell.diagrams.menu = None;
+        ui.memory_mut(|m| m.request_focus(row_id));
+        return;
+    }
+    let reached = why.is_none() && (menu.reached || down_up);
+    let window = ui.ctx().content_rect();
+    let size = vec2(MENU_WIDTH, 8.0 + MENU_ROW);
+    let x = menu.at.x.min(window.right() - size.x - 8.0).max(window.left() + 8.0);
+    let m = Rect::from_min_size(pos2(x, menu.at.y.min(window.bottom() - size.y - 8.0).max(window.top() + 8.0)), size);
+    let (key, label) = (crate::chat_delete::delete_key(ui.ctx()), tr("Delete diagram"));
+    let p2 = *p;
+    let clicked = ux::overlay(ui, widgets::egui_id("workspace.diagrams.contextMenu.layer"), m, |ui| {
+        let paint = ui.painter().clone();
+        ux::shadow(&paint, m, 8.0, p2.shadow);
+        paint.rect_filled(m, 8.0, p2.surface);
+        paint.rect_stroke(m, 8.0, Stroke::new(1.0, p2.border), StrokeKind::Inside);
+        let row = Rect::from_min_size(m.min + vec2(4.0, 4.0), vec2(m.width() - 8.0, MENU_ROW));
+        let id = "workspace.diagrams.contextMenu.delete";
+        let resp = match &why {
+            None => control(shell, ui, id, "menu-item", row, true),
+            Some(why) => {
+                widgets::record_visible(ui, &mut shell.registry, id, "menu-item", row);
+                let resp = ui.interact(row, widgets::egui_id(id), Sense::hover());
+                ui.ctx().accesskit_node_builder(widgets::egui_id(id), |node| {
+                    node.set_role(egui::accesskit::Role::MenuItem);
+                    node.set_disabled();
+                    node.set_description(why.clone());
+                });
+                resp.on_hover_text(why.as_str())
+            }
+        }
+        .accessible_name(label.as_str());
+        if why.is_none() && (resp.hovered() || reached) {
+            paint.rect_filled(row, 5.0, p2.accent_tint);
+        }
+        let detail = ux::galley(&paint, key, types::CAPTION, p2.text_muted, None);
+        let dw = detail.size().x;
+        paint.galley(pos2(row.right() - 10.0 - dw, row.center().y - detail.size().y / 2.0), detail, p2.text_muted);
+        let ink = if why.is_none() { p2.danger } else { p2.text_muted };
+        ux::text_mid(&paint, row.left() + 10.0, row.center().y, &label, types::SMALL, ink, Some((row.width() - 28.0 - dw).max(0.0)));
+        why.is_none() && resp.clicked()
+    });
+    if clicked || (enter && reached) {
+        delete_diagram(shell, menu.diagram);
+        return;
+    }
+    let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos)));
+    shell.diagrams.menu = (!outside).then_some(RowMenu { reached, ..menu });
 }
 
 // The New diagram dialog.

@@ -1946,6 +1946,7 @@ str		Rename	Rename
 str		Show in diagram	Show in diagram
 str		No diagram shows it yet	No diagram shows it yet
 str		Delete from model	Delete from model
+str		Delete diagram	Delete diagram
 str		A skill is removed from its tab	A skill is removed from its tab
 str		New inside {name}	New inside {name}
 str		not inside a class	not inside a class
