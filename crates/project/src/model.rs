@@ -342,8 +342,8 @@ impl Project {
     /// unclear is held as for every other reading ([`Error::BranchUnclear`]). The work is bounded
     /// as the model's reading is: rows past its limit, or a kind longer than [`KIND_LONGEST`], are
     /// refused, the kinds are streamed with no sorting on the server, and a long one is not read. A
-    /// reading that fails once kinds outside the known ones were found gives those: they refuse
-    /// the branch whatever the rest holds.
+    /// kind that cannot be read does not stop the reading, and kinds outside the known ones found by
+    /// a reading that fails are given: whatever the rows' order, a readable one refuses the branch.
     pub fn unknown_diagram_kinds(&self, branch: &SafeBranch, known: &[&str]) -> Result<Vec<String>, Error> {
         let damaged = |why: String| Error::Damaged { path: self.path().to_path_buf(), why };
         let mut c = self.connection_to(branch)?;
@@ -357,8 +357,7 @@ impl Project {
         if held.get_opt::<String, usize>(0).and_then(Result::ok).as_deref() != Some("BASE TABLE") {
             return Err(damaged(format!("{DIAGRAMS} is not a table")));
         }
-        // As UTF-8 text, then distinct as bytes, so kinds differing only in case stay apart: of
-        // these, at most `known`'s count are known, so the rest still holds the most that are not.
+        // As UTF-8 text, distinct as bytes (case counts); `most` leaves room for every known kind, and
         // `LEFT` counts characters, so the cut to bytes is made here, once a kind is decided.
         let most = known.len().saturating_add(MOST_UNKNOWN_KINDS);
         let query = format!(
@@ -378,12 +377,10 @@ impl Project {
                 unknown.push(shown);
             }
         }
-        if let Err(e) = read {
-            if unknown.is_empty() {
-                return Err(e);
-            }
+        if let (Err(e), false) = (&read, unknown.is_empty()) {
             log::warn!("the diagram kinds of {} were read in part: {e}", self.path().display());
         }
+        read.or_else(|e| if unknown.is_empty() { Err(e) } else { Ok(()) })?;
         Ok(unknown)
     }
 
@@ -800,27 +797,29 @@ fn within_rows(table: &str, held: usize) -> Result<(), Error> {
 type KindRow = Result<(Option<u64>, mysql::Value), Error>;
 
 /// The first `most` of the distinct kinds `rows` gives, in byte order, a kind left empty as none.
-/// Past `max_rows` rows the diagrams are too large, and a kind longer than [`KIND_LONGEST`] is no
-/// text of a model: both are refused, as the model's reading refuses them, beside the kinds read.
+/// A kind longer than [`KIND_LONGEST`] or not text is refused, as the model's reading refuses it,
+/// but read past, so which kinds are read does not hang on the rows' order; only past `max_rows`
+/// rows (too large) or at a row that cannot be read does it stop. The first refusal comes beside.
 fn first_kinds(rows: impl Iterator<Item = KindRow>, most: usize, max_rows: usize, path: &std::path::Path) -> (BTreeSet<Vec<u8>>, Result<(), Error>) {
-    let mut kinds = BTreeSet::new();
-    let read = rows.enumerate().try_for_each(|(held, row)| {
-        if held >= max_rows {
-            return Err(Error::ModelTooLarge { why: format!("the table {DIAGRAMS} has more than {max_rows} rows") });
-        }
-        let damaged = |why: String| Error::Damaged { path: path.to_path_buf(), why };
-        let kind = match row? {
-            (Some(length), _) if length > KIND_LONGEST => return Err(damaged(format!("a diagram's kind is longer than {KIND_LONGEST} bytes"))),
-            (_, mysql::Value::Bytes(bytes)) => bytes,
-            (_, mysql::Value::NULL) => Vec::new(),
-            _ => return Err(damaged("a diagram's kind is not text".into())),
+    let (mut kinds, mut read) = (BTreeSet::new(), Ok(()));
+    for (held, row) in rows.enumerate() {
+        let damaged = |why: String| Err(Error::Damaged { path: path.to_path_buf(), why });
+        let kind = match row {
+            _ if held >= max_rows => return (kinds, Err(Error::ModelTooLarge { why: format!("{DIAGRAMS} has over {max_rows} rows") })),
+            Err(e) => return (kinds, Err(e)),
+            Ok((Some(length), _)) if length > KIND_LONGEST => damaged(format!("a diagram's kind is longer than {KIND_LONGEST} bytes")),
+            Ok((_, mysql::Value::Bytes(bytes))) => Ok(bytes),
+            Ok((_, mysql::Value::NULL)) => Ok(Vec::new()),
+            Ok(_) => damaged("a diagram's kind is not text".into()),
         };
-        kinds.insert(kind);
+        match kind {
+            Ok(kind) => _ = kinds.insert(kind),
+            Err(e) => read = read.and(Err(e)),
+        }
         if kinds.len() > most {
             kinds.pop_last();
         }
-        Ok(())
-    });
+    }
     (kinds, read)
 }
 
@@ -1193,7 +1192,7 @@ mod tests {
     use super::*;
 
     /// The first kinds are the smallest distinct ones, at most `most`, NULL as none; past the rows,
-    /// or with a kind longer than any text, the reading is refused beside the kinds read until then.
+    /// or with a kind longer than any text, read on past, the reading is refused beside the kinds read.
     #[test]
     fn the_first_kinds_are_the_smallest_distinct_ones_within_the_budgets() {
         let path = std::path::Path::new("/p");
@@ -1204,8 +1203,8 @@ mod tests {
         assert_eq!(kinds(first_kinds([Ok((None, mysql::Value::NULL)), row("")].into_iter(), 3, 5, path).0), [""]);
         let (first, read) = first_kinds(["b", "a", "c"].map(row).into_iter(), 3, 2, path);
         assert!(kinds(first) == ["a", "b"] && matches!(read, Err(Error::ModelTooLarge { .. })));
-        let (first, read) = first_kinds([row("a"), Ok((Some(KIND_LONGEST + 1), mysql::Value::NULL))].into_iter(), 3, 5, path);
-        assert!(kinds(first) == ["a"] && matches!(read, Err(Error::Damaged { .. })));
+        let (first, read) = first_kinds([row("b"), Ok((Some(KIND_LONGEST + 1), mysql::Value::NULL)), row("a")].into_iter(), 3, 5, path);
+        assert!(kinds(first) == ["a", "b"] && matches!(read, Err(Error::Damaged { .. })));
         assert!(first_kinds([Ok((Some(KIND_LONGEST), mysql::Value::Bytes(b"x".to_vec())))].into_iter(), 3, 5, path).1.is_ok());
     }
 

@@ -527,12 +527,13 @@ fn the_diagram_kinds_outside_the_known_ones_are_read_raw_on_every_shape() {
     let most = project.unknown_diagram_kinds(&main, &["absent.a", "absent.b"]).unwrap();
     assert_eq!((most.len(), &most[..4]), (MOST_UNKNOWN_KINDS, &["".to_string(), "ER".into(), "er".into(), "k00".into()][..]));
     // A kind longer than any text a model holds is refused, as the model's reading refuses it, unless
-    // kinds outside the known ones were read before it: those refuse the branch anyway.
+    // kinds outside the known ones are read, before it or after it: those refuse the branch anyway.
     c.query_drop("INSERT INTO diagram_diagram (id, kind) VALUES (200, REPEAT('y', 262141))").unwrap();
-    assert_eq!(project.unknown_diagram_kinds(&main, &known).unwrap()[..3], ["", "ER", "k00"]);
+    let after = project.unknown_diagram_kinds(&main, &known).unwrap();
     c.query_drop("UPDATE diagram_diagram SET id = 0 WHERE id = 200").unwrap();
-    let long = project.unknown_diagram_kinds(&main, &known);
-    assert!(matches!(&long, Err(Error::Damaged { why, .. }) if why.contains("longer than")), "{long:?}");
+    assert_eq!((&after[..3], project.unknown_diagram_kinds(&main, &known).unwrap()), (&["", "ER", "k00"].map(String::from)[..], after.clone()));
+    c.query_drop("DELETE FROM diagram_diagram WHERE id NOT IN (0, 1)").unwrap();
+    assert!(matches!(project.unknown_diagram_kinds(&main, &known), Err(Error::Damaged { why, .. }) if why.contains("longer than")));
     c.query_drop("DROP TABLE diagram_diagram").unwrap();
     c.query_drop("CREATE TABLE diagram_diagram (id INT NOT NULL PRIMARY KEY, kind VARCHAR(64) CHARACTER SET utf16 NULL)").unwrap();
     c.query_drop("INSERT INTO diagram_diagram (id, kind) VALUES (1, 'er'), (2, 'legacy.kind')").unwrap();
