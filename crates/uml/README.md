@@ -200,17 +200,21 @@ the package's own live class diagrams, each refusal typed: no package or no diag
 (`IdEmpty`), an id of no element (`NoElement`), something that is no package or no class diagram, an
 ER diagram among them (`NotA`), and another element's diagram (`NotOwnDiagram`). The package's one
 binding is made as a member of the core's Model, or keeps its id and names the diagram; with
-several (`Duplicate`), the first by id is kept and names it and the others are removed, as the one
-explicit choice that mends them, which `default.get`'s refusal points to. Choosing the diagram
-the package's one binding already names changes nothing and records no undo step; anything else,
+several (`Duplicate`), the first by id is kept and names it and the others are removed, each with
+the links that have it as an end (AR-733), as the one explicit choice that mends them, which
+`default.get`'s refusal points to. Choosing the diagram the package's one binding already names changes nothing and records no undo step; anything else,
 a duplicate mended included, is one undo step. It answers
-`{package, binding, diagram, removed}`, `removed` the ids of the bindings it removed. A read-only
+`{package, binding, diagram, removed, links_removed}`, `removed` the ids of the bindings it removed
+and `links_removed` those of the links that went with them, in the order of their ids. A read-only
 session, as a version viewed, refuses it before it runs.
 Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
 diagrams up and its parent's binding stays; a top-level one takes the bindings of what it holds too.
 An element that would take along a diagram the binding of an element that stays names (unsoundly,
 `WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
-binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578).
+binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578);
+`diagram.remove` of a package's own default goes with a `replacement_diagram`, another of the
+package's class diagrams, or a `create_replacement`, a new empty class diagram of the package
+(AR-641), which its binding names from then on, in one undo step (AR-640).
 An element that stays is one outside every element selected and what each holds, and outside the
 relationships that go with the classifiers that go (an association class with what it holds); the bindings of
 all that goes go before any diagram, so the order of selection does not matter.
@@ -224,6 +228,24 @@ as its card's `owner_path` (AR-564). `uml.package.move` changes a package's owne
 26, AR-567): every appearance stays where it is under its id, with its notes' links, the default
 bindings stay as they were, and none is added to the new owner's diagram.
 
+**Effective results** (AR-642, Decision 13). `effective` holds a receiving package's effective
+contents as dedicated read-only records, never model objects: `EffectiveResult` with its `Header`
+(the `ResultContext`, `Completeness`, `Status` and the package's display path), element and member
+`Record`s (each with the display path of its owner), `Relationship`s whose ends are keys, `Origins`
+(local, imported, merged; not exclusive) and the `Provenance` graph: each `Contribution` of a
+`SourceRef` (authored UUID, originating package, `Inspected` revision, the import or merge it enters
+by, display path) and the `RouteEdge`s between packages, never an enumeration of paths. Every display
+path is a value worked out from the same snapshot, never an identity. `LocalKey` is the one
+structural key of a result: role, metatype, parent key and the sorted, unique UUIDs of its authored
+sources, compared, ordered and hashed as the whole tuple; merge results (AR-615) reuse it.
+`ResultKey` adds the `ResultContext` (project, the working revision by history and revision or a
+version by commit, receiving package). Neither converts to a `Uuid` or an `Obj`, so no key reaches a
+command that edits the model. `counterpart` finds the one result of a newer result with an old key,
+none when there is none or more than one. `EffectiveResult::accounted_bytes` counts every record,
+string and collection for the caps and the cache, and each key allocation once by its address,
+however many record keys, ends, contribution results and parents share it. `findings` stays empty
+until import findings come (398-D2).
+
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.
 
@@ -233,7 +255,10 @@ sweep). `tests/uml.rs`: the universe builds with the file's counts and the key i
 derived-union facts; a package with a class and a typed attribute behaves as UML says through the
 store (both ends of `ownedAttribute` and `class`, containment, `ownedElement`, `ownedMember`,
 `attribute`, defaults, destroy and undo); the adversarial sweep over a session of generic commands;
-the million-object test (release only). `tests/defaults.rs` (AR-575): each
+the million-object test (release only). `tests/effective_keys.rs` (AR-642): the whole key tuple decides
+even when every hash collides, source order, repeats and display paths do not, `counterpart` finds
+one match or none, and accounted bytes count every string and each key allocation once, a
+contribution's result and its parents to the root included. `tests/defaults.rs` (AR-575): each
 state of a package's default built by hand under fixed ids: bound to a diagram that is not the first
 made, none yet, missing, duplicate, a wrong-kind and a foreign target, a dead target read from
 rows (a dangling id refused as they are read), a profile; a store's problems in id order, the same
@@ -254,7 +279,11 @@ interface's give. `tests/defaults.rs` (AR-578): a default diagram's removal refu
 another diagram's leaving the binding, and a foreign binding keeping its diagram and the package
 that holds it, while a nested package that holds one hands it up and goes; that package and the
 binding's owner removed together in either order, as one undo step; the diagram of an association
-class that goes with its end kept the same way. `tests/skills.rs`: skills on a package, a class, an
+class that goes with its end kept the same way; a default removed with a replacement in one undo
+step, the binding keeping its id and the replacement its boxes, and every replacement that cannot
+take its place refused with nothing changed (AR-640); a new empty replacement made, bound and the
+default removed in one undo step, which Undo takes away and Redo makes again under the same id,
+and both replacements or a bad name refused with no diagram made (AR-641). `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and

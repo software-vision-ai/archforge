@@ -80,17 +80,25 @@ impl Route {
         out
     }
 
+    /// The steps, oldest first, left in the route.
+    pub(crate) fn steps(&self) -> impl DoubleEndedIterator<Item = &Step> {
+        self.steps.iter()
+    }
+
     /// Forgets every step.
+    #[cfg_attr(not(test), expect(dead_code, reason = "AR-671 (408-F) clears routes when the revision changes"))]
     pub(crate) fn clear(&mut self) {
         self.steps.clear();
     }
 
     /// How many steps the route holds.
+    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.steps.len()
     }
 
     /// Whether the route holds no step.
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.steps.is_empty()
     }

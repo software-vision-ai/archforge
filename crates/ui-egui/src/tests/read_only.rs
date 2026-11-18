@@ -38,6 +38,25 @@ fn corner_squares(h: &Harness<'static, Shell>) -> usize {
     rect_shapes(h).iter().filter(|(r, fill, stroke)| *stroke == accent && *fill != accent && r.size() == egui::vec2(6.0, 6.0)).count()
 }
 
+/// While a version shows, a diagram row offers neither its menu nor its Delete key (AR-644).
+#[test]
+fn a_diagram_row_has_no_menu_and_no_delete_key_while_a_version_shows() {
+    in_both(viewing, |mut h, _rig, _host| {
+        let at = rect_of(&h, "workspace.explorers.diagrams").center();
+        click(&mut h, at);
+        let row = ids(&h).into_iter().find(|i| i.starts_with("workspace.diagrams.row.")).expect("a diagram row");
+        let at = rect_of(&h, &row).center();
+        right_click(&mut h, at);
+        assert!(h.state().diagrams.menu.is_none() && !ids(&h).iter().any(|i| i == "workspace.diagrams.contextMenu.delete"));
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row)));
+        h.run();
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        let diagram = archforge_mof::Uuid::parse(row.trim_start_matches("workspace.diagrams.row.")).unwrap();
+        assert!(alive_in(&h, diagram));
+        assert_eq!(h.state().diagrams.notice, None, "not even the reason a default stays");
+    });
+}
+
 /// While a version shows the diagram, the Model menu lists its rows but none can be picked.
 #[test]
 fn the_model_menu_is_off_while_a_version_shows() {

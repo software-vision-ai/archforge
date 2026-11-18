@@ -8,7 +8,8 @@ other things go with it; `notation_ui::NotationUi` is what a notation brings to 
 search, the problems and Properties, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types, and
 `uml_classifier` the class diagram's classifier tool with its menu of kinds),
 the Diagrams explorer (`diagrams`: the model's folders and diagrams, the model behind the open
-diagram, the New diagram dialog from its `+` and the tab strip's), the centre (`canvas`: the
+diagram, the New diagram dialog from its `+` and the tab strip's, a diagram row's menu and Delete
+key, which delete a diagram that is no package's default), the centre (`canvas`: the
 diagram tabs, the open diagram drawn read-only from the diagram metamodel in the design's style
 with each notation's cards and lines as it describes them (`archforge_diagram::figure`: ER's
 table cards and crow's foot lines), notes, links and labels, pan and zoom, the minimap with the zoom control, the canvas
@@ -94,7 +95,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |
 | `explorer::{State, ContextMenu, add, remove_selection, rows, fresh_name, Row, Tree}` | the Models explorer's state (a row's context menu among it, AR-132) and the actions the tests and the host drive |
 | `panels::{State, draw, retain_valid, ColumnEdit, SkillEdit, Applies, Menu}` | the right panels' state and body; every change goes through `er.*` and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not) |
-| `diagrams::{State, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows and the New diagram dialog |
+| `diagrams::{State, RowMenu, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows, a row's menu and the New diagram dialog |
 | `versions::State` | the Versions explorer's state: what it has read, how its sections are folded, and what the keyboard has just moved to, which its list brings into view |
 | `save_version::Dialog` | the Save version dialog: the description typed, the revision its summary is of, and how its save went |
 | `canvas::{State, Tool, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool, the toggles and the editing state; `open` shows a diagram through `view.open-diagram` |

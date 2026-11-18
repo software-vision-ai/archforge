@@ -330,6 +330,17 @@ pub fn check_bindings_in_rows(rows: &Rows, tables: &[Table]) -> Result<(), Vec<B
 /// The commands: the edit area, the shared element commands, every notation's own, the diagrams'
 /// and the skills'.
 pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>, String> {
+    archforge_engine::Registry::new(specs())
+}
+
+/// The commands of [`registry`], with `check` run on every change as it is about to be kept: a
+/// refusal takes the whole change back (AR-641).
+pub fn registry_checked(check: archforge_engine::CommitCheck<Store>) -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>, String> {
+    archforge_engine::Registry::with_commit_check(specs(), check)
+}
+
+/// The one list of commands [`registry`] and [`registry_checked`] hold.
+fn specs() -> Vec<archforge_engine::CommandSpec<Store, ProjectView>> {
     let mut specs = archforge_engine::cmd::edit::specs();
     specs.extend(archforge_diagram::project::specs());
     specs.extend(archforge_er::commands::specs());
@@ -347,7 +358,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(archforge_uml::applications::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
-    archforge_engine::Registry::new(specs)
+    specs
 }
 
 /// The id counter a new project's session starts at: ids below it are the store's own.

@@ -130,6 +130,8 @@ pub enum Reason {
     HoldsBuiltInName { kind: &'static str, name: String },
     /// A name is empty.
     NameEmpty,
+    /// A name is given as something other than text, such as a number (AR-641).
+    NameNotText,
     /// A text that has to say something, as a note's, is empty.
     TextEmpty,
     /// A name or a text is longer than `max` characters.
@@ -303,8 +305,8 @@ pub enum Reason {
     IdsExpected { kind: &'static str },
     /// An item of a list of ids, given as an object, holds `key`, where it holds only `id` and `name`.
     NotAnItemKey { key: String },
-    /// An item of a list, given as an object, holds `key`, cut to its first characters, where it
-    /// takes only the keys `takes`.
+    /// An item of a list, given as an object, or a parameter that is an object (AR-641), holds
+    /// `key`, cut to its first characters, where it takes only the keys `takes`.
     UnknownKey { key: String, takes: &'static [&'static str] },
     /// No element of the model has the id `id`, cut to its first characters.
     NoElement { id: String },
@@ -495,6 +497,19 @@ pub enum Reason {
     /// The package `package` (its name, or its id when it has none) has no class diagram yet, so
     /// it has no default diagram to open; one has to be made for it first (AR-582).
     NoDiagramYet { package: Box<str> },
+    /// The default diagram being removed is named as its own replacement; another of its
+    /// element's diagrams has to be named (AR-640).
+    ReplacementIsRemoved,
+    /// A replacement is named for the diagram `diagram` (its name, or its id when it has none),
+    /// which is no element's default, so it is removed without one (AR-640).
+    ReplacementNotNeeded { diagram: Box<str> },
+    /// A default diagram being removed is given both another diagram to replace it and a name for a
+    /// new one, where it takes exactly one of them (AR-641).
+    OneReplacement,
+    /// The diagram `diagram` named to replace a default diagram as it is removed is not another
+    /// diagram of the same kind of `package` (each its name, or its id when it has none), so it
+    /// cannot take that default's place (AR-640).
+    NotReplacement { diagram: Box<str>, package: Box<str> },
 }
 
 /// What is wrong with a package's default-diagram binding, in a [`Reason::InvalidBinding`].
