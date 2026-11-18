@@ -10018,6 +10018,7 @@ fn entry_reaches_the_bound_default_never_the_first_found_and_makes_nothing_witho
             h.step();
         }
         assert_eq!(active(&h), Some(chosen), "{theme:?}: zooming in");
+        h.run(); // The chosen diagram lands; a landing never carries over to the next tab (AR-666).
         // Billing has none: Open and ⌘↓ stay, make nothing and say why, in German.
         h.state_mut().state.language = "de".into();
         back_on_top(&mut h, billing);
@@ -11498,6 +11499,35 @@ fn the_path_bar_and_command_up_follow_ownership_and_start_a_new_route() {
     }
 }
 
+/// The root's class diagram First with the card of the package Sales, and Sales' own diagram:
+/// `(root, first, sales, sales_d)`.
+fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid) {
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let s = h.state_mut().session.as_mut().unwrap();
+    let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+    let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap().value);
+    let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+    let p = serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+    s.execute("diagram.place", &p).unwrap();
+    let sales_d = own_diagram(s, sales);
+    (root, first, sales, sales_d)
+}
+
+/// Zooms out one frame at a time and stops on the frame that switches to `to`, before `to` draws:
+/// its landing is still pending.
+fn zoom_out_to(h: &mut Harness<'static, Shell>, to: archforge_mof::Uuid) {
+    h.event(egui::Event::PointerMoved(rect_of(h, "workspace.canvas").center()));
+    for _ in 0..40 {
+        if h.state().canvas.active == Some(to) {
+            break;
+        }
+        h.event(egui::Event::Zoom(0.8));
+        h.step();
+    }
+    assert_eq!(h.state().canvas.active, Some(to), "zoomed out to the diagram entered from");
+    assert!(h.state().canvas.nav.reveal.is_some(), "not drawn yet: the package left still to be centred on it");
+}
+
 /// The path bar restores a diagram as it was last left, however it was left (AR-666): the root's
 /// First is left once by entering Sales, then shown again by its tab, zoomed out and left by an
 /// ordinary tab switch, or by closing its tab. The path bar from Sales then opens First at that
@@ -11507,17 +11537,7 @@ fn the_path_bar_restores_the_view_a_diagram_was_last_left_with_by_a_tab_switch_o
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         for by_close in [false, true] {
             let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-            let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-            let (first, sales, sales_d) = {
-                let s = h.state_mut().session.as_mut().unwrap();
-                let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-                let first =
-                    id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap().value);
-                let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
-                let p = serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
-                s.execute("diagram.place", &p).unwrap();
-                (first, sales, own_diagram(s, sales))
-            };
+            let (_, first, sales, sales_d) = first_and_sales(&mut h);
             crate::canvas::open(h.state_mut(), first);
             h.run();
             crate::package_nav::enter(h.state_mut(), sales, 0.0);
@@ -11553,17 +11573,7 @@ fn the_path_bar_restores_the_view_a_diagram_was_last_left_with_by_a_tab_switch_o
 fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
     for (theme, at_once) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-        let (first, sales, sales_d) = {
-            let s = h.state_mut().session.as_mut().unwrap();
-            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-            let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap().value);
-            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
-            let p =
-                serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
-            s.execute("diagram.place", &p).unwrap();
-            (first, sales, own_diagram(s, sales))
-        };
+        let (_, first, sales, sales_d) = first_and_sales(&mut h);
         crate::canvas::open(h.state_mut(), first);
         h.run();
         let shown = (egui::vec2(-37.0, 52.0), 0.5);
@@ -11575,16 +11585,7 @@ fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
         } else {
             h.run();
             rest(&mut h);
-            // Out to First, one frame at a time, stopping on the frame of the switch.
-            h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
-            for _ in 0..40 {
-                if h.state().canvas.active == Some(first) {
-                    break;
-                }
-                h.event(egui::Event::Zoom(0.8));
-                h.step();
-            }
-            assert!(h.state().canvas.nav.reveal.is_some(), "{theme:?}: First not drawn yet, Sales still to be centred on it");
+            zoom_out_to(&mut h, first);
         }
         assert_eq!(h.state().canvas.active, Some(first), "{theme:?} at once {at_once}: back on First");
         crate::canvas::open(h.state_mut(), sales_d);
@@ -11594,6 +11595,65 @@ fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
         click(&mut h, at);
         assert_eq!(h.state().canvas.active, Some(first), "{theme:?} at once {at_once}");
         assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), shown, "{theme:?} at once {at_once}: First as it was last shown");
+    }
+}
+
+/// A landing package navigation leaves pending is for the tab it opened (AR-666). Support, a wide
+/// diagram opened in a new tab before First or Sales draws, is fitted below 100 %, neither landed
+/// at 100 % nor centred. When First is removed before it draws, Support takes over as it is. First
+/// opened again before it draws still lands, Sales' card centred at 100 %.
+#[test]
+fn a_landing_pending_for_one_tab_never_places_another() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for case in ["out, then Support", "in, then Support", "out, First removed", "out, First again"] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (root, first, sales, sales_d) = first_and_sales(&mut h);
+            let support = {
+                let s = h.state_mut().session.as_mut().unwrap();
+                let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+                let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Support" })).unwrap().value);
+                for (name, x) in [("Ticket", 0), ("Agent", 4000)] {
+                    let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": name })).unwrap().value);
+                    let p = serde_json::json!({ "diagram": d.to_string(), "element": c.to_string(), "x": x, "y": 0, "width": 200, "height": 120 });
+                    s.execute("diagram.place", &p).unwrap();
+                }
+                d
+            };
+            if case == "out, First removed" {
+                crate::canvas::open(h.state_mut(), support);
+                h.run();
+            }
+            crate::canvas::open(h.state_mut(), first);
+            h.run();
+            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            if case != "in, then Support" {
+                h.run();
+                rest(&mut h);
+                zoom_out_to(&mut h, first);
+            }
+            let before = (h.state().canvas.pan, h.state().canvas.zoom);
+            match case {
+                "out, First removed" => {
+                    crate::canvas::close_tab(h.state_mut(), sales_d);
+                    let s = h.state_mut().session.as_mut().unwrap();
+                    let (at, d) = (s.token(), first.to_string());
+                    let p = serde_json::json!({ "diagram": d, "replacement_diagram": support.to_string(), "expected_revision": { "history": at.history, "revision": at.revision } });
+                    s.execute("diagram.remove", &p).unwrap();
+                }
+                "out, First again" => crate::canvas::open(h.state_mut(), first),
+                _ => crate::canvas::open(h.state_mut(), support),
+            }
+            h.run();
+            let (pan, zoom, size) = (h.state().canvas.pan, h.state().canvas.zoom, h.state().canvas.size);
+            match case {
+                "out, First again" => {
+                    let card = pan + egui::vec2(320.0, 234.0) * zoom;
+                    assert!(zoom == 1.0 && (card - size / 2.0).length() < 1.0, "{theme:?}: Sales' card centred at 100 %, {pan:?} {zoom}");
+                }
+                "out, First removed" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(support), before), "{theme:?}: as it was"),
+                _ => assert!(h.state().canvas.active == Some(support) && zoom < 0.5, "{theme:?} {case}: Support fitted, not landed at {zoom}"),
+            }
+        }
     }
 }
 

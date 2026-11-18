@@ -291,10 +291,19 @@ fn keep_left_view(state: &mut State) {
     }
 }
 
+/// Drops the landing package navigation left pending for the active tab when `next` takes its
+/// place, so it never places another tab; navigation schedules its own landing after it opens one
+/// (AR-666).
+fn forget_landing(state: &mut State, next: Option<Uuid>) {
+    if state.active != next {
+        (state.nav.reveal, state.nav.centre) = (None, false);
+    }
+}
+
 /// Opens a diagram in the centre: its tab, added when it has none, becomes the active one, the
 /// view's open diagram follows, and the diagram is selected so Properties shows it. A skill opens
 /// in its own tab the same way, with its text in place of the canvas. The view of the tab left is
-/// kept first.
+/// kept first; a landing still pending for it never places the diagram opened.
 pub fn open(shell: &mut Shell, id: Uuid) {
     keep_left_view(&mut shell.canvas);
     shell.canvas.nav.shown = None;
@@ -314,6 +323,7 @@ pub fn open(shell: &mut Shell, id: Uuid) {
         shell.canvas.tabs.push(id);
         shell.canvas.fit_pending = true;
     }
+    forget_landing(&mut shell.canvas, Some(id));
     shell.canvas.active = Some(id);
 }
 
@@ -341,10 +351,11 @@ pub fn close_tab(shell: &mut Shell, id: Uuid) {
 }
 
 /// Drops the tabs of diagrams the store no longer has; what was said about the one showing goes
-/// with it.
+/// with it, and so does a landing pending for it.
 pub fn retain_valid(state: &mut State, store: &Store) {
     state.tabs.retain(|id| store.by_uuid(*id).is_some_and(|o| store.is_alive(o)));
     if state.active.is_some_and(|a| !state.tabs.contains(&a)) {
+        forget_landing(state, state.tabs.last().copied());
         state.active = state.tabs.last().copied();
         state.reopen_pending = state.active.is_some();
         state.notice = None;
