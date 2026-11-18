@@ -10,7 +10,8 @@
 //! With `compact` the command tools are not listed and `search_tools` finds them, each to run
 //! through `execute_command` (CS-14). The model and its skills are read-only resources too
 //! (`resources`), in both modes. Only the reads say they are read-only (CS-13); unknown tools, methods and
-//! argument keys are refused, naming the accepted ones (CS-3).
+//! argument keys are refused, naming the accepted ones (CS-3), and so are a missing key, a wrong type
+//! and a value outside the choices, each naming the tool (craft-mcp-server's check).
 //!
 //! With `read_only` the server offers only the tools whose `readOnlyHint` is true, and refuses a
 //! call of any other with the typed error [`READ_ONLY`] naming the tool. Both the listing and the

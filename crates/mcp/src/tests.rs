@@ -408,6 +408,8 @@ fn minimal(param: &Value) -> Value {
     }
 }
 
+/// A call built from each command's own documentation, as small as it allows, passes the argument
+/// check: the schema is never stricter than the engine.
 #[test]
 fn a_minimal_call_from_each_commands_documentation_passes_the_check() {
     let mut all = infos();

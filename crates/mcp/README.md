@@ -16,8 +16,13 @@ read methods. Only the reads carry `readOnlyHint`; a change of the view alone is
 destructive, nor is a save. `save_project` follows its save by the ticket `app.save` gives, through `app.saved`,
 for up to 30 seconds in all, so a tab switched meanwhile never answers for it. It is not the
 catalogue's `save_file`: it takes no path and saves the open project where the user opened it.
+Before a call is sent, its arguments are checked against the tool's listed schema by
+craft-mcp-server's `check_arguments`: an unknown or missing key, a wrong type or a value outside the
+choices is a tool result with `isError` naming the tool, and a required key set to `null` counts as
+missing. An integer written as a float without a fraction (`3.0`) passes, as the engine takes it.
 
-**Layer.** 10, above `control`, which it reaches the application through.
+**Layer.** 10, above `control`, which it reaches the application through. It uses craft-mcp-server
+(craft-libs) for the argument check only; the protocol serving is its own.
 
 **Public API.**
 
