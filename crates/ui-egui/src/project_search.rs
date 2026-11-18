@@ -27,7 +27,7 @@ pub(crate) enum Found {
 }
 
 /// A row of the index: what it finds, its icon, its name, what it is and where, its kind's place
-/// in the list, and its words in small letters for matching.
+/// in the list, its name folded for ranking and its words folded for matching.
 #[derive(Debug, Clone)]
 pub(crate) struct Entry {
     pub found: Found,
@@ -36,7 +36,7 @@ pub(crate) struct Entry {
     pub detail: String,
     kind: u8,
     name: String,
-    text: String,
+    text: craft_i18n::Folded,
 }
 
 fn cut(s: &str) -> String {
@@ -55,8 +55,9 @@ pub(crate) fn index(
             return;
         }
         let (label, detail) = (cut(&label), cut(&detail));
-        let text = format!("{label}\n{detail}").to_lowercase();
-        out.push(Entry { found, icon, label: label.clone(), detail, kind, name: label.to_lowercase(), text });
+        let text = crate::home_search::fold(&format!("{label}\n{detail}"));
+        let name = crate::home_search::fold(&label).as_str().to_owned();
+        out.push(Entry { found, icon, label, detail, kind, name, text });
     };
     for o in store.alive() {
         let Ok(id) = store.uuid(o) else { continue };
@@ -89,8 +90,8 @@ pub(crate) fn index(
     out
 }
 
-/// How well a row's name answers the query's first word: the name itself, its start, a word's
-/// start inside it, anywhere.
+/// How well a row's folded name answers the query's first word, folded: the name itself, its
+/// start, a word's start inside it, anywhere.
 fn rank(e: &Entry, first: &str) -> u8 {
     if e.name == first {
         0
@@ -103,14 +104,14 @@ fn rank(e: &Entry, first: &str) -> u8 {
     }
 }
 
-/// The diagrams and the elements whose name or place holds every word of `query`, whatever the
-/// case: the best answers first, at most [`MAX_DIAGRAMS`] and [`MAX_ELEMENTS`].
+/// The diagrams and the elements whose name or place holds every word of `query`, whatever its
+/// capitals and accents: the best answers first, at most [`MAX_DIAGRAMS`] and [`MAX_ELEMENTS`].
 pub(crate) fn hits<'a>(index: &'a [Entry], query: &str) -> (Vec<&'a Entry>, Vec<&'a Entry>) {
-    let words: Vec<String> = query.to_lowercase().split_whitespace().map(str::to_string).collect();
-    let first = words.first().cloned().unwrap_or_default();
-    let mut found: Vec<&Entry> = index.iter().filter(|e| words.iter().all(|w| e.text.contains(w.as_str()))).collect();
+    let typed = crate::home_search::Typed::words(query);
+    let first = typed.first();
+    let mut found: Vec<&Entry> = index.iter().filter(|e| typed.in_folded(&[&e.text])).collect();
     if !first.is_empty() {
-        found.sort_by_key(|e| (rank(e, &first), e.kind));
+        found.sort_by_key(|e| (rank(e, first), e.kind));
     }
     let diagrams = found.iter().filter(|e| matches!(e.found, Found::Diagram(_))).take(MAX_DIAGRAMS).copied().collect();
     let elements = found.iter().filter(|e| matches!(e.found, Found::Element(_))).take(MAX_ELEMENTS).copied().collect();
@@ -161,8 +162,8 @@ pub(crate) fn go(shell: &mut Shell, found: Found) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn the_index_finds_diagrams_and_elements_best_answers_first() {
+    /// A project named Shop, its ids from a counter.
+    fn session() -> archforge_notations::Session {
         let mut n = 0u64;
         let ids = Box::new(move || {
             n += 1;
@@ -170,7 +171,14 @@ mod tests {
             r[2..].copy_from_slice(&n.to_be_bytes());
             archforge_mof::Uuid::v7(1_761_670_800_000, r)
         });
-        let mut s = archforge_notations::new_project_session("Shop", ids).unwrap();
+        archforge_notations::new_project_session("Shop", ids).unwrap()
+    }
+
+    /// Every word must be found, and the name itself, then its start, then a word's start inside
+    /// it comes first.
+    #[test]
+    fn the_index_finds_diagrams_and_elements_best_answers_first() {
+        let mut s = session();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
         let schema = id(s.execute("er.schema.add", &json!({ "name": "shop" })).unwrap().value);
         let order = id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Order" })).unwrap().value);
@@ -186,5 +194,25 @@ mod tests {
         let (_, both) = hits(&index, "ORDER_ID order");
         assert_eq!(both.len(), 1);
         assert!(hits(&index, "nothing like it").1.is_empty());
+    }
+
+    /// Capitals, accents and `ß` count for nothing, and the best answers still come first.
+    #[test]
+    fn the_index_ignores_capitals_and_accents_and_keeps_the_best_answers_first() {
+        let mut s = session();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let schema = id(s.execute("er.schema.add", &json!({ "name": "shop" })).unwrap().value);
+        let check = id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Prüfung" })).unwrap().value);
+        s.execute("er.entity.add", &json!({ "schema": schema, "name": "Kunde_prüfung" })).unwrap();
+        for name in ["Bestellungen prüfen", "Straße"] {
+            s.execute("er.entity.add", &json!({ "schema": schema, "name": name })).unwrap();
+        }
+        s.execute("er.attribute.add", &json!({ "entity": check, "name": "prüfung_id", "type": "BIGINT" })).unwrap();
+        let index = index(crate::kinds::KINDS, crate::notation_ui::UIS, s.doc());
+        let labels = |query: &str| hits(&index, query).1.iter().map(|e| e.label.clone()).collect::<Vec<_>>();
+        assert_eq!(labels("PRUFUNG"), ["Prüfung", "prüfung_id", "Kunde_prüfung"]);
+        assert_eq!(labels("bestellung"), ["Bestellungen prüfen"]);
+        assert_eq!(labels("prufen"), ["Bestellungen prüfen"]);
+        assert_eq!(labels("STRASSE"), ["Straße"]);
     }
 }

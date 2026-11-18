@@ -762,8 +762,8 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         top += 38.0;
     }
     // Only while the field is there to clear it.
-    let needle = if shell.versions.changes.len() > FILTER_FROM { shell.versions.filter.to_lowercase() } else { String::new() };
-    let holds = |d: &&Difference| needle.is_empty() || d.name.as_deref().unwrap_or("").to_lowercase().contains(&needle);
+    let needle = crate::home_search::Typed::phrase(if shell.versions.changes.len() > FILTER_FROM { &shell.versions.filter } else { "" });
+    let holds = |d: &&Difference| needle.in_any(&[d.name.as_deref().unwrap_or("")]);
     let group = |area: Area| shell.versions.changes.iter().filter(|d| d.area == area).filter(holds).cloned().collect::<Vec<_>>();
     let groups = [(tr("Model elements"), group(Area::Model)), (tr("Diagrams"), group(Area::Diagram)), (tr("Skills"), group(Area::Skill))];
     let content: f32 = groups.iter().filter(|(_, g)| !g.is_empty()).map(|(_, g)| GROUP + g.len() as f32 * CHANGE_PITCH).sum();

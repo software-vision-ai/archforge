@@ -8048,6 +8048,34 @@ fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     assert!(h.state().explorer.rename.as_ref().is_some_and(|r| r.text == "Schema 2"));
 }
 
+/// The Models and Diagrams filters ignore capitals, accents and `ß`, and drop the names that
+/// don't hold what is typed.
+#[test]
+fn the_explorers_filters_ignore_capitals_and_accents() {
+    in_both_appearances(|theme| {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        for name in ["Bestellungen prüfen", "Straße"] {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let schema = s.execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap().value["id"].as_str().unwrap().to_string();
+            s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": name })).unwrap();
+        }
+        let models = |h: &Harness<'static, Shell>| {
+            let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+            rows.into_iter().map(|r| r.label).collect::<Vec<_>>()
+        };
+        let diagrams = |h: &Harness<'static, Shell>| {
+            let rows = crate::diagrams::rows(h.state().session.as_ref().unwrap().doc(), &h.state().diagrams, h.state().kinds).rows;
+            rows.into_iter().filter(|r| r.kind == crate::diagrams::Kind::Diagram).map(|r| r.label).collect::<Vec<_>>()
+        };
+        for (typed, found) in [("bestellung", "Bestellungen prüfen"), ("PRUFEN", "Bestellungen prüfen"), ("STRASSE", "Straße")] {
+            h.state_mut().explorer.filter = typed.into();
+            h.state_mut().diagrams.filter = typed.into();
+            h.run();
+            assert_eq!((models(&h), diagrams(&h)), (vec![found.to_string()], vec![found.to_string()]), "{theme:?}: {typed}");
+        }
+    });
+}
+
 /// A harness with a schema, a table of two columns, the table selected.
 #[test]
 fn the_models_tree_scrolls_and_follows_the_selection() {
@@ -14203,13 +14231,18 @@ fn working_changes_filter_a_long_list() {
     use egui_kittest::kittest::Queryable;
     in_both_appearances(|theme| {
         let (mut h, _host) = changes_panel(theme);
-        (0..13).for_each(|i| add_schema(&mut h, &format!("schema{i}")));
+        // Named with an accent, which the filter typed without one still finds.
+        (0..13).for_each(|i| add_schema(&mut h, &format!("Schéma{i}")));
         compared(&mut h);
         assert!(has_id(&h, "workspace.versions.filter") && h.state().versions.working == 13, "{theme:?}");
         h.state_mut().versions.filter = "schema7".to_string();
         h.run_steps(2);
-        let shown = ids(&h).iter().filter(|i| i.starts_with("workspace.versions.change.")).count();
-        assert_eq!((shown, h.state().versions.working), (1, 13), "{theme:?}");
+        let shown = |h: &Harness<'static, Shell>| ids(h).iter().filter(|i| i.starts_with("workspace.versions.change.")).count();
+        assert_eq!((shown(&h), h.state().versions.working), (1, 13), "{theme:?}");
+        // Capitals and full-width letters count for nothing either.
+        h.state_mut().versions.filter = "SCHEMA７".to_string();
+        h.run_steps(2);
+        assert_eq!(shown(&h), 1, "{theme:?}");
         use archforge_notations::differences::{Area, ChangeKind, Difference};
         let item = |n: u8, area, kind| Difference {
             id: archforge_mof::Uuid([n; 16]),

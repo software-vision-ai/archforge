@@ -88,6 +88,10 @@ rustix = { version = "1", default-features = false, features = ["std", "process"
 # `deny.toml` allows.
 craft-atomic = { git = "https://github.com/storytold/craft-libs", branch = "main" }
 craft-mcp-server = { git = "https://github.com/storytold/craft-libs", branch = "main" }
+# Search folding (`Folder`): case, accents, `ß` and compatibility forms count for nothing in a
+# name search a user types. Without `collate`, so no collation data. It pins ICU4X `~2.3`, which
+# holds the lockfile's `icu_*` crates below 2.4 for as long as it does.
+craft-i18n = { git = "https://github.com/storytold/craft-libs", branch = "main" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid" # "deny" only when one isolated crate exists

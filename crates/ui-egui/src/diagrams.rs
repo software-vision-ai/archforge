@@ -168,27 +168,30 @@ pub(crate) struct Tree {
     pub cut: bool,
 }
 
-/// A group of the tree: its diagram kind ("" for those the shell doesn't know), its name and the
-/// filter its diagrams answer to (none when the typed filter names the group).
+/// A group of the tree: its diagram kind ("" for those the shell doesn't know), its name and
+/// whether its diagrams answer to the typed filter (not when the filter names the group).
 struct Group {
     kind: &'static str,
     label: String,
-    filter: String,
+    filtered: bool,
 }
 
 impl Group {
-    /// Whether a diagram of `kind` named `name` (lower-cased) shows in the group.
-    fn shows(&self, known: &[&str], kind: &str, name: &str) -> bool {
+    /// Whether a diagram of `kind` shows in the group, `named` saying whether its name holds the
+    /// typed filter.
+    fn shows(&self, known: &[&str], kind: &str, named: bool) -> bool {
         let ours = if self.kind.is_empty() { !known.contains(&kind) } else { kind == self.kind };
-        ours && (self.filter.is_empty() || name.contains(&self.filter))
+        ours && (!self.filtered || named)
     }
 }
 
-/// The diagrams the model's folders hold for each group, from one visit of the model.
+/// The diagrams the model's folders hold for each group, from one visit of the model, and the
+/// typed filter, folded.
 struct Tally {
     folders: HashMap<(Obj, usize), usize>,
     left: usize,
     cut: bool,
+    typed: crate::home_search::Typed,
 }
 
 /// Counts the diagrams under `owner` that show in each group, noting each folder's counts in
@@ -214,9 +217,9 @@ fn tally(store: &Store, owner: Obj, prop: archforge_mof::PropId, groups: &[Group
                 }
             }
             Some(c) if c == DIAGRAM => {
-                let (kind, name) = (kind_word(store, m), diagram_name(store, m).to_lowercase());
+                let (kind, named) = (kind_word(store, m), t.typed.in_any(&[&diagram_name(store, m)]));
                 for (i, g) in groups.iter().enumerate() {
-                    here[i] += usize::from(g.shows(known, &kind, &name));
+                    here[i] += usize::from(g.shows(known, &kind, named));
                 }
             }
             _ => {}
@@ -229,8 +232,8 @@ fn tally(store: &Store, owner: Obj, prop: archforge_mof::PropId, groups: &[Group
 /// that kind's diagrams in the folders the model keeps them in, in the model's order; then the
 /// diagrams of kinds the shell doesn't know, when there are any. Grouping is the explorer's alone:
 /// the model keeps each diagram once, where it was. A filter shows the diagrams whose name holds
-/// it, or every diagram of a group whose name holds it, with their folders and groups, all open;
-/// without one every known kind's group shows, empty or not.
+/// it (whatever its capitals and accents), or every diagram of a group whose name holds it, with
+/// their folders and groups, all open; without one every known kind's group shows, empty or not.
 pub(crate) fn rows(store: &Store, state: &State, kinds: &[&dyn crate::kinds::DiagramKind]) -> Tree {
     rows_within(store, state, kinds, MAX_VISITS)
 }
@@ -238,20 +241,18 @@ pub(crate) fn rows(store: &Store, state: &State, kinds: &[&dyn crate::kinds::Dia
 /// The tree's rows, visiting at most `visits` members of the model to count them and as many to
 /// walk them.
 pub(crate) fn rows_within(store: &Store, state: &State, kinds: &[&dyn crate::kinds::DiagramKind], visits: usize) -> Tree {
-    let typed = state.filter.trim().to_lowercase();
+    let typed = crate::home_search::Typed::phrase(state.filter.trim());
     let open = !typed.is_empty();
     let mut tree = Tree::default();
     let Some(model) = archforge_core::skills::model_of(store) else { return tree };
-    let mut groups: Vec<Group> = kinds.iter().map(|k| Group { kind: k.kind(), label: k.group_word(), filter: String::new() }).collect();
+    let mut groups: Vec<Group> = kinds.iter().map(|k| Group { kind: k.kind(), label: k.group_word(), filtered: false }).collect();
     groups.sort_by_key(|g| g.label.to_lowercase());
     let known: Vec<&'static str> = groups.iter().map(|g| g.kind).collect();
-    groups.push(Group { kind: "", label: tr("Other diagrams"), filter: String::new() });
+    groups.push(Group { kind: "", label: tr("Other diagrams"), filtered: false });
     for g in &mut groups {
-        if !g.label.to_lowercase().contains(&typed) {
-            g.filter = typed.clone();
-        }
+        g.filtered = !typed.in_any(&[&g.label]);
     }
-    let mut t = Tally { folders: HashMap::new(), left: visits, cut: false };
+    let mut t = Tally { folders: HashMap::new(), left: visits, cut: false, typed };
     let counts = tally(store, model, archforge_core::model::MEMBER, &groups, &known, 0, &mut t);
     tree.cut = t.cut;
     let mut left = visits;
@@ -276,7 +277,7 @@ pub(crate) fn rows_within(store: &Store, state: &State, kinds: &[&dyn crate::kin
             count,
         });
         if expanded {
-            let walk = Walk { store, state, open, group: i, g, known: &known, folders: &t.folders };
+            let walk = Walk { store, state, open, group: i, g, known: &known, folders: &t.folders, typed: &t.typed };
             if walk.walk(model, archforge_core::model::MEMBER, 1, &mut tree.rows, &mut left) {
                 tree.cut = true;
                 break;
@@ -287,7 +288,7 @@ pub(crate) fn rows_within(store: &Store, state: &State, kinds: &[&dyn crate::kin
 }
 
 /// What a group's walk reads: the model, the explorer's state, whether a filter is typed (which
-/// opens every folder), the group and the counts.
+/// opens every folder), the group, the counts and the typed filter.
 struct Walk<'a> {
     store: &'a Store,
     state: &'a State,
@@ -296,6 +297,7 @@ struct Walk<'a> {
     g: &'a Group,
     known: &'a [&'static str],
     folders: &'a HashMap<(Obj, usize), usize>,
+    typed: &'a crate::home_search::Typed,
 }
 
 impl Walk<'_> {
@@ -324,7 +326,7 @@ impl Walk<'_> {
                 }
                 Some(c) if c == DIAGRAM => {
                     let label = diagram_name(self.store, m);
-                    if self.g.shows(self.known, &kind_word(self.store, m), &label.to_lowercase()) {
+                    if self.g.shows(self.known, &kind_word(self.store, m), self.typed.in_any(&[&label])) {
                         out.push(Row { id, obj: m, depth, kind: Kind::Diagram, label, expandable: false, expanded: false, count: 0 });
                     }
                 }

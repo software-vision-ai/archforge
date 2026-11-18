@@ -5,7 +5,7 @@
 //! columns; `notation_ui`). A click selects through `view.select`, the `+` adds what the
 //! selection's notation offers and opens the name for typing in place, Enter or F2 renames, Delete removes through `element.remove` after a dialog when other
 //! things go with it or a diagram shows it. The filter narrows the rows to the names that contain
-//! it. Every change goes through the engine, so undo and redo cover it.
+//! it, whatever its capitals and accents. Every change goes through the engine, so undo and redo cover it.
 //!
 //! The geometry is the design's: rows 34 px apart from y 119, a level 13 px deeper than its
 //! parent, the chevron at x 13, the icon at x 31 and the name at x 53 of the first level, the
@@ -274,7 +274,7 @@ pub struct Row {
 /// What a notation's rows are made with: the filter, the rows opened and the skills by subject.
 pub(crate) struct Tree<'a> {
     store: &'a Store,
-    filter: String,
+    filter: crate::home_search::Typed,
     expanded: &'a BTreeSet<Uuid>,
     skills: std::collections::BTreeMap<Obj, Vec<Obj>>,
     none: Vec<Obj>,
@@ -286,9 +286,9 @@ impl Tree<'_> {
         !self.filter.is_empty()
     }
 
-    /// Whether a name holds the filter.
+    /// Whether a name holds the filter, whatever its capitals and accents.
     pub(crate) fn matches(&self, label: &str) -> bool {
-        self.filter.is_empty() || label.to_lowercase().contains(&self.filter)
+        self.filter.in_any(&[label])
     }
 
     /// Whether the row of `obj` is open.
@@ -354,7 +354,8 @@ fn skills_by_subject(store: &Store) -> std::collections::BTreeMap<Obj, Vec<Obj>>
 /// The tree's rows for the store, the opened rows and the filter: a filter shows the rows whose
 /// name holds it and their ancestors, all open.
 pub(crate) fn rows(uis: &[&'static dyn NotationUi], store: &Store, state: &State) -> Vec<Row> {
-    let t = Tree { store, filter: state.filter.trim().to_lowercase(), expanded: &state.expanded, skills: skills_by_subject(store), none: Vec::new() };
+    let filter = crate::home_search::Typed::phrase(state.filter.trim());
+    let t = Tree { store, filter, expanded: &state.expanded, skills: skills_by_subject(store), none: Vec::new() };
     let mut out = Vec::new();
     for (top, ui) in tops(uis, store) {
         out.extend(ui.tree(store, top, &t));

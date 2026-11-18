@@ -3,9 +3,10 @@
 //! pinned folders and what Home can do; in a project, its diagrams and elements
 //! (crate::project_search). A click on the field or the command key with K opens it; typing
 //! narrows the list under it, every word of the query found in a result's name (or in where it
-//! lives); the arrow keys move the highlight, Enter runs it, Esc or a click elsewhere closes the
+//! lives), whatever its capitals and accents; the arrow keys move the highlight, Enter runs it, Esc or a click elsewhere closes the
 //! list.
 
+use craft_i18n::{Folded, Folder};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
@@ -38,13 +39,13 @@ pub struct Search {
 }
 
 /// A project found in a pinned folder, as its row shows it: where it is, its name, where it lives
-/// from its pinned folder down, and all three in small letters for matching.
+/// from its pinned folder down, and all three folded for matching.
 #[derive(Debug)]
 struct Found {
     path: std::path::PathBuf,
     label: String,
     detail: String,
-    text: String,
+    text: Folded,
 }
 
 /// The longest query kept, the most projects and folders the list shows, a row's height and the
@@ -121,7 +122,7 @@ fn take_found(shell: &mut Shell) {
             let label = f.path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let base = shell.state.pinned.get(f.folder).and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
             let detail = base.into_iter().chain(f.within).collect::<Vec<_>>().join(" / ");
-            let text = format!("{label}\n{detail}\n{}", f.path.to_string_lossy()).to_lowercase();
+            let text = fold(&format!("{label}\n{detail}\n{}", f.path.to_string_lossy()));
             Found { path: f.path, label, detail, text }
         })
         .collect();
@@ -161,16 +162,70 @@ pub(crate) fn close(shell: &mut Shell) {
     search.focus = false;
 }
 
-/// Whether every word of `query` is in one of `texts`, whatever the case.
-fn matches(query: &str, texts: &[&str]) -> bool {
-    let texts: Vec<String> = texts.iter().map(|t| t.to_lowercase()).collect();
-    query.to_lowercase().split_whitespace().all(|w| texts.iter().any(|t| t.contains(w)))
+/// What was typed into a search or a filter, folded once by craft-i18n's `Folder`: capitals,
+/// accents, `ß` against `ss` and compatibility forms (full-width letters, ligatures) count for
+/// nothing. Every name search a person types into matches through it, so Home's search, a
+/// project's, and the Models, Diagrams and Versions filters agree.
+#[derive(Debug, Clone)]
+pub(crate) struct Typed {
+    folder: Folder,
+    words: Vec<Folded>,
+}
+
+impl Typed {
+    /// Each word of `query` on its own: a text answers when it holds every one.
+    pub(crate) fn words(query: &str) -> Typed {
+        let folder = folder();
+        Typed { words: query.split_whitespace().map(|w| folder.fold(w)).collect(), folder }
+    }
+
+    /// `text` as one piece, spaces and all; nothing when it is empty.
+    pub(crate) fn phrase(text: &str) -> Typed {
+        let folder = folder();
+        Typed { words: (!text.is_empty()).then(|| folder.fold(text)).into_iter().collect(), folder }
+    }
+
+    /// Whether nothing was typed, so everything answers.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.words.is_empty()
+    }
+
+    /// The first word folded, to rank names by; empty when nothing was typed.
+    pub(crate) fn first(&self) -> &str {
+        self.words.first().map_or("", Folded::as_str)
+    }
+
+    /// Whether every word is in one of `texts`, already folded by [`fold`].
+    pub(crate) fn in_folded(&self, texts: &[&Folded]) -> bool {
+        self.words.iter().all(|w| texts.iter().any(|t| t.find(w).is_some()))
+    }
+
+    /// Whether every word is in one of `texts`; true at once when nothing was typed.
+    pub(crate) fn in_any(&self, texts: &[&str]) -> bool {
+        if self.is_empty() {
+            return true;
+        }
+        let folded: Vec<Folded> = texts.iter().map(|t| self.folder.fold(t)).collect();
+        self.in_folded(&folded.iter().collect::<Vec<_>>())
+    }
+}
+
+/// The folding for the interface's language. Accents count for nothing, so the language changes
+/// no match: only with accents counted does Turkish set its dotted and dotless i apart.
+fn folder() -> Folder {
+    Folder::new(crate::i18n::language())
+}
+
+/// `text` folded as [`Typed`] folds what is typed, for a text matched again and again.
+pub(crate) fn fold(text: &str) -> Folded {
+    folder().fold(text)
 }
 
 /// The rows for the query: the matching recent projects, then the projects in the pinned folders
 /// not among them, the pinned folders and the actions, in that order; with no query, all of them.
 fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
     let mut groups = Vec::new();
+    let typed = Typed::words(query);
     if shell.home_search.scope.is_some() {
         let (diagrams, elements) = crate::project_search::hits(&shell.home_search.index, query);
         for (heading, entries) in [(tr("Diagrams"), diagrams), (tr("Elements"), elements)] {
@@ -191,15 +246,14 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
         detail: shell.location_of(&r.path).unwrap_or_default(),
     });
     let recent = recent.filter(|h| match &h.target {
-        Target::Project(path) => matches(query, &[&h.label, &h.detail, &path.to_string_lossy()]),
+        Target::Project(path) => typed.in_any(&[&h.label, &h.detail, &path.to_string_lossy()]),
         _ => false,
     });
-    let words: Vec<String> = query.to_lowercase().split_whitespace().map(str::to_string).collect();
     let found = shell
         .home_search
         .found
         .iter()
-        .filter(|f| !shell.state.recent.iter().any(|r| r.path == f.path) && words.iter().all(|w| f.text.contains(w.as_str())))
+        .filter(|f| !shell.state.recent.iter().any(|r| r.path == f.path) && typed.in_folded(&[&f.text]))
         .map(|f| Hit { target: Target::Project(f.path.clone()), icon: &icons::ER_DIAGRAM, label: f.label.clone(), detail: f.detail.clone() });
     let projects: Vec<Hit> = recent.chain(found).take(MAX_PROJECTS).collect();
     if !projects.is_empty() {
@@ -209,7 +263,7 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
         .state
         .pinned
         .iter()
-        .filter(|f| matches(query, &[&f.to_string_lossy()]))
+        .filter(|f| typed.in_any(&[&f.to_string_lossy()]))
         .take(MAX_FOLDERS)
         .map(|f| Hit {
             target: Target::Folder(f.clone()),
@@ -221,7 +275,7 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
     if !folders.is_empty() {
         groups.push((tr("Pinned folders"), folders));
     }
-    let actions: Vec<Hit> = actions(shell).into_iter().filter(|h| matches(query, &[&h.label])).collect();
+    let actions: Vec<Hit> = actions(shell).into_iter().filter(|h| typed.in_any(&[&h.label])).collect();
     if !actions.is_empty() {
         groups.push((tr("Actions"), actions));
     }
@@ -464,6 +518,25 @@ mod tests {
         assert!(shown(&shell).contains(&open) && crate::actions::available(&shell, "file.open"));
         shell.services.projects = None;
         assert!(!shown(&shell).contains(&open) && !shown(&shell).contains(&Target::Action("file.new")));
+    }
+
+    /// Capitals, accents and `ß` count for nothing, and the projects found keep the list's order.
+    #[test]
+    fn the_search_ignores_capitals_and_accents_and_keeps_the_order() {
+        let (mut shell, ..) = shell();
+        for name in ["Prüfstand", "Straße", "Bestellungen prüfen"] {
+            shell.state.remember(name, &std::path::PathBuf::from(format!("/tmp/{name}.archforge")), 1);
+        }
+        let projects = |query: &str| {
+            let groups = hits(&shell, query);
+            let found = groups.into_iter().find(|(heading, _)| heading == "Projects");
+            found.map(|(_, rows)| rows.into_iter().map(|h| h.label).collect::<Vec<_>>()).unwrap_or_default()
+        };
+        assert_eq!(projects("bestellung"), ["Bestellungen prüfen"]);
+        assert_eq!(projects("prufen"), ["Bestellungen prüfen"]);
+        assert_eq!(projects("STRASSE"), ["Straße"]);
+        assert_eq!(projects("PRÜF"), ["Bestellungen prüfen", "Prüfstand"]);
+        assert_eq!(projects("pruf stand"), ["Prüfstand"]);
     }
 
     /// Running a row closes the search and runs its action.

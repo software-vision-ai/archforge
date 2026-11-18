@@ -33,6 +33,8 @@ pulldown-cmark.workspace = true
 egui_commonmark.workspace = true
 # Reads the app icon built in for the bar's brand mark; it also writes the snapshot example's picture.
 png.workspace = true
+# Folds what a search or a filter is typed against (crate::home_search::Typed).
+craft-i18n.workspace = true
 
 [dev-dependencies]
 archforge-mof = { workspace = true, features = ["testing"] }
