@@ -652,7 +652,7 @@ const SAFE_INTEGER: f64 = 9_007_199_254_740_992.0;
 fn integral(args: &Value) -> Value {
     let mut args = args.clone();
     for v in args.as_object_mut().into_iter().flat_map(|a| a.values_mut()) {
-        if let Some(n) = v.as_f64().filter(|n| n.fract() == 0.0 && n.abs() <= SAFE_INTEGER) {
+        if let Some(n) = v.as_f64().filter(|n| v.is_f64() && n.fract() == 0.0 && n.abs() <= SAFE_INTEGER) {
             *v = json!(n as i64);
         }
     }
