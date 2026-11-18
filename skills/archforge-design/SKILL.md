@@ -639,6 +639,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   changes", in the danger colour) before the changes not yet written are lost; what was written
   stays, unsaved, for the next opening (owner decision). Save waits for a save already running and
   asks again when edits came in meanwhile.
+- Opening a project whose tab is closing, by any route, waits for the closing: the project opens
+  afresh once closed, or its tab shows when the closing is refused; asked twice, it opens once
+  (AR-748).
 
 ## ER notation
 What is ER's own, beside the shared rules above.

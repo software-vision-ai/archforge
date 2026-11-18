@@ -3353,6 +3353,76 @@ fn a_recent_project_opens_from_its_row_or_shows_its_tab() {
     assert_eq!(h.state().active, Some(0));
 }
 
+/// The project shown, its tab closed and its Recent row chosen while the host closes it.
+fn reopened_while_closing(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().state.theme = theme;
+    h.state_mut().close_tab(0);
+    h.run_steps(2);
+    let at = rect_of(&h, "home.recent.0").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(h.state().tabs[0].closing() && host.opens.lock().unwrap().is_empty(), "{theme:?}: nothing opens while it closes");
+    (h, host)
+}
+
+/// An opening of a project whose tab is closing waits for the closing, then opens it afresh in a
+/// tab of its own; asked for twice, it opens once (AR-748).
+#[test]
+fn a_project_opened_while_its_tab_closes_opens_again_once_closed() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = reopened_while_closing(theme);
+        let at = rect_of(&h, "home.recent.0").center();
+        click(&mut h, at);
+        h.run_steps(2);
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        let (path, tx) = host.opens.lock().unwrap().pop().expect("the host opens it once the closing ends");
+        tx.send(Ok(crate::Opened { name: "Commerce platform".into(), path, ..Default::default() })).unwrap();
+        h.run_steps(4);
+        assert!(host.opens.lock().unwrap().is_empty(), "{theme:?}: the second ask opened nothing more");
+        assert_eq!((h.state().tabs.len(), h.state().active, h.state().title().as_str()), (1, Some(0), "Commerce platform — Archforge"));
+        assert!(!h.state().tabs[0].closing() && !h.state().holding.pending());
+    });
+}
+
+/// A closing refused while an opening of its project waits keeps the tab, which shows, saying why.
+#[test]
+fn a_project_opened_while_its_closing_is_refused_shows_its_tab() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = reopened_while_closing(theme);
+        host.closings.lock().unwrap().pop().unwrap().send(Err("the server would not stop".into())).unwrap();
+        h.run_steps(3);
+        assert_eq!((h.state().tabs.len(), h.state().active, h.state().close_error()), (1, Some(0), Some("the server would not stop")));
+        assert!(host.opens.lock().unwrap().is_empty() && !h.state().holding.pending(), "{theme:?}: the opening ran, on the tab kept");
+    });
+}
+
+/// Once its tab has closed, the waiting opening also waits for another opening or the New project
+/// dialog under way, which would drop it (AR-748).
+#[test]
+fn a_project_opened_while_its_tab_closes_waits_for_another_opening_and_the_new_project_dialog() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = reopened_while_closing(theme);
+        h.state_mut().open_path(std::path::Path::new("/tmp/Shop.archforge"));
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        let (shop, tx) = host.opens.lock().unwrap().pop().expect("the other opening");
+        assert!(h.state().tabs.is_empty() && host.opens.lock().unwrap().is_empty(), "{theme:?}: it waits for that opening");
+        tx.send(Ok(crate::Opened { name: "Shop".into(), path: shop, ..Default::default() })).unwrap();
+        h.run_steps(3);
+        assert_eq!(host.opens.lock().unwrap().pop().map(|(p, _)| p), Some(COMMERCE.into()), "{theme:?}: then it opens");
+        let (mut h, host) = reopened_while_closing(theme);
+        crate::new_project::open(h.state_mut());
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        assert!(h.state().tabs.is_empty() && host.opens.lock().unwrap().is_empty(), "{theme:?}: it waits for the dialog");
+        h.state_mut().new_project = None;
+        h.run_steps(3);
+        assert_eq!(host.opens.lock().unwrap().pop().map(|(p, _)| p), Some(COMMERCE.into()), "{theme:?}: then it opens");
+    });
+}
+
 #[test]
 fn home_sorts_the_recent_projects_by_name_and_shows_them_as_a_gallery() {
     let (mut h, host) = saving_harness(None, None);

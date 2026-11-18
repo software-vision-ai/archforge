@@ -1659,6 +1659,8 @@ impl Shell {
 
     /// Opens the project at `path` (from the picker or Home's recent list): a project open in a
     /// tab shows there without asking the host; another opens in a tab of its own while one is free.
+    /// One whose tab is closing waits for the closing: it opens afresh once closed, and its tab
+    /// shows when the closing is refused (AR-748).
     pub fn open_path(&mut self, path: &std::path::Path) {
         if self.remember(hold::Waiting::Open(path.to_path_buf())) {
             return;
