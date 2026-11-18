@@ -729,6 +729,28 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
     Ok(())
 }
 
+/// The package that takes the diagrams a nested package of `parent` hands up as `objs` go: the first
+/// above all of `objs` among its ancestors, `parent` when it stays, never one that only stays as one
+/// that goes hands it up (owner decision, 2026-11-18). None when the topmost package above goes: it
+/// takes everything below it along (AR-673). In a loop of packages, which only a damaged store holds,
+/// the walk goes round once more if need be, for the first that stays after the last that goes.
+fn receiver(store: &Store, objs: &[Obj], parent: Obj) -> Option<Obj> {
+    let (mut at, mut taker, mut seen, mut again) = (parent, None, std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
+    // The seen-sets bound the walk: one round of a loop, and a second while the last met goes.
+    while seen.insert(at) || (taker.is_none() && again.insert(at)) {
+        if objs.contains(&at) {
+            taker = None;
+        } else if taker.is_none() {
+            taker = Some(at);
+        }
+        match package_of(store, at) {
+            Some(up) => at = up,
+            None => return taker,
+        }
+    }
+    taker
+}
+
 /// Why `o` is not removed yet, as "{id} cannot be removed yet", typed with its name, or its id
 /// when it has none ([`Reason::ElementNotRemovable`]): an association's end, an element of a kind
 /// UML does not remove yet, or a classifier template parameter that is no template's parameter.
@@ -746,9 +768,13 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// profiles, stereotypes and template bindings), each with what it holds (an enumeration its literals, a
 /// data type or an association class its attributes and operations, an association its ends) and the
 /// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
-/// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
+/// nested package hands what it holds up to its parent first, and its diagrams up (owner decision); a
 /// top-level package takes them along. Either takes its default-diagram binding along, with no
-/// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). An
+/// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). A
+/// nested package's diagrams go to the first package above all its ancestors that go ([`receiver`]),
+/// its contents to its parent; one that would hand a structure diagram up to a package with no
+/// sound default, unless a package with no parent that goes takes it along, is refused typed as
+/// [`Reason::ParentDefaultUnsound`], before anything moves (AR-673). An
 /// element that would take along a diagram another element's binding names, unsoundly, is refused
 /// typed as [`Reason::DefaultDiagramOf`], unless that element goes too; the bindings of all that
 /// goes go before any diagram, in whatever order the elements are named (AR-578). A classifier takes the relationships that touch it along,
@@ -765,6 +791,8 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// typed, as [`Reason::ElementNotRemovable`] (AR-530).
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
+    // Where each nested package's diagrams go, worked out on the model as it is before anything moves.
+    let mut receivers = std::collections::BTreeMap::new();
     let removable = [
         PACKAGE,
         CLASS,
@@ -831,6 +859,13 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             && let Some(parent) = package_of(store, *o)
         {
             hand_up_problem(store, *o, parent)?;
+            // Its diagrams land in the first package above all that go, which needs a sound default.
+            if let Some(to) = receiver(store, objs, parent) {
+                if let Some(refused) = crate::defaults::handoff_problem(store, *o, to) {
+                    return Err(refused);
+                }
+                receivers.insert(*o, to);
+            }
         }
     }
     // A surviving template parameter's default, or a binding's argument, that would no longer
@@ -890,11 +925,13 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // A constraint left constraining nothing goes with what it constrained (AR-133), worked out
     // before anything moves; the others lose the elements that go as the core destroys them.
     let orphans = crate::constraints::orphans(&crate::constraints::dropped_by(store, objs));
-    // A nested package's contents and diagrams move up to its parent before it goes.
+    // A nested package's contents move up to its parent before it goes, and its diagrams to their
+    // receiver; inside a package with no parent that goes they stay below it, and go with it.
     let nested: Vec<Obj> = objs.iter().copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
     for o in nested {
         let Some(parent) = package_of(store, o) else { continue };
         let (diagrams, _, _) = archforge_diagram::views_of(store, o);
+        let to = receivers.get(&o).copied().unwrap_or(parent);
         store
             .transaction(|st| {
                 for child in held(st, o) {
@@ -902,7 +939,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
                     st.push(parent, package::PACKAGED_ELEMENT, Value::Ref(child))?;
                 }
                 for d in diagrams {
-                    st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(parent))?;
+                    st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(to))?;
                 }
                 Ok(())
             })

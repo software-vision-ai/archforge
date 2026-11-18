@@ -6669,7 +6669,9 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// engine text. In light and dark (AR-440). A change made for another revision of the model, or for
 /// none, is said in its sentence too (AR-574), as is each way a package's default diagram binding
 /// can be unsound, with the choice that mends it (AR-576), and a diagram a package's binding keeps,
-/// its own default or another element's diagram, with the package named (AR-578). Each package move
+/// its own default or another element's diagram, with the package named (AR-578), as are a nested
+/// package's diagrams that cannot move up to a parent with no diagram yet or no valid default
+/// (AR-673). Each package move
 /// or rename the root package or the package Types refuses is said in its own sentence (AR-563), as
 /// is a default diagram chosen for no package, for something that is none or among another
 /// element's diagrams (AR-580), and a default's replacement that is the diagram removed, is no
@@ -6743,6 +6745,15 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let foreign = "Vertrieb hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. \
                        Wählen Sie zuerst eines seiner eigenen Klassendiagramme.";
         assert_eq!(kept(Some(WrongOwner)), foreign, "{theme:?}");
+        // A nested package's diagrams that cannot move up: a parent with no diagram yet, or with no valid default (AR-673).
+        let up = |fault| {
+            let error = archforge_engine::CommandError::about("ids", "up")
+                .because(archforge_engine::Reason::ParentDefaultUnsound { parent: "Vertrieb".into(), fault });
+            crate::panels::refusal(&EngineError::Failed { id: "element.remove".into(), error })
+        };
+        let none_yet = "Vertrieb hat noch kein Diagramm, das die Diagramme dieses Pakets aufnehmen kann. Erstellen Sie zuerst eines dafür. Es wurde nichts geändert.";
+        let invalid = "Vertrieb hat kein gültiges Standarddiagramm, das die Diagramme dieses Pakets aufnehmen kann. Wählen Sie zuerst sein Standarddiagramm. Es wurde nichts geändert.";
+        assert_eq!([up(None), up(Some(Missing)), up(Some(WrongOwner))], [none_yet, invalid, invalid], "{theme:?}");
         // A package a dependency that stays depends on, or starts at, is kept (AR-696).
         use archforge_engine::End::{Source, Target};
         let of = |end| archforge_engine::DependencyOf { package: "Buchhaltung".into(), end, other: "Auftrag".into(), dependency: "d-7".into() };
@@ -8888,6 +8899,34 @@ fn the_explorer_s_refusals_are_read_out_as_a_status() {
         assert!(h.state().explorer.rename.is_none(), "{theme:?}: Escape closes the name");
         assert!(h.query_by_label(&refused).is_none(), "{theme:?}: and its refusal is no longer read out");
     }
+}
+
+/// A nested package whose class diagram would move up to a parent with no diagram yet stays when
+/// Delete removes it from Models: the refusal is read out in the chosen language under the tree,
+/// and the model and its history are as they were. In light and dark (AR-673).
+#[test]
+fn a_package_whose_diagrams_cannot_move_up_stays_and_models_says_why() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut id = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
+        let vertrieb = id("uml.package.add", serde_json::json!({ "name": "Vertrieb" }));
+        let archiv = id("uml.package.add", serde_json::json!({ "name": "Archiv", "parent": vertrieb }));
+        id("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": archiv, "name": "Archiv" }));
+        select_named(&mut h, archforge_uml::PACKAGE, "Archiv");
+        let before = h.state().session.as_ref().unwrap().token();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        // The wording is the engine refusal test's; here, that Models shows it, in German.
+        let said = h.state().explorer.notice.clone().unwrap_or_default();
+        assert!(said.starts_with("Vertrieb hat noch kein Diagramm"), "{theme:?}: {said}");
+        read_out(&h, &said, "workspace.explorer.notice");
+        assert_eq!(h.state().session.as_ref().unwrap().token(), before, "{theme:?}: nothing changed");
+        assert!(h.state().canvas.toast.is_none(), "{theme:?}: no Undo offered");
+    }
+    crate::i18n::set_language("en");
 }
 
 /// A new diagram whose new schema is refused says why in plain words, as Properties says a

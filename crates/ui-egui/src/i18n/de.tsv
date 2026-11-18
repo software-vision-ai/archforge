@@ -790,6 +790,8 @@ str		No package is given. Give its id.	Es ist kein Paket angegeben. Geben Sie se
 str		{name} is not a package.	{name} ist kein Paket.
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} ist keines der Klassendiagramme von {package}. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
 str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} hat noch kein Klassendiagramm, daher gibt es nichts zu öffnen. Erstellen Sie zuerst ein Klassendiagramm dafür.
+str		{parent} has no diagram yet to take this package's diagrams. Create one for it first. Nothing was changed.	{parent} hat noch kein Diagramm, das die Diagramme dieses Pakets aufnehmen kann. Erstellen Sie zuerst eines dafür. Es wurde nichts geändert.
+str		{parent} has no valid default diagram to take this package's diagrams. Choose its default first. Nothing was changed.	{parent} hat kein gültiges Standarddiagramm, das die Diagramme dieses Pakets aufnehmen kann. Wählen Sie zuerst sein Standarddiagramm. Es wurde nichts geändert.
 str		This could not be done because of an internal error. Nothing was changed.	Dies war wegen eines internen Fehlers nicht möglich. Es wurde nichts geändert.
 str		The text can't be empty.	Der Text darf nicht leer sein.
 str		It can't be longer than {max} characters.	Höchstens {max} Zeichen sind möglich.

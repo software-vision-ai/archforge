@@ -9,8 +9,9 @@
 //! that stays because a package's binding names it as its default (AR-578).
 //!
 //! A package move or rename the root package or the package Types refuses is said here too (AR-563),
-//! as is a default diagram chosen for no package or from another element's diagrams (AR-580), and
-//! a package with no class diagram yet to open (AR-582).
+//! as is a default diagram chosen for no package or from another element's diagrams (AR-580), a
+//! package with no class diagram yet to open (AR-582), and a nested package's diagrams that
+//! cannot move up to a parent with no diagram yet or no valid default (AR-673).
 //!
 //! A package kept because a dependency that stays depends on it, or starts at it, is said here too
 //! (AR-696).
@@ -60,6 +61,8 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 /// model than the one it would run on, or for none, a package's default diagram that cannot be
 /// read, by what is wrong with its binding and the choice that mends it, a diagram a package's
 /// binding keeps, its own default or another element's diagram, with the choice to make first, a
+/// nested package's removal that would hand its diagrams up to a parent with no diagram yet or no
+/// valid default, with the choice to make first (AR-673), a
 /// package move or rename refused because the root package stays or the package Types keeps the
 /// built-in types, and a package's default diagram chosen with no package, something that is none,
 /// or a class diagram of another element (AR-580), and a package with no class diagram to open yet
@@ -139,6 +142,14 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
         Reason::NoDiagramYet { package } => {
             fmt(&tr("{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first."), &[("package", package)])
         }
+        Reason::ParentDefaultUnsound { parent, fault: None } => fmt(
+            &tr("{parent} has no diagram yet to take this package's diagrams. Create one for it first. Nothing was changed."),
+            &[("parent", parent)],
+        ),
+        Reason::ParentDefaultUnsound { parent, fault: Some(_) } => fmt(
+            &tr("{parent} has no valid default diagram to take this package's diagrams. Choose its default first. Nothing was changed."),
+            &[("parent", parent)],
+        ),
         _ => return None,
     })
 }

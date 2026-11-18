@@ -486,6 +486,11 @@ pub enum Reason {
     /// A package's default diagram cannot be read, as its default-diagram binding is unsound in
     /// the way the fault names; one of the package's own diagrams has to be chosen as its default.
     InvalidBinding(BindingFault),
+    /// A nested package's class diagrams cannot move up to `parent` (its name, or its id when it has
+    /// none) as the package is removed: `parent`'s default-diagram binding is unsound in the way the
+    /// fault names or, with none, `parent` has no class diagram yet, so a default has to be chosen or
+    /// made for it first (AR-673).
+    ParentDefaultUnsound { parent: Box<str>, fault: Option<BindingFault> },
     /// The diagram stays while the default-diagram binding of `package` (its name, or its id when
     /// it has none) names it: with no fault, it is that package's own default, which another has to
     /// replace first; with [`BindingFault::WrongOwner`], it is another element's diagram, which the

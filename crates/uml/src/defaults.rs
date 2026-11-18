@@ -206,25 +206,21 @@ pub(crate) fn default_set(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> 
 fn invalid(store: &Store, package: Obj, problem: &BindingProblem) -> CommandError {
     let id = |o: &Obj| store.uuid(*o).map(|u| u.to_string()).unwrap_or_default();
     let mut named = format!("package {}", id(&package));
-    let fault = match problem {
-        BindingProblem::Missing => BindingFault::Missing,
+    match problem {
+        BindingProblem::Missing => {}
         BindingProblem::Duplicate(all) => {
             let ids: Vec<String> = all.iter().take(NAMED).map(id).collect();
             named.push_str(&format!(", bindings {}", ids.join(", ")));
             if let Some(more) = all.len().checked_sub(NAMED).filter(|n| *n > 0) {
                 named.push_str(&format!(" and {more} more"));
             }
-            BindingFault::Duplicate
         }
-        BindingProblem::DeadTarget { binding } => {
-            named.push_str(&format!(", binding {}", id(binding)));
-            BindingFault::DeadTarget
-        }
+        BindingProblem::DeadTarget { binding } => named.push_str(&format!(", binding {}", id(binding))),
         BindingProblem::WrongKind { binding, diagram } | BindingProblem::WrongOwner { binding, diagram } => {
             named.push_str(&format!(", binding {}, diagram {}", id(binding), id(diagram)));
-            if matches!(problem, BindingProblem::WrongKind { .. }) { BindingFault::WrongKind } else { BindingFault::WrongOwner }
         }
-    };
+    }
+    let fault = fault_of(problem);
     let mend = match fault {
         BindingFault::Duplicate => {
             "choose which of its structure diagrams stays its default with uml.package.default.set, which removes the other bindings"
@@ -232,6 +228,44 @@ fn invalid(store: &Store, package: Obj, problem: &BindingProblem) -> CommandErro
         _ => "choose one of its own structure diagrams as its default with uml.package.default.set",
     };
     CommandError::about("package", format!("{problem} ({named}); {mend}")).because(Reason::InvalidBinding(fault))
+}
+
+/// The engine's [`BindingFault`] for `problem`.
+fn fault_of(problem: &BindingProblem) -> BindingFault {
+    match problem {
+        BindingProblem::Missing => BindingFault::Missing,
+        BindingProblem::Duplicate(_) => BindingFault::Duplicate,
+        BindingProblem::DeadTarget { .. } => BindingFault::DeadTarget,
+        BindingProblem::WrongKind { .. } => BindingFault::WrongKind,
+        BindingProblem::WrongOwner { .. } => BindingFault::WrongOwner,
+    }
+}
+
+/// Why the nested package `pkg` cannot hand its structure diagrams up to `parent`, the package that
+/// takes them as `pkg` is removed (AR-673): `parent`'s default is unsound, or it has no structure
+/// diagram yet, so they would land in a package whose default no one binding gives. Refused about
+/// `ids`, typed as [`Reason::ParentDefaultUnsound`] with `parent`'s name or id and its fault, none
+/// for no diagram yet. None when `pkg` hands up no structure diagram, or `parent`'s default is
+/// sound; `parent`'s binding and `pkg`'s are judged, never changed.
+pub(crate) fn handoff_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<CommandError> {
+    if !archforge_diagram::views_of(store, pkg).0.into_iter().any(|d| is_structure(store, d)) {
+        return None;
+    }
+    let named = name_or_id(store, parent);
+    let (fault, said) = match resolve(store, parent) {
+        Ok(DefaultDiagram::Bound(_) | DefaultDiagram::DoesNotApply) => return None,
+        Ok(DefaultDiagram::NoDiagramYet) => (
+            None,
+            format!("its diagrams cannot move up: {named} has no structure diagram yet to be its default; make one for it with diagram.add first"),
+        ),
+        Err(problem) => (
+            Some(fault_of(&problem)),
+            format!(
+                "its diagrams cannot move up: the default diagram of {named} is unsound ({problem}); choose one of its own structure diagrams as its default with uml.package.default.set first"
+            ),
+        ),
+    };
+    Some(CommandError::about("ids", said).because(Reason::ParentDefaultUnsound { parent: named.into(), fault }))
 }
 
 /// The diagram `binding` names when it is a live structure diagram of `owner`, a package; an
