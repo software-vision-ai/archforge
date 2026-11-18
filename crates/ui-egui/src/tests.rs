@@ -25169,6 +25169,50 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
     }
 }
 
+/// Open's answer waits while a recent project opens (AR-737): the project chosen in the picker
+/// opens after it, never dropped.
+#[test]
+fn a_project_picked_while_a_recent_one_opens_opens_after_it() {
+    let opened = |name: &str| crate::Opened { name: name.into(), path: format!("/tmp/{name}.archforge").into(), ..Default::default() };
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        crate::i18n::set_language("en");
+        let host = std::sync::Arc::new(SavingHost::default());
+        let waiting = std::sync::Arc::new(std::sync::Mutex::new(Vec::<std::sync::mpsc::Sender<Picked>>::new()));
+        let asked = waiting.clone();
+        let mut shell = Shell::new(Services {
+            projects: Some(host.clone()),
+            pick_project: Some(std::sync::Arc::new(move |_| {
+                let (tx, rx) = std::sync::mpsc::channel();
+                asked.lock().unwrap().push(tx);
+                rx
+            })),
+            ..Services::default()
+        });
+        shell.state.theme = theme;
+        shell.state.remember("Library", std::path::Path::new("/tmp/Library.archforge"), 0);
+        let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
+            |ui, shell: &mut Shell| {
+                shell.logic(ui.ctx());
+                shell.ui(ui);
+            },
+            shell,
+        );
+        h.run();
+        h.state_mut().open_from_picker();
+        let row = rect_of(&h, "home.recent.0").center();
+        click(&mut h, row);
+        let asked_to_open = |host: &SavingHost| host.opens.lock().unwrap().iter().map(|(p, _)| p.clone()).collect::<Vec<_>>();
+        assert_eq!(asked_to_open(&host), [std::path::PathBuf::from("/tmp/Library.archforge")], "{theme:?}: the recent project opens");
+        waiting.lock().unwrap().pop().expect("a pick was asked for").send(Picked::Folder("/tmp/Shop.archforge".into())).unwrap();
+        h.run_steps(4);
+        assert_eq!(asked_to_open(&host).len(), 1, "{theme:?}: the pick waits for the opening");
+        let library = host.opens.lock().unwrap().remove(0).1;
+        library.send(Ok(opened("Library"))).unwrap();
+        h.run_steps(4);
+        assert_eq!(asked_to_open(&host), [std::path::PathBuf::from("/tmp/Shop.archforge")], "{theme:?}: then the project chosen opens");
+    }
+}
+
 #[test]
 fn a_class_and_an_attribute_take_a_skill_from_the_skills_panel_and_the_tree_lists_the_class_skill() {
     let (mut h, customer) = class_properties("Customer");
