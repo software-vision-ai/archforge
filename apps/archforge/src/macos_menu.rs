@@ -312,7 +312,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
+    use archforge_ui_egui::{CreateError, Opened, Picked, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
     use archforge_ui_egui::actions::{
@@ -358,7 +358,7 @@ mod tests {
             projects: Some(host.clone()),
             pick_project: Some(Arc::new(move |_| {
                 counted.fetch_add(1, Ordering::SeqCst);
-                None
+                Picked::at_once(None)
             })),
             ..Default::default()
         };

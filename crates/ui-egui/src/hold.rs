@@ -146,6 +146,11 @@ impl Holding {
 }
 
 impl Shell {
+    /// Whether an opening, or a project opened, waits for the hold to end: either takes a tab.
+    pub(crate) fn open_waits(&self) -> bool {
+        self.holding.waiting.iter().any(|w| matches!(w, Waiting::Open(_) | Waiting::Opened(_)))
+    }
+
     /// Whether the project shown is held still.
     pub fn is_held(&self) -> bool {
         self.holding.hold.is_some()

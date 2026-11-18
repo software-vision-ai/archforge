@@ -660,7 +660,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         }
         // Change… as a host with a folder picker shows it.
         if screen == Screen::NewProjectFolder {
-            shell.services.pick_folder = Some(std::sync::Arc::new(|_| None));
+            shell.services.pick_folder = Some(std::sync::Arc::new(|_| crate::Picked::at_once(None)));
         }
     }
     if screen == Screen::WorkspaceSchema {

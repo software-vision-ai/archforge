@@ -940,7 +940,7 @@ fn open_finds_the_name_typed_in_place_committed() {
     for ((theme, on_canvas), (way, open)) in BOTH.into_iter().flat_map(|b| ways.map(|w| (b, w))) {
         let mut h = renaming_beside_another(theme, on_canvas);
         h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
-        h.state_mut().services.pick_project = Some(std::sync::Arc::new(|_| Some(OTHER.into())));
+        h.state_mut().services.pick_project = Some(std::sync::Arc::new(|_| crate::Picked::at_once(Some(OTHER.into()))));
         h.state_mut().in_window_menu = false;
         open(&mut h);
         h.run();

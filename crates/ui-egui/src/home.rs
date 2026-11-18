@@ -88,9 +88,10 @@ impl Hue {
 }
 
 /// Whether a start card leads anywhere yet: New project opens its dialog; the others open screens
-/// not built so far, so they take no click and show no hover border.
+/// not built so far, so they take no click and show no hover border. New project waits while a
+/// folder pick does, as its menu item does.
 fn start_live(shell: &Shell, id: &str) -> bool {
-    (id == "new-project" && shell.tabs.len() < crate::MAX_TABS) || (id == "open-project" && can_open(shell))
+    (id == "new-project" && shell.tabs.len() < crate::MAX_TABS && shell.picking.is_none()) || (id == "open-project" && can_open(shell))
 }
 
 /// Whether projects can be opened: the host picks and opens them, and a tab is free.
