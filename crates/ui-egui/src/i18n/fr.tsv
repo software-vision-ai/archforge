@@ -788,6 +788,8 @@ str		No package is given. Give its id.	Aucun paquetage n’est indiqué. Indique
 str		{name} is not a package.	{name} n’est pas un paquetage.
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} n’est pas l’un des diagrammes de classes de {package}. Choisissez l’un de ses propres diagrammes de classes comme diagramme par défaut.
 str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} n’a pas encore de diagramme de classes, il n’y a donc rien à ouvrir. Créez-lui d’abord un diagramme de classes.
+str		{parent} has no diagram yet to take this package's diagrams. Create one for it first. Nothing was changed.	{parent} n’a pas encore de diagramme pour accueillir les diagrammes de ce paquetage. Créez-en d’abord un pour lui. Rien n’a été modifié.
+str		{parent} has no valid default diagram to take this package's diagrams. Choose its default first. Nothing was changed.	{parent} n’a pas de diagramme par défaut valide pour accueillir les diagrammes de ce paquetage. Choisissez d’abord son diagramme par défaut. Rien n’a été modifié.
 str		This could not be done because of an internal error. Nothing was changed.	Cela n’a pas pu être fait à cause d’une erreur interne. Rien n’a été modifié.
 str		The text can't be empty.	Le texte ne peut pas être vide.
 str		It can't be longer than {max} characters.	{max} caractères au maximum.

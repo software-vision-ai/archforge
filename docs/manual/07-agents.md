@@ -631,7 +631,20 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   same way: `element_remove` of a package with no parent that holds it, its own package among them,
   is refused, naming the package whose default it is, unless that package is removed in the same
   call. Choose a default of that package's own first. A nested package hands the diagram up to its
-  parent and goes.
+  parent and goes. Its class diagrams join the parent's, whose default stays, so `element_remove`
+  of a nested package that has class diagrams is refused while its parent has no class diagram
+  yet or its default is unsound, naming the parent. Repair the package named, then remove again:
+  with no class diagram and no binding, `diagram_add` a class diagram for it, which becomes its
+  default; with class diagrams but a default that is missing, doubled or unsound, choose one of
+  them with `uml_package_default_set`; with no class diagram of its own but a binding that names a
+  diagram that is gone or another element's, do both, in this order: `diagram_add` a class diagram
+  for it (the binding stays as it is), read the revision again with `inspect_document`, then
+  `uml_package_default_set` with the new diagram and that `expected_revision`. Removed together with its parent, or with any other package above it, it hands
+  them to the first package above the highest of its own ancestors removed in the call, which is
+  judged and named instead (packages removed on other branches play no part); a package between
+  them that a removed package hands up stays, but does not take the diagrams. Inside a package with
+  no parent removed in the same call, nothing is judged: that package takes everything below it
+  along, as it does when removed alone.
 - **Choosing a package's default diagram**: `uml_package_default_set`
   (`uml.package.default.set`) makes one of the package's own class diagrams its default, given
   `package`, `diagram` and `expected_revision`, which it needs: left out or changed since read, it

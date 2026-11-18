@@ -163,7 +163,9 @@ fn a_class_diagram_shows_its_packages_classes_and_removing_the_package_takes_the
     assert!(archforge_uml::commands::remove_elements(&mut st, &[pkg, model]).is_err());
     assert_eq!(picture(&st), before, "nothing went");
     // Every package sits in the model's root, so the package goes and its class and its diagram
-    // move up into the root, in one undo step.
+    // move up into the root, in one undo step; the root's default takes the diagram in (AR-673).
+    let root_id = s.doc().uuid(archforge_uml::commands::root_package(s.doc()).unwrap()).unwrap().to_string();
+    run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": root_id, "name": "Model" }));
     let before = picture(s.doc());
     let out = s.execute("element.remove", &json!({ "ids": [sales] })).unwrap();
     assert_eq!(out.value["removed"], 2, "the package and the binding its first diagram made: {}", out.value);

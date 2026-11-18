@@ -788,6 +788,8 @@ str		No package is given. Give its id.	パッケージが指定されていま�
 str		{name} is not a package.	{name} はパッケージではありません。
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} は {package} のクラス図ではありません。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
 str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} にはまだクラス図がないため、開くものがありません。先にクラス図を作成してください。
+str		{parent} has no diagram yet to take this package's diagrams. Create one for it first. Nothing was changed.	{parent} にはこのパッケージの図を受け入れる図がまだありません。先に {parent} の図を作成してください。何も変更されていません。
+str		{parent} has no valid default diagram to take this package's diagrams. Choose its default first. Nothing was changed.	{parent} にはこのパッケージの図を受け入れる有効な既定の図がありません。先に既定の図を選んでください。何も変更されていません。
 str		This could not be done because of an internal error. Nothing was changed.	内部エラーのため実行できませんでした。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。
 str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。
