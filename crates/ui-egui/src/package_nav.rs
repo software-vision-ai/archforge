@@ -12,7 +12,7 @@
 //!   the package left centred, even when that diagram is in another branch (Decision 4). The
 //!   return takes its step off the tab's route and makes none. With no way in left, the parent's
 //!   default opens instead; at the root, 10 % stays put and says so.
-//! - **Out by the path bar or ⌘↑**: the ancestor's diagram as it was left.
+//! - **Out by the path bar or ⌘↑**: the ancestor's diagram as it was last left.
 //! - One switch per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
 //!   seconds must pass, before the next switch. A switch fades in over [`FADE`] seconds.
 
@@ -47,8 +47,11 @@ const MAX_DEPTH: usize = 256;
 pub struct Nav {
     /// The zoom the user asked for this frame, as a factor; zero for none.
     pub(crate) intent: f32,
-    /// The view each diagram had when it was left for another level, by diagram.
+    /// The view each diagram was last left with, by diagram, as `crate::canvas` keeps it.
     pub(crate) views: HashMap<Uuid, (Vec2, f32)>,
+    /// The tab whose view the canvas has drawn since it was opened: none while the view is still
+    /// the one of the tab before, to be fitted or centred on the next frame.
+    pub(crate) shown: Option<Uuid>,
     /// The return route of each tab, by the tab's diagram: the package entries that led to it, so
     /// going back returns the way the user came in, though the parent package has other class
     /// diagrams too. Browsing state only: never written into the model, and no undo step.
@@ -139,7 +142,6 @@ pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
     let Some(from) = shell.canvas.active else { return };
     let Some(d) = default_of(shell, package) else { return };
     let view = (shell.canvas.pan, shell.canvas.zoom);
-    shell.canvas.nav.views.insert(from, view);
     if d != from
         && let Some(session) = shell.session.as_ref()
     {
@@ -172,9 +174,6 @@ pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now:
 /// out (`reveal`, the package just left) at 100 % with that package centred; else as `d` was left,
 /// or fitted when it never was.
 fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Uuid>, now: f64) {
-    if let Some(from) = shell.canvas.active {
-        shell.canvas.nav.views.insert(from, (shell.canvas.pan, shell.canvas.zoom));
-    }
     crate::canvas::open(shell, d);
     match (reveal, shell.canvas.nav.views.get(&d).copied()) {
         (Some(_), _) => {
