@@ -87,6 +87,7 @@ rustix = { version = "1", default-features = false, features = ["std", "process"
 # the gate's first step moves Cargo.lock to the newest commit. It is the only git source
 # `deny.toml` allows.
 craft-atomic = { git = "https://github.com/storytold/craft-libs", branch = "main" }
+craft-mcp-server = { git = "https://github.com/storytold/craft-libs", branch = "main" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid" # "deny" only when one isolated crate exists

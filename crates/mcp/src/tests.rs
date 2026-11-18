@@ -240,10 +240,14 @@ fn a_tool_calls_its_method_and_refuses_unknown_arguments() {
     assert_eq!(fake.calls.borrow()[0], ("engine.execute".into(), json!({ "command": "er.entity.add", "params": { "name": "A" } })));
     call("call_app", json!({ "method": "ui.inspect" }));
     assert_eq!(fake.calls.borrow()[1], ("ui.inspect".into(), json!({})));
-    let r = call("execute_command", json!({ "cmd": "x" }));
-    assert!(r["result"]["isError"].as_bool().unwrap() && r["result"]["content"][0]["text"].as_str().unwrap().contains("command, params"));
+    let r = call("execute_command", json!({ "command": "x", "cmd": "x" }));
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(r["result"]["isError"].as_bool().unwrap() && text.contains("unknown argument `cmd`; its arguments are: command, params"), "{text}");
     let r = call("describe_command", json!({}));
-    assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("needs \"command\""));
+    assert_eq!(r["result"]["content"][0]["text"], "describe_command: missing required argument `command`");
+    // A fixed tool's arguments are checked by type too.
+    let r = call("execute_command", json!({ "command": "x", "params": "no" }));
+    assert_eq!(r["result"]["content"][0]["text"], "execute_command: argument `params` must be of type \"object\"");
     assert_eq!(fake.calls.borrow().len(), 2, "refused calls reach nothing");
     let r = call("format_disk", json!({}));
     assert_eq!(r["error"]["code"], -32602);
@@ -365,15 +369,74 @@ fn a_command_tool_runs_its_command_and_refuses_what_it_does_not_take() {
         fake.calls.borrow()[0],
         ("engine.execute".into(), json!({ "command": "er.entity.add", "params": { "schema": "s1", "name": "Invoice" } }))
     );
-    assert!(call("er_entity_add", json!({ "name": "x" }))["result"]["content"][0]["text"].as_str().unwrap().contains("needs \"schema\""));
-    assert!(
-        call("er_entity_add", json!({ "schema": "s", "colour": "red" }))["result"]["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("no argument \"colour\"")
-    );
+    // Each refusal is a tool result that names the tool and what is wrong.
+    for (args, why) in [
+        (json!({ "schema": "s", "colour": "red" }), "unknown argument `colour`; its arguments are: coalesce, kind, name, schema, unique, width"),
+        (json!({ "name": "x" }), "missing required argument `schema`"),
+        (json!({ "schema": "s", "width": "wide" }), "argument `width` must be of type \"integer\""),
+        (json!({ "schema": "s", "kind": "chair" }), "`kind` must be one of [\"table\",\"view\"]"),
+        // A required key set to null counts as missing, as the engine counts it.
+        (json!({ "schema": null }), "missing required argument `schema`"),
+        // A float with a fraction, or past 2^53, is no integer, as the engine reads it.
+        (json!({ "schema": "s", "width": 300.5 }), "argument `width` must be of type \"integer\""),
+        (json!({ "schema": "s", "width": 1e20 }), "argument `width` must be of type \"integer\""),
+    ] {
+        let r = call("er_entity_add", args);
+        assert_eq!(r["result"]["isError"], true, "{r}");
+        assert_eq!(r["result"]["content"][0]["text"], format!("er_entity_add: {why}"));
+    }
     assert_eq!(fake.calls.borrow().len(), 1, "refused calls reach nothing");
+    // An integer written as a float without a fraction passes, as the engine takes it, and goes on
+    // as given.
+    assert_eq!(call("er_entity_add", json!({ "schema": "s", "width": 300.0 }))["result"]["isError"], false);
+    assert_eq!(fake.calls.borrow()[1].1["params"]["width"], json!(300.0));
     assert_eq!(call("er_entity_fly", json!({}))["error"]["code"], -32602);
+}
+
+/// The smallest value a command's parameter documentation allows: its first choice, the low end of
+/// its range as documented, or the plainest value of its kind.
+fn minimal(param: &Value) -> Value {
+    if let Some(first) = param["choices"].as_array().and_then(|c| c.first()) {
+        return first.clone();
+    }
+    match param["kind"].as_str() {
+        Some("integer" | "number") => param["range"][0].as_f64().map_or(json!(0), |lo| json!(lo)),
+        Some("bool") => json!(false),
+        Some("array") => json!([]),
+        Some("object") => json!({}),
+        _ => json!(""),
+    }
+}
+
+#[test]
+fn a_minimal_call_from_each_commands_documentation_passes_the_check() {
+    let mut all = infos();
+    // A required integer whose range starts at a float, and an optional key left out.
+    all.push(json!({ "id": "er.entity.resize", "label": "Resize", "journal": true, "params": [
+        { "key": "width", "kind": "integer", "default": null, "range": [40.0, 4000.0], "choices": [], "meaning": "its width" },
+        { "key": "note", "kind": "string", "optional": true, "default": null, "range": null, "choices": [], "meaning": "a note" },
+    ] }));
+    let catalog = Catalog::new(&all, false);
+    let fake = Fake::ok();
+    let mut checked = 0;
+    for info in &all {
+        let name = tool_name(info["id"].as_str().unwrap());
+        if !catalog.commands.iter().any(|c| c.name == name) {
+            continue;
+        }
+        // The keys the engine needs: those without a default that are not optional.
+        let args: serde_json::Map<String, Value> = info["params"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| p["default"].is_null() && p["optional"] != true)
+            .map(|p| (p["key"].as_str().unwrap().to_string(), minimal(p)))
+            .collect();
+        let r = handle(tool_call(&name, Value::Object(args)).as_slice(), &fake, &catalog).unwrap();
+        assert_eq!(r["result"]["isError"], false, "{name}: {r}");
+        checked += 1;
+    }
+    assert_eq!(checked, 4, "er.entity.add, er.foreign-key.list, view.select and er.entity.resize");
 }
 
 #[test]
