@@ -41,8 +41,41 @@ pub(crate) struct Entry {
     text: Folded,
 }
 
+/// `s` cut to [`MAX_TEXT`] characters, never inside a letter: a letter the cut would part from
+/// its combining marks or the rest of its Hangul syllable goes whole, unless it is the first.
 fn cut(s: &str) -> String {
-    s.chars().take(MAX_TEXT).collect()
+    let mut end = s.char_indices().nth(MAX_TEXT).map_or(s.len(), |(at, _)| at);
+    while let (Some(next), Some((at, prev))) = (s.get(end..).and_then(|t| t.chars().next()), s.get(..end).and_then(|t| t.char_indices().next_back()))
+        && at > 0
+        && joins(Some(prev), next)
+    {
+        end = at;
+    }
+    s.get(..end).unwrap_or_default().to_string()
+}
+
+/// Whether `next` goes on the letter before it rather than starting one: a combining mark, or a
+/// Hangul vowel or final consonant that continues `prev`'s syllable.
+fn joins(prev: Option<char>, next: char) -> bool {
+    use icu_properties::props::{GraphemeExtend, HangulSyllableType as H};
+    let hangul = icu_properties::CodePointMapData::<H>::new();
+    let syllable = |p| matches!((hangul.get(p), hangul.get(next)), (H::LeadingJamo, H::VowelJamo) | (H::VowelJamo | H::LVSyllable, H::TrailingJamo));
+    icu_properties::CodePointSetData::new::<GraphemeExtend>().contains(next) || prev.is_some_and(syllable)
+}
+
+/// The folded offsets where `word` starts in `name`, overlapping ones too, on the boundaries
+/// `Folded::find` matches on: never inside a letter, and a Hangul syllable part continues one only
+/// within the same source character, as compatibility jamo stand alone.
+fn starts<'a>(name: &'a Folded, word: &'a Folded) -> impl Iterator<Item = usize> + 'a {
+    let text = name.as_str();
+    let edge = move |at: usize| {
+        let Some(next) = text.get(at..).and_then(|t| t.chars().next()) else { return true };
+        let span = |from: usize, c: char| name.source_range(from..from + c.len_utf8());
+        let prev = text.get(..at).and_then(|t| t.chars().next_back()).filter(|p| span(at.saturating_sub(p.len_utf8()), *p) == span(at, next));
+        !joins(prev, next)
+    };
+    let found = move |at: usize| text.get(at..).is_some_and(|t| t.starts_with(word.as_str()));
+    text.char_indices().map(|(at, _)| at).filter(move |&at| found(at) && edge(at) && edge(at + word.as_str().len()))
 }
 
 /// The open project's diagrams and elements, in a stable order.
@@ -93,23 +126,16 @@ pub(crate) fn index(
 }
 
 /// How well a row's name answers the query's first word, both folded: the name itself, its
-/// start, a word's start inside it, anywhere. A start counts only where the search itself would
-/// match, so `ハ` doesn't start `バ`, whose voicing mark makes it another letter.
+/// start, a word's start inside it, anywhere. Starts are folded offsets on the search's own
+/// boundaries ([`starts`]), so `ハ` doesn't start `バ`, `fi` doesn't start `ﬃles` and an accent
+/// left out of `Réorder` parts no word.
 fn rank(e: &Entry, first: &Folded) -> u8 {
-    if e.name.as_str() == first.as_str() {
+    let text = e.name.as_str();
+    if text == first.as_str() {
         return 0;
     }
-    let start = e.name.source_range(0..0).start;
-    let mut best = 3;
-    for found in e.name.matches(first) {
-        if found.start == start {
-            return 1;
-        }
-        if e.label.get(..found.start).and_then(|before| before.chars().next_back()).is_some_and(|c| !c.is_alphanumeric()) {
-            best = 2;
-        }
-    }
-    best
+    let word = |at: usize| text.get(..at).and_then(|t| t.chars().next_back()).is_some_and(|c| !c.is_alphanumeric());
+    starts(&e.name, first).map(|at| if at == 0 { 1 } else { 3 - u8::from(word(at)) }).min().unwrap_or(3)
 }
 
 /// The diagrams and the elements whose name or place holds every word of `query`, whatever its
@@ -241,6 +267,20 @@ mod tests {
         };
         let ranks = ["Prüfung", "\u{AD}Prüfungen", "Kunde_prüfung", "Abprüfung"].map(|label| rank(&entry(label), &fold("PRUFUNG")));
         assert_eq!(ranks, [0, 1, 2, 3]);
+        let cases = [
+            ("ﬃles", "fi", 3),
+            ("ffiles", "fi", 3),
+            ("Réorder", "order", 3),
+            ("Re\u{301}order", "order", 3),
+            ("Kunde_order", "order", 2),
+            ("xid-id-id", "id-id", 2),
+            ("ㅋㅠ", "ㅋ", 1),
+        ];
+        for (label, word, wanted) in cases {
+            assert_eq!(rank(&entry(label), &fold(word)), wanted, "{label} {word}");
+        }
+        // The cut never parts a letter from its voicing mark: ハ alone isn't kept.
+        assert_eq!(cut(&format!("{}ハ\u{3099}", "a".repeat(119))), "a".repeat(119));
         assert_eq!((rank(&entry("ハ予定"), &fold("ハ")), rank(&entry("バ"), &fold("ハ"))), (1, 3));
     }
 }

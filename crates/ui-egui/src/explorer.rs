@@ -354,7 +354,7 @@ fn skills_by_subject(store: &Store) -> std::collections::BTreeMap<Obj, Vec<Obj>>
 /// The tree's rows for the store, the opened rows and the filter: a filter shows the rows whose
 /// name holds it and their ancestors, all open.
 pub(crate) fn rows(uis: &[&'static dyn NotationUi], store: &Store, state: &State) -> Vec<Row> {
-    let filter = crate::home_search::Typed::phrase(state.filter.trim());
+    let filter = crate::home_search::Typed::trimmed(&state.filter);
     let t = Tree { store, filter, expanded: &state.expanded, skills: skills_by_subject(store), none: Vec::new() };
     let mut out = Vec::new();
     for (top, ui) in tops(uis, store) {
@@ -604,7 +604,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     // Expand all, or Collapse all once every row is open; a filter opens everything it shows.
     let folds = shell.session.as_ref().map(|s| foldable(shell.notation_uis, s.doc())).unwrap_or_default();
     let all_open = !folds.is_empty() && folds.iter().all(|id| shell.explorer.expanded.contains(id));
-    let unfiltered = shell.explorer.filter.trim().is_empty();
+    let unfiltered = crate::home_search::Typed::trimmed(&shell.explorer.filter).is_empty();
     let fold_all = Rect::from_min_size(pos2(r.right() - 68.0, r.top() + 20.0), Vec2::splat(24.0));
     let can_fold = live && unfiltered && !folds.is_empty();
     let icon = if all_open { &icons::COLLAPSE_ALL } else { &icons::EXPAND_ALL };
@@ -627,7 +627,11 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         None => Vec::new(),
     };
     if rows.is_empty() {
-        let empty = if shell.explorer.filter.trim().is_empty() { tr("No schemas yet") } else { tr("Nothing matches the filter") };
+        let empty = if crate::home_search::Typed::trimmed(&shell.explorer.filter).is_empty() {
+            tr("No schemas yet")
+        } else {
+            tr("Nothing matches the filter")
+        };
         ux::text(&paint, at(36.0, FIRST_ROW), &empty, types::SMALL, p.text_muted, Some((r.width() - 52.0).max(0.0)));
     }
     // A name open on a row the tree does not list (filtered out, or past the most rows drawn) is

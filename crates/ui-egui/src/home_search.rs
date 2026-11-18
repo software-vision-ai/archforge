@@ -187,6 +187,12 @@ impl Typed {
         Typed { words: Some(folder.fold(text)).filter(|w| !w.as_str().is_empty()).into_iter().collect(), folder }
     }
 
+    /// `text` as one piece, folded and then trimmed, so spaces kept by invisible characters
+    /// around it (`\u{200B} prufen \u{200B}`) go too: the Models and Diagrams filters.
+    pub(crate) fn trimmed(text: &str) -> Typed {
+        Typed::phrase(folder().key(text).trim())
+    }
+
     /// Whether nothing was typed, so everything answers.
     pub(crate) fn is_empty(&self) -> bool {
         self.words.is_empty()

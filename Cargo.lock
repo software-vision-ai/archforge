@@ -444,6 +444,7 @@ dependencies = [
  "egui",
  "egui_commonmark",
  "egui_kittest",
+ "icu_properties",
  "log",
  "png",
  "pulldown-cmark",

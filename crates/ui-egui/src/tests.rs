@@ -8067,12 +8067,21 @@ fn the_explorers_filters_ignore_capitals_and_accents() {
             let rows = crate::diagrams::rows(h.state().session.as_ref().unwrap().doc(), &h.state().diagrams, h.state().kinds).rows;
             rows.into_iter().filter(|r| r.kind == crate::diagrams::Kind::Diagram).map(|r| r.label).collect::<Vec<_>>()
         };
-        for (typed, found) in [("bestellung", "Bestellungen prüfen"), ("PRUFEN", "Bestellungen prüfen"), ("STRASSE", "Straße")] {
+        let invisible = "\u{200B} PRUFEN \u{200B}";
+        for (typed, found) in
+            [("bestellung", "Bestellungen prüfen"), ("PRUFEN", "Bestellungen prüfen"), ("STRASSE", "Straße"), (invisible, "Bestellungen prüfen")]
+        {
             h.state_mut().explorer.filter = typed.into();
             h.state_mut().diagrams.filter = typed.into();
             h.run();
             assert_eq!((models(&h), diagrams(&h)), (vec![found.to_string()], vec![found.to_string()]), "{theme:?}: {typed}");
         }
+        // A filter of invisible characters only filters nothing, so Expand all stays on.
+        h.state_mut().explorer.filter = "\u{200B}".into();
+        h.run();
+        let at = rect_of(&h, "workspace.explorer.fold-all").center();
+        click(&mut h, at);
+        assert!(!h.state().explorer.expanded.is_empty(), "{theme:?}");
     });
 }
 

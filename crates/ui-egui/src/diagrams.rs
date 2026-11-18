@@ -241,7 +241,7 @@ pub(crate) fn rows(store: &Store, state: &State, kinds: &[&dyn crate::kinds::Dia
 /// The tree's rows, visiting at most `visits` members of the model to count them and as many to
 /// walk them.
 pub(crate) fn rows_within(store: &Store, state: &State, kinds: &[&dyn crate::kinds::DiagramKind], visits: usize) -> Tree {
-    let typed = crate::home_search::Typed::phrase(state.filter.trim());
+    let typed = crate::home_search::Typed::trimmed(&state.filter);
     let open = !typed.is_empty();
     let mut tree = Tree::default();
     let Some(model) = archforge_core::skills::model_of(store) else { return tree };
@@ -485,7 +485,11 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let tree = Rect::from_min_max(at(0.0, FIRST_ROW - 12.0), pos2(r.right(), if footer { r.bottom() - FOOTER_LINE } else { r.bottom() }));
     // Under the groups, while no group holds a diagram: no diagram yet, or none matching.
     if rows.iter().all(|row| row.count == 0) {
-        let empty = if shell.diagrams.filter.trim().is_empty() { tr("No diagrams yet") } else { tr("Nothing matches the filter") };
+        let empty = if crate::home_search::Typed::trimmed(&shell.diagrams.filter).is_empty() {
+            tr("No diagrams yet")
+        } else {
+            tr("Nothing matches the filter")
+        };
         let y = FIRST_ROW + rows.len() as f32 * ROW;
         ux::text(&paint, at(36.0, y), &empty, types::SMALL, p.text_muted, Some((r.width() - 52.0).max(0.0)));
     }
