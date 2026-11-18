@@ -14,7 +14,7 @@
 use archforge_mof::rows::{Cell, Rows};
 use archforge_mof::schema::{Junction, Table};
 use archforge_mof::{DataKind, MAX_STRING, TypeRef, Universe, Uuid, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use mysql::prelude::Queryable;
 
@@ -67,6 +67,9 @@ const KIND_READ: usize = 256;
 /// The most bytes of a diagram's kind given: a longer kind is cut there, at a character's end, and
 /// is no known kind.
 const KIND_BYTES: usize = 256;
+/// The longest kind in bytes that is read at all: a longer one is a text no model holds, which the
+/// model's reading refuses too, so it is refused before any of it is converted.
+const KIND_LONGEST: u64 = (MAX_STRING * 4) as u64;
 
 /// The model's tables as the project stores them: the generated tables and junctions with the SQL
 /// type of each junction's value, and their fingerprint.
@@ -336,7 +339,9 @@ impl Project {
     /// [`KIND_BYTES`]. Only `diagram_diagram.kind` is read, raw and at most [`KIND_READ`] characters
     /// of each, so it works on every shape that table has had, before the project is prepared, and
     /// writes nothing; a branch without that table holds no diagrams. A branch whose rename is
-    /// unclear is held as for every other reading ([`Error::BranchUnclear`]).
+    /// unclear is held as for every other reading ([`Error::BranchUnclear`]). The work is bounded
+    /// as the model's reading is: rows past its limit, or a kind longer than [`KIND_LONGEST`], are
+    /// refused, the kinds are streamed with no sorting on the server, and a long one is not read.
     pub fn unknown_diagram_kinds(&self, branch: &SafeBranch, known: &[&str]) -> Result<Vec<String>, Error> {
         let damaged = |why: String| Error::Damaged { path: self.path().to_path_buf(), why };
         let mut c = self.connection_to(branch)?;
@@ -355,16 +360,16 @@ impl Project {
         // `LEFT` counts characters, so the cut to bytes is made here, once a kind is decided.
         let most = known.len().saturating_add(MOST_UNKNOWN_KINDS);
         let query = format!(
-            "SELECT DISTINCT CAST(CONVERT(LEFT(`kind`, {KIND_READ}) USING utf8mb4) AS BINARY) AS k FROM `{DIAGRAMS}` ORDER BY k LIMIT {most}"
+            "SELECT OCTET_LENGTH(`kind`), CASE WHEN OCTET_LENGTH(`kind`) <= {KIND_LONGEST} THEN CAST(CONVERT(LEFT(`kind`, {KIND_READ}) USING utf8mb4) AS BINARY) END FROM `{DIAGRAMS}` LIMIT {}",
+            MAX_TABLE_ROWS + 1
         );
         let unreadable = |e: mysql::Error| damaged(format!("the diagrams' kinds cannot be read: {e}"));
+        let rows = c.query_iter(query).map_err(unreadable)?.map(|row| {
+            let row = row.map_err(unreadable)?;
+            Ok((row.get_opt::<u64, usize>(0).and_then(Result::ok), row.as_ref(1).cloned().unwrap_or(mysql::Value::NULL)))
+        });
         let mut unknown = Vec::new();
-        for row in c.query_iter(query).map_err(unreadable)? {
-            let kind = match row.map_err(unreadable)?.as_ref(0) {
-                Some(mysql::Value::Bytes(bytes)) => bytes.clone(),
-                Some(mysql::Value::NULL) | None => Vec::new(),
-                Some(_) => return Err(damaged("a diagram's kind is not text".into())),
-            };
+        for kind in first_kinds(rows, most, MAX_TABLE_ROWS, self.path())? {
             let shown = crate::chat::cut_bytes(&String::from_utf8_lossy(&kind), KIND_BYTES).0.to_string();
             if !known.iter().any(|k| k.as_bytes() == kind) && !unknown.contains(&shown) && unknown.len() < MOST_UNKNOWN_KINDS {
                 unknown.push(shown);
@@ -782,6 +787,36 @@ fn within_rows(table: &str, held: usize) -> Result<(), Error> {
     Ok(())
 }
 
+/// The first `most` of the distinct kinds `rows` gives, in byte order, a kind left empty as none.
+/// Each row is a kind's length in bytes and what was read of it. Past `max_rows` rows the diagrams
+/// are too large, and a kind longer than [`KIND_LONGEST`] is no text of a model: both are refused,
+/// as the model's reading refuses them.
+fn first_kinds(
+    rows: impl Iterator<Item = Result<(Option<u64>, mysql::Value), Error>>,
+    most: usize,
+    max_rows: usize,
+    path: &std::path::Path,
+) -> Result<BTreeSet<Vec<u8>>, Error> {
+    let mut kinds = BTreeSet::new();
+    for (held, row) in rows.enumerate() {
+        if held >= max_rows {
+            return Err(Error::ModelTooLarge { why: format!("the table {DIAGRAMS} has more than {max_rows} rows") });
+        }
+        let damaged = |why: String| Error::Damaged { path: path.to_path_buf(), why };
+        let kind = match row? {
+            (Some(length), _) if length > KIND_LONGEST => return Err(damaged(format!("a diagram's kind is longer than {KIND_LONGEST} bytes"))),
+            (_, mysql::Value::Bytes(bytes)) => bytes,
+            (_, mysql::Value::NULL) => Vec::new(),
+            _ => return Err(damaged("a diagram's kind is not text".into())),
+        };
+        kinds.insert(kind);
+        if kinds.len() > most {
+            kinds.pop_last();
+        }
+    }
+    Ok(kinds)
+}
+
 /// What a reading has taken so far of the whole model's budgets.
 #[derive(Default)]
 struct Budget {
@@ -1149,6 +1184,22 @@ fn from_sql(v: &mysql::Value, sql: &str) -> Result<Cell, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The first kinds are the smallest distinct ones, at most `most`, NULL as none; past the rows,
+    /// or with a kind longer than any text, the reading is refused.
+    #[test]
+    fn the_first_kinds_are_the_smallest_distinct_ones_within_the_budgets() {
+        let path = std::path::Path::new("/p");
+        let row = |k: &str| Ok((Some(k.len() as u64), mysql::Value::Bytes(k.into())));
+        let first = first_kinds(["c", "a", "b", "a", "d"].map(row).into_iter(), 3, 5, path).unwrap();
+        assert_eq!(first.into_iter().collect::<Vec<_>>(), [b"a".to_vec(), b"b".to_vec(), b"c".to_vec()]);
+        let empty = first_kinds([Ok((None, mysql::Value::NULL)), row("")].into_iter(), 3, 5, path).unwrap();
+        assert_eq!(empty.into_iter().collect::<Vec<_>>(), [Vec::<u8>::new()]);
+        assert!(matches!(first_kinds(["a", "b"].map(row).into_iter(), 3, 1, path), Err(Error::ModelTooLarge { .. })));
+        let long = Ok((Some(KIND_LONGEST + 1), mysql::Value::NULL));
+        assert!(matches!(first_kinds([row("a"), long].into_iter(), 3, 5, path), Err(Error::Damaged { .. })));
+        assert!(first_kinds([Ok((Some(KIND_LONGEST), mysql::Value::Bytes(b"x".to_vec())))].into_iter(), 3, 5, path).is_ok());
+    }
 
     /// Past a read budget the model is too large, not damaged: a table's rows, its cells or its bytes.
     #[test]

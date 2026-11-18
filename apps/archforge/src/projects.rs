@@ -1252,8 +1252,8 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
         let project = Project::open(&dolt, &opts, path).map_err(kind)?;
         // Before anything that writes (recovery, the stored branch's checks, the preparation):
         // refused as it is, with no tab opened.
-        let fallback = match known_kinds_only(&project, stored) {
-            Ok(fallback) => fallback,
+        let unread = match known_kinds_only(&project, stored) {
+            Ok(unread) => unread,
             Err(e) => {
                 let _ = project.close();
                 return Err(e);
@@ -1268,9 +1268,18 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
         }
         project.recover_creation();
         let read = schema(inner).and_then(|s| {
-            let notice = stored.and_then(|name| project.open_on_stored(name, &s).err().map(|e| branch_notice(name, e)));
-            // Fallen back to a `main` whose kinds could not be read: refused with why, unwritten.
-            if let Some(e) = fallback.filter(|_| project.current_branch().same_branch(&SafeBranch::default())) {
+            let notice = match (unread.stored, stored) {
+                // A stored branch whose kinds were not read is not opened, so not written: `main` is.
+                (Some(why), Some(name)) => {
+                    project.set_current_branch(SafeBranch::default());
+                    Some(branch_notice(name, why))
+                }
+                _ => stored.and_then(|name| project.open_on_stored(name, &s).err().map(|e| branch_notice(name, e))),
+            };
+            // Fallen back to a `main` whose kinds could not be read: refused with why, before it is
+            // prepared. Before this, only recovery and the stored branch's checks ran, and they wrote
+            // to no branch whose kinds were not read and known.
+            if let Some(e) = unread.main.filter(|_| project.current_branch().same_branch(&SafeBranch::default())) {
                 return Err(e);
             }
             project.prepare_model(&s).map_err(kind)?;
@@ -1313,17 +1322,20 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
 /// names and `main`, are of kinds no notation knows, naming those kinds as stored, the stored
 /// branch's first, each once and at most [`MOST_UNKNOWN_KINDS`]: read raw, so before anything is
 /// written. A stored branch that is gone, or whose name is not one, opens nowhere and is not read;
-/// one whose kinds cannot be read is left to its own checks, which open `main` with the reason when
-/// they fail too, so a damaged branch never keeps the project from opening. Once the stored branch
-/// is read, `main` is only where the opening falls back to: a `main` whose kinds cannot be read then
-/// refuses only that fallback, with the reason given back here.
-fn known_kinds_only(project: &Project, stored: Option<&str>) -> Result<Option<CreateError>, CreateError> {
+/// one whose kinds cannot be read is not opened, so never written, and `main` opens with the reason,
+/// so a damaged branch never keeps the project from opening. Once the stored branch is read, `main`
+/// is only where the opening falls back to: a `main` whose kinds cannot be read then refuses only
+/// that fallback, with the reason given back here.
+fn known_kinds_only(project: &Project, stored: Option<&str>) -> Result<KindsUnread, CreateError> {
     let (known, main) = (archforge_notations::kinds(), SafeBranch::default());
-    let (mut kinds, mut read) = (Vec::new(), false);
+    let (mut kinds, mut read, mut unread) = (Vec::new(), false, None);
     if let Some(branch) = stored.and_then(|name| project.branch_named(name).ok()).filter(|b| !b.same_branch(&main)) {
         match project.unknown_diagram_kinds(&branch, &known) {
             Ok(found) => (kinds, read) = (found, true),
-            Err(e) => log::warn!("the diagram kinds of {} on {} were not read: {e}", project.path().display(), branch.stored()),
+            Err(e) => {
+                log::warn!("the diagram kinds of {} on {} were not read: {e}", project.path().display(), branch.stored());
+                unread = Some(archforge_project::StoredBranch::CannotOpen(e.to_string()));
+            }
         }
     }
     let fallback = match project.unknown_diagram_kinds(&main, &known) {
@@ -1337,7 +1349,14 @@ fn known_kinds_only(project: &Project, stored: Option<&str>) -> Result<Option<Cr
         }
         Err(e) => return Err(kind(e)),
     };
-    if kinds.is_empty() { Ok(fallback) } else { Err(CreateError::UnsupportedKinds { kinds }) }
+    if kinds.is_empty() { Ok(KindsUnread { stored: unread, main: fallback }) } else { Err(CreateError::UnsupportedKinds { kinds }) }
+}
+
+/// What an opening goes on with once the kinds were read: why the stored branch is not opened, its
+/// kinds not having been read, and why `main` may not be fallen back to, its kinds not having been.
+struct KindsUnread {
+    stored: Option<archforge_project::StoredBranch>,
+    main: Option<CreateError>,
 }
 
 /// Adds `more` to `kinds` after them, a kind already there not again, until there are
@@ -5981,7 +6000,8 @@ mod tests {
     /// Diagrams of kinds no notation knows, on `main` or on the branch the project was left on,
     /// refuse the opening with their kinds, as the window takes them, before anything is written:
     /// no recovery, no upgrade of an earlier fingerprint, no tab; another open project reads as
-    /// before. A branch it could not open on is not read.
+    /// before. A branch it could not open on is not read, and one whose kinds cannot be read is not
+    /// written.
     #[test]
     fn a_project_holding_diagrams_of_unknown_kinds_is_refused_before_anything_is_written() {
         let (sandbox, path) = branched();
@@ -6020,15 +6040,20 @@ mod tests {
         closed(host, &path, |p| p.run_on_branch("main", "UPDATE diagram_diagram SET kind = 'er'"));
         assert_eq!(wait(&host.open_on(&path, Some("kinds"))), refused(&["other.kind"]));
         assert!(wait(&host.open(&path)).is_ok());
-        // Left on a branch whose kinds cannot be read, it opens on `main` and says why.
+        // Left on a branch whose kinds cannot be read, it opens on `main`, says why, and that branch
+        // (of an earlier fingerprint, which its checks would upgrade) is not written.
         close(host, &path).unwrap();
-        closed(host, &path, |p| {
-            p.run_on_branch("kinds", "DROP TABLE diagram_diagram")?;
-            p.run_on_branch("kinds", "CREATE VIEW diagram_diagram AS SELECT 'other.kind' AS kind")
-        });
+        closed(host, &path, |p| p.run_on_branch("kinds", "UPDATE diagram_diagram SET kind = REPEAT('x', 262141)"));
+        let unread = on_disk(host, &path)[1].clone();
         let opened = wait(&host.open_on(&path, Some("kinds"))).unwrap();
-        assert!(matches!(&opened.notice, Some(BranchNotice::CannotOpen { name, .. }) if name == "kinds"), "{:?}", opened.notice);
+        assert!(
+            matches!(&opened.notice, Some(BranchNotice::CannotOpen { name, why }) if name == "kinds" && why.contains("longer than")),
+            "{:?}",
+            opened.notice
+        );
         assert_eq!(lock(&host.inner.open).iter().find(|p| p.path() == path).unwrap().current_branch().stored(), "main");
+        close(host, &path).unwrap();
+        assert_eq!(on_disk(host, &path)[1], unread, "the branch whose kinds were not read is not written");
     }
 
     /// Once the branch it was left on is read, a `main` whose kinds cannot be read keeps the project
