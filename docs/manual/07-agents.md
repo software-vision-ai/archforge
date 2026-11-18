@@ -655,12 +655,14 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   classifier and a package outside the model. An element cannot depend on itself, while a cycle
   of dependencies is allowed. Two ends, no dependency on itself and both ends in one model are
   Archforge's own rules, not UML's. `element_remove` refuses a package, or a package taken along
-  with another, while a dependency that stays has it as its supplier, naming the package, the
-  dependency's client and the dependency's id; remove that dependency first with `element_remove`
-  and its id. A package client's own dependencies go with it, with the constraints that name only
-  them. `uml_relationship_reconnect` of a dependency's source moves the dependency to its new
-  client's package in the same step; a new target leaves its owner as it is.
-  `uml_relationship_rename` renames a dependency between packages in a project with no classifier.
+  with another, while a dependency that stays has it as its client or its supplier, naming the
+  package, the dependency's id and its other end; remove that dependency first with
+  `element_remove` and its id. For now this holds for both ends; a later version removes such
+  dependencies with the package instead. `uml_relationship_reconnect` of a dependency's source moves
+  the dependency to its new client's package in the same step; a new target leaves its owner as it
+  is. A dependency with more than one client or supplier, or a new end outside the model, is
+  refused. `uml_relationship_rename` renames a dependency between packages in a project with no
+  classifier.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element

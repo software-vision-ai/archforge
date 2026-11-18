@@ -261,14 +261,9 @@ fn a_dependency_joins_packages_and_classifiers_of_every_kind_owned_by_a_package_
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let billing = run(&mut s, "uml.package.add", json!({ "name": "billing" }));
-    let before = snapshot(&s);
-    let first = run(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": billing }));
-    let after = snapshot(&s);
-    assert_eq!(owner(&s, &first), obj(&s, &sales), "the package client owns it");
-    s.undo().unwrap();
-    assert_eq!(snapshot(&s), before, "undo is exact");
-    s.redo().unwrap();
-    assert_eq!(snapshot(&s), after, "redo is exact");
+    round_trip(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": billing }));
+    let held = s.doc().list(obj(&s, &sales), archforge_uml::package::PACKAGED_ELEMENT).unwrap();
+    assert_eq!(held.iter().filter_map(Value::as_ref).map(|o| s.doc().class_of(o).unwrap()).collect::<Vec<_>>(), [archforge_uml::DEPENDENCY]);
     let back = run(&mut s, "uml.dependency.add", json!({ "client": billing, "supplier": sales }));
     assert_eq!(owner(&s, &back), obj(&s, &billing), "a cycle is allowed, owned by its own client");
     let nested = run(&mut s, "uml.package.add", json!({ "name": "ledger", "parent": billing }));
@@ -324,8 +319,7 @@ fn a_dependency_end_that_is_no_package_or_classifier_is_refused_typed_with_nothi
     let comment = s.doc().uuid(comment).unwrap().to_string();
     let profile = run(&mut s, "uml.profile.add", json!({ "name": "Persistence" }));
     let entity = run(&mut s, "uml.stereotype.add", json!({ "profile": profile, "name": "Entity", "extends": ["Class"] }));
-    let metaclass = archforge_uml::profiles::extensions(s.doc(), obj(&s, &entity))[0].metaclass;
-    let metaclass = s.doc().uuid(metaclass).unwrap().to_string();
+    let metaclass = s.doc().uuid(archforge_uml::profiles::extensions(s.doc(), obj(&s, &entity))[0].metaclass).unwrap().to_string();
     let library = s.doc().uuid(archforge_uml::profiles::library(s.doc()).unwrap()).unwrap().to_string();
     let wrong = |end, kind| Some(Reason::WrongEnd { relationship: "dependency", end, kind });
     let cases = [
@@ -350,26 +344,34 @@ fn a_dependency_end_that_is_no_package_or_classifier_is_refused_typed_with_nothi
 
 /// A package outside the project's model is refused at either end of a dependency, joining two
 /// elements of one model being Archforge's own rule, and so is a classifier client in no package;
-/// a dependency held by no package is attached to its new client's package when its source is
-/// reconnected. No command makes these, but a loaded document may hold them (AR-696).
+/// a reconnect is refused for a dependency of several clients or onto a class outside the model,
+/// and one held by no package is attached to its new client's package. No command makes these,
+/// but a loaded document may hold them (AR-696).
 #[test]
 fn a_package_outside_the_model_or_a_classifier_client_in_no_package_is_refused_and_a_loose_dependency_attached() {
     use archforge_uml::{CLASS, DEPENDENCY, PACKAGE, dependency, package};
     let mut st = store(0);
     let model = st.create(archforge_core::MODEL).unwrap();
-    let [sales, stray, loose, order, d] = [PACKAGE, PACKAGE, CLASS, CLASS, DEPENDENCY].map(|c| st.create(c).unwrap());
+    let [sales, stray, loose, order, away, d, twice] = [PACKAGE, PACKAGE, CLASS, CLASS, CLASS, DEPENDENCY, DEPENDENCY].map(|c| st.create(c).unwrap());
     st.push(model, archforge_core::model::MEMBER, Value::Ref(sales)).unwrap();
     st.push(model, archforge_core::model::MEMBER, Value::Ref(loose)).unwrap();
     st.push(sales, package::PACKAGED_ELEMENT, Value::Ref(order)).unwrap();
-    st.push(d, dependency::CLIENT, Value::Ref(loose)).unwrap();
+    st.push(stray, package::PACKAGED_ELEMENT, Value::Ref(away)).unwrap();
+    for (dep, client) in [(d, loose), (twice, loose), (twice, order)] {
+        st.push(dep, dependency::CLIENT, Value::Ref(client)).unwrap();
+    }
     st.push(d, dependency::SUPPLIER, Value::Ref(sales)).unwrap();
-    let [sales, stray, loose, order, d] = [sales, stray, loose, order, d].map(|o| st.uuid(o).unwrap().to_string());
+    st.push(twice, dependency::SUPPLIER, Value::Ref(sales)).unwrap();
+    let [sales, stray, loose, order, away, d, twice] = [sales, stray, loose, order, away, d, twice].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
     refused(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": stray }), "supplier: ");
     refused(&mut s, "uml.dependency.add", json!({ "client": stray, "supplier": sales }), "client: ");
     refused(&mut s, "uml.dependency.add", json!({ "client": loose, "supplier": sales }), "client: the class is in no package");
     run(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": loose }));
-    round_trip(&mut s, "uml.relationship.reconnect", json!({ "relationship": d, "end": "source", "class": order }));
+    let reconnect = |d: &str, class: &str| json!({ "relationship": d, "end": "source", "class": class });
+    refused(&mut s, "uml.relationship.reconnect", reconnect(&twice, &order), "does not join one client to one supplier");
+    refused(&mut s, "uml.relationship.reconnect", reconnect(&d, &away), &format!("class: {away} is outside this project's model"));
+    round_trip(&mut s, "uml.relationship.reconnect", reconnect(&d, &order));
     assert_eq!(owner(&s, &d), obj(&s, &sales), "attached to the new client's package");
 }
 
@@ -382,15 +384,11 @@ fn a_dependency_between_two_package_nodes_draws_dashed_with_an_open_arrow() {
     let (pkg, d, _, _) = classes(&mut s, &["Order"], 0);
     let billing = run(&mut s, "uml.package.add", json!({ "name": "billing" }));
     let ledger = run(&mut s, "uml.package.add", json!({ "name": "ledger", "parent": pkg }));
-    let nodes: Vec<String> = [&billing, &ledger]
-        .iter()
-        .enumerate()
-        .map(|(i, p)| run(&mut s, "diagram.place", json!({ "diagram": d, "element": p, "x": 400 * i, "y": 0 })))
-        .collect();
+    let place = |s: &mut S, p: &str, x: i32| run(s, "diagram.place", json!({ "diagram": d, "element": p, "x": x, "y": 0 }));
+    let nodes = [place(&mut s, &billing, 0), place(&mut s, &ledger, 400)];
     let dep = run(&mut s, "uml.dependency.add", json!({ "client": ledger, "supplier": billing }));
     round_trip(&mut s, "diagram.connect", json!({ "diagram": d, "element": dep, "source": nodes[1], "target": nodes[0] }));
-    let edges = s.doc().list(obj(&s, &d), archforge_diagram::diagram::EDGE).unwrap();
-    assert_eq!(edges.len(), 1, "the line is on the diagram");
+    assert_eq!(s.doc().list(obj(&s, &d), archforge_diagram::diagram::EDGE).unwrap().len(), 1, "the line is on the diagram");
     let line = archforge_diagram::Notation::line(&archforge_uml::UmlNotation, s.doc(), obj(&s, &dep)).unwrap();
     assert!(line.dashed, "dashed");
     assert_eq!(marks(&s, &dep), [M::None, M::OpenArrow], "an open arrow at the supplier");

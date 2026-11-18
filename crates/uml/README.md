@@ -108,11 +108,11 @@ metaclass; a package client owns the dependency, a classifier client's home pack
 otherwise; any other end refused typed as `Reason::WrongEnd`, an element depending on itself as
 `DependsOnItself`, and a cycle of dependencies allowed; two ends, no dependency on itself and
 both ends in one model are Archforge's rules, not UML's; `element.remove` refuses a package,
-or one a package with no parent takes along, while a dependency that stays has it as its supplier
-(`Reason::DependencySupplier`, naming the dependency's id, until 402-C, AR-698, removes such
-dependencies with the package), and a nested package keeps the dependencies it is the client of,
-which go with it and with the constraints that name only them, rather than handing them up; a
-dependency's new client takes it to the package that owns its dependencies in the same step, and
+or one a package with no parent takes along, while a dependency that stays has it as its client or
+its supplier (`Reason::DependencyEnd`, naming the dependency's id and its other end), until 402-C,
+AR-698, replaces both refusals by removing such dependencies with the package; a dependency's new
+client takes it to the package that owns its dependencies in the same step, a reconnect of a
+dependency with several clients or suppliers, or onto an end outside the model, refused; and
 `uml.relationship.rename` is open while a classifier or a package exists; `uml.realization.add`: a class
 realizes an interface, owned by the class, its client and supplier kept in step with its
 implementing classifier and contract; reconnected through `uml.relationship.reconnect` and removed

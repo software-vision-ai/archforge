@@ -3,13 +3,12 @@
 //! diagrams up to its parent (owner decision, for every notation), a top-level one taking them
 //! along, either taking its default-diagram bindings along (AR-577), and a class of another package
 //! drawn as an outsider; a package's card naming its owners from the root down (AR-564); a package
-//! a dependency stays on kept, and a package client's dependencies taken along (AR-696); each one
-//! undo step; the sweep.
+//! a dependency that stays starts at or depends on kept (AR-696); each one undo step; the sweep.
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
 use archforge_engine::testing::sweep_with;
-use archforge_engine::{Options, Session};
+use archforge_engine::{End, Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, PropId, Store, Uuid, Value};
 use archforge_uml::defaults::problems;
 use archforge_uml::{ALONE, PACKAGE, STRUCTURE_DIAGRAM, registry};
@@ -301,80 +300,81 @@ fn refusal(s: &mut S, cmd: &str, p: Json) -> (Option<archforge_engine::Reason>, 
     (error.reason, error.message)
 }
 
-/// The reason a package that a dependency stays on is kept for, naming the dependency.
-fn kept(package: &str, client: &str, dependency: &str) -> Option<archforge_engine::Reason> {
-    let of = archforge_engine::SupplierOf { package: package.into(), client: client.into(), dependency: dependency.into() };
-    Some(archforge_engine::Reason::DependencySupplier(Box::new(of)))
+/// The reason a package that is the `end` of a dependency that stays is kept for, naming the
+/// dependency and its other end.
+fn kept(package: &str, end: End, other: &str, dependency: &str) -> Option<archforge_engine::Reason> {
+    let of = archforge_engine::DependencyOf { package: package.into(), end, other: other.into(), dependency: dependency.into() };
+    Some(archforge_engine::Reason::DependencyEnd(Box::new(of)))
 }
 
-/// A package a staying dependency has as supplier, deeper or right under the root, is kept, the
-/// refusal naming it, the dependency and its client (AR-696); it goes once the dependency goes, or
-/// its client with it, a package it holds handed up with its dependency. A package client takes its
-/// own dependencies along, with constraints naming only them, as does a removal of both ends.
+/// A package that a dependency which stays has as client or supplier, deeper or right under the
+/// root, is kept until AR-698, the refusal naming it, the dependency and its other end; it goes
+/// once the dependency goes, or its classifier client with it, a package it holds handed up with
+/// its dependency, Undo and Redo exact (AR-696).
 #[test]
-fn a_package_a_dependency_stays_on_is_kept_and_a_package_client_takes_its_dependencies_along() {
+fn a_package_a_dependency_that_stays_starts_at_or_depends_on_is_kept_until_the_dependency_goes() {
     let mut s = session();
     let add = |s: &mut S, name: &str, parent: Option<&str>| run(s, "uml.package.add", json!({ "name": name, "parent": parent }));
     let sales = add(&mut s, "sales", None);
     let billing = add(&mut s, "billing", None);
     let ledger = add(&mut s, "ledger", Some(&billing));
+    let audit = add(&mut s, "audit", Some(&sales));
     let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
     let depend = |s: &mut S, client: &str, supplier: &str| run(s, "uml.dependency.add", json!({ "client": client, "supplier": supplier }));
-    let on_ledger = depend(&mut s, &order, &ledger);
-    let on_billing = depend(&mut s, &sales, &billing);
-    for (package, client, name, d) in [(&ledger, "Order", "ledger", &on_ledger), (&billing, "sales", "billing", &on_billing)] {
+    let [on_ledger, on_billing, from_audit] = [(&order, &ledger), (&sales, &billing), (&audit, &billing)].map(|(c, p)| depend(&mut s, c, p));
+    let cases = [
+        (&ledger, "ledger", End::Target, "Order", &on_ledger),
+        (&billing, "billing", End::Target, "sales", &on_billing),
+        (&sales, "sales", End::Source, "billing", &on_billing),
+        (&audit, "audit", End::Source, "billing", &from_audit),
+    ];
+    for (package, name, end, other, d) in cases {
         let (reason, message) = refusal(&mut s, "element.remove", json!({ "ids": [package] }));
-        assert_eq!(reason, kept(name, client, d));
-        assert!(message.contains(&format!("the dependency {d} from {client}, which stays; remove that dependency first")), "{message}");
+        assert_eq!(reason, kept(name, end, other, d));
+        let link = if end == End::Source { "on" } else { "from" };
+        assert!(message.contains(&format!("the dependency {d} {link} {other}, which stays; remove that dependency first")), "{message}");
     }
-    run(&mut s, "element.remove", json!({ "ids": [on_billing] }));
+    run(&mut s, "element.remove", json!({ "ids": [on_billing, from_audit] }));
     round_trip(&mut s, "element.remove", json!({ "ids": [billing] }));
     assert!(alive(&s, &ledger) && alive(&s, &on_ledger), "ledger went up with its dependency");
     // A dependency that goes with its classifier client lets its supplier go in the same step.
     round_trip(&mut s, "element.remove", json!({ "ids": [order, ledger] }));
     assert!(!alive(&s, &on_ledger) && !alive(&s, &ledger));
-    // A package client, deeper or right under the root package, and both ends at once, take the
-    // dependency along.
-    let tax = add(&mut s, "tax", None);
-    let audit = add(&mut s, "audit", Some(&sales));
-    let reports = add(&mut s, "reports", None);
-    let rates = add(&mut s, "rates", Some(&sales));
-    let deps = [depend(&mut s, &audit, &tax), depend(&mut s, &reports, &tax), depend(&mut s, &audit, &rates)];
-    // A constraint naming only a dependency that goes with its client package goes too.
-    let rule = json!({ "context": sales, "expression": "audited", "constrained": [deps[0]] });
-    let rule = run(&mut s, "uml.constraint.add", rule);
-    round_trip(&mut s, "element.remove", json!({ "ids": [audit, rates] }));
-    assert!(!alive(&s, &rule), "the constraint went with the dependency it named");
-    round_trip(&mut s, "element.remove", json!({ "ids": [reports] }));
-    assert!(deps.iter().all(|d| !alive(&s, d)), "each went with its client");
-    assert!(alive(&s, &tax) && alive(&s, &sales));
+    round_trip(&mut s, "element.remove", json!({ "ids": [audit] }));
+    round_trip(&mut s, "element.remove", json!({ "ids": [sales] }));
 }
 
-/// A parentless package, as a loaded document may hold, is kept while a package it takes along is
-/// any supplier of a dependency that stays elsewhere (AR-696).
+/// A parentless package, as a loaded document may hold, takes what it holds along, the
+/// dependencies inside it among them, so it is kept while a package it takes along is any supplier
+/// of a dependency that stays elsewhere, and goes once that dependency goes (AR-696).
 #[test]
 fn a_package_with_no_parent_is_kept_while_a_package_it_takes_along_is_a_dependency_s_supplier() {
     use archforge_uml::{dependency, named_element, package};
     let mut st = store(0);
     let model = st.create(archforge_core::MODEL).unwrap();
     let [top, inner, other] = [(); 3].map(|_| st.create(PACKAGE).unwrap());
-    let (order, d) = (st.create(archforge_uml::CLASS).unwrap(), st.create(archforge_uml::DEPENDENCY).unwrap());
+    let [order, d, e] = [archforge_uml::CLASS, archforge_uml::DEPENDENCY, archforge_uml::DEPENDENCY].map(|c| st.create(c).unwrap());
     for p in [top, other] {
         st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
     }
     st.set(order, named_element::NAME, Value::Str("Order".into())).unwrap();
     st.set(inner, named_element::NAME, Value::Str("ledger".into())).unwrap();
-    for (owner, held) in [(top, inner), (other, order), (other, d)] {
+    for (owner, held) in [(top, inner), (other, order), (other, d), (inner, e)] {
         st.push(owner, package::PACKAGED_ELEMENT, Value::Ref(held)).unwrap();
     }
     st.push(d, dependency::CLIENT, Value::Ref(order)).unwrap();
     // A second supplier past a first that stays, as a loaded document may have it.
     st.push(d, dependency::SUPPLIER, Value::Ref(other)).unwrap();
     st.push(d, dependency::SUPPLIER, Value::Ref(inner)).unwrap();
-    let (top, d) = (st.uuid(top).unwrap().to_string(), st.uuid(d).unwrap().to_string());
+    st.push(e, dependency::CLIENT, Value::Ref(inner)).unwrap();
+    st.push(e, dependency::SUPPLIER, Value::Ref(other)).unwrap();
+    let [top, d, e] = [top, d, e].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = over(st);
     let (reason, _) = refusal(&mut s, "element.remove", json!({ "ids": [top] }));
-    assert_eq!(reason, kept("ledger", "Order", &d));
+    assert_eq!(reason, kept("ledger", End::Target, "Order", &d));
+    run(&mut s, "element.remove", json!({ "ids": [d] }));
+    round_trip(&mut s, "element.remove", json!({ "ids": [top] }));
+    assert!(!alive(&s, &e), "the dependency inside went along with its client");
 }
 
 /// A package of another branch, the root, an owner of the diagram's package and that package

@@ -6743,11 +6743,13 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let foreign = "Vertrieb hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. \
                        Wählen Sie zuerst eines seiner eigenen Klassendiagramme.";
         assert_eq!(kept(Some(WrongOwner)), foreign, "{theme:?}");
-        // A package a dependency that stays depends on is kept (AR-696).
-        let of = archforge_engine::SupplierOf { package: "Buchhaltung".into(), client: "Auftrag".into(), dependency: "d-7".into() };
-        let supplier = archforge_engine::Reason::DependencySupplier(Box::new(of));
-        let said = "Die Abhängigkeit d-7 von Auftrag hängt von Buchhaltung ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
-        assert_eq!(crate::panels::said(&supplier).as_deref(), Some(said), "{theme:?}");
+        // A package a dependency that stays depends on, or starts at, is kept (AR-696).
+        use archforge_engine::End::{Source, Target};
+        let of = |end| archforge_engine::DependencyOf { package: "Buchhaltung".into(), end, other: "Auftrag".into(), dependency: "d-7".into() };
+        let said = |end| crate::panels::said(&archforge_engine::Reason::DependencyEnd(Box::new(of(end))));
+        let to = "Die Abhängigkeit d-7 von Auftrag hängt von Buchhaltung ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
+        let from = "Buchhaltung hängt über die Abhängigkeit d-7 von Auftrag ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
+        assert_eq!([said(Target), said(Source)], [Some(to.into()), Some(from.into())], "{theme:?}");
         // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
         use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
         let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };

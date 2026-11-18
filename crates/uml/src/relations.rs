@@ -1159,8 +1159,15 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
             crate::bindings::reconnect(ctx.doc, r, source, c)?;
         }
     } else {
+        // Only one client to one supplier is reconnected, and only within the model (AR-696).
+        if list(ctx.doc, r, dependency::CLIENT).len() != 1 || list(ctx.doc, r, dependency::SUPPLIER).len() != 1 {
+            return Err(refuse(key, "the dependency does not join one client to one supplier; remove it and draw it again"));
+        }
         let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two elements"))?;
         let (cl, su) = if source { (c, supplier) } else { (client, c) };
+        if let Some(o) = [cl, su].into_iter().find(|o| !crate::constraints::in_model(ctx.doc, *o)) {
+            return Err(refuse("class", format!("{} is outside this project's model, which a dependency stays within", uuid_of(ctx.doc, o)?)));
+        }
         if cl == su {
             let why = Reason::DependsOnItself { kind: crate::commands::what(ctx.doc, cl) };
             return Err(refuse("class", format!("{} cannot depend on itself", a_what(ctx.doc, cl))).because(why));

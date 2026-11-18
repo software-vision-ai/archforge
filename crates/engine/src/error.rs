@@ -491,9 +491,9 @@ pub enum Reason {
     /// replace first; with [`BindingFault::WrongOwner`], it is another element's diagram, which the
     /// binding names unsoundly, so a diagram of the package's own has to be chosen first (AR-578).
     DefaultDiagramOf { package: Box<str>, fault: Option<BindingFault> },
-    /// A package stays while it is the supplier of a dependency that stays, which has to be
-    /// removed first (AR-696); boxed, so the error stays small.
-    DependencySupplier(Box<SupplierOf>),
+    /// A package stays while it is the client or the supplier of a dependency that stays, which has
+    /// to be removed first (AR-696); boxed, so the error stays small.
+    DependencyEnd(Box<DependencyOf>),
     /// The class diagram `diagram` is not one of `package`'s own (each its name, or its id when it
     /// has none), so it cannot be that package's default diagram (AR-580).
     NotOwnDiagram { diagram: Box<str>, package: Box<str> },
@@ -778,13 +778,15 @@ pub struct InUse {
     pub uses: Vec<(String, Vec<String>, usize)>,
 }
 
-/// What a [`Reason::DependencySupplier`] names; boxed in the reason, so the error stays small.
+/// What a [`Reason::DependencyEnd`] names; boxed in the reason, so the error stays small.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SupplierOf {
+pub struct DependencyOf {
     /// The package, by its name, or its id when it has none.
     pub package: String,
-    /// The dependency's client, by its name, or its id when it has none.
-    pub client: String,
+    /// The end the package is: [`End::Source`] for the client, [`End::Target`] for the supplier.
+    pub end: End,
+    /// The dependency's other end, by its name, or its id when it has none.
+    pub other: String,
     /// The dependency's id, which removes it.
     pub dependency: String,
 }

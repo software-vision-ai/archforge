@@ -780,6 +780,7 @@ str		The package's default diagram belongs to another element. Choose one of its
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Ce diagramme est le diagramme par défaut de {package}. Choisissez d’abord un autre diagramme de classes comme diagramme par défaut de {package}.
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} a pour diagramme par défaut le diagramme d’un autre élément, ce diagramme reste donc. Choisissez d’abord l’un de ses propres diagrammes de classes.
 str		The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.	La dépendance {dependency} de {client} dépend de {package}, donc {package} reste. Retirez d’abord cette dépendance.
+str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} dépend de {supplier} par la dépendance {dependency}, donc {package} reste. Retirez d’abord cette dépendance.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Un diagramme ne peut pas se remplacer lui-même lors de sa suppression. Choisissez un autre diagramme comme remplaçant.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Choisissez comme remplaçant soit un diagramme existant, soit un nouveau, mais pas les deux.
 str		A name has to be text.	Un nom doit être du texte.
