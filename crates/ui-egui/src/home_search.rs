@@ -207,13 +207,10 @@ impl Typed {
         self.words.iter().all(|w| texts.iter().any(|t| starts(t, w).next().is_some()))
     }
 
-    /// Whether every word is in one of `texts`; true at once when nothing was typed.
+    /// Whether every word is in one of `texts`; true at once, folding nothing, when nothing was
+    /// typed.
     pub(crate) fn in_any(&self, texts: &[&str]) -> bool {
-        if self.is_empty() {
-            return true;
-        }
-        let folded: Vec<Folded> = texts.iter().map(|t| fold(t)).collect();
-        self.in_folded(&folded.iter().collect::<Vec<_>>())
+        self.words.iter().all(|w| texts.iter().any(|t| starts(&fold(t), w).next().is_some()))
     }
 }
 
@@ -249,7 +246,10 @@ pub(crate) fn starts<'a>(name: &'a Folded, word: &'a str) -> impl Iterator<Item 
         !joins(prev, next)
     };
     let found = move |at: usize| text.get(at..).is_some_and(|t| t.starts_with(word));
-    text.char_indices().map(|(at, _)| at).filter(move |&at| found(at) && edge(at) && edge(at + word.len()))
+    // A word that starts with a mark, its space split or trimmed off (`゛` folds to a space and
+    // U+3099), starts where a space carries that mark; never on a letter, so `ハ` keeps out of `バ`.
+    let carried = move |at: usize| text.get(..at).and_then(|t| t.chars().next_back()).is_some_and(char::is_whitespace);
+    text.char_indices().map(|(at, _)| at).filter(move |&at| found(at) && (edge(at) || carried(at)) && edge(at + word.len()))
 }
 
 /// The rows for the query: the matching recent projects, then the projects in the pinned folders
@@ -580,6 +580,9 @@ mod tests {
         // Folded once, as the name is: a second fold would put the nukta before the virama.
         let marks = "क\u{94D}\u{200B}\u{93C}";
         assert!(Typed::trimmed(marks).in_any(&[marks]) && Typed::words(marks).in_any(&[marks]));
+        // ゛ folds to a space and a voicing mark: the mark, split or trimmed off its space, finds it.
+        assert!(Typed::words("Draft ゛").in_any(&["Draft ゛"]) && Typed::trimmed("゛").in_any(&["Draft ゛"]));
+        assert!(!Typed::words("゛").in_any(&["バ"]));
     }
 
     /// Running a row closes the search and runs its action.
