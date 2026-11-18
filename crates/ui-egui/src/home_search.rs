@@ -247,8 +247,9 @@ pub(crate) fn starts<'a>(name: &'a Folded, word: &'a str) -> impl Iterator<Item 
     };
     let found = move |at: usize| text.get(at..).is_some_and(|t| t.starts_with(word));
     // A word that starts with a mark, its space split or trimmed off (`゛` folds to a space and
-    // U+3099), starts where a space carries that mark; never on a letter, so `ハ` keeps out of `バ`.
-    let carried = move |at: usize| text.get(..at).and_then(|t| t.chars().next_back()).is_some_and(char::is_whitespace);
+    // U+3099), starts where a space carries that mark or where the name itself starts (`ﾞDraft`);
+    // never on a letter, so `ハ` keeps out of `バ`.
+    let carried = move |at: usize| text.get(..at).and_then(|t| t.chars().next_back()).is_none_or(char::is_whitespace);
     text.char_indices().map(|(at, _)| at).filter(move |&at| found(at) && (edge(at) || carried(at)) && edge(at + word.len()))
 }
 
@@ -555,7 +556,7 @@ mod tests {
     #[test]
     fn the_search_ignores_capitals_and_accents_and_keeps_the_order() {
         let (mut shell, ..) = shell();
-        for name in ["Prüfstand", "Straße", "Bestellungen prüfen"] {
+        for name in ["ﾞDraft", "Prüfstand", "Straße", "Bestellungen prüfen"] {
             shell.state.remember(name, &std::path::PathBuf::from(format!("/tmp/{name}.archforge")), 1);
         }
         let projects = |query: &str| {
@@ -568,6 +569,7 @@ mod tests {
         assert_eq!(projects("STRASSE"), ["Straße"]);
         assert_eq!(projects("PRÜF"), ["Bestellungen prüfen", "Prüfstand"]);
         assert_eq!(projects("pruf stand"), ["Prüfstand"]);
+        assert_eq!(projects("ﾞDraft"), ["ﾞDraft"], "a name that starts with a mark finds itself");
     }
 
     /// What folds to nothing is not typed, and a ligature of several words gives each of them.
