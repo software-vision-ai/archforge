@@ -109,9 +109,11 @@ otherwise; any other end refused typed as `Reason::WrongEnd`, an element dependi
 `DependsOnItself`, and a cycle of dependencies allowed; two ends, no dependency on itself and
 both ends in one model are Archforge's rules, not UML's; `element.remove` refuses a package,
 or one a package with no parent takes along, while a dependency that stays has it as its supplier
-(`Reason::DependencySupplier`, until 402-C, AR-698, removes such dependencies with the package),
-and a nested package keeps the dependencies it is the client of, which go with it, rather than
-handing them up; `uml.realization.add`: a class
+(`Reason::DependencySupplier`, naming the dependency's id, until 402-C, AR-698, removes such
+dependencies with the package), and a nested package keeps the dependencies it is the client of,
+which go with it and with the constraints that name only them, rather than handing them up; a
+dependency's new client takes it to the package that owns its dependencies in the same step, and
+`uml.relationship.rename` is open while a classifier or a package exists; `uml.realization.add`: a class
 realizes an interface, owned by the class, its client and supplier kept in step with its
 implementing classifier and contract; reconnected through `uml.relationship.reconnect` and removed
 through `element.remove`; `uml.association-class.add` (AR-125): one AssociationClass between two

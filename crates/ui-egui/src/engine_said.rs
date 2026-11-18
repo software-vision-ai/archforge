@@ -111,9 +111,9 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
             &tr("{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first."),
             &[("package", package)],
         ),
-        Reason::DependencySupplier { package, client } => fmt(
+        Reason::DependencySupplier(of) => fmt(
             &tr("A dependency from {client} depends on {package}, so {package} stays. Remove that dependency first."),
-            &[("package", package), ("client", client)],
+            &[("package", &of.package), ("client", &of.client)],
         ),
         Reason::ReplacementIsRemoved => tr("A diagram cannot replace itself as it is removed. Choose another diagram as the replacement."),
         Reason::OneReplacement => tr("Choose either an existing diagram or a new one as the replacement, not both."),

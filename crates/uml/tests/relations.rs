@@ -296,6 +296,23 @@ fn a_dependency_joins_packages_and_classifiers_of_every_kind_owned_by_a_package_
     assert_eq!(owner(&s, &between), obj(&s, &sales), "classifier to classifier, as before");
 }
 
+/// A dependency between packages is renamed in a project that holds only packages, and a new
+/// client takes it to the package that owns its dependencies, in the same step, while a new
+/// supplier leaves its owner as it is (AR-696).
+#[test]
+fn a_package_dependency_is_renamed_and_a_new_client_takes_it_to_its_own_package() {
+    let mut s = session();
+    let [sales, billing, orders] = ["sales", "billing", "orders"].map(|n| run(&mut s, "uml.package.add", json!({ "name": n })));
+    let dep = run(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": billing }));
+    round_trip(&mut s, "uml.relationship.rename", json!({ "relationship": dep, "name": "uses" }));
+    let [order, line] = ["Order", "Line"].map(|n| run(&mut s, "uml.class.add", json!({ "package": orders, "name": n })));
+    let reconnect = |end: &str, class: &str| json!({ "relationship": dep, "end": end, "class": class });
+    round_trip(&mut s, "uml.relationship.reconnect", reconnect("source", &order));
+    assert_eq!(owner(&s, &dep), obj(&s, &orders), "the new client's package owns it");
+    run(&mut s, "uml.relationship.reconnect", reconnect("target", &line));
+    assert_eq!(owner(&s, &dep), obj(&s, &orders), "a new supplier leaves the owner");
+}
+
 /// Anything but a package or a classifier at either end of a dependency is refused, typed as the
 /// wrong end it is, as is the UML library, a metaclass and an element depending on itself; nothing
 /// changes and no undo step is recorded (AR-696).

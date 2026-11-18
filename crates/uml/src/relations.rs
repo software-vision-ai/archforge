@@ -36,9 +36,9 @@
 //!
 //! A dependency (AR-696) joins two packages or classifiers in any mix, its client depending on its
 //! supplier; anything else at either end is refused as the wrong end, and a cycle of dependencies
-//! is allowed. A package client owns its dependencies; a classifier client's home
-//! package owns them otherwise. That a dependency has two ends, never depends on itself and joins
-//! elements of one model are Archforge's own rules, not UML's.
+//! is allowed. A package client owns its dependencies; a classifier client's home package owns
+//! them otherwise, and a new client takes a dependency along. That a dependency has two ends,
+//! never depends on itself and joins elements of one model are Archforge's own rules, not UML's.
 //!
 //! An association class (AR-125) is one element, UML's AssociationClass: a class and an
 //! association at once. It is made between two classes as a plain association is, owning both its
@@ -665,8 +665,8 @@ fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, g)? }))
 }
 
-/// Whether a dependency may be drawn: a classifier or a package exists, either of which may be its
-/// end.
+/// Whether a dependency may be drawn or renamed: a classifier or a package exists, either of which
+/// may be its end.
 fn has_dependency_ends(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     let fits = |o| f.doc.class_of(o).is_ok_and(|c| crate::is_classifier(c) || c == PACKAGE);
     if f.doc.alive().any(fits) { Ok(()) } else { Err(crate::constraints::NO_CONTEXTS) }
@@ -691,17 +691,22 @@ fn dependency_end(store: &Store, p: &Params, key: &str, end: End) -> Result<Obj,
     Ok(o)
 }
 
+/// The package that owns a dependency from `client`: the client itself when it is a package, its
+/// home package otherwise; a classifier in no package is refused under `key` (AR-696).
+fn dependency_owner(store: &Store, client: Obj, key: &str) -> Result<Obj, CommandError> {
+    if store.class_of(client).ok() == Some(PACKAGE) {
+        return Ok(client);
+    }
+    crate::nesting::home_package(store, client).ok_or_else(|| refuse(key, format!("the {} is in no package", what(store, client))))
+}
+
 /// `uml.dependency.add`: a client depends on a supplier, each a package or a classifier, never on
 /// itself (Archforge's rule, not UML's); a package client owns the dependency, a classifier
 /// client's home package does otherwise.
 fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     let client = dependency_end(ctx.doc, p, "client", End::Source)?;
     let supplier = dependency_end(ctx.doc, p, "supplier", End::Target)?;
-    let owner = if ctx.doc.class_of(client).ok() == Some(PACKAGE) {
-        client
-    } else {
-        crate::nesting::home_package(ctx.doc, client).ok_or_else(|| refuse("client", format!("the {} is in no package", what(ctx.doc, client))))?
-    };
+    let owner = dependency_owner(ctx.doc, client, "client")?;
     if client == supplier {
         let why = Reason::DependsOnItself { kind: crate::commands::what(ctx.doc, client) };
         return Err(refuse("supplier", format!("{} cannot depend on itself", a_what(ctx.doc, client))).because(why));
@@ -1162,8 +1167,17 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
             return Err(refuse("class", format!("{} cannot depend on itself", a_what(ctx.doc, cl))).because(why));
         }
         let (prop, old) = if source { (dependency::CLIENT, client) } else { (dependency::SUPPLIER, supplier) };
+        // A new client moves the dependency to the package that owns its dependencies (AR-696).
+        let held = ctx.doc.container(r).ok().flatten();
+        let owner = if source { Some(dependency_owner(ctx.doc, c, "class")?) } else { None };
         ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;
         ctx.doc.push(r, prop, Value::Ref(c)).map_err(fail)?;
+        if let (Some(owner), Some((was, by))) = (owner, held)
+            && owner != was
+        {
+            ctx.doc.remove_value(was, by, &Value::Ref(r)).map_err(fail)?;
+            ctx.doc.push(owner, package::PACKAGED_ELEMENT, Value::Ref(r)).map_err(fail)?;
+        }
     }
     follow_ends(ctx.doc, r)?;
     ctx.view.selection = vec![r];
@@ -1348,7 +1362,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Association", "Dependency"],
             None,
             "relationship: string; the association's or dependency's id\nname: string; the new name, or nothing",
-            has_classes,
+            has_dependency_ends,
             relationship_rename
         ),
         cmd!(

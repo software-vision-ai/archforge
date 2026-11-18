@@ -301,6 +301,12 @@ fn refusal(s: &mut S, cmd: &str, p: Json) -> (Option<archforge_engine::Reason>, 
     (error.reason, error.message)
 }
 
+/// The reason a package that a dependency stays on is kept for, naming the dependency.
+fn kept(package: &str, client: &str, dependency: &str) -> Option<archforge_engine::Reason> {
+    let of = archforge_engine::SupplierOf { package: package.into(), client: client.into(), dependency: dependency.into() };
+    Some(archforge_engine::Reason::DependencySupplier(Box::new(of)))
+}
+
 /// A package that is the supplier of a dependency that stays is not removed, nested deeper or
 /// right under the root package: the refusal names it and the dependency's client, and changes
 /// nothing. Once the dependency is removed, the package goes, a package it holds handed up with
@@ -308,7 +314,6 @@ fn refusal(s: &mut S, cmd: &str, p: Json) -> (Option<archforge_engine::Reason>, 
 /// both ends (AR-696).
 #[test]
 fn a_package_a_dependency_stays_on_is_kept_and_a_package_client_takes_its_dependencies_along() {
-    use archforge_engine::Reason::DependencySupplier;
     let mut s = session();
     let add = |s: &mut S, name: &str, parent: Option<&str>| run(s, "uml.package.add", json!({ "name": name, "parent": parent }));
     let sales = add(&mut s, "sales", None);
@@ -318,11 +323,10 @@ fn a_package_a_dependency_stays_on_is_kept_and_a_package_client_takes_its_depend
     let depend = |s: &mut S, client: &str, supplier: &str| run(s, "uml.dependency.add", json!({ "client": client, "supplier": supplier }));
     let on_ledger = depend(&mut s, &order, &ledger);
     let on_billing = depend(&mut s, &sales, &billing);
-    let kept = |package: &str, client: &str| Some(DependencySupplier { package: package.into(), client: client.into() });
-    for (package, client, name) in [(&ledger, "Order", "ledger"), (&billing, "sales", "billing")] {
+    for (package, client, name, d) in [(&ledger, "Order", "ledger", &on_ledger), (&billing, "sales", "billing", &on_billing)] {
         let (reason, message) = refusal(&mut s, "element.remove", json!({ "ids": [package] }));
-        assert_eq!(reason, kept(name, client));
-        assert!(message.contains("remove that dependency first"), "{message}");
+        assert_eq!(reason, kept(name, client, d));
+        assert!(message.contains(&format!("the dependency {d} from {client}, which stays; remove that dependency first")), "{message}");
     }
     run(&mut s, "element.remove", json!({ "ids": [on_billing] }));
     round_trip(&mut s, "element.remove", json!({ "ids": [billing] }));
@@ -337,7 +341,11 @@ fn a_package_a_dependency_stays_on_is_kept_and_a_package_client_takes_its_depend
     let reports = add(&mut s, "reports", None);
     let rates = add(&mut s, "rates", Some(&sales));
     let deps = [depend(&mut s, &audit, &tax), depend(&mut s, &reports, &tax), depend(&mut s, &audit, &rates)];
+    // A constraint naming only a dependency that goes with its client package goes too.
+    let rule = json!({ "context": sales, "expression": "audited", "constrained": [deps[0]] });
+    let rule = run(&mut s, "uml.constraint.add", rule);
     round_trip(&mut s, "element.remove", json!({ "ids": [audit, rates] }));
+    assert!(!alive(&s, &rule), "the constraint went with the dependency it named");
     round_trip(&mut s, "element.remove", json!({ "ids": [reports] }));
     assert!(deps.iter().all(|d| !alive(&s, d)), "each went with its client");
     assert!(alive(&s, &tax) && alive(&s, &sales));
@@ -362,10 +370,10 @@ fn a_package_with_no_parent_is_kept_while_a_package_it_takes_along_is_a_dependen
     }
     st.push(d, dependency::CLIENT, Value::Ref(order)).unwrap();
     st.push(d, dependency::SUPPLIER, Value::Ref(inner)).unwrap();
-    let top = st.uuid(top).unwrap().to_string();
+    let (top, d) = (st.uuid(top).unwrap().to_string(), st.uuid(d).unwrap().to_string());
     let mut s = over(st);
     let (reason, _) = refusal(&mut s, "element.remove", json!({ "ids": [top] }));
-    assert_eq!(reason, Some(archforge_engine::Reason::DependencySupplier { package: "ledger".into(), client: "Order".into() }));
+    assert_eq!(reason, kept("ledger", "Order", &d));
 }
 
 /// A package of another branch, the root, an owner of the diagram's package and that package

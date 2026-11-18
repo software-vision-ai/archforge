@@ -651,14 +651,21 @@ fn primitive_type_list(ctx: &mut C<'_>, p: &Params) -> R {
 /// What a nested package hands up to its parent when it is removed: everything it holds but the
 /// dependencies it is the client of, which go with it (AR-696).
 fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
-    let own = |o: &Obj| store.class_of(*o).ok() == Some(crate::DEPENDENCY) && dependency_end(store, *o, crate::dependency::CLIENT) == Some(pkg);
+    let own = own_dependencies(store, pkg);
     store
         .list(pkg, package::PACKAGED_ELEMENT)
         .unwrap_or_default()
         .iter()
         .filter_map(Value::as_ref)
-        .filter(|o| store.is_alive(*o) && !own(o))
+        .filter(|o| store.is_alive(*o) && !own.contains(o))
         .collect()
+}
+
+/// The live dependencies `pkg` holds and is the client of, which go with it (AR-696).
+fn own_dependencies(store: &Store, pkg: Obj) -> Vec<Obj> {
+    let refs = store.list(pkg, package::PACKAGED_ELEMENT).unwrap_or_default();
+    let own = |o: &Obj| store.class_of(*o).ok() == Some(crate::DEPENDENCY) && dependency_end(store, *o, crate::dependency::CLIENT) == Some(pkg);
+    refs.iter().filter_map(Value::as_ref).filter(|o| store.is_alive(*o) && own(o)).collect()
 }
 
 /// The dependency `d`'s first live end under `prop`, its client or its supplier.
@@ -684,9 +691,9 @@ fn supplier_problem(store: &Store, objs: &[Obj], goes: &std::collections::BTreeS
         .flat_map(|p| store.referrers(*p).into_iter().map(move |(d, _)| (*p, d)))
         .find(|(p, d)| stays(*d) && dependency_end(store, *d, crate::dependency::SUPPLIER) == Some(*p) && !with_client(*d))?;
     let client = dependency_end(store, d, crate::dependency::CLIENT).map(|c| crate::applications::name_or_id(store, c)).unwrap_or_default();
-    let package = crate::applications::name_or_id(store, pkg);
-    let message = format!("{package} is the supplier of a dependency from {client}, which stays; remove that dependency first");
-    Some(refuse("ids", message).because(Reason::DependencySupplier { package: package.into(), client: client.into() }))
+    let (package, dependency) = (crate::applications::name_or_id(store, pkg), uuid_of(store, d).unwrap_or_default());
+    let message = format!("{package} is the supplier of the dependency {dependency} from {client}, which stays; remove that dependency first");
+    Some(refuse("ids", message).because(Reason::DependencySupplier(Box::new(archforge_engine::SupplierOf { package, client, dependency }))))
 }
 
 /// Every classifier inside a package, at any depth, those nested in its classifiers among them
@@ -873,13 +880,15 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     if let Some(refused) = crate::applications::literal_refusal(store, "ids", |o| goes_by(store, objs, &going, o)) {
         return Err(refused);
     }
-    // A classifier's nested classifiers go with it (AR-132), named among what goes so their
-    // relationships, constraints and sets are worked out as theirs.
+    // A classifier's nested classifiers go with it (AR-132), and a package's own dependencies with
+    // it (AR-696), named among what goes so their relationships, constraints, sets, applications
+    // and lines are worked out as theirs.
     let mut objs: Vec<Obj> = objs.to_vec();
     let nested: Vec<Obj> = objs
         .iter()
         .filter(|o| store.is_alive(**o) && store.class_of(**o).is_ok_and(crate::is_classifier))
         .flat_map(|o| crate::nesting::nested_within(store, *o))
+        .chain(objs.iter().filter(|o| store.class_of(**o).ok() == Some(PACKAGE)).flat_map(|o| own_dependencies(store, *o)))
         .collect();
     for n in nested {
         if !objs.contains(&n) {
