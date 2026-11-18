@@ -228,6 +228,24 @@ as its card's `owner_path` (AR-564). `uml.package.move` changes a package's owne
 26, AR-567): every appearance stays where it is under its id, with its notes' links, the default
 bindings stay as they were, and none is added to the new owner's diagram.
 
+**Effective results** (AR-642, Decision 13). `effective` holds a receiving package's effective
+contents as dedicated read-only records, never model objects: `EffectiveResult` with its `Header`
+(the `ResultContext`, `Completeness`, `Status` and the package's display path), element and member
+`Record`s (each with the display path of its owner), `Relationship`s whose ends are keys, `Origins`
+(local, imported, merged; not exclusive) and the `Provenance` graph: each `Contribution` of a
+`SourceRef` (authored UUID, originating package, `Inspected` revision, the import or merge it enters
+by, display path) and the `RouteEdge`s between packages, never an enumeration of paths. Every display
+path is a value worked out from the same snapshot, never an identity. `LocalKey` is the one
+structural key of a result: role, metatype, parent key and the sorted, unique UUIDs of its authored
+sources, compared, ordered and hashed as the whole tuple; merge results (AR-615) reuse it.
+`ResultKey` adds the `ResultContext` (project, the working revision by history and revision or a
+version by commit, receiving package). Neither converts to a `Uuid` or an `Obj`, so no key reaches a
+command that edits the model. `counterpart` finds the one result of a newer result with an old key,
+none when there is none or more than one. `EffectiveResult::accounted_bytes` counts every record,
+string and collection for the caps and the cache, and each key allocation once by its address,
+however many record keys, ends, contribution results and parents share it. `findings` stays empty
+until import findings come (398-D2).
+
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.
 
@@ -237,7 +255,10 @@ sweep). `tests/uml.rs`: the universe builds with the file's counts and the key i
 derived-union facts; a package with a class and a typed attribute behaves as UML says through the
 store (both ends of `ownedAttribute` and `class`, containment, `ownedElement`, `ownedMember`,
 `attribute`, defaults, destroy and undo); the adversarial sweep over a session of generic commands;
-the million-object test (release only). `tests/defaults.rs` (AR-575): each
+the million-object test (release only). `tests/effective_keys.rs` (AR-642): the whole key tuple decides
+even when every hash collides, source order, repeats and display paths do not, `counterpart` finds
+one match or none, and accounted bytes count every string and each key allocation once, a
+contribution's result and its parents to the root included. `tests/defaults.rs` (AR-575): each
 state of a package's default built by hand under fixed ids: bound to a diagram that is not the first
 made, none yet, missing, duplicate, a wrong-kind and a foreign target, a dead target read from
 rows (a dangling id refused as they are read), a profile; a store's problems in id order, the same
