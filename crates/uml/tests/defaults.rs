@@ -407,7 +407,8 @@ fn removing_a_default_diagram_is_refused_and_another_leaves_the_binding() {
     let (key, reason, said) = refused(&mut s, "diagram.remove", json!({ "diagram": id(0x12) }));
     let default_of = Reason::DefaultDiagramOf { package: "Sales".into(), fault: None };
     assert_eq!((key.as_deref(), reason), (Some("diagram"), Some(default_of)), "{said}");
-    let named = "name another of its diagrams as replacement_diagram, with the expected_revision the project state gives";
+    let named =
+        "name another of its diagrams as replacement_diagram, or a new one as create_replacement, with the expected_revision the project state gives";
     assert_eq!(said, format!("the diagram {} is the default diagram of Sales; {named}", id(0x12)));
     let answer = s.execute("diagram.remove", &json!({ "diagram": id(0x11) })).unwrap().value;
     let plain =
@@ -562,6 +563,73 @@ fn a_replacement_that_cannot_take_the_defaults_place_is_refused_with_nothing_cha
     ];
     for (removed, replacement, revision, key, reason) in cases {
         let p = json!({ "diagram": id(removed), "replacement_diagram": replacement, "expected_revision": revision });
+        let (k, why, said) = refused(&mut s, "diagram.remove", p.clone());
+        assert_eq!((k.as_deref(), why), (Some(key), Some(reason)), "{p}: {said}");
+    }
+}
+
+/// A default removed with a `create_replacement` goes in one undo step with a new empty diagram of
+/// its kind and package, made in the Model beside it and named as asked, which the binding, keeping
+/// its id, now names; the package's other diagram is left as it was. Undo takes the new diagram away
+/// and brings the old default back, never the diagram that was there before; Redo makes it again
+/// under the same id (AR-641).
+#[test]
+fn a_default_removed_with_a_new_replacement_makes_binds_and_removes_in_one_undo_step() {
+    let (st, model, sales, first, detail, binding) = bound_sales();
+    let mut s = over(st);
+    let item = made(&mut s, "uml.class.add", json!({ "package": id(0x10), "name": "Item" }));
+    s.execute("diagram.place", &json!({ "diagram": id(0x12), "element": item })).unwrap();
+    let (before, alive) = (rows_of(s.doc()), s.doc().alive().count());
+    let p = json!({ "diagram": id(0x12), "create_replacement": { "name": "Sales map" }, "expected_revision": token(&s) });
+    let answer = s.execute("diagram.remove", &p).unwrap().value;
+    let made = answer["replacement"].as_str().unwrap_or_else(|| panic!("{answer}")).to_string();
+    let (removed, new) = (json!(alive + 2 - s.doc().alive().count()), at(&s, &made));
+    let expected =
+        json!({ "removed": removed, "diagram": id(0x12), "replacement": made, "binding": id(0x13), "bindings_removed": [], "created": true });
+    assert_eq!(answer, expected, "the diagram and its style made are not counted as removed");
+    let st = s.doc();
+    assert!(!st.is_alive(detail) && st.is_alive(first) && st.is_alive(at(&s, &item)), "the class and the other diagram stay");
+    assert_eq!((archforge_diagram::defaults::bindings_of(st, sales), resolve(st, sales)), (vec![binding], Ok(DefaultDiagram::Bound(new))));
+    assert!(st.list(model, archforge_core::model::MEMBER).unwrap().contains(&Value::Ref(new)), "made in the Model");
+    let shown = s.execute("diagram.get", &json!({ "diagram": made })).unwrap().value;
+    let head = (&shown["kind"], &shown["name"], &shown["element"], &shown["nodes"]);
+    assert_eq!(head, (&json!(STRUCTURE_DIAGRAM), &json!("Sales map"), &json!(id(0x10)), &json!([])), "an empty class diagram of Sales");
+    let after = rows_of(s.doc());
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(rows_of(s.doc()) == before, "one undo step takes the new diagram away and brings the old default back");
+    assert!(!s.doc().is_alive(new) && s.doc().is_alive(first), "the diagram there before stays");
+    s.execute("edit.redo", &json!({})).unwrap();
+    assert!(rows_of(s.doc()) == after, "redo makes it again, under the same id");
+    assert_eq!(resolve(s.doc(), sales), Ok(DefaultDiagram::Bound(at(&s, &made))));
+}
+
+/// A new replacement is refused typed, about the parameter at fault, with no diagram made and the
+/// store and its history as they were: given with an existing one too, neither given, a name blank,
+/// left out, no text, holding a control character or past the limit, a key other than the name, one for a
+/// diagram that is no default, and a revision left out (AR-641).
+#[test]
+fn a_new_replacement_given_twice_misnamed_or_not_needed_is_refused_with_nothing_changed() {
+    let (st, ..) = bound_sales();
+    let mut s = over(st);
+    let (at, token) = (s.token(), token(&s));
+    let (c, max) = ("create_replacement", archforge_diagram::rules::MAX_NAME);
+    let named = |name: &str| json!({ "name": name });
+    let unknown = Reason::UnknownKey { key: "title".into(), takes: &["name"] };
+    let cases = [
+        (0x12, id(0x11), named("Sales map"), token.clone(), c, Reason::OneReplacement),
+        (0x12, String::new(), Json::Null, token.clone(), "diagram", Reason::DefaultDiagramOf { package: "Sales".into(), fault: None }),
+        (0x12, String::new(), named(""), token.clone(), c, Reason::NameEmpty),
+        (0x12, String::new(), named("  "), token.clone(), c, Reason::NameEmpty),
+        (0x12, String::new(), json!({}), token.clone(), c, Reason::NameEmpty),
+        (0x12, String::new(), json!({ "name": 5 }), token.clone(), c, Reason::NameNotText),
+        (0x12, String::new(), named("Sales\u{7}map"), token.clone(), c, Reason::ControlCharacter),
+        (0x12, String::new(), named(&"m".repeat(max + 1)), token.clone(), c, Reason::TooLong { max }),
+        (0x12, String::new(), json!({ "name": "Sales map", "title": "x" }), token.clone(), c, unknown),
+        (0x11, String::new(), named("Sales map"), token.clone(), c, Reason::ReplacementNotNeeded { diagram: id(0x11).into() }),
+        (0x12, String::new(), named("Sales map"), Json::Null, "expected_revision", Reason::StaleRevision { expected: None, current: at }),
+    ];
+    for (removed, replacement, create, revision, key, reason) in cases {
+        let p = json!({ "diagram": id(removed), "replacement_diagram": replacement, "create_replacement": create, "expected_revision": revision });
         let (k, why, said) = refused(&mut s, "diagram.remove", p.clone());
         assert_eq!((k.as_deref(), why), (Some(key), Some(reason)), "{p}: {said}");
     }

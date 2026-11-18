@@ -6674,7 +6674,8 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// is a default diagram chosen for no package, for something that is none or among another
 /// element's diagrams (AR-580), and a default's replacement that is the diagram removed, is no
 /// other diagram of the same kind of its package, or is named for a diagram that is no default,
-/// each in a sentence of its own that speaks of replacing, not of choosing a default (AR-640).
+/// each in a sentence of its own that speaks of replacing, not of choosing a default (AR-640), and
+/// one given both as another diagram and as a new one, or a new one's name that is no text (AR-641).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -6758,6 +6759,9 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let not_needed = "Rechnungen ist kein Standarddiagramm und wird daher ohne Ersatz entfernt.";
         let not_own = "Rechnungen ist kein anderes Diagramm derselben Art von Vertrieb und kann das zu entfernende Diagramm daher nicht ersetzen.";
         assert_eq!(replaced, [itself, not_needed, not_own].map(|s| Some(s.to_string())), "{theme:?}");
+        let both = "Wählen Sie als Ersatz entweder ein vorhandenes Diagramm oder ein neues, nicht beides.";
+        assert_eq!(crate::panels::said(&archforge_engine::Reason::OneReplacement), Some(both.to_string()), "{theme:?}");
+        assert_eq!(crate::panels::said(&archforge_engine::Reason::NameNotText), Some("Ein Name muss Text sein.".to_string()), "{theme:?}");
         // A package move or rename the root package or the package Types refuses, each its own sentence.
         use archforge_engine::Reason::{HoldsBuiltInName, RootPackageStays, TypesPackageExists, TypesPackageKept};
         let held = HoldsBuiltInName { kind: "class", name: "String".into() };

@@ -61,8 +61,9 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 /// built-in types, and a package's default diagram chosen with no package, something that is none,
 /// or a class diagram of another element (AR-580), and a package with no class diagram to open yet
 /// (AR-582), and a default diagram's replacement that is the diagram removed, is no other diagram
-/// of the same kind of its package, or is named for a diagram that is no default (AR-640); none for another reason, or for a kind of element the
-/// catalogues don't name.
+/// of the same kind of its package, or is named for a diagram that is no default (AR-640), or is
+/// given both as another diagram and as a new one, or a new one's name that is no text (AR-641); none for another reason, or for a kind
+/// of element the catalogues don't name.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
     Some(match reason {
@@ -108,6 +109,8 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
             &[("package", package)],
         ),
         Reason::ReplacementIsRemoved => tr("A diagram cannot replace itself as it is removed. Choose another diagram as the replacement."),
+        Reason::OneReplacement => tr("Choose either an existing diagram or a new one as the replacement, not both."),
+        Reason::NameNotText => tr("A name has to be text."),
         Reason::ReplacementNotNeeded { diagram } => {
             fmt(&tr("{diagram} is not a default diagram, so it is removed without a replacement."), &[("diagram", diagram)])
         }

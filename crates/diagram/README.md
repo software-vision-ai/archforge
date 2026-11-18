@@ -44,14 +44,16 @@ binding may name (AR-575). `remove_views_of` takes the bindings it finds along (
 owner is not the diagram's element (`defaults::diagram_removal_problem`), unless it names a
 `replacement_diagram` on the `expected_revision` read (AR-640): another live diagram of the same
 element and kind, to which one step retargets the binding, keeping its id, before the diagram goes;
+or a `create_replacement`, `{name}`, instead (AR-641): the same step makes a diagram of that element
+and kind (`commands::new_diagram`, in the view's home) and the binding names it; both at once are
+refused as `OneReplacement`, a blank name as `NameEmpty`, one that is no text as `NameNotText` and any other as a diagram's name is;
 an element with several bindings keeps the first by id and loses the others in that step, as UML's
 `uml.package.default.set` mends them. The diagram itself is refused as `ReplacementIsRemoved`,
 another element's diagram or another kind as `NotReplacement`, a replacement for a diagram that is no default as `ReplacementNotNeeded`, and a
 revision absent with a replacement, or stale whenever given, as `StaleRevision`; a `WrongOwner`
 binding is refused still. It answers `{removed, diagram, replacement, binding, bindings_removed,
 created}`: `removed` the count of objects that went, `binding` the one kept, `bindings_removed` the
-ids of the others, and `created` false, as no diagram is made (AR-397 adds one made in the same
-step); the replacement and binding are null and no binding goes for a plain removal; a notation asks
+ids of the others, and `created` whether the replacement was made in that step; the replacement and binding are null and no binding goes for a plain removal; a notation asks
 `defaults::views_removal_problem` before it removes an element whose diagram a binding of an element
 that stays names, judged against everything the removal takes, and `defaults::remove_bindings_of`
 takes the bindings of all of it before any diagram goes, so the order of selection does not matter
