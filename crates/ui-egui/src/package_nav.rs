@@ -163,18 +163,17 @@ pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
 }
 
 /// Opens the default diagram of `package`, an owning ancestor of the open one, by the path bar or
-/// ⌘↑: as it was last left, however it was left, or fitted when it never was. It follows
-/// ownership, never the way in, and starts a new route in the tab it opens, with no step made up
-/// from the diagram left (Decision 4). Browsing state only: no model change and no undo step.
+/// ⌘↑, as it was last left or fitted. It follows ownership, never the way in, and starts a new route
+/// in its tab with no step made up from the diagram left (Decision 4): no model change, no undo step.
 pub(crate) fn leave(shell: &mut Shell, package: Uuid, now: f64) {
     let Some(d) = default_of(shell, package) else { return };
     shell.canvas.nav.routes.remove(&d);
     switch_out(shell, d, None, now);
 }
 
-/// Opens the diagram `d` on the way out of the open one, keeping the view of the diagram left
-/// ([`crate::canvas::open`] does): after a zoom out (`reveal`, the package just left) at 100 % with
-/// that package centred; else as `d` was last left, or fitted when it never was.
+/// Opens the diagram `d` on the way out of the open one, keeping the view of the diagram left: after a zoom
+/// out (`reveal`, the package just left) at 100 % with that package centred; else as `d` was left,
+/// or fitted when it never was.
 fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Uuid>, now: f64) {
     crate::canvas::open(shell, d);
     match (reveal, shell.canvas.nav.views.get(&d).copied()) {

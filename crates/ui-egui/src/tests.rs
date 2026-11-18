@@ -11596,15 +11596,17 @@ fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
     }
 }
 
-/// A landing package navigation leaves pending is for the tab it opened (AR-666). Support, a wide
-/// diagram opened in a new tab before First or Sales draws, is fitted below 100 %, neither landed
-/// at 100 % nor centred. When First is removed before it draws, Support takes over as it was last
-/// shown, or fitted when it never was. First opened again before it draws still lands, Sales' card
-/// centred at 100 %.
+/// A landing or fit package navigation leaves pending is for the tab it opened (AR-666). Support, a
+/// wide diagram opened in a new tab before First or Sales draws, is fitted below 100 %, neither
+/// landed at 100 % nor centred. Taking over from First before it draws, by First's removal or by
+/// reopening its closed tab, Support shows as last shown, or fitted when it never was; so does First
+/// after Support, opened new. First opened again before it draws still lands, Sales' card centred.
 #[test]
 fn a_landing_pending_for_one_tab_never_places_another() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        for case in ["out, then Support", "in, then Support", "out, First removed", "out, First removed, Support unseen", "out, First again"] {
+        for case in
+            ["out, Support", "in, Support", "out, First gone", "out, First gone, unseen", "out, reopened", "out, Support, First", "out, First again"]
+        {
             let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
             let (root, first, sales, sales_d) = first_and_sales(&mut h);
             let support = {
@@ -11618,25 +11620,28 @@ fn a_landing_pending_for_one_tab_never_places_another() {
                 }
                 d
             };
-            let shown = (egui::vec2(5.0, 6.0), 0.3);
-            if case.starts_with("out, First removed") {
+            let (shown, first_view) = ((egui::vec2(5.0, 6.0), 0.3), (egui::vec2(-50.0, 30.0), 0.6));
+            if case.starts_with("out, First gone") || case == "out, reopened" {
                 crate::canvas::open(h.state_mut(), support);
-                if case == "out, First removed" {
+                if !case.ends_with("unseen") {
                     h.run();
                     (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = shown;
                 }
             }
             crate::canvas::open(h.state_mut(), first);
             h.run();
-            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(-50.0, 30.0), 0.6);
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = first_view;
+            if case == "out, reopened" {
+                crate::canvas::close_tab(h.state_mut(), support);
+            }
             crate::package_nav::enter(h.state_mut(), sales, 0.0);
-            if case != "in, then Support" {
+            if case != "in, Support" {
                 h.run();
                 rest(&mut h);
                 zoom_out_to(&mut h, first);
             }
             match case {
-                c if c.starts_with("out, First removed") => {
+                c if c.starts_with("out, First gone") => {
                     crate::canvas::close_tab(h.state_mut(), sales_d);
                     let s = h.state_mut().session.as_mut().unwrap();
                     let (at, d) = (s.token(), first.to_string());
@@ -11644,6 +11649,7 @@ fn a_landing_pending_for_one_tab_never_places_another() {
                     s.execute("diagram.remove", &p).unwrap();
                 }
                 "out, First again" => crate::canvas::open(h.state_mut(), first),
+                "out, Support, First" => [support, first].into_iter().for_each(|d| crate::canvas::open(h.state_mut(), d)),
                 _ => crate::canvas::open(h.state_mut(), support),
             }
             h.run();
@@ -11653,8 +11659,12 @@ fn a_landing_pending_for_one_tab_never_places_another() {
                     let card = pan + egui::vec2(320.0, 234.0) * zoom;
                     assert!(zoom == 1.0 && (card - size / 2.0).length() < 1.0, "{theme:?}: Sales' card centred at 100 %, {pan:?} {zoom}");
                 }
-                "out, First removed" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(support), shown), "{theme:?}: as last shown"),
-                _ => assert!(h.state().canvas.active == Some(support) && zoom < 0.5, "{theme:?} {case}: Support fitted, not landed at {zoom}"),
+                "out, First gone" | "out, reopened" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(support), shown), "{theme:?} {case}"),
+                "out, Support, First" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(first), first_view), "{theme:?}: as last shown"),
+                _ => {
+                    let seen = [0.0, 4200.0].iter().all(|x| (0.0..=size.x).contains(&(pan.x + x * zoom)));
+                    assert!(h.state().canvas.active == Some(support) && seen, "{theme:?} {case}: both Support cards in view, not landed at {zoom}");
+                }
             }
         }
     }
