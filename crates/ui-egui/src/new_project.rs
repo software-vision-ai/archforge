@@ -149,18 +149,26 @@ fn start(shell: &Shell, dialog: &mut Dialog) {
     }
 }
 
-/// Change…: the host's folder picker, its pick the project's folder; a cancel changes nothing, and
-/// a picker that could not appear says why under the field.
-fn change_folder(shell: &Shell, dialog: &mut Dialog) {
+/// Change…: asks the host's folder picker for the project's folder; [`take_location`] takes the
+/// answer.
+fn change_folder(shell: &mut Shell) {
     let Some(pick) = shell.services.pick_folder.clone() else { return };
     // The picker says what the folder is for: where the project goes, not a folder to pin.
-    match pick(&tr("Choose project location")) {
-        Some(path) => {
+    shell.ask_pick(crate::Pick::Location, || pick(&tr("Choose project location")));
+}
+
+/// Change…'s answer, on a later frame: a folder chosen becomes the project's folder; otherwise
+/// the folder stays, and why the picker could not appear, if it could not, shows under the field.
+/// A dialog closed meanwhile takes nothing.
+pub(crate) fn take_location(shell: &mut Shell, chosen: Result<std::path::PathBuf, Option<String>>) {
+    let Some(dialog) = shell.new_project.as_mut() else { return };
+    match chosen {
+        Ok(path) => {
             dialog.folder = Some(path);
             dialog.picker = None;
             dialog.failed = None;
         }
-        None => dialog.picker = shell.services.picker_unavailable.as_ref().and_then(|probe| probe()),
+        Err(why) => dialog.picker = why,
     }
 }
 
@@ -348,7 +356,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     let g = ux::galley(&paint, &tr("Change…"), types::UI_STRONG, ink, Some(change.width() - 8.0));
     paint.galley(change.center() - g.size() / 2.0, g, ink);
     if live && resp.clicked() {
-        change_folder(shell, dialog);
+        change_folder(shell);
     }
     let file_line = if creatable(&dialog.name) && folder.is_some() {
         fmt(&tr("Creates the folder {file} here: the project and every version of it."), &[("file", &file_name(&dialog.name))])

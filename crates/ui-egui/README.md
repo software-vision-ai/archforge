@@ -112,6 +112,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `problems::{Problem, all, by_element, of}` | the problems the shell shows, on the element the user would fix them on |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |
+| `Picked` | how a folder pick ended (the folder, nothing, or why no picker could appear), sent once on the channel `Services::pick_project` and `Services::pick_folder` answer with; the shell takes it on a later frame, one pick at a time; `Picked::at_once` is a pick already answered |
 
 **Non-goals.** The screens behind Home's other controls, opening a version from the Versions explorer,
 the Agent and Appearance panels, relationships and foreign keys in Properties, key editing beyond

@@ -113,18 +113,20 @@ pub struct Services {
     /// and randomness); none keeps a project's model from opening, and the status bar says so.
     pub ids: Option<std::sync::Arc<dyn Fn() -> archforge_mof::Uuid + Send + Sync>>,
     /// Asks the user for a project to open (the native folder picker), starting in the folder
-    /// given or else in the projects folder; none, or none chosen, opens nothing.
-    pub pick_project: Option<std::sync::Arc<dyn Fn(Option<&std::path::Path>) -> Option<std::path::PathBuf> + Send + Sync>>,
+    /// given or else in the projects folder; the answer comes on a later frame. None, or none
+    /// chosen, opens nothing.
+    pub pick_project: Option<std::sync::Arc<dyn Fn(Option<&std::path::Path>) -> std::sync::mpsc::Receiver<Picked> + Send + Sync>>,
     /// Finds the projects in the folders given (Home's pinned folders) on the host's own thread,
     /// sends them once and then calls the wake it was given; none leaves Home's search to the
     /// recent projects.
     pub find_projects: Option<std::sync::Arc<FindProjects>>,
     /// Asks the user for a folder (the native folder picker), headed with the title given, which
     /// says what the folder is for (Pin a folder on Home, Choose project location in New project);
-    /// none keeps both unavailable.
-    pub pick_folder: Option<std::sync::Arc<dyn Fn(&str) -> Option<std::path::PathBuf> + Send + Sync>>,
+    /// the answer comes on a later frame. None keeps both unavailable.
+    pub pick_folder: Option<std::sync::Arc<dyn Fn(&str) -> std::sync::mpsc::Receiver<Picked> + Send + Sync>>,
     /// Why the native folder picker cannot appear, when the platform can tell (Linux without a
-    /// desktop portal answers nothing, as a cancel does); asked when a pick comes back empty.
+    /// desktop portal answers nothing, as a cancel does); asked when a pick comes back with
+    /// [`Picked::Nothing`].
     pub picker_unavailable: Option<std::sync::Arc<dyn Fn() -> Option<String> + Send + Sync>>,
     /// Where About Archforge sends support: the provider pages the host has set up; a
     /// destination left out says it is not set up yet.
@@ -139,6 +141,40 @@ pub struct Services {
     /// The time now and the local offset from UTC, for the times Chat shows; none says them in
     /// UTC from the system's clock.
     pub clock: Option<std::sync::Arc<dyn Fn() -> chat_words::Clock + Send + Sync>>,
+}
+
+/// How a folder pick the shell asked of the host ended, sent once on the pick's channel.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Picked {
+    /// The folder chosen.
+    Folder(std::path::PathBuf),
+    /// Nothing chosen: a cancel, or a picker that could not appear without saying so (Linux
+    /// without a desktop portal), which `Services::picker_unavailable` is then asked about.
+    Nothing,
+    /// No picker could appear; the text says why, in the user's language.
+    Unavailable(String),
+}
+
+impl Picked {
+    /// The channel of a pick already answered, as a host whose picker blocks until it closes
+    /// hands it back: the folder chosen, or nothing.
+    pub fn at_once(folder: Option<std::path::PathBuf>) -> std::sync::mpsc::Receiver<Picked> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(folder.map_or(Picked::Nothing, Picked::Folder));
+        rx
+    }
+}
+
+/// What a folder pick the shell waits for is for (AR-737): its answer, taken on a later frame,
+/// goes there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Pick {
+    /// Open project: the project chosen opens.
+    Open,
+    /// Pin a folder on Home: the folder chosen is pinned.
+    Pin,
+    /// New project's Change…: the folder chosen is where the project is made.
+    Location,
 }
 
 /// The host's search for projects in folders: the folders and a wake in, the projects found sent
@@ -860,6 +896,8 @@ pub struct Shell {
     /// Why the last folder pick showed no picker, for Home and the status bar; gone with
     /// the next pick that shows one.
     pub picker_error: Option<String>,
+    /// The folder pick asked of the host and not yet answered, with what it is for: one at a time.
+    picking: Option<(Pick, std::sync::mpsc::Receiver<Picked>)>,
     /// The Models explorer's own state: folds, filter, a name being typed, the dialogs.
     pub explorer: explorer::State,
     /// The Diagrams explorer's own state: folds, filter, the New diagram dialog.
@@ -946,6 +984,7 @@ impl Shell {
             save_error: None,
             open_error: None,
             picker_error: None,
+            picking: None,
             explorer: explorer::State::default(),
             diagrams: diagrams::State::default(),
             versions: versions::State::default(),
@@ -1618,7 +1657,7 @@ impl Shell {
         }
     }
 
-    /// Open project: asks the user for a project, then the host opens it.
+    /// Open project: asks the user for a project, then the host opens the one chosen.
     pub fn open_from_picker(&mut self) {
         self.open_from_picker_in(None);
     }
@@ -1630,31 +1669,52 @@ impl Shell {
             return;
         }
         let Some(pick) = self.services.pick_project.clone() else { return };
-        match pick(folder) {
-            Some(path) => {
-                self.picker_error = None;
-                self.open_path(&path);
-            }
-            None => self.say_why_no_picker(),
-        }
+        self.ask_pick(Pick::Open, || pick(folder));
     }
 
     /// Pin a folder: asks the user for a folder and pins it on Home.
     pub fn pin_from_picker(&mut self) {
         let Some(pick) = self.services.pick_folder.clone() else { return };
-        match pick(&crate::i18n::tr("Pin a folder")) {
-            Some(path) => {
-                self.picker_error = None;
-                self.state.pin(&path);
-            }
-            None => self.say_why_no_picker(),
+        self.ask_pick(Pick::Pin, || pick(&crate::i18n::tr("Pin a folder")));
+    }
+
+    /// Asks the host's folder picker through `ask` for `pick`'s folder, unless a pick still waits:
+    /// one at a time, so a second is refused and the host is not asked. `logic` takes the answer.
+    pub(crate) fn ask_pick(&mut self, pick: Pick, ask: impl FnOnce() -> std::sync::mpsc::Receiver<Picked>) {
+        if self.picking.is_none() {
+            self.picking = Some((pick, ask()));
         }
     }
 
-    /// A pick that came back empty: a cancel, or a picker that could not appear, which Home and
-    /// the status bar then say.
-    fn say_why_no_picker(&mut self) {
-        self.picker_error = self.services.picker_unavailable.as_ref().and_then(|probe| probe());
+    /// Takes the folder pick's answer once it has come, for what it was asked for: Open opens the
+    /// project, Pin a folder pins the folder, Change… makes it the new project's folder. A pick
+    /// that chose nothing says why when the picker could not appear and nothing on a cancel; a
+    /// host gone without answering counts as a cancel.
+    fn take_pick(&mut self) {
+        let Some((_, answer)) = &self.picking else { return };
+        let picked = match answer.try_recv() {
+            Ok(picked) => picked,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Picked::Nothing,
+        };
+        let Some((pick, _)) = self.picking.take() else { return };
+        let chosen = match picked {
+            Picked::Folder(path) => Ok(path),
+            Picked::Nothing => Err(self.services.picker_unavailable.as_ref().and_then(|probe| probe())),
+            Picked::Unavailable(why) => Err(Some(why)),
+        };
+        match (pick, chosen) {
+            (Pick::Location, chosen) => new_project::take_location(self, chosen),
+            (_, Err(why)) => self.picker_error = why,
+            (Pick::Open, Ok(path)) => {
+                self.picker_error = None;
+                self.open_path(&path);
+            }
+            (Pick::Pin, Ok(path)) => {
+                self.picker_error = None;
+                self.state.pin(&path);
+            }
+        }
     }
 
     /// Opens the project at `path` (from the picker or Home's recent list): a project open in a
@@ -1795,10 +1855,15 @@ impl Shell {
         generate::open(self);
     }
 
-    /// Whether Open can act now: the host opens projects, no opening is under way, the New
-    /// project dialog is closed and a tab is free.
+    /// Whether Open can act now: the host opens projects, no opening or folder pick is under way,
+    /// the New project dialog is closed and a tab is free.
     pub fn can_open_project(&self) -> bool {
-        home::can_open(self) && self.opening.is_none() && self.new_project.is_none() && self.about.is_none() && self.versions.dialog.is_none()
+        home::can_open(self)
+            && self.opening.is_none()
+            && self.picking.is_none()
+            && self.new_project.is_none()
+            && self.about.is_none()
+            && self.versions.dialog.is_none()
     }
 
     /// Tab `i`'s project stays open: it shows again, its status bar saying why.
@@ -1942,6 +2007,7 @@ impl Shell {
             self.look_for_dolt();
         }
         self.poll_host();
+        self.take_pick();
         version_chip::keep_valid(self);
         // Home and a project closed draw no rail: what the versions' pages hold of another goes here.
         version_details::let_go(self);
@@ -1972,6 +2038,7 @@ impl Shell {
         };
         let closing = self.tabs.iter().any(Tab::closing);
         if self.opening.is_some()
+            || self.picking.is_some()
             || self.dolt_check.is_some()
             || self.saving.is_some()
             || writing

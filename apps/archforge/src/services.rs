@@ -3,8 +3,9 @@
 //! with their keys.
 
 use std::path::PathBuf;
+use std::sync::mpsc::Receiver;
 
-use archforge_ui_egui::{Folder, Services};
+use archforge_ui_egui::{Folder, Picked, Services};
 
 /// The host's services: the system's, with `agents` the host of AI Agents and Chat.
 pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::sync::Arc<crate::agents::Agents>) -> Services {
@@ -112,8 +113,9 @@ fn support() -> archforge_ui_egui::support::Destinations {
 }
 
 /// The platform's folder picker, for Open project: it starts in the folder given (a pinned
-/// folder), else in the projects folder.
-fn pick_project(start: Option<&std::path::Path>) -> Option<PathBuf> {
+/// folder), else in the projects folder. It blocks until it closes, so its answer is in before the
+/// shell looks on the next frame.
+fn pick_project(start: Option<&std::path::Path>) -> Receiver<Picked> {
     let mut dialog = rfd::FileDialog::new();
     match start.filter(|s| s.is_dir()) {
         Some(start) => dialog = dialog.set_directory(start),
@@ -123,7 +125,7 @@ fn pick_project(start: Option<&std::path::Path>) -> Option<PathBuf> {
             }
         }
     }
-    dialog.pick_folder()
+    Picked::at_once(dialog.pick_folder())
 }
 
 /// Why the folder picker cannot appear. Where the picker is the desktop portal's (Linux
@@ -306,13 +308,14 @@ fn find_projects(folders: Vec<PathBuf>, wake: Box<dyn Fn() + Send>) -> std::sync
 }
 
 /// The platform's folder picker, headed with the title the shell gives for what the folder is for
-/// (Pin a folder, Choose project location): it starts in the user's Documents.
-fn pick_folder(title: &str) -> Option<PathBuf> {
+/// (Pin a folder, Choose project location): it starts in the user's Documents. It blocks until it
+/// closes, as [`pick_project`] does.
+fn pick_folder(title: &str) -> Receiver<Picked> {
     let mut dialog = rfd::FileDialog::new().set_title(title);
     if let Some(documents) = projects_folder().and_then(|f| f.path.parent().map(PathBuf::from)) {
         dialog = dialog.set_directory(documents);
     }
-    dialog.pick_folder()
+    Picked::at_once(dialog.pick_folder())
 }
 
 /// A version 7 id from the clock, a process-wide counter and the platform's randomness: the

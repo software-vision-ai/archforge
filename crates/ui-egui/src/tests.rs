@@ -4,7 +4,7 @@
 use egui_kittest::Harness;
 
 use crate::theme::ThemeKind;
-use crate::{Services, Shell, UiState};
+use crate::{Picked, Services, Shell, UiState};
 
 mod branches;
 mod edit_menu;
@@ -264,7 +264,7 @@ fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_on
     let (next, probe, asked) = (answers.clone(), unavailable.clone(), titles.clone());
     h.state_mut().services.pick_folder = Some(std::sync::Arc::new(move |title: &str| {
         asked.lock().unwrap().push(title.to_string());
-        next.lock().unwrap().pop().flatten()
+        Picked::at_once(next.lock().unwrap().pop().flatten())
     }));
     h.state_mut().services.picker_unavailable =
         Some(std::sync::Arc::new(move || probe.load(std::sync::atomic::Ordering::SeqCst).then(|| "this system has no desktop portal".to_string())));
@@ -622,7 +622,7 @@ fn saving_harness(opened: Option<crate::Opened>, picked: Option<&str>) -> (Harne
     let services = Services {
         projects: Some(host.clone()),
         ids: Some(test_ids()),
-        pick_project: Some(std::sync::Arc::new(move |_| picked.clone())),
+        pick_project: Some(std::sync::Arc::new(move |_| Picked::at_once(picked.clone()))),
         ..Services::default()
     };
     let mut shell = Shell::new(services);
@@ -3401,9 +3401,9 @@ fn a_pinned_folder_is_pinned_from_the_picker_opens_the_project_picker_in_it_and_
         ids: Some(test_ids()),
         pick_project: Some(std::sync::Arc::new(move |start: Option<&std::path::Path>| {
             seen.lock().unwrap().push(start.map(std::path::Path::to_path_buf));
-            None
+            Picked::at_once(None)
         })),
-        pick_folder: Some(std::sync::Arc::new(|_| Some(std::path::PathBuf::from("/Users/robin/Work/Models")))),
+        pick_folder: Some(std::sync::Arc::new(|_| Picked::at_once(Some(std::path::PathBuf::from("/Users/robin/Work/Models"))))),
         ..Services::default()
     };
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
@@ -3533,7 +3533,7 @@ fn homes_search_finds_the_projects_in_the_pinned_folders_one_search_at_a_time_an
     let services = Services {
         projects: Some(host.clone()),
         ids: Some(test_ids()),
-        pick_project: Some(std::sync::Arc::new(|_| None)),
+        pick_project: Some(std::sync::Arc::new(|_| Picked::at_once(None))),
         find_projects: Some(std::sync::Arc::new(move |folders: Vec<std::path::PathBuf>, wake: Box<dyn Fn() + Send>| {
             seen.lock().unwrap().push(folders);
             let (tx, rx) = std::sync::mpsc::channel();
@@ -25008,10 +25008,10 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
     let services = Services {
         projects: Some(host),
         ids: Some(test_ids()),
-        pick_project: Some(std::sync::Arc::new(|_| None)),
+        pick_project: Some(std::sync::Arc::new(|_| Picked::at_once(None))),
         pick_folder: Some(std::sync::Arc::new(move |title: &str| {
             asked.lock().unwrap().push(title.to_string());
-            None
+            Picked::at_once(None)
         })),
         picker_unavailable: Some(std::sync::Arc::new(move || {
             probe.load(std::sync::atomic::Ordering::SeqCst).then(|| "this system has no desktop portal".to_string())
@@ -25026,8 +25026,9 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
         Shell::new(services),
     );
     h.run();
-    // A cancel: nothing to say.
+    // A cancel, taken on the next frame: nothing to say.
     h.state_mut().open_from_picker();
+    h.run();
     assert_eq!(h.state().picker_error, None);
     // A picker that could not appear: Home says why, in its own words, for Open and for Pin a
     // folder alike; a later pick that shows a picker clears it.
@@ -25039,12 +25040,81 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
     assert_eq!(h.state().open_error, None, "not said as a failed opening");
     unavailable.store(false, std::sync::atomic::Ordering::SeqCst);
     h.state_mut().pin_from_picker();
+    h.run();
     assert_eq!(h.state().picker_error, None, "a cancel with a picker there clears it");
     unavailable.store(true, std::sync::atomic::Ordering::SeqCst);
     h.state_mut().pin_from_picker();
+    h.run();
     assert_eq!(h.state().picker_error.as_deref(), Some("this system has no desktop portal"));
     // Home's picker says it pins a folder.
     assert!(titles.lock().unwrap().iter().all(|t| t == "Pin a folder") && !titles.lock().unwrap().is_empty(), "{:?}", titles.lock().unwrap());
+}
+
+/// A folder pick is answered on a later frame (AR-737): until the answer is in, Open and Pin a
+/// folder are off, a second pick is refused without asking the host again, and the window looks
+/// again for the answer. A picker that says
+/// it could not appear is said on Home until a pick chooses a folder, a cancel changes nothing, and
+/// a host gone without answering counts as a cancel.
+#[test]
+fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
+    type Waiting = std::sync::Arc<std::sync::Mutex<Vec<std::sync::mpsc::Sender<Picked>>>>;
+    let pinned = || vec![std::path::PathBuf::from("/Users/robin/Work/Models")];
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        crate::i18n::set_language("en");
+        let waiting = Waiting::default();
+        let asked = waiting.clone();
+        let mut shell = Shell::new(Services {
+            projects: Some(std::sync::Arc::new(SavingHost::default())),
+            pick_project: Some(std::sync::Arc::new(|_| Picked::at_once(Some("/tmp/Shop.archforge".into())))),
+            pick_folder: Some(std::sync::Arc::new(move |_: &str| {
+                let (tx, rx) = std::sync::mpsc::channel();
+                asked.lock().unwrap().push(tx);
+                rx
+            })),
+            ..Services::default()
+        });
+        shell.state.theme = theme;
+        let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
+            |ui, shell: &mut Shell| {
+                shell.logic(ui.ctx());
+                shell.ui(ui);
+            },
+            shell,
+        );
+        h.run();
+        let answer = |h: &mut Harness<'static, Shell>, picked: Option<Picked>| {
+            let tx = waiting.lock().unwrap().pop().expect("a pick was asked for");
+            if let Some(picked) = picked {
+                tx.send(picked).unwrap();
+            }
+            drop(tx);
+            h.run();
+        };
+        let at = rect_of(&h, "home.pin-folder").center();
+        click(&mut h, at);
+        assert!(!crate::actions::available(h.state(), "home.pin-folder") && !h.state().can_open_project(), "{theme:?}: both pickers off");
+        h.state_mut().pin_from_picker();
+        h.state_mut().open_from_picker();
+        h.run();
+        assert_eq!(waiting.lock().unwrap().len(), 1, "{theme:?}: a second pick is refused");
+        assert!(!h.state().is_opening(), "{theme:?}: and Open asks no picker");
+        h.step();
+        assert!(h.ctx.has_requested_repaint(), "{theme:?}: the window looks again for the answer");
+        answer(&mut h, Some(Picked::Unavailable("no folder picker here".into())));
+        assert_eq!(h.state().picker_error.as_deref(), Some("no folder picker here"));
+        assert!(painted(&h).iter().any(|t| t == "no folder picker here"), "{theme:?}: {:?}", painted(&h));
+        assert!(crate::actions::available(h.state(), "home.pin-folder") && h.state().can_open_project(), "{theme:?}: both pickers back");
+        h.state_mut().pin_from_picker();
+        answer(&mut h, Some(Picked::Folder(pinned()[0].clone())));
+        assert_eq!((h.state().state.pinned.clone(), h.state().picker_error.clone()), (pinned(), None), "{theme:?}: the folder chosen is pinned");
+        h.state_mut().pin_from_picker();
+        answer(&mut h, Some(Picked::Nothing));
+        assert_eq!((h.state().state.pinned.clone(), h.state().picker_error.clone()), (pinned(), None), "{theme:?}: a cancel changes nothing");
+        h.state_mut().pin_from_picker();
+        answer(&mut h, None);
+        assert_eq!((h.state().state.pinned.clone(), h.state().picker_error.clone()), (pinned(), None), "{theme:?}: a host gone is a cancel");
+        assert!(crate::actions::available(h.state(), "home.pin-folder"), "{theme:?}: and Pin a folder is back");
+    }
 }
 
 #[test]
