@@ -6817,7 +6817,8 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// is a default diagram chosen for no package, for something that is none or among another
 /// element's diagrams (AR-580), and a default's replacement that is the diagram removed, is no
 /// other diagram of the same kind of its package, or is named for a diagram that is no default,
-/// each in a sentence of its own that speaks of replacing, not of choosing a default (AR-640).
+/// each in a sentence of its own that speaks of replacing, not of choosing a default (AR-640), and
+/// one given both as another diagram and as a new one, or a new one's name that is no text (AR-641).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -6901,6 +6902,9 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let not_needed = "Rechnungen ist kein Standarddiagramm und wird daher ohne Ersatz entfernt.";
         let not_own = "Rechnungen ist kein anderes Diagramm derselben Art von Vertrieb und kann das zu entfernende Diagramm daher nicht ersetzen.";
         assert_eq!(replaced, [itself, not_needed, not_own].map(|s| Some(s.to_string())), "{theme:?}");
+        let both = "Wählen Sie als Ersatz entweder ein vorhandenes Diagramm oder ein neues, nicht beides.";
+        assert_eq!(crate::panels::said(&archforge_engine::Reason::OneReplacement), Some(both.to_string()), "{theme:?}");
+        assert_eq!(crate::panels::said(&archforge_engine::Reason::NameNotText), Some("Ein Name muss Text sein.".to_string()), "{theme:?}");
         // A package move or rename the root package or the package Types refuses, each its own sentence.
         use archforge_engine::Reason::{HoldsBuiltInName, RootPackageStays, TypesPackageExists, TypesPackageKept};
         let held = HoldsBuiltInName { kind: "class", name: "String".into() };
@@ -9447,6 +9451,149 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
     }
 }
 
+/// A project to delete diagrams in (AR-644): the package Sales with its own default diagram and a
+/// second one, Sales details, showing the class Order, and the schema Shop's ER diagram; Sales and
+/// then Sales details open in tabs, the Diagrams explorer showing. Gives Order and the diagrams.
+fn deletable_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, [archforge_mof::Uuid; 4]) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let made = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        let default = own_diagram(s, sales);
+        let order = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Order" })).unwrap().value);
+        let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales details" });
+        let details = id(s.execute("diagram.add", &p).unwrap().value);
+        let place = serde_json::json!({ "diagram": details.to_string(), "element": order.to_string(), "x": 0, "y": 0, "width": 240, "height": 72 });
+        s.execute("diagram.place", &place).unwrap();
+        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+        let shop = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema.to_string(), "name": "Shop" })).unwrap().value);
+        [order, default, details, shop]
+    };
+    crate::canvas::open(h.state_mut(), made[1]);
+    crate::canvas::open(h.state_mut(), made[2]);
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    (h, made)
+}
+
+/// Whether the element `id` is in the open project's model.
+fn alive_in(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> bool {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.by_uuid(id).is_some_and(|o| st.is_alive(o))
+}
+
+/// The boxes the diagram `d` shows.
+fn boxes_of(h: &Harness<'static, Shell>, d: archforge_mof::Uuid) -> usize {
+    let st = h.state().session.as_ref().unwrap().doc();
+    crate::canvas::refs(st, st.by_uuid(d).unwrap(), archforge_diagram::diagram::NODE).len()
+}
+
+/// A diagram row's menu deletes a diagram that is no package's default at once, as one undo step:
+/// the class it showed stays, its tab goes to the one before, and the toast's Undo brings it back
+/// with its boxes. A package's default stays: its row is off (AR-644).
+#[test]
+fn a_diagram_rows_menu_deletes_the_diagram_at_once_and_undo_brings_it_back() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, [order, default, details, _]) = deletable_diagrams(theme);
+        assert_eq!((h.state().canvas.active, boxes_of(&h, details)), (Some(details), 1), "{theme:?}");
+        // While the menu is open the canvas takes none of its keys: Delete would take Order off.
+        let node = ids(&h).into_iter().find(|i| i.starts_with("workspace.canvas.node.") && i.matches('.').count() == 3).unwrap();
+        let (node, at) = (rect_of(&h, &node).center(), rect_of(&h, &format!("workspace.diagrams.row.{details}")).center());
+        click(&mut h, node);
+        right_click(&mut h, at);
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert_eq!(boxes_of(&h, details), 1, "{theme:?}: the box stays");
+        // The menu goes with the explorer, and so does its hold on the keys.
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.run();
+        click(&mut h, node);
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert_eq!(boxes_of(&h, details), 0, "{theme:?}: once the menu is gone, it does");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
+        h.run();
+        right_click(&mut h, at);
+        let item = rect_of(&h, "workspace.diagrams.contextMenu.delete").center();
+        click(&mut h, item);
+        assert!(!alive_in(&h, details), "{theme:?}: deleted at once, with no question");
+        assert!(alive_in(&h, order), "{theme:?}: the class stays in the model");
+        assert_eq!((h.state().canvas.tabs.clone(), h.state().canvas.active), (vec![default], Some(default)), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Remove diagram"), "{theme:?}: one undo step");
+        assert_eq!(painted_times(&h, "Sales details deleted"), 1, "{theme:?}: {:?}", painted(&h));
+        let undo = rect_of(&h, "workspace.toast.undo").center();
+        click(&mut h, undo);
+        assert!(alive_in(&h, details) && boxes_of(&h, details) == 1, "{theme:?}: back with its box");
+        // A package's default: the row is there, off, and a click on it deletes nothing.
+        let undo_label = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        let before = undo_label(&h);
+        let at = rect_of(&h, &format!("workspace.diagrams.row.{default}")).center();
+        right_click(&mut h, at);
+        let item = rect_of(&h, "workspace.diagrams.contextMenu.delete").center();
+        click(&mut h, item);
+        assert!(alive_in(&h, default), "{theme:?}: the default stays");
+        assert_eq!(undo_label(&h), before, "{theme:?}: nothing new to undo");
+        assert_eq!(h.state().diagrams.menu.as_ref().map(|m| m.diagram), Some(default), "{theme:?}: still open");
+        // It says why, to a screen reader too: the engine's reason for keeping a default.
+        let why = crate::panels::said(&archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
+        let off = {
+            use egui_kittest::kittest::{NodeT, Queryable};
+            h.get_by_label("Delete diagram").accesskit_node().data().clone()
+        };
+        assert!(off.is_disabled() && off.description() == why.as_deref(), "{theme:?}");
+    }
+}
+
+/// On a focused diagram row Delete or Backspace deletes the diagram, an ER one alike, and ⇧F10
+/// opens the menu with its row reached for Enter; Escape gives the row the keyboard back. A
+/// package's default stays and the notice says why, as the engine does (AR-644).
+#[test]
+fn a_focused_diagram_row_deletes_its_diagram_by_key_and_says_why_a_default_stays() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, [order, default, details, shop]) = deletable_diagrams(theme);
+        let row = |d: archforge_mof::Uuid| crate::widgets::egui_id(&format!("workspace.diagrams.row.{d}"));
+        // Only Shop open: once it goes no diagram shows, and the toast shows over the empty centre.
+        crate::canvas::close_tab(h.state_mut(), default);
+        crate::canvas::close_tab(h.state_mut(), details);
+        crate::canvas::open(h.state_mut(), shop);
+        h.run();
+        h.ctx.memory_mut(|m| m.request_focus(row(shop)));
+        h.run();
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert!(!alive_in(&h, shop), "{theme:?}: the ER diagram is deleted alike");
+        assert_eq!(h.state().canvas.active, None, "{theme:?}");
+        assert_eq!(painted_times(&h, "Shop deleted"), 1, "{theme:?}: {:?}", painted(&h));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert!(alive_in(&h, shop), "{theme:?}");
+        // ⇧F10 opens the menu, its row reached: Enter deletes.
+        h.ctx.memory_mut(|m| m.request_focus(row(details)));
+        h.run();
+        key(&mut h, egui::Key::F10, egui::Modifiers::SHIFT);
+        assert_eq!(h.state().diagrams.menu.as_ref().map(|m| (m.diagram, m.reached)), Some((details, true)), "{theme:?}");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(!alive_in(&h, details) && alive_in(&h, order), "{theme:?}");
+        // Escape closes the menu and hands the row the keyboard back.
+        h.ctx.memory_mut(|m| m.request_focus(row(default)));
+        h.run();
+        key(&mut h, egui::Key::F10, egui::Modifiers::SHIFT);
+        assert!(h.state().diagrams.menu.is_some(), "{theme:?}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().diagrams.menu.is_none(), "{theme:?}");
+        assert_eq!(h.ctx.memory(|m| m.focused()), Some(row(default)), "{theme:?}");
+        // Backspace on a package's default deletes nothing and says why.
+        let undo = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        assert!(alive_in(&h, default), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo, "{theme:?}");
+        let why = crate::panels::said(&archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
+        assert_eq!(h.state().diagrams.notice, why, "{theme:?}");
+        let why = why.unwrap();
+        let whole = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Text(t) if t.galley.text() == why && !t.galley.elided));
+        assert!(whole, "{theme:?}: the reason reads whole, not cut");
+    }
+}
+
 #[test]
 fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     // A model with a folder holding a class diagram, as a project may keep one.
@@ -10362,6 +10509,82 @@ fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from()
     assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "as it was left");
 }
 
+/// Each tab keeps the route it was entered by (AR-662): entering gives the new tab the route of the
+/// tab left plus one step, which names the diagram left, its view and the session's history, and
+/// leaves the tab left its own. Going back takes the newest way in through the parent, and
+/// browsing changes nothing in the model, its undo history or what is saved.
+#[test]
+fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Root > Sales > Orders. The root's First and Second both show Sales; Sales' diagram shows
+        // Orders and the root.
+        let (first, second, root, sales, orders, sales_d, orders_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let add = |s: &mut archforge_notations::Session, name: &str| {
+                let p = serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": name });
+                id(s.execute("diagram.add", &p).unwrap().value)
+            };
+            let (first, second) = (add(s, "First"), add(s, "Second"));
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
+            let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
+            for (on, what) in [(first, sales), (second, sales), (sales_d, orders), (sales_d, root)] {
+                let p =
+                    serde_json::json!({ "diagram": on.to_string(), "element": what.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                s.execute("diagram.place", &p).unwrap();
+            }
+            s.mark_saved().unwrap();
+            (first, second, root, sales, orders, sales_d, orders_d)
+        };
+        let unchanged = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.can_undo(), s.can_redo(), s.is_dirty())
+        };
+        let before = unchanged(&h);
+        let history = h.state().session.as_ref().unwrap().history();
+        let route = |h: &Harness<'static, Shell>, tab| -> Vec<(archforge_mof::Uuid, archforge_mof::Uuid)> {
+            h.state().canvas.nav.routes.get(&tab).map(|r| r.steps().map(|s| (s.source, s.destination)).collect()).unwrap_or_default()
+        };
+        crate::canvas::open(h.state_mut(), second);
+        h.run();
+        let left = (h.state().canvas.pan, h.state().canvas.zoom);
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        let entry = h.state().canvas.nav.routes.get(&sales_d).and_then(|r| r.steps().next_back()).cloned().unwrap();
+        let expected = crate::nav_route::Step { source: second, destination: sales_d, source_name: "Second".into(), view: Some(left), history };
+        assert_eq!(entry, expected, "{theme:?}: the step names what was left, its view and the history");
+        assert_eq!(route(&h, second), vec![], "{theme:?}: the tab left had no route and still has none");
+        // Sales > Orders: the Orders tab carries the way into Sales too; Sales keeps its own.
+        rest(&mut h);
+        crate::package_nav::enter(h.state_mut(), orders, 0.0);
+        h.run();
+        assert_eq!(route(&h, orders_d), vec![(second, sales_d), (sales_d, orders_d)], "{theme:?}");
+        assert_eq!(route(&h, sales_d), vec![(second, sales_d)], "{theme:?}: Sales' tab keeps its own route");
+        // Back to Sales, then into the root's First and from it into Sales again: Sales' tab now
+        // came by First, the newest way in, though Second is on its route too.
+        rest(&mut h);
+        let at = rect_of(&h, "workspace.canvas.path.1").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}");
+        rest(&mut h);
+        crate::package_nav::enter(h.state_mut(), root, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: the root's default");
+        rest(&mut h);
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        assert_eq!(route(&h, sales_d), vec![(second, sales_d), (sales_d, first), (first, sales_d)], "{theme:?}");
+        rest(&mut h);
+        let at = rect_of(&h, "workspace.canvas.path.0").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: back the newest way in");
+        assert_eq!(unchanged(&h), before, "{theme:?}: no change, no undo step, nothing to save");
+    }
+}
+
 #[test]
 fn a_long_package_path_folds_its_first_ancestors_and_keeps_the_nearest_ones_clickable() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1400.0, 900.0));
@@ -11180,6 +11403,172 @@ fn zooming_out_to_ten_percent_climbs_one_level_per_gesture_each_at_a_hundred_and
         }
         assert_eq!(active(&h), Some(sales_d), "{theme:?}: − to 10 % goes up one level");
         assert_eq!(h.state().canvas.zoom, 1.0, "{theme:?}: at 100 %");
+    }
+}
+
+/// One zoom-out gesture over the canvas of at most `ticks` frames, ending at the first switch when
+/// `stop` is set; gives the diagrams it showed, in turn.
+fn zoom_out_gesture(h: &mut Harness<'static, Shell>, ticks: usize, stop: bool) -> Vec<archforge_mof::Uuid> {
+    h.event(egui::Event::PointerMoved(rect_of(h, "workspace.canvas").center()));
+    let mut shown: Vec<_> = h.state().canvas.active.into_iter().collect();
+    for _ in 0..ticks {
+        h.event(egui::Event::Zoom(0.8));
+        h.step();
+        if let Some(now) = h.state().canvas.active.filter(|now| shown.last() != Some(now)) {
+            shown.push(now);
+            if stop {
+                break;
+            }
+        }
+    }
+    h.run();
+    shown
+}
+
+/// The (source, destination) of each step on the route of `tab`'s tab, oldest first.
+fn route_of(h: &Harness<'static, Shell>, tab: archforge_mof::Uuid) -> Vec<(archforge_mof::Uuid, archforge_mof::Uuid)> {
+    h.state().canvas.nav.routes.get(&tab).map(|r| r.steps().map(|s| (s.source, s.destination)).collect()).unwrap_or_default()
+}
+
+/// Zooming out at 10 % returns to the diagram a package was entered from though it is in another
+/// branch (AR-664, Decision 4): the Commerce overview shows Archive, owned by Operations; inside
+/// Archive the path bar shows Operations, yet zooming out lands on the overview. The return takes
+/// its step and makes none: one gesture makes one switch, and the next goes up by ownership instead
+/// of bouncing back into Archive. Browsing changes nothing in the model or its undo history.
+#[test]
+fn zooming_out_returns_across_branches_to_the_diagram_entered_from_without_a_bounce() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Root > Commerce and Root > Operations > Archive; Commerce's overview shows Archive.
+        let (top, overview, operations_d, archive, archive_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let add = |s: &mut archforge_notations::Session, on: archforge_mof::Uuid, name: &str| {
+                let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": on.to_string(), "name": name });
+                id(s.execute("diagram.add", &p).unwrap().value)
+            };
+            let top = add(s, root, "Top");
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let operations = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Operations" })).unwrap().value);
+            let archive =
+                id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": operations.to_string() })).unwrap().value);
+            let overview = add(s, commerce, "Commerce overview");
+            let (operations_d, archive_d) = (own_diagram(s, operations), own_diagram(s, archive));
+            let p = serde_json::json!({ "diagram": overview.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+            s.execute("diagram.place", &p).unwrap();
+            s.mark_saved().unwrap();
+            (top, overview, operations_d, archive, archive_d)
+        };
+        let unchanged = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.can_undo(), s.can_redo(), s.is_dirty())
+        };
+        let before = unchanged(&h);
+        crate::canvas::open(h.state_mut(), overview);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}");
+        // The path bar follows ownership, not the way in: the root, Operations, Archive.
+        let path: Vec<String> = texts_in(&h, rect_of(&h, "workspace.canvas.path")).into_iter().map(|(t, _)| t).collect();
+        assert_eq!(path.get(1..), Some(&["Operations".to_string(), "Archive".to_string()][..]), "{theme:?}: {path:?}");
+        // One long gesture: back on the overview, not Operations' diagram, and no further.
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, false), vec![archive_d, overview], "{theme:?}: one switch, across branches");
+        assert_ne!(h.state().canvas.active, Some(operations_d), "{theme:?}");
+        assert_eq!(route_of(&h, overview), vec![], "{theme:?}: the step taken, no reverse entry made");
+        assert_eq!(route_of(&h, archive_d), vec![], "{theme:?}: Archive's tab has no way back left");
+        // The next gesture has no route: up by ownership to the root's diagram, not back into Archive.
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, false), vec![overview, top], "{theme:?}: no bounce");
+        assert_eq!(unchanged(&h), before, "{theme:?}: no change, no undo step, nothing to save");
+    }
+}
+
+/// Repeated visits A → B → A → B return B → A → B → A, one step a gesture, each landing at 100 %
+/// with the package left centred; once the route is spent, the owning parent's default opens.
+#[test]
+fn zooming_out_walks_repeated_visits_back_one_step_a_gesture_then_follows_ownership() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // A is Commerce's diagram and shows Archive; B is Archive's and shows Commerce.
+        let (top, commerce, archive, a, b, archive_card, commerce_card) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" });
+            let top = id(s.execute("diagram.add", &p).unwrap().value);
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let operations = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Operations" })).unwrap().value);
+            let archive =
+                id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": operations.to_string() })).unwrap().value);
+            let (a, b) = (own_diagram(s, commerce), own_diagram(s, archive));
+            let mut place = |on: archforge_mof::Uuid, what: archforge_mof::Uuid| {
+                let p =
+                    serde_json::json!({ "diagram": on.to_string(), "element": what.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                id(s.execute("diagram.place", &p).unwrap().value)
+            };
+            let (archive_card, commerce_card) = (place(a, archive), place(b, commerce));
+            (top, commerce, archive, a, b, archive_card, commerce_card)
+        };
+        crate::canvas::open(h.state_mut(), a);
+        h.run();
+        for package in [archive, commerce, archive] {
+            crate::package_nav::enter(h.state_mut(), package, 0.0);
+            h.run();
+            rest(&mut h);
+        }
+        assert_eq!(h.state().canvas.active, Some(b), "{theme:?}");
+        assert_eq!(route_of(&h, b), vec![(a, b), (b, a), (a, b)], "{theme:?}");
+        // Back B → A → B → A: each gesture one switch and one step consumed, none added.
+        for (from, to, card, left) in [(b, a, archive_card, vec![(a, b), (b, a)]), (a, b, commerce_card, vec![(a, b)]), (b, a, archive_card, vec![])]
+        {
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![from, to], "{theme:?}");
+            assert_eq!(route_of(&h, to), left, "{theme:?}: from {from} to {to}");
+            assert_eq!(route_of(&h, from), vec![], "{theme:?}: the tab left keeps no way back");
+            assert_eq!(h.state().canvas.zoom, 1.0, "{theme:?}: at 100 %");
+            let canvas = rect_of(&h, "workspace.canvas");
+            let shown = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+            assert!((shown.center() - canvas.center()).length() < 2.0, "{theme:?}: the package left, centred: {shown:?} in {canvas:?}");
+            rest(&mut h);
+        }
+        // The route spent: Commerce's owning parent's default.
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![a, top], "{theme:?}: by ownership");
+    }
+}
+
+/// A zoom out whose way in leads only to a removed diagram spends the route and opens the owning
+/// parent's default instead of staying put on a diagram that is gone.
+#[test]
+fn zooming_out_past_a_removed_way_in_opens_the_owning_parents_default() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Commerce's second diagram, the overview, shows Archive, owned by Operations.
+        let (overview, operations_d, archive, archive_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let operations = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Operations" })).unwrap().value);
+            let archive =
+                id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": operations.to_string() })).unwrap().value);
+            own_diagram(s, commerce);
+            let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": commerce.to_string(), "name": "Commerce overview" });
+            let overview = id(s.execute("diagram.add", &p).unwrap().value);
+            let (operations_d, archive_d) = (own_diagram(s, operations), own_diagram(s, archive));
+            let p = serde_json::json!({ "diagram": overview.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+            s.execute("diagram.place", &p).unwrap();
+            (overview, operations_d, archive, archive_d)
+        };
+        crate::canvas::open(h.state_mut(), overview);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        h.state_mut().session.as_mut().unwrap().execute("diagram.remove", &serde_json::json!({ "diagram": overview.to_string() })).unwrap();
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![archive_d, operations_d], "{theme:?}: Operations' default");
+        assert_eq!(route_of(&h, archive_d), vec![], "{theme:?}: the route spent");
     }
 }
 

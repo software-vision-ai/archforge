@@ -126,6 +126,14 @@ model. Other kinds of diagram get their own group once Archforge supports them.
 
 <!-- picture: workspace-diagrams light | The Diagrams explorer: class diagrams and ER diagrams in their groups, a nested package's diagram open -->
 
+To delete a diagram, right-click its row in **Diagrams** and choose **Delete diagram**, or press
+Delete or Backspace while its row has the keyboard (the menu key or ⇧F10 opens the same menu). The
+diagram goes at once, its tab with it, and a message at the bottom of the canvas offers **Undo**,
+which brings it back with everything it showed. The elements it showed stay in the model and in
+**Models**. A package's default diagram is not deleted here: its **Delete diagram** is off and says
+why, and Delete leaves the same reason under the list. While you look at a saved version, no
+diagram can be deleted.
+
 **Models** lists the model's elements: an ER model's schemas with their tables and columns, a UML
 model's packages with their classes, attributes and operations. It starts folded; open a row with
 its arrow, or open every row with the button beside **+**. The filter field narrows the tree to

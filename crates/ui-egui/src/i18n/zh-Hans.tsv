@@ -780,6 +780,8 @@ str		The package's default diagram belongs to another element. Choose one of its
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	此图是 {package} 的默认图。请先选择另一个类图作为 {package} 的默认图。
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} 将另一个元素的图作为其默认图，因此该图会保留。请先选择 {package} 自己的一个类图。
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	图在删除时不能替换自身。请选择另一个图作为替换。
+str		Choose either an existing diagram or a new one as the replacement, not both.	请选择现有的图或新图作为替换，不能同时选择两者。
+str		A name has to be text.	名称必须是文本。
 str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} 不是默认图，因此删除时无需替换。
 str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} 不是 {package} 的另一个同类图，因此无法替换要删除的图。
 str		No package is given. Give its id.	未给出包。请给出其 ID。
@@ -1949,6 +1951,7 @@ str		Rename	重命名
 str		Show in diagram	在图中显示
 str		No diagram shows it yet	尚无图显示它
 str		Delete from model	从模型中删除
+str		Delete diagram	删除图
 str		A skill is removed from its tab	技能在其标签页中删除
 str		New inside {name}	在 {name} 中新建
 str		not inside a class	不能在类中

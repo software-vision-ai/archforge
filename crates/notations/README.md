@@ -40,6 +40,7 @@ would change a binding, compared by ids, is refused. A version opened to be look
 | `universe`, `store` | the universe of every notation; an empty store over it with the host's ids |
 | `storage` | every metamodel's tables and list tables, in the order of `PARTS` |
 | `registry`, `Session` | the edit area, the shared element commands, every notation's own, the diagrams' and the skills'; a project's session, `Session<Store, ProjectView>` |
+| `registry_checked` | the commands of `registry` with a commit check run on every change before it is kept, whose refusal takes the change back whole; for tests of an operation's atomicity (AR-641) |
 | `new_project_session` | a session with the project's Model root named `name`; the host supplies the ids |
 | `session_from_rows`, `session_from_rows_repaired` | a session rebuilt from a project's rows and checked (by `check_kinds_in_rows`, `check_bindings_in_rows`, then `name_kind`), saved as it is; the second runs a repair on the store first; refused with an `OpenError` |
 | `session_from_rows_diagnosed`, `Opened` | the second, with the binding problems of the store the session gets, after the repair (`archforge_uml::defaults::problems`), beside it |

@@ -779,6 +779,8 @@ str		The package's default diagram belongs to another element. Choose one of its
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.
+str		Choose either an existing diagram or a new one as the replacement, not both.	Choose either an existing diagram or a new one as the replacement, not both.
+str		A name has to be text.	A name has to be text.
 str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} is not a default diagram, so it is removed without a replacement.
 str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.
 str		No package is given. Give its id.	No package is given. Give its id.
@@ -1948,6 +1950,7 @@ str		Rename	Rename
 str		Show in diagram	Show in diagram
 str		No diagram shows it yet	No diagram shows it yet
 str		Delete from model	Delete from model
+str		Delete diagram	Delete diagram
 str		A skill is removed from its tab	A skill is removed from its tab
 str		New inside {name}	New inside {name}
 str		not inside a class	not inside a class

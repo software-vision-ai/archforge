@@ -780,6 +780,8 @@ str		The package's default diagram belongs to another element. Choose one of its
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Ce diagramme est le diagramme par défaut de {package}. Choisissez d’abord un autre diagramme de classes comme diagramme par défaut de {package}.
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} a pour diagramme par défaut le diagramme d’un autre élément, ce diagramme reste donc. Choisissez d’abord l’un de ses propres diagrammes de classes.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Un diagramme ne peut pas se remplacer lui-même lors de sa suppression. Choisissez un autre diagramme comme remplaçant.
+str		Choose either an existing diagram or a new one as the replacement, not both.	Choisissez comme remplaçant soit un diagramme existant, soit un nouveau, mais pas les deux.
+str		A name has to be text.	Un nom doit être du texte.
 str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} n’est pas un diagramme par défaut ; il est donc supprimé sans remplaçant.
 str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} n’est pas un autre diagramme du même type de {package} ; il ne peut donc pas remplacer le diagramme supprimé.
 str		No package is given. Give its id.	Aucun paquetage n’est indiqué. Indiquez son identifiant.
@@ -1949,6 +1951,7 @@ str		Rename	Renommer
 str		Show in diagram	Afficher dans le diagramme
 str		No diagram shows it yet	Aucun diagramme ne l’affiche encore
 str		Delete from model	Supprimer du modèle
+str		Delete diagram	Supprimer le diagramme
 str		A skill is removed from its tab	Une compétence se supprime depuis son onglet
 str		New inside {name}	Nouveau dans {name}
 str		not inside a class	pas dans une classe
