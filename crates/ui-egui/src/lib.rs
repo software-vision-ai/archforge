@@ -1539,13 +1539,15 @@ impl Shell {
             return;
         }
         host.write_model(&project.path, session.doc().freeze());
-        self.written = Some(revision);
+        // A failed opening is old news once the open project changes; the first hand-over, of the
+        // model it was shown with, is no change, and keeps a reopen's failure said (AR-748).
+        if self.written.replace(revision).is_some() {
+            self.open_error = None;
+        }
         // A change handed over replaces the word on a refused closing.
         if let Some(tab) = self.active.and_then(|i| self.tabs.get_mut(i)) {
             tab.close_error = None;
         }
-        // A failed opening is old news once the open project changes.
-        self.open_error = None;
     }
 
     /// Save: the host writes what waits and commits it, a skill's text and a description being

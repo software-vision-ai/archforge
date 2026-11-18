@@ -300,6 +300,11 @@ impl Shell {
                 self.open_path(&path);
                 if idle && self.opening.is_some() {
                     self.holding.reopening = Some(path);
+                } else if self.open_error.is_some() {
+                    // Refused at once, no tab being free: said as the host's refusal would be.
+                    self.holding.reopening = Some(path);
+                    let why = self.open_error.take();
+                    self.opened(why);
                 }
                 if self.open_error.is_none() {
                     self.open_error = shown;

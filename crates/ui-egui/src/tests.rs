@@ -3491,35 +3491,68 @@ fn a_project_waiting_for_its_tab_to_close_does_not_hold_up_another_tab() {
 }
 
 /// Two projects reopened after their tabs closed: the first one's failure, named, stays shown
-/// while the second opens and after it has opened (AR-748).
+/// while the second opens and after it has opened, its first model handed over too, until the
+/// person changes it (AR-748).
 #[test]
 fn a_reopen_that_failed_stays_said_while_the_next_reopen_opens() {
     in_both_appearances(|theme| {
+        for read_back in [true, false] {
+            let (mut h, host) = saving_harness(Some(commerce()), None);
+            h.state_mut().state.theme = theme;
+            let library = std::path::PathBuf::from("/tmp/Library.archforge");
+            h.state_mut().open_project(crate::Opened { name: "Library".into(), path: library.clone(), ..Default::default() });
+            h.run_steps(3);
+            // What Library holds, read back as it opens again, or nothing: a fresh model is handed over.
+            let model = Some(rows_now(&h)).filter(|_| read_back);
+            h.state_mut().close_tab(1);
+            h.state_mut().close_tab(0);
+            h.run_steps(2);
+            h.state_mut().open_path(std::path::Path::new(COMMERCE));
+            h.state_mut().open_path(&library);
+            for closing in host.closings.lock().unwrap().drain(..) {
+                closing.send(Ok(())).unwrap();
+            }
+            h.run_steps(3);
+            let (_, tx) = host.opens.lock().unwrap().pop().expect("Commerce's opening");
+            tx.send(Err(crate::CreateError::Failed { detail: "the folder is gone".into() })).unwrap();
+            h.run_steps(3);
+            let said = Some("Commerce platform: the folder is gone");
+            assert_eq!(h.state().open_error.as_deref(), said, "{theme:?}: said while Library opens");
+            let (path, tx) = host.opens.lock().unwrap().pop().expect("Library's opening");
+            tx.send(Ok(crate::Opened { name: "Library".into(), path, model, ..Default::default() })).unwrap();
+            h.run_steps(3);
+            assert_eq!((h.state().tabs.len(), h.state().open_error.as_deref()), (1, said), "{theme:?} {read_back}: and once it has opened");
+            add_schema(&mut h, "shop");
+            assert_eq!(h.state().open_error, None, "{theme:?} {read_back}: a change of the person's replaces it");
+        }
+    });
+}
+
+/// A reopen refused at once, every tab taken by an opening that went before it, says so with the
+/// project's name (AR-748).
+#[test]
+fn a_reopen_with_no_tab_free_says_which_project() {
+    in_both_appearances(|theme| {
         let (mut h, host) = saving_harness(Some(commerce()), None);
         h.state_mut().state.theme = theme;
-        let library = std::path::PathBuf::from("/tmp/Library.archforge");
-        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: library.clone(), ..Default::default() });
+        for n in 1..crate::MAX_TABS {
+            h.state_mut().open_project(crate::Opened { name: format!("P{n}"), path: format!("/tmp/P{n}.archforge").into(), ..Default::default() });
+        }
         h.run_steps(3);
-        // What Library holds, read back as it opens again: nothing to hand over then.
-        let model = Some(rows_now(&h));
-        h.state_mut().close_tab(1);
         h.state_mut().close_tab(0);
         h.run_steps(2);
         h.state_mut().open_path(std::path::Path::new(COMMERCE));
-        h.state_mut().open_path(&library);
-        for closing in host.closings.lock().unwrap().drain(..) {
-            closing.send(Ok(())).unwrap();
-        }
+        h.state_mut().begin_hold().unwrap();
+        h.state_mut().open_path(std::path::Path::new("/tmp/Shop.archforge"));
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
         h.run_steps(3);
-        let (_, tx) = host.opens.lock().unwrap().pop().expect("Commerce's opening");
-        tx.send(Err(crate::CreateError::Failed { detail: "the folder is gone".into() })).unwrap();
+        end_hold(&mut h, Shell::end_hold);
+        let (shop, tx) = host.opens.lock().unwrap().pop().expect("Shop, asked for during the hold");
+        tx.send(Ok(crate::Opened { name: "Shop".into(), path: shop, ..Default::default() })).unwrap();
         h.run_steps(3);
-        let said = Some("Commerce platform: the folder is gone");
-        assert_eq!(h.state().open_error.as_deref(), said, "{theme:?}: said while Library opens");
-        let (path, tx) = host.opens.lock().unwrap().pop().expect("Library's opening");
-        tx.send(Ok(crate::Opened { name: "Library".into(), path, model, ..Default::default() })).unwrap();
-        h.run_steps(3);
-        assert_eq!((h.state().tabs.len(), h.state().open_error.as_deref()), (1, said), "{theme:?}: and once it has opened");
+        assert_eq!(h.state().tabs.len(), crate::MAX_TABS, "{theme:?}: Shop took the last tab");
+        assert_eq!(h.state().open_error.as_deref(), Some("Commerce platform: Close a project to open another"), "{theme:?}");
+        assert!(h.state().holding.reopen.is_empty() && host.opens.lock().unwrap().is_empty(), "{theme:?}: nothing more is asked");
     });
 }
 
