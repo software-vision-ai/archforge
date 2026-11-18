@@ -68,7 +68,6 @@ impl Route {
     /// source passes `valid`, and gives that step with the ones removed before it. Every step
     /// looked at is consumed, so a route of nothing that can be shown ends empty; no step is
     /// added for the return.
-    #[cfg_attr(not(test), expect(dead_code, reason = "AR-664 (408-B2) is the first return to take one"))]
     pub(crate) fn take_return(&mut self, history: u64, mut valid: impl FnMut(Uuid) -> bool) -> Return {
         let mut out = Return::default();
         while let Some(step) = self.steps.pop_back() {
