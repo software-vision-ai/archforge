@@ -168,8 +168,9 @@ pub(crate) fn close(shell: &mut Shell) {
 /// project's, and the Models, Diagrams and Versions filters agree.
 #[derive(Debug, Clone)]
 pub(crate) struct Typed {
-    folder: Folder,
-    words: Vec<Folded>,
+    /// Folded once and never again: a second fold can reorder marks a dropped character kept
+    /// apart, which a name folded once keeps in place.
+    words: Vec<String>,
 }
 
 impl Typed {
@@ -177,20 +178,18 @@ impl Typed {
     /// folded before it is split, so a ligature that stands for several words (`ﷻ`) gives each
     /// of them, and a word of invisible characters only (a pasted zero-width space) is none.
     pub(crate) fn words(query: &str) -> Typed {
-        let folder = folder();
-        Typed { words: folder.key(query).split_whitespace().map(|w| folder.fold(w)).collect(), folder }
+        Typed { words: folder().key(query).split_whitespace().map(str::to_owned).collect() }
     }
 
     /// `text` as one piece, spaces and all; nothing when it folds to nothing.
     pub(crate) fn phrase(text: &str) -> Typed {
-        let folder = folder();
-        Typed { words: Some(folder.fold(text)).filter(|w| !w.as_str().is_empty()).into_iter().collect(), folder }
+        Typed { words: Some(folder().key(text)).filter(|w| !w.is_empty()).into_iter().collect() }
     }
 
     /// `text` as one piece, folded and then trimmed, so spaces kept by invisible characters
     /// around it (`\u{200B} prufen \u{200B}`) go too: the Models and Diagrams filters.
     pub(crate) fn trimmed(text: &str) -> Typed {
-        Typed::phrase(folder().key(text).trim())
+        Typed { words: Some(folder().key(text).trim()).filter(|w| !w.is_empty()).map(str::to_owned).into_iter().collect() }
     }
 
     /// Whether nothing was typed, so everything answers.
@@ -199,13 +198,13 @@ impl Typed {
     }
 
     /// The first word folded, to rank names by; none when nothing was typed.
-    pub(crate) fn first(&self) -> Option<&Folded> {
-        self.words.first()
+    pub(crate) fn first(&self) -> Option<&str> {
+        self.words.first().map(String::as_str)
     }
 
     /// Whether every word is in one of `texts`, already folded by [`fold`].
     pub(crate) fn in_folded(&self, texts: &[&Folded]) -> bool {
-        self.words.iter().all(|w| texts.iter().any(|t| t.find(w).is_some()))
+        self.words.iter().all(|w| texts.iter().any(|t| starts(t, w).next().is_some()))
     }
 
     /// Whether every word is in one of `texts`; true at once when nothing was typed.
@@ -213,7 +212,7 @@ impl Typed {
         if self.is_empty() {
             return true;
         }
-        let folded: Vec<Folded> = texts.iter().map(|t| self.folder.fold(t)).collect();
+        let folded: Vec<Folded> = texts.iter().map(|t| fold(t)).collect();
         self.in_folded(&folded.iter().collect::<Vec<_>>())
     }
 }
@@ -227,6 +226,30 @@ fn folder() -> Folder {
 /// `text` folded as [`Typed`] folds what is typed, for a text matched again and again.
 pub(crate) fn fold(text: &str) -> Folded {
     folder().fold(text)
+}
+
+/// Whether `next` goes on the letter before it rather than starting one: a combining mark, or a
+/// Hangul vowel or final consonant that continues `prev`'s syllable.
+pub(crate) fn joins(prev: Option<char>, next: char) -> bool {
+    use icu_properties::props::{GraphemeExtend, HangulSyllableType as H};
+    let hangul = icu_properties::CodePointMapData::<H>::new();
+    let syllable = |p| matches!((hangul.get(p), hangul.get(next)), (H::LeadingJamo, H::VowelJamo) | (H::VowelJamo | H::LVSyllable, H::TrailingJamo));
+    icu_properties::CodePointSetData::new::<GraphemeExtend>().contains(next) || prev.is_some_and(syllable)
+}
+
+/// The folded offsets where the folded `word` starts in `name`, overlapping ones too, on the
+/// boundaries `Folded::find` matches on: never inside a letter, where a Hangul syllable part
+/// continues one only within one source character. Every search matches and ranks through it.
+pub(crate) fn starts<'a>(name: &'a Folded, word: &'a str) -> impl Iterator<Item = usize> + 'a {
+    let text = name.as_str();
+    let edge = move |at: usize| {
+        let Some(next) = text.get(at..).and_then(|t| t.chars().next()) else { return true };
+        let span = |from: usize, c: char| name.source_range(from..from + c.len_utf8());
+        let prev = text.get(..at).and_then(|t| t.chars().next_back()).filter(|p| span(at.saturating_sub(p.len_utf8()), *p) == span(at, next));
+        !joins(prev, next)
+    };
+    let found = move |at: usize| text.get(at..).is_some_and(|t| t.starts_with(word));
+    text.char_indices().map(|(at, _)| at).filter(move |&at| found(at) && edge(at) && edge(at + word.len()))
 }
 
 /// The rows for the query: the matching recent projects, then the projects in the pinned folders
@@ -551,10 +574,12 @@ mod tests {
     #[test]
     fn invisible_words_are_dropped_and_a_ligature_gives_its_words() {
         assert!(Typed::phrase("\u{200B}").is_empty() && Typed::words("\u{AD} \u{200B}").is_empty());
-        assert_eq!(Typed::words("\u{200B} Order").first().map(Folded::as_str), Some("order"));
+        assert_eq!(Typed::words("\u{200B} Order").first(), Some("order"));
         // ﷻ folds to two Arabic words; a name holding both apart, with a comma, is found.
-        assert!(Typed::words("\u{FDFB}").in_any(&["جل، جلاله"]));
-        assert!(!Typed::words("\u{FDFB}").in_any(&["جل"]));
+        assert!(Typed::words("\u{FDFB}").in_any(&["جل، جلاله"]) && !Typed::words("\u{FDFB}").in_any(&["جل"]));
+        // Folded once, as the name is: a second fold would put the nukta before the virama.
+        let marks = "क\u{94D}\u{200B}\u{93C}";
+        assert!(Typed::trimmed(marks).in_any(&[marks]) && Typed::words(marks).in_any(&[marks]));
     }
 
     /// Running a row closes the search and runs its action.
