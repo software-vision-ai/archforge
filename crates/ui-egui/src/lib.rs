@@ -1539,13 +1539,15 @@ impl Shell {
             return;
         }
         host.write_model(&project.path, session.doc().freeze());
-        self.written = Some(revision);
+        // A failed opening is old news once the open project changes; the first hand-over, of the
+        // model it was shown with, is no change, and keeps a reopen's failure said (AR-748).
+        if self.written.replace(revision).is_some() {
+            self.open_error = None;
+        }
         // A change handed over replaces the word on a refused closing.
         if let Some(tab) = self.active.and_then(|i| self.tabs.get_mut(i)) {
             tab.close_error = None;
         }
-        // A failed opening is old news once the open project changes.
-        self.open_error = None;
     }
 
     /// Save: the host writes what waits and commits it, a skill's text and a description being
@@ -1659,6 +1661,8 @@ impl Shell {
 
     /// Opens the project at `path` (from the picker or Home's recent list): a project open in a
     /// tab shows there without asking the host; another opens in a tab of its own while one is free.
+    /// One whose tab is closing waits for the closing: it opens afresh once closed, and its tab
+    /// shows when the closing is refused (AR-748).
     pub fn open_path(&mut self, path: &std::path::Path) {
         if self.remember(hold::Waiting::Open(path.to_path_buf())) {
             return;
@@ -1727,7 +1731,10 @@ impl Shell {
             match rx.try_recv() {
                 Ok(Ok(opened)) => {
                     self.opening = None;
+                    let kept = self.open_error.take();
                     self.open_project(opened);
+                    self.open_error = kept;
+                    self.opened(None);
                 }
                 Ok(Err(e)) => {
                     self.opening = None;
@@ -1735,15 +1742,15 @@ impl Shell {
                     if let CreateError::DoltMissing { detail } = &e {
                         self.dolt_missing = Some(detail.clone());
                     }
-                    self.open_error = Some(match e {
+                    self.opened(Some(match e {
                         CreateError::Failed { detail } | CreateError::FolderUnusable { detail } | CreateError::DoltMissing { detail } => detail,
                         other => format!("{other:?}"),
-                    });
+                    }));
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     self.opening = None;
-                    self.open_error = Some(crate::i18n::tr("The opening stopped without an answer"));
+                    self.opened(Some(crate::i18n::tr("The opening stopped without an answer")));
                 }
             }
         }
@@ -1977,6 +1984,7 @@ impl Shell {
             || writing
             || closing
             || self.holding.pending()
+            || self.reopen_due()
             || self.agents.busy()
             || chat_panel::waiting(self)
             || chat_delete::waiting(self)
@@ -2030,6 +2038,7 @@ impl Shell {
         self.drive_loads();
         self.drive_replacement();
         self.run_after_hold(ctx);
+        self.reopen_after_closing();
         self.say_skip();
     }
 
@@ -2107,6 +2116,10 @@ impl Shell {
         // the next: that frame is asked for now, not left to the pointer's next move.
         if self.project.as_ref().is_some_and(|p| self.adopted.as_ref() != Some(&p.path)) {
             ui.ctx().request_repaint();
+        }
+        // A quit called off in this frame lets a waiting reopen go on in the next (AR-748).
+        if self.reopen_due() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         }
     }
 }

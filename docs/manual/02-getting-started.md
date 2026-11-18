@@ -64,6 +64,9 @@ a version is and how to save one with a description.
 
 - Close a project with the **×** on its tab, or with ⌘W (Ctrl W) or **File ▸ Close project** while it shows. If it has unsaved changes, Archforge asks whether to
   save them: **Save**, **Cancel**, or **Don't save**, which puts the project back to its last save.
+- While a project closes, its tab stays until the project has closed. Opening the project again
+  meanwhile waits for that: it then opens afresh in a new tab, or, if the project could not be
+  closed, its tab shows again and says why.
 - **Home** (the house in the bar) shows Home again without closing your projects. Up to eight
   projects can be open at once, each in its tab.
 - On Home, **Recent projects** lists the last twelve projects you opened. Choose one to open it;

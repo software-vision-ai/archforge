@@ -3353,6 +3353,278 @@ fn a_recent_project_opens_from_its_row_or_shows_its_tab() {
     assert_eq!(h.state().active, Some(0));
 }
 
+/// The project shown, its tab closed and its Recent row chosen while the host closes it.
+fn reopened_while_closing(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().state.theme = theme;
+    h.state_mut().close_tab(0);
+    h.run_steps(2);
+    let at = rect_of(&h, "home.recent.0").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(h.state().tabs[0].closing() && host.opens.lock().unwrap().is_empty(), "{theme:?}: nothing opens while it closes");
+    assert_eq!(h.state().holding.reopen, [std::path::PathBuf::from(COMMERCE)], "{theme:?}: the opening waits");
+    (h, host)
+}
+
+/// An opening of a project whose tab is closing waits for the closing, then opens it afresh in a
+/// tab of its own; asked for twice, it opens once (AR-748).
+#[test]
+fn a_project_opened_while_its_tab_closes_opens_again_once_closed() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = reopened_while_closing(theme);
+        let at = rect_of(&h, "home.recent.0").center();
+        click(&mut h, at);
+        h.run_steps(2);
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.step();
+        h.step();
+        // The frame that took the closing asked for the next, which takes the opening's answer.
+        let asked = h.ctx.repaint_causes().iter().any(|c| c.file.ends_with("ui-egui/src/lib.rs"));
+        assert!(asked, "{theme:?}: {:?}", h.ctx.repaint_causes());
+        h.run_steps(1);
+        let (path, tx) = host.opens.lock().unwrap().pop().expect("the host opens it once the closing ends");
+        tx.send(Ok(crate::Opened { name: "Commerce platform".into(), path, ..Default::default() })).unwrap();
+        h.run_steps(4);
+        assert!(host.opens.lock().unwrap().is_empty(), "{theme:?}: the second ask opened nothing more");
+        assert_eq!((h.state().tabs.len(), h.state().active, h.state().title().as_str()), (1, Some(0), "Commerce platform — Archforge"));
+        assert!(!h.state().tabs[0].closing() && !h.state().holding.pending());
+        // Asked twice and the opening failed: the host is not asked again behind the failure.
+        let (mut h, host) = reopened_while_closing(theme);
+        let at = rect_of(&h, "home.recent.0").center();
+        click(&mut h, at);
+        h.run_steps(2);
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        let (_, tx) = host.opens.lock().unwrap().pop().expect("the host opens it once the closing ends");
+        tx.send(Err(crate::CreateError::Failed { detail: "the folder is gone".into() })).unwrap();
+        h.run_steps(4);
+        assert!(host.opens.lock().unwrap().is_empty() && h.state().holding.reopen.is_empty(), "{theme:?}: asked once");
+        assert_eq!(h.state().open_error.as_deref(), Some("Commerce platform: the folder is gone"), "{theme:?}: named");
+    });
+}
+
+/// A closing refused while an opening of its project waits keeps the tab, which shows, saying why.
+#[test]
+fn a_project_opened_while_its_closing_is_refused_shows_its_tab() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = reopened_while_closing(theme);
+        h.state_mut().open_path(std::path::Path::new("/tmp/Shop.archforge"));
+        host.closings.lock().unwrap().pop().unwrap().send(Err("the server would not stop".into())).unwrap();
+        h.run_steps(3);
+        assert_eq!((h.state().tabs.len(), h.state().active, h.state().close_error()), (1, Some(0), Some("the server would not stop")));
+        assert!(h.state().holding.reopen.is_empty(), "{theme:?}: the opening ran on the tab kept, not after the other opening");
+        let (shop, tx) = host.opens.lock().unwrap().pop().expect("the other opening");
+        tx.send(Ok(crate::Opened { name: "Shop".into(), path: shop, ..Default::default() })).unwrap();
+        h.run_steps(3);
+        assert_eq!((h.state().tabs.len(), h.state().active), (2, Some(1)), "{theme:?}: the project asked for last shows");
+    });
+}
+
+/// Once its tab has closed, the waiting opening also waits for another opening or the New project
+/// dialog under way, which would drop it (AR-748).
+#[test]
+fn a_project_opened_while_its_tab_closes_waits_for_another_opening_and_the_new_project_dialog() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = reopened_while_closing(theme);
+        h.state_mut().open_path(std::path::Path::new("/tmp/Shop.archforge"));
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        let (shop, tx) = host.opens.lock().unwrap().pop().expect("the other opening");
+        assert!(h.state().tabs.is_empty() && host.opens.lock().unwrap().is_empty(), "{theme:?}: it waits for that opening");
+        tx.send(Ok(crate::Opened { name: "Shop".into(), path: shop, ..Default::default() })).unwrap();
+        h.run_steps(3);
+        assert_eq!(host.opens.lock().unwrap().pop().map(|(p, _)| p), Some(COMMERCE.into()), "{theme:?}: then it opens");
+        let (mut h, host) = reopened_while_closing(theme);
+        crate::new_project::open(h.state_mut());
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        assert!(h.state().tabs.is_empty() && host.opens.lock().unwrap().is_empty(), "{theme:?}: it waits for the dialog");
+        h.state_mut().new_project = None;
+        h.run_steps(3);
+        assert_eq!(host.opens.lock().unwrap().pop().map(|(p, _)| p), Some(COMMERCE.into()), "{theme:?}: then it opens");
+    });
+}
+
+/// An opening waiting for a tab's closing is no change under way: a hold in another tab starts,
+/// and the opening, once the closing ends, waits for that hold, then for an opening queued behind
+/// it, so that one does not drop it (AR-748).
+#[test]
+fn a_project_waiting_for_its_tab_to_close_does_not_hold_up_another_tab() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+        h.run_steps(3);
+        h.state_mut().close_tab(0);
+        h.run_steps(2);
+        h.state_mut().open_path(std::path::Path::new(COMMERCE));
+        assert_eq!(h.state_mut().begin_hold(), Ok(()), "{theme:?}: Library's hold starts");
+        h.state_mut().open_path(std::path::Path::new("/tmp/Shop.archforge"));
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        assert!(h.state().tabs.len() == 1 && host.opens.lock().unwrap().is_empty(), "{theme:?}: it waits for the hold");
+        end_hold(&mut h, Shell::end_hold);
+        let (shop, tx) = host.opens.lock().unwrap().pop().expect("Shop, asked for during the hold");
+        assert!(host.opens.lock().unwrap().is_empty(), "{theme:?}: Commerce waits for Shop's opening");
+        tx.send(Ok(crate::Opened { name: "Shop".into(), path: shop, ..Default::default() })).unwrap();
+        h.run_steps(3);
+        assert_eq!(host.opens.lock().unwrap().pop().map(|(p, _)| p), Some(COMMERCE.into()));
+        // Asked for again during the hold, its tab gone by then: still one opening, not retried.
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+        h.run_steps(3);
+        h.state_mut().close_tab(0);
+        h.run_steps(2);
+        h.state_mut().open_path(std::path::Path::new(COMMERCE));
+        h.state_mut().begin_hold().unwrap();
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        h.state_mut().open_path(std::path::Path::new(COMMERCE));
+        end_hold(&mut h, Shell::end_hold);
+        let (_, tx) = host.opens.lock().unwrap().pop().expect("Commerce's opening");
+        tx.send(Err(crate::CreateError::Failed { detail: "the folder is gone".into() })).unwrap();
+        h.run_steps(3);
+        assert!(host.opens.lock().unwrap().is_empty() && h.state().holding.reopen.is_empty(), "{theme:?}: asked once");
+    });
+}
+
+/// Two projects reopened after their tabs closed: the first one's failure, named, stays shown
+/// while the second opens and after it has opened, its first model handed over too, until the
+/// person changes it (AR-748).
+#[test]
+fn a_reopen_that_failed_stays_said_while_the_next_reopen_opens() {
+    in_both_appearances(|theme| {
+        for read_back in [true, false] {
+            let (mut h, host) = saving_harness(Some(commerce()), None);
+            h.state_mut().state.theme = theme;
+            let library = std::path::PathBuf::from("/tmp/Library.archforge");
+            h.state_mut().open_project(crate::Opened { name: "Library".into(), path: library.clone(), ..Default::default() });
+            h.run_steps(3);
+            // What Library holds, read back as it opens again, or nothing: a fresh model is handed over.
+            let model = Some(rows_now(&h)).filter(|_| read_back);
+            h.state_mut().close_tab(1);
+            h.state_mut().close_tab(0);
+            h.run_steps(2);
+            h.state_mut().open_path(std::path::Path::new(COMMERCE));
+            h.state_mut().open_path(&library);
+            for closing in host.closings.lock().unwrap().drain(..) {
+                closing.send(Ok(())).unwrap();
+            }
+            h.run_steps(3);
+            let (_, tx) = host.opens.lock().unwrap().pop().expect("Commerce's opening");
+            tx.send(Err(crate::CreateError::Failed { detail: "the folder is gone".into() })).unwrap();
+            h.run_steps(3);
+            let said = Some("Commerce platform: the folder is gone");
+            assert_eq!(h.state().open_error.as_deref(), said, "{theme:?}: said while Library opens");
+            let (path, tx) = host.opens.lock().unwrap().pop().expect("Library's opening");
+            tx.send(Ok(crate::Opened { name: "Library".into(), path, model, ..Default::default() })).unwrap();
+            h.run_steps(3);
+            assert_eq!((h.state().tabs.len(), h.state().open_error.as_deref()), (1, said), "{theme:?} {read_back}: and once it has opened");
+            add_schema(&mut h, "shop");
+            assert_eq!(h.state().open_error, None, "{theme:?} {read_back}: a change of the person's replaces it");
+        }
+    });
+}
+
+/// A reopen refused at once, every tab taken by an opening that went before it, says so with the
+/// project's name (AR-748).
+#[test]
+fn a_reopen_with_no_tab_free_says_which_project() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        for n in 1..crate::MAX_TABS {
+            h.state_mut().open_project(crate::Opened { name: format!("P{n}"), path: format!("/tmp/P{n}.archforge").into(), ..Default::default() });
+        }
+        h.run_steps(3);
+        h.state_mut().close_tab(0);
+        h.run_steps(2);
+        h.state_mut().open_path(std::path::Path::new(COMMERCE));
+        h.state_mut().begin_hold().unwrap();
+        h.state_mut().open_path(std::path::Path::new("/tmp/Shop.archforge"));
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        end_hold(&mut h, Shell::end_hold);
+        let (shop, tx) = host.opens.lock().unwrap().pop().expect("Shop, asked for during the hold");
+        tx.send(Ok(crate::Opened { name: "Shop".into(), path: shop, ..Default::default() })).unwrap();
+        h.run_steps(3);
+        assert_eq!(h.state().tabs.len(), crate::MAX_TABS, "{theme:?}: Shop took the last tab");
+        assert_eq!(h.state().open_error.as_deref(), Some("Commerce platform: Close a project to open another"), "{theme:?}");
+        assert!(h.state().holding.reopen.is_empty() && host.opens.lock().unwrap().is_empty(), "{theme:?}: nothing more is asked");
+    });
+}
+
+/// Openings that waited for a hold show their open tabs while another project is opening, and
+/// what waited behind them runs (AR-748).
+#[test]
+fn openings_after_a_hold_show_open_tabs_while_another_project_opens() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+        h.run_steps(3);
+        h.state_mut().open_path(std::path::Path::new("/tmp/Shop.archforge"));
+        h.state_mut().begin_hold().unwrap();
+        h.state_mut().open_path(std::path::Path::new(COMMERCE));
+        h.state_mut().close_tab(0);
+        end_hold(&mut h, Shell::end_hold);
+        assert_eq!(*host.closed.lock().unwrap(), [std::path::PathBuf::from(COMMERCE)], "{theme:?}: shown, then closed");
+        assert_eq!(host.opens.lock().unwrap().len(), 1, "{theme:?}: Shop is still opening");
+        // The opening alone shows Commerce's tab before Shop has opened.
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+        h.run_steps(3);
+        h.state_mut().open_path(std::path::Path::new("/tmp/Shop.archforge"));
+        h.state_mut().begin_hold().unwrap();
+        h.state_mut().open_path(std::path::Path::new(COMMERCE));
+        end_hold(&mut h, Shell::end_hold);
+        assert_eq!((h.state().active, host.opens.lock().unwrap().len()), (Some(0), 1), "{theme:?}: Commerce shows, Shop still opening");
+    });
+}
+
+/// A quit asked for while an opening waits for its tab's closing keeps it from starting; called
+/// off, the opening goes on (AR-748).
+#[test]
+fn a_project_waiting_for_its_tab_to_close_does_not_open_while_quitting() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = reopened_while_closing(theme);
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.state_mut().request_quit();
+        h.run_steps(3);
+        assert!(h.state().quit_confirmed() && host.opens.lock().unwrap().is_empty(), "{theme:?}: the window is closing");
+        // A quit still asking about another project's changes, then called off.
+        let (mut h, host) = edited_project();
+        h.state_mut().state.theme = theme;
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+        h.run_steps(3);
+        h.state_mut().close_tab(1);
+        h.run_steps(2);
+        h.state_mut().open_path(std::path::Path::new("/tmp/Library.archforge"));
+        h.state_mut().request_quit();
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        assert_eq!(h.state().ask, asked_unsaved(COMMERCE), "{theme:?}: the quit asks about Commerce");
+        assert!(host.opens.lock().unwrap().is_empty(), "{theme:?}: Library waits while quitting");
+        let ours = |h: &Harness<'static, Shell>| h.ctx.repaint_causes().iter().any(|c| c.file.ends_with("ui-egui/src/lib.rs"));
+        h.step();
+        assert!(!ours(&h), "{theme:?}: only the person's answer moves it on: {:?}", h.ctx.repaint_causes());
+        // Cancel, pressed and let go in one frame: that frame asks for the next.
+        let at = rect_of(&h, "close-ask.cancel").center();
+        let button =
+            |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+        h.input_mut().events.extend([egui::Event::PointerMoved(at), button(true), button(false)]);
+        h.step();
+        assert!(!h.state().quitting() && host.opens.lock().unwrap().is_empty(), "{theme:?}: called off");
+        h.step();
+        assert!(ours(&h), "{theme:?}: {:?}", h.ctx.repaint_causes());
+        h.run_steps(2);
+        assert_eq!(host.opens.lock().unwrap().pop().map(|(p, _)| p), Some("/tmp/Library.archforge".into()));
+    });
+}
+
 #[test]
 fn home_sorts_the_recent_projects_by_name_and_shows_them_as_a_gallery() {
     let (mut h, host) = saving_harness(None, None);
