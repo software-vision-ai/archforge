@@ -341,7 +341,9 @@ impl Project {
     /// writes nothing; a branch without that table holds no diagrams. A branch whose rename is
     /// unclear is held as for every other reading ([`Error::BranchUnclear`]). The work is bounded
     /// as the model's reading is: rows past its limit, or a kind longer than [`KIND_LONGEST`], are
-    /// refused, the kinds are streamed with no sorting on the server, and a long one is not read.
+    /// refused, the kinds are streamed with no sorting on the server, and a long one is not read. A
+    /// reading that fails once kinds outside the known ones were found gives those: they refuse
+    /// the branch whatever the rest holds.
     pub fn unknown_diagram_kinds(&self, branch: &SafeBranch, known: &[&str]) -> Result<Vec<String>, Error> {
         let damaged = |why: String| Error::Damaged { path: self.path().to_path_buf(), why };
         let mut c = self.connection_to(branch)?;
@@ -368,12 +370,19 @@ impl Project {
             let row = row.map_err(unreadable)?;
             Ok((row.get_opt::<u64, usize>(0).and_then(Result::ok), row.as_ref(1).cloned().unwrap_or(mysql::Value::NULL)))
         });
+        let (first, read) = first_kinds(rows, most, MAX_TABLE_ROWS, self.path());
         let mut unknown = Vec::new();
-        for kind in first_kinds(rows, most, MAX_TABLE_ROWS, self.path())? {
+        for kind in first {
             let shown = crate::chat::cut_bytes(&String::from_utf8_lossy(&kind), KIND_BYTES).0.to_string();
             if !known.iter().any(|k| k.as_bytes() == kind) && !unknown.contains(&shown) && unknown.len() < MOST_UNKNOWN_KINDS {
                 unknown.push(shown);
             }
+        }
+        if let Err(e) = read {
+            if unknown.is_empty() {
+                return Err(e);
+            }
+            log::warn!("the diagram kinds of {} were read in part: {e}", self.path().display());
         }
         Ok(unknown)
     }
@@ -787,18 +796,15 @@ fn within_rows(table: &str, held: usize) -> Result<(), Error> {
     Ok(())
 }
 
+/// A diagram's kind as read: its length in bytes, and what was read of it.
+type KindRow = Result<(Option<u64>, mysql::Value), Error>;
+
 /// The first `most` of the distinct kinds `rows` gives, in byte order, a kind left empty as none.
-/// Each row is a kind's length in bytes and what was read of it. Past `max_rows` rows the diagrams
-/// are too large, and a kind longer than [`KIND_LONGEST`] is no text of a model: both are refused,
-/// as the model's reading refuses them.
-fn first_kinds(
-    rows: impl Iterator<Item = Result<(Option<u64>, mysql::Value), Error>>,
-    most: usize,
-    max_rows: usize,
-    path: &std::path::Path,
-) -> Result<BTreeSet<Vec<u8>>, Error> {
+/// Past `max_rows` rows the diagrams are too large, and a kind longer than [`KIND_LONGEST`] is no
+/// text of a model: both are refused, as the model's reading refuses them, beside the kinds read.
+fn first_kinds(rows: impl Iterator<Item = KindRow>, most: usize, max_rows: usize, path: &std::path::Path) -> (BTreeSet<Vec<u8>>, Result<(), Error>) {
     let mut kinds = BTreeSet::new();
-    for (held, row) in rows.enumerate() {
+    let read = rows.enumerate().try_for_each(|(held, row)| {
         if held >= max_rows {
             return Err(Error::ModelTooLarge { why: format!("the table {DIAGRAMS} has more than {max_rows} rows") });
         }
@@ -813,8 +819,9 @@ fn first_kinds(
         if kinds.len() > most {
             kinds.pop_last();
         }
-    }
-    Ok(kinds)
+        Ok(())
+    });
+    (kinds, read)
 }
 
 /// What a reading has taken so far of the whole model's budgets.
@@ -1186,19 +1193,20 @@ mod tests {
     use super::*;
 
     /// The first kinds are the smallest distinct ones, at most `most`, NULL as none; past the rows,
-    /// or with a kind longer than any text, the reading is refused.
+    /// or with a kind longer than any text, the reading is refused beside the kinds read until then.
     #[test]
     fn the_first_kinds_are_the_smallest_distinct_ones_within_the_budgets() {
         let path = std::path::Path::new("/p");
         let row = |k: &str| Ok((Some(k.len() as u64), mysql::Value::Bytes(k.into())));
-        let first = first_kinds(["c", "a", "b", "a", "d"].map(row).into_iter(), 3, 5, path).unwrap();
-        assert_eq!(first.into_iter().collect::<Vec<_>>(), [b"a".to_vec(), b"b".to_vec(), b"c".to_vec()]);
-        let empty = first_kinds([Ok((None, mysql::Value::NULL)), row("")].into_iter(), 3, 5, path).unwrap();
-        assert_eq!(empty.into_iter().collect::<Vec<_>>(), [Vec::<u8>::new()]);
-        assert!(matches!(first_kinds(["a", "b"].map(row).into_iter(), 3, 1, path), Err(Error::ModelTooLarge { .. })));
-        let long = Ok((Some(KIND_LONGEST + 1), mysql::Value::NULL));
-        assert!(matches!(first_kinds([row("a"), long].into_iter(), 3, 5, path), Err(Error::Damaged { .. })));
-        assert!(first_kinds([Ok((Some(KIND_LONGEST), mysql::Value::Bytes(b"x".to_vec())))].into_iter(), 3, 5, path).is_ok());
+        let kinds = |set: BTreeSet<Vec<u8>>| set.into_iter().map(|k| String::from_utf8(k).unwrap()).collect::<Vec<_>>();
+        let (first, read) = first_kinds(["c", "a", "b", "a", "d"].map(row).into_iter(), 3, 5, path);
+        assert_eq!((kinds(first), read.is_ok()), (vec!["a".to_string(), "b".into(), "c".into()], true));
+        assert_eq!(kinds(first_kinds([Ok((None, mysql::Value::NULL)), row("")].into_iter(), 3, 5, path).0), [""]);
+        let (first, read) = first_kinds(["b", "a", "c"].map(row).into_iter(), 3, 2, path);
+        assert!(kinds(first) == ["a", "b"] && matches!(read, Err(Error::ModelTooLarge { .. })));
+        let (first, read) = first_kinds([row("a"), Ok((Some(KIND_LONGEST + 1), mysql::Value::NULL))].into_iter(), 3, 5, path);
+        assert!(kinds(first) == ["a"] && matches!(read, Err(Error::Damaged { .. })));
+        assert!(first_kinds([Ok((Some(KIND_LONGEST), mysql::Value::Bytes(b"x".to_vec())))].into_iter(), 3, 5, path).1.is_ok());
     }
 
     /// Past a read budget the model is too large, not damaged: a table's rows, its cells or its bytes.

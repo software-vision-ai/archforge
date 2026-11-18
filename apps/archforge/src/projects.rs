@@ -1363,10 +1363,7 @@ struct KindsUnread {
 /// [`MOST_UNKNOWN_KINDS`].
 fn add_kinds(kinds: &mut Vec<String>, more: Vec<String>) {
     for kind in more {
-        if kinds.len() >= MOST_UNKNOWN_KINDS {
-            break;
-        }
-        if !kinds.contains(&kind) {
+        if kinds.len() < MOST_UNKNOWN_KINDS && !kinds.contains(&kind) {
             kinds.push(kind);
         }
     }

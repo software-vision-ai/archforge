@@ -504,8 +504,8 @@ fn a_project_of_an_earlier_archforge_gets_the_columns_and_tables_added_since() {
 /// diagram table; on a table of an earlier shape whose text compares without case, each kind once
 /// and apart from those differing only in case, an empty one as `""`, a long one cut to 256 bytes
 /// at a character's end, at most [`MOST_UNKNOWN_KINDS`]; in another character set, known kinds are
-/// still known; a kind longer than any text and another kind of table are refused. The reading
-/// writes nothing.
+/// still known; a kind longer than any text, unless kinds outside the known ones came before it,
+/// and another kind of table are refused. The reading writes nothing.
 #[test]
 fn the_diagram_kinds_outside_the_known_ones_are_read_raw_on_every_shape() {
     let env = Env::new("kinds");
@@ -526,8 +526,11 @@ fn the_diagram_kinds_outside_the_known_ones_are_read_raw_on_every_shape() {
     // Known kinds that none of the diagrams has leave every row read to the unknown ones.
     let most = project.unknown_diagram_kinds(&main, &["absent.a", "absent.b"]).unwrap();
     assert_eq!((most.len(), &most[..4]), (MOST_UNKNOWN_KINDS, &["".to_string(), "ER".into(), "er".into(), "k00".into()][..]));
-    // A kind longer than any text a model holds is refused, as the model's reading refuses it.
+    // A kind longer than any text a model holds is refused, as the model's reading refuses it, unless
+    // kinds outside the known ones were read before it: those refuse the branch anyway.
     c.query_drop("INSERT INTO diagram_diagram (id, kind) VALUES (200, REPEAT('y', 262141))").unwrap();
+    assert_eq!(project.unknown_diagram_kinds(&main, &known).unwrap()[..3], ["", "ER", "k00"]);
+    c.query_drop("UPDATE diagram_diagram SET id = 0 WHERE id = 200").unwrap();
     let long = project.unknown_diagram_kinds(&main, &known);
     assert!(matches!(&long, Err(Error::Damaged { why, .. }) if why.contains("longer than")), "{long:?}");
     c.query_drop("DROP TABLE diagram_diagram").unwrap();
