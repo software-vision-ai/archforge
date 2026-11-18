@@ -3400,7 +3400,7 @@ fn a_project_opened_while_its_tab_closes_opens_again_once_closed() {
         tx.send(Err(crate::CreateError::Failed { detail: "the folder is gone".into() })).unwrap();
         h.run_steps(4);
         assert!(host.opens.lock().unwrap().is_empty() && h.state().holding.reopen.is_empty(), "{theme:?}: asked once");
-        assert_eq!(h.state().open_error.as_deref(), Some("the folder is gone"));
+        assert_eq!(h.state().open_error.as_deref(), Some("Commerce platform: the folder is gone"), "{theme:?}: named");
     });
 }
 
@@ -3470,6 +3470,56 @@ fn a_project_waiting_for_its_tab_to_close_does_not_hold_up_another_tab() {
         tx.send(Ok(crate::Opened { name: "Shop".into(), path: shop, ..Default::default() })).unwrap();
         h.run_steps(3);
         assert_eq!(host.opens.lock().unwrap().pop().map(|(p, _)| p), Some(COMMERCE.into()));
+        // Asked for again during the hold, its tab gone by then: still one opening, not retried.
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+        h.run_steps(3);
+        h.state_mut().close_tab(0);
+        h.run_steps(2);
+        h.state_mut().open_path(std::path::Path::new(COMMERCE));
+        h.state_mut().begin_hold().unwrap();
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(3);
+        h.state_mut().open_path(std::path::Path::new(COMMERCE));
+        end_hold(&mut h, Shell::end_hold);
+        let (_, tx) = host.opens.lock().unwrap().pop().expect("Commerce's opening");
+        tx.send(Err(crate::CreateError::Failed { detail: "the folder is gone".into() })).unwrap();
+        h.run_steps(3);
+        assert!(host.opens.lock().unwrap().is_empty() && h.state().holding.reopen.is_empty(), "{theme:?}: asked once");
+    });
+}
+
+/// Two projects reopened after their tabs closed: the first one's failure, named, stays shown
+/// while the second opens and after it has opened (AR-748).
+#[test]
+fn a_reopen_that_failed_stays_said_while_the_next_reopen_opens() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        let library = std::path::PathBuf::from("/tmp/Library.archforge");
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: library.clone(), ..Default::default() });
+        h.run_steps(3);
+        // What Library holds, read back as it opens again: nothing to hand over then.
+        let model = Some(rows_now(&h));
+        h.state_mut().close_tab(1);
+        h.state_mut().close_tab(0);
+        h.run_steps(2);
+        h.state_mut().open_path(std::path::Path::new(COMMERCE));
+        h.state_mut().open_path(&library);
+        for closing in host.closings.lock().unwrap().drain(..) {
+            closing.send(Ok(())).unwrap();
+        }
+        h.run_steps(3);
+        let (_, tx) = host.opens.lock().unwrap().pop().expect("Commerce's opening");
+        tx.send(Err(crate::CreateError::Failed { detail: "the folder is gone".into() })).unwrap();
+        h.run_steps(3);
+        let said = Some("Commerce platform: the folder is gone");
+        assert_eq!(h.state().open_error.as_deref(), said, "{theme:?}: said while Library opens");
+        let (path, tx) = host.opens.lock().unwrap().pop().expect("Library's opening");
+        tx.send(Ok(crate::Opened { name: "Library".into(), path, model, ..Default::default() })).unwrap();
+        h.run_steps(3);
+        assert_eq!((h.state().tabs.len(), h.state().open_error.as_deref()), (1, said), "{theme:?}: and once it has opened");
     });
 }
 
@@ -3525,9 +3575,19 @@ fn a_project_waiting_for_its_tab_to_close_does_not_open_while_quitting() {
         h.run_steps(3);
         assert_eq!(h.state().ask, asked_unsaved(COMMERCE), "{theme:?}: the quit asks about Commerce");
         assert!(host.opens.lock().unwrap().is_empty(), "{theme:?}: Library waits while quitting");
-        h.state_mut().ask = None;
-        h.state_mut().cancel_quit();
-        h.run_steps(3);
+        let ours = |h: &Harness<'static, Shell>| h.ctx.repaint_causes().iter().any(|c| c.file.ends_with("ui-egui/src/lib.rs"));
+        h.step();
+        assert!(!ours(&h), "{theme:?}: only the person's answer moves it on: {:?}", h.ctx.repaint_causes());
+        // Cancel, pressed and let go in one frame: that frame asks for the next.
+        let at = rect_of(&h, "close-ask.cancel").center();
+        let button =
+            |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+        h.input_mut().events.extend([egui::Event::PointerMoved(at), button(true), button(false)]);
+        h.step();
+        assert!(!h.state().quitting() && host.opens.lock().unwrap().is_empty(), "{theme:?}: called off");
+        h.step();
+        assert!(ours(&h), "{theme:?}: {:?}", h.ctx.repaint_causes());
+        h.run_steps(2);
         assert_eq!(host.opens.lock().unwrap().pop().map(|(p, _)| p), Some("/tmp/Library.archforge".into()));
     });
 }

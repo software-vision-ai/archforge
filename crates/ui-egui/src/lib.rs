@@ -1729,7 +1729,10 @@ impl Shell {
             match rx.try_recv() {
                 Ok(Ok(opened)) => {
                     self.opening = None;
+                    let kept = self.open_error.take();
                     self.open_project(opened);
+                    self.open_error = kept;
+                    self.opened(None);
                 }
                 Ok(Err(e)) => {
                     self.opening = None;
@@ -1737,15 +1740,15 @@ impl Shell {
                     if let CreateError::DoltMissing { detail } = &e {
                         self.dolt_missing = Some(detail.clone());
                     }
-                    self.open_error = Some(match e {
+                    self.opened(Some(match e {
                         CreateError::Failed { detail } | CreateError::FolderUnusable { detail } | CreateError::DoltMissing { detail } => detail,
                         other => format!("{other:?}"),
-                    });
+                    }));
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     self.opening = None;
-                    self.open_error = Some(crate::i18n::tr("The opening stopped without an answer"));
+                    self.opened(Some(crate::i18n::tr("The opening stopped without an answer")));
                 }
             }
         }
@@ -1979,7 +1982,7 @@ impl Shell {
             || writing
             || closing
             || self.holding.pending()
-            || !self.holding.reopen.is_empty()
+            || self.reopen_due()
             || self.agents.busy()
             || chat_panel::waiting(self)
             || chat_delete::waiting(self)
@@ -2111,6 +2114,10 @@ impl Shell {
         // the next: that frame is asked for now, not left to the pointer's next move.
         if self.project.as_ref().is_some_and(|p| self.adopted.as_ref() != Some(&p.path)) {
             ui.ctx().request_repaint();
+        }
+        // A quit called off in this frame lets a waiting reopen go on in the next (AR-748).
+        if self.reopen_due() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         }
     }
 }

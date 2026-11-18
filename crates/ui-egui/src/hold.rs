@@ -77,6 +77,8 @@ pub(crate) struct Holding {
     /// The projects asked to open while their tabs were closing, once each, in the order asked
     /// (AR-748). They are no change under way: a hold in another tab starts meanwhile.
     pub(crate) reopen: Vec<PathBuf>,
+    /// The project of the one waiting that the opening under way reopens.
+    reopening: Option<PathBuf>,
 }
 
 impl Holding {
@@ -229,8 +231,9 @@ impl Shell {
     /// of a project whose tab is closing is kept, once, for [`Shell::reopen_after_closing`].
     pub(crate) fn remember(&mut self, action: Waiting) -> bool {
         // Shown now, the tab would go with its closing, and the opening asked for with it (AR-748).
+        // One already waiting takes it too, its tab closed meanwhile (AR-748).
         if let Waiting::Open(path) = &action
-            && self.tabs.iter().any(|t| t.path == *path && t.closing())
+            && (self.tabs.iter().any(|t| t.path == *path && t.closing()) || self.holding.reopen.contains(path))
         {
             if !self.holding.reopen.contains(path) {
                 self.holding.reopen.push(path.clone());
@@ -292,11 +295,40 @@ impl Shell {
                 None => self.opening.is_none() && self.new_project.is_none(),
             };
             if ready {
+                // Not asked for just now, so the failure of one before it stays shown.
+                let (shown, idle) = (self.open_error.take(), self.opening.is_none());
                 self.open_path(&path);
+                if idle && self.opening.is_some() {
+                    self.holding.reopening = Some(path);
+                }
+                if self.open_error.is_none() {
+                    self.open_error = shown;
+                }
             } else {
                 self.holding.reopen.push(path);
             }
         }
+    }
+
+    /// Whether a reopen waits on something other than the person: not on a quit asked for, which
+    /// only the person's answer moves on, so the window looks again only for what it waits on.
+    pub(crate) fn reopen_due(&self) -> bool {
+        !self.holding.reopen.is_empty() && !self.quitting() && !self.quit_confirmed
+    }
+
+    /// Takes the opening's answer from the host: a reopen's failure is said with its project's
+    /// name, and keeps shown the failure of a reopen before it until it opens (AR-748); any other
+    /// opening's answer replaces what was shown, as before. `None` is a success.
+    pub(crate) fn opened(&mut self, why: Option<String>) {
+        let reopen = self.holding.reopening.take();
+        self.open_error = match (why, reopen) {
+            (Some(why), Some(path)) => {
+                let name = self.state.recent.iter().find(|r| r.path == path).map_or_else(|| path.display().to_string(), |r| r.name.clone());
+                Some(crate::i18n::fmt(&crate::i18n::tr("{key}: {problem}"), &[("key", &name), ("problem", &why)]))
+            }
+            (None, Some(_)) => self.open_error.take(),
+            (why, None) => why,
+        };
     }
 
     /// After a failed hold: the question a closing asks, or, with nothing unsaved, whether to close.
