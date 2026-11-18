@@ -937,11 +937,43 @@ fn a_handoff_inside_a_package_with_no_parent_that_goes_is_not_judged() {
     assert_eq!(refused(&mut kept, "element.remove", json!({ "ids": [id(0x50), id(0x70)] })).1, Some(unsound), "Accounts stays");
 }
 
+/// Removing T, nested in R, with C, below T in P, which has no diagram: T hands P up to R, so P
+/// stays and takes C's class diagram, and P, not R, is judged. With no diagram yet P is refused,
+/// named; with a bound one both go in either order, P lands in R holding C's diagram, and R, which
+/// has no diagram of its own, is never judged (AR-673).
+#[test]
+fn a_package_handed_up_by_a_removed_parent_stays_and_takes_the_diagram() {
+    let built = |bound: bool| {
+        let (mut st, model) = store();
+        let r = add(&mut st, model, PACKAGE, 0x10);
+        let t = nested(&mut st, r, 0x20, "T");
+        let p = nested(&mut st, t, 0x30, "P");
+        let own = bound.then(|| diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, p));
+        if let Some(own) = own {
+            bind(&mut st, model, 0x32, p, own);
+        }
+        let c = nested(&mut st, p, 0x40, "C");
+        let handed = diagram(&mut st, model, 0x41, STRUCTURE_DIAGRAM, c);
+        bind(&mut st, model, 0x42, c, handed);
+        (over(st), r, p, own, handed)
+    };
+    let unsound = Reason::ParentDefaultUnsound { parent: "P".into(), fault: None };
+    assert_eq!(refused(&mut built(false).0, "element.remove", json!({ "ids": [id(0x20), id(0x40)] })).1, Some(unsound), "P stays");
+    for ids in [[id(0x20), id(0x40)], [id(0x40), id(0x20)]] {
+        let (mut s, r, p, own, handed) = built(true);
+        s.execute("element.remove", &json!({ "ids": ids })).unwrap();
+        let st = s.doc();
+        assert_eq!((st.container(p).unwrap().map(|(o, _)| o), resolve(st, r)), (Some(r), Ok(DefaultDiagram::NoDiagramYet)), "{ids:?}");
+        let p_default = own.map(|d| Ok(DefaultDiagram::Bound(d)));
+        assert_eq!((st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), Some(resolve(st, p))), (Value::Ref(p), p_default), "{ids:?}");
+    }
+}
+
 /// A and B hold each other, a loop the store refuses as it is written and a project's reading
 /// refuses too: only a recorded move of A into B, applied again after B moved into A, makes it.
-/// Removing C, which B holds, with a class diagram, ends within the guard's time: no package above
-/// goes, so B, the first that stays, would take the diagram, and having none yet it is refused,
-/// named, with nothing changed (AR-673).
+/// Removing C, with a class diagram, and P, which holds C and has no diagram, ends within the
+/// guard's time: P goes and no package above goes, so B, which holds P and is the first that stays,
+/// would take the diagram, and having none yet it is refused, named, with nothing changed (AR-673).
 #[test]
 fn a_handoff_up_a_loop_of_packages_ends_and_is_judged_by_the_first_that_stays() {
     use archforge_engine::Document;
@@ -962,11 +994,12 @@ fn a_handoff_up_a_loop_of_packages_ends_and_is_judged_by_the_first_that_stays() 
         st.apply(&a_into_b).unwrap();
         let up = |o| st.container(o).unwrap().map(|(c, _)| c);
         assert_eq!((up(a), up(b)), (Some(b), Some(a)), "A and B hold each other");
-        let c = nested(&mut st, b, 0x30, "C");
+        let p = nested(&mut st, b, 0x40, "P");
+        let c = nested(&mut st, p, 0x30, "C");
         let handed = diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, c);
         bind(&mut st, model, 0x32, c, handed);
         let mut s = over(st);
-        let _ = tx.send(refused(&mut s, "element.remove", json!({ "ids": [id(0x30)] })));
+        let _ = tx.send(refused(&mut s, "element.remove", json!({ "ids": [id(0x30), id(0x40)] })));
     });
     let got = rx.recv_timeout(std::time::Duration::from_secs(30));
     assert!(!matches!(got, Err(std::sync::mpsc::RecvTimeoutError::Timeout)), "the walk up the loop never ended");
