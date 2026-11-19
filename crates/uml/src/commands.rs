@@ -57,7 +57,7 @@ pub(crate) fn has_packages(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'st
 
 /// The live element the id under `key` names, of whatever class; never a template parameter's
 /// classifier, which is its template's own (AR-130).
-fn element_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
+pub(crate) fn element_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let id = text(p, key);
     let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
     let obj = store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
@@ -434,6 +434,7 @@ fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: 
     }
     detach(ctx.doc, c)?;
     ctx.doc.push(to, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;
+    crate::relations::follow_client(ctx.doc, c)?;
     ctx.view.selection = vec![c];
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }

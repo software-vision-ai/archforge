@@ -1,6 +1,6 @@
 //! Relating classes through the engine: associations of each kind, ends set,
-//! generalizations, dependencies and interface realizations drawn, wrong ends refused with nothing
-//! changed, relationships reconnected with their drawn lines following, and removed with the
+//! generalizations, dependencies between packages and classifiers and interface realizations
+//! drawn, wrong ends refused with nothing changed, relationships reconnected with their drawn lines following, and removed with the
 //! classes they touch; each one undo step; realizations saved as rows and read back; the sweep.
 
 use archforge_diagram::ProjectView;
@@ -246,6 +246,208 @@ fn generalizations_and_dependencies_are_drawn_and_a_cycle_a_repeat_or_a_class_on
     refused(&mut s, "uml.dependency.add", json!({ "client": c[3], "supplier": c[3] }), "supplier");
     let d = relationships(&mut s, &c[3]).into_iter().find(|r| r["kind"] == "dependency").unwrap();
     assert_eq!((d["client"].as_str(), d["name"].as_str()), (Some(c[0].as_str()), Some("uses")));
+}
+
+/// The element that owns the element `id`.
+fn owner(s: &S, id: &str) -> archforge_mof::Obj {
+    s.doc().container(obj(s, id)).unwrap().unwrap().0
+}
+
+/// A dependency joins packages and classifiers of every kind in each of the four mixes, one undo
+/// step each: a package client owns it, a classifier client's home package does otherwise, and a
+/// cycle is allowed. A project holding only packages may draw one already (AR-696).
+#[test]
+fn a_dependency_joins_packages_and_classifiers_of_every_kind_owned_by_a_package_client_or_a_classifier_s_package() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "billing" }));
+    round_trip(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": billing }));
+    let held = s.doc().list(obj(&s, &sales), archforge_uml::package::PACKAGED_ELEMENT).unwrap();
+    assert_eq!(held.iter().filter_map(Value::as_ref).map(|o| s.doc().class_of(o).unwrap()).collect::<Vec<_>>(), [archforge_uml::DEPENDENCY]);
+    let back = run(&mut s, "uml.dependency.add", json!({ "client": billing, "supplier": sales }));
+    assert_eq!(owner(&s, &back), obj(&s, &billing), "a cycle is allowed, owned by its own client");
+    let nested = run(&mut s, "uml.package.add", json!({ "name": "ledger", "parent": billing }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let line = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Line" }));
+    let kinds = [
+        order.clone(),
+        run(&mut s, "uml.interface.add", json!({ "package": sales, "name": "Priced" })),
+        run(&mut s, "uml.enumeration.add", json!({ "package": sales, "name": "Tier" })),
+        run(&mut s, "uml.data-type.add", json!({ "package": sales, "name": "Money" })),
+        run(&mut s, "uml.primitive-type.add", json!({ "package": sales, "name": "Sku" })),
+        run(&mut s, "uml.association-class.add", json!({ "from": order, "to": line, "name": "Quote" })),
+    ];
+    for k in &kinds {
+        round_trip(&mut s, "uml.dependency.add", json!({ "client": k, "supplier": nested }));
+        round_trip(&mut s, "uml.dependency.add", json!({ "client": nested, "supplier": k }));
+        let deps = relationships(&mut s, k).into_iter().filter(|r| r["kind"] == "dependency");
+        let deps: Vec<_> = deps.map(|r| (r["client"].clone(), r["supplier"].clone(), owner(&s, r["id"].as_str().unwrap()))).collect();
+        assert_eq!(deps, [(json!(k), json!(nested), obj(&s, &sales)), (json!(nested), json!(k), obj(&s, &nested))], "{k}");
+    }
+    let between = run(&mut s, "uml.dependency.add", json!({ "client": kinds[2], "supplier": kinds[5] }));
+    assert_eq!(owner(&s, &between), obj(&s, &sales), "classifier to classifier, as before");
+}
+
+/// A dependency between packages is renamed in a project that holds only packages, and a new
+/// client takes it to the package that owns its dependencies, in the same step, while a new
+/// supplier leaves its owner as it is (AR-696).
+#[test]
+fn a_package_dependency_is_renamed_and_a_new_client_takes_it_to_its_own_package() {
+    let mut s = session();
+    let [sales, billing, orders] = ["sales", "billing", "orders"].map(|n| run(&mut s, "uml.package.add", json!({ "name": n })));
+    let dep = run(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": billing }));
+    round_trip(&mut s, "uml.relationship.rename", json!({ "relationship": dep, "name": "uses" }));
+    let [order, line] = [("Order", &orders), ("Line", &billing)].map(|(n, p)| run(&mut s, "uml.class.add", json!({ "package": p, "name": n })));
+    let reconnect = |end: &str, class: &str| json!({ "relationship": dep, "end": end, "class": class });
+    round_trip(&mut s, "uml.relationship.reconnect", reconnect("source", &order));
+    assert_eq!(owner(&s, &dep), obj(&s, &orders), "the new client's package owns it");
+    run(&mut s, "uml.relationship.reconnect", reconnect("target", &line));
+    assert_eq!(owner(&s, &dep), obj(&s, &orders), "a new supplier leaves the owner");
+}
+
+/// Anything but a package or a classifier at either end of a dependency is refused, typed as the
+/// wrong end it is, as is the UML library, a metaclass and an element depending on itself; nothing
+/// changes and no undo step is recorded (AR-696).
+#[test]
+fn a_dependency_end_that_is_no_package_or_classifier_is_refused_typed_with_nothing_recorded() {
+    use archforge_engine::End;
+    let mut s = session();
+    let (pkg, d, c, _) = classes(&mut s, &["Order"], 0);
+    let attribute = run(&mut s, "uml.attribute.add", json!({ "class": c[0], "name": "total" }));
+    run(&mut s, "element.describe", json!({ "element": c[0], "text": "Kept." }));
+    let comment = s.doc().list(obj(&s, &c[0]), archforge_uml::element::OWNED_COMMENT).unwrap()[0].as_ref().unwrap();
+    let comment = s.doc().uuid(comment).unwrap().to_string();
+    let profile = run(&mut s, "uml.profile.add", json!({ "name": "Persistence" }));
+    let entity = run(&mut s, "uml.stereotype.add", json!({ "profile": profile, "name": "Entity", "extends": ["Class"] }));
+    let metaclass = s.doc().uuid(archforge_uml::profiles::extensions(s.doc(), obj(&s, &entity))[0].metaclass).unwrap().to_string();
+    let library = s.doc().uuid(archforge_uml::profiles::library(s.doc()).unwrap()).unwrap().to_string();
+    let wrong = |end, kind| Some(Reason::WrongEnd { relationship: "dependency", end, kind });
+    let cases = [
+        (attribute.as_str(), pkg.as_str(), wrong(End::Source, "attribute")),
+        (pkg.as_str(), attribute.as_str(), wrong(End::Target, "attribute")),
+        (comment.as_str(), pkg.as_str(), wrong(End::Source, "element")),
+        (c[0].as_str(), d.as_str(), wrong(End::Target, "element")),
+        (profile.as_str(), c[0].as_str(), wrong(End::Source, "profile")),
+        (pkg.as_str(), metaclass.as_str(), Some(Reason::UmlOwn { metaclass: Some("Class".into()) })),
+        (library.as_str(), pkg.as_str(), Some(Reason::UmlOwn { metaclass: None })),
+        (pkg.as_str(), pkg.as_str(), Some(Reason::DependsOnItself { kind: "package" })),
+        (c[0].as_str(), c[0].as_str(), Some(Reason::DependsOnItself { kind: "class" })),
+    ];
+    for (client, supplier, want) in cases {
+        let (before, history) = (snapshot(&s), (s.undo_label().map(str::to_string), s.revision()));
+        let p = json!({ "client": client, "supplier": supplier });
+        assert_eq!(reason(&mut s, "uml.dependency.add", p.clone()), want, "{p}");
+        assert_eq!(snapshot(&s), before, "{p} changed nothing");
+        assert_eq!((s.undo_label().map(str::to_string), s.revision()), history, "{p} recorded no undo step");
+    }
+}
+
+/// A package outside the project's model is refused at either end of a dependency, joining two
+/// elements of one model being Archforge's own rule, and so is a classifier client in no package;
+/// a reconnect is refused for a dependency of several clients or onto a class outside the model,
+/// and one held by no package is attached to its new client's package. No command makes these,
+/// but a loaded document may hold them (AR-696).
+#[test]
+fn a_package_outside_the_model_or_a_classifier_client_in_no_package_is_refused_and_a_loose_dependency_attached() {
+    use archforge_uml::{CLASS, DEPENDENCY, PACKAGE, dependency, package};
+    let mut st = store(0);
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let [sales, stray, loose, order, away, d, twice] = [PACKAGE, PACKAGE, CLASS, CLASS, CLASS, DEPENDENCY, DEPENDENCY].map(|c| st.create(c).unwrap());
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(sales)).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(loose)).unwrap();
+    st.push(sales, package::PACKAGED_ELEMENT, Value::Ref(order)).unwrap();
+    st.push(stray, package::PACKAGED_ELEMENT, Value::Ref(away)).unwrap();
+    for (dep, client) in [(d, loose), (twice, loose), (twice, order)] {
+        st.push(dep, dependency::CLIENT, Value::Ref(client)).unwrap();
+    }
+    st.push(d, dependency::SUPPLIER, Value::Ref(sales)).unwrap();
+    st.push(twice, dependency::SUPPLIER, Value::Ref(sales)).unwrap();
+    let [sales, stray, loose, order, away, d, twice] = [sales, stray, loose, order, away, d, twice].map(|o| st.uuid(o).unwrap().to_string());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
+    refused(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": stray }), "supplier: ");
+    refused(&mut s, "uml.dependency.add", json!({ "client": stray, "supplier": sales }), "client: ");
+    refused(&mut s, "uml.dependency.add", json!({ "client": loose, "supplier": sales }), "client: the class is in no package");
+    run(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": loose }));
+    let reconnect = |d: &str, class: &str| json!({ "relationship": d, "end": "source", "class": class });
+    refused(&mut s, "uml.relationship.reconnect", reconnect(&twice, &order), "does not join one client to one supplier");
+    refused(&mut s, "uml.relationship.reconnect", reconnect(&d, &away), &format!("class: {away} is outside this project's model"));
+    round_trip(&mut s, "uml.relationship.reconnect", reconnect(&d, &order));
+    assert_eq!(owner(&s, &d), obj(&s, &sales), "attached to the new client's package");
+}
+
+/// A reconnect checks the pair it leaves: an end that stays which is no package or classifier, or
+/// is outside the model, as a loaded document may hold it, is the dependency's fault, said under
+/// `relationship` with its role, and moving that end itself repairs it. The commands are open only
+/// while a package or a classifier of the model exists (AR-696).
+#[test]
+fn a_wrong_end_that_stays_is_the_dependency_s_fault_and_only_model_elements_open_the_commands() {
+    use archforge_uml::{CLASS, DEPENDENCY, PACKAGE, PROPERTY, dependency, package};
+    let over = |st| Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
+    let mut st = store(0);
+    st.create(archforge_core::MODEL).unwrap();
+    st.create(PACKAGE).unwrap();
+    let mut s = over(st);
+    for cmd in ["uml.dependency.add", "uml.relationship.rename"] {
+        assert!(matches!(s.execute(cmd, &json!({})), Err(EngineError::Disabled { .. })), "{cmd}: only a package outside the model");
+    }
+    let mut st = store(100);
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let [sales, stray, order, invoice, total, d, e] =
+        [PACKAGE, PACKAGE, CLASS, CLASS, PROPERTY, DEPENDENCY, DEPENDENCY].map(|c| st.create(c).unwrap());
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(sales)).unwrap();
+    for held in [order, invoice, d, e] {
+        st.push(sales, package::PACKAGED_ELEMENT, Value::Ref(held)).unwrap();
+    }
+    for (dep, client, supplier) in [(d, order, total), (e, stray, sales)] {
+        st.push(dep, dependency::CLIENT, Value::Ref(client)).unwrap();
+        st.push(dep, dependency::SUPPLIER, Value::Ref(supplier)).unwrap();
+    }
+    let [invoice, d, e] = [invoice, d, e].map(|o| st.uuid(o).unwrap().to_string());
+    let mut s = over(st);
+    let reconnect = |d: &str, end: &str, class: &str| json!({ "relationship": d, "end": end, "class": class });
+    refused(&mut s, "uml.relationship.reconnect", reconnect(&d, "source", &invoice), "relationship: the dependency's supplier is");
+    let why = reason(&mut s, "uml.relationship.reconnect", reconnect(&d, "source", &invoice));
+    assert!(matches!(why, Some(Reason::WrongEnd { relationship: "dependency", end: archforge_engine::End::Target, .. })), "{why:?}");
+    refused(&mut s, "uml.relationship.reconnect", reconnect(&e, "target", &invoice), "relationship: the dependency's client ");
+    round_trip(&mut s, "uml.relationship.reconnect", reconnect(&d, "target", &invoice));
+}
+
+/// A classifier client moved to another package, or nested in a classifier there, takes its
+/// dependencies to the package that owns its dependencies now, a classifier nested in it too, in
+/// the same step (AR-696).
+#[test]
+fn a_classifier_client_moved_or_nested_elsewhere_takes_its_dependencies_along() {
+    let mut s = session();
+    let [sales, billing] = ["sales", "billing"].map(|n| run(&mut s, "uml.package.add", json!({ "name": n })));
+    let [order, line, invoice] =
+        [("Order", &sales), ("Line", &sales), ("Invoice", &billing)].map(|(n, p)| run(&mut s, "uml.class.add", json!({ "package": p, "name": n })));
+    run(&mut s, "uml.classifier.set-owner", json!({ "classifier": line, "owner": order }));
+    let [on_billing, from_line] =
+        [(&order, &billing), (&line, &invoice)].map(|(c, su)| run(&mut s, "uml.dependency.add", json!({ "client": c, "supplier": su })));
+    assert_eq!([owner(&s, &on_billing), owner(&s, &from_line)], [obj(&s, &sales); 2]);
+    round_trip(&mut s, "uml.class.move", json!({ "class": order, "package": billing }));
+    assert_eq!([owner(&s, &on_billing), owner(&s, &from_line)], [obj(&s, &billing); 2], "moved with the class and the one nested in it");
+    round_trip(&mut s, "uml.classifier.set-owner", json!({ "classifier": line, "owner": sales }));
+    assert_eq!(owner(&s, &from_line), obj(&s, &sales), "nested out, to its new package");
+}
+
+/// A dependency between two packages shown on a class diagram is drawn there as any dependency
+/// is: dashed, with an open arrow at the supplier (AR-696).
+#[test]
+fn a_dependency_between_two_package_nodes_draws_dashed_with_an_open_arrow() {
+    use archforge_diagram::figure::EndMark as M;
+    let mut s = session();
+    let (pkg, d, _, _) = classes(&mut s, &["Order"], 0);
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "billing" }));
+    let ledger = run(&mut s, "uml.package.add", json!({ "name": "ledger", "parent": pkg }));
+    let place = |s: &mut S, p: &str, x: i32| run(s, "diagram.place", json!({ "diagram": d, "element": p, "x": x, "y": 0 }));
+    let nodes = [place(&mut s, &billing, 0), place(&mut s, &ledger, 400)];
+    let dep = run(&mut s, "uml.dependency.add", json!({ "client": ledger, "supplier": billing }));
+    round_trip(&mut s, "diagram.connect", json!({ "diagram": d, "element": dep, "source": nodes[1], "target": nodes[0] }));
+    assert_eq!(s.doc().list(obj(&s, &d), archforge_diagram::diagram::EDGE).unwrap().len(), 1, "the line is on the diagram");
+    let line = archforge_diagram::Notation::line(&archforge_uml::UmlNotation, s.doc(), obj(&s, &dep)).unwrap();
+    assert!(line.dashed, "dashed");
+    assert_eq!(marks(&s, &dep), [M::None, M::OpenArrow], "an open arrow at the supplier");
 }
 
 #[test]

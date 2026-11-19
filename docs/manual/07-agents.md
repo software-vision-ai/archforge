@@ -659,11 +659,26 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   (`links_removed`).
   Choosing the default a package with one binding has already changes nothing and adds no undo
   step; any other choice, mending a duplicate included, is one undo step. While Archforge shows an earlier version, it is refused like every change.
-- **Dependencies**: `element_remove` refuses a package, or a package taken along with another,
-  while a dependency that stays has it as its client or its supplier, naming the package, the
-  dependency's id and its other end; remove that dependency first with `element_remove` and its
-  id. For now this holds for both ends; a later version removes such dependencies with the
-  package instead.
+- **Dependencies**: `uml_dependency_add` draws a dependency from `client` to `supplier`, each
+  the id of a package or of a class, an interface, an enumeration, a data type, a primitive type
+  or an association class, in any mix, with an optional `name`. A package client owns the
+  dependency; for a classifier client, the classifier's package owns it. Anything else at either
+  end, such as an attribute, a comment, a diagram or a profile, is refused as the wrong end and
+  changes nothing, as are UML's own library and metaclasses, a template parameter's own
+  classifier and a package outside the model. An element cannot depend on itself, while a cycle
+  of dependencies is allowed. Two ends, no dependency on itself and both ends in one model are
+  Archforge's own rules, not UML's. `element_remove` refuses a package, or a package taken along
+  with another, while a dependency that stays has it as its client or its supplier, naming the
+  package, the dependency's id and its other end; remove that dependency first with
+  `element_remove` and its id. For now this holds for both ends; a later version removes such
+  dependencies with the package instead. `uml_relationship_reconnect` of a dependency's source moves
+  the dependency to its new client's package in the same step; a new target leaves its owner as it
+  is. Moving a classifier client to another package, or nesting it in a classifier elsewhere,
+  takes its dependencies to its new package too. A dependency with more than one client or
+  supplier, or a new end outside the model, is refused, and so is a reconnect that would keep an
+  end that is no package or classifier, or is outside the model, naming that end's role: move that
+  end instead. `uml_relationship_rename` renames a dependency between packages in a project with no
+  classifier.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element

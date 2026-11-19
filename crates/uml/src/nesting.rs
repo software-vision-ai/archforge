@@ -330,6 +330,7 @@ fn set_owner(ctx: &mut C<'_>, p: &Params) -> R {
             ctx.doc.remove_value(from, prop, &Value::Ref(c)).map_err(fail)?;
         }
         place(ctx.doc, c, owner)?;
+        crate::relations::follow_client(ctx.doc, c)?;
     }
     ctx.view.selection = vec![c];
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
