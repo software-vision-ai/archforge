@@ -397,7 +397,8 @@ fn a_package_outside_the_model_or_a_classifier_client_in_no_package_is_refused_a
 /// while a package or a classifier of the model exists (AR-696).
 #[test]
 fn a_wrong_end_that_stays_is_the_dependency_s_fault_and_only_model_elements_open_the_commands() {
-    use archforge_uml::{CLASS, DEPENDENCY, PACKAGE, PROPERTY, dependency, package};
+    use archforge_uml::{CLASS, CLASSIFIER_TEMPLATE_PARAMETER, DEPENDENCY, PACKAGE, PROPERTY, REDEFINABLE_TEMPLATE_SIGNATURE};
+    use archforge_uml::{classifier, dependency, named_element, package, template_parameter, template_signature};
     let over = |st| Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
     let mut st = store(0);
     st.create(archforge_core::MODEL).unwrap();
@@ -408,23 +409,38 @@ fn a_wrong_end_that_stays_is_the_dependency_s_fault_and_only_model_elements_open
     }
     let mut st = store(100);
     let model = st.create(archforge_core::MODEL).unwrap();
-    let [sales, stray, order, invoice, total, d, e] =
-        [PACKAGE, PACKAGE, CLASS, CLASS, PROPERTY, DEPENDENCY, DEPENDENCY].map(|c| st.create(c).unwrap());
-    st.push(model, archforge_core::model::MEMBER, Value::Ref(sales)).unwrap();
-    for held in [order, invoice, d, e] {
+    let [sales, stray, other, order, invoice, total, loose, t] =
+        [PACKAGE, PACKAGE, PACKAGE, CLASS, CLASS, PROPERTY, CLASS, CLASS].map(|c| st.create(c).unwrap());
+    let [d, e, f, g, twice] = [(); 5].map(|_| st.create(DEPENDENCY).unwrap());
+    for top in [sales, other, loose] {
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(top)).unwrap();
+    }
+    for held in [order, invoice, d, e, f, g, twice] {
         st.push(sales, package::PACKAGED_ELEMENT, Value::Ref(held)).unwrap();
     }
-    for (dep, client, supplier) in [(d, order, total), (e, stray, sales)] {
+    // `t` is the template parameter of `invoice`, the template's own classifier.
+    let [sig, param] = [REDEFINABLE_TEMPLATE_SIGNATURE, CLASSIFIER_TEMPLATE_PARAMETER].map(|c| st.create(c).unwrap());
+    st.set(invoice, classifier::OWNED_TEMPLATE_SIGNATURE, Value::Ref(sig)).unwrap();
+    st.push(sig, template_signature::OWNED_PARAMETER, Value::Ref(param)).unwrap();
+    st.set(param, template_parameter::OWNED_PARAMETERED_ELEMENT, Value::Ref(t)).unwrap();
+    for (dep, client, supplier) in [(d, order, total), (e, stray, sales), (f, order, t), (g, loose, sales), (twice, order, sales)] {
         st.push(dep, dependency::CLIENT, Value::Ref(client)).unwrap();
         st.push(dep, dependency::SUPPLIER, Value::Ref(supplier)).unwrap();
     }
-    let [invoice, d, e] = [invoice, d, e].map(|o| st.uuid(o).unwrap().to_string());
+    st.push(twice, dependency::CLIENT, Value::Ref(invoice)).unwrap();
+    st.set(order, named_element::NAME, Value::Str("Order".into())).unwrap();
+    let [order, invoice, other, d, e, f, g, twice] = [order, invoice, other, d, e, f, g, twice].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = over(st);
     let reconnect = |d: &str, end: &str, class: &str| json!({ "relationship": d, "end": end, "class": class });
     refused(&mut s, "uml.relationship.reconnect", reconnect(&d, "source", &invoice), "relationship: the dependency's supplier is");
     let why = reason(&mut s, "uml.relationship.reconnect", reconnect(&d, "source", &invoice));
     assert!(matches!(why, Some(Reason::WrongEnd { relationship: "dependency", end: archforge_engine::End::Target, .. })), "{why:?}");
     refused(&mut s, "uml.relationship.reconnect", reconnect(&e, "target", &invoice), "relationship: the dependency's client ");
+    refused(&mut s, "uml.relationship.reconnect", reconnect(&f, "source", &invoice), "relationship: the dependency's supplier: ");
+    refused(&mut s, "uml.relationship.reconnect", reconnect(&g, "target", &invoice), "relationship: the class is in no package");
+    // A dependency of two clients stays where it is held when one of them moves.
+    round_trip(&mut s, "uml.class.move", json!({ "class": order, "package": other }));
+    assert_eq!(owner(&s, &twice), owner(&s, &e), "kept in sales");
     round_trip(&mut s, "uml.relationship.reconnect", reconnect(&d, "target", &invoice));
 }
 

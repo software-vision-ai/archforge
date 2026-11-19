@@ -719,12 +719,14 @@ fn rehome(store: &mut Store, d: Obj, owner: Obj) -> Result<(), CommandError> {
     store.push(owner, package::PACKAGED_ELEMENT, Value::Ref(d)).map_err(fail).map(|_| ())
 }
 
-/// Moves the dependencies whose client is the classifier `c`, or one it nests, to the package that
-/// owns their dependencies now that `c` has moved, as a new client does (AR-696).
+/// Moves the dependencies whose only client is the classifier `c`, or one it nests, to the package
+/// that owns their dependencies now that `c` has moved, as a new client does (AR-696).
 pub(crate) fn follow_client(store: &mut Store, c: Obj) -> Result<(), CommandError> {
     for x in std::iter::once(c).chain(crate::nesting::nested_within(store, c)) {
         let is_client = |(d, prop): &(Obj, archforge_mof::PropId)| *prop == dependency::CLIENT && store.class_of(*d).ok() == Some(DEPENDENCY);
-        let held: Vec<Obj> = store.referrers(x).into_iter().filter(is_client).map(|(d, _)| d).collect();
+        // One of several clients does not decide where the dependency is held, as no reconnect moves it.
+        let held: Vec<Obj> =
+            store.referrers(x).into_iter().filter(is_client).map(|(d, _)| d).filter(|d| list(store, *d, dependency::CLIENT).len() == 1).collect();
         if held.is_empty() {
             continue;
         }
@@ -1221,6 +1223,9 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         if !crate::constraints::in_model(ctx.doc, kept) {
             return Err(refuse(key, format!("the dependency's {role} {}", outside(kept))));
         }
+        if let Some(why) = crate::templates::parameter_element_problem(ctx.doc, kept) {
+            return Err(refuse(key, format!("the dependency's {role}: {why}")));
+        }
         if !crate::constraints::in_model(ctx.doc, c) {
             return Err(refuse("class", outside(c)));
         }
@@ -1229,8 +1234,9 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
             return Err(refuse("class", format!("{} cannot depend on itself", a_what(ctx.doc, cl))).because(why));
         }
         let (prop, old) = if source { (dependency::CLIENT, client) } else { (dependency::SUPPLIER, supplier) };
-        // A new client moves the dependency to the package that owns its dependencies (AR-696).
-        let owner = if source { Some(dependency_owner(ctx.doc, c, "class")?) } else { None };
+        // A new client moves the dependency to the package that owns its dependencies; the client
+        // kept must have one too, or the dependency would be held nowhere (AR-696).
+        let owner = if source { Some(dependency_owner(ctx.doc, c, "class")?) } else { dependency_owner(ctx.doc, client, key).map(|_| None)? };
         ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;
         ctx.doc.push(r, prop, Value::Ref(c)).map_err(fail)?;
         if let Some(owner) = owner {

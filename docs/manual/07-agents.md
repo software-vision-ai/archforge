@@ -676,7 +676,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   an association's or a generalization's end still moves onto a classifier only. Moving the source
   moves the dependency to its new client's package in the same step; a new target leaves its owner as it
   is. Moving a classifier client to another package, or nesting it in a classifier elsewhere,
-  takes its dependencies to its new package too. A dependency with more than one client or
+  takes the dependencies it is the only client of to its new package too. A dependency with more than one client or
   supplier, or a new end outside the model, is refused, and so is a reconnect that would keep an
   end that is no package or classifier, or is outside the model, naming that end's role: move that
   end instead. `uml_relationship_rename` renames a dependency between packages in a project with no

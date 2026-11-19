@@ -112,7 +112,7 @@ or one a package with no parent takes along, while a dependency that stays has i
 its supplier (`Reason::DependencyEnd`, naming the dependency's id and its other end), until 402-C,
 AR-698, replaces both refusals by removing such dependencies with the package; a dependency's new
 client takes it to the package that owns its dependencies in the same step, as a classifier client
-moved or nested elsewhere (`uml.*.move`, `uml.classifier.set-owner`) takes its dependencies; a
+moved or nested elsewhere (`uml.*.move`, `uml.classifier.set-owner`) takes the dependencies it is the only client of; a
 dependency's end moves onto a package or a classifier of the model, and `uml.relationship.reconnect` is open
 while a package of the model exists; a reconnect checks both ends it leaves, a wrong end that stays said under
 `relationship`; a reconnect of a
