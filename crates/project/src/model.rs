@@ -62,7 +62,9 @@ pub(crate) const MAX_TABLES: usize = 4096;
 const DIAGRAMS: &str = "diagram_diagram";
 /// The most kinds outside the known ones [`Project::unknown_diagram_kinds`] gives.
 pub const MOST_UNKNOWN_KINDS: usize = 16;
-/// The most characters of a diagram's kind that are read: enough for [`KIND_BYTES`] of any text.
+/// The most characters of a diagram's kind compared with the known kinds: enough for
+/// [`KIND_BYTES`] of any text. One more is read, so a longer kind is known to be cut and is no known
+/// kind, though the part read is one.
 const KIND_READ: usize = 256;
 /// The most bytes of a diagram's kind given: a longer kind is cut there, at a character's end, and
 /// is no known kind.
@@ -336,8 +338,9 @@ impl Project {
     /// The kinds of the diagrams `branch` holds that are not among `known`, each once and in byte
     /// order, at most [`MOST_UNKNOWN_KINDS`] of them: a kind left empty reads as `""`, and one is
     /// compared as UTF-8 text byte for byte, whatever the column's character set, then given cut to
-    /// [`KIND_BYTES`]. Only `diagram_diagram.kind` is read, raw and at most [`KIND_READ`] characters
-    /// of each, so it works on every shape that table has had, before the project is prepared, and
+    /// [`KIND_BYTES`]; the kinds given are in byte order as given. Only `diagram_diagram.kind` is
+    /// read, raw and at most one character past [`KIND_READ`] of each, and only a kind read whole
+    /// matches a known one, so a longer kind is never taken for one. It works on every shape that table has had, before the project is prepared, and
     /// writes nothing; a branch without that table holds no diagrams, and one whose `kind` is generated,
     /// not stored, is damaged, as the model's shape check finds it. A branch whose rename is
     /// unclear is held as for every other reading ([`Error::BranchUnclear`]). The work is bounded
@@ -372,10 +375,12 @@ impl Project {
             return Err(damaged(format!("{DIAGRAMS}.kind is generated, not stored")));
         }
         // As UTF-8 text, distinct as bytes (case counts); `most` leaves room for every known kind, and
-        // `LEFT` counts characters, so the cut to bytes is made here, once a kind is decided.
+        // `LEFT` counts characters, so the cut to bytes is made here, once a kind is decided; a kind
+        // read past `KIND_READ` characters was cut, so it is known by no prefix.
         let most = known.len().saturating_add(MOST_UNKNOWN_KINDS);
         let query = format!(
-            "SELECT OCTET_LENGTH(`kind`), CASE WHEN OCTET_LENGTH(`kind`) <= {KIND_LONGEST} THEN CAST(CONVERT(LEFT(`kind`, {KIND_READ}) USING utf8mb4) AS BINARY) END FROM `{DIAGRAMS}` LIMIT {}",
+            "SELECT OCTET_LENGTH(`kind`), CASE WHEN OCTET_LENGTH(`kind`) <= {KIND_LONGEST} THEN CAST(CONVERT(LEFT(`kind`, {}) USING utf8mb4) AS BINARY) END FROM `{DIAGRAMS}` LIMIT {}",
+            KIND_READ + 1,
             MAX_TABLE_ROWS + 1
         );
         let unreadable = |e: mysql::Error| damaged(format!("the diagrams' kinds cannot be read: {e}"));
@@ -386,11 +391,16 @@ impl Project {
         let (first, read) = first_kinds(rows, most, MAX_TABLE_ROWS, self.path());
         let mut unknown = Vec::new();
         for kind in first {
-            let shown = crate::chat::cut_bytes(&String::from_utf8_lossy(&kind), KIND_BYTES).0.to_string();
-            if !known.iter().any(|k| k.as_bytes() == kind) && !unknown.contains(&shown) && unknown.len() < MOST_UNKNOWN_KINDS {
+            let text = String::from_utf8_lossy(&kind);
+            let whole = text.chars().count() <= KIND_READ;
+            let shown = crate::chat::cut_bytes(&text, KIND_BYTES).0.to_string();
+            let known_kind = whole && known.iter().any(|k| k.as_bytes() == kind);
+            if !known_kind && !unknown.contains(&shown) && unknown.len() < MOST_UNKNOWN_KINDS {
                 unknown.push(shown);
             }
         }
+        // A cut can move a kind before another, so they are put in order once cut.
+        unknown.sort();
         if let (Err(e), false) = (&read, unknown.is_empty()) {
             log::warn!("the diagram kinds of {} were read in part: {e}", self.path().display());
         }

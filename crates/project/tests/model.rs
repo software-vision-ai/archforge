@@ -538,6 +538,17 @@ fn the_diagram_kinds_outside_the_known_ones_are_read_raw_on_every_shape() {
     c.query_drop("CREATE TABLE diagram_diagram (id INT NOT NULL PRIMARY KEY, kind VARCHAR(64) CHARACTER SET utf16 NULL)").unwrap();
     c.query_drop("INSERT INTO diagram_diagram (id, kind) VALUES (1, 'er'), (2, 'legacy.kind')").unwrap();
     assert_eq!(project.unknown_diagram_kinds(&main, &known).unwrap(), ["legacy.kind"], "another character set");
+    // Only a kind read whole matches a known one: one longer than what is read is unknown, though
+    // the part read is known; and the kinds given are in byte order once cut.
+    c.query_drop("DROP TABLE diagram_diagram").unwrap();
+    c.query_drop("CREATE TABLE diagram_diagram (id INT NOT NULL PRIMARY KEY, kind MEDIUMTEXT NULL)").unwrap();
+    let (a, b, c257) = ("a".repeat(256), "b".repeat(255), "c".repeat(257));
+    let stored = [a.clone(), format!("{a}x"), format!("{b}z"), format!("{b}é"), format!("{c257}y")];
+    for (id, kind) in stored.iter().enumerate() {
+        c.exec_drop("INSERT INTO diagram_diagram (id, kind) VALUES (?, ?)", (id, kind)).unwrap();
+    }
+    let given = project.unknown_diagram_kinds(&main, &[a.as_str(), c257.as_str()]).unwrap();
+    assert_eq!(given, [a.clone(), b.clone(), format!("{b}z"), "c".repeat(256)], "cut kinds unknown, in byte order");
     // A generated `kind` holds no stored kind: damaged, as the model's shape check finds it, not
     // its computed value given as a kind (AR-752).
     for generated in ["VIRTUAL", "STORED"] {
