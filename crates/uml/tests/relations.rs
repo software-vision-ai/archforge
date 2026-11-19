@@ -305,6 +305,22 @@ fn a_package_dependency_is_renamed_and_a_new_client_takes_it_to_its_own_package(
     assert_eq!(owner(&s, &dep), obj(&s, &orders), "a new supplier leaves the owner");
 }
 
+/// In a project holding only packages, a dependency's ends move onto other packages, a new client
+/// taking it to its own package; an association's end still moves onto a classifier only (AR-696).
+#[test]
+fn a_dependency_end_moves_onto_a_package_and_an_association_end_never_does() {
+    let mut s = session();
+    let [sales, billing, orders] = ["sales", "billing", "orders"].map(|n| run(&mut s, "uml.package.add", json!({ "name": n })));
+    let dep = run(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": billing }));
+    let reconnect = |r: &str, end: &str, to: &str| json!({ "relationship": r, "end": end, "class": to });
+    round_trip(&mut s, "uml.relationship.reconnect", reconnect(&dep, "target", &orders));
+    round_trip(&mut s, "uml.relationship.reconnect", reconnect(&dep, "source", &billing));
+    assert_eq!(owner(&s, &dep), obj(&s, &billing), "the new client package owns it");
+    let [order, line] = ["Order", "Line"].map(|n| run(&mut s, "uml.class.add", json!({ "package": sales, "name": n })));
+    let assoc = run(&mut s, "uml.association.add", json!({ "from": order, "to": line }));
+    refused(&mut s, "uml.relationship.reconnect", reconnect(&assoc, "target", &orders), "class: ");
+}
+
 /// Anything but a package or a classifier at either end of a dependency is refused, typed as the
 /// wrong end it is, as is the UML library, a metaclass and an element depending on itself; nothing
 /// changes and no undo step is recorded (AR-696).

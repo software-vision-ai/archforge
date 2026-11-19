@@ -671,6 +671,13 @@ fn has_dependency_ends(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static
     if f.doc.alive().any(fits) { Ok(()) } else { Err(crate::constraints::NO_CONTEXTS) }
 }
 
+/// Whether a relationship's end may be moved: a classifier exists, as for every relationship, or a
+/// package of the model, which a dependency's end may move onto (AR-696).
+fn has_reconnect_ends(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
+    let fits = |o| f.doc.class_of(o).is_ok_and(|c| crate::is_classifier(c) || (c == PACKAGE && crate::constraints::in_model(f.doc, o)));
+    if f.doc.alive().any(fits) { Ok(()) } else { Err(crate::constraints::NO_CONTEXTS) }
+}
+
 /// The dependency's end under `key`: a package or a classifier of the project's model, never the
 /// UML library or one of its metaclasses; anything else is refused as the wrong `end`. Joining
 /// two elements of one model is Archforge's rule, not UML's.
@@ -1116,8 +1123,14 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         "target" => false,
         e => return Err(refuse("end", format!("{e:?} is not source or target"))),
     };
-    let c = classifier_of(ctx.doc, p, "class")?;
     let class = ctx.doc.class_of(r).map_err(fail)?;
+    // A dependency's end moves onto a package or a classifier, as one is drawn; every other
+    // relationship's onto a classifier only (AR-696).
+    let c = if class == DEPENDENCY {
+        dependency_end(ctx.doc, p, "class", if source { End::Source } else { End::Target })?
+    } else {
+        classifier_of(ctx.doc, p, "class")?
+    };
     let mut dropped: Vec<Json> = Vec::new();
     if crate::is_association(class) {
         let end = if source { End::Source } else { End::Target };
@@ -1418,9 +1431,9 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             concat!(
                 "relationship: string; the association's, generalization's, dependency's, interface realization's, association class's or template binding's id\n",
                 "end: string, source|target; the end to move: the classifier it was drawn from (the specific one, the client, the implementing class, the bound element) or to\n",
-                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization in a generalization set keeps its ends, refused naming its sets; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing, and the general end never moves onto a final classifier; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a template binding's source moves onto another class, interface or data type of the template's kind, keeping its arguments, and its target onto another template only when every parameter of that one has a default (else uml.template-binding.set gives the template with its arguments); a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result"
+                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization in a generalization set keeps its ends, refused naming its sets; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing, and the general end never moves onto a final classifier; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a template binding's source moves onto another class, interface or data type of the template's kind, keeping its arguments, and its target onto another template only when every parameter of that one has a default (else uml.template-binding.set gives the template with its arguments); a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result; a dependency's end moves onto a package as well, of the model"
             ),
-            has_classes,
+            has_reconnect_ends,
             relationship_reconnect
         ),
         cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization", "Association class", "Template binding"], None, "class: string; the class's, interface's, enumeration's, data type's, primitive type's or association class's id", has_classes, relationship_list),
