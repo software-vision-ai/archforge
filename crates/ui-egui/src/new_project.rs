@@ -87,8 +87,12 @@ impl Dialog {
     }
 }
 
-/// Opens the dialog with an empty name.
+/// Opens the dialog with an empty name, unless a folder pick waits: its answer, an Open or a
+/// Change…, would find the dialog in its way, or another dialog in place of its own (AR-737).
 pub fn open(shell: &mut Shell) {
+    if shell.picking.is_some() {
+        return;
+    }
     shell.new_project = Some(Dialog::default());
 }
 

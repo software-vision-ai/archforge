@@ -3578,6 +3578,24 @@ fn reopened_while_closing(theme: ThemeKind) -> (Harness<'static, Shell>, std::sy
     (h, host)
 }
 
+/// An opening waiting for its tab to close keeps waiting while a folder pick waits, once the closing
+/// ends, and runs when the pick is answered: the pick would turn it away (AR-737).
+#[test]
+fn a_reopen_waits_for_a_folder_pick_answered_after_its_tab_closed() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = reopened_while_closing(theme);
+        let (answer, rx) = std::sync::mpsc::channel();
+        h.state_mut().ask_pick(crate::Pick::Pin, || rx);
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(host.opens.lock().unwrap().is_empty(), "{theme:?}: nothing opens while the pick waits");
+        assert_eq!(h.state().holding.reopen, [std::path::PathBuf::from(COMMERCE)], "{theme:?}: the opening still waits");
+        drop(answer);
+        h.run_steps(4);
+        assert_eq!(host.opens.lock().unwrap().len(), 1, "{theme:?}: it opens once the pick is answered");
+    });
+}
+
 /// An opening of a project whose tab is closing waits for the closing, then opens it afresh in a
 /// tab of its own; asked for twice, it opens once (AR-748).
 #[test]
@@ -26180,6 +26198,10 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         let at = rect_of(&h, "home.pin-folder").center();
         click(&mut h, at);
         assert!(!crate::actions::available(h.state(), "home.pin-folder") && !h.state().can_open_project(), "{theme:?}: both pickers off");
+        assert!(!crate::home::can_open(h.state()), "{theme:?}: Home's Open card and button off");
+        // New project's handler waits too, however it is reached: its dialog would stand over the pick.
+        crate::new_project::open(h.state_mut());
+        assert!(h.state().new_project.is_none(), "{theme:?}: no dialog over the pick");
         // New project too, from its menu item and from Home's card: an Open answer would find the dialog.
         let new = rect_of(&h, "home.start.new-project").center();
         click(&mut h, new);
@@ -26199,6 +26221,7 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         assert_eq!(h.state().picker_error.as_deref(), Some("no folder picker here"));
         assert!(painted(&h).iter().any(|t| t == "no folder picker here"), "{theme:?}: {:?}", painted(&h));
         assert!(crate::actions::available(h.state(), "home.pin-folder") && h.state().can_open_project(), "{theme:?}: both pickers back");
+        assert!(crate::home::can_open(h.state()), "{theme:?}: Home's Open card back");
         h.state_mut().pin_from_picker();
         answer(&mut h, Some(Picked::Folder(pinned()[0].clone())));
         assert_eq!((h.state().state.pinned.clone(), h.state().picker_error.clone()), (pinned(), None), "{theme:?}: the folder chosen is pinned");
