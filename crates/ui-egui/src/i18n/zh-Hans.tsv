@@ -1192,6 +1192,8 @@ str		The model could not be opened	无法打开模型
 str		Not kept on {name}: {why}	未在 {name} 上保留：{why}
 str		Not kept on the element selected before: {why}	未在之前选中的元素上保留：{why}
 str		The host gives no ids for the model's elements	宿主未提供模型元素的 ID
+str		It holds diagrams whose kind Archforge does not support; create a new project to carry on.	其中包含 Archforge 不支持的图类型；请新建项目以继续。
+str		It holds diagrams whose kind Archforge does not support ({kinds}); create a new project to carry on.	其中包含 Archforge 不支持的图类型（{kinds}）；请新建项目以继续。
 str		Collapse panel	折叠面板
 str		Not available yet	尚不可用
 str		Welcome home	主页

@@ -1192,6 +1192,8 @@ str		The model could not be opened	モデルを開けませんでした
 str		Not kept on {name}: {why}	{name} には反映されませんでした: {why}
 str		Not kept on the element selected before: {why}	前に選択していた要素には反映されませんでした: {why}
 str		The host gives no ids for the model's elements	ホストがモデル要素の ID を提供していません
+str		It holds diagrams whose kind Archforge does not support; create a new project to carry on.	Archforge が対応していない種類の図が含まれています。続けるには新しいプロジェクトを作成してください。
+str		It holds diagrams whose kind Archforge does not support ({kinds}); create a new project to carry on.	Archforge が対応していない種類の図が含まれています ({kinds})。続けるには新しいプロジェクトを作成してください。
 str		Collapse panel	パネルを折りたたむ
 str		Not available yet	まだ利用できません
 str		Welcome home	ホーム

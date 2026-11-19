@@ -641,6 +641,15 @@ impl Project {
 
     /// The branch `stored` names, once it has passed what an opening checks.
     fn stored_branch(&self, stored: &str, schema: &ModelSchema) -> Result<SafeBranch, StoredBranch> {
+        let branch = self.branch_named(stored)?;
+        self.check_branch(&branch, schema).map_err(|e| StoredBranch::CannotOpen(e.to_string()))?;
+        Ok(branch)
+    }
+
+    /// The branch `stored` names as Dolt has it, a name that differs only in case being that
+    /// branch; only looked up, so nothing is written. The reason is as [`Project::open_on_stored`]
+    /// gives it when the name is not one.
+    pub fn branch_named(&self, stored: &str) -> Result<SafeBranch, StoredBranch> {
         let cannot = |e: &dyn fmt::Display| StoredBranch::CannotOpen(e.to_string());
         let asked = SafeBranch::found(stored).map_err(|e| cannot(&e))?;
         let mut c = database_connection(&self.server().connector(), &SafeBranch::default()).map_err(|e| cannot(&e))?;
@@ -649,9 +658,7 @@ impl Project {
             .map_err(|e| cannot(&e))?;
         let Some(row) = row else { return Err(StoredBranch::Gone) };
         let name = row.get_opt::<String, usize>(0).and_then(Result::ok).unwrap_or_default();
-        let branch = SafeBranch::found(&name).map_err(|e| cannot(&e))?;
-        self.check_branch(&branch, schema).map_err(|e| cannot(&e))?;
-        Ok(branch)
+        SafeBranch::found(&name).map_err(|e| cannot(&e))
     }
 
     /// Cleans up after a branch creation that stopped, and logs what it did. For an opening, before

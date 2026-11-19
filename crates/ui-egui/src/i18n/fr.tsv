@@ -1192,6 +1192,8 @@ str		The model could not be opened	Le modèle n’a pas pu être ouvert
 str		Not kept on {name}: {why}	Non conservé sur {name} : {why}
 str		Not kept on the element selected before: {why}	Non conservé sur l’élément sélectionné auparavant : {why}
 str		The host gives no ids for the model's elements	L’hôte ne fournit pas d’identifiants pour les éléments du modèle
+str		It holds diagrams whose kind Archforge does not support; create a new project to carry on.	Il contient des diagrammes dont le type n’est pas pris en charge par Archforge ; créez un nouveau projet pour continuer.
+str		It holds diagrams whose kind Archforge does not support ({kinds}); create a new project to carry on.	Il contient des diagrammes dont le type n’est pas pris en charge par Archforge ({kinds}) ; créez un nouveau projet pour continuer.
 str		Collapse panel	Replier le panneau
 str		Not available yet	Pas encore disponible
 str		Welcome home	Accueil

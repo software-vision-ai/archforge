@@ -33,7 +33,7 @@ use archforge_mof::rows::Rows;
 use archforge_notations::differences::{ClassifyError, Difference};
 use archforge_project::{
     Author, BRANCH_NAME_CHARS, BranchCreated, BranchCreationError, BranchNameProblem, DESCRIPTION_CHARS, DeleteBranchError, DescriptionProblem,
-    Hooks, MAX_BRANCHES, ModelSchema, Project, RenameBranchError, SafeBranch, VersionReader, check_description,
+    Hooks, MAX_BRANCHES, MOST_UNKNOWN_KINDS, ModelSchema, Project, RenameBranchError, SafeBranch, VersionReader, check_description,
 };
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
@@ -1211,7 +1211,8 @@ fn job(inner: &Inner, folder: &Path, name: &str, reply: &Sender<Result<Opened, C
     let _ = reply.send(answer);
 }
 
-/// One opening, on the worker thread: the project's server, its model's tables and rows.
+/// One opening, on the worker thread: the project's server, its model's tables and rows. A project
+/// holding diagrams of kinds no notation knows is refused before anything is written.
 fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Result<Opened, CreateError>>) {
     let _job = lock(&inner.job);
     // A project already open is read where it is (the window shows its tab when it has one),
@@ -1249,6 +1250,15 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
     let result = dolt(inner).and_then(|dolt| {
         let opts = ServerOptions::new(inner.settings.join("servers"));
         let project = Project::open(&dolt, &opts, path).map_err(kind)?;
+        // Before anything that writes (recovery, the stored branch's checks, the preparation):
+        // refused as it is, with no tab opened.
+        let unread = match known_kinds_only(&project, stored, |name| project.branch_named(name)) {
+            Ok(unread) => unread,
+            Err(e) => {
+                let _ = project.close();
+                return Err(e);
+            }
+        };
         // Provisional, for recovery alone: told which branch it may open on, so that recovery keeps
         // it, before anything lists or reads branches. `open_on_stored` below settles the branch.
         // A record naming a stored branch that has gone is logged as protected, not as no branch;
@@ -1258,7 +1268,20 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
         }
         project.recover_creation();
         let read = schema(inner).and_then(|s| {
-            let notice = stored.and_then(|name| project.open_on_stored(name, &s).err().map(|e| branch_notice(name, e)));
+            let notice = match (unread.stored, stored) {
+                // A stored branch whose kinds were not read is not opened, so not written: `main` is.
+                (Some(why), Some(name)) => {
+                    project.set_current_branch(SafeBranch::default());
+                    Some(branch_notice(name, why))
+                }
+                _ => stored.and_then(|name| project.open_on_stored(name, &s).err().map(|e| branch_notice(name, e))),
+            };
+            // Fallen back to a `main` whose kinds could not be read: refused with why, before it is
+            // prepared. Before this, only recovery and the stored branch's checks ran, and they wrote
+            // to no branch whose kinds were not read and known.
+            if let Some(e) = unread.main.filter(|_| project.current_branch().same_branch(&SafeBranch::default())) {
+                return Err(e);
+            }
             project.prepare_model(&s).map_err(kind)?;
             let rows = project.read_model(&s).map_err(kind)?;
             // Damaged conversations never keep the model from opening: the chat panel says why.
@@ -1293,6 +1316,66 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
         }
     };
     let _ = reply.send(answer);
+}
+
+/// Refuses a project just opened when the diagrams of a branch it could open on, the one `stored`
+/// names and `main`, are of kinds no notation knows, naming those kinds as stored, the stored
+/// branch's first, each once and at most [`MOST_UNKNOWN_KINDS`]: read raw, so before anything is
+/// written. `lookup` finds the branch a stored name means ([`Project::branch_named`]). A stored
+/// branch that is gone opens nowhere and is not read. One whose kinds cannot be read, or that cannot
+/// be looked up (its name not one, or the lookup failing), is not opened, so never written, and
+/// `main` opens with the reason, so a damaged branch never keeps the project from opening. Once the
+/// stored branch is read, `main` is only where the opening falls back to: a `main` whose kinds
+/// cannot be read then refuses only that fallback, with the reason given back here.
+fn known_kinds_only(
+    project: &Project,
+    stored: Option<&str>,
+    lookup: impl FnOnce(&str) -> Result<SafeBranch, archforge_project::StoredBranch>,
+) -> Result<KindsUnread, CreateError> {
+    let (known, main) = (archforge_notations::kinds(), SafeBranch::default());
+    let (mut kinds, mut read, mut unread) = (Vec::new(), false, None);
+    let not_read = |on: &str, why: &dyn std::fmt::Display| {
+        log::warn!("the diagram kinds of {} on {on} were not read: {why}", project.path().display());
+        Some(archforge_project::StoredBranch::CannotOpen(why.to_string()))
+    };
+    match stored.map(|name| (name, lookup(name))) {
+        Some((_, Ok(branch))) if !branch.same_branch(&main) => match project.unknown_diagram_kinds(&branch, &known) {
+            Ok(found) => (kinds, read) = (found, true),
+            Err(e) => unread = not_read(branch.stored(), &e),
+        },
+        // A lookup that failed now may not fail when the branch is opened: it is not read, so not opened.
+        Some((name, Err(archforge_project::StoredBranch::CannotOpen(why)))) => unread = not_read(name, &why),
+        _ => {}
+    }
+    let fallback = match project.unknown_diagram_kinds(&main, &known) {
+        Ok(found) => {
+            add_kinds(&mut kinds, found);
+            None
+        }
+        Err(e) if read => {
+            log::warn!("the diagram kinds of {} on main were not read: {e}", project.path().display());
+            Some(kind(e))
+        }
+        Err(e) => return Err(kind(e)),
+    };
+    if kinds.is_empty() { Ok(KindsUnread { stored: unread, main: fallback }) } else { Err(CreateError::UnsupportedKinds { kinds }) }
+}
+
+/// What an opening goes on with once the kinds were read: why the stored branch is not opened, its
+/// kinds not having been read, and why `main` may not be fallen back to, its kinds not having been.
+struct KindsUnread {
+    stored: Option<archforge_project::StoredBranch>,
+    main: Option<CreateError>,
+}
+
+/// Adds `more` to `kinds` after them, a kind already there not again, until there are
+/// [`MOST_UNKNOWN_KINDS`].
+fn add_kinds(kinds: &mut Vec<String>, more: Vec<String>) {
+    for kind in more {
+        if kinds.len() < MOST_UNKNOWN_KINDS && !kinds.contains(&kind) {
+            kinds.push(kind);
+        }
+    }
 }
 
 /// The window's words for why the branch `stored` did not open. A name made in Archforge is shown
@@ -5325,6 +5408,8 @@ mod tests {
         unclear(lock(&host.inner.open)[0].rename_branch_faulted(&from, &to, false, false, false));
         let answer = switch_to(host, &path, "main");
         assert!(matches!(answer, Err(SwitchError::Checks(archforge_project::Error::BranchUnclear { .. }))), "{answer:?}");
+        let kinds = lock(&host.inner.open)[0].unknown_diagram_kinds(&to, &[]);
+        assert!(matches!(kinds, Err(archforge_project::Error::BranchUnclear { .. })), "no kinds are read either: {kinds:?}");
         close(host, &path).unwrap();
         wait(&host.open(&path)).unwrap();
         host.write(&path, model("after"));
@@ -5891,6 +5976,166 @@ mod tests {
         stopped_creation(&path, "scripted", "main", &start);
         reopened_on(host, &path, Some("gone"));
         assert!(!has_branch(&lock(&host.inner.open)[0], "scripted") && !path.join(".creating-branch").exists());
+    }
+
+    /// Runs `f` on the project at `path`, which the host does not hold, through a server of the
+    /// test's own that is stopped before the answer is looked at.
+    fn closed<T>(host: &Projects, path: &Path, f: impl FnOnce(&Project) -> Result<T, String>) -> T {
+        let dolt = dolt(&host.inner).unwrap();
+        let project = Project::open(&dolt, &ServerOptions::new(host.inner.settings.join("servers")), path).unwrap();
+        let answer = f(&project);
+        project.close().unwrap();
+        answer.unwrap()
+    }
+
+    /// What a refused opening leaves as it was: the working set of `main` and of `kinds` by their
+    /// hashes (rows, fingerprint and settings included), and how many branches there are.
+    fn on_disk(host: &Projects, path: &Path) -> Vec<String> {
+        closed(host, path, |p| {
+            let hash = "SELECT CAST(DOLT_HASHOF_DB('WORKING') AS CHAR)";
+            let branches = p.first_on_branch("main", "SELECT CAST(COUNT(*) AS CHAR) FROM dolt_branches");
+            [p.first_on_branch("main", hash), p.first_on_branch("kinds", hash), branches].into_iter().collect()
+        })
+    }
+
+    /// The rows of the open project at `path`.
+    fn rows_at(host: &Projects, path: &Path) -> Rows {
+        lock(&host.inner.open).iter().find(|p| p.path() == path).unwrap().read_model(&schema(&host.inner).unwrap()).unwrap()
+    }
+
+    /// Diagrams of kinds no notation knows, on `main` or on the branch the project was left on,
+    /// refuse the opening with their kinds, as the window takes them, before anything is written:
+    /// no recovery, no upgrade of an earlier fingerprint, no tab; another open project reads as
+    /// before. A branch it could not open on is not read, and one whose kinds cannot be read is not
+    /// written.
+    #[test]
+    fn a_project_holding_diagrams_of_unknown_kinds_is_refused_before_anything_is_written() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let other = wait(&host.create(&sandbox.base.join("q"), "Other")).unwrap().path;
+        host.write(&other, model("kept"));
+        assert_eq!(host.flush_for_test(&other), Ok(()));
+        let others = rows_at(host, &other);
+        host.write(&path, short_and_fitted_box().0);
+        assert_eq!(saved(host, &path), Ok(true));
+        let earlier = format!("UPDATE settings SET `value` = '{}' WHERE `key` = 'model_schema'", archforge_project::EARLIER_MODELS.last().unwrap());
+        let start = {
+            let open = lock(&host.inner.open);
+            let run = |branch: &str, statement: &str| open.iter().find(|p| p.path() == path).unwrap().run_on_branch(branch, statement).unwrap();
+            run("main", "CALL DOLT_BRANCH('kinds')");
+            for (branch, kind) in [("main", "legacy.kind"), ("kinds", "other.kind")] {
+                run(branch, &format!("UPDATE diagram_diagram SET kind = '{kind}'"));
+                run(branch, &earlier);
+            }
+            open.iter().find(|p| p.path() == path).unwrap().head_of("scripted").unwrap()
+        };
+        close(host, &path).unwrap();
+        stopped_creation(&path, "scripted", "main", &start);
+        let before = on_disk(host, &path);
+        let refused = |kinds: &[&str]| Err(CreateError::UnsupportedKinds { kinds: kinds.iter().map(|k| k.to_string()).collect() });
+        let cases =
+            [(None, refused(&["legacy.kind"])), (Some("KINDS"), refused(&["other.kind", "legacy.kind"])), (Some("MAIN"), refused(&["legacy.kind"]))];
+        for (stored, kinds) in cases {
+            assert_eq!(wait(&host.open_on(&path, stored)), kinds, "{stored:?}");
+            assert_eq!(open_paths(host), vec![other.clone()], "{stored:?}: no tab, and the other stays open");
+            assert_eq!(on_disk(host, &path), before, "{stored:?}: nothing written");
+            assert!(path.join(".creating-branch").exists(), "{stored:?}: no recovery");
+            assert_eq!(rows_at(host, &other), others, "{stored:?}");
+        }
+        // With `main` known again, only the branch it was left on refuses it; not left there, it opens.
+        closed(host, &path, |p| p.run_on_branch("main", "UPDATE diagram_diagram SET kind = 'er'"));
+        assert_eq!(wait(&host.open_on(&path, Some("kinds"))), refused(&["other.kind"]));
+        assert!(wait(&host.open(&path)).is_ok());
+        // Left on a branch whose kinds cannot be read, it opens on `main`, says why, and that branch
+        // (of an earlier fingerprint, which its checks would upgrade) is not written.
+        close(host, &path).unwrap();
+        closed(host, &path, |p| p.run_on_branch("kinds", "UPDATE diagram_diagram SET kind = REPEAT('x', 262141)"));
+        let unread = on_disk(host, &path)[1].clone();
+        let opened = wait(&host.open_on(&path, Some("kinds"))).unwrap();
+        assert!(
+            matches!(&opened.notice, Some(BranchNotice::CannotOpen { name, why }) if name == "kinds" && why.contains("longer than")),
+            "{:?}",
+            opened.notice
+        );
+        assert_eq!(lock(&host.inner.open).iter().find(|p| p.path() == path).unwrap().current_branch().stored(), "main");
+        close(host, &path).unwrap();
+        assert_eq!(on_disk(host, &path)[1], unread, "the branch whose kinds were not read is not written");
+    }
+
+    /// Once the branch it was left on is read, a `main` whose kinds cannot be read keeps the project
+    /// from opening there neither when that branch's kinds are known nor, naming them, when they are
+    /// not; an opening that falls back to that `main`, or needs it, is refused with why, before
+    /// anything is written to it.
+    #[test]
+    fn a_main_whose_kinds_cannot_be_read_refuses_only_an_opening_that_needs_it() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        host.write(&path, short_and_fitted_box().0);
+        assert_eq!(saved(host, &path), Ok(true));
+        close(host, &path).unwrap();
+        closed(host, &path, |p| {
+            p.run_on_branch("main", "CALL DOLT_BRANCH('kinds')")?;
+            p.run_on_branch("main", "ALTER TABLE diagram_diagram DROP COLUMN kind")
+        });
+        let opened = wait(&host.open_on(&path, Some("kinds"))).unwrap();
+        assert_eq!(opened.notice, None);
+        assert_eq!(lock(&host.inner.open)[0].current_branch().stored(), "kinds");
+        close(host, &path).unwrap();
+        closed(host, &path, |p| p.run_on_branch("kinds", "UPDATE diagram_diagram SET kind = 'other.kind'"));
+        let refused = Err(CreateError::UnsupportedKinds { kinds: vec!["other.kind".into()] });
+        assert_eq!(wait(&host.open_on(&path, Some("kinds"))), refused);
+        // The branch failing its own checks, the opening would fall back to `main`.
+        closed(host, &path, |p| {
+            p.run_on_branch("kinds", "UPDATE diagram_diagram SET kind = 'er'")?;
+            p.run_on_branch("kinds", "UPDATE settings SET `value` = 'nonsense' WHERE `key` = 'model_schema'")
+        });
+        let main = || closed(host, &path, |p| p.first_on_branch("main", "SELECT CAST(DOLT_HASHOF_DB('WORKING') AS CHAR)"));
+        let before = main();
+        for stored in [Some("kinds"), None] {
+            let answer = wait(&host.open_on(&path, stored));
+            assert!(matches!(&answer, Err(CreateError::Failed { detail }) if detail.contains("kinds cannot be read")), "{stored:?}: {answer:?}");
+            assert!(open_paths(host).is_empty(), "{stored:?}");
+            assert_eq!(main(), before, "{stored:?}: nothing written to main");
+        }
+    }
+
+    /// A stored branch whose lookup fails is not read, and so not opened, though its kinds are not
+    /// known and a later lookup might find it: the opening goes on to `main` with why (AR-751). One
+    /// that is gone opens nowhere; one found is read.
+    #[test]
+    fn a_stored_branch_whose_lookup_fails_is_left_unread_not_taken_for_none() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        host.write(&path, short_and_fitted_box().0);
+        assert_eq!(saved(host, &path), Ok(true));
+        close(host, &path).unwrap();
+        closed(host, &path, |p| {
+            p.run_on_branch("main", "CALL DOLT_BRANCH('kinds')")?;
+            p.run_on_branch("kinds", "UPDATE diagram_diagram SET kind = 'other.kind'")
+        });
+        let (lost, gone, found) = closed(host, &path, |p| {
+            let answer = |lookup: Result<SafeBranch, archforge_project::StoredBranch>| known_kinds_only(p, Some("kinds"), |_| lookup);
+            let stored = |answer: Result<KindsUnread, CreateError>| answer.map(|unread| unread.stored).map_err(|e| format!("{e:?}"));
+            let lost = stored(answer(Err(archforge_project::StoredBranch::CannotOpen("lost".into()))))?;
+            let gone = stored(answer(Err(archforge_project::StoredBranch::Gone)))?;
+            Ok((lost, gone, known_kinds_only(p, Some("kinds"), |name| p.branch_named(name)).err()))
+        });
+        assert!(matches!(&lost, Some(archforge_project::StoredBranch::CannotOpen(why)) if why == "lost"), "{lost:?}");
+        assert!(gone.is_none(), "{gone:?}");
+        assert_eq!(found, Some(CreateError::UnsupportedKinds { kinds: vec!["other.kind".into()] }));
+    }
+
+    /// The kinds of two branches are given each once, the first branch's first, at most
+    /// [`MOST_UNKNOWN_KINDS`] in all.
+    #[test]
+    fn the_kinds_of_two_branches_are_given_each_once_up_to_the_most() {
+        let names = |range: std::ops::Range<usize>| range.map(|n| format!("k{n:02}")).collect::<Vec<_>>();
+        let mut kinds = vec!["b".to_string(), "a".into()];
+        add_kinds(&mut kinds, vec!["a".into(), "c".into(), "b".into()]);
+        assert_eq!(kinds, ["b", "a", "c"]);
+        let mut kinds = names(0..10);
+        add_kinds(&mut kinds, names(5..30));
+        assert_eq!(kinds, names(0..MOST_UNKNOWN_KINDS));
     }
 
     /// A saved model and unsaved work on the source that differ in the rows and diagrams.
