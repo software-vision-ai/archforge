@@ -779,6 +779,8 @@ str		The package's default diagram is not a class diagram. Choose one of its cla
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	该包的默认图属于另一个元素。请选择它自己的一个类图作为默认图。
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	此图是 {package} 的默认图。请先选择另一个类图作为 {package} 的默认图。
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} 将另一个元素的图作为其默认图，因此该图会保留。请先选择 {package} 自己的一个类图。
+str		The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.	来自 {client} 的依赖 {dependency} 依赖于 {package}，因此 {package} 保留。请先移除该依赖。
+str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} 通过依赖 {dependency} 依赖于 {supplier}，因此 {package} 保留。请先移除该依赖。
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	图在删除时不能替换自身。请选择另一个图作为替换。
 str		Choose either an existing diagram or a new one as the replacement, not both.	请选择现有的图或新图作为替换，不能同时选择两者。
 str		A name has to be text.	名称必须是文本。

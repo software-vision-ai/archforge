@@ -659,6 +659,11 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   (`links_removed`).
   Choosing the default a package with one binding has already changes nothing and adds no undo
   step; any other choice, mending a duplicate included, is one undo step. While Archforge shows an earlier version, it is refused like every change.
+- **Dependencies**: `element_remove` refuses a package, or a package taken along with another,
+  while a dependency that stays has it as its client or its supplier, naming the package, the
+  dependency's id and its other end; remove that dependency first with `element_remove` and its
+  id. For now this holds for both ends; a later version removes such dependencies with the
+  package instead.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element

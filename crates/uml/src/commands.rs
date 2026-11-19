@@ -653,6 +653,37 @@ fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
     store.list(pkg, package::PACKAGED_ELEMENT).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|o| store.is_alive(*o)).collect()
 }
 
+/// The dependency `d`'s first live end under `prop`, its client or its supplier.
+fn dependency_end(store: &Store, d: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
+    store.list(d, prop).ok()?.iter().filter_map(Value::as_ref).find(|o| store.is_alive(*o))
+}
+
+/// Why removing `objs` would leave an ordinary dependency that stays without its client or its
+/// supplier, when a package that goes (named in `objs`, or among what `goes` with one directly in
+/// the Model) is either: refused, naming the package, the dependency's id and its other end, so
+/// the dependency is removed first (AR-696). Until AR-698 removes such dependencies with the
+/// package, a nested package's own dependencies, which it would hand up, are refused too.
+fn dependency_problem(store: &Store, objs: &[Obj], goes: &std::collections::BTreeSet<Obj>) -> Option<CommandError> {
+    let packages: std::collections::BTreeSet<Obj> =
+        goes.iter().chain(objs).copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
+    let stays = |d: Obj| store.is_alive(d) && store.class_of(d).ok() == Some(crate::DEPENDENCY) && !goes.contains(&d) && !objs.contains(&d);
+    let at = |d: Obj, prop, p: Obj| store.list(d, prop).is_ok_and(|l| l.contains(&Value::Ref(p)));
+    let (pkg, d) = packages
+        .iter()
+        .flat_map(|p| store.referrers(*p).into_iter().map(move |(d, _)| (*p, d)))
+        .find(|(p, d)| stays(*d) && (at(*d, crate::dependency::CLIENT, *p) || at(*d, crate::dependency::SUPPLIER, *p)))?;
+    let (end, other, role, link) = if at(d, crate::dependency::CLIENT, pkg) {
+        (archforge_engine::End::Source, crate::dependency::SUPPLIER, "client", "on")
+    } else {
+        (archforge_engine::End::Target, crate::dependency::CLIENT, "supplier", "from")
+    };
+    let other = dependency_end(store, d, other).map(|o| crate::applications::name_or_id(store, o)).unwrap_or_default();
+    let (package, dependency) = (crate::applications::name_or_id(store, pkg), uuid_of(store, d).unwrap_or_default());
+    let message = format!("{package} is the {role} of the dependency {dependency} {link} {other}, which stays; remove that dependency first");
+    let of = archforge_engine::DependencyOf { package, end, other, dependency };
+    Some(refuse("ids", message).because(Reason::DependencyEnd(Box::new(of))))
+}
+
 /// Every classifier inside a package, at any depth, those nested in its classifiers among them
 /// (AR-132).
 pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
@@ -857,6 +888,9 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     let doomed: std::collections::BTreeSet<Obj> = roots.flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default()).collect();
     let plan: std::collections::BTreeSet<Obj> = doomed.iter().copied().chain(objs.iter().copied().filter(|o| nested(*o))).collect();
     if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, doomed.iter().copied(), "ids", |b| plan.contains(&b)) {
+        return Err(refused);
+    }
+    if let Some(refused) = dependency_problem(store, objs, &doomed) {
         return Err(refused);
     }
     let going: Vec<Obj> = with.into_iter().chain(objs.iter().copied()).collect();
