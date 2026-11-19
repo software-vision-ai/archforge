@@ -698,7 +698,7 @@ fn metaclass(text: &str) -> Result<(), Error> {
 }
 
 /// `text` cut to at most `max` bytes at a character boundary, and whether it was cut.
-fn cut_bytes(text: &str, max: usize) -> (&str, bool) {
+pub(crate) fn cut_bytes(text: &str, max: usize) -> (&str, bool) {
     if text.len() <= max {
         return (text, false);
     }
