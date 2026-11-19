@@ -529,7 +529,7 @@ card where nothing lies over it to select the package.
   there is no parent: the diagram stays at 10 %, and a note under the path bar says so.
 - **Come back by the path bar.** The path bar at the canvas's top left names the packages from
   your project's root down to the one open. Choose one of them, or press ⌘↑ (Ctrl+↑) for the
-  parent; it comes back as you left it.
+  parent; it comes back as you last left it, however you left it.
 
 One gesture makes one switch: after a switch, keep zooming and you stay where you landed. Pause,
 then zoom again to go on. Renaming a package renames its diagram too, as long as the diagram

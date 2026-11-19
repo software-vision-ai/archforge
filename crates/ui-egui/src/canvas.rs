@@ -278,10 +278,44 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     }
 }
 
+/// Keeps the active tab's pan and zoom as the view it was left with, for package navigation to
+/// restore ([`crate::package_nav::leave`]). Every way of leaving a tab comes here first, so the
+/// view kept is always the last (AR-666). Only a view drawn for that tab counts: one still to be
+/// fitted or centred belongs to the tab before, so the tab's entry stays.
+fn keep_left_view(state: &mut State) {
+    if let Some(from) = state.active
+        && state.nav.shown == Some(from)
+    {
+        state.nav.views.insert(from, (state.pan, state.zoom));
+    }
+}
+
+/// The view `next` opens with when it takes the active tab's place; the view is not drawn for it
+/// yet. A landing or a fit still pending was for the tab left, which navigation sets after opening,
+/// so it goes. A view the canvas never drew for the tab left is half made, so `next` then shows as
+/// last left; after a drawn view an open tab keeps it, as a new one is fitted; a tab with no view
+/// kept, never drawn, is fitted (AR-758).
+fn settle_view(state: &mut State, next: Option<Uuid>) {
+    let drawn = state.active.is_some() && state.nav.shown == state.active;
+    state.nav.shown = None;
+    if state.active == next {
+        return;
+    }
+    let new = next.is_some_and(|n| !state.tabs.contains(&n));
+    (state.nav.reveal, state.nav.centre) = (None, false);
+    match next.and_then(|n| state.nav.views.get(&n).copied()) {
+        Some((pan, zoom)) if !drawn => (state.pan, state.zoom, state.fit_pending) = (pan, zoom, false),
+        Some(_) if !new => state.fit_pending = false,
+        _ => state.fit_pending = true,
+    }
+}
+
 /// Opens a diagram in the centre: its tab, added when it has none, becomes the active one, the
 /// view's open diagram follows, and the diagram is selected so Properties shows it. A skill opens
-/// in its own tab the same way, with its text in place of the canvas.
+/// in its own tab the same way, with its text in place of the canvas. The view of the tab left is
+/// kept first; a landing or fit still pending for it never places the diagram opened.
 pub fn open(shell: &mut Shell, id: Uuid) {
+    keep_left_view(&mut shell.canvas);
     // What is opened shows in the centre, where a version's details or a changed element would hide it.
     (shell.versions.details, shell.versions.element) = (None, None);
     if shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), id)) {
@@ -294,9 +328,9 @@ pub fn open(shell: &mut Shell, id: Uuid) {
         return;
     }
     select(shell, vec![id]);
+    settle_view(&mut shell.canvas, Some(id));
     if !shell.canvas.tabs.contains(&id) {
         shell.canvas.tabs.push(id);
-        shell.canvas.fit_pending = true;
     }
     shell.canvas.active = Some(id);
 }
@@ -306,6 +340,7 @@ pub fn open(shell: &mut Shell, id: Uuid) {
 /// showing why, so nothing typed is lost.
 pub fn close_tab(shell: &mut Shell, id: Uuid) {
     let Some(i) = shell.canvas.tabs.iter().position(|t| *t == id) else { return };
+    keep_left_view(&mut shell.canvas);
     crate::skill_tab::sync(shell, 0.0, true, Some(id));
     if shell.canvas.skills.iter().any(|d| d.skill == id && d.text != d.saved) {
         crate::skill_tab::open(shell, id);
@@ -327,6 +362,7 @@ pub fn close_tab(shell: &mut Shell, id: Uuid) {
 pub fn retain_valid(state: &mut State, store: &Store) {
     state.tabs.retain(|id| store.by_uuid(*id).is_some_and(|o| store.is_alive(o)));
     if state.active.is_some_and(|a| !state.tabs.contains(&a)) {
+        settle_view(state, state.tabs.last().copied());
         state.active = state.tabs.last().copied();
         state.reopen_pending = state.active.is_some();
         state.notice = None;
@@ -692,7 +728,9 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     if !shell.canvas.pan.is_finite() {
         shell.canvas.pan = Vec2::ZERO;
     }
-    // A zoom across a package's threshold, ⌘↓ or ⌘↑ moves to another level (AR-95).
+    // The view is this diagram's once `before_draw` places a pending landing first; a zoom across
+    // a package's threshold, ⌘↓ or ⌘↑ then moves to another level (AR-95).
+    shell.canvas.nav.shown = shell.canvas.active;
     crate::package_nav::before_draw(shell, ui, r, d);
     let view = View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
     // An element dragged from the Models explorer lands where it was let go (slice S7), as the
