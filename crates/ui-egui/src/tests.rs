@@ -1253,14 +1253,13 @@ fn an_opening_waiting_for_the_hold_keeps_folder_picks_off_until_it_runs() {
     }));
     h.state_mut().begin_hold().unwrap();
     h.state_mut().open_path(std::path::Path::new("/tmp/Later.archforge"));
-    let off =
-        |h: &Harness<'static, Shell>| !crate::actions::available(h.state(), "home.pin-folder") && !crate::new_project::can_change(h.state(), false);
-    assert!(off(&h), "Pin a folder and Change… off while the opening waits");
+    let off = |s: &Shell| !crate::actions::available(s, "home.pin-folder") && !crate::new_project::can_change(s, false);
+    assert!(off(h.state()), "Pin a folder and Change… off while the opening waits");
     h.state_mut().pin_from_picker();
     assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 0, "no picker asked");
     end_hold(&mut h, Shell::end_hold);
     assert_eq!(host.opens.lock().unwrap().len(), 1, "the opening runs after the hold");
-    assert!(!off(&h), "and the pickers are back");
+    assert!(!off(h.state()), "and the pickers are back");
 }
 
 /// Holds `h`, does `during`, checks that it acted on nothing, and ends the hold as `how`.
