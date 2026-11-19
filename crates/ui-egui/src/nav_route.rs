@@ -6,6 +6,8 @@
 //! - Entering a diagram from itself records nothing.
 //! - A return consumes steps from the newest back to the nearest whose source can still be
 //!   shown, and records nothing itself: returning is not an entry.
+//! - Leaving by the path bar or ⌘↑ follows ownership, not the route, and starts the route of the
+//!   tab it opens anew (AR-666).
 //!
 //! A route is browsing state of the project session only: it is never written into the model, the
 //! project or its versions, and makes no undo step.
@@ -81,6 +83,7 @@ impl Route {
     }
 
     /// The steps, oldest first, left in the route.
+    #[cfg(test)]
     pub(crate) fn steps(&self) -> impl DoubleEndedIterator<Item = &Step> {
         self.steps.iter()
     }

@@ -12,7 +12,8 @@
 //!   the package left centred, even when that diagram is in another branch (Decision 4). The
 //!   return takes its step off the tab's route and makes none. With no way in left, the parent's
 //!   default opens instead; at the root, 10 % stays put and says so.
-//! - **Out by the path bar or ⌘↑**: the ancestor's diagram as it was last left.
+//! - **Out by the path bar or ⌘↑**: the owning ancestor's default diagram as it was last left, by
+//!   ownership and never the way in; its tab starts a new route.
 //! - One switch per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
 //!   seconds must pass, before the next switch. A switch fades in over [`FADE`] seconds.
 
@@ -161,13 +162,14 @@ pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
     shell.canvas.nav.disarmed = true;
 }
 
-/// Opens the diagram of `package`, an ancestor of the open one: after a zoom out (`reveal`, the
-/// package just left) at 100 % with that package centred; by the path bar or ⌘↑ as it was left.
-pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now: f64) {
-    let from = shell.canvas.active;
-    // The diagram of `package` the way in came through, while it is still of it; else its default.
-    let Some(d) = from.and_then(|f| entered_from(shell, f, package)).or_else(|| default_of(shell, package)) else { return };
-    switch_out(shell, d, reveal, now);
+/// Opens the default diagram of `package`, an owning ancestor of the open one, by the path bar or
+/// ⌘↑: as it was last left, or fitted when it never was. It follows ownership, never the way in,
+/// and starts a new route in the tab it opens, with no step made up from the diagram left
+/// (Decision 4). Browsing state only: no model change and no undo step.
+pub(crate) fn leave(shell: &mut Shell, package: Uuid, now: f64) {
+    let Some(d) = default_of(shell, package) else { return };
+    shell.canvas.nav.routes.remove(&d);
+    switch_out(shell, d, None, now);
 }
 
 /// Opens the diagram `d` on the way out of the open one, keeping the view of the diagram left: after a zoom
@@ -207,15 +209,6 @@ fn take_return(shell: &mut Shell) -> Option<Uuid> {
     let step = route.take_return(session.history(), shown).reached?;
     shell.canvas.nav.routes.insert(step.source, route);
     Some(step.source)
-}
-
-/// The diagram of `package` on the way that led to the diagram `from`: the newest source on its
-/// tab's route that is a diagram of `package`, walking back the levels entered.
-fn entered_from(shell: &Shell, from: Uuid, package: Uuid) -> Option<Uuid> {
-    let store = shell.session.as_ref()?.doc();
-    let package = store.by_uuid(package)?;
-    let route = shell.canvas.nav.routes.get(&from)?;
-    route.steps().rev().map(|s| s.source).find(|up| store.by_uuid(*up).and_then(|d| package_of_diagram(store, d)) == Some(package))
 }
 
 /// Before the canvas draws: shows the package a zoom out left, takes ⌘↓, ⌘↑ and the zoom keys,
@@ -293,7 +286,12 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
         let parent = archforge_uml::commands::package_of(store, here).map(|p| store.uuid(p));
         match (take_return(shell), parent) {
             (Some(back), _) => switch_out(shell, back, Some(left), now),
-            (None, Some(Ok(parent))) => leave(shell, parent, Some(left), now),
+            (None, Some(Ok(parent))) => {
+                // The owning parent's default; its tab keeps its own route.
+                if let Some(d) = default_of(shell, parent) {
+                    switch_out(shell, d, Some(left), now);
+                }
+            }
             (None, Some(Err(_))) => {}
             (None, None) => {
                 // Said under the path bar until the next action.
@@ -324,7 +322,7 @@ fn keys(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj, here: Obj, now: f64) 
     if down && let Some(package) = selected_package(shell, store, d) {
         enter(shell, package, now);
     } else if up && let Some(parent) = archforge_uml::commands::package_of(store, here).and_then(|p| store.uuid(p).ok()) {
-        leave(shell, parent, None, now);
+        leave(shell, parent, now);
     }
 }
 
@@ -454,7 +452,7 @@ fn path_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, here: Obj, n
         }
     }
     if let Some(id) = go {
-        leave(shell, id, None, now);
+        leave(shell, id, now);
     }
     bar.height() + 14.0
 }
