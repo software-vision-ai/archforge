@@ -103,6 +103,12 @@ pub fn view() -> ProjectView {
     ProjectView::new(NOTATIONS)
 }
 
+/// The diagram kinds the project's notations know, in the order of [`NOTATIONS`]: what a host
+/// checks a project's diagrams against before it opens it.
+pub fn kinds() -> Vec<&'static str> {
+    view().kinds()
+}
+
 /// The universe of every notation a project holds.
 pub fn universe() -> Result<Arc<Universe>, MetaError> {
     let metamodels = PARTS.iter().map(|n| (n.metamodel)()).collect::<Result<Vec<_>, _>>()?;
@@ -218,7 +224,7 @@ const DIAGRAMS: &str = "diagram_diagram";
 
 /// Refused when any of `diagrams` is of a kind none of [`NOTATIONS`] knows, naming them all.
 fn known_kinds(diagrams: impl Iterator<Item = UnknownDiagram>) -> Result<(), UnknownKinds> {
-    let accepted = view().kinds();
+    let accepted = kinds();
     let diagrams: Vec<UnknownDiagram> = diagrams.filter(|d| !accepted.contains(&d.kind.as_str())).collect();
     if diagrams.is_empty() {
         return Ok(());

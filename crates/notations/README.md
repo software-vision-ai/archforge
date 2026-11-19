@@ -36,7 +36,7 @@ would change a binding, compared by ids, is refused. A version opened to be look
 |---|---|
 | `Part`, `PARTS` | what a metamodel brings to the store, its name rule among it; the list a project holds |
 | `name_kind` | the kind an element is told apart within by name in its owner, by its metamodel's rule (UML's is `archforge_uml::names::kind`, ER's `archforge_er::names::kind`): the check as a project opens refuses only two of one kind named alike (AR-208, AR-209) |
-| `NOTATIONS`, `view` | the notations a project's view asks; a `ProjectView` of them |
+| `NOTATIONS`, `view`, `kinds` | the notations a project's view asks; a `ProjectView` of them; the diagram kinds they know |
 | `universe`, `store` | the universe of every notation; an empty store over it with the host's ids |
 | `storage` | every metamodel's tables and list tables, in the order of `PARTS` |
 | `registry`, `Session` | the edit area, the shared element commands, every notation's own, the diagrams' and the skills'; a project's session, `Session<Store, ProjectView>` |

@@ -43,7 +43,7 @@ pub use chat::{
 pub use creation::{CreationRecovery, RecordDamage, RecoveryStep};
 pub use description::{DESCRIPTION_CHARS, DescriptionProblem, check_description};
 pub use error::Error;
-pub use model::{EARLIER_MODELS, ModelSchema};
+pub use model::{EARLIER_MODELS, MOST_UNKNOWN_KINDS, ModelSchema};
 pub use saving::{AfterFailure, Author, SaveFailure, Saved, is_version, shown_author};
 pub use time::timestamp;
 pub use versions::{BranchCounts, Version, VersionReader, Versions};
