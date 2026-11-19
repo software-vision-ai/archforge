@@ -313,6 +313,7 @@ fn a_change_pick_belongs_to_its_dialog_and_holds_create_until_it_is_answered() {
         h.run();
         let (change, create) = (centre_of(&h, "new-project.location.change"), centre_of(&h, "new-project.create"));
         press(&mut h, change);
+        assert!(!crate::new_project::can_change(h.state(), false), "{theme:?}: Change… is off while its pick waits");
         press(&mut h, create);
         assert!(host.asked.lock().unwrap().is_empty(), "{theme:?}: Create project waits for the pick");
         waiting.lock().unwrap().pop().expect("a pick was asked for").send(Picked::Folder(acme())).unwrap();
@@ -1237,6 +1238,29 @@ fn showing_another_project_and_opening_wait_for_the_hold() {
     let (mut h, host) = saving_harness(Some(commerce()), None);
     through_hold(&mut h, &host, |s| s.open_path(std::path::Path::new("/tmp/Later.archforge")), Shell::end_hold);
     assert_eq!(host.opens.lock().unwrap().len(), 1);
+}
+
+/// An opening waiting for the hold keeps every folder pick off, Pin a folder and Change… among
+/// them: a pick waiting when the hold ends would turn that opening away (AR-737).
+#[test]
+fn an_opening_waiting_for_the_hold_keeps_folder_picks_off_until_it_runs() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    let asked = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = asked.clone();
+    h.state_mut().services.pick_folder = Some(std::sync::Arc::new(move |_: &str| {
+        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        std::sync::mpsc::channel().1
+    }));
+    h.state_mut().begin_hold().unwrap();
+    h.state_mut().open_path(std::path::Path::new("/tmp/Later.archforge"));
+    let off =
+        |h: &Harness<'static, Shell>| !crate::actions::available(h.state(), "home.pin-folder") && !crate::new_project::can_change(h.state(), false);
+    assert!(off(&h), "Pin a folder and Change… off while the opening waits");
+    h.state_mut().pin_from_picker();
+    assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 0, "no picker asked");
+    end_hold(&mut h, Shell::end_hold);
+    assert_eq!(host.opens.lock().unwrap().len(), 1, "the opening runs after the hold");
+    assert!(!off(&h), "and the pickers are back");
 }
 
 /// Holds `h`, does `during`, checks that it acted on nothing, and ends the hold as `how`.

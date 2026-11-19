@@ -151,6 +151,12 @@ fn start(shell: &Shell, dialog: &mut Dialog) {
     }
 }
 
+/// Whether Change… acts: the host has a folder picker, no creation runs (`creating`) and no folder
+/// pick waits, its own included, nor an opening for the hold, which a pick would turn away (AR-737).
+pub(crate) fn can_change(shell: &Shell, creating: bool) -> bool {
+    shell.services.pick_folder.is_some() && !creating && shell.picking.is_none() && !shell.open_waits()
+}
+
 /// Change…: asks the host's folder picker for the project's folder; [`take_location`] takes the
 /// answer.
 fn change_folder(shell: &mut Shell) {
@@ -360,8 +366,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         Some(label) => ux::text(&paint, field.min + vec2(44.0, 12.0), label, types::BODY, p.text, room),
         None => ux::text(&paint, field.min + vec2(44.0, 12.0), &tr("No folder chosen yet"), types::BODY, p.text_muted, room),
     };
-    // Change… acts where the host has a folder picker, and not while a creation runs.
-    let live = shell.services.pick_folder.is_some() && !dialog.creating();
+    let live = can_change(shell, dialog.creating());
     let resp = control(shell, ui, "new-project.location.change", "button", change, live);
     let paint = ui.painter().clone();
     paint.rect_filled(change, 6.0, if live && resp.hovered() { p.border } else { p.page });

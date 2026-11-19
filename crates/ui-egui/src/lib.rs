@@ -1754,10 +1754,12 @@ impl Shell {
         self.ask_pick(Pick::Pin, || pick(&crate::i18n::tr("Pin a folder")));
     }
 
-    /// Asks the host's folder picker through `ask` for `pick`'s folder, unless a pick still waits:
-    /// one at a time, so a second is refused and the host is not asked. `logic` takes the answer.
+    /// Asks the host's folder picker through `ask` for `pick`'s folder, unless a pick still waits
+    /// (one at a time, so a second is refused and the host is not asked) or an opening waits for the
+    /// hold. `logic` takes the answer.
     pub(crate) fn ask_pick(&mut self, pick: Pick, ask: impl FnOnce() -> std::sync::mpsc::Receiver<Picked>) {
-        if self.picking.is_none() {
+        // An opening waiting for the hold goes through `open_path`, which a pick waiting would turn away.
+        if self.picking.is_none() && !self.open_waits() {
             self.picking = Some((pick, ask()));
         }
     }

@@ -147,7 +147,7 @@ pub static ACTIONS: &[Action] = &[
     Action {
         id: "home.pin-folder",
         label: |_| tr("Pin a folder"),
-        available: |s| s.services.pick_folder.is_some() && s.picking.is_none() && s.state.pinned.len() < crate::state::MAX_PINNED,
+        available: |s| s.services.pick_folder.is_some() && s.picking.is_none() && !s.open_waits() && s.state.pinned.len() < crate::state::MAX_PINNED,
         run: Shell::pin_from_picker,
         keys: None,
         search: Some(InSearch { icon: |_| &icons::PLUS, label: None }),
@@ -647,8 +647,12 @@ pub(crate) mod tests {
             ("a panel's dialog", |s| crate::diagrams::open_new_of(s, None), &BEHIND_A_DIALOG),
             ("an opening under way", |s| s.opening = Some(channel().1), &[OPEN]),
             ("a folder pick under way", |s| s.ask_pick(crate::Pick::Pin, || channel().1), &[NEW, OPEN, PIN]),
-            ("an opening waiting for the hold", |s| s.begin_hold().map(|()| s.open_path(Path::new("/tmp/Later.archforge"))).unwrap(), &[SAVE, OPEN]),
-            ("a project opened waiting for the hold", |s| s.begin_hold().map(|()| s.open_project(Opened::default())).unwrap(), &[SAVE, OPEN]),
+            (
+                "an opening waiting for the hold",
+                |s| s.begin_hold().map(|()| s.open_path(Path::new("/tmp/Later.archforge"))).unwrap(),
+                &[SAVE, OPEN, PIN],
+            ),
+            ("a project opened waiting for the hold", |s| s.begin_hold().map(|()| s.open_project(Opened::default())).unwrap(), &[SAVE, OPEN, PIN]),
             ("every tab taken", |s| s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect(), &[NEW, OPEN]),
             ("every pin taken", |s| s.state.pinned = (0..crate::state::MAX_PINNED).map(|i| i.to_string().into()).collect(), &[PIN]),
             ("no folder picker", |s| s.services.pick_folder = None, &[PIN]),
