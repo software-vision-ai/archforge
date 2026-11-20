@@ -11,7 +11,8 @@
 //! name and says what went wrong. The name follows the rules both sides share (`archforge-names`).
 //! Change… asks the host's folder picker for the folder the project goes in; a pick shows
 //! there and is where the project is made, a cancel keeps the name and the folder as they were,
-//! and a picker that cannot appear says why. Cancel, the close button and Escape close the dialog;
+//! and a picker that cannot appear says why; Create project waits for the pick, and closing the
+//! dialog lets it go. Cancel, the close button and Escape close the dialog;
 //! the window behind it takes no clicks while it is open.
 
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -86,8 +87,12 @@ impl Dialog {
     }
 }
 
-/// Opens the dialog with an empty name.
+/// Opens the dialog with an empty name, unless a folder pick waits: its answer, an Open or a
+/// Change…, would find the dialog in its way, or another dialog in place of its own (AR-737).
 pub fn open(shell: &mut Shell) {
+    if shell.picking.is_some() {
+        return;
+    }
     shell.new_project = Some(Dialog::default());
 }
 
@@ -133,10 +138,11 @@ fn folder_label(shell: &Shell, dialog: &Dialog) -> Option<String> {
     }
 }
 
-/// Whether Create project can start now: a name that can be created, a folder, a host, and no
-/// creation running.
+/// Whether Create project can start now: a name that can be created, a folder, a host, no
+/// creation running, and no Change… pick waiting, whose answer would change the folder.
 fn can_create(shell: &Shell, dialog: &Dialog) -> bool {
-    creatable(&dialog.name) && folder_of(shell, dialog).is_some() && shell.services.projects.is_some() && !dialog.creating()
+    let free = !dialog.creating() && shell.picking.is_none();
+    creatable(&dialog.name) && folder_of(shell, dialog).is_some() && shell.services.projects.is_some() && free
 }
 
 /// Asks the host to create the project in its folder.
@@ -149,18 +155,32 @@ fn start(shell: &Shell, dialog: &mut Dialog) {
     }
 }
 
-/// Change…: the host's folder picker, its pick the project's folder; a cancel changes nothing, and
-/// a picker that could not appear says why under the field.
-fn change_folder(shell: &Shell, dialog: &mut Dialog) {
+/// Whether Change… acts: the host has a folder picker, no creation runs (`creating`) and no folder
+/// pick waits, its own included, nor an opening for the hold, which a pick would turn away (AR-737).
+pub(crate) fn can_change(shell: &Shell, creating: bool) -> bool {
+    shell.services.pick_folder.is_some() && !creating && shell.picking.is_none() && !shell.open_waits()
+}
+
+/// Change…: asks the host's folder picker for the project's folder; [`take_location`] takes the
+/// answer.
+fn change_folder(shell: &mut Shell) {
     let Some(pick) = shell.services.pick_folder.clone() else { return };
     // The picker says what the folder is for: where the project goes, not a folder to pin.
-    match pick(&tr("Choose project location")) {
-        Some(path) => {
+    shell.ask_pick(crate::Pick::Location, || pick(&tr("Choose project location")));
+}
+
+/// Change…'s answer, on a later frame: a folder chosen becomes the project's folder; otherwise
+/// the folder stays, and why the picker could not appear, if it could not, shows under the field.
+/// A dialog closed meanwhile takes nothing, and a creation running keeps the folder it was given.
+pub(crate) fn take_location(shell: &mut Shell, chosen: Result<std::path::PathBuf, Option<String>>) {
+    let Some(dialog) = shell.new_project.as_mut().filter(|d| !d.creating()) else { return };
+    match chosen {
+        Ok(path) => {
             dialog.folder = Some(path);
             dialog.picker = None;
             dialog.failed = None;
         }
-        None => dialog.picker = shell.services.picker_unavailable.as_ref().and_then(|probe| probe()),
+        Err(why) => dialog.picker = why,
     }
 }
 
@@ -187,6 +207,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let Some(mut dialog) = shell.new_project.take() else { return };
     match answer(&mut dialog) {
         Some(Ok(opened)) => {
+            let_go_of_change(shell);
             shell.open_project(opened);
             return;
         }
@@ -227,8 +248,18 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
             close = true;
         }
     });
-    if !close {
+    if close {
+        let_go_of_change(shell);
+    } else {
         shell.new_project = Some(dialog);
+    }
+}
+
+/// The dialog has closed: a Change… pick still waiting goes with it, so its answer reaches no
+/// later dialog, and New project and Open are free again at once.
+fn let_go_of_change(shell: &mut Shell) {
+    if matches!(shell.picking, Some((crate::Pick::Location, _))) {
+        shell.picking = None;
     }
 }
 
@@ -339,8 +370,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         Some(label) => ux::text(&paint, field.min + vec2(44.0, 12.0), label, types::BODY, p.text, room),
         None => ux::text(&paint, field.min + vec2(44.0, 12.0), &tr("No folder chosen yet"), types::BODY, p.text_muted, room),
     };
-    // Change… acts where the host has a folder picker, and not while a creation runs.
-    let live = shell.services.pick_folder.is_some() && !dialog.creating();
+    let live = can_change(shell, dialog.creating());
     let resp = control(shell, ui, "new-project.location.change", "button", change, live);
     let paint = ui.painter().clone();
     paint.rect_filled(change, 6.0, if live && resp.hovered() { p.border } else { p.page });
@@ -348,7 +378,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     let g = ux::galley(&paint, &tr("Change…"), types::UI_STRONG, ink, Some(change.width() - 8.0));
     paint.galley(change.center() - g.size() / 2.0, g, ink);
     if live && resp.clicked() {
-        change_folder(shell, dialog);
+        change_folder(shell);
     }
     let file_line = if creatable(&dialog.name) && folder.is_some() {
         fmt(&tr("Creates the folder {file} here: the project and every version of it."), &[("file", &file_name(&dialog.name))])

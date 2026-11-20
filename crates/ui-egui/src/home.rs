@@ -88,14 +88,16 @@ impl Hue {
 }
 
 /// Whether a start card leads anywhere yet: New project opens its dialog; the others open screens
-/// not built so far, so they take no click and show no hover border.
+/// not built so far, so they take no click and show no hover border. New project waits while a
+/// folder pick does, as its menu item does.
 fn start_live(shell: &Shell, id: &str) -> bool {
-    (id == "new-project" && shell.tabs.len() < crate::MAX_TABS) || (id == "open-project" && can_open(shell))
+    (id == "new-project" && shell.tabs.len() < crate::MAX_TABS && shell.picking.is_none()) || (id == "open-project" && can_open(shell))
 }
 
-/// Whether projects can be opened: the host picks and opens them, and a tab is free.
+/// Whether projects can be opened: the host picks and opens them, a tab is free, and no folder pick
+/// waits, whose answer would find another opening in its way (AR-737).
 pub(crate) fn can_open(shell: &Shell) -> bool {
-    shell.services.pick_project.is_some() && shell.services.projects.is_some() && shell.tabs.len() < crate::MAX_TABS
+    shell.services.pick_project.is_some() && shell.services.projects.is_some() && shell.tabs.len() < crate::MAX_TABS && shell.picking.is_none()
 }
 
 /// The four start cards: automation id, title, line, link, icon and colour.

@@ -111,7 +111,8 @@ pub static ACTIONS: &[Action] = &[
     Action {
         id: NEW,
         label: |_| tr("New project…"),
-        available: |s| free(s) && s.services.projects.is_some() && s.tabs.len() < crate::MAX_TABS,
+        // A folder pick waiting keeps it off: its answer would find the dialog in the way.
+        available: |s| free(s) && s.picking.is_none() && s.services.projects.is_some() && s.tabs.len() < crate::MAX_TABS,
         run: crate::new_project::open,
         keys: None,
         search: Some(InSearch { icon: |_| &icons::PLUS, label: Some(|| tr("New project")) }),
@@ -146,7 +147,7 @@ pub static ACTIONS: &[Action] = &[
     Action {
         id: "home.pin-folder",
         label: |_| tr("Pin a folder"),
-        available: |s| s.services.pick_folder.is_some() && s.state.pinned.len() < crate::state::MAX_PINNED,
+        available: |s| s.services.pick_folder.is_some() && s.picking.is_none() && !s.open_waits() && s.state.pinned.len() < crate::state::MAX_PINNED,
         run: Shell::pin_from_picker,
         keys: None,
         search: Some(InSearch { icon: |_| &icons::PLUS, label: None }),
@@ -543,7 +544,7 @@ pub(crate) mod tests {
     use std::sync::mpsc::{Receiver, channel};
 
     use super::*;
-    use crate::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services, Tab};
+    use crate::{CreateError, Opened, Picked, ProjectHost, SaveError, Saved, SavedBy, Services, Tab};
 
     const PIN: &str = "home.pin-folder";
     const APPEARANCE: &str = "home.appearance";
@@ -589,9 +590,9 @@ pub(crate) mod tests {
         let counted = picks.clone();
         let pick_project = Some(Arc::new(move |_: Option<&Path>| {
             counted.fetch_add(1, Ordering::SeqCst);
-            None
+            Picked::at_once(None)
         }) as _);
-        let pick_folder = Some(Arc::new(|_: &str| Some("/pinned".into())) as _);
+        let pick_folder = Some(Arc::new(|_: &str| Picked::at_once(Some("/pinned".into()))) as _);
         let mut shell = Shell::new(Services { projects: Some(host.clone()), pick_project, pick_folder, ..Default::default() });
         shell.session = Some(session());
         shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false, notice: None });
@@ -633,7 +634,7 @@ pub(crate) mod tests {
     #[test]
     fn every_action_follows_one_rule_in_every_state() {
         type Setup = fn(&mut Shell);
-        let states: [(&str, Setup, &[&str]); 18] = [
+        let states: [(&str, Setup, &[&str]); 21] = [
             ("a project", |_| {}, &[]),
             ("saving", |s| unsaved(s).save(), &[SAVE]),
             ("held", |s| s.begin_hold().unwrap(), &[SAVE]),
@@ -645,6 +646,13 @@ pub(crate) mod tests {
             ("a question open", |s| s.ask = Some(question()), &BEHIND_A_DIALOG),
             ("a panel's dialog", |s| crate::diagrams::open_new_of(s, None), &BEHIND_A_DIALOG),
             ("an opening under way", |s| s.opening = Some(channel().1), &[OPEN]),
+            ("a folder pick under way", |s| s.ask_pick(crate::Pick::Pin, || channel().1), &[NEW, OPEN, PIN]),
+            (
+                "an opening waiting for the hold",
+                |s| s.begin_hold().map(|()| s.open_path(Path::new("/tmp/Later.archforge"))).unwrap(),
+                &[SAVE, OPEN, PIN],
+            ),
+            ("a project opened waiting for the hold", |s| s.begin_hold().map(|()| s.open_project(Opened::default())).unwrap(), &[SAVE, OPEN, PIN]),
             ("every tab taken", |s| s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect(), &[NEW, OPEN]),
             ("every pin taken", |s| s.state.pinned = (0..crate::state::MAX_PINNED).map(|i| i.to_string().into()).collect(), &[PIN]),
             ("no folder picker", |s| s.services.pick_folder = None, &[PIN]),
@@ -719,6 +727,8 @@ pub(crate) mod tests {
                 unsaved(&mut shell);
             }
             run(&mut shell, id);
+            // A pick's answer, as the next frame takes it.
+            shell.take_pick();
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
         for id in [APPEARANCE, VIEW, SORT] {

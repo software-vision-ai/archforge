@@ -146,6 +146,11 @@ impl Holding {
 }
 
 impl Shell {
+    /// Whether an opening, or a project opened, waits for the hold to end: either takes a tab.
+    pub(crate) fn open_waits(&self) -> bool {
+        self.holding.waiting.iter().any(|w| matches!(w, Waiting::Open(_) | Waiting::Opened(_)))
+    }
+
     /// Whether the project shown is held still.
     pub fn is_held(&self) -> bool {
         self.holding.hold.is_some()
@@ -284,8 +289,9 @@ impl Shell {
     /// opening or New project dialog is under way, past which [`Shell::open_path`] would drop it.
     /// Nothing opens while a hold runs, nor once a quit is asked for, until it is called off.
     pub(crate) fn reopen_after_closing(&mut self) {
-        // Kept here, not queued behind the hold, where an opening queued before it would drop it.
-        if self.is_held() || self.quitting() || self.quit_confirmed {
+        // Kept here, not queued behind the hold, where an opening queued before it would drop it,
+        // and kept while a folder pick waits, which `open_path` would let no opening pass (AR-737).
+        if self.is_held() || self.picking.is_some() || self.quitting() || self.quit_confirmed {
             return;
         }
         // Each looked at once a frame, so nothing put back meanwhile can keep the frame going.
