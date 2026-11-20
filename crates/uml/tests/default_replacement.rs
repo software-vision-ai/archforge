@@ -178,11 +178,14 @@ fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() 
     // A choice that would go but for its revision, read before an agent added a class.
     let (old, was) = (token(&s), s.token());
     s.execute_from("uml.class.add", &json!({ "package": c.sales, "name": "Ledger" }), Some("Claude")).unwrap();
+    let added = pending(&mut s, "Journal");
     for form in forms(&c) {
         let stale = Reason::StaleRevision { expected: Some(was), current: s.token() };
         let p = joined(json!({ "diagram": c.overview, "expected_revision": old }), &form);
         assert_eq!(refused(&mut s, p), (Some("expected_revision".into()), Some(stale)), "{form}: stale alone");
     }
+    assert_eq!(s.redo().unwrap(), "Add class", "the step undone is still there to make again");
+    assert!(rows_of(&s) == added, "and makes the class again");
     let (read, at) = (token(&s), s.token());
     let set = json!({ "package": c.sales, "diagram": c.detail, "expected_revision": read });
     s.execute_from("uml.package.default.set", &set, Some("Claude")).unwrap();
