@@ -1688,8 +1688,8 @@ the model; **Delete from the model…** (⇧⌫) asks first, then deletes it eve
   class at either end takes the association class along.
 - Deleting a package deletes the dependencies that start at it or depend on it, and those of
   every package it deletes with it, in the same step; their lines go from every diagram. A
-  dependency the package only holds, between elements that stay, moves up with the rest of what
-  it holds.
+  dependency a package inside another only holds, between elements that stay, moves up with the
+  rest of what it holds.
 - An association class's row in **Models** can be dragged onto a diagram to place its card; where
   the diagram shows both its classes, its line comes too. A diagram may also show the line
   without the card: the line then carries the name at its middle, and Delete on it takes it only

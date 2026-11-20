@@ -661,9 +661,9 @@ fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
 /// Removing packages takes these along (AR-698); AR-592 and AR-611 call it with their own kinds.
 pub(crate) fn incident_to_packages(store: &Store, packages: &[Obj], kinds: &[ClassId]) -> Vec<Obj> {
     let of_kind = |c: ClassId| kinds.iter().any(|k| store.universe().conforms(c, archforge_mof::TypeRef::Class(*k)));
-    let mut out = Vec::new();
+    let (mut out, mut seen) = (Vec::new(), std::collections::BTreeSet::new());
     for (r, _) in packages.iter().flat_map(|p| store.referrers(*p)) {
-        if store.is_alive(r) && store.class_of(r).is_ok_and(of_kind) && !out.contains(&r) {
+        if store.is_alive(r) && store.class_of(r).is_ok_and(of_kind) && seen.insert(r) {
             out.push(r);
         }
     }
@@ -899,10 +899,11 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
         return Err(refused);
     }
     // The dependencies at a package that goes are named first among what goes, so they go before
-    // their ends, with their constraints and stereotype applications (AR-698); a classifier's
-    // nested classifiers go with it (AR-132), named among what goes so their relationships,
-    // constraints and sets are worked out as theirs.
-    let mut objs: Vec<Obj> = incident.into_iter().filter(|d| !objs.contains(d)).chain(objs.iter().copied()).collect();
+    // their ends, those named in the call too, with their constraints and stereotype applications
+    // (AR-698); a classifier's nested classifiers go with it (AR-132), named among what goes so
+    // their relationships, constraints and sets are worked out as theirs.
+    let first: std::collections::BTreeSet<Obj> = incident.iter().copied().collect();
+    let mut objs: Vec<Obj> = incident.into_iter().chain(objs.iter().copied().filter(|o| !first.contains(o))).collect();
     let nested: Vec<Obj> = objs
         .iter()
         .filter(|o| store.is_alive(**o) && store.class_of(**o).is_ok_and(crate::is_classifier))
