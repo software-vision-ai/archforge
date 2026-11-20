@@ -41,8 +41,10 @@ egui_kittest = "0.37"
 # The macOS menu bar. Without its default gtk3 feature, so no GTK, glib or their Linux libraries
 # enter the lockfile: Archforge draws no native menu on Linux.
 muda = { version = "0.21", default-features = false }
-# The native folder picker for Open project (owner decision): MIT; on Linux it
-# asks the desktop portal over D-Bus, pure Rust, no GTK.
+# The native folder picker (owner decision): MIT; on Linux it asks the desktop portal over D-Bus,
+# pure Rust, no GTK. craft-dialogs shows it and builds it without its default `wayland` feature;
+# this direct dependency is here for that feature, so on Wayland the portal's picker keeps the
+# window as its parent.
 rfd = "0.17"
 log = "0.4"
 serde = { version = "1", features = ["derive", "rc"] }
@@ -88,6 +90,9 @@ rustix = { version = "1", default-features = false, features = ["std", "process"
 # `deny.toml` allows.
 craft-atomic = { git = "https://github.com/storytold/craft-libs", branch = "main" }
 craft-mcp-server = { git = "https://github.com/storytold/craft-libs", branch = "main" }
+# The folder pickers, queued in the frame and shown at its end, answered on a later frame: a
+# blocking picker inside winit's handler aborts the app on macOS when an event re-enters it.
+craft-dialogs = { git = "https://github.com/storytold/craft-libs", branch = "main" }
 # Search folding (`Folder`): case, accents, `ß` and compatibility forms count for nothing in a
 # name search a user types. Without `collate`, so no collation data. It pins ICU4X `~2.3`, which
 # holds the lockfile's `icu_*` crates below 2.4 for as long as it does.

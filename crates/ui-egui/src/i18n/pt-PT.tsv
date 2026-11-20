@@ -2238,6 +2238,7 @@ str		The changes since the last write are lost.	As alterações desde a última 
 str		The changes to {name} cannot be written	Não é possível escrever as alterações a {name}
 # Seletor de pastas no Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	Não foi possível abrir nenhum seletor de pastas: instale o xdg-desktop-portal e um backend para o seu ambiente.
+str		No folder picker could open; Archforge's log says why.	Não foi possível abrir nenhum seletor de pastas; o registo do Archforge indica o motivo.
 str		{day} {month} {time}	{day} {month} {time}
 str		Unsaved changes	Alterações não guardadas
 str		No unsaved changes	Sem alterações não guardadas

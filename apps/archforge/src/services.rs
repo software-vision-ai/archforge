@@ -3,12 +3,14 @@
 //! with their keys.
 
 use std::path::PathBuf;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 
 use archforge_ui_egui::{Folder, Picked, Services};
+use craft_dialogs::{Answer, Dialogs, FileDialog};
 
-/// The host's services: the system's, with `agents` the host of AI Agents and Chat.
-pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::sync::Arc<crate::agents::Agents>) -> Services {
+/// The host's services: the system's, with `agents` the host of AI Agents and Chat and `asks` the
+/// queue the window's [`Pickers`] show the folder pickers from.
+pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::sync::Arc<crate::agents::Agents>, asks: Asks) -> Services {
     let chats = std::sync::Arc::new(crate::chats::Chats::new(projects.clone(), agents.clone()));
     projects.check_descriptions_with(agents.clone());
     Services {
@@ -16,8 +18,11 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::
         fonts: Some(std::sync::Arc::new(crate::fonts::SystemFonts::installed())),
         projects_folder: projects_folder(),
         projects: Some(projects),
-        pick_project: Some(std::sync::Arc::new(pick_project)),
-        pick_folder: Some(std::sync::Arc::new(pick_folder)),
+        pick_project: Some(std::sync::Arc::new({
+            let asks = asks.clone();
+            move |start: Option<&std::path::Path>| pick_project(&asks, start)
+        })),
+        pick_folder: Some(std::sync::Arc::new(move |title: &str| pick_folder(&asks, title))),
         picker_unavailable: Some(std::sync::Arc::new(picker_unavailable)),
         find_projects: Some(std::sync::Arc::new(find_projects)),
         ids: Some(std::sync::Arc::new(fresh_id)),
@@ -112,26 +117,98 @@ fn support() -> archforge_ui_egui::support::Destinations {
     archforge_ui_egui::support::Destinations { github_sponsors: GITHUB_SPONSORS.map(str::to_string), ko_fi: KO_FI.map(str::to_string) }
 }
 
-/// The platform's folder picker, for Open project: it starts in the folder given (a pinned
-/// folder), else in the projects folder. It blocks until it closes, so its answer is in before the
-/// shell looks on the next frame.
-fn pick_project(start: Option<&std::path::Path>) -> Receiver<Picked> {
-    let mut dialog = rfd::FileDialog::new();
+/// The folder picks the shell asked for in this frame, each with the channel its answer goes back
+/// on, until the window's [`Pickers`] show them at the frame's end. The shell asks from inside the
+/// frame, where a picker that blocks lets AppKit's modal loop re-enter winit's handler (a file
+/// dragged over the window) and abort the app; so nothing is shown here.
+#[derive(Clone, Default)]
+pub struct Asks(std::sync::Arc<std::sync::Mutex<Vec<(FileDialog, Sender<Picked>)>>>);
+
+impl Asks {
+    /// Queues `dialog`; its answer comes on the channel returned, on a later frame.
+    fn ask(&self, dialog: FileDialog) -> Receiver<Picked> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push((dialog, tx));
+        rx
+    }
+}
+
+/// The window's folder pickers, through craft-dialogs: the picks the shell asked for are shown at
+/// the end of the frame, one at a time, and answered on a later frame without the window waiting.
+/// On macOS the picker is a panel of its own beside the window.
+pub struct Pickers {
+    asks: Asks,
+    dialogs: Dialogs<Sender<Picked>>,
+}
+
+impl Pickers {
+    /// Pickers whose answers call `wake`, which runs a frame of the window to take them.
+    pub fn new(wake: craft_dialogs::Wake) -> Self {
+        Self { asks: Asks::default(), dialogs: Dialogs::new(wake) }
+    }
+
+    /// The queue the shell's pickers ask through (`native`'s `asks`).
+    pub fn asks(&self) -> Asks {
+        self.asks.clone()
+    }
+
+    /// Hands the answers that have come to the picks that asked for them. Called before the shell's
+    /// logic, which takes them in the same frame; a pick the shell has let go of (its dialog
+    /// closed, the window quitting) has no use for its answer.
+    pub fn answer(&mut self) {
+        for (tx, answer) in self.dialogs.take_answers() {
+            let _ = tx.send(picked(answer));
+        }
+    }
+
+    /// Shows the picks asked for, at the end of the window's frame, with the window as `parent`;
+    /// one asked while a picker is open waits for it to close.
+    pub fn show(&mut self, parent: Option<&eframe::Frame>) {
+        let asked = std::mem::take(&mut *self.asks.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
+        for (dialog, tx) in asked {
+            self.dialogs.ask(dialog, tx);
+        }
+        self.dialogs.show_pending(parent);
+    }
+}
+
+/// What a folder picker's answer is to the shell. A cancel is nothing chosen, which is also what a
+/// Linux system without a desktop portal and without zenity answers, so the shell then asks
+/// [`picker_unavailable`]. A picker that could not be shown says so in the user's language; its own
+/// English reason goes to the log.
+fn picked(answer: Answer) -> Picked {
+    let unavailable = |why: &str| {
+        log::warn!("the folder picker could not be shown: {why}");
+        Picked::Unavailable(archforge_ui_egui::i18n::tr("No folder picker could open; Archforge's log says why."))
+    };
+    match answer {
+        Answer::Paths(paths) => paths.into_iter().next().map_or(Picked::Nothing, Picked::Folder),
+        Answer::Cancelled => Picked::Nothing,
+        Answer::Unavailable(why) => unavailable(&why),
+        Answer::Message(result) => unavailable(&format!("a folder pick answered as a message box ({result:?})")),
+    }
+}
+
+/// The platform's folder picker, for Open project, asked through `asks`: it starts in the folder
+/// given (a pinned folder), else in the projects folder.
+fn pick_project(asks: &Asks, start: Option<&std::path::Path>) -> Receiver<Picked> {
+    let mut dialog = FileDialog::folder();
     match start.filter(|s| s.is_dir()) {
-        Some(start) => dialog = dialog.set_directory(start),
+        Some(start) => dialog = dialog.directory(start),
         None => {
             if let Some(folder) = projects_folder().filter(|f| f.path.is_dir()) {
-                dialog = dialog.set_directory(folder.path);
+                dialog = dialog.directory(folder.path);
             }
         }
     }
-    Picked::at_once(dialog.pick_folder())
+    asks.ask(dialog)
 }
 
 /// Why the folder picker cannot appear. Where the picker is the desktop portal's (Linux
 /// and the BSDs), asked over D-Bus, a missing portal answers nothing, as a cancel does; the picker
 /// library then falls back to zenity, so only with no zenity either is the picker surely missing.
-/// Elsewhere the picker is the system's own and always appears.
+/// craft-dialogs answers that case as a cancel, not as unavailable, so this is asked after every
+/// cancel whatever shows the picker. Elsewhere the picker is the system's own and always appears.
 fn picker_unavailable() -> Option<String> {
     #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))]
     {
@@ -307,15 +384,15 @@ fn find_projects(folders: Vec<PathBuf>, wake: Box<dyn Fn() + Send>) -> std::sync
     rx
 }
 
-/// The platform's folder picker, headed with the title the shell gives for what the folder is for
-/// (Pin a folder, Choose project location): it starts in the user's Documents. It blocks until it
-/// closes, as [`pick_project`] does.
-fn pick_folder(title: &str) -> Receiver<Picked> {
-    let mut dialog = rfd::FileDialog::new().set_title(title);
+/// The platform's folder picker, asked through `asks` as [`pick_project`] is, headed with the
+/// title the shell gives for what the folder is for (Pin a folder, Choose project location; on
+/// macOS the line above the files): it starts in the user's Documents.
+fn pick_folder(asks: &Asks, title: &str) -> Receiver<Picked> {
+    let mut dialog = FileDialog::folder().title(title);
     if let Some(documents) = projects_folder().and_then(|f| f.path.parent().map(PathBuf::from)) {
-        dialog = dialog.set_directory(documents);
+        dialog = dialog.directory(documents);
     }
-    Picked::at_once(dialog.pick_folder())
+    asks.ask(dialog)
 }
 
 /// A version 7 id from the clock, a process-wide counter and the platform's randomness: the
@@ -356,6 +433,77 @@ mod tests {
         assert_eq!(classify(false, no_backend), Probe::Missing, "a portal without a file chooser backend");
         assert_eq!(classify(false, "Error org.freedesktop.DBus.Error.NoReply: Did not receive a reply"), Probe::Unknown, "no answer claims nothing");
         assert_eq!(classify(false, "Failed to open connection to session bus"), Probe::Unknown);
+    }
+
+    /// A pick the shell asks for is shown only at the end of the frame and answered on a later one:
+    /// a folder chosen is that folder, a cancel is nothing (the shell then asks why no picker
+    /// appeared), and a picker that could not be shown says so in the user's words, never in
+    /// craft-dialogs' English. A pick the shell let go of answers nowhere, and the next still shows.
+    #[test]
+    fn a_pick_shows_at_the_frames_end_and_its_answer_comes_on_a_later_frame() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        use std::sync::mpsc::TryRecvError;
+
+        use craft_dialogs::Request;
+
+        archforge_ui_egui::i18n::set_language("en");
+        let woken = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let wake = woken.clone();
+        let mut pickers = Pickers::new(std::sync::Arc::new(move || {
+            wake.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }));
+        let chosen = std::env::temp_dir();
+        let shown = Rc::new(RefCell::new(Vec::<Request>::new()));
+        let answers = Rc::new(RefCell::new(std::collections::VecDeque::from([
+            Answer::Paths(vec![chosen.clone()]),
+            Answer::Cancelled,
+            Answer::Unavailable("the app isn't running yet, so the dialog can't be shown".into()),
+            Answer::Paths(vec![chosen.clone()]),
+            Answer::Cancelled,
+        ])));
+        let (seen, next) = (shown.clone(), answers.clone());
+        pickers.dialogs.set_override(Some(Box::new(move |request: &Request| {
+            seen.borrow_mut().push(request.clone());
+            next.borrow_mut().pop_front().unwrap_or(Answer::Cancelled)
+        })));
+        let asks = pickers.asks();
+
+        // Open project, from a pinned folder: nothing shows in the frame that asks.
+        let open = pick_project(&asks, Some(&chosen));
+        assert!(shown.borrow().is_empty(), "shown inside the frame");
+        pickers.answer();
+        assert_eq!(open.try_recv(), Err(TryRecvError::Empty));
+        pickers.show(None);
+        assert_eq!(shown.borrow().as_slice(), [Request::File(FileDialog::folder().directory(&chosen))]);
+        assert_eq!(open.try_recv(), Err(TryRecvError::Empty), "answered in the frame that showed it");
+        assert!(woken.load(std::sync::atomic::Ordering::SeqCst) > 0, "the answer wakes the window");
+        pickers.answer();
+        assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())));
+
+        // Pin a folder, cancelled: nothing chosen, under the title the shell gave.
+        let pin = pick_folder(&asks, "Pin a folder");
+        pickers.show(None);
+        pickers.answer();
+        assert_eq!(pin.try_recv(), Ok(Picked::Nothing));
+        let Some(Request::File(dialog)) = shown.borrow().last().cloned() else { panic!("no file dialog shown") };
+        assert_eq!((dialog.kind, dialog.title.as_deref()), (craft_dialogs::Kind::Folder, Some("Pin a folder")));
+
+        // Choose project location, with no picker to show.
+        let location = pick_folder(&asks, "Choose project location");
+        pickers.show(None);
+        pickers.answer();
+        assert_eq!(location.try_recv(), Ok(Picked::Unavailable("No folder picker could open; Archforge's log says why.".into())));
+
+        // Two asked in one frame, the first let go of before its answer: the second still answers.
+        let gone = pick_project(&asks, Some(&chosen));
+        let kept = pick_folder(&asks, "Pin a folder");
+        drop(gone);
+        pickers.show(None);
+        pickers.answer();
+        assert_eq!(kept.try_recv(), Ok(Picked::Nothing));
+        assert_eq!(shown.borrow().len(), 5, "every pick asked was shown once");
+        assert!(answers.borrow().is_empty());
     }
 }
 

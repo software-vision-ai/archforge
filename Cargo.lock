@@ -264,6 +264,7 @@ dependencies = [
  "archforge-secrets",
  "archforge-ui-egui",
  "craft-atomic",
+ "craft-dialogs",
  "eframe",
  "egui",
  "egui_kittest",
@@ -1079,6 +1080,19 @@ version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?branch=main#52fc6b5b3d2179239664136e84543231f8576f8d"
 dependencies = [
  "rustix 1.1.6",
+]
+
+[[package]]
+name = "craft-dialogs"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?branch=main#52fc6b5b3d2179239664136e84543231f8576f8d"
+dependencies = [
+ "block2 0.6.2",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "raw-window-handle",
+ "rfd",
 ]
 
 [[package]]

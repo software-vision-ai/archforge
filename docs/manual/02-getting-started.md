@@ -80,7 +80,8 @@ a version is and how to save one with a description.
 - **Pin a folder** on Home keeps a folder of projects one click away.
 - While a folder picker is open, Home waits for it: the recent projects, the pinned folders and
   every other way to open a project are off, and the search lists none of them, until you choose
-  a folder or cancel.
+  a folder or cancel. On macOS the picker is a panel of its own that you can move aside, and the
+  rest of the window keeps working; elsewhere it stays in front of the window until it closes.
 
 ## Finding a project on disk
 

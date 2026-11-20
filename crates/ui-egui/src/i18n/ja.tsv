@@ -2238,6 +2238,7 @@ str		The changes since the last write are lost.	前回の書き込み以降の�
 str		The changes to {name} cannot be written	{name} への変更を書き込めません
 # Linux のフォルダーピッカー
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	フォルダーピッカーを開けませんでした: お使いのデスクトップ用に xdg-desktop-portal とバックエンドをインストールしてください。
+str		No folder picker could open; Archforge's log says why.	フォルダーピッカーを開けませんでした。理由は Archforge のログに記録されています。
 str		{day} {month} {time}	{month}{day}日 {time}
 str		Unsaved changes	未保存の変更
 str		No unsaved changes	未保存の変更はありません

@@ -6534,7 +6534,7 @@ mod tests {
     fn the_native_services_give_the_host_its_key_check() {
         let sandbox = Sandbox::new(Some(Box::new(archforge_secrets::MemoryStore::new())));
         let host = Arc::new(Projects::new(&sandbox.base.join("wired"), "Archforge test".into()));
-        let _services = crate::services::native(host.clone(), sandbox.agents.clone().unwrap());
+        let _services = crate::services::native(host.clone(), sandbox.agents.clone().unwrap(), crate::services::Asks::default());
         assert!(host.inner.keys.get().is_some(), "a description would be refused in the application");
     }
 

@@ -156,8 +156,8 @@ pub enum Picked {
 }
 
 impl Picked {
-    /// The channel of a pick already answered, as a host whose picker blocks until it closes
-    /// hands it back: the folder chosen, or nothing.
+    /// The channel of a pick already answered, as a stand-in host hands it back: the folder chosen,
+    /// or nothing.
     pub fn at_once(folder: Option<std::path::PathBuf>) -> std::sync::mpsc::Receiver<Picked> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(folder.map_or(Picked::Nothing, Picked::Folder));

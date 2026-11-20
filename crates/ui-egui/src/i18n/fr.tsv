@@ -2238,6 +2238,7 @@ str		The changes since the last write are lost.	Les modifications depuis la dern
 str		The changes to {name} cannot be written	Les modifications de {name} ne peuvent pas être écrites
 # Sélecteur de dossier sous Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	Aucun sélecteur de dossier n'a pu s'ouvrir : installez xdg-desktop-portal et un backend pour votre bureau.
+str		No folder picker could open; Archforge's log says why.	Aucun sélecteur de dossier n'a pu s'ouvrir ; le journal d'Archforge en indique la raison.
 str		{day} {month} {time}	{day} {month} {time}
 str		Unsaved changes	Modifications non enregistrées
 str		No unsaved changes	Aucune modification non enregistrée

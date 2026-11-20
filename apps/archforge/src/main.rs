@@ -78,6 +78,8 @@ struct DesktopApp {
     next_save: std::time::Instant,
     #[cfg(target_os = "macos")]
     menu: Option<macos_menu::NativeMenu>,
+    /// The folder pickers the shell asks for: shown at the end of a frame, answered on a later one.
+    pickers: services::Pickers,
 }
 
 /// The least time between two saves of changed preferences, and after a save that failed.
@@ -85,8 +87,11 @@ const PREFS_SETTLE: std::time::Duration = std::time::Duration::from_secs(1);
 const PREFS_RETRY: std::time::Duration = std::time::Duration::from_secs(30);
 
 impl eframe::App for DesktopApp {
-    /// Once a frame: the native menu's chosen items, the shell's logic, then the housekeeping of the running app.
+    /// Once a frame: the folder pickers' answers, the native menu's chosen items, the shell's logic,
+    /// then the housekeeping of the running app.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Before the shell's logic, which takes a pick's answer in this frame.
+        self.pickers.answer();
         #[cfg(target_os = "macos")]
         if let Some(menu) = &mut self.menu {
             menu.frame(&mut self.shell);
@@ -118,8 +123,11 @@ impl eframe::App for DesktopApp {
         }
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    /// Draws the shell, then shows the folder pickers it asked for, with the window as their parent:
+    /// last in the frame, never inside its handling.
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         self.shell.ui(ui);
+        self.pickers.show(Some(frame));
     }
 
     fn on_exit(&mut self) {
@@ -225,7 +233,9 @@ fn run() -> i32 {
                 // What a crashed or killed Archforge left running stops, on a thread of its own.
                 let _ = projects.stop_orphans();
                 let agents = std::sync::Arc::new(agents::Agents::new(&settings, window.clone()));
-                let mut shell = Shell::new(services::native(projects.clone(), agents.clone()));
+                let ctx = cc.egui_ctx.clone();
+                let pickers = services::Pickers::new(std::sync::Arc::new(move || ctx.request_repaint()));
+                let mut shell = Shell::new(services::native(projects.clone(), agents.clone(), pickers.asks()));
                 prefs::apply(&stored, &mut shell);
                 if let Some(rx) = requests.borrow_mut().take() {
                     shell.attach_control(rx, window.generation());
@@ -247,6 +257,7 @@ fn run() -> i32 {
                     next_save: std::time::Instant::now() + PREFS_SETTLE,
                     #[cfg(target_os = "macos")]
                     menu,
+                    pickers,
                 }))
             }),
         );
@@ -323,6 +334,18 @@ mod tests {
     #[test]
     fn the_window_never_installs_the_system_font_scanner() {
         assert!(!native_options().system_font_fallback, "installed fonts come from fonts.rs, never mapped");
+    }
+
+    /// The window hands the folder pickers' answers to the shell before its logic, which takes
+    /// them, and shows the picks the shell asked for after it has drawn, at the frame's end. The
+    /// other way round, a pick asked or answered waits for a frame nothing asks for.
+    #[test]
+    fn the_window_answers_picks_before_the_shells_logic_and_shows_them_after_its_drawing() {
+        let source = include_str!("main.rs");
+        let window = source.split("impl eframe::App for DesktopApp").nth(1).and_then(|s| s.split("fn on_exit").next()).unwrap_or_default();
+        let at = |line: &str| window.find(line).unwrap_or_else(|| panic!("`{line}` is not in the window's frame"));
+        assert!(at("self.pickers.answer();") < at("self.shell.logic(ctx);"), "answers after the shell's logic");
+        assert!(at("self.shell.ui(ui);") < at("self.pickers.show(Some(frame));"), "picks shown before the shell has drawn");
     }
 
     /// The agent's way into a shell with an open project: each tool call answered at once by the

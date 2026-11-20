@@ -2238,6 +2238,7 @@ str		The changes since the last write are lost.	Die Änderungen seit dem letzten
 str		The changes to {name} cannot be written	Die Änderungen an {name} können nicht geschrieben werden
 # Ordnerauswahl unter Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	Es konnte keine Ordnerauswahl geöffnet werden: Installieren Sie xdg-desktop-portal und ein Backend für Ihren Desktop.
+str		No folder picker could open; Archforge's log says why.	Es konnte keine Ordnerauswahl geöffnet werden; das Protokoll von Archforge nennt den Grund.
 str		{day} {month} {time}	{day}. {month} {time}
 str		Unsaved changes	Ungespeicherte Änderungen
 str		No unsaved changes	Keine ungespeicherten Änderungen
