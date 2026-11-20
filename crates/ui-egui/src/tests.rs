@@ -23550,12 +23550,6 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
             let doc = h.state().session.as_ref().unwrap().doc();
             doc.alive().filter(|o| doc.class_of(*o).ok() == Some(archforge_uml::DEPENDENCY)).count()
         };
-        let (count, revision) = (dependencies(&h), h.state().session.as_ref().unwrap().revision());
-        relate(&mut h, Relate::Dependency, from, to);
-        assert!(h.state().canvas.notice.is_some(), "{theme:?}: said");
-        assert_eq!((dependencies(&h), edge_count(&h), h.state().session.as_ref().unwrap().revision()), (count, before + 2, revision), "{theme:?}");
-        // With no line on this diagram, as on another that shows both ends, its line is added for
-        // the same dependency, one undo step that Undo takes back alone, the dependency kept.
         let [line, order, order_status] =
             [(archforge_uml::CLASS, "OrderLine"), (archforge_uml::CLASS, "Order"), (archforge_uml::ENUMERATION, "OrderStatus")]
                 .map(|(k, n)| named(&h, k, n));
@@ -23570,6 +23564,13 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
             let shows = |e: &archforge_mof::Obj| st.get(*e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()) == Some(dependency);
             (st.uuid(dependency).unwrap(), edges.iter().filter_map(|v| v.as_ref()).find(shows).map(|e| st.uuid(e).unwrap()))
         };
+        let (count, revision) = (dependencies(&h), h.state().session.as_ref().unwrap().revision());
+        relate(&mut h, Relate::Dependency, from, to);
+        let shown = format!("This diagram shows {} already.", drawn(&h).0);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(shown.as_str()), "{theme:?}: said");
+        assert_eq!((dependencies(&h), edge_count(&h), h.state().session.as_ref().unwrap().revision()), (count, before + 2, revision), "{theme:?}");
+        // With no line on this diagram, as on another that shows both ends, its line is added for
+        // the same dependency, one undo step that Undo takes back alone, the dependency kept.
         let (dependency, edge) = drawn(&h);
         let edge = edge.expect("the dependency's line");
         crate::editing::run(h.state_mut(), "diagram.disconnect", serde_json::json!({ "edge": edge.to_string() })).unwrap();
