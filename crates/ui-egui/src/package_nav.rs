@@ -152,16 +152,24 @@ fn default_of(shell: &mut Shell, package: Uuid) -> Option<Uuid> {
 /// takes the route of the tab left plus this entry; entering the diagram already open records
 /// nothing.
 pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
+    enter_by(shell, package, now, false);
+}
+
+/// [`enter`], `by_zoom` when zooming in made the entry. Such an entry keeps no view for the return:
+/// the package covered [`ENTER_COVER`] there, so coming back to it would let the next zoom-in tick
+/// enter again, and the canvas may have grown since, so the return can't tell by measuring alone
+/// ([`restorable`]); it centres the package at [`LANDING`] instead (AR-668).
+fn enter_by(shell: &mut Shell, package: Uuid, now: f64, by_zoom: bool) {
     let Some(from) = shell.canvas.active else { return };
     let Some(d) = default_of(shell, package) else { return };
-    let view = (shell.canvas.pan, shell.canvas.zoom);
+    let view = (!by_zoom).then_some((shell.canvas.pan, shell.canvas.zoom));
     if d != from
         && let Some(session) = shell.session.as_ref()
     {
         let store = session.doc();
         let source_name = store.by_uuid(from).map(|o| archforge_core::name_of(store, o)).unwrap_or_default();
         let mut route = shell.canvas.nav.routes.get(&from).cloned().unwrap_or_default();
-        route.push(Step { source: from, destination: d, source_name, view: Some(view), history: session.history() });
+        route.push(Step { source: from, destination: d, source_name, view, history: session.history() });
         shell.canvas.nav.routes.insert(d, route);
     }
     crate::canvas::open(shell, d);
@@ -227,8 +235,9 @@ fn take_return(shell: &mut Shell) -> Option<(Uuid, Option<(Vec2, f32)>)> {
 /// Whether `view`, the pan and zoom a diagram was left with, can be shown again on canvas `r`
 /// holding `card`, the diagram's card of the package just left: both finite, the zoom within
 /// [`crate::canvas::ZOOM_RANGE`], and the card covering less than [`ENTER_COVER`] of the canvas.
-/// A view a zoom entry was made at covers more, so the next zoom-in tick would enter the package
-/// again; it is no place to come back to (delegated UX decision, AR-668).
+/// A view the package covered more of is no place to come back to, since the next zoom-in tick
+/// would enter it again (delegated UX decision, AR-668); a zoom entry keeps no view at all
+/// ([`enter_by`]).
 fn restorable(store: &Store, r: Rect, card: Obj, (pan, zoom): (Vec2, f32)) -> bool {
     let (least, most) = crate::canvas::ZOOM_RANGE;
     if !pan.is_finite() || !zoom.is_finite() || !(least..=most).contains(&zoom) {
@@ -321,7 +330,7 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
             && cover >= ENTER_COVER
             && let Ok(id) = store.uuid(package)
         {
-            enter(shell, id, now);
+            enter_by(shell, id, now, true);
         }
     } else if shell.canvas.zoom <= crate::canvas::ZOOM_RANGE.0 + f32::EPSILON {
         // Out: the zoom has reached its least, 10 %: back the way in came, even into another

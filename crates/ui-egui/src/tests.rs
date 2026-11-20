@@ -30823,22 +30823,23 @@ fn centred_at_landing(h: &Harness<'static, Shell>, card: archforge_mof::Uuid) ->
 }
 
 /// A return by zoom shows the diagram as it was left when that view is sound (AR-668): Top, left
-/// at a view of its own by entering Sales, comes back at exactly that view. A saved view whose
-/// zoom is outside the zoom range, or whose pan is not finite, is no view to restore: the return
-/// lands at 100 % with Sales' card centred instead.
+/// at a view of its own by opening Sales, comes back at exactly that view. A view in which Sales'
+/// card covers most of the canvas, a saved zoom outside the zoom range, or a pan that is not
+/// finite is no view to restore: the return lands at 100 % with Sales' card centred instead.
 #[test]
 fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        for (case, saved) in [
-            ("as left", None),
-            ("zoom beyond the range", Some((egui::vec2(-50.0, 30.0), crate::canvas::ZOOM_RANGE.1 * 2.0))),
-            ("pan not finite", Some((egui::vec2(f32::NAN, 30.0), 0.6))),
+        let sound = (egui::vec2(-50.0, 30.0), 0.6);
+        for (case, left, saved) in [
+            ("as left", sound, None),
+            ("the card covering the canvas", (egui::vec2(-590.0, -470.0), 3.0), None),
+            ("zoom beyond the range", sound, Some((egui::vec2(-50.0, 30.0), crate::canvas::ZOOM_RANGE.1 * 2.0))),
+            ("pan not finite", sound, Some((egui::vec2(f32::NAN, 30.0), 0.6))),
         ] {
             let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-            let (top, sales, card, sales_d) = top_with_sales(&mut h, (240, 148), &[]);
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
             crate::canvas::open(h.state_mut(), top);
             h.run();
-            let left = (egui::vec2(-50.0, 30.0), 0.6);
             (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
             h.run();
             crate::package_nav::enter(h.state_mut(), sales, 0.0);
@@ -30851,7 +30852,7 @@ fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound(
             }
             rest(&mut h);
             assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {case}");
-            if saved.is_none() {
+            if case == "as left" {
                 assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?}: Top as it was left");
             } else {
                 assert!(
@@ -30867,10 +30868,11 @@ fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound(
 /// A view a zoom entry was made at shows the package covering most of the canvas, so a return
 /// there would let the next zoom-in tick enter again (AR-668, delegated UX decision): zooming in
 /// on Sales' card until Sales opens, then out again, lands Top at 100 % with the card centred, and
-/// one tick of zooming in on the card then stays on Top.
+/// one tick of zooming in on the card then stays on Top. So it does when the window grew while
+/// Sales was open, though the card then covers less of the larger canvas at the entry's view.
 #[test]
 fn a_return_to_the_view_a_zoom_entry_left_centres_the_package_and_the_next_tick_stays() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+    for (theme, grown) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
         let (top, _, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
         crate::canvas::open(h.state_mut(), top);
@@ -30885,9 +30887,12 @@ fn a_return_to_the_view_a_zoom_entry_left_centres_the_package_and_the_next_tick_
             h.step();
         }
         assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}: zooming in entered Sales");
+        if grown {
+            h.set_size(egui::vec2(2600.0, 1700.0));
+        }
         h.run();
         rest(&mut h);
-        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} grown {grown}");
         assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
         rest(&mut h);
         h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{card}")).center()));
