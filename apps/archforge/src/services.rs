@@ -138,13 +138,16 @@ impl Asks {
 /// On macOS the picker is a panel of its own beside the window.
 pub struct Pickers {
     asks: Asks,
+    /// The pick asked for while a picker is on screen, shown once it closes; a newer ask takes
+    /// its place.
+    waiting: Option<(FileDialog, Sender<Picked>)>,
     dialogs: Dialogs<Sender<Picked>>,
 }
 
 impl Pickers {
     /// Pickers whose answers call `wake`, which runs a frame of the window to take them.
     pub fn new(wake: craft_dialogs::Wake) -> Self {
-        Self { asks: Asks::default(), dialogs: Dialogs::new(wake) }
+        Self { asks: Asks::default(), waiting: None, dialogs: Dialogs::new(wake) }
     }
 
     /// The queue the shell's pickers ask through (`native`'s `asks`).
@@ -161,11 +164,21 @@ impl Pickers {
         }
     }
 
-    /// Shows the picks asked for, at the end of the window's frame, with the window as `parent`;
-    /// one asked while a picker is open waits for it to close.
+    /// Shows the pick asked for, at the end of the window's frame, with the window as `parent`.
+    /// The shell asks for one pick at a time, after the last one was answered or let go of (its
+    /// New project closed, say), so a newer ask means one still waiting was let go of: only the
+    /// newest is kept, and it waits, with the open picker brought to the front, until that picker
+    /// closes. A picker let go of while on screen stays until the user closes it: craft-dialogs
+    /// cannot close one.
     pub fn show(&mut self, parent: Option<&eframe::Frame>) {
         let asked = std::mem::take(&mut *self.asks.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
-        for (dialog, tx) in asked {
+        if let Some(newest) = asked.into_iter().last() {
+            self.waiting = Some(newest);
+            self.dialogs.raise();
+        }
+        if !self.dialogs.is_open()
+            && let Some((dialog, tx)) = self.waiting.take()
+        {
             self.dialogs.ask(dialog, tx);
         }
         self.dialogs.show_pending(parent);
@@ -438,7 +451,8 @@ mod tests {
     /// A pick the shell asks for is shown only at the end of the frame and answered on a later one:
     /// a folder chosen is that folder, a cancel is nothing (the shell then asks why no picker
     /// appeared), and a picker that could not be shown says so in the user's words, never in
-    /// craft-dialogs' English. A pick the shell let go of answers nowhere, and the next still shows.
+    /// craft-dialogs' English. A pick still waiting when a newer one is asked was let go of by the
+    /// shell, and only the newer one shows.
     #[test]
     fn a_pick_shows_at_the_frames_end_and_its_answer_comes_on_a_later_frame() {
         use std::cell::RefCell;
@@ -495,15 +509,18 @@ mod tests {
         pickers.answer();
         assert_eq!(location.try_recv(), Ok(Picked::Unavailable("No folder picker could open; Archforge's log says why.".into())));
 
-        // Two asked in one frame, the first let go of before its answer: the second still answers.
+        // A pick asked after one still waiting means the shell let that one go: only the newest
+        // shows, and it answers.
         let gone = pick_project(&asks, Some(&chosen));
-        let kept = pick_folder(&asks, "Pin a folder");
         drop(gone);
+        let kept = pick_folder(&asks, "Pin a folder");
         pickers.show(None);
         pickers.answer();
-        assert_eq!(kept.try_recv(), Ok(Picked::Nothing));
-        assert_eq!(shown.borrow().len(), 5, "every pick asked was shown once");
-        assert!(answers.borrow().is_empty());
+        assert_eq!(kept.try_recv(), Ok(Picked::Folder(chosen.clone())));
+        assert_eq!(shown.borrow().len(), 4, "the pick let go of was never shown");
+        let Some(Request::File(dialog)) = shown.borrow().last().cloned() else { panic!("no file dialog shown") };
+        assert_eq!(dialog.title.as_deref(), Some("Pin a folder"), "the newest pick shows");
+        assert_eq!(answers.borrow().len(), 1, "one answer left for a pick never shown");
     }
 }
 
