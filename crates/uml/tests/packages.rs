@@ -798,3 +798,95 @@ fn a_package_with_no_parent_takes_its_diagrams_and_every_binding_in_it_along() {
     assert_eq!(refers(&s, &ids[5], DEFAULT_DIAGRAM), Some(obj(&s, &ids[4])));
     assert_eq!(problems(s.doc()), []);
 }
+
+/// What `element.remove` of `ids` answers, checked as one undo step (AR-675): undone and redone, the
+/// rows read back as they were each time, and removed again after one more undo, it answers the
+/// same; `removed` is every object that went.
+fn removal(s: &mut S, ids: &[&str]) -> Json {
+    let p = json!({ "ids": ids });
+    let (before, live) = (snapshot(s), s.doc().alive().count());
+    let answer = s.execute("element.remove", &p).unwrap_or_else(|e| panic!("{p}: {e}")).value;
+    let after = snapshot(s);
+    assert_eq!(answer["removed"], json!(live - s.doc().alive().count()), "every object that went is counted: {answer}");
+    s.undo().unwrap();
+    assert_eq!(snapshot(s), before, "undone");
+    s.redo().unwrap();
+    assert_eq!(snapshot(s), after, "redone");
+    s.undo().unwrap();
+    assert_eq!(s.execute("element.remove", &p).unwrap().value, answer, "the same counts after Undo and Redo");
+    assert_eq!(snapshot(s), after);
+    answer
+}
+
+/// The counts `element.remove` answers beside `removed`: (moved elements, moved diagrams,
+/// bindings, relationships).
+fn counts(answer: &Json) -> (u64, u64, u64, u64) {
+    let n = |key: &str| answer[key].as_u64().unwrap_or_else(|| panic!("{key} in {answer}"));
+    (n("moved_elements"), n("moved_diagrams"), n("bindings"), n("relationships"))
+}
+
+/// A nested package removed reports what it handed up to its parent, its contents and its
+/// diagrams, and the one binding that went, its own; the binding of a package it hands up stays
+/// and is not counted. Removed with one of its classes, the class is no longer counted as handed
+/// up, and its association is counted as gone. Each answer is the same after Undo and Redo (AR-675).
+#[test]
+fn a_nested_package_removed_reports_what_it_handed_up_and_its_one_binding() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let lines = run(&mut s, "uml.package.add", json!({ "name": "Lines", "parent": orders }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": orders, "name": "Order" }));
+    run(&mut s, "uml.class.add", json!({ "package": orders, "name": "Line" }));
+    let customer = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Customer" }));
+    run(&mut s, "uml.association.add", json!({ "from": customer, "to": order }));
+    for (of, name) in [(&sales, "Sales"), (&orders, "Order detail"), (&orders, "Orders"), (&lines, "Lines")] {
+        run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": of, "name": name }));
+    }
+    // Order, Line and Lines move up, with both diagrams of Orders; its binding goes, Lines's stays.
+    let answer = removal(&mut s, &[&orders]);
+    assert_eq!(counts(&answer), (3, 2, 1, 0), "{answer}");
+    assert_eq!(answer.as_object().map(|o| o.len()), Some(5), "removed and the four counts: {answer}");
+    // Order goes in the same step: it is not handed up, and its association goes with it.
+    s.undo().unwrap();
+    let answer = removal(&mut s, &[&orders, &order]);
+    assert_eq!(counts(&answer), (2, 2, 1, 1), "{answer}");
+    assert_eq!(problems(s.doc()), []);
+}
+
+/// A package with no parent removed hands nothing up and reports every binding in it and every
+/// relationship that went: the generalization and the dependency inside it, and a generalization
+/// onto one of its classes from a class that stays elsewhere. The answer is the same after Undo
+/// and Redo (AR-675).
+#[test]
+fn a_package_with_no_parent_removed_reports_its_bindings_and_relationships() {
+    use archforge_uml::{CLASS, GENERALIZATION, classifier, generalization};
+    let mut st = store(0);
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let [outer, other] = [0x10, 0x30].map(|id| {
+        let p = st.create_with_uuid(PACKAGE, Uuid([id; 16])).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
+        p
+    });
+    let inner = packaged(&mut st, PACKAGE, "inner", outer);
+    let (party, customer, guest) =
+        (packaged(&mut st, CLASS, "Party", outer), packaged(&mut st, CLASS, "Customer", inner), packaged(&mut st, CLASS, "Guest", other));
+    for specific in [customer, guest] {
+        let g = st.create(GENERALIZATION).unwrap();
+        st.push(specific, classifier::GENERALIZATION, Value::Ref(g)).unwrap();
+        st.set(g, generalization::GENERAL, Value::Ref(party)).unwrap();
+    }
+    depending(&mut st, party, customer, outer);
+    for (package, id) in [(outer, 0x11), (inner, 0x21)] {
+        let d = st.create_with_uuid(DIAGRAM, Uuid([id; 16])).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(d)).unwrap();
+        DiagramObj::set_kind(&mut st, d, Some(STRUCTURE_DIAGRAM)).unwrap();
+        DiagramObj::set_element(&mut st, d, Some(package)).unwrap();
+        bind(&mut st, id + 1, package, d);
+    }
+    let guest = st.uuid(guest).unwrap().to_string();
+    let mut s = over(st);
+    let answer = removal(&mut s, &[&Uuid([0x10; 16]).to_string()]);
+    assert_eq!(counts(&answer), (0, 0, 2, 3), "{answer}");
+    assert!(alive(&s, &guest), "the class elsewhere stays");
+    assert_eq!(problems(s.doc()), []);
+}

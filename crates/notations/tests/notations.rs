@@ -94,16 +94,19 @@ impl Notation for Sketch {
         let general = store.get(element, archforge_uml::generalization::GENERAL).ok()?.as_ref()?;
         Some((specific, general))
     }
+    /// Every sketch node's size, its own so a test can tell it from the default.
     fn default_size(&self, _: ClassId) -> (f64, f64) {
         (200.0, 60.0)
     }
-    fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
+    /// Removes each object with its views; it hands nothing up and counts no binding or
+    /// relationship apart, only the objects that went.
+    fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<archforge_diagram::Removed, CommandError> {
         let mut gone = 0;
         for o in objs {
             gone += archforge_diagram::remove_views_of(store, *o).map_err(|e| CommandError::new(e.to_string()))?;
             gone += store.destroy(*o).map_err(|e| CommandError::new(e.to_string()))?;
         }
-        Ok(gone)
+        Ok(archforge_diagram::Removed { gone, ..Default::default() })
     }
     fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), CommandError> {
         store.set(obj, archforge_uml::named_element::NAME, Value::str(text)).map_err(|e| CommandError::new(e.to_string()))
@@ -241,6 +244,28 @@ fn a_removal_one_notation_refuses_changes_nothing_in_any() {
     assert_eq!((error.reason, error.key.as_deref()), (Some(archforge_engine::Reason::NotRemovable { notation: "Stubborn" }), Some("ids")));
     assert_eq!(error.message, "Stubborn elements cannot be removed yet");
     assert_eq!(rows::snapshot(s.doc(), &tables, &junctions).unwrap(), before);
+}
+
+/// One removal of both notations' elements adds up what each took (AR-675): every object that went,
+/// and the relationships each took along with its own, ER's table its relationship and UML's
+/// class its association; the relationships between what stays stay and are not counted.
+#[test]
+fn a_removal_across_notations_adds_up_what_each_took() {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    let [customer, order, item] = ["customer", "order", "item"].map(|name| id(&mut s, "er.entity.add", json!({ "schema": schema, "name": name })));
+    for (from, to) in [(&customer, &order), (&order, &item)] {
+        id(&mut s, "er.relationship.add", json!({ "from": from, "to": to, "from_end": "exactly-one", "to_end": "zero-or-more" }));
+    }
+    let pkg = id(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let [buyer, sale, line] = ["Buyer", "Sale", "Line"].map(|name| id(&mut s, "uml.class.add", json!({ "package": pkg, "name": name })));
+    for (from, to) in [(&buyer, &sale), (&sale, &line)] {
+        id(&mut s, "uml.association.add", json!({ "from": from, "to": to }));
+    }
+    let live = s.doc().alive().count();
+    let out = s.execute("element.remove", &json!({ "ids": [customer, buyer] })).unwrap().value;
+    assert_eq!(out["removed"], json!(live - s.doc().alive().count()), "{out}");
+    assert_eq!((out["relationships"].as_u64(), out["bindings"].as_u64(), out["moved_elements"].as_u64()), (Some(2), Some(0), Some(0)), "{out}");
 }
 
 /// The shared commands refuse with their reason typed beside the unchanged English: the lists of

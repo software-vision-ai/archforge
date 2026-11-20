@@ -645,6 +645,14 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   them that a removed package hands up stays, but does not take the diagrams. Inside a package with
   no parent removed in the same call, nothing is judged: that package takes everything below it
   along, as it does when removed alone.
+- **What a removal answers**: `element_remove` answers `removed`, how many objects went in all,
+  and four counts beside it. `moved_elements` and `moved_diagrams` say how many elements and
+  diagrams a removed nested package handed up to the package above, counting only those still
+  there: what is removed in the same call, and what a package with no parent takes along, is not
+  counted. `bindings` says how many default-diagram bindings went, and `relationships` how many
+  relationships of any kind went, those taken along with a class, a table or a package included;
+  those between elements that stay are kept and not counted. One call that removes ER and UML
+  elements together adds up what each took.
 - **Choosing a package's default diagram**: `uml_package_default_set`
   (`uml.package.default.set`) makes one of the package's own class diagrams its default, given
   `package`, `diagram` and `expected_revision`, which it needs: left out or changed since read, it
