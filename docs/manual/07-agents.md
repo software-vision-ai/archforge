@@ -691,8 +691,9 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   `name` sent is not applied; rename it with `uml_relationship_rename`. With several, nothing
   changes and `id` is null (`"choiceRequired"`): call again with `existing` set to the id of the
   candidate to use. One that was removed or reconnected since, or never joined the two, is refused
-  under `existing`, naming the ids of those that join them now, and another is never picked in its
-  place. Reusing a dependency rather than repeating it is Archforge's rule, not UML's, which
+  under `existing`, naming the ids of those that join them now (the sentence names the first 12 and
+  how many more; call again without `existing` for the whole list in `candidates`), and another is
+  never picked in its place. Reusing a dependency rather than repeating it is Archforge's rule, not UML's, which
   allows parallel dependencies; parallel dependencies loaded from earlier versions stay as they
   are. `element_remove` refuses a package, or a package taken along
   with another, while a dependency that stays has it as its client or its supplier, naming the

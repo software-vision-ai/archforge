@@ -23554,11 +23554,42 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         relate(&mut h, Relate::Dependency, from, to);
         assert!(h.state().canvas.notice.is_some(), "{theme:?}: said");
         assert_eq!((dependencies(&h), edge_count(&h), h.state().session.as_ref().unwrap().revision()), (count, before + 2, revision), "{theme:?}");
-        // Two from OrderLine to OrderStatus, as a document of an earlier version may hold: drawn
-        // again, neither is added to, which is said, and nothing changes.
+        // With no line on this diagram, as on another that shows both ends, its line is added for
+        // the same dependency, one undo step that Undo takes back alone, the dependency kept.
         let [line, order, order_status] =
             [(archforge_uml::CLASS, "OrderLine"), (archforge_uml::CLASS, "Order"), (archforge_uml::ENUMERATION, "OrderStatus")]
                 .map(|(k, n)| named(&h, k, n));
+        let drawn = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let kind = archforge_uml::matches::Kind::Dependency;
+            let [dependency] = archforge_uml::matches::existing_matches(st, kind, st.by_uuid(line).unwrap(), st.by_uuid(order_status).unwrap())[..]
+            else {
+                panic!("one dependency from OrderLine to OrderStatus")
+            };
+            let edges = st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap();
+            let shows = |e: &archforge_mof::Obj| st.get(*e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()) == Some(dependency);
+            (st.uuid(dependency).unwrap(), edges.iter().filter_map(|v| v.as_ref()).find(shows).map(|e| st.uuid(e).unwrap()))
+        };
+        let (dependency, edge) = drawn(&h);
+        let edge = edge.expect("the dependency's line");
+        crate::editing::run(h.state_mut(), "diagram.disconnect", serde_json::json!({ "edge": edge.to_string() })).unwrap();
+        h.run();
+        assert_eq!((dependencies(&h), edge_count(&h), drawn(&h)), (count, before + 1, (dependency, None)), "{theme:?}: the line alone gone");
+        relate(&mut h, Relate::Dependency, from, to);
+        assert_eq!(h.state().canvas.notice, None, "{theme:?}");
+        let (again, added) = drawn(&h);
+        assert_eq!(
+            (dependencies(&h), edge_count(&h), again, added.is_some()),
+            (count, before + 2, dependency, true),
+            "{theme:?}: its line, no new dependency"
+        );
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!((dependencies(&h), edge_count(&h)), (count, before + 1), "{theme:?}: Undo takes the line back alone");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+        // Two from OrderLine to OrderStatus, as a document of an earlier version may hold: drawn
+        // again, neither is added to, which is said, and nothing changes.
         let s = h.state_mut().session.as_mut().unwrap();
         let twin = s.execute("uml.dependency.add", &serde_json::json!({ "client": line.to_string(), "supplier": order.to_string() })).unwrap();
         let twin = archforge_mof::Uuid::parse(twin.value["id"].as_str().unwrap()).unwrap();

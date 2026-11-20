@@ -760,15 +760,15 @@ fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     let name = text(p, "name");
     check_name(name)?;
     let found = existing_matches(ctx.doc, Kind::Dependency, client, supplier);
-    let candidates = found.iter().map(|d| candidate_json(ctx.doc, Kind::Dependency, *d, ["client", "supplier"])).collect::<Result<Vec<Json>, _>>()?;
+    // A choice is checked before any candidate is written out, so a stale one costs no result.
     let reused = match p.str("existing") {
         Some(chosen) => Some(chosen_match(ctx.doc, &found, chosen, (client, supplier))?),
-        None => match found.as_slice() {
-            [] => None,
-            [one] => Some(*one),
-            _ => return Ok(json!({ "id": Json::Null, "outcome": "choiceRequired", "candidates": candidates })),
-        },
+        None => found.first().copied().filter(|_| found.len() == 1),
     };
+    let candidates = found.iter().map(|d| candidate_json(ctx.doc, Kind::Dependency, *d, ["client", "supplier"])).collect::<Result<Vec<Json>, _>>()?;
+    if reused.is_none() && !found.is_empty() {
+        return Ok(json!({ "id": Json::Null, "outcome": "choiceRequired", "candidates": candidates }));
+    }
     if let Some(d) = reused {
         ctx.view.selection = vec![d];
         return Ok(json!({ "id": uuid_of(ctx.doc, d)?, "outcome": "selected", "candidates": candidates }));
