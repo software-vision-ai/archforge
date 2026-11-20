@@ -91,8 +91,8 @@ impl eframe::App for DesktopApp {
     /// the folder pickers asked for while the window is hidden, then the housekeeping of the
     /// running app.
     fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        // Before the shell's logic, which takes a pick's answer in this frame.
-        self.pickers.answer();
+        // Before the shell's logic, which takes a pick's answer, or its giving up, in this frame.
+        self.pickers.answer(ctx);
         #[cfg(target_os = "macos")]
         if let Some(menu) = &mut self.menu {
             menu.frame(&mut self.shell);
@@ -348,7 +348,7 @@ mod tests {
         let source = include_str!("main.rs");
         let window = source.split("impl eframe::App for DesktopApp").nth(1).and_then(|s| s.split("fn on_exit").next()).unwrap_or_default();
         let at = |line: &str| window.find(line).unwrap_or_else(|| panic!("`{line}` is not in the window's frame"));
-        assert!(at("self.pickers.answer();") < at("self.shell.logic(ctx);"), "answers after the shell's logic");
+        assert!(at("self.pickers.answer(ctx);") < at("self.shell.logic(ctx);"), "answers after the shell's logic");
         assert!(
             at("self.shell.logic(ctx);") < at("self.pickers.show_if_hidden(ctx, Some(frame));"),
             "a hidden window's picks shown before the shell asks"

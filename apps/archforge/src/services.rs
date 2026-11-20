@@ -175,20 +175,34 @@ pub struct Pickers {
     /// meanwhile; a newer ask takes its place.
     waiting: Option<Ask>,
     dialogs: Dialogs<Sender<Picked>>,
+    /// Makes the queue that takes the place of one whose picker never answered.
+    fresh: Box<dyn Fn() -> Dialogs<Sender<Picked>>>,
+    /// Whether a picker stays in front of the window until it closes, so that the user working in
+    /// the window means none is up: everywhere but macOS, whose picker is a panel beside the window.
+    in_front: bool,
     /// Tests: a picker counts as on screen, as a real one does until the user closes it.
     #[cfg(test)]
     held: bool,
+    /// Tests: `Some` makes the pickers hang, as a hung desktop portal's do: the pick handed to one
+    /// is kept here, never answered, until the picker is given up with its queue.
+    #[cfg(test)]
+    hung: Option<Option<Sender<Picked>>>,
 }
 
 impl Pickers {
     /// Pickers whose answers call `wake`, which runs a frame of the window to take them.
     pub fn new(wake: craft_dialogs::Wake) -> Self {
+        let fresh = wake.clone();
         Self {
             asks: Asks::default(),
             waiting: None,
             dialogs: Dialogs::new(wake),
+            fresh: Box::new(move || Dialogs::new(fresh.clone())),
+            in_front: !cfg!(target_os = "macos"),
             #[cfg(test)]
             held: false,
+            #[cfg(test)]
+            hung: None,
         }
     }
 
@@ -197,12 +211,38 @@ impl Pickers {
         self.asks.clone()
     }
 
-    /// Hands the answers that have come to the picks that asked for them. Called before the shell's
+    /// Hands the answers that have come to the picks that asked for them, then gives up on a
+    /// picker that never answered, as [`Self::give_up_if_left`] says. Called before the shell's
     /// logic, which takes them in the same frame; a pick the shell has let go of (its dialog
     /// closed, the window quitting) has no use for its answer.
-    pub fn answer(&mut self) {
+    pub fn answer(&mut self, ctx: &egui::Context) {
         for (tx, answer) in self.dialogs.take_answers() {
             let _ = tx.send(picked(answer));
+        }
+        self.give_up_if_left(ctx);
+    }
+
+    /// Gives up on the picker on screen when the user works in the window again (a pointer or key
+    /// pressed while it has the focus) where a picker stays in front of the window until it closes:
+    /// none is up then, so it never appeared or went without answering, as a hung desktop portal
+    /// does. craft-dialogs cannot say whether its picker is up, nor give one up, so its queue is
+    /// left behind with the picker's worker and a fresh one shows the picks from then on. The pick
+    /// it held ends as a cancel: the shell, its channel closed, frees Open project, Pin a folder and
+    /// Change… in this frame, and an answer the old picker gives later reaches nothing. A slow user
+    /// is never cut off: a picker up holds the window, which then takes no presses.
+    fn give_up_if_left(&mut self, ctx: &egui::Context) {
+        let pressed = |i: &egui::InputState| {
+            i.pointer.any_pressed() || i.events.iter().any(|e| matches!(e, egui::Event::Key { pressed: true, repeat: false, .. }))
+        };
+        if !self.in_front || !self.on_screen() || !ctx.input(|i| i.focused && pressed(i)) {
+            return;
+        }
+        log::warn!("the folder picker did not answer and the window is in use again: the pick is given up as a cancel");
+        self.dialogs = (self.fresh)();
+        #[cfg(test)]
+        {
+            self.held = false;
+            self.hung = None;
         }
     }
 
@@ -210,8 +250,9 @@ impl Pickers {
     /// The shell asks for one pick at a time, after the last one was answered or let go of (its
     /// New project closed, say), so a newer ask means one still waiting was let go of: only the
     /// newest is kept, and it waits, with the open picker brought to the front, until that picker
-    /// closes. A waiting pick the shell withdraws is dropped and never shown. A picker already on
-    /// screen stays until the user closes it, withdrawn or not: craft-dialogs cannot close one.
+    /// closes, or is given up ([`Self::answer`]). A waiting pick the shell withdraws is dropped and
+    /// never shown. A picker already on screen stays until the user closes it, withdrawn or not:
+    /// craft-dialogs cannot close one.
     pub fn show(&mut self, parent: Option<&eframe::Frame>) {
         let (asked, withdrawn) = {
             let mut queue = self.asks.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -227,6 +268,11 @@ impl Pickers {
         if !self.on_screen()
             && let Some((_, dialog, tx)) = self.waiting.take()
         {
+            #[cfg(test)]
+            if let Some(hung) = &mut self.hung {
+                *hung = Some(tx);
+                return;
+            }
             self.dialogs.ask(dialog, tx);
         }
         self.dialogs.show_pending(parent);
@@ -245,7 +291,7 @@ impl Pickers {
     /// Whether a picker is on screen, or its answer not yet collected.
     fn on_screen(&self) -> bool {
         #[cfg(test)]
-        if self.held {
+        if self.held || self.hung.as_ref().is_some_and(Option::is_some) {
             return true;
         }
         self.dialogs.is_open()
@@ -553,19 +599,19 @@ mod tests {
         // Open project, from a pinned folder: nothing shows in the frame that asks.
         let open = pick_project(&asks, Some(&chosen));
         assert!(shown.borrow().is_empty(), "shown inside the frame");
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert_eq!(open.try_recv(), Err(TryRecvError::Empty));
         pickers.show(None);
         assert_eq!(shown.borrow().as_slice(), [Request::File(FileDialog::folder().directory(&chosen))]);
         assert_eq!(open.try_recv(), Err(TryRecvError::Empty), "answered in the frame that showed it");
         assert!(woken.load(std::sync::atomic::Ordering::SeqCst) > 0, "the answer wakes the window");
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())));
 
         // Pin a folder, cancelled: nothing chosen, under the title the shell gave.
         let pin = pick_folder(&asks, "Pin a folder");
         pickers.show(None);
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert_eq!(pin.try_recv(), Ok(Picked::Nothing));
         let Some(Request::File(dialog)) = shown.borrow().last().cloned() else { panic!("no file dialog shown") };
         assert_eq!((dialog.kind, dialog.title.as_deref()), (craft_dialogs::Kind::Folder, Some("Pin a folder")));
@@ -573,7 +619,7 @@ mod tests {
         // Choose project location, with no picker to show.
         let location = pick_folder(&asks, "Choose project location");
         pickers.show(None);
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert_eq!(location.try_recv(), Ok(Picked::Unavailable("No folder picker could open; Archforge's log says why.".into())));
 
         // A pick asked after one still waiting means the shell let that one go: only the newest
@@ -582,7 +628,7 @@ mod tests {
         drop(gone);
         let kept = pick_folder(&asks, "Pin a folder");
         pickers.show(None);
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert_eq!(kept.try_recv(), Ok(Picked::Folder(chosen.clone())));
         assert_eq!(shown.borrow().len(), 4, "the pick let go of was never shown");
         let Some(Request::File(dialog)) = shown.borrow().last().cloned() else { panic!("no file dialog shown") };
@@ -619,7 +665,7 @@ mod tests {
         pickers.held = true;
         let pin = pick_folder("Pin a folder");
         pickers.show(None);
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert!(shown.borrow().is_empty(), "shown over the picker on screen");
         assert_eq!(pin.try_recv(), Err(TryRecvError::Empty));
         // The shell lets it go too, then the picker on screen closes: nothing shows.
@@ -627,7 +673,7 @@ mod tests {
         drop(pin);
         pickers.held = false;
         pickers.show(None);
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert!(shown.borrow().is_empty(), "a withdrawn pick showed");
 
         // The next pick shows; withdrawn once shown, its answer still comes.
@@ -635,7 +681,7 @@ mod tests {
         pickers.show(None);
         assert_eq!(shown.borrow().as_slice(), [Some("Choose project location".to_string())]);
         withdraw();
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert_eq!(location.try_recv(), Ok(Picked::Folder(chosen.clone())));
 
         // Withdrawn in the frame it was asked, before the window took it: never shown.
@@ -643,13 +689,13 @@ mod tests {
         withdraw();
         drop(gone);
         pickers.show(None);
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert_eq!(shown.borrow().len(), 1, "a pick withdrawn in its own frame showed");
 
         // A withdrawal holds only for the picks asked before it.
         let open = (services.pick_project.clone().unwrap())(Some(&chosen));
         pickers.show(None);
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())));
         assert_eq!(shown.borrow().len(), 2);
     }
@@ -685,7 +731,7 @@ mod tests {
         // Home's Open project asks, and the shell keeps waiting for it over several frames.
         let open = pick_project(Some(&chosen));
         for _ in 0..3 {
-            pickers.answer();
+            pickers.answer(&egui::Context::default());
             pickers.show(None);
             assert!(shown.borrow().is_empty(), "shown over the picker on screen");
             assert_eq!(open.try_recv(), Err(TryRecvError::Empty));
@@ -693,10 +739,10 @@ mod tests {
 
         // The old picker closes: the Open pick shows in the next frame, asked once, and answers.
         pickers.held = false;
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         pickers.show(None);
         assert_eq!(shown.borrow().as_slice(), [FileDialog::folder().directory(&chosen)], "the Open pick did not show once");
-        pickers.answer();
+        pickers.answer(&egui::Context::default());
         assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())));
         pickers.show(None);
         assert_eq!(shown.borrow().len(), 1, "the Open pick showed again");
@@ -742,8 +788,127 @@ mod tests {
                 pickers.show(None);
                 assert_eq!(shown.get() - before, 1, "a {state} window's drawing");
             }
-            pickers.answer();
+            pickers.answer(&egui::Context::default());
             assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())), "a {state} window's pick");
+        }
+    }
+
+    /// One frame's input: the window focused or not, and the events in it.
+    fn input(focused: bool, events: Vec<egui::Event>) -> egui::RawInput {
+        egui::RawInput { focused, events, ..Default::default() }
+    }
+
+    /// A pointer button pressed in the window.
+    fn press() -> egui::Event {
+        egui::Event::PointerButton {
+            pos: egui::pos2(40.0, 40.0),
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// A key going down in the window, or let go; egui marks one already down as a repeat.
+    fn key(pressed: bool) -> egui::Event {
+        egui::Event::Key { key: egui::Key::A, physical_key: None, pressed, repeat: false, modifiers: egui::Modifiers::NONE }
+    }
+
+    /// Pickers whose first picker never answers, as a hung desktop portal's does, and whose fresh
+    /// queues answer every pick with `chosen`; with the count of pickers shown and of queues made.
+    fn hanging_pickers(chosen: &std::path::Path) -> (Pickers, std::rc::Rc<std::cell::Cell<usize>>, std::rc::Rc<std::cell::Cell<usize>>) {
+        let mut pickers = Pickers::new(std::sync::Arc::new(|| {}));
+        let (shown, made) = (std::rc::Rc::new(std::cell::Cell::new(0_usize)), std::rc::Rc::new(std::cell::Cell::new(0_usize)));
+        let (seen, folder, making) = (shown.clone(), chosen.to_path_buf(), made.clone());
+        pickers.fresh = Box::new(move || {
+            making.set(making.get() + 1);
+            let (seen, folder) = (seen.clone(), folder.clone());
+            let mut dialogs = Dialogs::new(std::sync::Arc::new(|| {}));
+            dialogs.set_override(Some(Box::new(move |_: &craft_dialogs::Request| {
+                seen.set(seen.get() + 1);
+                Answer::Paths(vec![folder.clone()])
+            })));
+            dialogs
+        });
+        pickers.dialogs = (pickers.fresh)();
+        pickers.hung = Some(None);
+        (pickers, shown, made)
+    }
+
+    /// A picker that never answers, where pickers stay in front of the window: the window waits,
+    /// with Open project and Pin a folder off, through idle frames and through presses while it
+    /// has not the focus. A press in the focused window gives the picker up: the pick ends as a
+    /// cancel, saying nothing, Open and Pin are free in that frame, the answer the old picker
+    /// would give later reaches nothing, and the next pick shows a picker of its own and answers.
+    #[test]
+    fn a_picker_that_never_answers_is_given_up_once_the_window_is_used_again() {
+        archforge_ui_egui::i18n::set_language("en");
+        let sandbox = crate::test_host::Sandbox::named("pick", None);
+        let chosen = std::env::temp_dir();
+        let (mut pickers, shown, made) = hanging_pickers(&chosen);
+        pickers.in_front = true;
+        let mut shell = archforge_ui_egui::Shell::new(Services { projects: Some(sandbox.host.clone()), ..with_pickers(&pickers.asks()) });
+        let ctx = egui::Context::default();
+        let frame = |pickers: &mut Pickers, shell: &mut archforge_ui_egui::Shell, input: egui::RawInput| {
+            // As eframe runs a shown window's logic: in the frame's pass, with its input.
+            ctx.run_ui(input, |ui| {
+                pickers.answer(ui.ctx());
+                shell.logic(ui.ctx());
+            })
+            .textures_delta
+            .clear();
+            pickers.show(None);
+        };
+        let queued = |pickers: &Pickers| pickers.asks.0.lock().map(|q| q.asked.len()).unwrap_or_default();
+
+        shell.pin_from_picker();
+        pickers.show(None);
+        assert!(pickers.hung.as_ref().is_some_and(Option::is_some), "the pick was not handed to the picker");
+        for (what, events, focused) in
+            [("an idle frame", vec![], true), ("a press elsewhere", vec![press()], false), ("a key elsewhere", vec![key(true)], false)]
+        {
+            frame(&mut pickers, &mut shell, input(focused, events));
+            assert!(!shell.can_open_project(), "Open free after {what}");
+            shell.pin_from_picker();
+            assert_eq!(queued(&pickers), 0, "Pin asked again after {what}");
+        }
+
+        frame(&mut pickers, &mut shell, input(true, vec![press()]));
+        assert_eq!((made.get(), pickers.hung.is_none()), (2, true), "the hung picker's queue was kept");
+        assert!(shell.can_open_project(), "Open still off");
+        assert_eq!((shell.picker_error.as_deref(), shell.state.pinned.len()), (None, 0), "a pick given up is a cancel");
+        shell.pin_from_picker();
+        assert_eq!(queued(&pickers), 1, "Pin still off");
+        frame(&mut pickers, &mut shell, input(true, vec![]));
+        frame(&mut pickers, &mut shell, input(true, vec![]));
+        assert_eq!((shown.get(), shell.state.pinned.as_slice()), (1, [chosen].as_slice()), "the next pick's picker");
+    }
+
+    /// Only a press, or a key going down, in the focused window gives a picker up, and only where
+    /// pickers stay in front of the window: a key held down since before the picker showed (the
+    /// Enter that asked for it, say) repeating, or let go, is not the user back in the window. On
+    /// macOS the picker is a panel beside the window, which keeps working, so a press there leaves
+    /// the panel waiting for its answer.
+    #[test]
+    fn only_a_press_in_the_focused_window_gives_up_and_never_beside_a_macos_panel() {
+        let chosen = std::env::temp_dir();
+        let cases = [
+            ("a key going down", true, vec![], vec![key(true)], true),
+            ("a key held down", true, vec![key(true)], vec![key(true)], false),
+            ("a key let go", true, vec![key(true)], vec![key(false)], false),
+            ("the pointer moving", true, vec![], vec![egui::Event::PointerMoved(egui::pos2(1.0, 1.0))], false),
+            ("a press beside a macOS panel", false, vec![], vec![press()], false),
+        ];
+        for (what, in_front, before, events, gives_up) in cases {
+            let (mut pickers, ..) = hanging_pickers(&chosen);
+            pickers.in_front = in_front;
+            let ctx = egui::Context::default();
+            let frame = |pickers: &mut Pickers, events| ctx.run_ui(input(true, events), |ui| pickers.answer(ui.ctx())).textures_delta.clear();
+            frame(&mut pickers, before);
+            let pin = pick_folder(&pickers.asks(), "Pin a folder");
+            pickers.show(None);
+            frame(&mut pickers, events);
+            let closed = pin.try_recv() == Err(std::sync::mpsc::TryRecvError::Disconnected);
+            assert_eq!((closed, pickers.on_screen()), (gives_up, !gives_up), "{what}");
         }
     }
 }
