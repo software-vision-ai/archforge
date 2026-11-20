@@ -465,8 +465,8 @@ fn a_wrong_end_that_stays_is_the_dependency_s_fault_and_only_model_elements_open
     }
     st.push(twice, dependency::CLIENT, Value::Ref(invoice)).unwrap();
     st.set(order, named_element::NAME, Value::Str("Order".into())).unwrap();
-    let [sales, order, invoice, other, d, e, f, g, twice] =
-        [sales, order, invoice, other, d, e, f, g, twice].map(|o| st.uuid(o).unwrap().to_string());
+    let [sales, loose, order, invoice, other, d, e, f, g, twice] =
+        [sales, loose, order, invoice, other, d, e, f, g, twice].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = over(st);
     let reconnect = |s: &S, d: &str, end: &str, class: &str| json!({ "relationship": d, "end": end, "class": class, "expected_revision": token(s) });
     let p = reconnect(&s, &d, "source", &invoice);
@@ -486,6 +486,10 @@ fn a_wrong_end_that_stays_is_the_dependency_s_fault_and_only_model_elements_open
     let p = reconnect(&s, &g, "target", &sales);
     let label = s.undo_label().map(str::to_string);
     refused(&mut s, "uml.relationship.reconnect", p, "relationship: the class is in no package");
+    assert_eq!(s.undo_label().map(str::to_string), label, "no undo step");
+    // Dropped back on loose, the client it has, it is refused for that client, under `class`.
+    let p = reconnect(&s, &g, "source", &loose);
+    refused(&mut s, "uml.relationship.reconnect", p, "class: the class is in no package");
     assert_eq!(s.undo_label().map(str::to_string), label, "no undo step");
     // A dependency of two clients stays where it is held when one of them moves.
     round_trip(&mut s, "uml.class.move", json!({ "class": order, "package": other }));
