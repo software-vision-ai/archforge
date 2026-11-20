@@ -9945,6 +9945,19 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     assert_eq!(selected_name(&h), "Billing");
 }
 
+/// Where the first text painted as `words` stands on the screen.
+fn painted_at(h: &Harness<'static, Shell>, words: &str) -> Option<egui::Rect> {
+    /// Where `s`, or the first shape it holds, paints `words`.
+    fn walk(s: &egui::Shape, words: &str) -> Option<egui::Rect> {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == words => Some(egui::Rect::from_min_size(t.pos, t.galley.size())),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, words)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, words))
+}
+
 /// The names of the headings a screen reader finds on the screen, in tree order.
 fn headings(h: &Harness<'static, Shell>) -> Vec<String> {
     use egui_kittest::kittest::{NodeT, Queryable};
@@ -10323,9 +10336,11 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(found.iter().any(|t| t == "UML structure diagram") && found.iter().any(|t| t == said), "{theme:?}: {found:?}");
         assert_eq!(h.get_by_label("UML structure diagram").accesskit_node().role(), egui::accesskit::Role::RadioButton, "{theme:?}");
         assert_eq!(headings(&h), ["New diagram"], "{theme:?}");
-        // Found where it is painted: above the cards, from their left edge.
+        // Found where it is painted: over the painted title, above the cards, from their left edge.
         let title = h.get_by_role_and_label(egui::accesskit::Role::Heading, "New diagram").accesskit_node().bounding_box().expect("bounds");
-        assert!((title.x0 as f32 - er.left()).abs() < 0.5 && title.y1 as f32 <= er.top() && title.y0 < title.y1, "{theme:?}: {title:?}");
+        let shown = painted_at(&h, "New diagram").expect("the title painted").center();
+        assert!(title.contains(egui::accesskit::Point::new(shown.x.into(), shown.y.into())), "{theme:?}: {title:?} over {shown:?}");
+        assert!((title.x0 as f32 - er.left()).abs() < 0.5 && title.y1 as f32 <= er.top(), "{theme:?}: {title:?}");
         // The arrow keys move the choice; the name the dialog gave follows the kind.
         key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
