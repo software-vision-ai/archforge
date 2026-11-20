@@ -37,14 +37,21 @@ pointer.
 ## 3. Choosing a project's location
 
 **Do:** in the New project dialog choose **Change…**, then **Cancel** in the picker; choose
-**Change…** again and pick another folder; create the project.
+**Change…** again and pick another folder; create the project. Then go to Home, open New project
+again, choose **Change…**, move the picker aside and choose **Cancel** in the New project dialog. On
+Home choose **Browse files** on the **Open a project** card; then pick a folder in the first picker,
+and in the picker that follows, a `.archforge` folder.
 
 **Expect:** the picker says **Choose project location** above its folders. After the cancel, the name and the
 folder are as they were. After the pick, the field shows the chosen folder by its last two names,
-and Finder shows the project there as a folder named `<name>.archforge`.
+and Finder shows the project there as a folder named `<name>.archforge`. Cancelling New project gives
+Home back at once while its picker stays on screen. **Browse files** opens no second picker yet: the
+first one comes to the front. The folder picked in it changes nothing (no project is made and none
+opens), and as it closes the Open project picker opens on its own, without another click; the
+project picked there opens.
 
-**Covers:** the system folder picker and its title, and a project made in a folder outside the
-default one.
+**Covers:** the system folder picker and its title, a project made in a folder outside the default
+one, and a picker asked for while one let go of is still on screen.
 
 ## 4. Pinning a folder and opening a project
 
