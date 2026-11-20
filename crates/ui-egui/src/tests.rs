@@ -31074,11 +31074,12 @@ fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
 /// A return to a diagram that no longer shows the package left fits that diagram's content, though
 /// its saved view was sound (AR-668): Top, left at 60 % by entering Sales, loses Sales' card; the
 /// return shows both classes far apart in view, below 100 %. Emptied entirely, Top shows at 100 %
-/// from its top left, as an empty diagram fits.
+/// from its top left, as an empty diagram fits. So does Top as the owning parent's default when
+/// Sales' diagram was opened directly, with no route back.
 #[test]
 fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        for emptied in [false, true] {
+        for (emptied, routed) in [(false, true), (true, true), (false, false), (true, false)] {
             let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
             let far: &[i64] = if emptied { &[] } else { &[0, 4000] };
             let (top, sales, card, sales_d) = top_with_sales(&mut h, (240, 148), far);
@@ -31086,18 +31087,23 @@ fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
             h.run();
             (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(-50.0, 30.0), 0.6);
             h.run();
-            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            if routed {
+                crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            } else {
+                crate::canvas::open(h.state_mut(), sales_d);
+                assert!(h.state().canvas.nav.routes.get(&sales_d).is_none_or(|r| r == &crate::nav_route::Route::default()), "{theme:?}: no route");
+            }
             h.run();
             h.state_mut().session.as_mut().unwrap().execute("diagram.unplace", &serde_json::json!({ "nodes": [card.to_string()] })).unwrap();
             h.run();
             rest(&mut h);
-            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} emptied {emptied}");
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} emptied {emptied} routed {routed}");
             let c = &h.state().canvas;
             if emptied {
-                assert_eq!((c.pan, c.zoom), (egui::Vec2::ZERO, 1.0), "{theme:?}: the empty diagram from its top left");
+                assert_eq!((c.pan, c.zoom), (egui::Vec2::ZERO, 1.0), "{theme:?} routed {routed}: the empty diagram from its top left");
             } else {
                 let seen = [0.0, 4200.0].iter().all(|x| (0.0..=c.size.x).contains(&(c.pan.x + x * c.zoom)));
-                assert!(seen && c.zoom < 1.0, "{theme:?}: both classes fitted in view, {:?}", (c.pan, c.zoom));
+                assert!(seen && c.zoom < 1.0, "{theme:?} routed {routed}: both classes fitted in view, {:?}", (c.pan, c.zoom));
             }
         }
     }

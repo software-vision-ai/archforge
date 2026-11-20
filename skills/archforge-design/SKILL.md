@@ -729,7 +729,7 @@ What is UML's own, beside the shared rules above.
   (AR-582). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it
   opens the diagram the package was entered from, even in another branch (Decision 4, AR-664), as
   it was left while that view is finite, within the zoom range and shows no package card covering
-  60 % or more, the measure zoom entry uses, whether the entry was by zoom, ⌘↓ or Open; a zoom
+  60 % or more of the canvas as it is at the return, the measure zoom entry uses, whether the entry was by zoom, ⌘↓ or Open; a zoom
   entry keeps no view at all. Else it lands at 100 %, the package left centred, which makes no
   promise about the next zoom-in (a small window can let the card fill 60 % there); or fitted
   when the card is gone (AR-668, delegated UX decision). The return takes the newest step off
