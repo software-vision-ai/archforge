@@ -465,7 +465,8 @@ fn a_wrong_end_that_stays_is_the_dependency_s_fault_and_only_model_elements_open
     }
     st.push(twice, dependency::CLIENT, Value::Ref(invoice)).unwrap();
     st.set(order, named_element::NAME, Value::Str("Order".into())).unwrap();
-    let [order, invoice, other, d, e, f, g, twice] = [order, invoice, other, d, e, f, g, twice].map(|o| st.uuid(o).unwrap().to_string());
+    let [sales, order, invoice, other, d, e, f, g, twice] =
+        [sales, order, invoice, other, d, e, f, g, twice].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = over(st);
     let reconnect = |s: &S, d: &str, end: &str, class: &str| json!({ "relationship": d, "end": end, "class": class, "expected_revision": token(s) });
     let p = reconnect(&s, &d, "source", &invoice);
@@ -480,6 +481,12 @@ fn a_wrong_end_that_stays_is_the_dependency_s_fault_and_only_model_elements_open
         let p = reconnect(&s, dep, end, &invoice);
         refused(&mut s, "uml.relationship.reconnect", p, says);
     }
+    // Dropped back on sales, the supplier it has, `g` is still refused for its client in no package:
+    // the ends it keeps are checked before a move that changes nothing (AR-697).
+    let p = reconnect(&s, &g, "target", &sales);
+    let label = s.undo_label().map(str::to_string);
+    refused(&mut s, "uml.relationship.reconnect", p, "relationship: the class is in no package");
+    assert_eq!(s.undo_label().map(str::to_string), label, "no undo step");
     // A dependency of two clients stays where it is held when one of them moves.
     round_trip(&mut s, "uml.class.move", json!({ "class": order, "package": other }));
     assert_eq!(owner(&s, &twice), owner(&s, &e), "kept in sales");
