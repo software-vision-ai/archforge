@@ -243,20 +243,20 @@ fn most_covered(store: &Store, d: Obj, view: crate::canvas::View, r: Rect) -> Op
         .max_by(|a, b| a.1.total_cmp(&b.1))
 }
 
-/// Whether `view`, the pan and zoom diagram `d` was left with, can be shown again on canvas `r`,
-/// `d` still showing the card of the package left ([`land`] checks that first):
-/// both finite, the zoom within [`crate::canvas::ZOOM_RANGE`], and no package card of `d` covering
-/// [`ENTER_COVER`] of the canvas there, the measure zooming in enters by ([`most_covered`]). A view
-/// some package covers more of is no place to come back to, since the next zoom-in tick would
-/// enter that package (delegated UX decision, AR-668); a zoom entry keeps no view at all
-/// ([`enter_by`]).
-fn restorable(store: &Store, r: Rect, d: Obj, (pan, zoom): (Vec2, f32)) -> bool {
+/// Whether `view`, the pan and zoom diagram `d` was left with, can be shown again on canvas `r`
+/// holding `card`, `d`'s card of the package left: both finite, the zoom within
+/// [`crate::canvas::ZOOM_RANGE`], the card at least partly on the canvas there, and no package card
+/// of `d` covering [`ENTER_COVER`] of it, the measure zooming in enters by ([`most_covered`]). A
+/// view that hides the package left, as a window narrowed since can, is no place to come back to,
+/// nor one some package covers more of, since the next zoom-in tick would take that package
+/// (delegated UX decision, AR-668); a zoom entry keeps no view at all ([`enter_by`]).
+fn restorable(store: &Store, r: Rect, d: Obj, card: Obj, (pan, zoom): (Vec2, f32)) -> bool {
     let (least, most) = crate::canvas::ZOOM_RANGE;
     if !pan.is_finite() || !zoom.is_finite() || !(least..=most).contains(&zoom) {
         return false;
     }
     let view = crate::canvas::View { origin: r.min, pan, zoom };
-    most_covered(store, d, view, r).is_none_or(|(_, cover)| cover < ENTER_COVER)
+    area(screen(view, store, card).intersect(r)) > 0.0 && most_covered(store, d, view, r).is_none_or(|(_, cover)| cover < ENTER_COVER)
 }
 
 /// Lands diagram `d` on canvas `r` after a zoom out. When `d` shows no card of the package left,
@@ -267,7 +267,7 @@ fn land(shell: &mut Shell, r: Rect, d: Obj, landing: Landing) {
     let card = store.by_uuid(landing.package).and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p)));
     shell.canvas.fit_pending = false;
     match (card, landing.view) {
-        (Some(_), Some(view)) if restorable(store, r, d, view) => (shell.canvas.pan, shell.canvas.zoom) = view,
+        (Some(card), Some(view)) if restorable(store, r, d, card, view) => (shell.canvas.pan, shell.canvas.zoom) = view,
         (Some(card), _) => {
             let b = bounds_of(store, card);
             let centre = vec2((b.x + b.width / 2.0) as f32, (b.y + b.height / 2.0) as f32);

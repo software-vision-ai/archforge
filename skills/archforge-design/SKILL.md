@@ -730,8 +730,9 @@ What is UML's own, beside the shared rules above.
   opens the diagram the package was entered from, even in another branch (Decision 4, AR-664).
   When that diagram no longer shows the package left's card, it is fitted (down to 10 %, so a
   diagram wider than ten canvases shows only in part). Else it shows as it was left while that
-  view is finite, within the zoom range and shows no package card covering 60 % or more of the
-  canvas as it is at the return, the measure zoom entry uses, whether the entry was by zoom, ⌘↓ or
+  view is finite, within the zoom range, shows the package left's card at least in part, and shows
+  no package card covering 60 % or more, the measure zoom entry uses (whether or not that package
+  could open), both on the canvas as it is at the return, whether the entry was by zoom, ⌘↓ or
   Open; a zoom entry keeps no view at all. Else it lands at 100 %, the package left centred, which
   makes no promise about the next zoom-in (a small window can let the card fill 60 % there)
   (AR-668, delegated UX decision). The return takes the newest step off the tab's route and adds

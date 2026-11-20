@@ -524,11 +524,12 @@ card where nothing lies over it to select the package.
   least zoom, 10 %. Reach 10 % and the diagram you went in from opens again, even when that
   diagram belongs to another branch of your model, as you left it, provided it still shows the
   package you were in. If it no longer does, the diagram is fitted to the view instead: all of it
-  shows, unless it is too wide or tall to fit even at 10 %, the least zoom. Two cases open it at
-  100 %, with the package you were in at its centre: you went in by zooming, or, however you went
-  in (zooming, ⌘↓ or Open), the view you left would now show a package filling most of the canvas
-  (60 % or more, measured on the window as it is when you come back, so a smaller window counts),
-  where zooming in would open that package again. Zoom out to 10 % again to go back one more step
+  shows, unless it is too wide or tall to fit even at 10 %, the least zoom. Three cases open it at
+  100 %, with the package you were in at its centre: you went in by zooming; or, however you went
+  in (zooming, ⌘↓ or Open), the view you left would now hide the package you were in; or it would
+  now show a package filling most of the canvas (60 % or more), the amount at which zooming in
+  goes into a package. Both are measured on the window as it is when you come back, so a smaller
+  window counts. Zoom out to 10 % again to go back one more step
   the way you came; coming back adds no step of its own. Once no step is left, or when you opened
   the diagram without going in through a package, zooming out opens the parent package's default
   diagram instead, at 100 % with the package you were in at its centre, or, when that diagram shows

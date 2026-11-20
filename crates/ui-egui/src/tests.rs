@@ -30993,37 +30993,45 @@ fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound(
 }
 
 /// A return by zoom measures the view it would restore on the canvas as it is at the return
-/// (AR-668): Top, left by ⌘↓-style entry into Sales at a view where Sales' card covers less than
-/// [`crate::package_nav::ENTER_COVER`] of the canvas, comes back at 100 % with the card centred
-/// once the window has shrunk so far that the card would cover more at that view.
+/// (AR-668): Top, left by ⌘↓-style entry into Sales at a view that shows Sales' card in part,
+/// covering less than [`crate::package_nav::ENTER_COVER`] of the canvas, comes back at 100 % with
+/// the card centred once the window has shrunk so far that the card would cover more at that view,
+/// or, near the canvas's right edge, would be out of view entirely.
 #[test]
 fn a_return_by_zoom_measures_the_saved_view_on_the_window_it_returns_to() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
-        crate::canvas::open(h.state_mut(), top);
-        h.run();
-        let zoom = 1.6;
-        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(20.0 - 200.0 * zoom, 20.0 - 160.0 * zoom), zoom);
-        h.run();
-        let share = |h: &Harness<'static, Shell>| {
-            let canvas = rect_of(h, "workspace.canvas");
-            let covered = rect_of(h, &format!("workspace.canvas.node.{card}")).intersect(canvas);
-            covered.width().max(0.0) * covered.height().max(0.0) / (canvas.width() * canvas.height())
-        };
-        let before = share(&h);
-        assert!(before < crate::package_nav::ENTER_COVER, "{theme:?}: Sales covers {before} when left");
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
-        h.run();
-        h.set_size(egui::vec2(1000.0, 700.0));
-        h.run();
-        rest(&mut h);
-        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
-        assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
-        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(20.0 - 200.0 * zoom, 20.0 - 160.0 * zoom), zoom);
-        h.run();
-        let after = share(&h);
-        assert!(after >= crate::package_nav::ENTER_COVER, "{theme:?}: Sales would cover {after} at that view now");
+        for (case, zoom) in [("covering", 1.6), ("hidden", 0.6)] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            // Sales' card at the canvas's top left, or with only its left 100 points in view at the right.
+            let width = rect_of(&h, "workspace.canvas").width();
+            let left = if case == "covering" { 20.0 } else { width - 100.0 };
+            let view = (egui::vec2(left - 200.0 * zoom, 20.0 - 160.0 * zoom), zoom);
+            // The share of the canvas Sales' card covers at `view`.
+            let share = |h: &Harness<'static, Shell>| {
+                let canvas = rect_of(h, "workspace.canvas");
+                let shown = egui::Rect::from_min_size(canvas.min + view.0 + egui::vec2(200.0, 160.0) * zoom, egui::vec2(480.0, 300.0) * zoom);
+                let covered = shown.intersect(canvas);
+                covered.width().max(0.0) * covered.height().max(0.0) / (canvas.width() * canvas.height())
+            };
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
+            h.run();
+            let before = share(&h);
+            assert!(before > 0.0 && before < crate::package_nav::ENTER_COVER, "{theme:?} {case}: Sales covers {before} when left");
+            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.run();
+            h.set_size(egui::vec2(1000.0, 700.0));
+            h.run();
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {case}");
+            let landed = (h.state().canvas.pan, h.state().canvas.zoom);
+            assert!(centred_at_landing(&h, card), "{theme:?} {case}: Sales centred at 100 %, {landed:?}");
+            let after = share(&h);
+            let changed = if case == "covering" { after >= crate::package_nav::ENTER_COVER } else { after == 0.0 };
+            assert!(changed, "{theme:?} {case}: Sales would cover {after} at the view left now");
+        }
     }
 }
 
