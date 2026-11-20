@@ -27,6 +27,8 @@ pub struct Search {
     /// What the highlighted row ran when the list was last drawn: Enter runs that, not whatever
     /// a list changed since has put in its place.
     seen: Option<Target>,
+    /// What every row ran when the list was last drawn, in order.
+    drawn: Vec<Target>,
     /// Find… was chosen: the frame's drawing opens the list, as opening it needs the window.
     pub asked: bool,
     /// The bar last drawn had no room for the field, so the list has nowhere to show.
@@ -60,7 +62,7 @@ const ROW: f32 = 36.0;
 const LIST_WIDTH: f32 = 420.0;
 
 /// Something the list offers.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 enum Target {
     Project(std::path::PathBuf),
     Folder(std::path::PathBuf),
@@ -96,6 +98,7 @@ fn open(shell: &mut Shell, ctx: &egui::Context) {
     search.open = true;
     search.highlight = 0;
     search.seen = None;
+    search.drawn.clear();
     search.scope = scope;
     if search.scope.is_some() {
         return;
@@ -141,6 +144,7 @@ pub(crate) fn open_with(shell: &mut Shell, query: &str) {
     shell.home_search.query = query.to_string();
     shell.home_search.highlight = 0;
     shell.home_search.seen = None;
+    shell.home_search.drawn.clear();
 }
 
 /// Where the search works now: the open project's folder, or none on Home.
@@ -165,6 +169,7 @@ pub(crate) fn close(shell: &mut Shell) {
     search.query.clear();
     search.highlight = 0;
     search.seen = None;
+    search.drawn.clear();
     search.focus = false;
 }
 
@@ -288,11 +293,15 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
         Target::Project(path) => typed.in_any(&[&h.label, &h.detail, &path.to_string_lossy()]),
         _ => false,
     });
+    // A project found twice (pinned folders inside one another) is listed once: its row is known by
+    // what it opens.
+    let mut listed = std::collections::HashSet::new();
     let found = shell
         .home_search
         .found
         .iter()
         .filter(|f| !shell.state.recent.iter().any(|r| r.path == f.path) && typed.in_folded(&[&f.text]))
+        .filter(|f| listed.insert(f.path.as_path()))
         .map(|f| Hit { target: Target::Project(f.path.clone()), icon: &icons::ER_DIAGRAM, label: f.label.clone(), detail: f.detail.clone() });
     let projects: Vec<Hit> = recent.chain(found).take(MAX_PROJECTS).collect();
     // A project opens nothing while a folder pick waits, and a pinned folder only while Open can
@@ -332,6 +341,18 @@ fn actions(shell: &Shell) -> Vec<Hit> {
             Hit { target: Target::Action(a.id), icon: (search.icon)(shell), label, detail: String::new() }
         })
         .collect()
+}
+
+/// The toolkit's id for the list row in the field `id` that runs `target`.
+fn result_id(id: &str, target: &Target) -> egui::Id {
+    widgets::egui_id(&format!("{id}.result")).with(target)
+}
+
+/// The toolkit's id for the list row in the field `id` that opens the project at `path`, for the
+/// tests' screen reader.
+#[cfg(test)]
+pub(crate) fn project_row_id(id: &str, path: &std::path::Path) -> egui::Id {
+    result_id(id, &Target::Project(path.to_path_buf()))
 }
 
 /// Runs a row and closes the search.
@@ -414,8 +435,14 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
     // Enter runs the row last drawn highlighted while it is still listed, as the list can change
     // on this very frame (a folder pick ending lists the projects above the actions); one gone,
     // or none drawn, is not swapped for the row now in its place, and the list is drawn again
-    // (AR-749).
-    if enter && let Some(target) = shell.home_search.seen.clone().filter(|seen| groups.iter().flat_map(|(_, h)| h).any(|h| h.target == *seen)) {
+    // (AR-749). The arrows pressed with it moved on from that row first, which only the rows drawn
+    // show: on a list changed since, the row they reach is drawn before Enter can run it.
+    let moved = (up || down) && !groups.iter().flat_map(|(_, h)| h).map(|h| &h.target).eq(shell.home_search.drawn.iter());
+    if enter
+        && seen_at.is_some()
+        && !moved
+        && let Some(target) = groups.iter().flat_map(|(_, h)| h).nth(shell.home_search.highlight).map(|h| h.target.clone())
+    {
         run(shell, target);
         return;
     }
@@ -473,7 +500,12 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, groups: &[(S
             y += 28.0;
             for hit in hits {
                 let row = Rect::from_min_size(pos2(r.left() + 4.0, y), vec2(r.width() - 8.0, ROW));
-                let resp = control(shell, ui, &format!("{id}.result.{n}"), "menu-item", row, true);
+                // Automation finds the row by its place; the toolkit knows it by what it runs, so a
+                // press, a release or a screen reader's click meant for a row that moved or went
+                // (the projects, as a folder pick ends) never lands on the row now in its place
+                // (AR-749).
+                widgets::record_visible(ui, &mut shell.registry, &format!("{id}.result.{n}"), "menu-item", row);
+                let resp = ui.interact(row, result_id(id, &hit.target), egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
                 if resp.hovered() {
                     shell.home_search.highlight = n;
                 }
@@ -498,6 +530,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, groups: &[(S
         picked
     });
     shell.home_search.seen = groups.iter().flat_map(|(_, h)| h).nth(shell.home_search.highlight).map(|h| h.target.clone());
+    shell.home_search.drawn = groups.iter().flat_map(|(_, h)| h).map(|h| h.target.clone()).collect();
     if let Some(target) = picked {
         run(shell, target);
         return;
@@ -580,6 +613,17 @@ mod tests {
         assert_eq!(groups(&shell)[..2], [tr("Projects"), tr("Pinned folders")]);
         shell.picking = Some((crate::Pick::Pin, std::sync::mpsc::channel().1));
         assert_eq!(groups(&shell), [tr("Actions")]);
+    }
+
+    /// A project found in two pinned folders, one inside the other, is listed once.
+    #[test]
+    fn a_project_found_twice_is_listed_once() {
+        let (mut shell, ..) = shell();
+        let found = |path: &str| Found { path: path.into(), label: "Billing".into(), detail: String::new(), text: fold("Billing") };
+        shell.home_search.found = vec![found("/w/Billing.archforge"), found("/w/Billing.archforge"), found("/w/Other.archforge")];
+        let projects = hits(&shell, "").into_iter().find(|(heading, _)| *heading == tr("Projects")).map(|(_, rows)| rows).unwrap_or_default();
+        let paths: Vec<Target> = projects.into_iter().map(|h| h.target).collect();
+        assert_eq!(paths, [Target::Project("/w/Billing.archforge".into()), Target::Project("/w/Other.archforge".into())]);
     }
 
     /// Capitals, accents and `ß` count for nothing, and the projects found keep the list's order.

@@ -22,7 +22,7 @@ pub(crate) const MAX_ELEMENTS: usize = 10;
 const MAX_TEXT: usize = 120;
 
 /// One thing the search can find: a diagram, or an element (a note's node is one too).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Found {
     Diagram(Uuid),
     Element(Uuid),
