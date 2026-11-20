@@ -134,6 +134,11 @@ impl Holding {
         }
     }
 
+    /// Whether a quit waits for the hold.
+    pub(crate) fn quit_waits(&self) -> bool {
+        self.waiting.iter().any(|w| matches!(w, Waiting::Quit))
+    }
+
     /// Whether a hold runs or something still waits for one.
     pub(crate) fn pending(&self) -> bool {
         self.hold.is_some() || self.closing.is_some() || !self.waiting.is_empty()

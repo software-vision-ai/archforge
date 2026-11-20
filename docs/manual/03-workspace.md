@@ -203,10 +203,10 @@ border width, and for lines their colour, width and routing (straight, right-ang
 
 The search field in the bar (⌘K, Ctrl K) finds the project's diagrams and elements by name or by
 where they live. Every word you type must match, whatever its capitals and accents: *strasse*
-finds *Straße* and *prufen* finds *prüfen*. The search on Home and the filter fields in
-**Diagrams**, **Models** and **Versions** ignore capitals and accents too. Choose a diagram to
-open it; choose an element to select it, show its row in Models and bring it to the centre of a
-diagram that shows it.
+finds *Straße* and *prufen* finds *prüfen*. The search on Home, the filter fields in
+**Diagrams**, **Models** and **Versions**, the version chip's list and the list of stereotypes
+to apply ignore capitals and accents too. Choose a diagram to open it; choose an element to
+select it, show its row in Models and bring it to the centre of a diagram that shows it.
 
 <!-- picture: workspace-search light | Search finds diagrams and elements by name -->
 

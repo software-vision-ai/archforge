@@ -347,7 +347,7 @@ pub(crate) fn when(date: &str, clock: Clock) -> String {
 
 /// The branch in use when there are two or more, which lists the branches, Current work, then the
 /// versions read, newest first, the latest reading as current work if nothing is unsaved; or the
-/// branches. Those the filter holds, by what a row says.
+/// branches. Those the filter holds, by what a row says, whatever its capitals and accents.
 fn rows(shell: &Shell) -> Vec<Row> {
     let (clock, unsaved) = (crate::chat_panel::clock(shell), shell.shown_unsaved());
     let mut out = Vec::new();
@@ -372,8 +372,8 @@ fn rows(shell: &Shell) -> Vec<Row> {
         };
         out.push((Pick::Version(v.hash.clone()), when(&v.date, clock), detail));
     }
-    let needle = shell.version_list.filter.trim().to_lowercase();
-    out.retain(|(_, name, detail)| name.to_lowercase().contains(&needle) || detail.to_lowercase().contains(&needle));
+    let typed = crate::home_search::Typed::trimmed(&shell.version_list.filter);
+    out.retain(|(_, name, detail)| typed.in_any(&[name.as_str(), detail.as_str()]));
     out
 }
 

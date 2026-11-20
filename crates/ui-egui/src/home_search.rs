@@ -176,7 +176,8 @@ pub(crate) fn close(shell: &mut Shell) {
 /// What was typed into a search or a filter, folded once by craft-i18n's `Folder`: capitals,
 /// accents, `ß` against `ss` and compatibility forms (full-width letters, ligatures) count for
 /// nothing. Every name search a person types into matches through it, so Home's search, a
-/// project's, and the Models, Diagrams and Versions filters agree.
+/// project's, the Models, Diagrams and Versions filters, the version list and the stereotype
+/// picker agree.
 #[derive(Debug, Clone)]
 pub(crate) struct Typed {
     /// Folded once and never again: a second fold can reorder marks a dropped character kept
