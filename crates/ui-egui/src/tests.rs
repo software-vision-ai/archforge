@@ -31272,6 +31272,39 @@ fn a_return_past_a_removed_diagram_fits_the_one_it_lands_on() {
     }
 }
 
+/// A return restores the view an entry by Open or ⌘↓ left (AR-668): Top, at a view of its own with
+/// Sales selected and in view, entered through Sales' Open button or ⌘↓, comes back on zooming out
+/// at exactly that pan and zoom.
+#[test]
+fn a_return_restores_the_view_an_entry_by_open_or_command_down_left() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for control in ["Open", "⌘↓"] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            let left = (egui::vec2(-50.0, 30.0), 0.6);
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
+            h.run();
+            rest(&mut h);
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
+            h.state_mut().canvas.focused = true;
+            h.run();
+            if control == "Open" {
+                let at = rect_of(&h, &format!("workspace.canvas.node.{card}.enter")).center();
+                click(&mut h, at);
+            } else {
+                key(&mut h, egui::Key::ArrowDown, egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND);
+            }
+            assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}: {control} entered Sales");
+            h.run();
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {control}");
+            assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?}: Top as {control} left it");
+        }
+    }
+}
+
 /// A return that lands at the least zoom goes back one more step on the next zoom-out once the
 /// switch has rested, with no zoom-in first (AR-668): Top → Sales → Archive, Archive's card then
 /// removed from Sales' diagram, whose classes lie too far apart to fit above 10 %; zooming out of
