@@ -676,11 +676,11 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   changes nothing, as are UML's own library and metaclasses, a template parameter's own
   classifier and a package outside the model. An element cannot depend on itself, while a cycle
   of dependencies is allowed. Two ends, no dependency on itself and both ends in one model are
-  Archforge's own rules, not UML's. `element_remove` refuses a package, or a package taken along
-  with another, while a dependency that stays has it as its client or its supplier, naming the
-  package, the dependency's id and its other end; remove that dependency first with
-  `element_remove` and its id. For now this holds for both ends; a later version removes such
-  dependencies with the package instead. `uml_relationship_reconnect` moves either end of a
+  Archforge's own rules, not UML's. `element_remove` of a package removes, in the same step,
+  every dependency whose client or supplier is that package or a package it takes along, with its
+  lines, never moving that end onto another element; `relationships` counts them. A dependency a
+  removed nested package holds between two elements that stay is handed up with the rest, and
+  `diagram_disconnect` on a dependency's line keeps the dependency. `uml_relationship_reconnect` moves either end of a
   dependency onto another package or classifier of the model, in a project of packages alone too;
   an association's or a generalization's end still moves onto a classifier only. Moving the source
   moves the dependency to its new client's package in the same step; a new target leaves its owner as it
