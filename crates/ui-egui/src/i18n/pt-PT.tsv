@@ -383,9 +383,9 @@ str		Step 1 of 2 · Choose what the diagram shows	Passo 1 de 2 · Escolha o que 
 str		Step 2 of 2 · Name it and say what it is of	Passo 2 de 2 · Dê-lhe um nome e indique de que é
 str		Diagram name	Nome do diagrama
 str		New ER diagram	Novo diagrama ER
-str		New class diagram	Novo diagrama de classes
+str		New UML structure diagram	Novo diagrama de estrutura UML
 str		Tables, their columns and keys, and the relationships between them.	Tabelas, as suas colunas e chaves, e as relações entre elas.
-str		Classes with their attributes and operations, and the lines between them.	Classes com os seus atributos e operações, e as linhas entre elas.
+str		Classes, packages and the relationships between them.	Classes, pacotes e as relações entre eles.
 str		Customer	Cliente
 str		Order	Encomenda
 str		Create	Criar
@@ -971,7 +971,6 @@ str		Skills	Competências
 str		Filter models…	Filtrar modelos…
 str		Filter diagrams…	Filtrar diagramas…
 str		No diagrams yet	Ainda sem diagramas
-str		Other diagrams	Outros diagramas
 str		Select	Selecionar
 str		Pan	Deslocar
 str		Entity	Entidade
@@ -1362,8 +1361,8 @@ str		«primitive»	«primitive»
 str		Association class	Classe de associação
 str		Classifier	Classificador
 str		Classifier kinds	Tipos de classificador
-str		Class diagram	Diagrama de classes
-str		Class diagrams	Diagramas de classes
+str		UML structure diagram	Diagrama de estrutura UML
+str		UML structure diagrams	Diagramas de estrutura UML
 str		Class · model, in every diagram	Classe · modelo, em cada diagrama
 str		Interface · model, in every diagram	Interface · modelo, em cada diagrama
 str		Enumeration · model, in every diagram	Enumeração · modelo, em cada diagrama

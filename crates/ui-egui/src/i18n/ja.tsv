@@ -383,9 +383,9 @@ str		Step 1 of 2 · Choose what the diagram shows	ステップ 1/2 · 図の種�
 str		Step 2 of 2 · Name it and say what it is of	ステップ 2/2 · 名前と対象を指定
 str		Diagram name	図の名前
 str		New ER diagram	新しいER図
-str		New class diagram	新しいクラス図
+str		New UML structure diagram	新しいUML構造図
 str		Tables, their columns and keys, and the relationships between them.	テーブルとその列やキー、そしてテーブル間のリレーションシップ。
-str		Classes with their attributes and operations, and the lines between them.	属性と操作を持つクラスと、その間の線。
+str		Classes, packages and the relationships between them.	クラス、パッケージ、およびそれらの間の関係。
 str		Customer	顧客
 str		Order	注文
 str		Create	作成
@@ -971,7 +971,6 @@ str		Skills	スキル
 str		Filter models…	モデルを絞り込む…
 str		Filter diagrams…	図を絞り込む…
 str		No diagrams yet	図はまだありません
-str		Other diagrams	その他の図
 str		Select	選択
 str		Pan	パン
 str		Entity	エンティティ
@@ -1362,8 +1361,8 @@ str		«primitive»	«primitive»
 str		Association class	関連クラス
 str		Classifier	分類子
 str		Classifier kinds	分類子の種類
-str		Class diagram	クラス図
-str		Class diagrams	クラス図
+str		UML structure diagram	UML構造図
+str		UML structure diagrams	UML構造図
 str		Class · model, in every diagram	クラス · モデル、すべての図に
 str		Interface · model, in every diagram	インターフェース · モデル、すべての図に
 str		Enumeration · model, in every diagram	列挙 · モデル、すべての図に
