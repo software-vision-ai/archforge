@@ -238,9 +238,10 @@ does one inside a package with no parent removed with it, which takes that packa
 A package a profile holds directly, which no command makes but a project's rows may hold, has
 the profile as its parent on the way up, and a profile never takes the diagrams itself
 (AR-745, `commands::receiver`): when the profile goes, or the package inside it does, nothing
-below it is judged, since either takes everything below along; a profile that stays is passed,
-and the package holding the profile, or the first package above the ones that go, takes them and
-is judged.
+below it is judged, since either takes everything below along. A profile that stays changes
+nothing else: the receiver is still the parent, or the first package above all the ones that go,
+the walk only going on through the profile to find those, so a package below the profile can be
+the receiver, and is judged.
 An element that would take along a diagram the binding of an element that stays names (unsoundly,
 `WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
 binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578);
