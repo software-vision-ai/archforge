@@ -27,6 +27,26 @@ pub(crate) const ROW: f32 = 36.0;
 const MAX_NAME: usize = archforge_er::rules::MAX_NAME;
 const MAX_TYPE: usize = archforge_er::rules::MAX_TYPE;
 
+/// The row of the open menu the arrow keys reached and the rows drawn above and below it, each as
+/// its text and note (empty for none).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ReachedRows {
+    pub menu: String,
+    pub row: (String, String),
+    pub above: Option<(String, String)>,
+    pub below: Option<(String, String)>,
+}
+
+/// A menu's rows numbered among the rows of their text and note, by the menu's id and a hash of
+/// the rows they were numbered for, with the texts and notes more than one row shares.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MenuOrdinals {
+    pub menu: String,
+    pub rows: u64,
+    pub nth: Vec<usize>,
+    pub twins: Vec<(String, String)>,
+}
+
 /// What the panels keep between frames: the open editors and the last refusal.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct State {
@@ -41,6 +61,15 @@ pub struct State {
     pub menu_scroll: Option<(String, f32)>,
     /// The row of the open menu the arrow keys have reached, by the menu's id: Enter picks it.
     pub menu_reached: Option<(String, usize)>,
+    /// That row and its neighbours as last drawn, so the reach stays on its row when rows come or
+    /// go, and an arrow with Enter in its frame runs only a row that was in sight.
+    pub menu_reached_rows: Option<ReachedRows>,
+    /// The open menu's rows numbered among the rows of their text and note, made once per set of
+    /// rows, so a row's toolkit id never hangs on how far the menu is scrolled.
+    pub menu_ordinals: Option<MenuOrdinals>,
+    /// The texts and notes of twin rows whose rows changed lately, by the menu's id, with the time
+    /// until which a click on one of them picks nothing (longer while the pointer is held).
+    pub menu_unsure: Option<(String, Vec<(String, String)>, f64)>,
     /// A type menu's choices as built for one state of one project (its model root and its
     /// revision), each label with the value the commands take: the model is walked for them once
     /// per change, not on every frame the menu is open.
@@ -1410,6 +1439,9 @@ fn menu_frame(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &
 
 /// A menu row's height.
 const MENU_ROW: f32 = 30.0;
+
+/// How long, in seconds, a click on a twin row picks nothing after the menu's rows changed.
+const TWIN_HOLD: f64 = 0.5;
 /// The most noted rows a menu measures for its width: a note marks a name several types share,
 /// which few do, and the rest fit or are cut as any row is.
 const MAX_NOTED: usize = 64;
@@ -1464,8 +1496,52 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     if ui.input(|i| i.pointer.hover_pos().is_some_and(|at| r.contains(at))) {
         offset -= ui.input(|i| i.smooth_scroll_delta.y);
     }
-    // The arrow keys reach a row, scrolled into sight; Enter picks it.
+    // The arrow keys reach a row, scrolled into sight; Enter picks it. The row is kept by its text
+    // and note too: rows that come or go before it (Open, while a folder pick waits) move the reach
+    // with it, never onto another row, and a row gone, or there twice, is reached no more (AR-749).
+    let key_of = |i: usize| items.get(i).map(|text| (text.as_str(), notes.get(i).map_or("", String::as_str)));
+    /// A row's text and note as kept, borrowed.
+    fn as_key(k: &(String, String)) -> (&str, &str) {
+        (k.0.as_str(), k.1.as_str())
+    }
+    let drawn = shell.panels.menu_reached_rows.clone().filter(|d| d.menu == id);
     let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == id).map(|(_, i)| *i);
+    // When the rows change, a reach whose text and note more than one row shares, before or after,
+    // is dropped: a twin come in may stand where it was. Unchanged rows keep it, twins and all.
+    let fingerprint = egui::Id::unique((id, items, notes)).value();
+    let before = shell.panels.menu_ordinals.as_ref().filter(|o| o.menu == id && o.rows != fingerprint);
+    if let (Some(before), Some(d)) = (before, &drawn) {
+        let twin_before = before.twins.iter().any(|twin| as_key(twin) == as_key(&d.row));
+        let twin_now = (0..items.len()).filter(|k| key_of(*k) == Some(as_key(&d.row))).nth(1).is_some();
+        if twin_before || twin_now {
+            reached = None;
+        }
+    }
+    // A row scrolled into sight: the menu's offset moved only as far as it takes.
+    let into_sight = |row: usize, offset: f32| {
+        let (top, bottom) = (4.0 + row as f32 * MENU_ROW, 4.0 + (row + 1) as f32 * MENU_ROW);
+        if top < offset + 4.0 {
+            top - 4.0
+        } else if bottom > offset + r.height() - 4.0 {
+            bottom - r.height() + 4.0
+        } else {
+            offset
+        }
+    };
+    if let Some(d) = &drawn
+        && reached.is_some_and(|i| key_of(i) != Some(as_key(&d.row)))
+    {
+        let mut same = (0..items.len()).filter(|k| key_of(*k) == Some(as_key(&d.row)));
+        reached = match (same.next(), same.next()) {
+            (Some(i), None) => Some(i),
+            _ => None,
+        };
+        // Moved by rows that came or went before it, it is kept in sight.
+        if let Some(i) = reached {
+            offset = into_sight(i, offset);
+        }
+    }
+    let from = reached;
     let (down, up, enter) = ui.input_mut(|i| {
         (
             i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
@@ -1480,14 +1556,21 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
             Some(i) => i.saturating_sub(1),
         };
         reached = Some(next);
-        let (top, bottom) = (4.0 + next as f32 * MENU_ROW, 4.0 + (next + 1) as f32 * MENU_ROW);
-        if top < offset + 4.0 {
-            offset = top - 4.0;
-        } else if bottom > offset + r.height() - 4.0 {
-            offset = bottom - r.height() + 4.0;
-        }
+        offset = into_sight(next, offset);
     }
+    // An arrow with Enter in its frame picks the row it moved to only if that row was drawn there
+    // beside the row in sight: one that came with a change of the rows this frame is drawn first.
+    let enter = enter
+        && match (from, reached, &drawn) {
+            (Some(from), Some(to), Some(d)) if to != from => (if to < from { &d.above } else { &d.below }).as_ref().map(as_key) == key_of(to),
+            _ => true,
+        };
+    let owned = |(text, note): (&str, &str)| (text.to_string(), note.to_string());
     shell.panels.menu_reached = reached.map(|i| (id.to_string(), i));
+    shell.panels.menu_reached_rows = reached.and_then(|i| {
+        let (above, below) = (i.checked_sub(1).and_then(key_of).map(owned), i.checked_add(1).and_then(key_of).map(owned));
+        Some(ReachedRows { menu: id.to_string(), row: owned(key_of(i)?), above, below })
+    });
     let offset = offset.clamp(0.0, most);
     shell.panels.menu_scroll = Some((id.to_string(), offset));
     let rows = r.shrink2(vec2(0.0, 4.0));
@@ -1496,13 +1579,53 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     // Only the rows in sight are laid out, however many the menu holds.
     let first = ((offset / MENU_ROW).floor().max(0.0) as usize).min(items.len());
     let in_sight = ((r.height() / MENU_ROW).ceil().max(0.0) as usize).saturating_add(1);
+    // Rows of one text and note (two template parameters `T`, say) are told apart by their order
+    // in the whole menu, numbered once for each set of rows: never by the rows in sight, which
+    // scrolling changes (AR-749).
+    // For a moment after the rows change, a click or Enter on a row whose text and note another
+    // row shares, before or after, runs nothing: it may have been meant for a twin that just went,
+    // by a screen reader still reading the rows before, and the menu stays for a click on what now
+    // shows. A press held over the change is released on such a row for nothing too.
+    let (now, held, released) = ui.input(|i| (i.time, i.pointer.primary_down(), i.pointer.primary_released()));
+    let kept = shell.panels.menu_unsure.take().filter(|(of, _, until)| of == id && (held || released || now < *until));
+    let mut until = kept.as_ref().map_or(now, |(.., until)| *until);
+    let mut unsure: Vec<(String, String)> = kept.map(|(_, twins, _)| twins).unwrap_or_default();
+    if shell.panels.menu_ordinals.as_ref().is_none_or(|o| o.menu != id || o.rows != fingerprint) {
+        let mut nth_of: std::collections::HashMap<(&str, &str), usize> = std::collections::HashMap::new();
+        let nth = (0..items.len())
+            .filter_map(key_of)
+            .map(|key| {
+                let seen = nth_of.entry(key).or_insert(0);
+                *seen += 1;
+                *seen - 1
+            })
+            .collect::<Vec<_>>();
+        let twins: Vec<(String, String)> =
+            nth_of.into_iter().filter(|(_, n)| *n > 1).map(|((text, note), _)| (text.to_string(), note.to_string())).collect();
+        if let Some(before) = shell.panels.menu_ordinals.take().filter(|o| o.menu == id) {
+            unsure.extend(before.twins.into_iter().chain(twins.iter().cloned()));
+            until = now + TWIN_HOLD;
+        }
+        shell.panels.menu_ordinals = Some(MenuOrdinals { menu: id.to_string(), rows: fingerprint, nth, twins });
+    }
+    if !unsure.is_empty() && (held || now < until) {
+        shell.panels.menu_unsure = Some((id.to_string(), unsure.clone(), until));
+    }
+    let shown = first..first.saturating_add(in_sight).min(items.len());
+    let nths = shell.panels.menu_ordinals.as_ref().and_then(|o| o.nth.get(shown)).map(<[usize]>::to_vec).unwrap_or_default();
     for (i, item) in items.iter().enumerate().skip(first).take(in_sight) {
+        let key = key_of(i).unwrap_or((item.as_str(), ""));
+        let nth = nths.get(i.saturating_sub(first)).copied().unwrap_or(0);
         let row = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + 4.0 + i as f32 * MENU_ROW - offset), vec2(r.width() - 8.0, MENU_ROW));
         if !rows.intersects(row) {
             continue;
         }
         let note = notes.get(i).filter(|n| !n.is_empty());
-        let resp = control(shell, ui, &format!("{id}.{i}"), "menu-item", row.intersect(rows), true);
+        // Automation finds the row by its place; the toolkit knows it by its text, so a press, a
+        // release or a screen reader's click meant for a row that moved or went (Open, as a folder
+        // pick ends or starts) never lands on the row now in its place (AR-749).
+        widgets::record_visible(ui, &mut shell.registry, &format!("{id}.{i}"), "menu-item", row.intersect(rows));
+        let resp = ui.interact(row.intersect(rows), menu_row_id(id, key, nth), egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
         let resp = match note {
             Some(n) => resp.accessible_name(fmt(&tr("{name} · {where}"), &[("name", item), ("where", n)])),
             None => resp,
@@ -1546,7 +1669,7 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
         } else {
             resp
         };
-        if resp.clicked() || (enter && reached == Some(i)) {
+        if (resp.clicked() || (enter && reached == Some(i))) && !unsure.iter().any(|twin| as_key(twin) == key) {
             picked = Some(i);
         }
     }
@@ -1554,8 +1677,16 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         shell.panels.menu = None;
         shell.panels.menu_reached = None;
+        shell.panels.menu_reached_rows = None;
+        shell.panels.menu_unsure = None;
     }
     picked
+}
+
+/// The toolkit's id for the menu `id`'s row of `key`, its text and note (empty for none), the `nth`
+/// of the menu's rows with that key: never its place among rows that can come and go.
+pub(crate) fn menu_row_id(id: &str, key: (&str, &str), nth: usize) -> egui::Id {
+    widgets::egui_id(id).with(("row", key, nth))
 }
 
 /// A check box with its label; a click flips `on`.
