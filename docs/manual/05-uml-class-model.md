@@ -1170,7 +1170,7 @@ dependency that joins just those two is refused, and the canvas says that the co
 exists and names that dependency, which may have no line on the open diagram: select it instead.
 If the model is no longer as it was when you started dragging the end of a line between two
 elements, for example because an agent changed it meanwhile, the drop is refused and changes
-nothing: drag the end again.
+nothing: drag the end again. If the end is already where you drop it, nothing happens.
 
 ### What each line can join
 

@@ -605,7 +605,7 @@ fn a_dependency_dropped_back_on_its_supplier_leaves_a_line_drawn_elsewhere_as_it
 /// a revision read before the dependency went included.
 /// The same two ends the other way round, those of a realization or of a dependency removed are no
 /// repeat, and a dependency dropped back on its own end changes nothing in the model and leaves no
-/// undo step, though another has its ends (AR-697).
+/// undo step, though another has its ends, and is selected (AR-697).
 #[test]
 fn a_dependency_moved_onto_a_pair_another_has_onto_itself_a_wrong_end_or_a_stale_revision_is_refused_unchanged() {
     use archforge_engine::{End, Revision};
@@ -672,11 +672,13 @@ fn a_dependency_moved_onto_a_pair_another_has_onto_itself_a_wrong_end_or_a_stale
     }
     // Dropped back on billing, the end it has, `other` changes nothing in the model, though `twin`
     // has its ends too.
-    run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing, "name": "twin" }));
+    let twin = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing, "name": "twin" }));
+    run(&mut s, "view.select", json!({ "ids": [twin] }));
     let p = json!({ "relationship": other, "end": "target", "class": billing, "expected_revision": token(&s) });
     let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));
     s.execute("uml.relationship.reconnect", &p).unwrap();
     assert_eq!((snapshot(&s), s.token(), s.undo_label().map(str::to_string)), before, "no change and no undo step");
+    assert_eq!(s.view().selection, [obj(&s, &other)], "selected, as after any reconnect");
 }
 
 /// Every other relationship keeps its released call: reconnected without a revision, or with a null
