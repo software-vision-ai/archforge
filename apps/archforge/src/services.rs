@@ -956,6 +956,33 @@ mod tests {
         frame(&mut pickers, vec![]);
         assert_eq!(shown.get(), 1, "the waiting pick did not show once");
     }
+
+    /// With craft-dialogs' own queue holding a pick's answer: an answer that has come is handed
+    /// over before a press in the same frame can give its picker up, and one still in the queue
+    /// when the picker is given up never reaches the pick, whose channel closes.
+    #[test]
+    fn an_answer_in_beats_a_press_and_one_left_in_a_queue_given_up_reaches_nothing() {
+        let chosen = std::env::temp_dir();
+        let ctx = egui::Context::default();
+        for answer_first in [true, false] {
+            let (mut pickers, _, made) = hanging_pickers(&chosen);
+            (pickers.in_front, pickers.hung) = (true, None);
+            let pin = pick_folder(&pickers.asks(), "Pin a folder");
+            pickers.show(None);
+            // The answer waits in craft-dialogs' queue; a picker counts as still on screen.
+            pickers.held = true;
+            ctx.run_ui(input(true, vec![press()]), |ui| if answer_first { pickers.answer(ui.ctx()) } else { pickers.give_up_if_left(ui.ctx()) })
+                .textures_delta
+                .clear();
+            pickers.answer(&egui::Context::default());
+            let got = pin.try_recv();
+            if answer_first {
+                assert_eq!(got, Ok(Picked::Folder(chosen.clone())), "a press beat the answer that had come");
+            } else {
+                assert_eq!((made.get(), got), (2, Err(std::sync::mpsc::TryRecvError::Disconnected)), "an answer left in the queue given up");
+            }
+        }
+    }
 }
 
 #[cfg(test)]

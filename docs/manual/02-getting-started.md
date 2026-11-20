@@ -84,10 +84,10 @@ a version is and how to save one with a description.
   a folder or cancel. On macOS the picker is a panel of its own that you can move aside, and the
   rest of the window keeps working; elsewhere it stays in front of the window until it closes.
 - Outside macOS, if a picker never appears, or goes away without an answer (a desktop portal that
-  stopped responding, for example), click in the window or press a key there: Archforge stops
-  waiting for that picker, as if you had cancelled it, and Home's openings work again. What you
-  choose in a picker still open after that, or in one that shows up after all, is ignored; ask
-  for a new one instead.
+  stopped responding, for example), click in the window or press a key such as Esc there (a
+  modifier key such as Shift alone does not count): Archforge stops waiting for that picker, as if
+  you had cancelled it, and Home's openings work again. What you choose in a picker still open
+  after that, or in one that shows up after all, is ignored; ask for a new one instead.
 - Closing the New project dialog while its **Change…** picker is still open on macOS gives Home
   back at once, though that picker stays on screen until you close it, and what you choose in it
   is ignored. A picker you ask for meanwhile, with **Browse files** for example, waits for it: the
