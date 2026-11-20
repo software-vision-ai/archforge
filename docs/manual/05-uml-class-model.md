@@ -1166,8 +1166,10 @@ realization, drag the class end onto another class, or the interface end onto an
 A generalization in a generalization set keeps its ends: take it out of its sets first (see
 [Generalization sets](#generalization-sets)). A dependency keeps its name and description when an
 end moves. Moving it so that it joins the same two elements, in the same direction, as another
-dependency is refused, and the canvas says that the connection already exists: select that
-dependency instead.
+dependency that joins just those two is refused, and the canvas says that the connection already exists and names that
+dependency, which may have no line on the open diagram: select it instead. If the model changes
+while you drag the end of a line between two elements, for example because an agent edits it,
+the drop is refused and changes nothing: drag the end again.
 
 ### What each line can join
 

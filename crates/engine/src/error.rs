@@ -501,8 +501,9 @@ pub enum Reason {
     DependencyEnd(Box<DependencyOf>),
     /// Another relationship of the same kind joins the same two elements in the same direction
     /// already, as a dependency moved onto the client and supplier of another would; the two are
-    /// never merged into one (AR-697).
-    ConnectionExists,
+    /// never merged into one. `dependency` is that other one, by its name, or its id when it has
+    /// none, as it may have no line on the diagram in view (AR-697).
+    ConnectionExists { dependency: Box<str> },
     /// The class diagram `diagram` is not one of `package`'s own (each its name, or its id when it
     /// has none), so it cannot be that package's default diagram (AR-580).
     NotOwnDiagram { diagram: Box<str>, package: Box<str> },

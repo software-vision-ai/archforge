@@ -125,7 +125,9 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
             &tr("{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first."),
             &[("package", &of.package), ("supplier", &of.other), ("dependency", &of.dependency)],
         ),
-        Reason::ConnectionExists => tr("This connection already exists. Select the existing relationship."),
+        Reason::ConnectionExists { dependency } => {
+            fmt(&tr("This connection already exists: the dependency {dependency}. Select the existing relationship."), &[("dependency", dependency)])
+        }
         Reason::ReplacementIsRemoved => tr("A diagram cannot replace itself as it is removed. Choose another diagram as the replacement."),
         Reason::OneReplacement => tr("Choose either an existing diagram or a new one as the replacement, not both."),
         Reason::NameNotText => tr("A name has to be text."),

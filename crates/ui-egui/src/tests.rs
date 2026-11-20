@@ -7394,8 +7394,9 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let from = "Buchhaltung hängt über die Abhängigkeit d-7 von Auftrag ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
         assert_eq!([said(Target), said(Source)], [Some(to.into()), Some(from.into())], "{theme:?}");
         // A dependency moved onto the client and supplier another has (AR-697).
-        let exists = "Diese Verbindung besteht bereits. Wählen Sie die bestehende Beziehung aus.";
-        assert_eq!(crate::panels::said(&archforge_engine::Reason::ConnectionExists), Some(exists.to_string()), "{theme:?}");
+        let exists = "Diese Verbindung besteht bereits: die Abhängigkeit zahlt. Wählen Sie die bestehende Beziehung aus.";
+        let repeated = archforge_engine::Reason::ConnectionExists { dependency: "zahlt".into() };
+        assert_eq!(crate::panels::said(&repeated), Some(exists.to_string()), "{theme:?}");
         // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
         use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
         let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
@@ -22566,9 +22567,11 @@ fn a_realization_shows_its_class_and_interface_in_properties_and_its_ends_reconn
     }
 }
 
-/// A dependency's end dragged onto another class moves there, the canvas sending the revision it
-/// shows, which a dependency's reconnect needs; dragged onto the client and supplier another
-/// dependency has, it is refused in words and nothing changes; in light and dark (AR-697).
+/// A dependency's end dragged onto another class moves there, the canvas sending the revision the
+/// drag began on, which a dependency's reconnect needs, so a change made during the drag makes the
+/// drop stale; dragged onto the client and supplier another
+/// dependency has, one with no line on the diagram, it is refused in words naming that one and
+/// nothing changes; in light and dark (AR-697).
 #[test]
 fn a_dependency_end_dragged_onto_another_class_carries_the_revision_and_a_repeated_pair_is_refused() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -22593,17 +22596,38 @@ fn a_dependency_end_dragged_onto_another_class_carries_the_revision_and_a_repeat
         drag(&mut h, handle, to);
         assert_eq!(supplier(&h), "Product", "{theme:?}: moved, notice {:?}", h.state().canvas.notice);
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Reconnect relationship"), "{theme:?}");
-        // Another dependency from Order to Payment: moving this one onto that pair is refused.
+        // A change made while the end is dragged, as an agent's: the drop, on the revision the drag
+        // began on, is refused as stale and changes nothing.
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Customer"])).center();
+        h.event(egui::Event::PointerMoved(handle));
+        h.event(egui::Event::PointerButton { pos: handle, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run();
+        h.event(egui::Event::PointerMoved(handle + egui::vec2(0.0, 40.0)));
+        h.run();
+        assert!(matches!(h.state().canvas.gesture, Some(crate::editing::Gesture::Reconnect { .. })), "{theme:?}: dragging the end");
         let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("uml.dependency.add", &serde_json::json!({ "client": order, "supplier": payment })).unwrap();
+        s.execute("uml.relationship.rename", &serde_json::json!({ "relationship": dep, "name": "prices" })).unwrap();
+        let revision = s.revision();
+        h.event(egui::Event::PointerMoved(to));
+        h.run();
+        h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+        let stale = "The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.";
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(stale), "{theme:?}");
+        assert_eq!((supplier(&h), h.state().session.as_ref().unwrap().revision()), ("Product".to_string(), revision), "{theme:?}: unchanged");
+        // Another dependency from Order to Payment, with no line on this diagram: moving this one
+        // onto that pair is refused, naming it.
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("uml.dependency.add", &serde_json::json!({ "client": order, "supplier": payment, "name": "pays" })).unwrap();
         s.execute("view.select", &serde_json::json!({ "ids": [dep] })).unwrap();
         h.run();
         let revision = h.state().session.as_ref().unwrap().revision();
         let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
         let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Payment"])).center();
         drag(&mut h, handle, to);
-        let said = crate::i18n::tr("This connection already exists. Select the existing relationship.");
-        assert_eq!(h.state().canvas.notice.as_deref(), Some(said.as_str()), "{theme:?}");
+        let said = "This connection already exists: the dependency pays. Select the existing relationship.";
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(said), "{theme:?}");
         assert_eq!((supplier(&h), h.state().session.as_ref().unwrap().revision()), ("Product".to_string(), revision), "{theme:?}: unchanged");
     }
 }
@@ -28064,7 +28088,8 @@ fn a_moved_end_drops_what_it_no_longer_subsets_and_says_so() {
         let st = s.doc();
         let item = st.by_uuid(archforge_mof::Uuid::parse(&made["Item"]).unwrap()).unwrap();
         let node = archforge_diagram::views_of(st, item).2.first().and_then(|n| st.uuid(*n).ok()).unwrap();
-        crate::uml_relate::reconnect(h.state_mut(), archforge_mof::Uuid::parse(&holds).unwrap(), true, node);
+        let at = h.state().session.as_ref().unwrap().token();
+        crate::uml_relate::reconnect(h.state_mut(), archforge_mof::Uuid::parse(&holds).unwrap(), true, node, at);
         h.run();
         assert_eq!(h.state().canvas.notice.as_deref(), Some("The moved ends no longer subset or redefine lines, so those were dropped."));
         assert!(

@@ -532,8 +532,10 @@ fn leg_handles(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: Vie
             .interact(handle.expand(2.0), widgets::egui_id(&id), egui::Sense::click_and_drag())
             .on_hover_cursor(egui::CursorIcon::Crosshair)
             .on_hover_text(tr("Drag onto another class to move this end"));
-        if resp.drag_started_by(egui::PointerButton::Primary) {
-            shell.canvas.gesture = Some(crate::editing::Gesture::Reconnect { element: end, source: false, fixed });
+        if resp.drag_started_by(egui::PointerButton::Primary)
+            && let Some(at) = shell.session.as_ref().map(|s| s.token())
+        {
+            shell.canvas.gesture = Some(crate::editing::Gesture::Reconnect { element: end, source: false, fixed, at });
         }
     }
 }

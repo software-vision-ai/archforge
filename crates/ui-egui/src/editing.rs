@@ -102,8 +102,9 @@ pub enum Gesture {
     /// the route as it was in diagram units, and the screen point the drag started at.
     Segment { edge: Uuid, index: usize, route: Vec<(f64, f64)>, from: Pos2 },
     /// A selected line's end dragged towards another element: the line's
-    /// element, whether it is the source end, and the screen point of the end that stays.
-    Reconnect { element: Uuid, source: bool, fixed: Pos2 },
+    /// element, whether it is the source end, the screen point of the end that stays, and the
+    /// revision of the model the drag began on, which the drop changes only if it still holds (AR-697).
+    Reconnect { element: Uuid, source: bool, fixed: Pos2, at: archforge_engine::Revision },
     /// A generalization set's label dragged where no node holds it yet (AR-129): the set, the
     /// screen point the drag started at and the label's rectangle then.
     SetLabel { set: Uuid, from: Pos2, rect: Rect },
@@ -917,10 +918,10 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 shell.canvas.notice = Some(e);
             }
         }
-        Gesture::Reconnect { element, source, .. } => {
+        Gesture::Reconnect { element, source, at, .. } => {
             let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d)) else { return };
             if let Some(to_node) = node_at(shell, view, d, pointer) {
-                kind.reconnect(shell, element, source, to_node);
+                kind.reconnect(shell, element, source, to_node, at);
             }
         }
         Gesture::LinkNote { note } => {
@@ -1738,8 +1739,10 @@ fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View,
             .interact(handle.expand(2.0), widgets::egui_id(&id), egui::Sense::click_and_drag())
             .on_hover_cursor(egui::CursorIcon::Crosshair)
             .on_hover_text(tr("Drag onto another class to move this end"));
-        if resp.drag_started_by(egui::PointerButton::Primary) {
-            shell.canvas.gesture = Some(Gesture::Reconnect { element, source, fixed });
+        if resp.drag_started_by(egui::PointerButton::Primary)
+            && let Some(at) = shell.session.as_ref().map(|s| s.token())
+        {
+            shell.canvas.gesture = Some(Gesture::Reconnect { element, source, fixed, at });
         }
     }
 }
