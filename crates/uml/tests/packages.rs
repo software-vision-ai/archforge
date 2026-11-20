@@ -334,8 +334,8 @@ fn edges(s: &S, id: &str) -> usize {
 /// A nested package removed takes the dependencies at it along in the same step, never moving an
 /// end onto another element: one from it to a class and one on it from another package, with their
 /// lines; the package it handed up, removed next, takes the one on it from a class, which goes once
-/// when the class goes in the same call. A dependency it
-/// holds between two elements that stay is handed up with its line, and so is its diagram; a
+/// when the class goes in the same call. A dependency the removed package holds between two
+/// elements that stay is handed up with its line, and the package's own diagram is handed up too; a
 /// constraint left naming none of what it constrained goes too. Removing a line from a diagram
 /// keeps its dependency. Counted as relationships, each one undo step that brings back the ids,
 /// the owners and the lines (AR-698).
