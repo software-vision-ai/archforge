@@ -255,11 +255,11 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     }
 }
 
-/// The dialog has closed: a Change… pick still waiting goes with it, so its answer reaches no
-/// later dialog, and New project and Open are free again at once.
+/// The dialog has closed: a Change… pick still waiting goes with it, withdrawn from the host, so
+/// its answer reaches no later dialog, and New project and Open are free again at once.
 fn let_go_of_change(shell: &mut Shell) {
     if matches!(shell.picking, Some((crate::Pick::Location, _))) {
-        shell.picking = None;
+        shell.let_go_of_pick();
     }
 }
 

@@ -779,6 +779,7 @@ str		The package's default diagram is not a class diagram. Choose one of its cla
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Das Standarddiagramm des Pakets gehört zu einem anderen Element. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Dieses Diagramm ist das Standarddiagramm von {package}. Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von {package}.
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. Wählen Sie zuerst eines seiner eigenen Klassendiagramme.
+str		This connection already exists: the dependency {dependency}. Select the existing relationship.	Diese Verbindung besteht bereits: die Abhängigkeit {dependency}. Wählen Sie die bestehende Beziehung aus.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Ein Diagramm kann sich beim Entfernen nicht selbst ersetzen. Wählen Sie ein anderes Diagramm als Ersatz.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Wählen Sie als Ersatz entweder ein vorhandenes Diagramm oder ein neues, nicht beides.
 str		A name has to be text.	Ein Name muss Text sein.
@@ -2236,6 +2237,7 @@ str		The changes since the last write are lost.	Die Änderungen seit dem letzten
 str		The changes to {name} cannot be written	Die Änderungen an {name} können nicht geschrieben werden
 # Ordnerauswahl unter Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	Es konnte keine Ordnerauswahl geöffnet werden: Installieren Sie xdg-desktop-portal und ein Backend für Ihren Desktop.
+str		No folder picker could open; Archforge's log says why.	Es konnte keine Ordnerauswahl geöffnet werden; das Protokoll von Archforge nennt den Grund.
 str		{day} {month} {time}	{day}. {month} {time}
 str		Unsaved changes	Ungespeicherte Änderungen
 str		No unsaved changes	Keine ungespeicherten Änderungen

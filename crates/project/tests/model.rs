@@ -510,12 +510,12 @@ fn a_project_of_an_earlier_archforge_gets_the_columns_and_tables_added_since() {
 fn the_diagram_kinds_outside_the_known_ones_are_read_raw_on_every_shape() {
     let env = Env::new("kinds");
     let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Kinds", "test", &timestamp(1_761_670_800)).unwrap();
-    let (main, known) = (SafeBranch::default(), ["er", "uml.class"]);
+    let (main, known) = (SafeBranch::default(), ["er", "uml.structure"]);
     assert_eq!(project.unknown_diagram_kinds(&main, &known).unwrap(), Vec::<String>::new(), "no diagram table");
     let mut c = working(&project);
     c.query_drop("CREATE TABLE diagram_diagram (id INT NOT NULL PRIMARY KEY, kind MEDIUMTEXT COLLATE utf8mb4_0900_ai_ci NULL, name MEDIUMTEXT NULL)")
         .unwrap();
-    c.query_drop("INSERT INTO diagram_diagram (id, kind) VALUES (1, 'er'), (2, 'legacy.kind'), (3, 'legacy.kind'), (4, 'ER'), (5, NULL), (6, ''), (7, REPEAT('x', 300)), (8, 'uml.class'), (9, REPEAT('é', 200))").unwrap();
+    c.query_drop("INSERT INTO diagram_diagram (id, kind) VALUES (1, 'er'), (2, 'legacy.kind'), (3, 'legacy.kind'), (4, 'ER'), (5, NULL), (6, ''), (7, REPEAT('x', 300)), (8, 'uml.structure'), (9, REPEAT('é', 200))").unwrap();
     let before = untouched(&project);
     let (long, wide) = ("x".repeat(256), "é".repeat(128));
     assert_eq!(project.unknown_diagram_kinds(&main, &known).unwrap(), ["", "ER", "legacy.kind", long.as_str(), wide.as_str()]);
@@ -718,7 +718,7 @@ fn stereotype_applications_and_their_values_are_saved_and_opened_again() {
     for (property, values) in [("table", json!(["orders"])), ("fetch", json!(["lazy"])), ("tags", json!(["a", "b"]))] {
         run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": property, "values": values }));
     }
-    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "name": "Sales", "element": sales }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "name": "Sales", "element": sales }));
     run(&mut s, "uml.stereotype.show-values", json!({ "diagram": d, "show": true }));
     assert_eq!(schema.fingerprint(), CURRENT, "no table changed");
     let back = save_and_reopen(&env, &schema, &path, s.doc(), "Applications").expect("a project with stereotype applications opens");

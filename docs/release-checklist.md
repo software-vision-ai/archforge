@@ -37,27 +37,41 @@ pointer.
 ## 3. Choosing a project's location
 
 **Do:** in the New project dialog choose **Change…**, then **Cancel** in the picker; choose
-**Change…** again and pick another folder; create the project.
+**Change…** again and pick another folder; create the project. Then go to Home, open New project
+again, choose **Change…**, move the picker aside and choose **Cancel** in the New project dialog. On
+Home choose **Browse files** on the **Open a project** card; then pick a folder in the first picker,
+and in the picker that follows, a `.archforge` folder.
 
-**Expect:** the picker is titled **Choose project location**. After the cancel, the name and the
+**Expect:** the picker says **Choose project location** above its folders. After the cancel, the name and the
 folder are as they were. After the pick, the field shows the chosen folder by its last two names,
-and Finder shows the project there as a folder named `<name>.archforge`.
+and Finder shows the project there as a folder named `<name>.archforge`. Cancelling New project gives
+Home back at once while its picker stays on screen. **Browse files** opens no second picker yet: the
+first one comes to the front. The folder picked in it changes nothing (no project is made and none
+opens), and as it closes the Open project picker opens on its own, without another click; the
+project picked there opens.
 
-**Covers:** the system folder picker and its title, and a project made in a folder outside the
-default one.
+**Covers:** the system folder picker and its title, a project made in a folder outside the default
+one, and a picker asked for while one let go of is still on screen.
 
 ## 4. Pinning a folder and opening a project
 
-**Do:** on Home choose **Pin a folder** and pick a folder; then choose **+ Open project…** at the top
-(or press ⌘O), pick a `.archforge` folder and open it; then try ⌘O with a folder that is not a
-project.
+**Do:** on Home choose **Pin a folder**; with its picker open, move the picker aside, click in the
+Archforge window, then drag a file from Finder over the window and hold it there for a few seconds
+before letting go of it back in Finder; then pick a folder in the picker. Choose **+ Open project…**
+at the top (or press ⌘O), pick a `.archforge` folder and open it; then try ⌘O with a folder that is
+not a project. Last, choose **Window ▸ Minimise** (⌘M), then **File ▸ Open project…** in the
+menu bar; cancel the picker.
 
-**Expect:** the first picker is titled **Pin a folder** and the folder appears under Pinned folders.
-The project opens in a tab of its own. The folder that is not a project is refused: Home says in
-red **The project could not be opened:** and why, and nothing else changes.
+**Expect:** the first picker is a panel of its own beside the window and says **Pin a folder** above
+its folders. While it is open the window keeps answering (Home's ways to open a project wait, shown
+off), the picker stays where you moved it, and the file held over the window changes nothing:
+Archforge keeps running. The folder picked appears under Pinned folders. The project opens in a tab
+of its own. The folder that is not a project is refused: Home says in red **The project could not be
+opened:** and why, and nothing else changes. With the window minimised, the picker still shows at
+once, without the window coming back.
 
-**Covers:** the system pickers for pinning and opening, and the refusal of a folder that is not a
-project.
+**Covers:** the system pickers for pinning and opening, shown beside a window that keeps running or
+is minimised, and the refusal of a folder that is not a project.
 
 ## 5. The menu bar
 
@@ -152,13 +166,15 @@ change nothing behind the dialog; Escape closes it, and the table is still selec
 **Do:** make a change in a project without saving, then quit with ⌘Q; choose **Cancel**; quit again
 and choose **Save**. Open the project again; select an element in **Models**, press F2, type a new name
 and, still typing, choose **Archforge ▸ Quit Archforge**; choose **Cancel**. Rename it again and, still
-typing, click the window's close button; choose **Cancel**.
+typing, click the window's close button; choose **Cancel**. Last, with every change saved, choose
+**Pin a folder** on Home and, with its picker still open, quit with ⌘Q.
 
 **Expect:** Archforge asks **Save the changes to `<name>`?** with Save, Cancel and Don't save. Cancel
 keeps Archforge open with the change. Save saves, then Archforge quits; opening the project again
 shows the change. A name still being typed when quitting, by the menu or the close button, is finished
 first, then shows in **Models**, and Archforge asks about it as an unsaved change; **Cancel** keeps
-Archforge open with the new name.
+Archforge open with the new name. Quitting with the folder picker open quits at once, and the picker
+goes with the window; started again, Home pins no new folder.
 
 **Covers:** the operating system's quit request and closing the real window.
 

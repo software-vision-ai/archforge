@@ -8,10 +8,12 @@
 //! - **In**: a selected package's Open, ⌘↓, or zooming in until one package covers
 //!   [`ENTER_COVER`] of the canvas opens the package's diagram at 100 %, its content centred.
 //! - **Out by zoom**: a package's diagram stays open until the zoom reaches its least, 10 %
-//!   ([`crate::canvas::ZOOM_RANGE`]); there the diagram it was entered from opens again at 100 %,
-//!   the package left centred, even when that diagram is in another branch (Decision 4). The
-//!   return takes its step off the tab's route and makes none. With no way in left, the parent's
-//!   default opens instead; at the root, 10 % stays put and says so.
+//!   ([`crate::canvas::ZOOM_RANGE`]); there the diagram it was entered from opens again, even when
+//!   that diagram is in another branch (Decision 4): fitted, down to 10 %, when it no longer has
+//!   a card of the package; else as it was left when that view is still sound ([`restorable`]);
+//!   else at 100 %, the package left centred (AR-668). The return takes its step off the tab's route
+//!   and makes none. With no way in left, the parent's default opens instead, landing as a return
+//!   with no view kept does; at the root, 10 % stays put and says so.
 //! - **Out by the path bar or ⌘↑**: the owning ancestor's default diagram as it was last left, by
 //!   ownership and never the way in; its tab starts a new route.
 //! - One switch per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
@@ -43,6 +45,16 @@ pub const LANDING: f32 = 1.0;
 /// The deepest package chain the path bar walks.
 const MAX_DEPTH: usize = 256;
 
+/// Where a switch on the way out lands, on the next frame of the diagram it opened.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Landing {
+    /// The package just left, whose card the landing measures or centres.
+    pub(crate) package: Uuid,
+    /// The view the diagram was left with when the package was entered from it, which a return
+    /// restores while [`restorable`]; none for a way out that is no return.
+    pub(crate) view: Option<(Vec2, f32)>,
+}
+
 /// What package navigation keeps between frames.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Nav {
@@ -59,8 +71,8 @@ pub struct Nav {
     pub(crate) routes: HashMap<Uuid, Route>,
     /// When the last switch happened, and when it began to fade in.
     pub(crate) switched: Option<f64>,
-    /// The package to centre at [`LANDING`] on the next frame, after a zoom out.
-    pub(crate) reveal: Option<Uuid>,
+    /// Where the next frame lands after a zoom out: the package left and the view to restore.
+    pub(crate) reveal: Option<Landing>,
     /// True while the diagram just entered is still to be centred at [`LANDING`].
     pub(crate) centre: bool,
     /// When the user last zoomed, and whether the gesture that made the last switch is still on:
@@ -140,16 +152,24 @@ fn default_of(shell: &mut Shell, package: Uuid) -> Option<Uuid> {
 /// takes the route of the tab left plus this entry; entering the diagram already open records
 /// nothing.
 pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
+    enter_by(shell, package, now, false);
+}
+
+/// [`enter`], `by_zoom` when zooming in made the entry. Such an entry keeps no view for the return:
+/// the package covered [`ENTER_COVER`] there, so coming back to it would let the next zoom-in tick
+/// enter again, and the canvas may have grown since, so the return can't tell by measuring alone
+/// ([`restorable`]); it centres the package at [`LANDING`] instead (AR-668).
+fn enter_by(shell: &mut Shell, package: Uuid, now: f64, by_zoom: bool) {
     let Some(from) = shell.canvas.active else { return };
     let Some(d) = default_of(shell, package) else { return };
-    let view = (shell.canvas.pan, shell.canvas.zoom);
+    let view = (!by_zoom).then_some((shell.canvas.pan, shell.canvas.zoom));
     if d != from
         && let Some(session) = shell.session.as_ref()
     {
         let store = session.doc();
         let source_name = store.by_uuid(from).map(|o| archforge_core::name_of(store, o)).unwrap_or_default();
         let mut route = shell.canvas.nav.routes.get(&from).cloned().unwrap_or_default();
-        route.push(Step { source: from, destination: d, source_name, view: Some(view), history: session.history() });
+        route.push(Step { source: from, destination: d, source_name, view, history: session.history() });
         shell.canvas.nav.routes.insert(d, route);
     }
     crate::canvas::open(shell, d);
@@ -173,9 +193,9 @@ pub(crate) fn leave(shell: &mut Shell, package: Uuid, now: f64) {
 }
 
 /// Opens the diagram `d` on the way out of the open one, keeping the view of the diagram left: after a zoom
-/// out (`reveal`, the package just left) at 100 % with that package centred; else as `d` was left,
-/// or fitted when it never was.
-fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Uuid>, now: f64) {
+/// out (`reveal`) as its next frame lands it ([`land`]); else as `d` was left, or fitted when it
+/// never was.
+fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Landing>, now: f64) {
     crate::canvas::open(shell, d);
     match (reveal, shell.canvas.nav.views.get(&d).copied()) {
         (Some(_), _) => {
@@ -197,10 +217,11 @@ fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Uuid>, now: f64) {
 
 /// The way back from the open diagram by zoom: the newest step on its tab's route made in this
 /// session's history whose source is still a diagram, taken off the route with every newer one
-/// passed over. Gives that source, which may be in another branch than the open diagram; the tab
-/// of the source keeps what is left of the route, the one left keeps none, and nothing is added,
-/// since a return is no entry. Gives none, the route spent, when no step leads anywhere.
-fn take_return(shell: &mut Shell) -> Option<Uuid> {
+/// passed over. Gives that source, which may be in another branch than the open diagram, and the
+/// view it was left with; the tab of the source keeps what is left of the route, the one left
+/// keeps none, and nothing is added, since a return is no entry. Gives none, the route spent,
+/// when no step leads anywhere.
+fn take_return(shell: &mut Shell) -> Option<(Uuid, Option<(Vec2, f32)>)> {
     let from = shell.canvas.active?;
     let session = shell.session.as_ref()?;
     let store = session.doc();
@@ -208,7 +229,65 @@ fn take_return(shell: &mut Shell) -> Option<Uuid> {
     let shown = |s: Uuid| store.by_uuid(s).is_some_and(|d| store.is_alive(d) && store.class_of(d).ok() == Some(archforge_diagram::DIAGRAM));
     let step = route.take_return(session.history(), shown).reached?;
     shell.canvas.nav.routes.insert(step.source, route);
-    Some(step.source)
+    Some((step.source, step.view))
+}
+
+/// The package whose card on diagram `d` covers the most of canvas `r` at `view`, with the share of
+/// the canvas it covers; none when `d` shows no package. Zooming in enters it once that share
+/// reaches [`ENTER_COVER`].
+fn most_covered(store: &Store, d: Obj, view: crate::canvas::View, r: Rect) -> Option<(Obj, f32)> {
+    let canvas_area = area(r).max(1.0);
+    nodes(store, d)
+        .into_iter()
+        .filter_map(|n| element(store, n).filter(|e| is_package(store, *e)).map(|e| (e, area(screen(view, store, n).intersect(r)) / canvas_area)))
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// Whether `view`, the pan and zoom diagram `d` was left with, can be shown again on canvas `r`
+/// holding `card`, `d`'s card of the package left: both finite, the zoom within
+/// [`crate::canvas::ZOOM_RANGE`], the card at least partly on the canvas there, and no package card
+/// of `d` covering [`ENTER_COVER`] of it, the measure zooming in enters by ([`most_covered`]). A
+/// view that hides the package left, as a window narrowed since can, is no place to come back to,
+/// nor one some package covers more of, since the next zoom-in tick would take that package
+/// (delegated UX decision, AR-668); a zoom entry keeps no view at all ([`enter_by`]).
+fn restorable(store: &Store, r: Rect, d: Obj, card: Obj, (pan, zoom): (Vec2, f32)) -> bool {
+    let (least, most) = crate::canvas::ZOOM_RANGE;
+    if !pan.is_finite() || !zoom.is_finite() || !(least..=most).contains(&zoom) {
+        return false;
+    }
+    let view = crate::canvas::View { origin: r.min, pan, zoom };
+    area(screen(view, store, card).intersect(r)) > 0.0 && most_covered(store, d, view, r).is_none_or(|(_, cover)| cover < ENTER_COVER)
+}
+
+/// Lands diagram `d` on canvas `r` after a zoom out. When `d` has no card of the package left,
+/// its content fitted, down to the least zoom, its middle shown when it is too big for that
+/// ([`crate::canvas::fit`]), as an emptied diagram is; else at the view it was left with when
+/// that is [`restorable`]; else at [`LANDING`] with that card centred.
+fn land(shell: &mut Shell, r: Rect, d: Obj, landing: Landing) {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let card = store.by_uuid(landing.package).and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p)));
+    shell.canvas.fit_pending = false;
+    match (card, landing.view) {
+        (Some(card), Some(view)) if restorable(store, r, d, card, view) => (shell.canvas.pan, shell.canvas.zoom) = view,
+        (Some(card), _) => {
+            let b = bounds_of(store, card);
+            let centre = vec2((b.x + b.width / 2.0) as f32, (b.y + b.height / 2.0) as f32);
+            centre_at_landing(&mut shell.canvas, r, Some(centre));
+        }
+        (None, _) => {
+            let bounds = crate::canvas::diagram_bounds(store, d);
+            crate::canvas::fit(&mut shell.canvas, r.size(), bounds, crate::canvas::ZOOM_RANGE.0);
+        }
+    }
+}
+
+/// Shows canvas `r` at [`LANDING`] with `centre`, a point of the diagram, in its middle; with
+/// none, from the diagram's top left, as a new diagram opens.
+fn centre_at_landing(state: &mut crate::canvas::State, r: Rect, centre: Option<Vec2>) {
+    state.zoom = LANDING;
+    state.fit_pending = false;
+    let pan = centre.map_or(Vec2::ZERO, |c| r.size() / 2.0 - c * LANDING);
+    state.pan = if pan.is_finite() { pan } else { Vec2::ZERO };
 }
 
 /// Before the canvas draws: shows the package a zoom out left, takes ⌘↓, ⌘↑ and the zoom keys,
@@ -220,21 +299,12 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
         shell.canvas.nav.intent = 0.0;
         return;
     };
-    // A switch landed: at 100 %, the package just left centred, or the content entered.
-    let left = shell.canvas.nav.reveal.take();
-    let target = match left {
-        // The package left, centred; a parent with no card of it centres what it shows instead,
-        // so its content never opens off the canvas.
-        Some(left) => Some(
-            store
-                .by_uuid(left)
-                .and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p)))
-                .map_or_else(|| nodes(store, d), |n| vec![n]),
-        ),
-        None => std::mem::take(&mut shell.canvas.nav.centre).then(|| nodes(store, d)),
-    };
-    if let Some(shown) = target {
-        let boxes: Vec<archforge_diagram::Rect> = shown.into_iter().map(|n| bounds_of(store, n)).collect();
+    // A switch landed: a zoom out as `land` places it, an entry at 100 % with its content centred.
+    // Only the tab the switch opened lands: opening another first drops it (`canvas::open`).
+    if let Some(landing) = shell.canvas.nav.reveal.take() {
+        land(shell, r, d, landing);
+    } else if std::mem::take(&mut shell.canvas.nav.centre) {
+        let boxes: Vec<archforge_diagram::Rect> = nodes(store, d).into_iter().map(|n| bounds_of(store, n)).collect();
         let centre = if boxes.is_empty() {
             None
         } else {
@@ -242,11 +312,7 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
             let (x1, y1) = boxes.iter().fold((f64::NEG_INFINITY, f64::NEG_INFINITY), |(x, y), b| (x.max(b.x + b.width), y.max(b.y + b.height)));
             Some(vec2(((x0 + x1) / 2.0) as f32, ((y0 + y1) / 2.0) as f32))
         };
-        shell.canvas.zoom = LANDING;
-        shell.canvas.fit_pending = false;
-        // An empty diagram opens at 100 % from its top left, as a new one does.
-        let pan = centre.map_or(Vec2::ZERO, |c| r.size() / 2.0 - c * LANDING);
-        shell.canvas.pan = if pan.is_finite() { pan } else { Vec2::ZERO };
+        centre_at_landing(&mut shell.canvas, r, centre);
     }
     keys(shell, ui, r, d, here, now);
     let intent = std::mem::take(&mut shell.canvas.nav.intent);
@@ -266,18 +332,13 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let view = crate::canvas::View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
-    let canvas_area = area(r).max(1.0);
     if intent > 1.0 {
         // In: the package covering the most of the canvas, once it covers enough.
-        let best = nodes(store, d)
-            .into_iter()
-            .filter_map(|n| element(store, n).filter(|e| is_package(store, *e)).map(|e| (e, area(screen(view, store, n).intersect(r)) / canvas_area)))
-            .max_by(|a, b| a.1.total_cmp(&b.1));
-        if let Some((package, cover)) = best
+        if let Some((package, cover)) = most_covered(store, d, view, r)
             && cover >= ENTER_COVER
             && let Ok(id) = store.uuid(package)
         {
-            enter(shell, id, now);
+            enter_by(shell, id, now, true);
         }
     } else if shell.canvas.zoom <= crate::canvas::ZOOM_RANGE.0 + f32::EPSILON {
         // Out: the zoom has reached its least, 10 %: back the way in came, even into another
@@ -285,11 +346,11 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
         let Ok(left) = store.uuid(here) else { return };
         let parent = archforge_uml::commands::package_of(store, here).map(|p| store.uuid(p));
         match (take_return(shell), parent) {
-            (Some(back), _) => switch_out(shell, back, Some(left), now),
+            (Some((back, view)), _) => switch_out(shell, back, Some(Landing { package: left, view }), now),
             (None, Some(Ok(parent))) => {
                 // The owning parent's default; its tab keeps its own route.
                 if let Some(d) = default_of(shell, parent) {
-                    switch_out(shell, d, Some(left), now);
+                    switch_out(shell, d, Some(Landing { package: left, view: None }), now);
                 }
             }
             (None, Some(Err(_))) => {}

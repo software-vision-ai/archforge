@@ -30,7 +30,8 @@ pub(crate) struct Step {
     pub(crate) destination: Uuid,
     /// The source's name when it was left, for saying what a return skipped once it is gone.
     pub(crate) source_name: String,
-    /// The source's pan and zoom when it was left, if it had a view.
+    /// The source's pan and zoom when it was left, for a return to restore; none for an entry made
+    /// by zooming in, whose view a return must not restore (AR-668).
     pub(crate) view: Option<(Vec2, f32)>,
     /// The undo history of the session the entry was made in (`Session::history`): a step of
     /// another history never leads anywhere, since its diagrams belong to another revision.

@@ -6,7 +6,8 @@ primitive types, generated from OMG's `UML.xmi` by `cargo xtask generate uml`. O
 written by hand.
 
 **Layer.** 7, the notations' layer above the MOF core (4), the shared core (5) and the diagrams (6),
-whose project view it joins as `UmlNotation` (class diagrams of a package, classes as plain cards
+whose project view it joins as `UmlNotation` (structure diagrams of a package, of the one UML kind
+`uml.structure` (`STRUCTURE_DIAGRAM`; the earlier `uml.class` is no kind any more and refused, AR-551), classes as plain cards
 with their attributes and operations; skills on packages, classes, attributes and operations,
 aiming at every class, attribute, operation or association below) and whose commands it adds to (`commands`: `uml.package.{add,
 rename, list}`, `uml.class.{add, rename, list}`; a name told apart from its siblings', whatever the
@@ -122,7 +123,12 @@ moved or nested elsewhere (`uml.*.move`, `uml.classifier.set-owner`) takes the d
 dependency's end moves onto a package or a classifier of the model, and `uml.relationship.reconnect` is open
 while a package of the model exists; a reconnect checks both ends it leaves, a wrong end that stays said under
 `relationship`; a reconnect of a
-dependency with several clients or suppliers, or onto an end outside the model, refused; and
+dependency with several clients or suppliers, or onto an end outside the model, refused; a dependency's
+reconnect needs `expected_revision` (`StaleRevision` without it or for another revision), every other
+relationship's checks it only when given, and one whose moved end makes it join the single client
+and supplier another dependency of just those two ends joins is refused as
+`Reason::ConnectionExists`, naming that one, never merged, while one dropped back on the end it has,
+its revision and kept ends checked, changes nothing in the model and is selected (AR-697); and
 `uml.relationship.rename` is open while a classifier or a package exists; `uml.realization.add`: a class
 realizes an interface, owned by the class, its client and supplier kept in step with its
 implementing classifier and contract; reconnected through `uml.relationship.reconnect` and removed
@@ -243,6 +249,13 @@ contents; owner decision 2026-11-18) has no structure diagram yet or an unsound 
 with that package's name or id and its `BindingFault`, none for no diagram yet (AR-673,
 `defaults::handoff_problem`); one that hands up none goes whatever its parent's default, and so
 does one inside a package with no parent removed with it, which takes that package along.
+A package a profile holds directly, which no command makes but a project's rows may hold, has
+the profile as its parent on the way up, and a profile never takes the diagrams itself
+(AR-745, `commands::receiver`): when the profile goes, or the package inside it does, nothing
+below it is judged, since either takes everything below along. A profile that stays changes
+nothing else: the receiver is still the parent, or the first package above all the ones that go,
+the walk only going on through the profile to find those, so a package below the profile can be
+the receiver, and is judged.
 An element that would take along a diagram the binding of an element that stays names (unsoundly,
 `WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
 binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578);
@@ -317,7 +330,12 @@ class that goes with its end kept the same way; a default removed with a replace
 step, the binding keeping its id and the replacement its boxes, and every replacement that cannot
 take its place refused with nothing changed (AR-640); a new empty replacement made, bound and the
 default removed in one undo step, which Undo takes away and Redo makes again under the same id,
-and both replacements or a bad name refused with no diagram made (AR-641). `tests/skills.rs`: skills on a package, a class, an
+and both replacements or a bad name refused with no diagram made (AR-641).
+`tests/default_replacement.rs` (AR-658): a replacement chosen before an agent's
+`uml.package.default.set` refused as stale in both forms, then judged afresh on the revision read
+now; the interface's labelled step and an agent's command giving the same answer, ids and store,
+each one undo step undone and redone exactly; a whole package removed, nested or top-level,
+handing its diagrams up and making no replacement. `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and

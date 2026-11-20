@@ -442,7 +442,7 @@ pub(crate) fn element_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> 
 }
 
 /// The rectangle around every node of the diagram, in diagram units, or none when it has none.
-fn diagram_bounds(store: &Store, d: Obj) -> Option<Rect> {
+pub(crate) fn diagram_bounds(store: &Store, d: Obj) -> Option<Rect> {
     let mut out: Option<Rect> = None;
     for n in refs(store, d, diagram::NODE) {
         let b = bounds_of(store, n);

@@ -585,6 +585,9 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   the command ids `uml.package.list`, `uml.relationship.list` and `uml.constraint.list`.
   `uml_package_list` gives each package's `path`: the names of the packages that own it, from the
   root package down to its parent, empty for the root package itself.
+- **Diagram kinds**: `diagram_add` makes a diagram of the kind `uml.structure`, a UML structure
+  diagram of a package, or `er`, an ER diagram of a schema. Any other kind, the `uml.class` of
+  earlier versions among them, is refused, naming the kinds it takes, and changes nothing.
 - **Packages on a class diagram**: `diagram_place` puts any package of the model on a class
   diagram, wherever it is owned: one of another branch, the root package, the diagram's own
   package or one that holds it. The package is shown there and keeps its owner; nothing is copied.
@@ -688,7 +691,20 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   takes the dependencies it is the only client of to its new package too. A dependency with more than one client or
   supplier, or a new end outside the model, is refused, and so is a reconnect that would keep an
   end that is no package or classifier, or is outside the model, naming that end's role: move that
-  end instead. `uml_relationship_rename` renames a dependency between packages in a project with no
+  end instead. A reconnected dependency stays the same dependency, with its id, name and
+  description, and its line follows on every diagram that shows the new end; a diagram that does
+  not show it loses that line alone. One moved onto the end it has already is checked like any
+  other move first, so a wrong end that stays, or a classifier client in no package, is still
+  refused; once every check passes, it changes nothing in the model and adds no undo step, and
+  like any reconnect it selects the dependency. Reconnecting a dependency needs `expected_revision`, as
+  `inspect_document` gives it. This is a change from earlier versions: a call that reconnects a
+  dependency without it, with null or with another revision, is now refused and changes nothing. Read the project
+  again, check that the dependency's client and supplier are still the ones the move was planned
+  for, as another change may have moved them, and only then retry with the revision it gives. The other relationships' ends move without it as
+  before, left out or null, and only on that revision when it is given. Moving a dependency so that it joins one
+  client to one supplier that another dependency alone joins already is refused, naming that
+  dependency: the two are never merged into one, so select that one instead. Like the two ends and no dependency on itself,
+  this is Archforge's rule, not UML's. `uml_relationship_rename` renames a dependency between packages in a project with no
   classifier.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked

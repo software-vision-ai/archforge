@@ -296,7 +296,8 @@ fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_on
 
 /// A Change… pick belongs to its dialog (AR-737): Create project waits for its answer, a creation
 /// running keeps its folder whatever a picker answers late, and closing the dialog lets the pick go,
-/// so New project is back at once and a later dialog never takes the old answer.
+/// withdrawn from the host (AR-738), so New project is back at once and a later dialog never takes
+/// the old answer.
 #[test]
 fn a_change_pick_belongs_to_its_dialog_and_holds_create_until_it_is_answered() {
     let acme = || std::path::PathBuf::from("/Volumes/Work/Clients/Acme");
@@ -310,6 +311,7 @@ fn a_change_pick_belongs_to_its_dialog_and_holds_create_until_it_is_answered() {
             asked.lock().unwrap().push(tx);
             rx
         }));
+        let withdrawn = count_withdrawals(&mut h);
         h.run();
         let (change, create) = (centre_of(&h, "new-project.location.change"), centre_of(&h, "new-project.create"));
         press(&mut h, change);
@@ -328,10 +330,12 @@ fn a_change_pick_belongs_to_its_dialog_and_holds_create_until_it_is_answered() {
         assert_eq!(h.state().new_project.as_ref().and_then(|d| d.folder.clone()), Some(acme()), "{theme:?}: the creation keeps its folder");
         answer(&mut h, &host, Err(crate::CreateError::FolderUnusable { detail: "read-only volume".into() }));
         // A pick still waiting when the dialog closes goes with it.
+        assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 0, "{theme:?}: picks answered are not withdrawn");
         press(&mut h, change);
         let cancel = centre_of(&h, "new-project.cancel");
         press(&mut h, cancel);
         assert!(crate::actions::available(h.state(), "file.new"), "{theme:?}: New project is back at once");
+        assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 1, "{theme:?}: the pick is withdrawn from the host");
         open_new_project(&mut h);
         let _ = waiting.lock().unwrap().pop().expect("a pick was asked for").send(Picked::Folder("/Users/robin/Old".into()));
         h.run_steps(4);
@@ -3873,6 +3877,16 @@ fn pick_waiting(h: &mut Harness<'static, Shell>, pick: crate::Pick) -> std::sync
     answer
 }
 
+/// Counts the picks the shell withdraws from its host (`Services::withdraw_pick`).
+fn count_withdrawals(h: &mut Harness<'static, Shell>) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+    let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = count.clone();
+    h.state_mut().services.withdraw_pick = Some(std::sync::Arc::new(move || {
+        counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }));
+    count
+}
+
 /// Whether [`PICKED`] was taken for `pick`: a project opening, a folder pinned, or the New project
 /// dialog's folder.
 fn pick_taken(h: &Harness<'static, Shell>, host: &SavingHost, pick: crate::Pick) -> bool {
@@ -3885,8 +3899,9 @@ fn pick_taken(h: &Harness<'static, Shell>, host: &SavingHost, pick: crate::Pick)
 }
 
 /// A quit by `request_quit`, the window's close button, ⌘Q or a field letting go first goes ahead
-/// while an Open, a Pin or a Location pick waits, and the pick goes with it: an answer that comes
-/// after all, or in the quit's own frame, opens, pins or changes nothing (AR-759).
+/// while an Open, a Pin or a Location pick waits, and the pick goes with it, withdrawn from the host
+/// once (AR-738): an answer that comes after all, or in the quit's own frame, opens, pins or
+/// changes nothing (AR-759).
 #[test]
 fn a_quit_goes_ahead_while_a_folder_pick_waits_and_lets_the_pick_go() {
     let ways: [(&str, fn(&mut Harness<'static, Shell>)); 4] = [
@@ -3905,12 +3920,14 @@ fn a_quit_goes_ahead_while_a_folder_pick_waits_and_lets_the_pick_go() {
             let (mut h, host) = saving_harness(Some(commerce()), None);
             h.state_mut().state.theme = theme;
             let answer = pick_waiting(&mut h, pick);
+            let withdrawn = count_withdrawals(&mut h);
             quit(&mut h);
             if in_its_frame {
                 answer.send(Picked::Folder(PICKED.into())).unwrap();
             }
             h.run_steps(3);
             assert!(h.state().quit_confirmed(), "{what}: the quit goes ahead");
+            assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 1, "{what}: the pick is withdrawn from the host once");
             // The pick was let go: an answer still sent finds nobody waiting for it.
             assert!(answer.send(Picked::Folder(PICKED.into())).is_err(), "{what}: the pick is let go");
             h.run_steps(3);
@@ -3921,7 +3938,8 @@ fn a_quit_goes_ahead_while_a_folder_pick_waits_and_lets_the_pick_go() {
 
 /// A quit asking about unsaved changes keeps a waiting pick's answer until the question is
 /// answered: called off with Cancel, the pick still waits and its answer, come meanwhile or after,
-/// is taken; gone ahead with Don't save, the answer that came meanwhile does nothing (AR-759).
+/// is taken, nothing withdrawn; gone ahead with Don't save, the answer that came meanwhile does
+/// nothing (AR-759) and the pick is withdrawn from the host (AR-738).
 #[test]
 fn a_quit_asking_about_unsaved_changes_holds_a_folder_picks_answer_until_it_is_answered() {
     in_both_appearances(|theme| {
@@ -3930,6 +3948,7 @@ fn a_quit_asking_about_unsaved_changes_holds_a_folder_picks_answer_until_it_is_a
             let (mut h, host) = edited_project();
             h.state_mut().state.theme = theme;
             let answer = pick_waiting(&mut h, pick);
+            let withdrawn = count_withdrawals(&mut h);
             h.state_mut().request_quit();
             h.run_steps(2);
             assert_eq!(h.state().ask, asked_unsaved(COMMERCE), "{what}: the quit asks first");
@@ -3948,11 +3967,13 @@ fn a_quit_asking_about_unsaved_changes_holds_a_folder_picks_answer_until_it_is_a
                 }
                 h.run_steps(3);
                 assert!(pick_taken(&h, &host, pick), "{what}: the answer is taken");
+                assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 0, "{what}: nothing withdrawn");
             } else {
                 host.closings.lock().unwrap().pop().expect("the project closes without its changes").send(Ok(())).unwrap();
                 h.run_steps(3);
                 assert!(h.state().quit_confirmed(), "{what}: the quit goes ahead");
                 assert!(!pick_taken(&h, &host, pick), "{what}: the answer does nothing");
+                assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 1, "{what}: the pick is withdrawn from the host");
             }
         }
     });
@@ -7386,6 +7407,10 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let none_yet = "Vertrieb hat noch kein Diagramm, das die Diagramme dieses Pakets aufnehmen kann. Erstellen Sie zuerst eines dafür. Es wurde nichts geändert.";
         let invalid = "Vertrieb hat kein gültiges Standarddiagramm, das die Diagramme dieses Pakets aufnehmen kann. Wählen Sie zuerst sein Standarddiagramm. Es wurde nichts geändert.";
         assert_eq!([up(None), up(Some(Missing)), up(Some(WrongOwner))], [none_yet, invalid, invalid], "{theme:?}");
+        // A dependency moved onto the client and supplier another has (AR-697).
+        let exists = "Diese Verbindung besteht bereits: die Abhängigkeit zahlt. Wählen Sie die bestehende Beziehung aus.";
+        let repeated = archforge_engine::Reason::ConnectionExists { dependency: "zahlt".into() };
+        assert_eq!(crate::panels::said(&repeated), Some(exists.to_string()), "{theme:?}");
         // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
         use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
         let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
@@ -9930,15 +9955,15 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 0), row(0, "ER diagrams", 0)]);
         let found = ids(&h);
         for id in [
-            "workspace.diagrams.group.uml.class",
-            "workspace.diagrams.group.uml.class.add",
+            "workspace.diagrams.group.uml.structure",
+            "workspace.diagrams.group.uml.structure.add",
             "workspace.diagrams.group.er",
             "workspace.diagrams.group.er.add",
         ] {
             assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
         }
         // A group's + opens the New diagram dialog on its kind.
-        let at = rect_of(&h, "workspace.diagrams.group.uml.class.add").center();
+        let at = rect_of(&h, "workspace.diagrams.group.uml.structure.add").center();
         click(&mut h, at);
         assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_uml::STRUCTURE_DIAGRAM));
         h.state_mut().diagrams.new = None;
@@ -9954,9 +9979,11 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let orders_package = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales })).unwrap().value);
             s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap();
-            s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": sales, "name": "Sales" })).unwrap();
-            let orders =
-                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": orders_package, "name": "Orders" })).unwrap().value);
+            s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": sales, "name": "Sales" })).unwrap();
+            let orders = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": orders_package, "name": "Orders" }))
+                .unwrap()
+                .value);
             (orders_package, orders)
         };
         h.run();
@@ -9996,11 +10023,11 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
             assert_eq!(crate::diagrams::trail(st, "Commerce platform", package), "Commerce platform / Sales / Orders");
         }
         // A group folds and opens with a click.
-        let at = rect_of(&h, "workspace.diagrams.group.uml.class").center();
+        let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
         click(&mut h, at);
         assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(0, "ER diagrams", 1), row(1, "Shop", 0)]);
         assert!(!ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{orders}")));
-        let at = rect_of(&h, "workspace.diagrams.group.uml.class").center();
+        let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
         click(&mut h, at);
         assert_eq!(diagram_rows(&h).len(), 5);
         // The filter narrows the diagrams, or shows a whole group named by it; groups with no match go.
@@ -10221,7 +10248,7 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     let at = rect_of(&h, "workspace.explorers.diagrams").center();
     click(&mut h, at);
     let found = ids(&h);
-    for id in [format!("workspace.diagrams.group.uml.class.folder.{folder}"), format!("workspace.diagrams.group.er.folder.{folder}")] {
+    for id in [format!("workspace.diagrams.group.uml.structure.folder.{folder}"), format!("workspace.diagrams.group.er.folder.{folder}")] {
         assert_eq!(found.iter().filter(|i| **i == id).count(), 1, "{id} once in {found:?}");
     }
     // Folded shut, the folder hides its diagrams; typing a group's name opens it again.
@@ -10242,7 +10269,7 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         let at = rect_of(&h, "workspace.tabs.add").center();
         click(&mut h, at);
         assert_eq!(step(&h), Some(crate::diagrams::Step::Kind));
-        let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.class"));
+        let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.structure"));
         assert!(er.right() < class.left() && (er.top() - class.top()).abs() < 0.5, "{theme:?}: side by side");
         assert!(er.width() >= 240.0, "{theme:?}: room for the card to read");
         assert!(painted(&h).iter().any(|t| t == "Step 1 of 2 · Choose what the diagram shows"));
@@ -10260,7 +10287,7 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         // The class card, then Enter: its details, the root package named after the project.
         let at = rect_of(&h, "workspace.tabs.add").center();
         click(&mut h, at);
-        let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
+        let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
         click(&mut h, at);
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(step(&h), Some(crate::diagrams::Step::Details));
@@ -10288,7 +10315,7 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_none()));
         assert!(egui_kittest::kittest::Queryable::query_by_label(&h, &refused).is_none(), "{theme:?}: no longer read out");
         // A double click on a card goes straight on; Create opens the diagram in its group.
-        let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
+        let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
         // Past egui's double-click window, so the clicks before don't count with these two.
         for _ in 0..40 {
             h.step();
@@ -10319,7 +10346,7 @@ fn in_a_narrow_window_the_kinds_cards_stand_one_above_the_other() {
     h.run();
     crate::diagrams::open_new(h.state_mut());
     h.run();
-    let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.class"));
+    let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.structure"));
     assert!(er.bottom() < class.top() && (er.left() - class.left()).abs() < 0.5, "{er:?} {class:?}");
     let window = h.ctx.content_rect();
     assert!(window.contains_rect(er) && window.contains_rect(class), "both fit");
@@ -10389,7 +10416,7 @@ fn the_package_tool_makes_the_package_its_diagram_and_its_default_as_one_undo_st
         let top = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
-            let d = s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value;
+            let d = s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Top" })).unwrap().value;
             archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
         };
         crate::canvas::open(h.state_mut(), top);
@@ -10544,8 +10571,10 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         let root_diagram = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
-            let d =
-                s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Commerce platform" })).unwrap().value;
+            let d = s
+                .execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Commerce platform" }))
+                .unwrap()
+                .value;
             archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
         };
         crate::canvas::open(h.state_mut(), root_diagram);
@@ -10763,7 +10792,7 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let (top, sales, billing, sales_card, billing_card) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-            let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value);
+            let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Top" })).unwrap().value);
             let mut made = Vec::new();
             for (name, x) in [("Sales", 80), ("Billing", 520)] {
                 let p = id(s.execute("uml.package.add", &serde_json::json!({ "name": name })).unwrap().value);
@@ -10783,7 +10812,7 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let (overview, sales_card2) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
-            let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Overview" })).unwrap().value);
+            let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Overview" })).unwrap().value);
             let at = serde_json::json!({ "diagram": d.to_string(), "element": sales.to_string(), "x": 80, "y": 120, "width": 240, "height": 148 });
             (d, id(s.execute("diagram.place", &at).unwrap().value))
         };
@@ -11055,8 +11084,10 @@ fn the_path_bar_opens_the_parents_default_not_the_diagram_it_was_entered_from() 
         let (first, second, sales) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-            let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap().value);
-            let second = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Second" })).unwrap().value);
+            let first =
+                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "First" })).unwrap().value);
+            let second =
+                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Second" })).unwrap().value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let p =
                 serde_json::json!({ "diagram": second.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
@@ -11092,7 +11123,7 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
             let add = |s: &mut archforge_notations::Session, name: &str| {
-                let p = serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": name });
+                let p = serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": name });
                 id(s.execute("diagram.add", &p).unwrap().value)
             };
             let (first, second) = (add(s, "First"), add(s, "Second"));
@@ -11218,7 +11249,7 @@ fn shift_delete_on_a_selected_package_card_asks_to_delete_the_package() {
     let (top, sales) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-        let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value);
+        let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Top" })).unwrap().value);
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         s.execute(
             "diagram.place",
@@ -11247,13 +11278,13 @@ fn package_preview_harness(
         let s = h.state_mut().session.as_mut().unwrap();
         let mut run = |c: &str, p: serde_json::Value| id(s.execute(c, &p).unwrap().value);
         let root = run("uml.model.root", serde_json::json!({}));
-        let top = run("diagram.add", serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" }));
+        let top = run("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" }));
         let sales = run("uml.package.add", serde_json::json!({ "name": "Sales" }));
         let card = run(
             "diagram.place",
             serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
         );
-        let own = run("diagram.add", serde_json::json!({ "kind": "uml.class", "element": sales.to_string(), "name": "Sales" }));
+        let own = run("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": sales.to_string(), "name": "Sales" }));
         let order = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "Order" }));
         let line = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "OrderLine" }));
         run("uml.association.add", serde_json::json!({ "from": order.to_string(), "to": line.to_string() }));
@@ -11797,7 +11828,7 @@ fn a_class_over_a_package_card_keeps_a_package_dropped_on_it_where_it_was() {
         let s = h.state_mut().session.as_mut().unwrap();
         let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
         let top =
-            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" })).unwrap().value);
+            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" })).unwrap().value);
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
         let place = |s: &mut archforge_notations::Session, e: archforge_mof::Uuid, x: i32| {
@@ -11855,7 +11886,7 @@ fn a_package_let_go_outside_the_canvas_stays_where_it_was() {
         let s = h.state_mut().session.as_mut().unwrap();
         let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
         let top =
-            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" })).unwrap().value);
+            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" })).unwrap().value);
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
         let sales_card = id(s
@@ -11897,8 +11928,10 @@ fn zooming_out_to_ten_percent_climbs_one_level_per_gesture_each_at_a_hundred_and
         let (top, sales_d, orders_d) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
-            let top =
-                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" })).unwrap().value);
+            let top = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" }))
+                .unwrap()
+                .value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
             let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
@@ -12054,8 +12087,9 @@ fn zooming_out_returns_across_branches_to_the_diagram_entered_from_without_a_bou
     }
 }
 
-/// Repeated visits A → B → A → B return B → A → B → A, one step a gesture, each landing at 100 %
-/// with the package left centred; once the route is spent, the owning parent's default opens.
+/// Repeated visits A → B → A → B return B → A → B → A, one step a gesture, each landing as it was
+/// left, fitted here, so at 100 % with the package left centred; once the route is spent, the owning
+/// parent's default opens.
 #[test]
 fn zooming_out_walks_repeated_visits_back_one_step_a_gesture_then_follows_ownership() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -12213,7 +12247,7 @@ fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::U
     let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
     let s = h.state_mut().session.as_mut().unwrap();
     let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-    let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap().value);
+    let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "First" })).unwrap().value);
     let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
     let p = serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
     s.execute("diagram.place", &p).unwrap();
@@ -12233,7 +12267,7 @@ fn zoom_out_to(h: &mut Harness<'static, Shell>, to: archforge_mof::Uuid) {
         h.step();
     }
     assert_eq!(h.state().canvas.active, Some(to), "zoomed out to the diagram entered from");
-    assert!(h.state().canvas.nav.reveal.is_some(), "not drawn yet: the package left still to be centred on it");
+    assert!(h.state().canvas.nav.reveal.is_some(), "not drawn yet: the landing still pending");
 }
 
 /// The path bar restores a diagram as it was last left, however it was left (AR-666): First, left
@@ -12310,7 +12344,8 @@ fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
 /// wide diagram opened in a new tab before First or Sales draws, is fitted below 100 %, neither
 /// landed at 100 % nor centred. Taking over from First before it draws, by First's removal or by
 /// reopening its closed tab, Support shows as last shown, or fitted when it never was; so does First
-/// after Support, opened new. First opened again before it draws still lands, Sales' card centred.
+/// after Support, opened new. First opened again before it draws still lands, at the view it was
+/// left with (AR-668).
 #[test]
 fn a_landing_pending_for_one_tab_never_places_another() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -12322,7 +12357,8 @@ fn a_landing_pending_for_one_tab_never_places_another() {
             let support = {
                 let s = h.state_mut().session.as_mut().unwrap();
                 let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-                let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Support" })).unwrap().value);
+                let d =
+                    id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Support" })).unwrap().value);
                 for (name, x) in [("Ticket", 0), ("Agent", 4000)] {
                     let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": name })).unwrap().value);
                     let p = serde_json::json!({ "diagram": d.to_string(), "element": c.to_string(), "x": x, "y": 0, "width": 200, "height": 120 });
@@ -12365,10 +12401,7 @@ fn a_landing_pending_for_one_tab_never_places_another() {
             h.run();
             let (pan, zoom, size) = (h.state().canvas.pan, h.state().canvas.zoom, h.state().canvas.size);
             match case {
-                "out, First again" => {
-                    let card = pan + egui::vec2(320.0, 234.0) * zoom;
-                    assert!(zoom == 1.0 && (card - size / 2.0).length() < 1.0, "{theme:?}: Sales' card centred at 100 %, {pan:?} {zoom}");
-                }
+                "out, First again" => assert_eq!((pan, zoom), first_view, "{theme:?}: First landed as it was left"),
                 "out, First gone" | "out, reopened" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(support), shown), "{theme:?} {case}"),
                 "out, Support, First" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(first), first_view), "{theme:?}: as last shown"),
                 _ => {
@@ -12396,7 +12429,7 @@ fn a_pending_fit_or_restored_view_stays_on_its_tab_across_switches_in_one_frame(
             let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
             let [overview, support] = ["Overview", "Support"].map(|name| {
                 let s = h.state_mut().session.as_mut().unwrap();
-                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": name })).unwrap().value)
+                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": name })).unwrap().value)
             });
             let s = h.state_mut().session.as_mut().unwrap();
             for (name, x) in [("Ticket", 0), ("Agent", 4000)] {
@@ -16388,7 +16421,7 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     // 1. The tab strip's + opens New diagram; 2. the Class diagram card, Continue; 3. Create.
     let at = rect_of(&h, "workspace.tabs.add").center();
     click(&mut h, at);
-    let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
+    let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.new-diagram.continue").center();
     click(&mut h, at);
@@ -16460,7 +16493,7 @@ fn the_first_class_diagram_new_diagram_makes_is_its_packages_default() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
         let mut made = |name: &str| {
-            for id in ["workspace.tabs.add", "workspace.new-diagram.type.uml.class", "workspace.new-diagram.continue"] {
+            for id in ["workspace.tabs.add", "workspace.new-diagram.type.uml.structure", "workspace.new-diagram.continue"] {
                 let at = rect_of(&h, id).center();
                 click(&mut h, at);
             }
@@ -16485,7 +16518,7 @@ fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes
     let at = rect_of(&h, "workspace.tabs.add").center();
     click(&mut h, at);
     assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND, "an ER project starts at ER");
-    let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
+    let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.new-diagram.continue").center();
     click(&mut h, at);
@@ -16502,7 +16535,7 @@ fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes
         out["result"]["id"].as_str().unwrap_or_default().to_string()
     };
     let pkg = call("uml.package.add", serde_json::json!({ "name": "Billing" }));
-    let d = call("diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg, "name": "Billing" }));
+    let d = call("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg, "name": "Billing" }));
     let invoice = call("uml.class.add", serde_json::json!({ "package": pkg, "name": "Invoice" }));
     call("diagram.place", serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 }));
     let st = h.state().session.as_ref().unwrap().doc();
@@ -16785,7 +16818,7 @@ fn nested_orders(theme: ThemeKind) -> (Harness<'static, Shell>, archforge_mof::U
     };
     let fulfilment = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Fulfilment" })).unwrap();
     let orders = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Orders", "parent": fulfilment.to_string() })).unwrap();
-    let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": orders.to_string(), "name": "Orders" })).unwrap();
+    let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": orders.to_string(), "name": "Orders" })).unwrap();
     let money = run(&mut h, "uml.data-type.add", serde_json::json!({ "package": orders.to_string(), "name": "Money" })).unwrap();
     let order = run(&mut h, "uml.class.add", serde_json::json!({ "package": orders.to_string(), "name": "Order" })).unwrap();
     run(&mut h, "uml.attribute.add", serde_json::json!({ "class": order.to_string(), "name": "number", "type": "Integer" }));
@@ -17143,7 +17176,7 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
             out.value["id"].as_str().map(|i| archforge_mof::Uuid::parse(i).unwrap())
         };
         let pkg = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Billing" })).unwrap();
-        let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg.to_string(), "name": "Billing" })).unwrap();
+        let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": "Billing" })).unwrap();
         crate::canvas::open(h.state_mut(), d);
         let class = run(&mut h, "uml.class.add", serde_json::json!({ "package": pkg.to_string(), "name": "ReviewInvoice" })).unwrap();
         let node =
@@ -17156,7 +17189,7 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         // The same class on two more diagrams: wider and short, and already tall.
         let mut others = Vec::new();
         for (name, width, tall) in [("Wide", 300, 150), ("Tall", 260, 400)] {
-            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg.to_string(), "name": name })).unwrap();
+            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": name })).unwrap();
             let n = run(
                 &mut h,
                 "diagram.place",
@@ -17274,14 +17307,14 @@ fn members_a_tool_adds_grow_the_class_card_in_the_same_undo_step() {
             archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
         };
         let pkg = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Sales" }));
-        let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg.to_string(), "name": "Sales" }));
+        let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": "Sales" }));
         crate::canvas::open(h.state_mut(), d);
         let class = run(&mut h, "uml.class.add", serde_json::json!({ "package": pkg.to_string(), "name": "Customer" }));
         let node = run(&mut h, "diagram.place", serde_json::json!({ "diagram": d.to_string(), "element": class.to_string(), "x": 200, "y": 200 }));
         // The same class on two more diagrams: made wider and short by hand, and already tall.
         let mut others = Vec::new();
         for (name, width, tall) in [("Wide", 360, 150), ("Tall", 260, 600)] {
-            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg.to_string(), "name": name }));
+            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": name }));
             let place =
                 serde_json::json!({ "diagram": other.to_string(), "element": class.to_string(), "x": 0, "y": 0, "width": width, "height": tall });
             others.push(run(&mut h, "diagram.place", place));
@@ -21618,7 +21651,7 @@ fn a_menu_left_open_on_a_class_diagram_closes_on_an_er_tab_and_the_arrows_nudge_
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
         let pkg = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
-        let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": pkg, "name": "Billing" })).unwrap().value);
+        let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": pkg, "name": "Billing" })).unwrap().value);
         let invoice = id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "Invoice" })).unwrap().value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 })).unwrap();
         archforge_mof::Uuid::parse(&d).unwrap()
@@ -22553,6 +22586,71 @@ fn a_realization_shows_its_class_and_interface_in_properties_and_its_ends_reconn
         drag(&mut h, handle, to);
         assert_eq!(h.state().canvas.notice.as_deref(), Some("A class realizes only an interface"));
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision);
+    }
+}
+
+/// A dependency's end dragged onto another class moves there, the canvas sending the revision the
+/// drag began on, which a dependency's reconnect needs, so a model no longer at it when the end is
+/// dropped makes the drop stale; dragged onto the client and supplier another dependency has, one
+/// with no line on the diagram, it is refused in words naming that one and nothing changes; in
+/// light and dark (AR-697).
+#[test]
+fn a_dependency_end_dragged_onto_another_class_carries_the_revision_and_a_repeated_pair_is_refused() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (dep, order, payment) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let dep = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::DEPENDENCY)).unwrap();
+            let named = |n: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == n);
+            let uuid = |o: archforge_mof::Obj| st.uuid(o).unwrap().to_string();
+            (uuid(dep), uuid(named("Order").unwrap()), uuid(named("Payment").unwrap()))
+        };
+        let supplier = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let (_, to) = archforge_uml::figures::ends(st, st.by_uuid(archforge_mof::Uuid::parse(&dep).unwrap()).unwrap()).unwrap();
+            archforge_core::name_of(st, to)
+        };
+        assert_eq!(supplier(&h), "PricingService", "{theme:?}");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [dep] })).unwrap();
+        h.run();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Product"])).center();
+        drag(&mut h, handle, to);
+        assert_eq!(supplier(&h), "Product", "{theme:?}: moved, notice {:?}", h.state().canvas.notice);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Reconnect relationship"), "{theme:?}");
+        // A change made while the end is dragged, as an agent's: the drop, on the revision the drag
+        // began on, is refused as stale and changes nothing.
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Customer"])).center();
+        h.event(egui::Event::PointerMoved(handle));
+        h.event(egui::Event::PointerButton { pos: handle, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run();
+        h.event(egui::Event::PointerMoved(handle + egui::vec2(0.0, 40.0)));
+        h.run();
+        assert!(matches!(h.state().canvas.gesture, Some(crate::editing::Gesture::Reconnect { .. })), "{theme:?}: dragging the end");
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("uml.relationship.rename", &serde_json::json!({ "relationship": dep, "name": "prices" })).unwrap();
+        let revision = s.revision();
+        h.event(egui::Event::PointerMoved(to));
+        h.run();
+        h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+        let stale = "The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.";
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(stale), "{theme:?}");
+        assert_eq!((supplier(&h), h.state().session.as_ref().unwrap().revision()), ("Product".to_string(), revision), "{theme:?}: unchanged");
+        // Another dependency from Order to Payment, with no line on this diagram: moving this one
+        // onto that pair is refused, naming it.
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("uml.dependency.add", &serde_json::json!({ "client": order, "supplier": payment, "name": "pays" })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [dep] })).unwrap();
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Payment"])).center();
+        drag(&mut h, handle, to);
+        let said = "This connection already exists: the dependency pays. Select the existing relationship.";
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(said), "{theme:?}");
+        assert_eq!((supplier(&h), h.state().session.as_ref().unwrap().revision()), ("Product".to_string(), revision), "{theme:?}: unchanged");
     }
 }
 
@@ -28012,7 +28110,8 @@ fn a_moved_end_drops_what_it_no_longer_subsets_and_says_so() {
         let st = s.doc();
         let item = st.by_uuid(archforge_mof::Uuid::parse(&made["Item"]).unwrap()).unwrap();
         let node = archforge_diagram::views_of(st, item).2.first().and_then(|n| st.uuid(*n).ok()).unwrap();
-        crate::uml_relate::reconnect(h.state_mut(), archforge_mof::Uuid::parse(&holds).unwrap(), true, node);
+        let at = h.state().session.as_ref().unwrap().token();
+        crate::uml_relate::reconnect(h.state_mut(), archforge_mof::Uuid::parse(&holds).unwrap(), true, node, at);
         h.run();
         assert_eq!(h.state().canvas.notice.as_deref(), Some("The moved ends no longer subset or redefine lines, so those were dropped."));
         assert!(
@@ -30906,6 +31005,437 @@ fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
         assert_eq!(h.state().panels.stereotypes.filter, "e", "{theme:?}: Backspace edits the filter");
         assert_eq!(shown(&h), cards, "{theme:?}: the card stays on the diagram");
         assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypePick));
+    }
+}
+
+/// The root's diagram, Top, with a card of Sales `size` big at (200, 160), and of the classes
+/// `far` names at those x, far apart; Sales' own diagram. Gives Top, Sales, Sales' card and
+/// Sales' diagram.
+fn top_with_sales(
+    h: &mut Harness<'static, Shell>,
+    size: (u32, u32),
+    far: &[i64],
+) -> (archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid) {
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let s = h.state_mut().session.as_mut().unwrap();
+    let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+    let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Top" });
+    let top = id(s.execute("diagram.add", &p).unwrap().value);
+    let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+    let p = serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": size.0, "height": size.1 });
+    let card = id(s.execute("diagram.place", &p).unwrap().value);
+    for (i, x) in far.iter().enumerate() {
+        let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": format!("Far{i}") })).unwrap().value);
+        let p = serde_json::json!({ "diagram": top.to_string(), "element": c.to_string(), "x": x, "y": 0, "width": 200, "height": 120 });
+        s.execute("diagram.place", &p).unwrap();
+    }
+    let sales_d = own_diagram(s, sales);
+    (top, sales, card, sales_d)
+}
+
+/// Whether the canvas shows the card `card` at 100 %, centred, by its pan and zoom.
+fn centred_at_landing(h: &Harness<'static, Shell>, card: archforge_mof::Uuid) -> bool {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let b = archforge_diagram::grid::bounds_of(st, st.by_uuid(card).unwrap());
+    let c = &h.state().canvas;
+    let centre = egui::vec2((b.x + b.width / 2.0) as f32, (b.y + b.height / 2.0) as f32);
+    c.zoom == 1.0 && (c.pan + centre - c.size / 2.0).length() < 1.0
+}
+
+/// A return by zoom shows the diagram as it was left when that view is sound (AR-668): Top, left
+/// at a view of its own by opening Sales, comes back at exactly that view, at the least zoom, 10 %,
+/// too. A view in which Sales' card covers most of the canvas, a saved zoom outside the zoom range,
+/// or a pan that is not finite is no view to restore: the return lands at 100 % with Sales' card
+/// centred instead.
+#[test]
+fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let sound = (egui::vec2(-50.0, 30.0), 0.6);
+        for (case, left, saved) in [
+            ("as left", sound, None),
+            ("as left at the least zoom", (egui::vec2(100.0, 100.0), crate::canvas::ZOOM_RANGE.0), None),
+            ("the card covering the canvas", (egui::vec2(-590.0, -470.0), 3.0), None),
+            ("zoom beyond the range", sound, Some((egui::vec2(-50.0, 30.0), crate::canvas::ZOOM_RANGE.1 * 2.0))),
+            ("pan not finite", sound, Some((egui::vec2(f32::NAN, 30.0), 0.6))),
+        ] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
+            h.run();
+            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.run();
+            if let Some(view) = saved {
+                let mut route = crate::nav_route::Route::default();
+                let history = h.state().session.as_ref().unwrap().history();
+                route.push(crate::nav_route::Step { source: top, destination: sales_d, source_name: "Top".into(), view: Some(view), history });
+                h.state_mut().canvas.nav.routes.insert(sales_d, route);
+            }
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {case}");
+            if case.starts_with("as left") {
+                assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?} {case}: Top as it was left");
+            } else {
+                assert!(
+                    centred_at_landing(&h, card),
+                    "{theme:?} {case}: Sales centred at 100 %, {:?}",
+                    (h.state().canvas.pan, h.state().canvas.zoom)
+                );
+            }
+        }
+    }
+}
+
+/// A return by zoom measures the view it would restore on the canvas as it is at the return
+/// (AR-668): Top, left by ⌘↓-style entry into Sales at a view that shows Sales' card in part,
+/// covering less than [`crate::package_nav::ENTER_COVER`] of the canvas, comes back at 100 % with
+/// the card centred once the window has shrunk so far that the card would cover more at that view,
+/// or, near the canvas's right edge, would be out of view entirely.
+#[test]
+fn a_return_by_zoom_measures_the_saved_view_on_the_window_it_returns_to() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for (case, zoom) in [("covering", 1.6), ("hidden", 0.6)] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            // Sales' card at the canvas's top left, or with only its left 100 points in view at the right.
+            let width = rect_of(&h, "workspace.canvas").width();
+            let left = if case == "covering" { 20.0 } else { width - 100.0 };
+            let view = (egui::vec2(left - 200.0 * zoom, 20.0 - 160.0 * zoom), zoom);
+            // The share of the canvas Sales' card covers at `view`.
+            let share = |h: &Harness<'static, Shell>| {
+                let canvas = rect_of(h, "workspace.canvas");
+                let shown = egui::Rect::from_min_size(canvas.min + view.0 + egui::vec2(200.0, 160.0) * zoom, egui::vec2(480.0, 300.0) * zoom);
+                let covered = shown.intersect(canvas);
+                covered.width().max(0.0) * covered.height().max(0.0) / (canvas.width() * canvas.height())
+            };
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
+            h.run();
+            let before = share(&h);
+            assert!(before > 0.0 && before < crate::package_nav::ENTER_COVER, "{theme:?} {case}: Sales covers {before} when left");
+            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.run();
+            h.set_size(egui::vec2(1000.0, 700.0));
+            h.run();
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {case}");
+            let landed = (h.state().canvas.pan, h.state().canvas.zoom);
+            assert!(centred_at_landing(&h, card), "{theme:?} {case}: Sales centred at 100 %, {landed:?}");
+            let after = share(&h);
+            let changed = if case == "covering" { after >= crate::package_nav::ENTER_COVER } else { after == 0.0 };
+            assert!(changed, "{theme:?} {case}: Sales would cover {after} at the view left now");
+        }
+    }
+}
+
+/// A view a zoom entry was made at shows the package covering most of the canvas, so a return
+/// there would let the next zoom-in tick enter again (AR-668, delegated UX decision): zooming in
+/// on Sales' card until Sales opens, then out again, lands Top at 100 % with the card centred, and
+/// one tick of zooming in on the card then stays on Top. So it does when the window grew while
+/// Sales was open, though the card then covers less of the larger canvas at the entry's view.
+#[test]
+fn a_return_to_the_view_a_zoom_entry_left_centres_the_package_and_the_next_tick_stays() {
+    for (theme, grown) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, _, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{card}")).center()));
+        for _ in 0..40 {
+            if h.state().canvas.active == Some(sales_d) {
+                break;
+            }
+            h.event(egui::Event::Zoom(1.25));
+            h.step();
+        }
+        assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}: zooming in entered Sales");
+        if grown {
+            h.set_size(egui::vec2(2600.0, 1700.0));
+        }
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} grown {grown}");
+        assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{card}")).center()));
+        h.event(egui::Event::Zoom(1.25));
+        h.step();
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(top), "{theme:?}: one tick in does not enter Sales again");
+    }
+}
+
+/// A return by zoom measures the view it would restore as zooming in does, by every package card
+/// (AR-668): Top, left by ⌘↓-style entry into Sales at a view where Archive's card covers most of
+/// the canvas and Sales' card shows in part, lands at 100 % with Sales' card centred instead, and
+/// one tick of zooming in on Archive then stays on Top.
+#[test]
+fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, card, sales_d) = top_with_sales(&mut h, (240, 148), &[]);
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive" })).unwrap().value);
+        let p = serde_json::json!({ "diagram": top.to_string(), "element": archive.to_string(), "x": 460, "y": 160, "width": 480, "height": 300 });
+        let archive_card = id(s.execute("diagram.place", &p).unwrap().value);
+        let archive_d = own_diagram(s, archive);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        // Archive's card fills the canvas from 120 points in, Sales' card's right 60 points in view.
+        let zoom = 3.0;
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(120.0 - 460.0 * zoom, 40.0 - 160.0 * zoom), zoom);
+        h.run();
+        let c = &h.state().canvas;
+        let canvas = rect_of(&h, "workspace.canvas");
+        let share = |n| {
+            let covered = rect_of(&h, &format!("workspace.canvas.node.{n}")).intersect(canvas);
+            covered.width().max(0.0) * covered.height().max(0.0) / (canvas.width() * canvas.height())
+        };
+        let (archive_share, sales_share) = (share(archive_card), share(card));
+        assert!(archive_share >= crate::package_nav::ENTER_COVER, "{theme:?}: Archive covers {archive_share} at {:?}", (c.pan, c.zoom));
+        assert!(sales_share > 0.0, "{theme:?}: Sales' card partly in view, {sales_share}");
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
+        assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{archive_card}")).center()));
+        h.event(egui::Event::Zoom(1.25));
+        h.step();
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(top), "{theme:?}: one tick in does not enter Archive, {archive_d}");
+    }
+}
+
+/// A return to a diagram that no longer shows the package left fits that diagram's content, though
+/// its saved view was sound (AR-668): Top, left at 60 % by entering Sales, loses Sales' card; the
+/// return shows both classes far apart in view, below 100 %. Emptied entirely, Top shows at 100 %
+/// from its top left, as an empty diagram fits. So does Top as the owning parent's default when
+/// Sales' diagram was opened directly, with no route back. Classes wider apart than ten canvases
+/// fit only down to the least zoom, 10 %, the middle between them in the canvas's centre.
+#[test]
+fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for (far, routed) in [(&[0, 4000][..], true), (&[], true), (&[0, 4000], false), (&[], false), (&[0, 400_000], false)] {
+            let emptied = far.is_empty();
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (240, 148), far);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(-50.0, 30.0), 0.6);
+            h.run();
+            if routed {
+                crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            } else {
+                crate::canvas::open(h.state_mut(), sales_d);
+                assert!(h.state().canvas.nav.routes.get(&sales_d).is_none_or(|r| r == &crate::nav_route::Route::default()), "{theme:?}: no route");
+            }
+            h.run();
+            h.state_mut().session.as_mut().unwrap().execute("diagram.unplace", &serde_json::json!({ "nodes": [card.to_string()] })).unwrap();
+            h.run();
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} emptied {emptied} routed {routed}");
+            let c = &h.state().canvas;
+            if emptied {
+                assert_eq!((c.pan, c.zoom), (egui::Vec2::ZERO, 1.0), "{theme:?} routed {routed}: the empty diagram from its top left");
+            } else if far[1] > 4000 {
+                assert_eq!(c.zoom, crate::canvas::ZOOM_RANGE.0, "{theme:?}: too wide to fit, at the least zoom");
+                // The classes span x 0 to 400 200 and y 0 to 120: their middle at the centre.
+                let middle = c.pan + egui::vec2(200_100.0, 60.0) * c.zoom;
+                assert!((middle - c.size / 2.0).length() < 1.0, "{theme:?}: the middle shown, {middle:?} in {:?}", c.size);
+            } else {
+                let seen = [0.0, 4200.0].iter().all(|x| (0.0..=c.size.x).contains(&(c.pan.x + x * c.zoom)));
+                assert!(seen && c.zoom < 1.0, "{theme:?} routed {routed}: both classes fitted in view, {:?}", (c.pan, c.zoom));
+            }
+        }
+    }
+}
+
+/// A return by zoom rejects a saved view at exactly the entry threshold, where zooming in would try
+/// to enter (AR-668): Top, left by Open-style entry into Sales at a view where Sales' card covers
+/// exactly [`crate::package_nav::ENTER_COVER`] of the canvas, comes back at 100 % with the card
+/// centred. The card spans the canvas's height and its right 60 % in whole points, so the share is
+/// exactly the threshold.
+#[test]
+fn a_return_by_zoom_rejects_a_view_at_exactly_the_entry_threshold() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        // A window one point wider than usual makes the canvas 845 points wide, a multiple of 5.
+        let mut h = workspace_harness(theme, egui::vec2(1601.0, 1000.0));
+        let (top, sales, card, sales_d) = top_with_sales(&mut h, (3000, 3000), &[]);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        let canvas = rect_of(&h, "workspace.canvas");
+        assert_eq!(canvas.width() % 5.0, 0.0, "{theme:?}: canvas {canvas:?}");
+        // At 100 %, the card's left edge 40 % in, its top above the canvas.
+        let view = (egui::vec2(canvas.width() * 0.4 - 200.0, -400.0), 1.0);
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
+        h.run();
+        let covered = rect_of(&h, &format!("workspace.canvas.node.{card}")).intersect(canvas);
+        let share = covered.width() * covered.height() / (canvas.width() * canvas.height());
+        assert_eq!(share, crate::package_nav::ENTER_COVER, "{theme:?}: Sales covers exactly the threshold, {covered:?}");
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
+        assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
+    }
+}
+
+/// Each return restores the view of its own visit (AR-668): A → B → A → B by Open, A left first at
+/// one view and then at another, B at a third; zooming out goes back B → A → B → A, landing on A's
+/// second view, then B's, then A's first.
+#[test]
+fn returns_restore_the_view_each_visit_was_left_with() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // A is Commerce's diagram and shows Archive; B is Archive's and shows Commerce.
+        let (commerce, archive, a, b) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive" })).unwrap().value);
+            let (a, b) = (own_diagram(s, commerce), own_diagram(s, archive));
+            for (on, what) in [(a, archive), (b, commerce)] {
+                let p =
+                    serde_json::json!({ "diagram": on.to_string(), "element": what.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                s.execute("diagram.place", &p).unwrap();
+            }
+            (commerce, archive, a, b)
+        };
+        let views = [(egui::vec2(40.0, 30.0), 0.8), (egui::vec2(60.0, 20.0), 0.9), (egui::vec2(-20.0, 50.0), 0.7)];
+        crate::canvas::open(h.state_mut(), a);
+        h.run();
+        for (package, view) in [archive, commerce, archive].into_iter().zip(views) {
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
+            h.run();
+            crate::package_nav::enter(h.state_mut(), package, 0.0);
+            h.run();
+            rest(&mut h);
+        }
+        assert_eq!(h.state().canvas.active, Some(b), "{theme:?}");
+        for (from, to, view) in [(b, a, views[2]), (a, b, views[1]), (b, a, views[0])] {
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![from, to], "{theme:?}");
+            assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), view, "{theme:?}: {to} as that visit left it");
+            rest(&mut h);
+        }
+    }
+}
+
+/// A return that skips a step to a removed diagram lands on one with no card of the package left,
+/// and fits it rather than restoring the view it was left with (AR-668): Top → Sales → Archive,
+/// Sales' diagram then removed; zooming out of Archive opens Top with both its far classes in view.
+#[test]
+fn a_return_past_a_removed_diagram_fits_the_one_it_lands_on() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, _, sales_d) = top_with_sales(&mut h, (240, 148), &[0, 4000]);
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": sales.to_string() })).unwrap().value);
+        let p =
+            serde_json::json!({ "diagram": sales_d.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+        s.execute("diagram.place", &p).unwrap();
+        let archive_d = own_diagram(s, archive);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        let left = (egui::vec2(-50.0, 30.0), 0.6);
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
+        // Sales' diagram is its default: removing it makes Sales a new, empty one.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let at = s.token();
+        let p = serde_json::json!({ "diagram": sales_d.to_string(), "create_replacement": { "name": "Sales" }, "expected_revision": { "history": at.history, "revision": at.revision } });
+        s.execute("diagram.remove", &p).unwrap();
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![archive_d, top], "{theme:?}: past Sales' removed diagram");
+        let c = &h.state().canvas;
+        let seen = [0.0, 4200.0].iter().all(|x| (0.0..=c.size.x).contains(&(c.pan.x + x * c.zoom)));
+        assert!(seen && (c.pan, c.zoom) != left, "{theme:?}: Top fitted, not as left, {:?}", (c.pan, c.zoom));
+    }
+}
+
+/// A return restores the view an entry by Open or ⌘↓ left (AR-668): Top, at a view of its own with
+/// Sales selected and in view, entered through Sales' Open button or ⌘↓, comes back on zooming out
+/// at exactly that pan and zoom.
+#[test]
+fn a_return_restores_the_view_an_entry_by_open_or_command_down_left() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for control in ["Open", "⌘↓"] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            let left = (egui::vec2(-50.0, 30.0), 0.6);
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
+            h.run();
+            rest(&mut h);
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
+            h.state_mut().canvas.focused = true;
+            h.run();
+            if control == "Open" {
+                let at = rect_of(&h, &format!("workspace.canvas.node.{card}.enter")).center();
+                click(&mut h, at);
+            } else {
+                key(&mut h, egui::Key::ArrowDown, egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND);
+            }
+            assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}: {control} entered Sales");
+            h.run();
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {control}");
+            assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?}: Top as {control} left it");
+        }
+    }
+}
+
+/// A return that lands at the least zoom goes back one more step on the next zoom-out once the
+/// switch has rested, with no zoom-in first (AR-668): Top → Sales → Archive, Archive's card then
+/// removed from Sales' diagram, whose classes lie too far apart to fit above 10 %; zooming out of
+/// Archive lands on Sales fitted at 10 %, where a zoom-out straight away does nothing, and after
+/// the rest one fresh zoom-out returns to Top.
+#[test]
+fn a_return_landing_at_the_least_zoom_goes_back_on_the_next_zoom_out() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, _, sales_d) = top_with_sales(&mut h, (240, 148), &[]);
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": sales.to_string() })).unwrap().value);
+        let p =
+            serde_json::json!({ "diagram": sales_d.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+        let archive_card = id(s.execute("diagram.place", &p).unwrap().value);
+        for (i, x) in [0, 400_000].iter().enumerate() {
+            let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": format!("Wide{i}") })).unwrap().value);
+            let p = serde_json::json!({ "diagram": sales_d.to_string(), "element": c.to_string(), "x": x, "y": 0, "width": 200, "height": 120 });
+            s.execute("diagram.place", &p).unwrap();
+        }
+        let archive_d = own_diagram(s, archive);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
+        let p = serde_json::json!({ "nodes": [archive_card.to_string()] });
+        h.state_mut().session.as_mut().unwrap().execute("diagram.unplace", &p).unwrap();
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![archive_d, sales_d], "{theme:?}: back to Sales");
+        assert_eq!(h.state().canvas.zoom, crate::canvas::ZOOM_RANGE.0, "{theme:?}: Sales too wide, fitted at 10 %");
+        assert_eq!(zoom_out_gesture(&mut h, 1, true), vec![sales_d], "{theme:?}: a zoom-out straight after the switch does nothing");
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 1, true), vec![sales_d, top], "{theme:?}: one fresh zoom-out back to Top");
     }
 }
 

@@ -281,9 +281,10 @@ impl DiagramKind for UmlKind {
         true
     }
 
-    /// Moves an end of a selected line onto the classifier of `to_node`, the Relationship tool's rules kept.
-    fn reconnect(&self, shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid) {
-        crate::uml_relate::reconnect(shell, element, source, to_node);
+    /// Moves an end of a selected line onto the classifier of `to_node`, the Relationship tool's rules
+    /// kept, on the revision `at` the drag began on.
+    fn reconnect(&self, shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid, at: archforge_engine::Revision) {
+        crate::uml_relate::reconnect(shell, element, source, to_node, at);
     }
 
     /// Renames a card's element in place: a package or a classifier,

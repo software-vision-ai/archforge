@@ -143,7 +143,8 @@ fn a_clash_a_package_into_itself_and_a_self_dependency_carry_their_reason_typed(
     // Reconnected onto its client, a dependency would make it depend on itself too.
     let line = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Line" }));
     let uses = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": line }));
-    let p = json!({ "relationship": uses, "end": "target", "class": order });
+    let at = s.token();
+    let p = json!({ "relationship": uses, "end": "target", "class": order, "expected_revision": { "history": at.history, "revision": at.revision } });
     let Err(EngineError::Failed { error, .. }) = s.execute("uml.relationship.reconnect", &p) else { panic!("{p} is refused") };
     assert_eq!((error.reason, error.message), itself, "reconnected");
 }
@@ -156,7 +157,7 @@ fn a_class_and_a_package_move_a_cycle_or_a_clash_is_refused_and_the_diagrams_kee
     let inner = run(&mut s, "uml.package.add", json!({ "name": "inner", "parent": sales }));
     let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
     run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Invoice" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "sales" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": sales, "name": "sales" }));
     let node = run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     round_trip(&mut s, "uml.class.move", json!({ "class": order, "package": billing }));
     assert_eq!(class_names(&s, &billing), ["Invoice", "Order"]);
@@ -188,10 +189,10 @@ fn a_package_removed_hands_its_contents_and_diagrams_up_to_its_parent_the_root_i
     let order = run(&mut s, "uml.class.add", json!({ "package": orders, "name": "Order" }));
     let customer = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Customer" }));
     let a = run(&mut s, "uml.association.add", json!({ "from": customer, "to": order }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": orders, "name": "orders" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": orders, "name": "orders" }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     // sales's own default takes the diagram in, an additional diagram of sales (AR-673).
-    let own = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "sales" }));
+    let own = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": sales, "name": "sales" }));
     // orders goes: Order, the package lines and the diagram move up into sales.
     round_trip(&mut s, "element.remove", json!({ "ids": [orders] }));
     let default = archforge_uml::defaults::resolve(s.doc(), obj(&s, &sales));
@@ -212,7 +213,7 @@ fn a_package_removed_hands_its_contents_and_diagrams_up_to_its_parent_the_root_i
     let outside = run(&mut s, "uml.class.add", json!({ "package": other, "name": "Outside" }));
     let dep = run(&mut s, "uml.dependency.add", json!({ "client": outside, "supplier": customer }));
     let root = s.doc().uuid(archforge_uml::commands::root_package(s.doc()).unwrap()).unwrap().to_string();
-    run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": root, "name": "model" }));
+    run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": root, "name": "model" }));
     round_trip(&mut s, "element.remove", json!({ "ids": [sales] }));
     assert!(!alive(&s, &sales));
     for kept in [&customer, &order, &deep, &a, &dep, &d, &outside] {
@@ -713,11 +714,13 @@ fn a_package_move_or_rename_the_root_or_the_package_types_refuses_carries_its_re
     assert!(message.starts_with("its contents cannot move up: "), "{message}");
 }
 
+/// A nested package's card on its parent's structure diagram lists and counts none of its 60
+/// classes, however many it holds.
 #[test]
 fn a_package_card_builds_no_rows_however_much_it_holds() {
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": sales, "name": "Sales" }));
     let crowded = run(&mut s, "uml.package.add", json!({ "name": "Crowded", "parent": sales }));
     for i in 0..60 {
         run(&mut s, "uml.class.add", json!({ "package": crowded, "name": format!("C{i}") }));

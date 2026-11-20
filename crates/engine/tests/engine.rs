@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use archforge_engine::testing::round_trip;
 use archforge_engine::{
-    CommandError, CommandSpec, Ctx, EXPECTED_REVISION, EngineError, Facts, JournalEntry, Options, Params, Reason, Registry, Replace, Revision,
-    Session, Snapshot, Snapshotted, View, always, cmd, expected_revision, history_start, seed_histories,
+    CommandError, CommandSpec, Ctx, EngineError, Facts, JournalEntry, Options, Params, Reason, Registry, Replace, Revision, Session, Snapshot,
+    Snapshotted, View, always, cmd, expected_revision, expected_revision_if_given, history_start, seed_histories,
 };
 use serde_json::{Value, json};
 
@@ -89,9 +89,7 @@ fn select(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, Comman
 
 /// How many items there are; given an `expected_revision`, only on that revision.
 fn count(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
-    if p.get(EXPECTED_REVISION).is_some() {
-        expected_revision(ctx, p)?;
-    }
+    expected_revision_if_given(ctx, p)?;
     Ok(json!(ctx.doc.0.len()))
 }
 

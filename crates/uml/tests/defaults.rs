@@ -10,6 +10,8 @@
 //! one, and refuses anything but one of the package's own class diagrams on the revision read
 //! (AR-580). A nested package handing a structure diagram up to a package with no sound default,
 //! the root among them, is refused with nothing changed; one handing up none goes (AR-673).
+//! Below a package a profile holds, read back from rows, the handoff passes the profile when it
+//! stays and judges nothing when it or that package goes (AR-745).
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
@@ -1042,6 +1044,58 @@ fn a_handoff_past_a_removed_ancestor_goes_to_the_first_package_above_it_that_sta
         let r_default = own.map(|d| Ok(DefaultDiagram::Bound(d)));
         assert_eq!((st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), Some(resolve(st, r))), (Value::Ref(r), r_default), "{ids:?}");
     }
+}
+
+/// Inner, a package a profile holds directly, which no command makes but a project's rows may
+/// hold, read back from them: Leaf in Inner hands its class diagram up past the profile as past any
+/// parent. Removed with the profile, or with Inner, Leaf goes and so does its diagram, taken along
+/// with them, nothing judged, R's lack of a diagram no more than Inner's; removed alone, Inner judges
+/// it, refused. With the profile in Shop, a nested package, removing Shop with Leaf hands the diagram
+/// past Inner and the profile, which only stay as Shop hands them up, to R, the first package above,
+/// which judges it: refused, named, while R has no diagram yet, and R's once it has one (AR-745).
+#[test]
+fn a_package_a_profile_holds_hands_its_diagrams_up_past_the_profile() {
+    let built = |in_shop: bool, r_bound: bool| {
+        let (mut st, model) = store();
+        let r = add(&mut st, model, PACKAGE, 0x10);
+        st.set(r, archforge_uml::named_element::NAME, Value::str("R")).unwrap();
+        if r_bound {
+            let own = diagram(&mut st, model, 0x11, STRUCTURE_DIAGRAM, r);
+            bind(&mut st, model, 0x12, r, own);
+        }
+        let holder = if in_shop { nested(&mut st, r, 0x20, "Shop") } else { r };
+        let profile = st.create_with_uuid(PROFILE, Uuid([0x30; 16])).unwrap();
+        st.push(holder, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(profile)).unwrap();
+        let inner = nested(&mut st, profile, 0x40, "Inner");
+        let leaf = nested(&mut st, inner, 0x50, "Leaf");
+        let handed = diagram(&mut st, model, 0x51, STRUCTURE_DIAGRAM, leaf);
+        bind(&mut st, model, 0x52, leaf, handed);
+        let mut back = bare();
+        let (tables, junctions) = tables();
+        rows::restore(&mut back, &rows_of(&st), &tables, &junctions).unwrap();
+        assert_eq!(back.first_problem(), None, "the rows read back whole");
+        let at = |n: u8| back.by_uuid(Uuid([n; 16])).unwrap();
+        let (r, profile, inner, handed) = (at(0x10), at(0x30), at(0x40), at(0x51));
+        assert_eq!(back.container(inner).unwrap().map(|(o, _)| o), Some(profile), "Inner sits in the profile");
+        (over(back), r, profile, handed)
+    };
+    let unsound = |parent: &str| Some(Reason::ParentDefaultUnsound { parent: parent.into(), fault: None });
+    assert_eq!(refused(&mut built(false, true).0, "element.remove", json!({ "ids": [id(0x50)] })).1, unsound("Inner"), "Inner takes it");
+    for (with, profile_stays, r_bound) in [(0x30, false, true), (0x30, false, false), (0x40, true, true), (0x40, true, false)] {
+        let (mut s, r, profile, handed) = built(false, r_bound);
+        s.execute("element.remove", &json!({ "ids": [id(0x50), id(with)] })).unwrap();
+        let st = s.doc();
+        assert!(!st.is_alive(handed), "{with:#x}, {r_bound}: Leaf's diagram went along");
+        assert_eq!(st.is_alive(profile), profile_stays, "{with:#x}, {r_bound}");
+        let r_default = if r_bound { DefaultDiagram::Bound(st.by_uuid(Uuid([0x11; 16])).unwrap()) } else { DefaultDiagram::NoDiagramYet };
+        assert_eq!((resolve(st, r), problems(st)), (Ok(r_default), vec![]), "{with:#x}, {r_bound}");
+    }
+    assert_eq!(refused(&mut built(true, false).0, "element.remove", json!({ "ids": [id(0x50), id(0x20)] })).1, unsound("R"), "R takes it");
+    let (mut s, r, profile, handed) = built(true, true);
+    s.execute("element.remove", &json!({ "ids": [id(0x50), id(0x20)] })).unwrap();
+    let st = s.doc();
+    assert_eq!(st.container(profile).unwrap().map(|(o, _)| o), Some(r), "Shop handed the profile up to R");
+    assert_eq!(st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), Value::Ref(r), "past Inner and the profile, into R");
 }
 
 /// A and B hold each other, a loop the store and a project's reading refuse, made by a recorded move

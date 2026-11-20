@@ -719,18 +719,30 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
 /// The package that takes the diagrams a nested package of `parent` hands up as `objs` go: the first
 /// above all of `objs` among its ancestors, `parent` when it stays, never one that only stays as one
 /// that goes hands it up (owner decision, 2026-11-18). None when the topmost package above goes: it
-/// takes everything below it along (AR-673). In a loop of packages, which only a damaged store holds,
-/// the walk goes round once more if need be, for the first that stays after the last that goes.
+/// takes everything below it along (AR-673). A profile holding a package, which only a project read
+/// from its rows makes, is that package's parent on the walk: one that stays is passed for the package
+/// holding it, and none takes the diagrams when the profile goes, or the package it holds goes, either
+/// taking everything below along; a profile never takes them itself (AR-745). In a loop of packages,
+/// which only a damaged store holds, the walk goes round once more if need be, for the first that
+/// stays after the last that goes.
 fn receiver(store: &Store, objs: &[Obj], parent: Obj) -> Option<Obj> {
     let (mut at, mut taker, mut seen, mut again) = (parent, None, std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
+    let holder = |o: Obj| {
+        let up = store.container(o).ok().flatten().map(|(c, _)| c);
+        up.filter(|c| store.class_of(*c).is_ok_and(|class| class == PACKAGE || class == crate::PROFILE))
+    };
     // The seen-sets bound the walk: one round of a loop, and a second while the last met goes.
     while seen.insert(at) || (taker.is_none() && again.insert(at)) {
+        // Below a profile the walk has a taker unless the package the profile holds goes.
+        if store.class_of(at).ok() == Some(crate::PROFILE) && (objs.contains(&at) || taker.is_none()) {
+            return None;
+        }
         if objs.contains(&at) {
             taker = None;
         } else if taker.is_none() {
             taker = Some(at);
         }
-        match package_of(store, at) {
+        match holder(at) {
             Some(up) => at = up,
             None => return taker,
         }
