@@ -693,7 +693,8 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   not show it loses that line alone. Reconnecting a dependency needs `expected_revision`, as
   `inspect_document` gives it. This is a change from earlier versions: a call that reconnects a
   dependency without it, or with another revision, is now refused and changes nothing. Read the project
-  again and retry with the revision it gives. The other relationships' ends move without it as
+  again, check that the dependency's client and supplier are still the ones the move was planned
+  for, as another change may have moved them, and only then retry with the revision it gives. The other relationships' ends move without it as
   before, and only on that revision when it is given. Moving a dependency so that it joins one
   client to one supplier that another dependency alone joins already is refused, naming that
   dependency: the two are never merged into one, so select that one instead. Like the two ends and no dependency on itself,
