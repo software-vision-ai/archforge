@@ -944,11 +944,8 @@ What is UML's own, beside the shared rules above.
 - An association's Properties: Name, its From and To classes read only with "Drag a line end onto
   another class.", then a section per end, "End at {class}": Role (written on Enter or leaving the
   field) and Multiplicity, Navigable and Aggregation (None, Shared, Composite; written when
-  changed). A dependency shows Name, then Client and Supplier, each on a row of its own: its kind
-  and name (`Package · Sales`) over its true owning path from the root, cut from the front, whole
-  in its tooltip and accessible name, and "Drag a line end onto a class or a package." (AR-702,
-  R1); a generalization Specific and General; an interface realization Implementing class and
-  Realized interface, with no name. An association
+  changed). A dependency shows Name, Client and Supplier; a generalization Specific and General; an
+  interface realization Implementing class and Realized interface, with no name. An association
   class shows an association's Name, From and To and its ends' sections, then Attributes · n and
   Operations · n with a class's editors; its members are typed on its card as a class's are.
 - An end's Multiplicity is an editable select (owner, 2026-11-02): its text takes typing, its

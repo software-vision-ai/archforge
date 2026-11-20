@@ -182,7 +182,7 @@ fn refusals_follow_the_er_policy_and_change_nothing() {
     let elsewhere = run(&mut s, "er.entity.add", json!({ "schema": other, "name": "Elsewhere" }));
     let before = (picture(s.doc()), s.view().clone(), s.counter());
     let refused: Vec<(&str, Json)> = vec![
-        ("diagram.add", json!({ "kind": "uml.class", "element": sm.schema })),
+        ("diagram.add", json!({ "kind": "uml.structure", "element": sm.schema })),
         ("diagram.add", json!({ "kind": "er", "element": sm.customer })),
         ("diagram.add", json!({ "kind": "er" })),
         ("diagram.place", json!({ "diagram": sm.diagram, "element": key, "x": 0, "y": 0 })),

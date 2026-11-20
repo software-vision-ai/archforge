@@ -436,7 +436,7 @@ fn a_diagram_carries_skills_and_inherits_the_projects_and_its_elements() {
     let mut s = new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = id(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
-    let diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": orders, "name": "Orders" }));
+    let diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": orders, "name": "Orders" }));
     id(&mut s, "skill.add", json!({ "subject": "", "name": "House style" }));
     id(&mut s, "skill.add", json!({ "subject": sales, "name": "Layout" }));
     id(&mut s, "skill.add", json!({ "subject": sales, "name": "Classes", "applies_to": "class" }));
@@ -480,7 +480,7 @@ fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_wit
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     // Sales's first diagram is its default, which is not removed alone (AR-578): the second goes.
     id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales overview" }));
-    let class_diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
+    let class_diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": sales, "name": "Sales" }));
     let er_diagram = id(&mut s, "diagram.add", json!({ "kind": "er", "element": schema, "name": "shop" }));
     id(&mut s, "skill.add", json!({ "subject": class_diagram, "name": "Layout" }));
     id(&mut s, "skill.add", json!({ "subject": er_diagram, "name": "Layout" }));
@@ -509,12 +509,12 @@ fn a_nested_packages_diagram_keeps_its_skill_when_the_package_goes_and_inherits_
     let mut s = new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = id(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
-    let diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": orders, "name": "Orders" }));
+    let diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": orders, "name": "Orders" }));
     id(&mut s, "skill.add", json!({ "subject": sales, "name": "Sales style" }));
     id(&mut s, "skill.add", json!({ "subject": orders, "name": "Orders style" }));
     id(&mut s, "skill.add", json!({ "subject": diagram, "name": "Layout" }));
     // Sales's default takes the diagram in (AR-673).
-    id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
+    id(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": sales, "name": "Sales" }));
     s.execute("element.remove", &json!({ "ids": [orders] })).unwrap();
     assert_eq!(applying(&s, &diagram), [("Sales style".into(), false), ("Layout".into(), false)], "moved up to Sales with its skill");
 }
@@ -540,7 +540,7 @@ fn two_diagrams() -> (Session, String) {
     let shop = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let orders = id(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Orders" }));
     let sales = id(&mut s, "uml.package.add", json!({ "name": "sales" }));
-    id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Main" }));
+    id(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": sales, "name": "Main" }));
     (s, orders)
 }
 
@@ -570,14 +570,14 @@ fn a_diagram_of_a_kind_no_notation_knows_refuses_its_model_before_anything_is_bu
     let refused = check_kinds_in_rows(&legacy, &tables).unwrap_err();
     let named = |d: &UnknownDiagram| (d.id.to_string(), d.name.clone(), d.kind.clone());
     assert_eq!(refused.diagrams.iter().map(named).collect::<Vec<_>>(), [(orders.clone(), "Orders".to_string(), "legacy.kind".to_string())]);
-    assert_eq!(refused.accepted, ["er", "uml.class"]);
+    assert_eq!(refused.accepted, ["er", "uml.structure"]);
     // Refused whole: the repair never sees a store, so none is built, let alone handed back.
     let mut built = false;
     let why = session_from_rows_repaired(&legacy, ids(1 << 40), |_| built = true).err().unwrap();
     assert!(!built, "nothing is built from refused rows");
     assert_eq!(why, OpenError::UnknownKinds(refused), "callers match the refusal");
     let why = why.to_string();
-    assert!(why.contains("\"Orders\"") && why.contains("\"legacy.kind\"") && why.contains("the kinds known are er, uml.class"), "{why}");
+    assert!(why.contains("\"Orders\"") && why.contains("\"legacy.kind\"") && why.contains("the kinds known are er, uml.structure"), "{why}");
     // A diagram of no kind is of none a notation knows.
     *kind_cell(&mut legacy, &orders) = Cell::Null;
     assert_eq!(check_kinds_in_rows(&legacy, &tables).unwrap_err().diagrams[0].kind, "");
@@ -589,6 +589,42 @@ fn a_diagram_of_a_kind_no_notation_knows_refuses_its_model_before_anything_is_bu
     .err()
     .unwrap();
     assert!(matches!(&why, OpenError::UnknownKinds(e) if e.diagrams[0].kind == "legacy.kind"), "{why}");
+}
+
+/// AR-551: the project knows the ER kind and the one UML kind, `uml.structure`, which a new UML
+/// diagram is stored as; the earlier `uml.class` is no alias of it: adding a diagram of it is
+/// refused, typed and naming the kinds known, with no undo entry, and rows holding one are refused.
+#[test]
+fn the_kinds_known_are_er_and_uml_structure_and_the_earlier_uml_class_is_refused() {
+    assert_eq!(archforge_diagram::DiagramView::kinds(&archforge_notations::view()), ["er", "uml.structure"]);
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let main = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Main" }));
+    let (tables, junctions) = storage();
+    let state = |s: &Session| (rows::snapshot(s.doc(), &tables, &junctions).unwrap(), s.undo_label().map(String::from), s.revision(), s.counter());
+    let before = state(&s);
+    let Err(archforge_engine::EngineError::Failed { error, .. }) =
+        s.execute("diagram.add", &json!({ "kind": "uml.class", "element": sales, "name": "Old" }))
+    else {
+        panic!("a diagram of the earlier kind is refused")
+    };
+    assert!(error.message.contains("\"uml.class\" is not one of er, uml.structure"), "{}", error.message);
+    let known = vec!["er".to_string(), "uml.structure".into()];
+    let unknown = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "uml.class".into(), known };
+    assert_eq!((error.reason, error.key.as_deref()), (Some(archforge_engine::Reason::NotOneOf(Box::new(unknown))), Some("kind")));
+    assert_eq!(state(&s), before, "nothing changed and no undo entry was made");
+    // The diagram is stored as `uml.structure`, and its rows open again.
+    let mut fresh = before.0;
+    assert_eq!(*kind_cell(&mut fresh, &main), Cell::Text("uml.structure".into()));
+    assert!(session_from_rows(&fresh, ids(1 << 40)).is_ok());
+    // Rows holding a diagram of the earlier kind are refused whole, never read as a structure diagram.
+    *kind_cell(&mut fresh, &main) = Cell::Text("uml.class".into());
+    let refused = check_kinds_in_rows(&fresh, &tables).unwrap_err();
+    let named = |d: &UnknownDiagram| (d.id.to_string(), d.name.clone(), d.kind.clone());
+    assert_eq!(refused.diagrams.iter().map(named).collect::<Vec<_>>(), [(main, "Main".to_string(), "uml.class".to_string())]);
+    assert_eq!(refused.accepted, ["er", "uml.structure"]);
+    let why = session_from_rows_repaired(&fresh, ids(1 << 40), |_| ()).err().unwrap();
+    assert_eq!(why, OpenError::UnknownKinds(refused));
 }
 
 /// A text column of a table of an earlier shape.
@@ -611,13 +647,13 @@ fn the_kind_check_reads_a_diagram_table_of_any_shape_by_its_column_names() {
     let earlier = diagrams_of(EARLIER);
     let [known, legacy, kindless] = [1, 2, 3].map(|n| Uuid::v7(1_761_670_800_000, [n; 10]));
     let row = |kind: Cell, id| vec![kind, Cell::Id(id)];
-    let diagrams = vec![row(Cell::Text("uml.class".into()), known), row(Cell::Text("legacy.kind".into()), legacy), row(Cell::Null, kindless)];
+    let diagrams = vec![row(Cell::Text("uml.structure".into()), known), row(Cell::Text("legacy.kind".into()), legacy), row(Cell::Null, kindless)];
     let rows = rows::Rows { tables: vec![diagrams], junctions: Vec::new() };
     let refused = check_kinds_in_rows(&rows, &earlier).unwrap_err();
     let unknown = |id, kind: &str| UnknownDiagram { id, name: String::new(), kind: kind.into() };
     assert_eq!(refused.diagrams, [unknown(legacy, "legacy.kind"), unknown(kindless, "")], "every one, in the order read");
     let said = format!(
-        "the diagram ({legacy}) is of the kind \"legacy.kind\", which no notation knows, and so are 1 more; the kinds known are er, uml.class"
+        "the diagram ({legacy}) is of the kind \"legacy.kind\", which no notation knows, and so are 1 more; the kinds known are er, uml.structure"
     );
     assert_eq!(refused.to_string(), said);
     // A shape without the diagram table holds no diagram.

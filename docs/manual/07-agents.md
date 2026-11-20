@@ -585,6 +585,9 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   the command ids `uml.package.list`, `uml.relationship.list` and `uml.constraint.list`.
   `uml_package_list` gives each package's `path`: the names of the packages that own it, from the
   root package down to its parent, empty for the root package itself.
+- **Diagram kinds**: `diagram_add` makes a diagram of the kind `uml.structure`, a UML structure
+  diagram of a package, or `er`, an ER diagram of a schema. Any other kind, the `uml.class` of
+  earlier versions among them, is refused, naming the kinds it takes, and changes nothing.
 - **Packages on a class diagram**: `diagram_place` puts any package of the model on a class
   diagram, wherever it is owned: one of another branch, the root package, the diagram's own
   package or one that holds it. The package is shown there and keeps its owner; nothing is copied.

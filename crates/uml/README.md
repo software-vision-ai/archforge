@@ -6,7 +6,8 @@ primitive types, generated from OMG's `UML.xmi` by `cargo xtask generate uml`. O
 written by hand.
 
 **Layer.** 7, the notations' layer above the MOF core (4), the shared core (5) and the diagrams (6),
-whose project view it joins as `UmlNotation` (class diagrams of a package, classes as plain cards
+whose project view it joins as `UmlNotation` (structure diagrams of a package, of the one UML kind
+`uml.structure` (`STRUCTURE_DIAGRAM`; the earlier `uml.class` is no kind any more and refused, AR-551), classes as plain cards
 with their attributes and operations; skills on packages, classes, attributes and operations,
 aiming at every class, attribute, operation or association below) and whose commands it adds to (`commands`: `uml.package.{add,
 rename, list}`, `uml.class.{add, rename, list}`; a name told apart from its siblings', whatever the
