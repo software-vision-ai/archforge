@@ -1149,6 +1149,42 @@ pub(crate) fn path_select_field(
     field
 }
 
+/// A read-only element at `at`, `width` wide, as a relationship's end shows it (R1): its label,
+/// then the element's kind and name (`Package · Sales`), then its owning path from the top, cut
+/// from its front so its own name shows. The whole path is its tooltip, and with the label and the
+/// kind its accessible name (`Client: Package · Commerce platform › Sales`). Gives the box under
+/// the label.
+pub(crate) fn path_field(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    kind: &str,
+    parts: &[String],
+) -> Rect {
+    let paint = ui.painter();
+    let width = width.max(0.0);
+    let path = parts.join(PATH_SEP);
+    let name = parts.last().map(String::as_str).unwrap_or_default();
+    let what = |name: &str| fmt(&tr("{kind} · {name}"), &[("kind", kind), ("name", name)]);
+    ux::text(paint, at, label, types::CAPTION, p.text_secondary, Some(width));
+    let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width, 2.0 * PATH_LINE));
+    ux::text_mid(paint, field.left(), field.top() + PATH_LINE / 2.0, &what(name), types::SMALL, p.text, Some(width));
+    ux::text_mid_front(paint, field.left(), field.bottom() - PATH_LINE / 2.0, parts, PATH_SEP, types::SMALL, p.text_secondary, width);
+    widgets::record_visible(ui, &mut shell.registry, id, "field", field);
+    let resp = ui.interact(field, widgets::egui_id(id), egui::Sense::hover()).accessible_name(format!("{label}: {}", what(&path)));
+    if !path.is_empty() {
+        let _ = resp.on_hover_text(&path);
+    }
+    field
+}
+
+/// The height of one line of a [`path_field`]'s value.
+const PATH_LINE: f32 = 16.0;
+
 /// What joins a package's path: `Commerce platform › Orders`.
 pub(crate) const PATH_SEP: &str = " › ";
 
@@ -1826,12 +1862,28 @@ pub(crate) fn refuse_empty_name(shell: &mut Shell, cmd: &str, name: &str) -> boo
 /// The name field of an element, committed through its rename command on Enter or when it is
 /// left; Escape brings the name back, and an empty name is refused before it is sent.
 pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject, cmd: &str, key: &str) {
+    name_field_as(shell, ui, p, at, width, subject, cmd, key, "workspace.properties.name");
+}
+
+/// The name field of an element as [`name_field`] draws it, under the automation id `field`
+/// (a dependency's is `workspace.properties.dependency.name`, R1).
+pub(crate) fn name_field_as(
+    shell: &mut Shell,
+    ui: &mut egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    subject: &Subject,
+    cmd: &str,
+    key: &str,
+    field: &str,
+) {
     let Some(id) = subject.id else { return };
     let mut text = match &shell.panels.name {
         Some(n) if n.target == id => n.text.clone(),
         _ => subject.name.clone(),
     };
-    let out = edit_field(shell, ui, p, at, width, "workspace.properties.name", &tr("Name"), &mut text, MAX_NAME, false, true);
+    let out = edit_field(shell, ui, p, at, width, field, &tr("Name"), &mut text, MAX_NAME, false, true);
     if out == FieldOut::Cancel {
         shell.panels.name = None;
     } else if out == FieldOut::Commit {

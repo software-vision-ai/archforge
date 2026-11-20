@@ -12,8 +12,8 @@
 //! primitive type, the only kind each specializes. A selected
 //! line's ends drag onto another class to reconnect it.
 //! Properties shows an association's name and both its ends (role, multiplicity, navigable,
-//! aggregation), a dependency's name and its classes, a generalization's classes, a realization's
-//! implementing class and interface.
+//! aggregation), a dependency's name and its client and supplier, each with its kind and owning
+//! path (R1), a generalization's classes, a realization's implementing class and interface.
 //!
 //! An association class (AR-125) is drawn between two classes as an association is: its line and
 //! its card above the line's middle come as one element and one undo step, the card's name open
@@ -914,8 +914,9 @@ fn aggregation_words() -> [String; 3] {
 }
 
 /// A line's Properties: an association's or a dependency's name, its classes (a realization's
-/// implementing class and the interface it realizes), an association's ends; an association
-/// class's name, classes and ends, then its attributes and operations as a class's.
+/// implementing class and the interface it realizes; a dependency's client and supplier, each with
+/// its kind and owning path), an association's ends; an association class's name, classes and
+/// ends, then its attributes and operations as a class's.
 pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
@@ -933,32 +934,39 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     // A generalization and a realization have no name to show; an association class is named as
     // the classifier it is.
     let association_class = class == Some(archforge_uml::ASSOCIATION_CLASS);
+    let dependency = class == Some(archforge_uml::DEPENDENCY);
     let (rename, key) =
         if association_class { ("uml.association-class.rename", "association_class") } else { ("uml.relationship.rename", "relationship") };
     if class != Some(archforge_uml::GENERALIZATION) && class != Some(archforge_uml::INTERFACE_REALIZATION) {
-        crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, rename, key);
+        let field = if dependency { "workspace.properties.dependency.name" } else { "workspace.properties.name" };
+        crate::panels::name_field_as(shell, ui, p, pos2(r.left() + PAD, y), width, subject, rename, key, field);
         y += 17.0 + FIELD + 12.0;
     }
-    // The classes it joins, read only: its ends drag onto another class on the canvas.
-    let (first, second) = match class {
-        Some(c) if c == archforge_uml::GENERALIZATION => (tr("Specific"), tr("General")),
-        Some(c) if c == archforge_uml::DEPENDENCY => (tr("Client"), tr("Supplier")),
-        Some(c) if c == archforge_uml::INTERFACE_REALIZATION => (tr("Implementing class"), tr("Realized interface")),
-        _ => (tr("From"), tr("To")),
-    };
-    let half = ((width - 8.0) / 2.0).max(0.0);
-    for (i, (label, value)) in [(first, from), (second, to)].into_iter().enumerate() {
-        let at = pos2(r.left() + PAD + i as f32 * (half + 8.0), y);
-        ux::text(&paint, at, &label, types::CAPTION, p.text_secondary, Some(half));
-        let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(half, FIELD));
-        paint.rect_filled(field, 6.0, p.field);
-        ux::text_mid(&paint, field.left() + 8.0, field.center().y, &value, types::SMALL, p.text_secondary, Some((half - 16.0).max(0.0)));
-        control(shell, ui, &format!("workspace.properties.relationship.{}", ["from", "to"][i]), "field", field, false);
+    if dependency {
+        y = dependency_ends(shell, ui, p, r, y, o);
+    } else {
+        // The classes it joins, read only: its ends drag onto another class on the canvas.
+        let (first, second) = match class {
+            Some(c) if c == archforge_uml::GENERALIZATION => (tr("Specific"), tr("General")),
+            Some(c) if c == archforge_uml::INTERFACE_REALIZATION => (tr("Implementing class"), tr("Realized interface")),
+            _ => (tr("From"), tr("To")),
+        };
+        let half = ((width - 8.0) / 2.0).max(0.0);
+        for (i, (label, value)) in [(first, from), (second, to)].into_iter().enumerate() {
+            let at = pos2(r.left() + PAD + i as f32 * (half + 8.0), y);
+            ux::text(&paint, at, &label, types::CAPTION, p.text_secondary, Some(half));
+            let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(half, FIELD));
+            paint.rect_filled(field, 6.0, p.field);
+            ux::text_mid(&paint, field.left() + 8.0, field.center().y, &value, types::SMALL, p.text_secondary, Some((half - 16.0).max(0.0)));
+            control(shell, ui, &format!("workspace.properties.relationship.{}", ["from", "to"][i]), "field", field, false);
+        }
+        y += 17.0 + FIELD + 8.0;
     }
-    y += 17.0 + FIELD + 8.0;
-    // A realization's ends each move onto their own kind.
+    // A realization's ends each move onto their own kind, a dependency's onto a class or a package.
     let hint = if class == Some(archforge_uml::INTERFACE_REALIZATION) {
         tr("Drag the class end onto another class, the interface end onto another interface.")
+    } else if dependency {
+        tr("Drag a line end onto a class or a package.")
     } else {
         tr("Drag a line end onto another class.")
     };
@@ -986,6 +994,44 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
             crate::uml_constraints::section_of(shell, ui, p, r, y + 4.0, o, id);
         }
     }
+}
+
+/// A dependency's client and supplier, read only, each on a row of its own: its kind and name,
+/// then its true owning path, so two ends of one name in two branches read apart (R1). Gives the
+/// y under them, or `y` for a dependency missing an end.
+fn dependency_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, mut y: f32, d: Obj) -> f32 {
+    let width = (r.width() - 2.0 * PAD).max(0.0);
+    let ends = shell.session.as_ref().and_then(|s| {
+        let store = s.doc();
+        let (client, supplier) = archforge_uml::figures::ends(store, d)?;
+        Some([client, supplier].map(|e| (end_kind(store, e), end_parts(store, e))))
+    });
+    // A dependency missing an end, as a damaged file could hold, shows no ends to read.
+    let Some([client, supplier]) = ends else { return y };
+    for (key, label, (kind, parts)) in [("client", tr("Client"), client), ("supplier", tr("Supplier"), supplier)] {
+        let id = format!("workspace.properties.dependency.{key}");
+        let field = crate::panels::path_field(shell, ui, p, pos2(r.left() + PAD, y), width, &id, &label, &kind, &parts);
+        y = field.bottom() + 12.0;
+    }
+    y
+}
+
+/// What a dependency's end is, as its Properties name it: Package, or the classifier's kind.
+fn end_kind(store: &Store, end: Obj) -> String {
+    if store.class_of(end).ok() == Some(archforge_uml::PACKAGE) {
+        return tr("Package");
+    }
+    crate::uml_classifier::Classifier::of(store, end).map_or_else(|| tr("Element"), |k| k.word())
+}
+
+/// The names on a dependency's end's owning path from the root, its own last: its home package's
+/// path, then the classifiers that nest it. A package's home is the package it sits in, so its path
+/// is that package's and its own name.
+fn end_parts(store: &Store, end: Obj) -> Vec<String> {
+    let mut parts = archforge_uml::nesting::home_package(store, end).map(|p| crate::uml_panel::package_parts(store, p)).unwrap_or_default();
+    parts.extend(archforge_uml::nesting::owner_chain(store, end).into_iter().map(|o| archforge_core::name_of(store, o)));
+    parts.push(archforge_core::name_of(store, end));
+    parts
 }
 
 /// An association's or an association class's two ends, each its own section: role, written when
