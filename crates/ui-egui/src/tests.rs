@@ -26592,6 +26592,100 @@ fn a_menus_twin_rows_keep_their_ids_when_it_scrolls() {
     }
 }
 
+/// The texts and notes a [`rows_menu`] shows, as the test sets them.
+type MenuRowsSet = std::sync::Arc<std::sync::Mutex<(Vec<String>, Vec<String>)>>;
+
+/// Home in `theme` with the menu `test.rows` drawn over it, its rows as `rows` holds them on each
+/// frame, every row it picks pushed onto `picks`; its keys are the menu's, as for an open menu.
+fn rows_menu(theme: ThemeKind, rows: &MenuRowsSet, picks: &std::sync::Arc<std::sync::Mutex<Vec<usize>>>) -> Harness<'static, Shell> {
+    crate::i18n::set_language("en");
+    let (shown, picked) = (rows.clone(), picks.clone());
+    let mut shell = Shell::new(Services::default());
+    shell.state.theme = theme;
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).with_step_dt(0.1).build_ui_state(
+        move |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+            let p = crate::ux::palette(shell.state.theme.is_dark());
+            let (items, notes) = shown.lock().unwrap().clone();
+            let anchor = egui::Rect::from_min_size(egui::pos2(700.0, 600.0), egui::vec2(220.0, 28.0));
+            picked.lock().unwrap().extend(crate::panels::menu_noted(shell, ui, p, anchor, "test.rows", &items, &notes, &[]));
+        },
+        shell,
+    );
+    h.state_mut().panels.menu = Some(crate::panels::Menu::Kind);
+    h.run();
+    h
+}
+
+/// Rows of their texts and notes, for a [`rows_menu`].
+fn menu_rows(rows: &[(&str, &str)]) -> (Vec<String>, Vec<String>) {
+    rows.iter().map(|(text, note)| (text.to_string(), note.to_string())).unzip()
+}
+
+/// When the rows change and a twin of the row the keys reached comes in where it stood, or leaves
+/// another in its place, the reach is dropped, so Enter runs no twin; on rows unchanged the keys
+/// still reach a twin and Enter runs it (AR-749).
+#[test]
+fn a_menus_reach_on_a_twin_is_dropped_when_the_rows_change() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let t = ("T", "template parameter");
+        let rows: MenuRowsSet = std::sync::Arc::new(std::sync::Mutex::new(menu_rows(&[("A", ""), t, ("B", "")])));
+        let picks = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut h = rows_menu(theme, &rows, &picks);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        *rows.lock().unwrap() = menu_rows(&[("A", ""), t, t, ("B", "")]);
+        h.run_steps(8);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(picks.lock().unwrap().is_empty(), "{theme:?}: Enter ran neither twin");
+        // The rows as they are now, unchanged: the keys reach the second twin and Enter runs it.
+        for _ in 0..3 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        }
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(picks.lock().unwrap().as_slice(), [2], "{theme:?}: the twin reached ran");
+        // The first of two twins reached, then it goes and the other moves up into its place:
+        // dropped too, as the rows before had the twin.
+        let mut h = rows_menu(theme, &rows, &picks);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        *rows.lock().unwrap() = menu_rows(&[("A", ""), t, ("B", "")]);
+        h.run_steps(8);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(picks.lock().unwrap().as_slice(), [2], "{theme:?}: Enter ran not the twin left");
+    }
+}
+
+/// Rows coming in above the row the keys reached move it out of sight: the menu scrolls to keep it
+/// in sight, and Enter runs it; a row it still shows after the change leaves the scroll as it was
+/// (AR-749).
+#[test]
+fn a_menus_reach_moved_by_new_rows_is_kept_in_sight() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let numbered = |from: usize, to: usize| (from..to).map(|n| format!("Row {n}")).collect::<Vec<_>>();
+        let set = |texts: Vec<String>| (texts.clone(), vec![String::new(); texts.len()]);
+        let rows: MenuRowsSet = std::sync::Arc::new(std::sync::Mutex::new(set(numbered(0, 44))));
+        let picks = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut h = rows_menu(theme, &rows, &picks);
+        for _ in 0..3 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        }
+        let scroll = |h: &Harness<'static, Shell>| h.state().panels.menu_scroll.as_ref().map(|(_, offset)| *offset);
+        // One row above: the row reached still shows, and the menu does not scroll.
+        let before = scroll(&h);
+        *rows.lock().unwrap() = set([vec!["New 0".to_string()], numbered(0, 44)].concat());
+        h.run();
+        assert_eq!(scroll(&h), before, "{theme:?}: no scroll for a row still in sight");
+        // Forty rows above: the row reached is kept in sight, and Enter runs it.
+        *rows.lock().unwrap() = set([numbered(100, 140), vec!["New 0".to_string()], numbered(0, 44)].concat());
+        h.run();
+        assert!(ids(&h).iter().any(|i| i == "test.rows.43"), "{theme:?}: Row 2, now the 44th, in sight: {:?}", ids(&h));
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(picks.lock().unwrap().as_slice(), [43], "{theme:?}: the row reached ran");
+    }
+}
+
 /// Clicks the control the toolkit knows as `id` as a screen reader does, with no pointer press, on
 /// the next frame.
 fn reader_click(h: &mut Harness<'static, Shell>, id: egui::Id) {

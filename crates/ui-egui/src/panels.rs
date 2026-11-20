@@ -1506,6 +1506,28 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     }
     let drawn = shell.panels.menu_reached_rows.clone().filter(|d| d.menu == id);
     let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == id).map(|(_, i)| *i);
+    // When the rows change, a reach whose text and note more than one row shares, before or after,
+    // is dropped: a twin come in may stand where it was. Unchanged rows keep it, twins and all.
+    let fingerprint = egui::Id::unique((id, items, notes)).value();
+    let before = shell.panels.menu_ordinals.as_ref().filter(|o| o.menu == id && o.rows != fingerprint);
+    if let (Some(before), Some(d)) = (before, &drawn) {
+        let twin_before = before.twins.iter().any(|twin| as_key(twin) == as_key(&d.row));
+        let twin_now = (0..items.len()).filter(|k| key_of(*k) == Some(as_key(&d.row))).nth(1).is_some();
+        if twin_before || twin_now {
+            reached = None;
+        }
+    }
+    // A row scrolled into sight: the menu's offset moved only as far as it takes.
+    let into_sight = |row: usize, offset: f32| {
+        let (top, bottom) = (4.0 + row as f32 * MENU_ROW, 4.0 + (row + 1) as f32 * MENU_ROW);
+        if top < offset + 4.0 {
+            top - 4.0
+        } else if bottom > offset + r.height() - 4.0 {
+            bottom - r.height() + 4.0
+        } else {
+            offset
+        }
+    };
     if let Some(d) = &drawn
         && reached.is_some_and(|i| key_of(i) != Some(as_key(&d.row)))
     {
@@ -1514,6 +1536,10 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
             (Some(i), None) => Some(i),
             _ => None,
         };
+        // Moved by rows that came or went before it, it is kept in sight.
+        if let Some(i) = reached {
+            offset = into_sight(i, offset);
+        }
     }
     let from = reached;
     let (down, up, enter) = ui.input_mut(|i| {
@@ -1530,12 +1556,7 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
             Some(i) => i.saturating_sub(1),
         };
         reached = Some(next);
-        let (top, bottom) = (4.0 + next as f32 * MENU_ROW, 4.0 + (next + 1) as f32 * MENU_ROW);
-        if top < offset + 4.0 {
-            offset = top - 4.0;
-        } else if bottom > offset + r.height() - 4.0 {
-            offset = bottom - r.height() + 4.0;
-        }
+        offset = into_sight(next, offset);
     }
     // An arrow with Enter in its frame picks the row it moved to only if that row was drawn there
     // beside the row in sight: one that came with a change of the rows this frame is drawn first.
@@ -1565,7 +1586,6 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     // row shares, before or after, runs nothing: it may have been meant for a twin that just went,
     // by a screen reader still reading the rows before, and the menu stays for a click on what now
     // shows. A press held over the change is released on such a row for nothing too.
-    let fingerprint = egui::Id::unique((id, items, notes)).value();
     let (now, held, released) = ui.input(|i| (i.time, i.pointer.primary_down(), i.pointer.primary_released()));
     let kept = shell.panels.menu_unsure.take().filter(|(of, _, until)| of == id && (held || released || now < *until));
     let mut until = kept.as_ref().map_or(now, |(.., until)| *until);
