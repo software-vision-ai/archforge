@@ -1255,9 +1255,10 @@ fn mixed() -> (Rows, Mixed) {
 }
 
 /// Drawn on a fresh project's model, the mixed diagram is compared in the diagrams' area: the
-/// diagram, its look, its package box, its class box and its line each one item added there, and in the
-/// model's area only the package's default-diagram binding the first diagram brings. The diagram's
-/// own comparison places both boxes and the line and finds no element of the model changed.
+/// diagram, its look, its package box, its class box and its line each one item added there, and in
+/// the model's area only the package's default-diagram binding the first diagram brings. The
+/// diagram's own comparison places both boxes and the line and finds no element of the model
+/// changed.
 #[test]
 fn a_mixed_structure_diagram_is_compared_in_the_diagram_area() {
     let (model, Mixed { s, orders, order, dependency, diagram, package_box, class_box, line }) = mixed();
@@ -1283,20 +1284,28 @@ fn a_mixed_structure_diagram_is_compared_in_the_diagram_area() {
     assert_eq!([&package_box, &class_box, &line].map(|id| mark(&seen, id)), [Some(ChangeKind::Added); 3]);
 }
 
-/// A revision of the mixed diagram opened as its own session stays as it was saved while the
-/// project goes on (its class renamed, its package box taken off, its class box moved); changing
-/// that revision changes nothing in the project, whose own history still steps back to it; and
-/// compared with the project, each side holds its own state.
+/// A revision of the mixed diagram opened as its own session, before the project goes on and after,
+/// stays as it was saved while it does (its class renamed, its package box taken off with the line
+/// to it, its class box moved); changing that revision changes nothing in the project, whose own
+/// history still steps back to it; and compared with the project, each side holds its own state,
+/// Orders and the dependency on it on both.
 #[test]
 fn a_historical_revision_of_a_mixed_diagram_stays_isolated_from_the_project() {
-    let (_, Mixed { mut s, order, diagram, package_box, class_box, .. }) = mixed();
+    let (_, Mixed { mut s, orders, order, dependency, diagram, package_box, class_box, line }) = mixed();
     let then = state(&s);
-    run(&mut s, "uml.class.rename", json!({ "class": order, "name": "Purchase" }));
-    run(&mut s, "diagram.unplace", json!({ "nodes": [package_box] }));
-    run(&mut s, "diagram.move", json!({ "nodes": [class_box], "dx": 40, "dy": 0 }));
-    let now = state(&s);
     let mut revision = archforge_notations::session_from_rows(&then, ids()).unwrap();
     assert_eq!(state(&revision), then, "the revision as it was saved");
+    run(&mut s, "uml.class.rename", json!({ "class": order, "name": "Purchase" }));
+    run(&mut s, "diagram.unplace", json!({ "nodes": [package_box] }));
+    let joined = |s: &Session| archforge_uml::figures::ends(s.doc(), s.doc().by_uuid(uuid(&dependency))?);
+    let (client, supplier) = (s.doc().by_uuid(uuid(&order)).unwrap(), s.doc().by_uuid(uuid(&orders)).unwrap());
+    assert_eq!(joined(&s), Some((client, supplier)), "taken off the diagram, Orders and the dependency on it stay in the model");
+    assert!(s.doc().by_uuid(uuid(&line)).is_none_or(|e| !s.doc().is_alive(e)), "the line to its box is gone");
+    run(&mut s, "diagram.move", json!({ "nodes": [class_box], "dx": 40, "dy": 0 }));
+    let now = state(&s);
+    assert_eq!(state(&revision), then, "the project's changes changed nothing in the revision");
+    let reopened = archforge_notations::session_from_rows(&then, ids()).unwrap();
+    assert_eq!(state(&reopened), then, "opened again, the revision as it was saved");
     assert_eq!(state(&s), now, "opening it changed nothing in the project");
     run(&mut revision, "diagram.move", json!({ "nodes": [class_box], "dx": 0, "dy": 80 }));
     assert_ne!(state(&revision), then);
@@ -1304,10 +1313,27 @@ fn a_historical_revision_of_a_mixed_diagram_stays_isolated_from_the_project() {
     let seen = drawn(&then, &now, &diagram);
     let name_on = |side: &DiagramSide| archforge_core::name_of(&side.store, side.store.by_uuid(uuid(&order)).unwrap());
     let boxes_on = |side: &DiagramSide| side.store.list(side.diagram, archforge_diagram::diagram::NODE).unwrap().len();
+    let at_on = |side: &DiagramSide| {
+        let n = side.store.by_uuid(uuid(&class_box)).unwrap();
+        [archforge_diagram::node::X, archforge_diagram::node::Y].map(|p| side.store.get(n, p).unwrap())
+    };
+    let line_on =
+        |side: &DiagramSide| side.store.by_uuid(uuid(&line)).and_then(|e| archforge_diagram::diagram_of(&side.store, e)) == Some(side.diagram);
     let (was, is) = (seen.before.as_ref().unwrap(), seen.after.as_ref().unwrap());
-    assert_eq!((name_on(was), boxes_on(was)), ("Order".to_string(), 2), "the revision's side");
-    assert_eq!((name_on(is), boxes_on(is)), ("Purchase".to_string(), 1), "the project's side");
-    assert_eq!((mark(&seen, &package_box), mark(&seen, &class_box)), (Some(ChangeKind::Removed), Some(ChangeKind::Changed)));
+    let [x40, x80] = [Value::Real(40.0), Value::Real(80.0)];
+    assert_eq!((at_on(was), at_on(is)), ([x40.clone(), x40.clone()], [x80, x40]), "the class box where each side has it");
+    assert_eq!((name_on(was), boxes_on(was), line_on(was)), ("Order".to_string(), 2, true), "the revision's side");
+    assert_eq!((name_on(is), boxes_on(is), line_on(is)), ("Purchase".to_string(), 1, false), "the project's side");
+    let joined_on = |side: &DiagramSide| {
+        let at = |id: &str| side.store.by_uuid(uuid(id));
+        Some((archforge_uml::figures::ends(&side.store, at(&dependency)?), at(&order)?, at(&orders)?))
+    };
+    for side in [was, is] {
+        let (ends, client, supplier) = joined_on(side).expect("Orders and the dependency on each side");
+        assert_eq!(ends, Some((client, supplier)), "the dependency still from Order to Orders");
+    }
+    let marks = [&package_box, &class_box, &line].map(|id| mark(&seen, id));
+    assert_eq!(marks, [Some(ChangeKind::Removed), Some(ChangeKind::Changed), Some(ChangeKind::Removed)], "the line went with the package's box");
     for _ in 0..3 {
         s.undo().unwrap();
     }
