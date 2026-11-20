@@ -781,6 +781,7 @@ str		This diagram is the default diagram of {package}. Choose another class diag
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} は別の要素の図を既定の図にしているため、その図は残ります。先に {package} 自身のクラス図のいずれかを選んでください。
 str		The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.	{client} からの依存 {dependency} が {package} に依存しているため、{package} は残ります。先にその依存を外してください。
 str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} は依存 {dependency} によって {supplier} に依存しているため、{package} は残ります。先にその依存を外してください。
+str		This connection already exists: the dependency {dependency}. Select the existing relationship.	この接続はすでに存在します（依存 {dependency}）。既存のリレーションシップを選択してください。
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	図は削除されるときに自分自身を置き換えることはできません。置き換える図として別の図を選んでください。
 str		Choose either an existing diagram or a new one as the replacement, not both.	置き換える図として、既存の図か新しい図のどちらか一方を選んでください。両方は選べません。
 str		A name has to be text.	名前はテキストでなければなりません。

@@ -781,6 +781,7 @@ str		This diagram is the default diagram of {package}. Choose another class diag
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} tem como diagrama predefinido o diagrama de outro elemento, por isso esse diagrama fica. Escolha primeiro um dos seus próprios diagramas de classes.
 str		The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.	A dependência {dependency} de {client} depende de {package}, por isso {package} fica. Retire primeiro essa dependência.
 str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} depende de {supplier} através da dependência {dependency}, por isso {package} fica. Retire primeiro essa dependência.
+str		This connection already exists: the dependency {dependency}. Select the existing relationship.	Esta ligação já existe: a dependência {dependency}. Selecione a relação existente.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Um diagrama não pode substituir-se a si próprio ao ser removido. Escolha outro diagrama como substituto.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Escolha como substituto um diagrama existente ou um novo, não ambos.
 str		A name has to be text.	Um nome tem de ser texto.

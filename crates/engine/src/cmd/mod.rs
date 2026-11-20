@@ -79,6 +79,13 @@ pub fn expected_revision<D, V>(ctx: &Ctx<'_, D, V>, params: &Params) -> Result<(
     Err(CommandError::about(EXPECTED_REVISION, message).because(Reason::StaleRevision { expected, current }))
 }
 
+/// [`expected_revision`] for a command that takes the revision optionally: given, it is checked
+/// and refused alike when it is not the one the call runs on; left out, or null, which the
+/// parameters leave out, the call runs on whichever revision the model is at.
+pub fn expected_revision_if_given<D, V>(ctx: &Ctx<'_, D, V>, params: &Params) -> Result<(), CommandError> {
+    if params.get(EXPECTED_REVISION).is_some() { expected_revision(ctx, params) } else { Ok(()) }
+}
+
 /// What an enabled predicate sees: the state the command would run on, and the history.
 pub struct Facts<'a, D, V> {
     pub doc: &'a D,

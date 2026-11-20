@@ -83,6 +83,12 @@ fn classes(s: &mut S, names: &[&str], shown: usize) -> (String, String, Vec<Stri
     (pkg, d, ids, nodes)
 }
 
+/// The revision `s` is at, as `expected_revision` takes it.
+fn token(s: &S) -> Json {
+    let at = s.token();
+    json!({ "history": at.history, "revision": at.revision })
+}
+
 /// The relationships of the classifier `class`, as `uml.relationship.list` gives them.
 fn relationships(s: &mut S, class: &str) -> Vec<Json> {
     s.execute("uml.relationship.list", &json!({ "class": class })).unwrap().value["relationships"].as_array().unwrap().clone()
@@ -298,10 +304,12 @@ fn a_package_dependency_is_renamed_and_a_new_client_takes_it_to_its_own_package(
     let dep = run(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": billing }));
     round_trip(&mut s, "uml.relationship.rename", json!({ "relationship": dep, "name": "uses" }));
     let [order, line] = [("Order", &orders), ("Line", &billing)].map(|(n, p)| run(&mut s, "uml.class.add", json!({ "package": p, "name": n })));
-    let reconnect = |end: &str, class: &str| json!({ "relationship": dep, "end": end, "class": class });
-    round_trip(&mut s, "uml.relationship.reconnect", reconnect("source", &order));
+    let reconnect = |s: &S, end: &str, class: &str| json!({ "relationship": dep, "end": end, "class": class, "expected_revision": token(s) });
+    let p = reconnect(&s, "source", &order);
+    round_trip(&mut s, "uml.relationship.reconnect", p);
     assert_eq!(owner(&s, &dep), obj(&s, &orders), "the new client's package owns it");
-    run(&mut s, "uml.relationship.reconnect", reconnect("target", &line));
+    let p = reconnect(&s, "target", &line);
+    run(&mut s, "uml.relationship.reconnect", p);
     assert_eq!(owner(&s, &dep), obj(&s, &orders), "a new supplier leaves the owner");
 }
 
@@ -312,13 +320,16 @@ fn a_dependency_end_moves_onto_a_package_and_an_association_end_never_does() {
     let mut s = session();
     let [sales, billing, orders] = ["sales", "billing", "orders"].map(|n| run(&mut s, "uml.package.add", json!({ "name": n })));
     let dep = run(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": billing }));
-    let reconnect = |r: &str, end: &str, to: &str| json!({ "relationship": r, "end": end, "class": to });
-    round_trip(&mut s, "uml.relationship.reconnect", reconnect(&dep, "target", &orders));
-    round_trip(&mut s, "uml.relationship.reconnect", reconnect(&dep, "source", &billing));
+    let reconnect = |s: &S, r: &str, end: &str, to: &str| json!({ "relationship": r, "end": end, "class": to, "expected_revision": token(s) });
+    let p = reconnect(&s, &dep, "target", &orders);
+    round_trip(&mut s, "uml.relationship.reconnect", p);
+    let p = reconnect(&s, &dep, "source", &billing);
+    round_trip(&mut s, "uml.relationship.reconnect", p);
     assert_eq!(owner(&s, &dep), obj(&s, &billing), "the new client package owns it");
     let [order, line] = ["Order", "Line"].map(|n| run(&mut s, "uml.class.add", json!({ "package": sales, "name": n })));
     let assoc = run(&mut s, "uml.association.add", json!({ "from": order, "to": line }));
-    refused(&mut s, "uml.relationship.reconnect", reconnect(&assoc, "target", &orders), "class: ");
+    let p = reconnect(&s, &assoc, "target", &orders);
+    refused(&mut s, "uml.relationship.reconnect", p, "class: ");
 }
 
 /// Anything but a package or a classifier at either end of a dependency is refused, typed as the
@@ -361,14 +372,17 @@ fn a_dependency_end_that_is_no_package_or_classifier_is_refused_typed_with_nothi
 /// A package outside the project's model is refused at either end of a dependency, joining two
 /// elements of one model being Archforge's own rule, and so is a classifier client in no package;
 /// a reconnect is refused for a dependency of several clients or onto a class outside the model,
-/// and one held by no package is attached to its new client's package. No command makes these,
-/// but a loaded document may hold them (AR-696).
+/// and one held by no package is attached to its new client's package, a dependency of several
+/// clients or suppliers that include its new ends being no repeat of it, while one dropped back on
+/// the client it has stays as it is (AR-697). No command makes
+/// these, but a loaded document may hold them (AR-696).
 #[test]
 fn a_package_outside_the_model_or_a_classifier_client_in_no_package_is_refused_and_a_loose_dependency_attached() {
     use archforge_uml::{CLASS, DEPENDENCY, PACKAGE, dependency, package};
     let mut st = store(0);
     let model = st.create(archforge_core::MODEL).unwrap();
-    let [sales, stray, loose, order, away, d, twice] = [PACKAGE, PACKAGE, CLASS, CLASS, CLASS, DEPENDENCY, DEPENDENCY].map(|c| st.create(c).unwrap());
+    let [sales, stray, loose, order, away] = [PACKAGE, PACKAGE, CLASS, CLASS, CLASS].map(|c| st.create(c).unwrap());
+    let [d, twice, wide, spare] = [(); 4].map(|_| st.create(DEPENDENCY).unwrap());
     st.push(model, archforge_core::model::MEMBER, Value::Ref(sales)).unwrap();
     st.push(model, archforge_core::model::MEMBER, Value::Ref(loose)).unwrap();
     st.push(sales, package::PACKAGED_ELEMENT, Value::Ref(order)).unwrap();
@@ -378,16 +392,35 @@ fn a_package_outside_the_model_or_a_classifier_client_in_no_package_is_refused_a
     }
     st.push(d, dependency::SUPPLIER, Value::Ref(sales)).unwrap();
     st.push(twice, dependency::SUPPLIER, Value::Ref(sales)).unwrap();
-    let [sales, stray, loose, order, away, d, twice] = [sales, stray, loose, order, away, d, twice].map(|o| st.uuid(o).unwrap().to_string());
+    // `wide` joins order to sales and loose: one of several suppliers is no pair `d` repeats (AR-697).
+    st.push(wide, dependency::CLIENT, Value::Ref(order)).unwrap();
+    for supplier in [sales, loose] {
+        st.push(wide, dependency::SUPPLIER, Value::Ref(supplier)).unwrap();
+    }
+    // `spare`, from order to loose, is held by no package either.
+    st.push(spare, dependency::CLIENT, Value::Ref(order)).unwrap();
+    st.push(spare, dependency::SUPPLIER, Value::Ref(loose)).unwrap();
+    let [sales, stray, loose, order, away, d, twice, spare] =
+        [sales, stray, loose, order, away, d, twice, spare].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
     refused(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": stray }), "supplier: ");
     refused(&mut s, "uml.dependency.add", json!({ "client": stray, "supplier": sales }), "client: ");
     refused(&mut s, "uml.dependency.add", json!({ "client": loose, "supplier": sales }), "client: the class is in no package");
     run(&mut s, "uml.dependency.add", json!({ "client": sales, "supplier": loose }));
-    let reconnect = |d: &str, class: &str| json!({ "relationship": d, "end": "source", "class": class });
-    refused(&mut s, "uml.relationship.reconnect", reconnect(&twice, &order), "does not join one client to one supplier");
-    refused(&mut s, "uml.relationship.reconnect", reconnect(&d, &away), &format!("class: {away} is outside this project's model"));
-    round_trip(&mut s, "uml.relationship.reconnect", reconnect(&d, &order));
+    let reconnect = |s: &S, d: &str, class: &str| json!({ "relationship": d, "end": "source", "class": class, "expected_revision": token(s) });
+    let p = reconnect(&s, &twice, &order);
+    refused(&mut s, "uml.relationship.reconnect", p, "does not join one client to one supplier");
+    let p = reconnect(&s, &d, &away);
+    refused(&mut s, "uml.relationship.reconnect", p, &format!("class: {away} is outside this project's model"));
+    // Dropped back on the client it has, `spare` changes nothing in the model: it stays held
+    // nowhere, with no undo step (AR-697).
+    let p = reconnect(&s, &spare, &order);
+    let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));
+    s.execute("uml.relationship.reconnect", &p).unwrap();
+    assert_eq!((snapshot(&s), s.token(), s.undo_label().map(str::to_string)), before, "no change and no undo step");
+    assert_eq!(s.doc().container(obj(&s, &spare)).unwrap(), None, "still held nowhere");
+    let p = reconnect(&s, &d, &order);
+    round_trip(&mut s, "uml.relationship.reconnect", p);
     assert_eq!(owner(&s, &d), obj(&s, &sales), "attached to the new client's package");
 }
 
@@ -411,11 +444,11 @@ fn a_wrong_end_that_stays_is_the_dependency_s_fault_and_only_model_elements_open
     let model = st.create(archforge_core::MODEL).unwrap();
     let [sales, stray, other, order, invoice, total, loose, t] =
         [PACKAGE, PACKAGE, PACKAGE, CLASS, CLASS, PROPERTY, CLASS, CLASS].map(|c| st.create(c).unwrap());
-    let [d, e, f, g, twice] = [(); 5].map(|_| st.create(DEPENDENCY).unwrap());
+    let [d, e, f, g, h, twice] = [(); 6].map(|_| st.create(DEPENDENCY).unwrap());
     for top in [sales, other, loose] {
         st.push(model, archforge_core::model::MEMBER, Value::Ref(top)).unwrap();
     }
-    for held in [order, invoice, d, e, f, g, twice] {
+    for held in [order, invoice, d, e, f, g, h, twice] {
         st.push(sales, package::PACKAGED_ELEMENT, Value::Ref(held)).unwrap();
     }
     // `t` is the template parameter of `invoice`, the template's own classifier.
@@ -423,25 +456,252 @@ fn a_wrong_end_that_stays_is_the_dependency_s_fault_and_only_model_elements_open
     st.set(invoice, classifier::OWNED_TEMPLATE_SIGNATURE, Value::Ref(sig)).unwrap();
     st.push(sig, template_signature::OWNED_PARAMETER, Value::Ref(param)).unwrap();
     st.set(param, template_parameter::OWNED_PARAMETERED_ELEMENT, Value::Ref(t)).unwrap();
-    for (dep, client, supplier) in [(d, order, total), (e, stray, sales), (f, order, t), (g, loose, sales), (twice, order, sales)] {
+    // `h` joins loose to invoice already: `g` moved onto invoice is still said as its client in no
+    // package, not as a repeat of `h` (AR-697).
+    let ends = [(d, order, total), (e, stray, sales), (f, order, t), (g, loose, sales), (h, loose, invoice), (twice, order, sales)];
+    for (dep, client, supplier) in ends {
         st.push(dep, dependency::CLIENT, Value::Ref(client)).unwrap();
         st.push(dep, dependency::SUPPLIER, Value::Ref(supplier)).unwrap();
     }
     st.push(twice, dependency::CLIENT, Value::Ref(invoice)).unwrap();
     st.set(order, named_element::NAME, Value::Str("Order".into())).unwrap();
-    let [order, invoice, other, d, e, f, g, twice] = [order, invoice, other, d, e, f, g, twice].map(|o| st.uuid(o).unwrap().to_string());
+    let [sales, loose, order, invoice, other, d, e, f, g, twice] =
+        [sales, loose, order, invoice, other, d, e, f, g, twice].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = over(st);
-    let reconnect = |d: &str, end: &str, class: &str| json!({ "relationship": d, "end": end, "class": class });
-    refused(&mut s, "uml.relationship.reconnect", reconnect(&d, "source", &invoice), "relationship: the dependency's supplier is");
-    let why = reason(&mut s, "uml.relationship.reconnect", reconnect(&d, "source", &invoice));
+    let reconnect = |s: &S, d: &str, end: &str, class: &str| json!({ "relationship": d, "end": end, "class": class, "expected_revision": token(s) });
+    let p = reconnect(&s, &d, "source", &invoice);
+    refused(&mut s, "uml.relationship.reconnect", p.clone(), "relationship: the dependency's supplier is");
+    let why = reason(&mut s, "uml.relationship.reconnect", p);
     assert!(matches!(why, Some(Reason::WrongEnd { relationship: "dependency", end: archforge_engine::End::Target, .. })), "{why:?}");
-    refused(&mut s, "uml.relationship.reconnect", reconnect(&e, "target", &invoice), "relationship: the dependency's client ");
-    refused(&mut s, "uml.relationship.reconnect", reconnect(&f, "source", &invoice), "relationship: the dependency's supplier: ");
-    refused(&mut s, "uml.relationship.reconnect", reconnect(&g, "target", &invoice), "relationship: the class is in no package");
+    for (dep, end, says) in [
+        (&e, "target", "relationship: the dependency's client "),
+        (&f, "source", "relationship: the dependency's supplier: "),
+        (&g, "target", "relationship: the class is in no package"),
+    ] {
+        let p = reconnect(&s, dep, end, &invoice);
+        refused(&mut s, "uml.relationship.reconnect", p, says);
+    }
+    // Dropped back on sales, the supplier it has, `g` is still refused for its client in no package:
+    // the ends it keeps are checked before a move that changes nothing (AR-697).
+    let p = reconnect(&s, &g, "target", &sales);
+    let label = s.undo_label().map(str::to_string);
+    refused(&mut s, "uml.relationship.reconnect", p, "relationship: the class is in no package");
+    assert_eq!(s.undo_label().map(str::to_string), label, "no undo step");
+    // Dropped back on loose, the client it has, it is refused for that client, under `class`.
+    let p = reconnect(&s, &g, "source", &loose);
+    refused(&mut s, "uml.relationship.reconnect", p, "class: the class is in no package");
+    assert_eq!(s.undo_label().map(str::to_string), label, "no undo step");
     // A dependency of two clients stays where it is held when one of them moves.
     round_trip(&mut s, "uml.class.move", json!({ "class": order, "package": other }));
     assert_eq!(owner(&s, &twice), owner(&s, &e), "kept in sales");
-    round_trip(&mut s, "uml.relationship.reconnect", reconnect(&d, "target", &invoice));
+    let p = reconnect(&s, &d, "target", &invoice);
+    round_trip(&mut s, "uml.relationship.reconnect", p);
+}
+
+/// The ends of the dependency `id`, as the elements it joins, and the ids of its lines on each of
+/// the diagrams `diagrams`.
+fn dependency_state(s: &S, id: &str, diagrams: &[&String]) -> ((archforge_mof::Obj, archforge_mof::Obj), Vec<Vec<archforge_mof::Obj>>) {
+    let st = s.doc();
+    let edges = archforge_diagram::views_of(st, obj(s, id)).1;
+    let on = |d: &String| edges.iter().copied().filter(|e| st.container(*e).unwrap().map(|(c, _)| c) == Some(obj(s, d))).collect();
+    (archforge_uml::figures::ends(st, obj(s, id)).unwrap(), diagrams.iter().map(|d| on(d)).collect())
+}
+
+/// A dependency's end moved onto a package keeps the dependency itself, its id, name and
+/// description; its line follows on every diagram that shows the new end, and a diagram that
+/// does not show it loses that line alone. A new client takes it to its own package in the same
+/// step, and one Undo puts back its ends, its owner and its lines (AR-697).
+#[test]
+fn a_dependency_moved_onto_a_package_keeps_its_identity_its_lines_follow_and_undo_puts_all_back() {
+    let mut s = session();
+    let [sales, billing, orders] = ["sales", "billing", "orders"].map(|n| run(&mut s, "uml.package.add", json!({ "name": n })));
+    let [order, line] = ["Order", "Line"].map(|n| run(&mut s, "uml.class.add", json!({ "package": sales, "name": n })));
+    let dep = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": line, "name": "reads" }));
+    run(&mut s, "element.describe", json!({ "element": dep, "text": "Order reads its lines" }));
+    let assoc = run(&mut s, "uml.association.add", json!({ "from": order, "to": line }));
+    // Two diagrams show billing too; the third shows Order and Line alone, with their association.
+    let mut diagrams = Vec::new();
+    for (name, shown) in [("one", vec![&order, &line, &billing]), ("two", vec![&order, &line, &billing]), ("three", vec![&order, &line])] {
+        let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": name }));
+        let nodes: Vec<String> = shown
+            .iter()
+            .enumerate()
+            .map(|(i, e)| run(&mut s, "diagram.place", json!({ "diagram": d, "element": e, "x": 300 * i, "y": 0 })))
+            .collect();
+        for r in [&dep, &assoc] {
+            run(&mut s, "diagram.connect", json!({ "diagram": d, "element": r, "source": nodes[0], "target": nodes[1] }));
+        }
+        diagrams.push((d, nodes));
+    }
+    let ds: Vec<&String> = diagrams.iter().map(|(d, _)| d).collect();
+    let (_, lines_before) = dependency_state(&s, &dep, &ds);
+    let assoc_lines = archforge_diagram::views_of(s.doc(), obj(&s, &assoc)).1;
+    // Dropped back on Line, the end it has, it changes nothing in the model, its three lines and
+    // the bend of one included, and leaves no undo step.
+    let bent = s.doc().uuid(lines_before[0][0]).unwrap().to_string();
+    run(&mut s, "diagram.route", json!({ "edge": bent, "points": [{ "x": 150, "y": 200 }] }));
+    let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));
+    s.execute("uml.relationship.reconnect", &json!({ "relationship": dep, "end": "target", "class": line, "expected_revision": token(&s) })).unwrap();
+    assert_eq!((snapshot(&s), s.token(), s.undo_label().map(str::to_string)), before, "no change and no undo step");
+    let p = json!({ "relationship": dep, "end": "target", "class": billing, "expected_revision": token(&s) });
+    let out = s.execute("uml.relationship.reconnect", &p).unwrap().value;
+    assert_eq!(out["id"].as_str(), Some(dep.as_str()), "the same dependency");
+    let d = obj(&s, &dep);
+    assert_eq!(
+        (archforge_core::name_of(s.doc(), d), archforge_uml::descriptions::description_of(s.doc(), d)),
+        ("reads".into(), "Order reads its lines".into())
+    );
+    let ((client, supplier), lines) = dependency_state(&s, &dep, &ds);
+    assert_eq!((client, supplier), (obj(&s, &order), obj(&s, &billing)));
+    for (i, (_, nodes)) in diagrams.iter().take(2).enumerate() {
+        assert_eq!(lines[i], lines_before[i], "the same line on diagram {i}");
+        let target = s.doc().get(lines[i][0], archforge_diagram::edge::TARGET).unwrap().as_ref();
+        assert_eq!(target, Some(obj(&s, &nodes[2])), "it follows to billing's box on diagram {i}");
+    }
+    assert!(lines[2].is_empty(), "the diagram without billing loses the line");
+    let (third, nodes) = &diagrams[2];
+    let st = s.doc();
+    assert_eq!(st.list(obj(&s, third), archforge_diagram::diagram::NODE).unwrap().len(), nodes.len(), "and keeps its boxes");
+    assert!(assoc_lines.iter().all(|e| st.is_alive(*e)), "and its other lines");
+    // The client moved onto the package orders: orders owns it now; one Undo puts back all.
+    let before = snapshot(&s);
+    let p = json!({ "relationship": dep, "end": "source", "class": orders, "expected_revision": token(&s) });
+    s.execute("uml.relationship.reconnect", &p).unwrap();
+    assert_eq!((owner(&s, &dep), dependency_state(&s, &dep, &ds).0), (obj(&s, &orders), (obj(&s, &orders), obj(&s, &billing))));
+    assert!(dependency_state(&s, &dep, &ds).1.iter().all(Vec::is_empty), "no diagram shows orders");
+    s.undo().unwrap();
+    assert_eq!((owner(&s, &dep), dependency_state(&s, &dep, &ds)), (obj(&s, &sales), ((client, supplier), lines)));
+    assert_eq!(snapshot(&s), before, "exactly as before");
+    s.undo().unwrap();
+    assert_eq!(dependency_state(&s, &dep, &ds), ((obj(&s, &order), obj(&s, &line)), lines_before), "the first move undone, every line back");
+}
+
+/// A dependency dropped back on the supplier it has changes nothing in the model, its lines
+/// included, though a loaded document draws its line to another box on a diagram that does not
+/// show that supplier (AR-697).
+#[test]
+fn a_dependency_dropped_back_on_its_supplier_leaves_a_line_drawn_elsewhere_as_it_is() {
+    let mut built = session();
+    let (_, d, c, nodes) = classes(&mut built, &["Order", "Line", "Billing"], 2);
+    let dep = run(&mut built, "uml.dependency.add", json!({ "client": c[0], "supplier": c[1] }));
+    let edge = run(&mut built, "diagram.connect", json!({ "diagram": d, "element": dep, "source": nodes[0], "target": nodes[1] }));
+    // Loaded: the dependency depends on Billing now, which the diagram does not show, while its line
+    // still ends at Line's box.
+    let (tables, junctions) = tables();
+    let rows = archforge_mof::rows::snapshot(built.doc(), &tables, &junctions).unwrap();
+    let mut st = store(1000);
+    archforge_mof::rows::restore(&mut st, &rows, &tables, &junctions).unwrap();
+    let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let (r, line, billing) = (at(&st, &dep), at(&st, &c[1]), at(&st, &c[2]));
+    st.remove_value(r, archforge_uml::dependency::SUPPLIER, &Value::Ref(line)).unwrap();
+    st.push(r, archforge_uml::dependency::SUPPLIER, Value::Ref(billing)).unwrap();
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
+    let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));
+    s.execute("uml.relationship.reconnect", &json!({ "relationship": dep, "end": "target", "class": c[2], "expected_revision": token(&s) })).unwrap();
+    assert_eq!((snapshot(&s), s.token(), s.undo_label().map(str::to_string)), before, "no change and no undo step");
+    assert!(s.doc().is_alive(obj(&s, &edge)), "the line stays");
+}
+
+/// A dependency's reconnect is refused, typed, with nothing changed and no undo step: onto the
+/// client and supplier another dependency has already, by either end, naming that one, by its name
+/// or its id, and keeping its own client and owner; onto its other end; onto
+/// what is no package or classifier; and for a revision other than the one it runs on, or none or null,
+/// a revision read before the dependency went included.
+/// The same two ends the other way round, those of a realization or of a dependency removed are no
+/// repeat, and a dependency dropped back on its own end changes nothing in the model and leaves no
+/// undo step, though another has its ends, and is selected (AR-697).
+#[test]
+fn a_dependency_moved_onto_a_pair_another_has_onto_itself_a_wrong_end_or_a_stale_revision_is_refused_unchanged() {
+    use archforge_engine::{End, Revision};
+    let mut s = session();
+    let [sales, billing] = ["sales", "billing"].map(|n| run(&mut s, "uml.package.add", json!({ "name": n })));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let priced = run(&mut s, "uml.interface.add", json!({ "package": sales, "name": "Priced" }));
+    let total = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "total" }));
+    let dep = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": sales }));
+    run(&mut s, "uml.dependency.add", json!({ "client": billing, "supplier": order }));
+    run(&mut s, "uml.realization.add", json!({ "class": order, "interface": priced }));
+    let moved = |s: &S, class: &str| json!({ "relationship": dep, "end": "target", "class": class, "expected_revision": token(s) });
+    for to in [&billing, &priced] {
+        let p = moved(&s, to);
+        round_trip(&mut s, "uml.relationship.reconnect", p);
+        s.undo().unwrap();
+    }
+    // One removed joins those ends no longer; a reconnect of it on the revision read before it went
+    // hears that the model changed.
+    let gone = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing }));
+    let read = s.token();
+    let p = json!({ "relationship": gone, "end": "target", "class": sales, "expected_revision": token(&s) });
+    run(&mut s, "element.remove", json!({ "ids": [gone] }));
+    let late = reason(&mut s, "uml.relationship.reconnect", p);
+    assert_eq!(late, Some(Reason::StaleRevision { expected: Some(read), current: s.token() }));
+    let p = moved(&s, &billing);
+    round_trip(&mut s, "uml.relationship.reconnect", p);
+    s.undo().unwrap();
+    let other = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing }));
+    let from_billing = run(&mut s, "uml.dependency.add", json!({ "client": billing, "supplier": sales, "name": "settles" }));
+    let at = s.token();
+    let mut without = moved(&s, &billing);
+    without.as_object_mut().unwrap().remove("expected_revision");
+    let later = Revision { revision: at.revision + 1, ..at };
+    let cases = [
+        (
+            moved(&s, &billing),
+            Reason::ConnectionExists { dependency: other.as_str().into() },
+            format!("depends on a package through the dependency {other} already"),
+        ),
+        (
+            json!({ "relationship": dep, "end": "source", "class": billing, "expected_revision": token(&s) }),
+            Reason::ConnectionExists { dependency: "settles".into() },
+            format!("depends on a package through the dependency {from_billing} already"),
+        ),
+        (moved(&s, &order), Reason::DependsOnItself { kind: "class" }, "a class cannot depend on itself".into()),
+        (moved(&s, &total), Reason::WrongEnd { relationship: "dependency", end: End::Target, kind: "attribute" }, "class: ".into()),
+        (
+            json!({ "relationship": dep, "end": "target", "class": billing, "expected_revision": { "history": later.history, "revision": later.revision } }),
+            Reason::StaleRevision { expected: Some(later), current: at },
+            "expected_revision: ".into(),
+        ),
+        (without, Reason::StaleRevision { expected: None, current: at }, "expected_revision: ".into()),
+        (
+            json!({ "relationship": dep, "end": "target", "class": billing, "expected_revision": null }),
+            Reason::StaleRevision { expected: None, current: at },
+            "expected_revision: ".into(),
+        ),
+    ];
+    for (p, why, says) in cases {
+        let label = s.undo_label().map(str::to_string);
+        refused(&mut s, "uml.relationship.reconnect", p.clone(), &says);
+        assert_eq!((reason(&mut s, "uml.relationship.reconnect", p), s.undo_label().map(str::to_string)), (Some(why), label));
+    }
+    // Dropped back on billing, the end it has, `other` changes nothing in the model, though `twin`
+    // has its ends too.
+    let twin = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing, "name": "twin" }));
+    run(&mut s, "view.select", json!({ "ids": [twin] }));
+    let p = json!({ "relationship": other, "end": "target", "class": billing, "expected_revision": token(&s) });
+    let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));
+    s.execute("uml.relationship.reconnect", &p).unwrap();
+    assert_eq!((snapshot(&s), s.token(), s.undo_label().map(str::to_string)), before, "no change and no undo step");
+    assert_eq!(s.view().selection, [obj(&s, &other)], "selected, as after any reconnect");
+}
+
+/// Every other relationship keeps its released call: reconnected without a revision, or with a null
+/// one, as before, and, given one, only on the revision it runs on (AR-697).
+#[test]
+fn an_association_reconnects_without_a_revision_and_given_one_only_on_the_current_one() {
+    use archforge_engine::Revision;
+    let mut s = session();
+    let (_, _, c, _) = classes(&mut s, &["Order", "Line", "Product"], 0);
+    let assoc = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));
+    round_trip(&mut s, "uml.relationship.reconnect", json!({ "relationship": assoc, "end": "target", "class": c[2] }));
+    let at = s.token();
+    let stale = Revision { revision: at.revision + 1, ..at };
+    let p = json!({ "relationship": assoc, "end": "target", "class": c[1], "expected_revision": { "history": stale.history, "revision": stale.revision } });
+    refused(&mut s, "uml.relationship.reconnect", p.clone(), "expected_revision: ");
+    assert_eq!(reason(&mut s, "uml.relationship.reconnect", p), Some(Reason::StaleRevision { expected: Some(stale), current: at }));
+    let p = json!({ "relationship": assoc, "end": "target", "class": c[1], "expected_revision": token(&s) });
+    round_trip(&mut s, "uml.relationship.reconnect", p);
+    round_trip(&mut s, "uml.relationship.reconnect", json!({ "relationship": assoc, "end": "target", "class": c[2], "expected_revision": null }));
 }
 
 /// A classifier client moved to another package, or nested in a classifier there, takes its
@@ -506,9 +766,13 @@ fn a_reconnected_relationship_moves_its_line_on_a_diagram_that_shows_the_new_cla
     refused(&mut s, "uml.relationship.reconnect", json!({ "relationship": g, "end": "source", "class": c[1] }), "class");
     // A dependency's supplier moves; onto its own client it is refused.
     let dep = run(&mut s, "uml.dependency.add", json!({ "client": c[0], "supplier": c[1] }));
-    round_trip(&mut s, "uml.relationship.reconnect", json!({ "relationship": dep, "end": "target", "class": c[2] }));
-    refused(&mut s, "uml.relationship.reconnect", json!({ "relationship": dep, "end": "target", "class": c[0] }), "class");
-    refused(&mut s, "uml.relationship.reconnect", json!({ "relationship": dep, "end": "middle", "class": c[1] }), "end");
+    let reconnect = |s: &S, end: &str, class: &str| json!({ "relationship": dep, "end": end, "class": class, "expected_revision": token(s) });
+    let p = reconnect(&s, "target", &c[2]);
+    round_trip(&mut s, "uml.relationship.reconnect", p);
+    let p = reconnect(&s, "target", &c[0]);
+    refused(&mut s, "uml.relationship.reconnect", p, "class");
+    let p = reconnect(&s, "middle", &c[1]);
+    refused(&mut s, "uml.relationship.reconnect", p, "end");
 }
 
 #[test]

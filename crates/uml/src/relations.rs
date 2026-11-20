@@ -49,7 +49,7 @@
 //! association class in UML and another association class would bind its ends to these.
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, End, Facts, Params, Reason, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, End, Facts, Params, Reason, cmd, expected_revision, expected_revision_if_given};
 use archforge_mof::{Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
@@ -719,6 +719,17 @@ fn rehome(store: &mut Store, d: Obj, owner: Obj) -> Result<(), CommandError> {
     store.push(owner, package::PACKAGED_ELEMENT, Value::Ref(d)).map_err(fail).map(|_| ())
 }
 
+/// A dependency that joins `client` alone to `supplier` alone: one of exactly that kind, as a
+/// realization or a usage is a relationship of its own, and of those two ends, as one of several
+/// clients or suppliers joins no single pair (AR-697).
+fn dependency_between(store: &Store, client: Obj, supplier: Obj) -> Option<Obj> {
+    store.referrers(client).into_iter().map(|(d, _)| d).find(|d| {
+        store.class_of(*d).ok() == Some(DEPENDENCY)
+            && list(store, *d, dependency::CLIENT) == [client]
+            && list(store, *d, dependency::SUPPLIER) == [supplier]
+    })
+}
+
 /// Moves the dependencies whose only client is the classifier `c`, or one it nests, to the package
 /// that owns their dependencies now that `c` has moved, as a new client does (AR-696).
 pub(crate) fn follow_client(store: &mut Store, c: Obj) -> Result<(), CommandError> {
@@ -1109,6 +1120,9 @@ fn wrong_end(store: &Store, which: &str, end: Obj, needs: &str) -> String {
 /// an association's ends drop, in the same step, what they subset or redefine that the rules no
 /// longer allow, each listed under `dropped` (AR-126).
 fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
+    // A revision given is checked before anything else, so a caller that read the model before its
+    // relationship went hears that the model changed, not that the relationship is unknown (AR-697).
+    expected_revision_if_given(ctx, p)?;
     let key = "relationship";
     let id = text(p, key);
     let r = crate::RELATIONSHIPS.into_iter().find_map(|k| id_of(ctx.doc, p, key, k, "").ok()).ok_or_else(|| {
@@ -1126,6 +1140,11 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         e => return Err(refuse("end", format!("{e:?} is not source or target"))),
     };
     let class = ctx.doc.class_of(r).map_err(fail)?;
+    // A dependency is reconnected only on the revision its caller read, as the contract for it says;
+    // every other relationship keeps its released call, without one (AR-697).
+    if class == DEPENDENCY {
+        expected_revision(ctx, p)?;
+    }
     // A dependency's end moves onto a package or a classifier, as one is drawn; every other
     // relationship's onto a classifier only (AR-696).
     let c = if class == DEPENDENCY {
@@ -1237,6 +1256,28 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         // A new client moves the dependency to the package that owns its dependencies; the client
         // kept must have one too, or the dependency would be held nowhere (AR-696).
         let owner = if source { Some(dependency_owner(ctx.doc, c, "class")?) } else { dependency_owner(ctx.doc, client, key).map(|_| None)? };
+        // Moved onto the ends another dependency has, it would repeat it: refused, never merged,
+        // as Archforge's rule, not UML's; checked once the ends themselves are sound, so a client in
+        // no package is said as that (AR-697).
+        if (cl, su) != (client, supplier)
+            && let Some(other) = dependency_between(ctx.doc, cl, su)
+        {
+            let message = format!(
+                "{} depends on {} through the dependency {} already; select that one instead",
+                a_what(ctx.doc, cl),
+                a_what(ctx.doc, su),
+                uuid_of(ctx.doc, other)?
+            );
+            let dependency = crate::applications::name_or_id(ctx.doc, other).into();
+            return Err(refuse("class", message).because(Reason::ConnectionExists { dependency }));
+        }
+        // Dropped back on the end it has, it changes nothing in the model, its owner and its lines
+        // included, though a loaded document may draw a line elsewhere, and leaves no undo step; it
+        // is selected, as after any reconnect (AR-697).
+        if c == old {
+            ctx.view.selection = vec![r];
+            return Ok(json!({ "id": uuid_of(ctx.doc, r)?, "dropped": dropped }));
+        }
         ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;
         ctx.doc.push(r, prop, Value::Ref(c)).map_err(fail)?;
         if let Some(owner) = owner {
@@ -1437,7 +1478,8 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             concat!(
                 "relationship: string; the association's, generalization's, dependency's, interface realization's, association class's or template binding's id\n",
                 "end: string, source|target; the end to move: the classifier it was drawn from (the specific one, the client, the implementing class, the bound element) or to\n",
-                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization in a generalization set keeps its ends, refused naming its sets; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing, and the general end never moves onto a final classifier; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a template binding's source moves onto another class, interface or data type of the template's kind, keeping its arguments, and its target onto another template only when every parameter of that one has a default (else uml.template-binding.set gives the template with its arguments); a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result; a dependency's end moves onto a package as well, of the model"
+                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization in a generalization set keeps its ends, refused naming its sets; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing, and the general end never moves onto a final classifier; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a template binding's source moves onto another class, interface or data type of the template's kind, keeping its arguments, and its target onto another template only when every parameter of that one has a default (else uml.template-binding.set gives the template with its arguments); a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result; a dependency's end moves onto a package as well, of the model, never so that it joins one client to one supplier that another dependency of just those two ends joins already; dropped back on the end it has, with its expected_revision and its kept ends checked as for any move, it changes nothing in the model and is selected\n",
+                "expected_revision: object?; the history and the revision the project state gives, {\"history\": h, \"revision\": r}; needed to move a dependency's end, refused when left out, null or not the revision the model is at; for any other relationship checked whenever given, and left out or null not checked"
             ),
             has_reconnect_ends,
             relationship_reconnect

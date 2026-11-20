@@ -623,11 +623,11 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
     }
 }
 
-/// Moves the source or target end of `element` to the class of `to_node`; dropped back on its own
-/// class it changes nothing, and a refusal is said at the canvas's top: a realization's, a
-/// generalization's, and an association's moved onto an enumeration, a data type or a primitive type, in the user's
-/// words.
-pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid) {
+/// Moves the source or target end of `element` to the class of `to_node`, only while the model is at
+/// `at`, the revision the drag began on; dropped back on its own class it changes nothing, and a
+/// refusal is said at the canvas's top: a realization's, a generalization's, and an association's
+/// moved onto an enumeration, a data type or a primitive type, in the user's words.
+pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid, at: archforge_engine::Revision) {
     shell.canvas.notice = None;
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let line = store.by_uuid(element);
@@ -706,7 +706,11 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     }
     let Ok(class) = store.uuid(target) else { return };
     let end = if source { "source" } else { "target" };
-    match run(shell, "uml.relationship.reconnect", json!({ "relationship": element.to_string(), "end": end, "class": class.to_string() })) {
+    // The revision the drag began on, which a dependency's reconnect needs: a model no longer at it
+    // when the end is dropped makes the drop stale (AR-697).
+    let revision = json!({ "history": at.history, "revision": at.revision });
+    let params = json!({ "relationship": element.to_string(), "end": end, "class": class.to_string(), "expected_revision": revision });
+    match run(shell, "uml.relationship.reconnect", params) {
         // What the moved ends no longer subset or redefine went in the same step: said.
         Ok(out) => {
             let names: Vec<&str> =

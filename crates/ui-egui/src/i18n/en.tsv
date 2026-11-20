@@ -780,6 +780,7 @@ str		This diagram is the default diagram of {package}. Choose another class diag
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.
 str		The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.	The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.
 str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.
+str		This connection already exists: the dependency {dependency}. Select the existing relationship.	This connection already exists: the dependency {dependency}. Select the existing relationship.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Choose either an existing diagram or a new one as the replacement, not both.
 str		A name has to be text.	A name has to be text.
