@@ -3884,14 +3884,19 @@ fn pick_taken(h: &Harness<'static, Shell>, host: &SavingHost, pick: crate::Pick)
     }
 }
 
-/// A quit by `request_quit`, the window's close button or a field letting go first goes ahead while
-/// an Open, a Pin or a Location pick waits, and the pick goes with it: an answer that comes after
-/// all, or in the quit's own frame, opens, pins or changes nothing (AR-759).
+/// A quit by `request_quit`, the window's close button, ⌘Q or a field letting go first goes ahead
+/// while an Open, a Pin or a Location pick waits, and the pick goes with it: an answer that comes
+/// after all, or in the quit's own frame, opens, pins or changes nothing (AR-759).
 #[test]
 fn a_quit_goes_ahead_while_a_folder_pick_waits_and_lets_the_pick_go() {
-    let ways: [(&str, fn(&mut Harness<'static, Shell>)); 3] = [
+    let ways: [(&str, fn(&mut Harness<'static, Shell>)); 4] = [
         ("request_quit", |h| h.state_mut().request_quit()),
         ("the close button", |h| h.input_mut().viewports.entry(egui::ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close)),
+        ("⌘Q", |h| {
+            // In the input of one frame, as the answer is: kittest runs a frame per event it queues.
+            let modifiers = egui::Modifiers::MAC_CMD.plus(egui::Modifiers::COMMAND);
+            h.input_mut().events.push(egui::Event::Key { key: egui::Key::Q, physical_key: None, pressed: true, repeat: false, modifiers });
+        }),
         ("a field letting go", |h| h.state_mut().edit.closing = Some(crate::actions::Closing::Asked(crate::actions::Then::Quit))),
     ];
     in_both_appearances(|theme| {

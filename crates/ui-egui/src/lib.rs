@@ -1298,15 +1298,12 @@ impl Shell {
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
-    /// Whether a quit is asked for and has neither gone ahead nor been called off: by the menu, its
-    /// key or [`Shell::request_quit`] and not yet looked at, by the window's close button in this
-    /// frame, on a field letting go of the keyboard first, waiting for a hold, or asking about
-    /// unsaved projects. A folder pick's answer waits meanwhile, for what the quit comes to (AR-759).
-    fn quit_asked(&self, ctx: &egui::Context) -> bool {
+    /// Whether a quit asked for has neither gone ahead nor been called off, once the frame has looked
+    /// at it: on a field letting go of the keyboard first, waiting for a hold, or asking about unsaved
+    /// projects. A folder pick's answer waits meanwhile, for what the quit comes to (AR-759).
+    fn quit_asked(&self) -> bool {
         use actions::{Closing, Then};
-        self.quit_requested
-            || ctx.input(|i| i.viewport().close_requested())
-            || matches!(self.edit.closing, Some(Closing::Asked(Then::Quit) | Closing::LetGo(Then::Quit)))
+        matches!(self.edit.closing, Some(Closing::Asked(Then::Quit) | Closing::LetGo(Then::Quit)))
             || self.holding.quit_waits()
             || self.quitting.is_some()
     }
@@ -1785,8 +1782,8 @@ impl Shell {
     /// host gone without answering counts as a cancel, without asking why no picker appeared. While
     /// a quit is asked for, the answer waits: taken once the quit is called off, let go with the
     /// window once it goes ahead.
-    fn take_pick(&mut self, ctx: &egui::Context) {
-        if self.quit_asked(ctx) {
+    fn take_pick(&mut self) {
+        if self.quit_asked() {
             return;
         }
         let Some((_, answer)) = &self.picking else { return };
@@ -2114,7 +2111,6 @@ impl Shell {
             self.look_for_dolt();
         }
         self.poll_host();
-        self.take_pick(ctx);
         version_chip::keep_valid(self);
         // Home and a project closed draw no rail: what the versions' pages hold of another goes here.
         version_details::let_go(self);
@@ -2202,6 +2198,8 @@ impl Shell {
             }
         }
         self.continue_quit(ctx);
+        // After the quit, by any way, is asked for in this frame: one going ahead lets the pick go.
+        self.take_pick();
         self.drive_loads();
         self.drive_replacement();
         self.run_after_hold(ctx);
