@@ -236,9 +236,11 @@ with that package's name or id and its `BindingFault`, none for no diagram yet (
 `defaults::handoff_problem`); one that hands up none goes whatever its parent's default, and so
 does one inside a package with no parent removed with it, which takes that package along.
 A package a profile holds directly, which no command makes but a project's rows may hold, has
-the profile as its parent on the way up: a profile that stays is passed for the package holding
-it, nothing is judged when the profile or that package goes, which takes everything below along,
-and a profile never takes the diagrams itself (AR-745, `commands::receiver`).
+the profile as its parent on the way up, and a profile never takes the diagrams itself
+(AR-745, `commands::receiver`): when the profile goes, or the package inside it does, nothing
+below it is judged, since either takes everything below along; a profile that stays is passed,
+and the package holding the profile, or the first package above the ones that go, takes them and
+is judged.
 An element that would take along a diagram the binding of an element that stays names (unsoundly,
 `WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
 binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578);
