@@ -245,3 +245,28 @@ fn a_stale_choice_among_many_names_the_first_twelve_and_how_many_more() {
     assert!(error.message.ends_with(&format!("those that do now: {} and 1 more", deps[..12].join(", "))), "{}", error.message);
     assert_eq!(error.reason, Some(Reason::StaleChoice { candidates: deps.iter().map(|d| d.as_str().into()).collect() }));
 }
+
+/// A dependency of one client and two suppliers, as a loaded document may hold, joins no single
+/// pair: drawing one of its pairs again adds a dependency of its own and leaves that one as it is.
+#[test]
+fn a_dependency_of_several_suppliers_is_no_match_for_one_of_them() {
+    let mut built = session();
+    let sales = run(&mut built, "uml.package.add", json!({ "name": "sales" }));
+    let [order, line, product] = ["Order", "Line", "Product"].map(|n| run(&mut built, "uml.class.add", json!({ "package": sales, "name": n })));
+    let both = add(&mut built, json!({ "client": order, "supplier": line, "name": "both" }))["id"].as_str().unwrap().to_string();
+    let (tables, junctions) = tables();
+    let rows = archforge_mof::rows::snapshot(built.doc(), &tables, &junctions).unwrap();
+    let mut st = store(1000);
+    archforge_mof::rows::restore(&mut st, &rows, &tables, &junctions).unwrap();
+    let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let (d, also) = (at(&st, &both), at(&st, &product));
+    st.push(d, archforge_uml::dependency::SUPPLIER, Value::Ref(also)).unwrap();
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
+    let suppliers = |s: &S| s.doc().list(obj(s, &both), archforge_uml::dependency::SUPPLIER).unwrap().to_vec();
+    let before = suppliers(&s);
+    assert_eq!(before.len(), 2, "loaded with two suppliers");
+    let out = add(&mut s, json!({ "client": order, "supplier": line }));
+    assert_eq!((&out["outcome"], &out["candidates"]), (&json!("created"), &json!([])));
+    assert_ne!(out["id"].as_str(), Some(both.as_str()), "a dependency of its own");
+    assert_eq!(suppliers(&s), before, "the one of two suppliers as it was");
+}

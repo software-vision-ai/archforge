@@ -692,7 +692,8 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   changes and `id` is null (`"choiceRequired"`): call again with `existing` set to the id of the
   candidate to use. One that was removed or reconnected since, or never joined the two, is refused
   under `existing`, naming the ids of those that join them now (the sentence names the first 12 and
-  how many more; call again without `existing` for the whole list in `candidates`), and another is
+  how many more; a call without `existing` lists them all in `candidates`, as far as a reply's size
+  limit allows, and any of their ids may be sent as `existing` directly), and another is
   never picked in its place. Reusing a dependency rather than repeating it is Archforge's rule, not UML's, which
   allows parallel dependencies; parallel dependencies loaded from earlier versions stay as they
   are. `element_remove` refuses a package, or a package taken along
