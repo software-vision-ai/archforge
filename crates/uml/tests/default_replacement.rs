@@ -158,8 +158,8 @@ fn refused(s: &mut S, p: Json) -> (Option<String>, Option<Reason>) {
     (error.key, error.reason)
 }
 
-/// A choice read before an agent chose another default is stale in both forms, naming the revision
-/// read and the one now. Retried on the revision read now, the old default needs no replacement in
+/// A choice that would go, read before an agent added a class, is stale in both forms, and so is one
+/// read before an agent chose another default, each naming the revision read and the one now. Retried on the revision read now, the old default needs no replacement in
 /// either form; a new one's invalid name is refused, and a replacement removed since is stale on the
 /// revision it was chosen on and no diagram on the one after, each with nothing made and a step
 /// waiting to be redone kept.
@@ -175,6 +175,14 @@ fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() 
         s.undo().unwrap();
         added
     };
+    // A choice that would go but for its revision, read before an agent added a class.
+    let (old, was) = (token(&s), s.token());
+    s.execute_from("uml.class.add", &json!({ "package": c.sales, "name": "Ledger" }), Some("Claude")).unwrap();
+    for form in forms(&c) {
+        let stale = Reason::StaleRevision { expected: Some(was), current: s.token() };
+        let p = joined(json!({ "diagram": c.overview, "expected_revision": old }), &form);
+        assert_eq!(refused(&mut s, p), (Some("expected_revision".into()), Some(stale)), "{form}: stale alone");
+    }
     let (read, at) = (token(&s), s.token());
     let set = json!({ "package": c.sales, "diagram": c.detail, "expected_revision": read });
     s.execute_from("uml.package.default.set", &set, Some("Claude")).unwrap();
