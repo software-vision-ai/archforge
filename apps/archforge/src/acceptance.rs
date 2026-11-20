@@ -195,7 +195,7 @@ fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was
 
     // 2. A class diagram, its package made with it.
     click_on(&mut h, "workspace.tabs.add");
-    click_on(&mut h, "workspace.new-diagram.type.uml.class");
+    click_on(&mut h, "workspace.new-diagram.type.uml.structure");
     click_on(&mut h, "workspace.new-diagram.continue");
     h.state_mut().diagrams.new.as_mut().expect("New diagram opens").name = "Domain".into();
     h.run();

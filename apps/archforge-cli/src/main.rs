@@ -555,7 +555,7 @@ mod tests {
                     assert!(tools.contains(&word), "compact {compact}: {word} is not a listed tool");
                 } else if word.contains('.') {
                     // A command id, or the kind diagram.add takes for a class diagram.
-                    assert!(ids.contains(&word) || word == "uml.class", "compact {compact}: {word} is not a command");
+                    assert!(ids.contains(&word) || word == "uml.structure", "compact {compact}: {word} is not a command");
                 }
             }
             // Literals are built (AR-122), data types (AR-123), primitive types (AR-124) and

@@ -842,7 +842,7 @@ fn kinds_of(refused: &archforge_notations::UnknownKinds) -> Vec<String> {
 /// Why a project, a branch or a version does not open when it holds diagrams of `kinds` Archforge
 /// does not support: one sentence that names the first few, each once and as stored, and says to
 /// create a new project. A kind left empty is not named.
-pub(crate) fn unsupported_kinds(kinds: &[String]) -> String {
+pub fn unsupported_kinds(kinds: &[String]) -> String {
     let named = named_kinds(kinds.iter().map(String::as_str));
     if named.is_empty() {
         return crate::i18n::tr("It holds diagrams whose kind Archforge does not support; create a new project to carry on.");
