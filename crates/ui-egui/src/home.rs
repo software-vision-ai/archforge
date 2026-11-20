@@ -89,15 +89,21 @@ impl Hue {
 
 /// Whether a start card leads anywhere yet: New project opens its dialog; the others open screens
 /// not built so far, so they take no click and show no hover border. New project waits while a
-/// folder pick does, as its menu item does.
+/// folder pick does, as its menu item does; Open a project is live while Open can act.
 fn start_live(shell: &Shell, id: &str) -> bool {
-    (id == "new-project" && shell.tabs.len() < crate::MAX_TABS && shell.picking.is_none()) || (id == "open-project" && can_open(shell))
+    (id == "new-project" && shell.tabs.len() < crate::MAX_TABS && shell.picking.is_none()) || (id == "open-project" && shell.can_open_project())
 }
 
-/// Whether projects can be opened: the host picks and opens them, a tab is free, and no folder pick
-/// waits, whose answer would find another opening in its way (AR-737).
+/// Whether this window can open projects at all: the host picks and opens them, and a tab is free.
+/// [`Shell::can_open_project`] adds what must not be under way, and Home's ways to Open use that.
 pub(crate) fn can_open(shell: &Shell) -> bool {
-    shell.services.pick_project.is_some() && shell.services.projects.is_some() && shell.tabs.len() < crate::MAX_TABS && shell.picking.is_none()
+    shell.services.pick_project.is_some() && shell.services.projects.is_some() && shell.tabs.len() < crate::MAX_TABS
+}
+
+/// Whether a recent project can be asked to open: the host opens projects, and no folder pick
+/// waits, whose answer would find another opening in its way (AR-749).
+fn can_open_recent(shell: &Shell) -> bool {
+    shell.services.projects.is_some() && shell.picking.is_none()
 }
 
 /// The four start cards: automation id, title, line, link, icon and colour.
@@ -207,7 +213,7 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
     ux::icon_mid(paint, pos2(ghost + 13.0, mid), &icons::PLUS, p.text_secondary);
     let label = ux::text_mid(paint, ghost + 24.0, mid, &tr("Open project…"), types::UI, p.text, None);
     let ghost_rect = Rect::from_min_max(pos2(ghost, mid - 12.0), pos2(label.right() + 8.0, mid + 12.0));
-    let live = can_open(shell);
+    let live = shell.can_open_project();
     if control(shell, ui, "strip.open-project", "button", ghost_rect, live).clicked() && live {
         shell.open_from_picker();
     }
@@ -448,7 +454,7 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     }
     if shell.state.pinned.len() < crate::state::MAX_PINNED {
         let pin = Rect::from_min_size(at(x, tiles_top), vec2(234.0f32.min(inner), 66.0));
-        let live = shell.services.pick_folder.is_some();
+        let live = crate::actions::available(shell, "home.pin-folder");
         let resp = control(shell, ui, "home.pin-folder", "button", pin, live);
         paint.rect_stroke(pin, 10.0, Stroke::new(1.0, if live && resp.hovered() { p.border_hover } else { p.border }), StrokeKind::Inside);
         ux::icon(&paint, pin.min + vec2(20.0, 24.0), &icons::PLUS, 18.0, p.text_secondary);
@@ -678,7 +684,7 @@ fn start_card(
 /// A pinned folder's tile: its name and the folder it is in. A click opens the project picker in
 /// it; its menu opens a project there too, or unpins it.
 fn pinned_tile(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter, r: Rect, i: usize, folder: &std::path::Path) {
-    let live = can_open(shell);
+    let live = shell.can_open_project();
     let resp = control(shell, ui, &format!("home.pinned.{i}"), "card", r, live).on_hover_text(folder.display().to_string());
     paint.rect_filled(r, 10.0, p.surface);
     paint.rect_stroke(r, 10.0, Stroke::new(1.0, if live && resp.hovered() { p.border_hover } else { p.border }), StrokeKind::Inside);
@@ -760,13 +766,13 @@ fn recent_card(
     project: &crate::state::RecentProject,
     now: u64,
 ) -> bool {
-    let live = shell.services.projects.is_some();
+    let live = can_open_recent(shell);
     let mut resp = control(shell, ui, &format!("home.recent.{i}"), "card", r, live);
     if live {
         resp = resp.on_hover_text(project.path.display().to_string());
     }
     paint.rect_filled(r, 12.0, p.surface);
-    paint.rect_stroke(r, 12.0, Stroke::new(1.0, if resp.hovered() { p.border_hover } else { p.border }), StrokeKind::Inside);
+    paint.rect_stroke(r, 12.0, Stroke::new(1.0, if live && resp.hovered() { p.border_hover } else { p.border }), StrokeKind::Inside);
     let thumb = Rect::from_min_size(r.min + vec2(8.0, 8.0), vec2((r.width() - 16.0).max(0.0), 112.0));
     model_thumb(p, paint, thumb, [Hue::Blue, Hue::Green, Hue::Purple][i % 3]);
     let w = (r.width() - 32.0).max(0.0);
@@ -816,7 +822,7 @@ fn recent_more(
     }
     let anchor = Rect::from_min_max(pos2(more.right() - 220.0, more.top()), more.max);
     // Opening is offered only while a project can open; removing from the list always.
-    let live = shell.services.projects.is_some();
+    let live = can_open_recent(shell);
     let items: Vec<String> = if live { vec![tr("Open"), tr("Remove from recent projects")] } else { vec![tr("Remove from recent projects")] };
     match crate::panels::menu(shell, ui, p, anchor, &format!("home.recent.{i}.menu"), &items) {
         Some(0) if live => true,
@@ -840,13 +846,13 @@ fn recent_row(
     project: &crate::state::RecentProject,
     now: u64,
 ) -> bool {
-    let live = shell.services.projects.is_some();
+    let live = can_open_recent(shell);
     let mut resp = control(shell, ui, &format!("home.recent.{i}"), "row", r, live);
     if live {
         resp = resp.on_hover_text(project.path.display().to_string());
     }
-    // The design draws the row under the pointer on the surface, with a border.
-    if resp.hovered() {
+    // The design draws the row under the pointer on the surface, with a border, while it opens.
+    if live && resp.hovered() {
         paint.rect_filled(r, 8.0, p.surface);
         paint.rect_stroke(r, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     }

@@ -41,6 +41,8 @@ pub struct State {
     pub menu_scroll: Option<(String, f32)>,
     /// The row of the open menu the arrow keys have reached, by the menu's id: Enter picks it.
     pub menu_reached: Option<(String, usize)>,
+    /// That row's text, by the menu's id, so the reach stays on its row when rows come or go.
+    pub menu_reached_text: Option<(String, String)>,
     /// A type menu's choices as built for one state of one project (its model root and its
     /// revision), each label with the value the commands take: the model is walked for them once
     /// per change, not on every frame the menu is open.
@@ -1464,8 +1466,19 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     if ui.input(|i| i.pointer.hover_pos().is_some_and(|at| r.contains(at))) {
         offset -= ui.input(|i| i.smooth_scroll_delta.y);
     }
-    // The arrow keys reach a row, scrolled into sight; Enter picks it.
+    // The arrow keys reach a row, scrolled into sight; Enter picks it. The row is kept by its text
+    // too: rows that come or go before it (Open, while a folder pick waits) move the reach with it,
+    // never onto another row, and a row gone, or there twice, is reached no more (AR-749).
     let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == id).map(|(_, i)| *i);
+    if let Some((_, text)) = shell.panels.menu_reached_text.as_ref().filter(|(of, _)| of == id)
+        && reached.is_some_and(|i| items.get(i) != Some(text))
+    {
+        let mut same = items.iter().enumerate().filter(|(_, item)| *item == text).map(|(i, _)| i);
+        reached = match (same.next(), same.next()) {
+            (Some(i), None) => Some(i),
+            _ => None,
+        };
+    }
     let (down, up, enter) = ui.input_mut(|i| {
         (
             i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
@@ -1488,6 +1501,7 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
         }
     }
     shell.panels.menu_reached = reached.map(|i| (id.to_string(), i));
+    shell.panels.menu_reached_text = reached.and_then(|i| items.get(i)).map(|text| (id.to_string(), text.clone()));
     let offset = offset.clamp(0.0, most);
     shell.panels.menu_scroll = Some((id.to_string(), offset));
     let rows = r.shrink2(vec2(0.0, 4.0));
@@ -1554,6 +1568,7 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         shell.panels.menu = None;
         shell.panels.menu_reached = None;
+        shell.panels.menu_reached_text = None;
     }
     picked
 }

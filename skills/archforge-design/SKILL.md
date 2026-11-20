@@ -170,6 +170,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   the projects in the pinned folders (two levels down, looked for each time it opens, one search
   at a time), up to eight projects in all, the pinned folders and Home's actions, each worded for the state it is in. Every word typed must
   be found; the arrows move, Enter runs, Esc or a click elsewhere closes.
+- While a folder pick waits for its answer, nothing on Home starts an opening: the recent rows and
+  cards and their menu's Open, the Open card and button, the pinned folders and their Open a
+  project here, and Pin a folder look and act off, and the search lists no projects or pinned
+  folders. Enter, in the search or in an open menu, runs the row last shown highlighted, never one
+  a change of the list put in its place (AR-749).
 - The recent projects show as rows or as a gallery of cards in the page's grid (four columns
   where the width takes them, so two start cards line up with them), sorted by last opened
   (newest first) or by name; both choices are kept in the preferences.

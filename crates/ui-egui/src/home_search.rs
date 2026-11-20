@@ -15,15 +15,18 @@ use crate::i18n::tr;
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
-/// The search's state between frames: whether its list is open, the query, the highlighted row,
-/// whether the field is still to take the keyboard, the projects last found in the pinned folders
-/// and the host's answer still to come. Both outlive closing the list, so one search of the folders
-/// runs at a time however often the list opens.
+/// The search's state between frames: whether its list is open, the query, the highlighted row and
+/// what it runs as last drawn, whether the field is still to take the keyboard, the projects last
+/// found in the pinned folders and the host's answer still to come. Both outlive closing the list,
+/// so one search of the folders runs at a time however often the list opens.
 #[derive(Debug, Default)]
 pub struct Search {
     pub open: bool,
     pub query: String,
     pub highlight: usize,
+    /// What the highlighted row ran when the list was last drawn: Enter runs that, not whatever
+    /// a list changed since has put in its place.
+    seen: Option<Target>,
     /// Find… was chosen: the frame's drawing opens the list, as opening it needs the window.
     pub asked: bool,
     /// The bar last drawn had no room for the field, so the list has nowhere to show.
@@ -92,6 +95,7 @@ fn open(shell: &mut Shell, ctx: &egui::Context) {
     }
     search.open = true;
     search.highlight = 0;
+    search.seen = None;
     search.scope = scope;
     if search.scope.is_some() {
         return;
@@ -136,6 +140,7 @@ pub(crate) fn open_with(shell: &mut Shell, query: &str) {
     shell.home_search.scope = scope(shell);
     shell.home_search.query = query.to_string();
     shell.home_search.highlight = 0;
+    shell.home_search.seen = None;
 }
 
 /// Where the search works now: the open project's folder, or none on Home.
@@ -159,6 +164,7 @@ pub(crate) fn close(shell: &mut Shell) {
     search.open = false;
     search.query.clear();
     search.highlight = 0;
+    search.seen = None;
     search.focus = false;
 }
 
@@ -254,7 +260,8 @@ pub(crate) fn starts<'a>(name: &'a Folded, word: &'a str) -> impl Iterator<Item 
 }
 
 /// The rows for the query: the matching recent projects, then the projects in the pinned folders
-/// not among them, the pinned folders and the actions, in that order; with no query, all of them.
+/// not among them, the pinned folders and the actions, in that order, each while it can run; with
+/// no query, all of them.
 fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
     let mut groups = Vec::new();
     let typed = Typed::words(query);
@@ -288,7 +295,9 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
         .filter(|f| !shell.state.recent.iter().any(|r| r.path == f.path) && typed.in_folded(&[&f.text]))
         .map(|f| Hit { target: Target::Project(f.path.clone()), icon: &icons::ER_DIAGRAM, label: f.label.clone(), detail: f.detail.clone() });
     let projects: Vec<Hit> = recent.chain(found).take(MAX_PROJECTS).collect();
-    if !projects.is_empty() {
+    // A project opens nothing while a folder pick waits, and a pinned folder only while Open can
+    // act: neither is listed meanwhile (AR-749).
+    if !projects.is_empty() && shell.picking.is_none() {
         groups.push((tr("Projects"), projects));
     }
     let folders: Vec<Hit> = shell
@@ -304,7 +313,7 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
             detail: tr("Open a project here"),
         })
         .collect();
-    if !folders.is_empty() {
+    if !folders.is_empty() && shell.can_open_project() {
         groups.push((tr("Pinned folders"), folders));
     }
     let actions: Vec<Hit> = actions(shell).into_iter().filter(|h| typed.in_any(&[&h.label])).collect();
@@ -396,11 +405,12 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
         }
         search.highlight = search.highlight.min(count - 1);
     }
-    if enter && count > 0 {
-        let target = groups.iter().flat_map(|(_, h)| h).nth(shell.home_search.highlight).map(|h| h.target.clone());
-        if let Some(target) = target {
-            run(shell, target);
-        }
+    // Enter runs the row last drawn highlighted while it is still listed, as the list can change
+    // on this very frame (a folder pick ending lists the projects above the actions); one gone,
+    // or none drawn, is not swapped for the row now in its place, and the list is drawn again
+    // (AR-749).
+    if enter && let Some(target) = shell.home_search.seen.clone().filter(|seen| groups.iter().flat_map(|(_, h)| h).any(|h| h.target == *seen)) {
+        run(shell, target);
         return;
     }
     let row = ui.fonts_mut(|f| f.row_height(&types::UI.font()));
@@ -421,9 +431,13 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
     if std::mem::take(&mut shell.home_search.focus) {
         resp.request_focus();
     }
-    if shell.home_search.query != before {
+    // What was typed narrows the list drawn now, so the row Enter next runs is the one in sight.
+    let groups = if shell.home_search.query == before {
+        groups
+    } else {
         shell.home_search.highlight = 0;
-    }
+        hits(shell, &shell.home_search.query.clone())
+    };
     list(shell, ui, p, field, &groups, &id);
     // The host's answer only now, so the rows a key or a click ran on are the rows drawn; a list
     // that grows keeps its highlight on the first row.
@@ -481,6 +495,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, groups: &[(S
         }
         picked
     });
+    shell.home_search.seen = groups.iter().flat_map(|(_, h)| h).nth(shell.home_search.highlight).map(|h| h.target.clone());
     if let Some(target) = picked {
         run(shell, target);
         return;
@@ -550,6 +565,19 @@ mod tests {
         assert!(shown(&shell).contains(&open) && crate::actions::available(&shell, "file.open"));
         shell.services.projects = None;
         assert!(!shown(&shell).contains(&open) && !shown(&shell).contains(&Target::Action("file.new")));
+    }
+
+    /// The projects and the pinned folders are listed only while they can open: a folder pick
+    /// waiting would meet the opening (AR-749).
+    #[test]
+    fn projects_and_pinned_folders_are_left_out_while_a_folder_pick_waits() {
+        let (mut shell, ..) = shell();
+        shell.state.pinned = vec!["/pinned".into()];
+        shell.state.remember("Shop", std::path::Path::new("/shop.archforge"), 0);
+        let groups = |shell: &Shell| hits(shell, "").into_iter().map(|(heading, _)| heading).collect::<Vec<_>>();
+        assert_eq!(groups(&shell)[..2], [tr("Projects"), tr("Pinned folders")]);
+        shell.picking = Some((crate::Pick::Pin, std::sync::mpsc::channel().1));
+        assert_eq!(groups(&shell), [tr("Actions")]);
     }
 
     /// Capitals, accents and `ß` count for nothing, and the projects found keep the list's order.

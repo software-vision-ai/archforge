@@ -26152,8 +26152,33 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
     assert!(titles.lock().unwrap().iter().all(|t| t == "Pin a folder") && !titles.lock().unwrap().is_empty(), "{:?}", titles.lock().unwrap());
 }
 
+/// Home's controls that start an opening or a pick, off while a folder pick waits (AR-749).
+const HOME_OPENINGS: [&str; 4] = ["home.recent.0", "home.start.open-project", "strip.open-project", "home.pin-folder"];
+
+/// Whether `id` is live, as the pointer over it shows: the pointing hand.
+fn points(h: &mut Harness<'static, Shell>, id: &str) -> bool {
+    h.event(egui::Event::PointerMoved(rect_of(h, id).center()));
+    h.run();
+    h.output().platform_output.cursor_icon == egui::CursorIcon::PointingHand
+}
+
+/// The fill and stroke colours of the rectangles the last frame painted exactly over `id`.
+fn painted_over(h: &Harness<'static, Shell>, id: &str) -> Vec<(egui::Color32, egui::Color32)> {
+    /// Collects every rectangle over `r` under `s`.
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(egui::Color32, egui::Color32)>) {
+        match s {
+            egui::Shape::Rect(x) if x.rect == r => out.push((x.fill, x.stroke.color)),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
+            _ => {}
+        }
+    }
+    let (r, mut out) = (rect_of(h, id), Vec::new());
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, r, &mut out));
+    out
+}
+
 /// A folder pick is answered on a later frame (AR-737): until the answer is in, New project, Open
-/// and Pin a folder are off, a recent project opens nothing, a second pick is refused without
+/// and Pin a folder are off, a recent project opens nothing and Home's ways to open one look off, a second pick is refused without
 /// asking the host again, and the
 /// window looks again for the answer. A picker that says it could not appear is said on Home until
 /// a pick chooses a folder, one that answers nothing is asked why, and a host gone without
@@ -26198,7 +26223,6 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         let at = rect_of(&h, "home.pin-folder").center();
         click(&mut h, at);
         assert!(!crate::actions::available(h.state(), "home.pin-folder") && !h.state().can_open_project(), "{theme:?}: both pickers off");
-        assert!(!crate::home::can_open(h.state()), "{theme:?}: Home's Open card and button off");
         // New project's handler waits too, however it is reached: its dialog would stand over the pick.
         crate::new_project::open(h.state_mut());
         assert!(h.state().new_project.is_none(), "{theme:?}: no dialog over the pick");
@@ -26210,6 +26234,19 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         let row = rect_of(&h, "home.recent.0").center();
         click(&mut h, row);
         assert!(!h.state().is_opening(), "{theme:?}: a recent project opens nothing while the pick waits");
+        // Home's ways to open a project look off meanwhile, a recent card in the gallery too (AR-749).
+        assert!(HOME_OPENINGS.iter().all(|id| !points(&mut h, id)), "{theme:?}: Home's openings off while the pick waits");
+        let p = crate::ux::palette(theme.is_dark());
+        assert!(
+            !points(&mut h, "home.recent.0") && !painted_over(&h, "home.recent.0").iter().any(|(fill, _)| *fill == p.surface),
+            "{theme:?}: no hover look"
+        );
+        h.state_mut().state.recent_view = crate::state::RecentView::Gallery;
+        h.run();
+        assert!(!points(&mut h, "home.recent.0"), "{theme:?}: and a recent card");
+        assert!(!painted_over(&h, "home.recent.0").iter().any(|(_, stroke)| *stroke == p.border_hover), "{theme:?}: no hover border");
+        h.state_mut().state.recent_view = crate::state::RecentView::List;
+        h.run();
         h.state_mut().pin_from_picker();
         h.state_mut().open_from_picker();
         h.run();
@@ -26221,7 +26258,11 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         assert_eq!(h.state().picker_error.as_deref(), Some("no folder picker here"));
         assert!(painted(&h).iter().any(|t| t == "no folder picker here"), "{theme:?}: {:?}", painted(&h));
         assert!(crate::actions::available(h.state(), "home.pin-folder") && h.state().can_open_project(), "{theme:?}: both pickers back");
-        assert!(crate::home::can_open(h.state()), "{theme:?}: Home's Open card back");
+        assert!(HOME_OPENINGS.iter().all(|id| points(&mut h, id)), "{theme:?}: and Home's openings");
+        assert!(
+            points(&mut h, "home.recent.0") && painted_over(&h, "home.recent.0").iter().any(|(fill, _)| *fill == p.surface),
+            "{theme:?}: hover look back"
+        );
         h.state_mut().pin_from_picker();
         answer(&mut h, Some(Picked::Folder(pinned()[0].clone())));
         assert_eq!((h.state().state.pinned.clone(), h.state().picker_error.clone()), (pinned(), None), "{theme:?}: the folder chosen is pinned");
@@ -26234,6 +26275,162 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         assert_eq!((h.state().state.pinned.clone(), h.state().picker_error.clone()), (pinned(), None), "{theme:?}: a host gone is a cancel");
         assert!(crate::actions::available(h.state(), "home.pin-folder"), "{theme:?}: and Pin a folder is back");
         assert!(crate::actions::available(h.state(), "file.new"), "{theme:?}: and New project");
+    }
+}
+
+/// The folder picks a [`pick_waits_harness`] was asked for, each answered when the test says.
+type PickWaits = std::sync::Arc<std::sync::Mutex<Vec<std::sync::mpsc::Sender<Picked>>>>;
+
+/// Home in `theme` with Library among the recent projects and Models pinned: a folder pick waits
+/// until the test answers it, and the project picker counts its calls and answers a cancel.
+fn pick_waits_harness(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>, PickWaits, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    crate::i18n::set_language("en");
+    let host = std::sync::Arc::new(SavingHost::default());
+    let asked = PickWaits::default();
+    let asked_for = asked.clone();
+    let opens = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = opens.clone();
+    let mut shell = Shell::new(Services {
+        projects: Some(host.clone()),
+        pick_project: Some(std::sync::Arc::new(move |_| {
+            counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Picked::at_once(None)
+        })),
+        pick_folder: Some(std::sync::Arc::new(move |_: &str| {
+            let (tx, rx) = std::sync::mpsc::channel();
+            asked_for.lock().unwrap().push(tx);
+            rx
+        })),
+        ..Services::default()
+    });
+    shell.state.theme = theme;
+    shell.state.remember("Library", std::path::Path::new("/tmp/Library.archforge"), 0);
+    shell.state.pin(std::path::Path::new("/Users/robin/Work/Models"));
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run();
+    (h, host, asked, opens)
+}
+
+/// The More menus of a recent project and of a pinned folder keep the row the arrow keys reached
+/// when a folder pick ending brings their opening back above it: Enter removes or unpins, as the
+/// row reached says, and opens nothing. An opening reached that a pick starting takes away runs
+/// nothing in its place (AR-749).
+#[test]
+fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
+    use crate::panels::Menu;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for (menu, id) in [(Menu::Recent(0), "home.recent.0.menu"), (Menu::Pinned(0), "home.pinned.0.menu")] {
+            let (mut h, host, waits, opens) = pick_waits_harness(theme);
+            h.state_mut().pin_from_picker();
+            h.run();
+            h.state_mut().panels.menu = Some(menu);
+            h.run();
+            let rows = |h: &Harness<'static, Shell>| ids(h).into_iter().filter(|i| i.starts_with(&format!("{id}."))).count();
+            assert_eq!(rows(&h), 1, "{theme:?}: {id} offers no opening while the pick waits");
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+            // The pick ends with a cancel, taken on the frame that reads Enter.
+            drop(waits.lock().unwrap().pop().expect("a pick was asked for"));
+            enter_now(&mut h);
+            let s = h.state();
+            let opened = (s.is_opening(), host.opens.lock().unwrap().len(), opens.load(std::sync::atomic::Ordering::SeqCst));
+            assert_eq!(opened, (false, 0, 0), "{theme:?}: {id}: Enter opened nothing");
+            let left = (s.state.recent.len(), s.state.pinned.len());
+            assert_eq!(left, if menu == Menu::Recent(0) { (0, 1) } else { (1, 0) }, "{theme:?}: {id}: the row reached ran");
+            // The opening reached, then a pick starts: Enter runs nothing in its place.
+            let (mut h, host, _waits, opens) = pick_waits_harness(theme);
+            h.state_mut().panels.menu = Some(menu);
+            h.run();
+            assert_eq!(rows(&h), 2, "{theme:?}: {id} offers its opening");
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+            h.state_mut().pin_from_picker();
+            enter_now(&mut h);
+            let s = h.state();
+            let opened = (s.is_opening(), host.opens.lock().unwrap().len(), opens.load(std::sync::atomic::Ordering::SeqCst));
+            assert_eq!((opened, s.state.recent.len(), s.state.pinned.len()), ((false, 0, 0), 1, 1), "{theme:?}: {id}: nothing ran");
+        }
+    }
+}
+
+/// Presses Enter, alone, on the very next frame: `key` gives the modifiers a frame of their own first.
+fn enter_now(h: &mut Harness<'static, Shell>) {
+    let (key, modifiers) = (egui::Key::Enter, egui::Modifiers::NONE);
+    h.input_mut().events.push(egui::Event::Key { key, pressed: true, modifiers, repeat: false, physical_key: None });
+    h.step();
+    h.run();
+}
+
+/// Enter in Home's search runs the row last shown highlighted: a folder pick ending on that frame
+/// lists Library above it, a row a pick has taken off the list meanwhile runs nothing in its
+/// place, and a query typed is listed on its own frame (AR-749).
+#[test]
+fn enter_in_homes_search_runs_the_row_last_shown_while_it_is_still_listed() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host, waits, _) = pick_waits_harness(theme);
+        // The list's first heading and its first row, as drawn.
+        let first = |h: &Harness<'static, Shell>| {
+            let texts = painted(h);
+            let at = texts.iter().position(|t| ["PROJECTS", "PINNED FOLDERS", "ACTIONS"].contains(&t.as_str()))?;
+            texts.get(at..at + 2).map(<[String]>::to_vec)
+        };
+        // While a pick waits, the list starts with the appearance switch.
+        h.state_mut().pin_from_picker();
+        h.run();
+        crate::home_search::open_with(h.state_mut(), "");
+        h.run();
+        let switch = if theme.is_dark() { "Switch to the light appearance" } else { "Switch to the dark appearance" };
+        assert_eq!(first(&h), Some(vec!["ACTIONS".to_string(), switch.to_string()]), "{theme:?}");
+        drop(waits.lock().unwrap().pop().expect("a pick was asked for"));
+        enter_now(&mut h);
+        assert_ne!(h.state().state.theme, theme, "{theme:?}: the appearance switch shown ran");
+        assert!(!h.state().is_opening() && host.opens.lock().unwrap().is_empty(), "{theme:?}: Library did not open");
+        // Library shown first, then a pick starts: Enter runs nothing in its place.
+        crate::home_search::open_with(h.state_mut(), "");
+        h.run();
+        assert_eq!(first(&h), Some(vec!["PROJECTS".to_string(), "Library".to_string()]), "{theme:?}");
+        let shown = h.state().state.theme;
+        h.state_mut().pin_from_picker();
+        enter_now(&mut h);
+        assert_eq!(h.state().state.theme, shown, "{theme:?}: the row now first did not run");
+        assert!(!h.state().is_opening() && h.state().home_search.open, "{theme:?}: nothing opened, and the list stays");
+        assert_eq!(waits.lock().unwrap().len(), 1, "{theme:?}: the pick still waits");
+        // What is typed is listed on its own frame, so Enter on the next runs its first row.
+        drop(waits.lock().unwrap().pop());
+        crate::home_search::close(h.state_mut());
+        h.run();
+        let at = rect_of(&h, "home.header.search").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("appearance".into()));
+        h.step();
+        enter_now(&mut h);
+        assert_ne!(h.state().state.theme, shown, "{theme:?}: the appearance switch typed for ran");
+    }
+}
+
+/// An opening waiting for the hold turns the title strip's Open project off, as it does File ▸
+/// Open: a click would be turned away. Once the opening has run, it is back (AR-749).
+#[test]
+fn an_opening_waiting_for_the_hold_turns_the_strips_open_project_off() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        h.run();
+        assert!(points(&mut h, "strip.open-project"), "{theme:?}: Open project live in the project");
+        h.state_mut().begin_hold().unwrap();
+        h.state_mut().open_path(std::path::Path::new("/tmp/Later.archforge"));
+        assert!(!points(&mut h, "strip.open-project"), "{theme:?}: off while the opening waits for the hold");
+        end_hold(&mut h, Shell::end_hold);
+        let (path, answer) = host.opens.lock().unwrap().pop().expect("the opening runs after the hold");
+        answer.send(Ok(crate::Opened { name: "Later".into(), path, ..Default::default() })).unwrap();
+        h.run();
+        assert!(points(&mut h, "strip.open-project"), "{theme:?}: and back once it has opened");
     }
 }
 
