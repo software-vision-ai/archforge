@@ -22568,10 +22568,10 @@ fn a_realization_shows_its_class_and_interface_in_properties_and_its_ends_reconn
 }
 
 /// A dependency's end dragged onto another class moves there, the canvas sending the revision the
-/// drag began on, which a dependency's reconnect needs, so a change made during the drag makes the
-/// drop stale; dragged onto the client and supplier another
-/// dependency has, one with no line on the diagram, it is refused in words naming that one and
-/// nothing changes; in light and dark (AR-697).
+/// drag began on, which a dependency's reconnect needs, so a model no longer at it when the end is
+/// dropped makes the drop stale; dragged onto the client and supplier another dependency has, one
+/// with no line on the diagram, it is refused in words naming that one and nothing changes; in
+/// light and dark (AR-697).
 #[test]
 fn a_dependency_end_dragged_onto_another_class_carries_the_revision_and_a_repeated_pair_is_refused() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
