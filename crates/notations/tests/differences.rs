@@ -1,12 +1,14 @@
 //! Two states of a project classified and named, built with the real commands.
 
+use archforge_engine::EngineError;
 use archforge_mof::rows::{self, Cell, Rows};
 use archforge_mof::{ClassId, DataKind, PropId, Store, TypeRef, Uuid, Value};
 use archforge_notations::differences::{
     Apart, Area, CardField, CardList, ChangeKind, ClassifyError, DiagramSide, DiagramSides, Difference, ElementCard, ElementSides, ListKind, Named,
     Placing, classified, diagram_sides, element_sides,
 };
-use archforge_notations::{Session, new_project_session, storage, universe};
+use archforge_notations::{Session, new_project_session, session_from_rows, storage, universe};
+use archforge_uml::defaults::{DefaultDiagram, resolve};
 use serde_json::{Value as Json, json};
 
 /// Ids that never repeat within a test.
@@ -827,6 +829,66 @@ fn a_default_diagram_binding_has_element_sides() {
     assert!(!after.renamed_from(&before), "its words follow what it names");
     assert!(seen.fields.is_empty(), "{:?}", seen.fields);
     assert_eq!(rows_of(&seen, ListKind::Ownership), [(said("Commerce"), None)]);
+}
+
+/// The default the package `package` opens to in the project `rows` hold, read back as a session
+/// whose rows are those: (its binding's id, its diagram's).
+fn default_in(rows: &Rows, package: &str) -> (String, String) {
+    let back = session_from_rows(rows, ids()).unwrap();
+    assert!(state(&back) == *rows, "the rows read back as they were");
+    let (st, package) = (back.doc(), back.doc().by_uuid(uuid(package)).unwrap());
+    let id = |o| st.uuid(o).unwrap().to_string();
+    let bindings = archforge_diagram::defaults::bindings_of(st, package);
+    let (Ok(DefaultDiagram::Bound(diagram)), [binding]) = (resolve(st, package), &bindings[..]) else { panic!("one sound binding") };
+    (id(*binding), id(diagram))
+}
+
+/// A default replaced as it is removed, by another of its package's diagrams or a new one (AR-658):
+/// the project read back from its rows after the step and after its Undo opens to the replacement
+/// and to the old default, under the one binding; Redo gives the rows of the step again. Compared,
+/// the binding changed, worded package → replacement, the old default removed and a new one added.
+/// A version from before, looked at, keeps the old binding and changes nothing.
+#[test]
+fn a_replaced_default_reads_back_compares_and_stays_in_an_earlier_version() {
+    for create in [false, true] {
+        let mut s = new_project_session("Commerce", ids()).unwrap();
+        let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+        let mut diagram =
+            |name: &str| run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": name }));
+        let (overview, detail) = (diagram("Sales overview"), diagram("Sales detail"));
+        let (before, at) = (state(&s), s.token());
+        let read = json!({ "history": at.history, "revision": at.revision });
+        let form = if create { json!({ "create_replacement": { "name": "Sales map" } }) } else { json!({ "replacement_diagram": detail }) };
+        let mut p = json!({ "diagram": overview, "expected_revision": read });
+        p.as_object_mut().unwrap().extend(form.as_object().unwrap().clone());
+        let answer = s.execute("diagram.remove", &p).unwrap().value;
+        let (binding, replacement) = (answer["binding"].as_str().unwrap().to_string(), answer["replacement"].as_str().unwrap().to_string());
+        let after = state(&s);
+        assert_eq!(default_in(&after, &sales), (binding.clone(), replacement.clone()), "{form}");
+        let found = differences(&before, &after);
+        let named = if create { "Sales map" } else { "Sales detail" };
+        let (kept, gone) = (about(&found, &binding), about(&found, &overview));
+        assert_eq!((told(kept), kept.area), ((ChangeKind::Changed, Some(&*format!("Sales → {named}")), vec!["Commerce"]), Area::Model), "{form}");
+        assert_eq!((told(gone).0, told(gone).1, gone.area), (ChangeKind::Removed, Some("Sales overview"), Area::Diagram), "{form}");
+        let added = found.iter().filter(|d| d.kind == ChangeKind::Added && d.class == archforge_diagram::DIAGRAM).map(|d| d.id.to_string());
+        assert_eq!(added.collect::<Vec<_>>(), if create { vec![replacement.clone()] } else { vec![] }, "{form}: {found:?}");
+        assert_eq!(found.iter().filter(|d| d.area == Area::Model).count(), 1, "{form}: the model changed by the binding alone");
+        s.undo().unwrap();
+        let undone = state(&s);
+        assert!(undone == before, "{form}: one undo step");
+        assert_eq!(default_in(&undone, &sales), (binding.clone(), overview.clone()), "{form}");
+        s.redo().unwrap();
+        assert!(state(&s) == after, "{form}: redo makes the same ids again");
+        let mut earlier = session_from_rows(&before, ids()).unwrap();
+        earlier.set_read_only(true).unwrap();
+        let get = earlier.execute("uml.package.default.get", &json!({ "package": sales })).unwrap().value;
+        assert_eq!((&get["binding"], &get["diagram"]), (&json!(binding), &json!(overview)), "{form}: the old binding");
+        let own = earlier.token();
+        p["expected_revision"] = json!({ "history": own.history, "revision": own.revision });
+        assert!(matches!(earlier.execute("diagram.remove", &p), Err(EngineError::ReadOnly)), "{form}: on the version's own revision");
+        assert!(state(&earlier) == before, "{form}: the version as it was");
+        assert_eq!((earlier.token(), earlier.can_undo(), earlier.can_redo()), (own, false, false), "{form}: and its history");
+    }
 }
 
 /// A project with a diagram of its schema, the tables customer and invoice placed on it.
