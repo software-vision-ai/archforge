@@ -1271,14 +1271,16 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
             let dependency = crate::applications::name_or_id(ctx.doc, other).into();
             return Err(refuse("class", message).because(Reason::ConnectionExists { dependency }));
         }
-        // Dropped back on the end it has, it changes nothing, its owner included, and leaves no
-        // undo step (AR-697).
-        if c != old {
-            ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;
-            ctx.doc.push(r, prop, Value::Ref(c)).map_err(fail)?;
-            if let Some(owner) = owner {
-                rehome(ctx.doc, r, owner)?;
-            }
+        // Dropped back on the end it has, it changes nothing, its owner and its lines included, and
+        // leaves no undo step, though a loaded document may draw a line elsewhere (AR-697).
+        if c == old {
+            ctx.view.selection = vec![r];
+            return Ok(json!({ "id": uuid_of(ctx.doc, r)?, "dropped": dropped }));
+        }
+        ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;
+        ctx.doc.push(r, prop, Value::Ref(c)).map_err(fail)?;
+        if let Some(owner) = owner {
+            rehome(ctx.doc, r, owner)?;
         }
     }
     follow_ends(ctx.doc, r)?;
