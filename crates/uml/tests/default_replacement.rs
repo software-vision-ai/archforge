@@ -142,12 +142,18 @@ fn default_of(s: &S, id: &str) -> Option<String> {
     }
 }
 
-/// `diagram.remove` given `p`, checked to be refused with the store, the revision and the undo step
-/// on top as they were: the refusal's parameter and reason.
+/// The steps on top of the history: the one undo takes back and the one redo makes again, by their
+/// labels and the revisions they lead back to.
+fn history(s: &S) -> (Option<String>, Option<u64>, Option<String>) {
+    (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string))
+}
+
+/// `diagram.remove` given `p`, checked to be refused with the store, the revision and the steps to
+/// undo and redo as they were: the refusal's parameter and reason.
 fn refused(s: &mut S, p: Json) -> (Option<String>, Option<Reason>) {
-    let (at, before, top) = (s.token(), rows_of(s), s.undo_label().map(str::to_string));
+    let (at, before, steps) = (s.token(), rows_of(s), history(s));
     let Err(EngineError::Failed { error, .. }) = s.execute("diagram.remove", &p) else { panic!("{p} was not refused") };
-    assert_eq!((s.token(), s.undo_label().map(str::to_string)), (at, top), "{p} left no undo step");
+    assert_eq!((s.token(), history(s)), (at, steps), "{p} left the history as it was");
     assert!(rows_of(s) == before, "{p} changed nothing");
     (error.key, error.reason)
 }
@@ -169,6 +175,9 @@ fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() 
         let p = joined(json!({ "diagram": c.overview, "expected_revision": read }), &form);
         assert_eq!(refused(&mut s, p), (Some("expected_revision".into()), Some(stale)), "{form}");
     }
+    // A step undone waits to be made again while the choice is retried.
+    run(&mut s, "uml.class.add", json!({ "package": c.sales, "name": "Invoice" }));
+    s.undo().unwrap();
     let fresh = token(&s);
     for form in forms(&c) {
         let p = joined(json!({ "diagram": c.overview, "expected_revision": fresh }), &form);
@@ -177,6 +186,7 @@ fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() 
     let named = |name: &str| json!({ "diagram": c.detail, "create_replacement": { "name": name }, "expected_revision": fresh });
     assert_eq!(refused(&mut s, named(" ")).1, Some(Reason::NameEmpty));
     assert_eq!(refused(&mut s, named("Sales\u{7}map")).1, Some(Reason::ControlCharacter));
+    assert_eq!(s.redo().unwrap(), "Add class", "the step undone is still there to make again");
     let (chosen, at) = (token(&s), s.token());
     s.execute("diagram.remove", &json!({ "diagram": c.overview })).unwrap();
     let choice = |revision: Json| json!({ "diagram": c.detail, "replacement_diagram": c.overview, "expected_revision": revision });
@@ -200,6 +210,7 @@ fn an_agents_removal_gives_what_the_interfaces_step_gives_undone_and_redone_exac
         let asked = |s: &S| joined(json!({ "diagram": c.overview, "expected_revision": token(s) }), &form);
         let (p, by_agent_p) = (asked(&ui), asked(&agent));
         let (before, binding) = (rows_of(&ui), bound(&ui).into_iter().find(|b| b.0 == c.sales).unwrap().1);
+        let steps = [history(&ui), history(&agent)];
         let mut answer = Json::Null;
         ui.batch("Delete diagram", |b| b.execute("diagram.remove", &p).map(|v| answer = v)).unwrap();
         let by_agent = agent.execute_from("diagram.remove", &by_agent_p, Some("Claude")).unwrap().value;
@@ -209,11 +220,12 @@ fn an_agents_removal_gives_what_the_interfaces_step_gives_undone_and_redone_exac
         let replacement = answer["replacement"].as_str().unwrap().to_string();
         assert_eq!((&answer["binding"], &answer["created"]), (&json!(binding), &json!(n == 1)), "{answer}");
         assert_eq!(replacement == c.detail, n == 0, "{answer}");
-        for s in [&mut ui, &mut agent] {
+        for (s, steps) in [&mut ui, &mut agent].into_iter().zip(steps) {
             assert_eq!(default_of(s, &c.sales), Some(replacement.clone()), "{form}");
             s.undo().unwrap();
             assert!(rows_of(s) == before, "{form}: one undo step");
-            assert_eq!((default_of(s, &c.sales), s.can_undo()), (Some(c.overview.clone()), true), "{form}: only that step undone");
+            assert_eq!(default_of(s, &c.sales), Some(c.overview.clone()), "{form}");
+            assert_eq!((history(s).0, history(s).1), (steps.0, steps.1), "{form}: the step before on top again, none added");
             s.redo().unwrap();
             assert!(rows_of(s) == after, "{form}: redo is exact");
             assert_eq!(default_of(s, &c.sales), Some(replacement.clone()), "{form}: under the same id");
