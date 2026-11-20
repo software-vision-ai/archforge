@@ -1183,15 +1183,6 @@ When you let go on empty canvas, the line makes a new card there, its name ready
 interface for an interface realization, a new class for an association class, and for a
 generalization a new element of the kind it started from.
 
-Select a dependency, and **Properties** shows its **Client**, the element that depends, and its
-**Supplier**, the one it depends on. Each reads as its kind and name, *Package · Sales*, with its
-path under it: the packages it sits in and, for a nested classifier, the classifiers that nest it,
-*Commerce platform › Sales*. So two elements of one name in two packages read apart. A long path is
-cut from its front, so the element's own name shows; point at it to read it whole. When an end
-moves to another package, its path follows, and the dependency keeps that end.
-
-<!-- picture: workspace-dependency light | Sales's dependency on CurrencyConverter selected; Properties shows its Name, its Client Package · Sales with the path Commerce platform › Sales, and its Supplier Class · CurrencyConverter with the path Commerce platform › Shared › CurrencyConverter -->
-
 ### Names, types and packages
 
 - All classifiers of one package share its names: a class, an interface, an enumeration, a data
