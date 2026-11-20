@@ -31161,6 +31161,47 @@ fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
     }
 }
 
+/// A return that lands at the least zoom goes back one more step on the next zoom-out once the
+/// switch has rested, with no zoom-in first (AR-668): Top → Sales → Archive, Archive's card then
+/// removed from Sales' diagram, whose classes lie too far apart to fit above 10 %; zooming out of
+/// Archive lands on Sales fitted at 10 %, where a zoom-out straight away does nothing, and after
+/// the rest one fresh zoom-out returns to Top.
+#[test]
+fn a_return_landing_at_the_least_zoom_goes_back_on_the_next_zoom_out() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, _, sales_d) = top_with_sales(&mut h, (240, 148), &[]);
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": sales.to_string() })).unwrap().value);
+        let p =
+            serde_json::json!({ "diagram": sales_d.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+        let archive_card = id(s.execute("diagram.place", &p).unwrap().value);
+        for (i, x) in [0, 400_000].iter().enumerate() {
+            let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": format!("Wide{i}") })).unwrap().value);
+            let p = serde_json::json!({ "diagram": sales_d.to_string(), "element": c.to_string(), "x": x, "y": 0, "width": 200, "height": 120 });
+            s.execute("diagram.place", &p).unwrap();
+        }
+        let archive_d = own_diagram(s, archive);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
+        let p = serde_json::json!({ "nodes": [archive_card.to_string()] });
+        h.state_mut().session.as_mut().unwrap().execute("diagram.unplace", &p).unwrap();
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![archive_d, sales_d], "{theme:?}: back to Sales");
+        assert_eq!(h.state().canvas.zoom, crate::canvas::ZOOM_RANGE.0, "{theme:?}: Sales too wide, fitted at 10 %");
+        assert_eq!(zoom_out_gesture(&mut h, 1, true), vec![sales_d], "{theme:?}: a zoom-out straight after the switch does nothing");
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 1, true), vec![sales_d, top], "{theme:?}: one fresh zoom-out back to Top");
+    }
+}
+
 /// The stereotype picker's filter ignores capitals and accents (AR-747), in light and dark:
 /// *STRASSE* finds *Straße* and *prufung* finds *Prüfung*, each leaving the other out.
 #[test]

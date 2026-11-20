@@ -529,14 +529,15 @@ card where nothing lies over it to select the package.
   is still there, three cases open the diagram at 100 % with that card at its centre: you went in
   by zooming; or, however you went in (zooming, ⌘↓ or Open), the view you left would now put the
   card out of sight; or it would now show a package filling most of the canvas (60 % or more), the
-  amount at which zooming in goes into a package. Both are measured on the window as it is when
-  you come back, so a smaller window counts. Zoom out to 10 % again to go back one more step the
-  way you came; when the return already landed at 10 %, a new zoom-out, once the one that brought
-  you back has ended, takes you back at once, without zooming in first. Coming back adds no step of
-  its own. Once no step is left, or when you opened the
-  diagram without going in through a package, zooming out opens the parent package's default
-  diagram instead, at 100 % with the package you were in at its centre, or, when that diagram has
-  no card of it, fitted to the view the same way. At your project's root there is no parent: the
+  amount at which zooming in tries to go into a package, even one that can't open and only shows a
+  note. Both are measured on the window as it is when you come back, so a smaller window counts.
+  Zoom out to 10 % again to go back one more step the way you came. When the return already landed
+  at 10 %, stop zooming for a moment, then zoom out again: that takes you back at once, without
+  zooming in first; a zoom-out started straight after the switch does nothing. Coming back adds no
+  step of its own. Once no step is left, or when you opened the diagram without going in through a
+  package, zooming out opens the parent package's default diagram instead, at 100 % with the
+  package you were in at its centre, or, when that diagram has no card of it, fitted to the view
+  the same way. At your project's root there is no parent: the
   diagram stays at 10 %, and a note under the path bar says so.
 - **Come back by the path bar.** The path bar at the canvas's top left names the packages from
   your project's root down to the one open: the packages that hold it, whichever diagram you went

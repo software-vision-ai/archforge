@@ -745,8 +745,9 @@ What is UML's own, beside the shared rules above.
   ancestor's default as it was last left (by navigation, a tab switch or a close), and start that
   tab's route empty, with no step made up from the package left (AR-666), so a later zoom out
   there falls back to ownership. One switch
-  per gesture: a switch waits for the zoom to rest 0.3 s and for 0.6 s to pass since the last; a
-  switch fades in over 0.2 s. A double click renames, never navigates.
+  per gesture: a switch waits for the zoom to rest 0.3 s and for 0.6 s to pass since the last, so
+  a return that lands at 10 % goes back one more step on the next zoom-out after that rest, with
+  no zoom-in needed, and a zoom-out before it does nothing; a switch fades in over 0.2 s. A double click renames, never navigates.
 - A package moves (AR-102) by its row in Models onto another package's, or Properties' Parent
   package (the keyboard's way; never itself or one it holds). It goes with what it holds and its
   own diagram; its cards stay where they are, their owner lines following, and none is added to
