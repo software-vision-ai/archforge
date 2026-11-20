@@ -315,7 +315,12 @@ class that goes with its end kept the same way; a default removed with a replace
 step, the binding keeping its id and the replacement its boxes, and every replacement that cannot
 take its place refused with nothing changed (AR-640); a new empty replacement made, bound and the
 default removed in one undo step, which Undo takes away and Redo makes again under the same id,
-and both replacements or a bad name refused with no diagram made (AR-641). `tests/skills.rs`: skills on a package, a class, an
+and both replacements or a bad name refused with no diagram made (AR-641).
+`tests/default_replacement.rs` (AR-658): a replacement chosen before an agent's
+`uml.package.default.set` refused as stale in both forms, then judged afresh on the revision read
+now; the interface's labelled step and an agent's command giving the same answer, ids and store,
+each one undo step undone and redone exactly; a whole package removed, nested or top-level,
+handing its diagrams up and making no replacement. `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and
