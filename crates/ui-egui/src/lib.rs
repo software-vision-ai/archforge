@@ -1262,8 +1262,7 @@ impl Shell {
         }
         let unsaved: Vec<std::path::PathBuf> = (0..self.tabs.len()).filter(|i| self.tab_unsaved(*i)).map(|i| self.tabs[i].path.clone()).collect();
         if unsaved.is_empty() {
-            self.quit_confirmed = true;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            self.confirm_quit(ctx);
         } else {
             self.quitting = Some(unsaved);
         }
@@ -1287,11 +1286,26 @@ impl Shell {
                 self.ask = Some(close_ask::Ask::Unsaved { path });
                 self.quitting = Some(queue);
             }
-            None => {
-                self.quit_confirmed = true;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-            }
+            None => self.confirm_quit(ctx),
         }
+    }
+
+    /// Quitting goes ahead: the window closes, and a folder pick still waiting is let go, so an
+    /// answer that comes after all opens, pins or changes nothing (AR-759).
+    fn confirm_quit(&mut self, ctx: &egui::Context) {
+        self.quit_confirmed = true;
+        self.picking = None;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
+    /// Whether a quit asked for has neither gone ahead nor been called off, once the frame has looked
+    /// at it: on a field letting go of the keyboard first, waiting for a hold, or asking about unsaved
+    /// projects. A folder pick's answer waits meanwhile, for what the quit comes to (AR-759).
+    fn quit_asked(&self) -> bool {
+        use actions::{Closing, Then};
+        matches!(self.edit.closing, Some(Closing::Asked(Then::Quit) | Closing::LetGo(Then::Quit)))
+            || self.holding.quit_waits()
+            || self.quitting.is_some()
     }
 
     /// Whether quitting was answered for every unsaved project, so the window closes.
@@ -1765,8 +1779,13 @@ impl Shell {
     /// Takes the folder pick's answer once it has come, for what it was asked for: Open opens the
     /// project, Pin a folder pins the folder, Change… makes it the new project's folder. A pick
     /// that chose nothing says why when the picker could not appear and nothing on a cancel; a
-    /// host gone without answering counts as a cancel, without asking why no picker appeared.
+    /// host gone without answering counts as a cancel, without asking why no picker appeared. While
+    /// a quit is asked for, the answer waits: taken once the quit is called off, let go with the
+    /// window once it goes ahead.
     fn take_pick(&mut self) {
+        if self.quit_asked() {
+            return;
+        }
         let Some((_, answer)) = &self.picking else { return };
         let chosen = match answer.try_recv() {
             Ok(Picked::Folder(path)) => Ok(path),
@@ -2092,7 +2111,6 @@ impl Shell {
             self.look_for_dolt();
         }
         self.poll_host();
-        self.take_pick();
         version_chip::keep_valid(self);
         // Home and a project closed draw no rail: what the versions' pages hold of another goes here.
         version_details::let_go(self);
@@ -2180,6 +2198,8 @@ impl Shell {
             }
         }
         self.continue_quit(ctx);
+        // After the quit, by any way, is asked for in this frame: one going ahead lets the pick go.
+        self.take_pick();
         self.drive_loads();
         self.drive_replacement();
         self.run_after_hold(ctx);

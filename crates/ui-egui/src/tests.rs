@@ -3854,6 +3854,133 @@ fn a_project_waiting_for_its_tab_to_close_does_not_open_while_quitting() {
     });
 }
 
+/// The folder a test's pick answers with.
+const PICKED: &str = "/Users/robin/Picked";
+
+/// Every kind of folder pick.
+const PICKS: [crate::Pick; 3] = [crate::Pick::Open, crate::Pick::Pin, crate::Pick::Location];
+
+/// A folder pick for `pick` waiting, its answer for the test to send: a Location pick asked from the
+/// New project dialog, opened for it.
+fn pick_waiting(h: &mut Harness<'static, Shell>, pick: crate::Pick) -> std::sync::mpsc::Sender<Picked> {
+    if pick == crate::Pick::Location {
+        crate::new_project::open(h.state_mut());
+    }
+    let (answer, rx) = std::sync::mpsc::channel();
+    h.state_mut().ask_pick(pick, || rx);
+    h.run_steps(2);
+    assert!(h.state().picking.is_some(), "{pick:?}: the pick waits");
+    answer
+}
+
+/// Whether [`PICKED`] was taken for `pick`: a project opening, a folder pinned, or the New project
+/// dialog's folder.
+fn pick_taken(h: &Harness<'static, Shell>, host: &SavingHost, pick: crate::Pick) -> bool {
+    let picked = std::path::Path::new(PICKED);
+    match pick {
+        crate::Pick::Open => host.opens.lock().unwrap().iter().any(|(p, _)| p == picked),
+        crate::Pick::Pin => h.state().state.pinned.iter().any(|p| p == picked),
+        crate::Pick::Location => h.state().new_project.as_ref().and_then(|d| d.folder.as_deref()) == Some(picked),
+    }
+}
+
+/// A quit by `request_quit`, the window's close button, ⌘Q or a field letting go first goes ahead
+/// while an Open, a Pin or a Location pick waits, and the pick goes with it: an answer that comes
+/// after all, or in the quit's own frame, opens, pins or changes nothing (AR-759).
+#[test]
+fn a_quit_goes_ahead_while_a_folder_pick_waits_and_lets_the_pick_go() {
+    let ways: [(&str, fn(&mut Harness<'static, Shell>)); 4] = [
+        ("request_quit", |h| h.state_mut().request_quit()),
+        ("the close button", |h| h.input_mut().viewports.entry(egui::ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close)),
+        ("⌘Q", |h| {
+            // In the input of one frame, as the answer is: kittest runs a frame per event it queues.
+            let modifiers = egui::Modifiers::MAC_CMD.plus(egui::Modifiers::COMMAND);
+            h.input_mut().events.push(egui::Event::Key { key: egui::Key::Q, physical_key: None, pressed: true, repeat: false, modifiers });
+        }),
+        ("a field letting go", |h| h.state_mut().edit.closing = Some(crate::actions::Closing::Asked(crate::actions::Then::Quit))),
+    ];
+    in_both_appearances(|theme| {
+        for ((pick, (way, quit)), in_its_frame) in PICKS.into_iter().flat_map(|p| ways.map(|w| (p, w))).flat_map(|c| [(c, false), (c, true)]) {
+            let what = format!("{theme:?}, {pick:?}, {way}, answered in the quit's frame {in_its_frame}");
+            let (mut h, host) = saving_harness(Some(commerce()), None);
+            h.state_mut().state.theme = theme;
+            let answer = pick_waiting(&mut h, pick);
+            quit(&mut h);
+            if in_its_frame {
+                answer.send(Picked::Folder(PICKED.into())).unwrap();
+            }
+            h.run_steps(3);
+            assert!(h.state().quit_confirmed(), "{what}: the quit goes ahead");
+            // The pick was let go: an answer still sent finds nobody waiting for it.
+            assert!(answer.send(Picked::Folder(PICKED.into())).is_err(), "{what}: the pick is let go");
+            h.run_steps(3);
+            assert!(!pick_taken(&h, &host, pick), "{what}: the answer does nothing");
+        }
+    });
+}
+
+/// A quit asking about unsaved changes keeps a waiting pick's answer until the question is
+/// answered: called off with Cancel, the pick still waits and its answer, come meanwhile or after,
+/// is taken; gone ahead with Don't save, the answer that came meanwhile does nothing (AR-759).
+#[test]
+fn a_quit_asking_about_unsaved_changes_holds_a_folder_picks_answer_until_it_is_answered() {
+    in_both_appearances(|theme| {
+        for (pick, (cancel, meanwhile)) in PICKS.into_iter().flat_map(|p| [(true, false), (true, true), (false, true)].map(|c| (p, c))) {
+            let what = format!("{theme:?}, {pick:?}, cancelled {cancel}, answered meanwhile {meanwhile}");
+            let (mut h, host) = edited_project();
+            h.state_mut().state.theme = theme;
+            let answer = pick_waiting(&mut h, pick);
+            h.state_mut().request_quit();
+            h.run_steps(2);
+            assert_eq!(h.state().ask, asked_unsaved(COMMERCE), "{what}: the quit asks first");
+            if meanwhile {
+                answer.send(Picked::Folder(PICKED.into())).unwrap();
+                h.run_steps(3);
+                assert!(!pick_taken(&h, &host, pick), "{what}: the answer waits for the question");
+            }
+            let at = rect_of(&h, if cancel { "close-ask.cancel" } else { "close-ask.discard" }).center();
+            click(&mut h, at);
+            h.run_steps(2);
+            if cancel {
+                assert!(!h.state().quitting() && !h.state().quit_confirmed(), "{what}: the quit is called off");
+                if !meanwhile {
+                    answer.send(Picked::Folder(PICKED.into())).unwrap();
+                }
+                h.run_steps(3);
+                assert!(pick_taken(&h, &host, pick), "{what}: the answer is taken");
+            } else {
+                host.closings.lock().unwrap().pop().expect("the project closes without its changes").send(Ok(())).unwrap();
+                h.run_steps(3);
+                assert!(h.state().quit_confirmed(), "{what}: the quit goes ahead");
+                assert!(!pick_taken(&h, &host, pick), "{what}: the answer does nothing");
+            }
+        }
+    });
+}
+
+/// A quit waiting for a hold keeps a waiting pick's answer too, and lets the pick go once it goes
+/// ahead after the hold: the answer does nothing (AR-759).
+#[test]
+fn a_quit_waiting_for_a_hold_holds_a_folder_picks_answer_and_then_lets_it_go() {
+    in_both_appearances(|theme| {
+        for pick in PICKS {
+            let (mut h, host) = saving_harness(Some(commerce()), None);
+            h.state_mut().state.theme = theme;
+            let answer = pick_waiting(&mut h, pick);
+            h.state_mut().begin_hold().unwrap();
+            h.state_mut().request_quit();
+            h.run_steps(3);
+            answer.send(Picked::Folder(PICKED.into())).unwrap();
+            h.run_steps(3);
+            assert!(!h.state().quit_confirmed() && !pick_taken(&h, &host, pick), "{theme:?}, {pick:?}: both wait for the hold");
+            end_hold(&mut h, Shell::end_hold);
+            h.run_steps(3);
+            assert!(h.state().quit_confirmed(), "{theme:?}, {pick:?}: the quit goes ahead");
+            assert!(!pick_taken(&h, &host, pick), "{theme:?}, {pick:?}: the answer does nothing");
+        }
+    });
+}
+
 #[test]
 fn home_sorts_the_recent_projects_by_name_and_shows_them_as_a_gallery() {
     let (mut h, host) = saving_harness(None, None);
