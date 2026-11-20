@@ -887,6 +887,7 @@ fn a_replaced_default_reads_back_compares_and_stays_in_an_earlier_version() {
         p["expected_revision"] = json!({ "history": own.history, "revision": own.revision });
         assert!(matches!(earlier.execute("diagram.remove", &p), Err(EngineError::ReadOnly)), "{form}: on the version's own revision");
         assert!(state(&earlier) == before, "{form}: the version as it was");
+        assert_eq!((earlier.token(), earlier.can_undo(), earlier.can_redo()), (own, false, false), "{form}: and its history");
     }
 }
 
