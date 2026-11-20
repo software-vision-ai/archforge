@@ -395,7 +395,13 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
         close(shell);
         return;
     }
+    // The highlight stays on the row last drawn highlighted while it is listed, wherever a change of
+    // the list on this frame has moved it, so the arrows move on from the row in sight (AR-749).
+    let seen_at = shell.home_search.seen.as_ref().and_then(|seen| groups.iter().flat_map(|(_, h)| h).position(|h| h.target == *seen));
     let search = &mut shell.home_search;
+    if let Some(at) = seen_at {
+        search.highlight = at;
+    }
     if count > 0 {
         if down {
             search.highlight = (search.highlight + 1) % count;
@@ -440,12 +446,8 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
     };
     list(shell, ui, p, field, &groups, &id);
     // The host's answer only now, so the rows a key or a click ran on are the rows drawn; a list
-    // that grows keeps its highlight on the first row.
-    let had = shell.home_search.found.len();
+    // that grows keeps its highlight on the row last drawn highlighted, and Enter runs that row.
     take_found(shell);
-    if shell.home_search.found.len() != had {
-        shell.home_search.highlight = 0;
-    }
 }
 
 /// The list under the field, its rows grouped under their headings; a click elsewhere closes it.

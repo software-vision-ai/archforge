@@ -4062,7 +4062,10 @@ fn homes_search_finds_the_projects_in_the_pinned_folders_one_search_at_a_time_an
     key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
     h.run_steps(2);
     assert_eq!(asked.lock().unwrap().as_slice(), [vec![std::path::PathBuf::from("/Users/robin/Work")]], "one search of the pinned folders");
-    // The answer comes, and its wake is called: the projects found join the list.
+    // The answer comes, and its wake is called: the projects found join the list, which keeps its
+    // highlight on the row highlighted, the pinned folder, wherever the rows found put it.
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    assert_eq!(h.state().home_search.highlight, 1);
     let (tx, wake) = pending.lock().unwrap().pop().unwrap();
     tx.send(vec![
         crate::FoundProject { path: "/Users/robin/Work/Client/Billing.archforge".into(), folder: 0, within: vec!["Client".into()] },
@@ -4071,6 +4074,7 @@ fn homes_search_finds_the_projects_in_the_pinned_folders_one_search_at_a_time_an
     .unwrap();
     wake();
     h.run_steps(2);
+    assert_eq!(h.state().home_search.highlight, 2, "Shop, Billing, then the pinned folder highlighted");
     let results = |h: &Harness<'static, Shell>| ids(h).iter().filter(|i| i.starts_with("home.header.search.result.")).count();
     h.event(egui::Event::Text("billing".into()));
     h.run_steps(2);
@@ -26338,7 +26342,7 @@ fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
             key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
             // The pick ends with a cancel, taken on the frame that reads Enter.
             drop(waits.lock().unwrap().pop().expect("a pick was asked for"));
-            enter_now(&mut h);
+            press_now(&mut h, egui::Key::Enter);
             let s = h.state();
             let opened = (s.is_opening(), host.opens.lock().unwrap().len(), opens.load(std::sync::atomic::Ordering::SeqCst));
             assert_eq!(opened, (false, 0, 0), "{theme:?}: {id}: Enter opened nothing");
@@ -26351,7 +26355,7 @@ fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
             assert_eq!(rows(&h), 2, "{theme:?}: {id} offers its opening");
             key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
             h.state_mut().pin_from_picker();
-            enter_now(&mut h);
+            press_now(&mut h, egui::Key::Enter);
             let s = h.state();
             let opened = (s.is_opening(), host.opens.lock().unwrap().len(), opens.load(std::sync::atomic::Ordering::SeqCst));
             assert_eq!((opened, s.state.recent.len(), s.state.pinned.len()), ((false, 0, 0), 1, 1), "{theme:?}: {id}: nothing ran");
@@ -26359,9 +26363,10 @@ fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
     }
 }
 
-/// Presses Enter, alone, on the very next frame: `key` gives the modifiers a frame of their own first.
-fn enter_now(h: &mut Harness<'static, Shell>) {
-    let (key, modifiers) = (egui::Key::Enter, egui::Modifiers::NONE);
+/// Presses `key`, alone, on the very next frame: [`key`] gives the modifiers a frame of their own
+/// first.
+fn press_now(h: &mut Harness<'static, Shell>, key: egui::Key) {
+    let modifiers = egui::Modifiers::NONE;
     h.input_mut().events.push(egui::Event::Key { key, pressed: true, modifiers, repeat: false, physical_key: None });
     h.step();
     h.run();
@@ -26369,7 +26374,8 @@ fn enter_now(h: &mut Harness<'static, Shell>) {
 
 /// Enter in Home's search runs the row last shown highlighted: a folder pick ending on that frame
 /// lists Library above it, a row a pick has taken off the list meanwhile runs nothing in its
-/// place, and a query typed is listed on its own frame (AR-749).
+/// place, a query typed is listed on its own frame, and the arrows move on from the row in sight
+/// (AR-749).
 #[test]
 fn enter_in_homes_search_runs_the_row_last_shown_while_it_is_still_listed() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -26388,7 +26394,7 @@ fn enter_in_homes_search_runs_the_row_last_shown_while_it_is_still_listed() {
         let switch = if theme.is_dark() { "Switch to the light appearance" } else { "Switch to the dark appearance" };
         assert_eq!(first(&h), Some(vec!["ACTIONS".to_string(), switch.to_string()]), "{theme:?}");
         drop(waits.lock().unwrap().pop().expect("a pick was asked for"));
-        enter_now(&mut h);
+        press_now(&mut h, egui::Key::Enter);
         assert_ne!(h.state().state.theme, theme, "{theme:?}: the appearance switch shown ran");
         assert!(!h.state().is_opening() && host.opens.lock().unwrap().is_empty(), "{theme:?}: Library did not open");
         // Library shown first, then a pick starts: Enter runs nothing in its place.
@@ -26397,7 +26403,7 @@ fn enter_in_homes_search_runs_the_row_last_shown_while_it_is_still_listed() {
         assert_eq!(first(&h), Some(vec!["PROJECTS".to_string(), "Library".to_string()]), "{theme:?}");
         let shown = h.state().state.theme;
         h.state_mut().pin_from_picker();
-        enter_now(&mut h);
+        press_now(&mut h, egui::Key::Enter);
         assert_eq!(h.state().state.theme, shown, "{theme:?}: the row now first did not run");
         assert!(!h.state().is_opening() && h.state().home_search.open, "{theme:?}: nothing opened, and the list stays");
         assert_eq!(waits.lock().unwrap().len(), 1, "{theme:?}: the pick still waits");
@@ -26409,28 +26415,80 @@ fn enter_in_homes_search_runs_the_row_last_shown_while_it_is_still_listed() {
         click(&mut h, at);
         h.event(egui::Event::Text("appearance".into()));
         h.step();
-        enter_now(&mut h);
+        press_now(&mut h, egui::Key::Enter);
         assert_ne!(h.state().state.theme, shown, "{theme:?}: the appearance switch typed for ran");
+        // The arrow on the frame a pick ends moves on from the row in sight, not from its place.
+        let (mut h, host, waits, opens) = pick_waits_harness(theme);
+        h.state_mut().pin_from_picker();
+        h.run();
+        crate::home_search::open_with(h.state_mut(), "");
+        h.run();
+        drop(waits.lock().unwrap().pop().expect("a pick was asked for"));
+        press_now(&mut h, egui::Key::ArrowDown);
+        press_now(&mut h, egui::Key::Enter);
+        assert_eq!(h.state().state.recent_view, crate::state::RecentView::Gallery, "{theme:?}: the action after the switch ran");
+        let opened = (h.state().is_opening(), host.opens.lock().unwrap().len(), opens.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(opened, (false, 0, 0), "{theme:?}: no project or pinned folder ran");
     }
 }
 
-/// An opening waiting for the hold turns the title strip's Open project off, as it does File ▸
-/// Open: a click would be turned away. Once the opening has run, it is back (AR-749).
+/// The colour the last frame painted `text` in, the first time it painted it whole.
+fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<egui::Color32> {
+    /// The colour of `text` under `s`, if `s` paints it.
+    fn walk(s: &egui::Shape, text: &str) -> Option<egui::Color32> {
+        match s {
+            egui::Shape::Text(t) if t.galley.job.text == text => {
+                let colour = t.galley.job.sections.first().map_or(t.fallback_color, |s| s.format.color);
+                Some(t.override_text_color.unwrap_or(if colour == egui::Color32::PLACEHOLDER { t.fallback_color } else { colour }))
+            }
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, text)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, text))
+}
+
+/// The tints of the meshes the last frame painted inside `id`: its icons, drawn as textures.
+fn icons_in(h: &Harness<'static, Shell>, id: &str) -> Vec<egui::Color32> {
+    /// Collects the tint of every mesh inside `r` under `s`.
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<egui::Color32>) {
+        match s {
+            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| r.contains(v.pos)) => {
+                out.extend(m.vertices.first().map(|v| v.color))
+            }
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
+            _ => {}
+        }
+    }
+    let (r, mut out) = (rect_of(h, id), Vec::new());
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, r, &mut out));
+    out
+}
+
+/// An opening waiting for the hold turns the title strip's Open project off and draws it muted, as
+/// it turns File ▸ Open off: a click would be turned away. Once the opening has run, it is back
+/// (AR-749).
 #[test]
 fn an_opening_waiting_for_the_hold_turns_the_strips_open_project_off() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, host) = saving_harness(Some(commerce()), None);
         h.state_mut().state.theme = theme;
         h.run();
+        let p = crate::ux::palette(theme.is_dark());
         assert!(points(&mut h, "strip.open-project"), "{theme:?}: Open project live in the project");
+        assert_eq!(text_colour(&h, "Open project…"), Some(p.text), "{theme:?}");
+        assert_eq!(icons_in(&h, "strip.open-project"), [p.text_secondary], "{theme:?}: its plus");
         h.state_mut().begin_hold().unwrap();
         h.state_mut().open_path(std::path::Path::new("/tmp/Later.archforge"));
         assert!(!points(&mut h, "strip.open-project"), "{theme:?}: off while the opening waits for the hold");
+        assert_eq!(text_colour(&h, "Open project…"), Some(p.text_muted), "{theme:?}: and drawn muted");
+        assert_eq!(icons_in(&h, "strip.open-project"), [p.text_muted], "{theme:?}: its plus too");
         end_hold(&mut h, Shell::end_hold);
         let (path, answer) = host.opens.lock().unwrap().pop().expect("the opening runs after the hold");
         answer.send(Ok(crate::Opened { name: "Later".into(), path, ..Default::default() })).unwrap();
         h.run();
         assert!(points(&mut h, "strip.open-project"), "{theme:?}: and back once it has opened");
+        assert_eq!(text_colour(&h, "Open project…"), Some(p.text), "{theme:?}: drawn as live");
     }
 }
 
