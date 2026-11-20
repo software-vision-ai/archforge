@@ -330,9 +330,17 @@ impl Project {
     /// model's fingerprint and upgrade), and builds its model, all over connections of their own.
     /// The current branch and every connection to it stay as they were, whatever the outcome.
     pub fn check_branch(&self, branch: &SafeBranch, schema: &ModelSchema) -> Result<Rows, Error> {
-        crate::checked_settings(self.server(), self.path(), branch)?;
+        self.check_branch_settings(branch)?;
         let mut c = self.prepare_on(self.connection_to(branch)?, schema)?;
         self.version_reader().read_rows(&mut c, schema, None)
+    }
+
+    /// What [`Project::check_branch`] checks first on `branch`, writing nothing: that it is there and
+    /// its database usable, that its settings read cleanly, and that it holds no triggers,
+    /// procedures or events. A host runs it before reading what else decides whether the branch may
+    /// be written.
+    pub fn check_branch_settings(&self, branch: &SafeBranch) -> Result<(), Error> {
+        crate::checked_settings(self.server(), self.path(), branch).map(|_| ())
     }
 
     /// The kinds of the diagrams `branch` holds that are not among `known`, each once and in byte
