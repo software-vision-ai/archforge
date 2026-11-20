@@ -127,15 +127,16 @@ struct Pick {
     why: Option<String>,
 }
 
-/// The picker's rows for `element`, filtered by `filter` (any part of the name, whatever the case):
-/// those that apply and those applied first, then the rest, each group by profile.
+/// The picker's rows for `element`, filtered by `filter` (any part of the name, whatever its
+/// capitals and accents): those that apply and those applied first, then the rest, each group by
+/// profile.
 fn picks(store: &Store, element: Obj, filter: &str) -> Vec<Pick> {
-    let wanted = filter.trim().to_lowercase();
+    let wanted = crate::home_search::Typed::trimmed(filter);
     let mut open = Vec::new();
     let mut shut = Vec::new();
     for (s, offer) in applications::choices(store, element) {
         let label = name(store, s);
-        if !wanted.is_empty() && !label.to_lowercase().contains(&wanted) {
+        if !wanted.in_any(&[label.as_str()]) {
             continue;
         }
         let Ok(id) = store.uuid(s) else { continue };

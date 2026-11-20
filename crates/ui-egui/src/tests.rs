@@ -30915,3 +30915,31 @@ fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
         assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypePick));
     }
 }
+
+/// The stereotype picker's filter ignores capitals and accents (AR-747), in light and dark:
+/// *STRASSE* finds *Straße* and *prufung* finds *Prüfung*, each leaving the other out.
+#[test]
+fn the_stereotype_picker_filter_ignores_capitals_and_accents() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        let (_, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        let row = |h: &mut Harness<'static, Shell>, name: &str| {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let made = s.execute("uml.stereotype.add", &serde_json::json!({ "profile": persistence, "name": name, "extends": ["Class"] })).unwrap();
+            format!("{}.{}", crate::uml_stereotypes::ADD_ID, made.value["id"].as_str().unwrap())
+        };
+        let (street, check) = (row(&mut h, "Straße"), row(&mut h, "Prüfung"));
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let at = rect_of(&h, crate::uml_stereotypes::ADD_ID).center();
+        click(&mut h, at);
+        for (typed, found, left) in [("STRASSE", &street, &check), ("prufung", &check, &street)] {
+            h.state_mut().panels.stereotypes.filter.clear();
+            h.event(egui::Event::Text(typed.into()));
+            h.run();
+            let shown = ids(&h);
+            assert!(shown.contains(found) && !shown.contains(left), "{theme:?}: {typed} finds its stereotype alone: {shown:?}");
+        }
+    }
+}

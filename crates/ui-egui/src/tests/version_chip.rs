@@ -2356,3 +2356,28 @@ fn the_load_banner_ends_on_every_path() {
         assert!(has_id(&h, LOAD_FAILED), "{theme:?}: the banner stays");
     });
 }
+
+/// The filter ignores capitals and accents (AR-747): *STRASSE* leaves the version described
+/// *Straße* alone in the list and *prufen* the one described *Prüfen*, so Enter views it.
+#[test]
+fn the_filter_ignores_capitals_and_accents() {
+    for (typed, hash) in [("STRASSE", "v2"), ("prufen", "v1")] {
+        in_both(|mut h, host| {
+            let entry = |n: usize, description: &str| crate::VersionEntry {
+                hash: format!("v{n}"),
+                date: format!("2026-11-08T14:{n:02}:00Z"),
+                description: Some(description.into()),
+                ..Default::default()
+            };
+            let versions = vec![entry(3, "Latest"), entry(2, "Straße"), entry(1, "Prüfen")];
+            open_with(&mut h, &host, Ok(crate::VersionsPage { versions, more: false }));
+            h.event(egui::Event::Text(typed.into()));
+            h.run_steps(3);
+            let rows = ids(&h);
+            assert!(rows.iter().any(|i| i == "workspace.header.version.row.0"), "{typed} finds a version");
+            assert!(!rows.iter().any(|i| i == "workspace.header.version.row.1"), "{typed} finds one version alone");
+            key(&mut h, egui::Key::Enter, MOVE[0]);
+            assert_eq!(host.reads.lock().unwrap()[0].0, hash, "{typed} finds its version");
+        });
+    }
+}
