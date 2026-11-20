@@ -94,6 +94,17 @@ fn diagrams(s: &S) -> BTreeSet<String> {
     st.alive().filter(|o| st.class_of(*o).ok() == Some(DIAGRAM)).map(|o| st.uuid(o).unwrap().to_string()).collect()
 }
 
+/// Every live diagram's element, by their ids.
+fn elements(s: &S) -> BTreeMap<String, String> {
+    let st = s.doc();
+    let id = |o: Obj| st.uuid(o).unwrap().to_string();
+    let element = |d: Obj| match st.get(d, archforge_diagram::diagram::ELEMENT) {
+        Ok(Value::Ref(e)) => id(e),
+        other => panic!("{other:?}"),
+    };
+    st.alive().filter(|o| st.class_of(*o).ok() == Some(DIAGRAM)).map(|d| (id(d), element(d))).collect()
+}
+
 /// Every binding by its owner's id: (the binding's id, the diagram's).
 fn bound(s: &S) -> BTreeMap<String, (String, String)> {
     let st = s.doc();
@@ -181,7 +192,7 @@ fn an_agents_removal_gives_what_the_interfaces_step_gives_undone_and_redone_exac
         // Each session reads its own revision, as the dialog and the agent each do.
         let asked = |s: &S| joined(json!({ "diagram": c.overview, "expected_revision": token(s) }), &form);
         let (p, by_agent_p) = (asked(&ui), asked(&agent));
-        let before = rows_of(&ui);
+        let (before, binding) = (rows_of(&ui), bound(&ui)[&c.sales].0.clone());
         let mut answer = Json::Null;
         ui.batch("Delete diagram", |b| b.execute("diagram.remove", &p).map(|v| answer = v)).unwrap();
         let by_agent = agent.execute_from("diagram.remove", &by_agent_p, Some("Claude")).unwrap().value;
@@ -189,7 +200,8 @@ fn an_agents_removal_gives_what_the_interfaces_step_gives_undone_and_redone_exac
         let after = rows_of(&ui);
         assert!(rows_of(&agent) == after, "{form}: the same store");
         let replacement = answer["replacement"].as_str().unwrap().to_string();
-        assert!(answer["binding"].is_string() && (answer["created"] == true) == (replacement != c.detail), "{answer}");
+        assert_eq!((&answer["binding"], &answer["created"]), (&json!(binding), &json!(n == 1)), "{answer}");
+        assert_eq!(replacement == c.detail, n == 0, "{answer}");
         for s in [&mut ui, &mut agent] {
             assert_eq!(default_of(s, &c.sales), Some(replacement.clone()), "{form}");
             s.undo().unwrap();
@@ -210,13 +222,16 @@ fn an_agents_removal_gives_what_the_interfaces_step_gives_undone_and_redone_exac
 fn removing_a_whole_package_never_makes_a_replacement() {
     let mut s = session();
     let c = scene(&mut s);
-    let (all, was, before) = (diagrams(&s), bound(&s), rows_of(&s));
+    let (all, was, before, of) = (diagrams(&s), bound(&s), rows_of(&s), elements(&s));
     let owner = |s: &S, of: &str| s.doc().container(at(s, of)).unwrap().map(|(o, _)| s.doc().uuid(o).unwrap().to_string());
-    let element = |s: &S, of: &str| s.doc().get(at(s, of), archforge_diagram::diagram::ELEMENT).ok();
-    for (removed, up, diagram) in [(&c.archive, &c.sales, &c.archived), (&c.sales, &c.root, &c.overview)] {
+    for (removed, up, handed) in [(&c.archive, &c.sales, 1), (&c.sales, &c.root, 2)] {
         s.execute("element.remove", &json!({ "ids": [removed] })).unwrap();
-        assert_eq!(diagrams(&s), all, "{removed}: handed up, nothing made");
-        assert_eq!(element(&s, diagram), Some(Value::Ref(at(&s, up))), "{removed}: {diagram} handed up");
+        assert!(s.doc().by_uuid(Uuid::parse(removed).unwrap()).is_none_or(|o| !s.doc().is_alive(o)), "{removed} goes");
+        assert_eq!(diagrams(&s), all, "{removed}: nothing made");
+        let mut moved = of.clone();
+        moved.values_mut().filter(|e| *e == removed).for_each(|e| *e = up.clone());
+        assert_eq!(elements(&s), moved, "{removed}: its {handed} diagrams handed up, the others where they were");
+        assert_eq!(of.values().filter(|e| *e == removed).count(), handed, "{removed}");
         let mut kept = was.clone();
         kept.remove(removed);
         assert_eq!(bound(&s), kept, "{removed}: its binding goes, the others stay");
