@@ -442,7 +442,8 @@ fn a_package_with_no_parent_takes_the_dependencies_at_every_package_within_it_al
 /// the dependency: while Sales, which stays, has that diagram as its default, removing Billing at
 /// the dependency's other end is refused typed with nothing changed, as removing the dependency is.
 /// With Sales bound to a diagram of its own instead, Billing goes with the dependency and its
-/// diagram, Sales's binding staying, one undo step (AR-698).
+/// diagram, Sales's binding staying; with Billing's own binding on that diagram, the binding goes
+/// with Billing. Each one undo step (AR-698).
 #[test]
 fn a_binding_that_stays_on_a_diagram_of_a_dependency_at_a_package_keeps_the_package() {
     use archforge_engine::{BindingFault, Reason};
@@ -474,6 +475,15 @@ fn a_binding_that_stays_on_a_diagram_of_a_dependency_at_a_package_keeps_the_pack
     assert_eq!(counts(&removal(&mut s, &[&billing])).3, 1);
     assert!(!alive(&s, &d) && !alive(&s, &diagram), "the dependency went with its diagram");
     assert_eq!(refers(&s, &binding, DEFAULT_DIAGRAM), Some(obj(&s, &own)), "Sales keeps its own default");
+    // Billing's own binding on that diagram goes with Billing, so it keeps nothing.
+    s.undo().unwrap();
+    let mut st = reread(&s);
+    let (b, owner, target) = (at(&st, &binding), at(&st, &billing), at(&st, &diagram));
+    st.set(b, OWNER_ELEMENT, Value::Ref(owner)).unwrap();
+    st.set(b, DEFAULT_DIAGRAM, Value::Ref(target)).unwrap();
+    let mut s = over(st);
+    assert_eq!(counts(&removal(&mut s, &[&billing])), (0, 0, 1, 1));
+    assert!([&billing, &d, &diagram, &binding].iter().all(|id| !alive(&s, id)), "Billing, its binding, the dependency and its diagram went");
 }
 
 /// A dependency at a package that goes takes its stereotype application along, as a loaded document
