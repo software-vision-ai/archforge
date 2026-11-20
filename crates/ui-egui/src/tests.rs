@@ -31075,8 +31075,8 @@ fn a_return_to_the_view_a_zoom_entry_left_centres_the_package_and_the_next_tick_
 
 /// A return by zoom measures the view it would restore as zooming in does, by every package card
 /// (AR-668): Top, left by ⌘↓-style entry into Sales at a view where Archive's card covers most of
-/// the canvas, lands at 100 % with Sales' card centred instead, and one tick of zooming in on
-/// Archive then stays on Top.
+/// the canvas and Sales' card shows in part, lands at 100 % with Sales' card centred instead, and
+/// one tick of zooming in on Archive then stays on Top.
 #[test]
 fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -31090,16 +31090,19 @@ fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
         let archive_d = own_diagram(s, archive);
         crate::canvas::open(h.state_mut(), top);
         h.run();
-        // Archive's card fills the canvas from its top left, Sales' card still partly in view.
+        // Archive's card fills the canvas from 120 points in, Sales' card's right 60 points in view.
         let zoom = 3.0;
-        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(60.0 - 460.0 * zoom, 40.0 - 160.0 * zoom), zoom);
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(120.0 - 460.0 * zoom, 40.0 - 160.0 * zoom), zoom);
         h.run();
         let c = &h.state().canvas;
-        let archive_rect = rect_of(&h, &format!("workspace.canvas.node.{archive_card}"));
         let canvas = rect_of(&h, "workspace.canvas");
-        let covered = archive_rect.intersect(canvas);
-        let share = covered.width() * covered.height() / (canvas.width() * canvas.height());
-        assert!(share >= crate::package_nav::ENTER_COVER, "{theme:?}: Archive covers {share} at {:?}", (c.pan, c.zoom));
+        let share = |n| {
+            let covered = rect_of(&h, &format!("workspace.canvas.node.{n}")).intersect(canvas);
+            covered.width().max(0.0) * covered.height().max(0.0) / (canvas.width() * canvas.height())
+        };
+        let (archive_share, sales_share) = (share(archive_card), share(card));
+        assert!(archive_share >= crate::package_nav::ENTER_COVER, "{theme:?}: Archive covers {archive_share} at {:?}", (c.pan, c.zoom));
+        assert!(sales_share > 0.0, "{theme:?}: Sales' card partly in view, {sales_share}");
         crate::package_nav::enter(h.state_mut(), sales, 0.0);
         h.run();
         rest(&mut h);
