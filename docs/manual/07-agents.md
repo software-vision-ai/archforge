@@ -688,7 +688,9 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   added, each with its `id`, `name`, `client`, `supplier` and `detail` (empty for a dependency). With none, the dependency is added as before
   (`"outcome": "created"`). With one, that one is returned and selected (`"selected"`): nothing in
   the model changes, no undo step is added, and its name and description stay as they are, so a
-  `name` sent is not applied; rename it with `uml_relationship_rename`. With several, nothing
+  `name` sent is not applied, though it is still checked first, as every part of the call is, and
+  refused when it is no valid name: leave `name` out to reuse only, and rename the dependency with
+  `uml_relationship_rename`. With several, nothing
   changes and `id` is null (`"choiceRequired"`): call again with `existing` set to the id of the
   candidate to use. One that was removed or reconnected since, or never joined the two, is refused
   under `existing`, naming the ids of those that join them now (the sentence names the first 12 and
