@@ -855,8 +855,8 @@ fn a_nested_package_removed_reports_what_it_handed_up_and_its_one_binding() {
 
 /// A package with no parent removed hands nothing up and reports every binding in it and every
 /// relationship that went: the generalization and the dependency inside it, and a generalization
-/// onto one of its classes from a class that stays elsewhere. The answer is the same after Undo
-/// and Redo (AR-675).
+/// onto one of its classes from a class that stays elsewhere. That generalization named alone is
+/// counted too, both its ends staying. Each answer is the same after Undo and Redo (AR-675).
 #[test]
 fn a_package_with_no_parent_removed_reports_its_bindings_and_relationships() {
     use archforge_uml::{CLASS, GENERALIZATION, classifier, generalization};
@@ -870,11 +870,12 @@ fn a_package_with_no_parent_removed_reports_its_bindings_and_relationships() {
     let inner = packaged(&mut st, PACKAGE, "inner", outer);
     let (party, customer, guest) =
         (packaged(&mut st, CLASS, "Party", outer), packaged(&mut st, CLASS, "Customer", inner), packaged(&mut st, CLASS, "Guest", other));
-    for specific in [customer, guest] {
+    let [_, guest_is_party] = [customer, guest].map(|specific| {
         let g = st.create(GENERALIZATION).unwrap();
         st.push(specific, classifier::GENERALIZATION, Value::Ref(g)).unwrap();
         st.set(g, generalization::GENERAL, Value::Ref(party)).unwrap();
-    }
+        g
+    });
     depending(&mut st, party, customer, outer);
     for (package, id) in [(outer, 0x11), (inner, 0x21)] {
         let d = st.create_with_uuid(DIAGRAM, Uuid([id; 16])).unwrap();
@@ -883,10 +884,55 @@ fn a_package_with_no_parent_removed_reports_its_bindings_and_relationships() {
         DiagramObj::set_element(&mut st, d, Some(package)).unwrap();
         bind(&mut st, id + 1, package, d);
     }
-    let guest = st.uuid(guest).unwrap().to_string();
+    let [guest, guest_is_party] = [guest, guest_is_party].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = over(st);
+    // A relationship named alone goes and is counted, though both its ends stay.
+    let answer = removal(&mut s, &[&guest_is_party]);
+    assert_eq!(counts(&answer), (0, 0, 0, 1), "{answer}");
+    assert!(alive(&s, &guest), "its specific end stays");
+    s.undo().unwrap();
     let answer = removal(&mut s, &[&Uuid([0x10; 16]).to_string()]);
     assert_eq!(counts(&answer), (0, 0, 2, 3), "{answer}");
     assert!(alive(&s, &guest), "the class elsewhere stays");
+    assert_eq!(problems(s.doc()), []);
+}
+
+/// Two packages of one chain removed in one call, `Root > Parent > Child` with a class and a bound
+/// diagram under Child: whichever is named first, the class and the diagram are handed up through
+/// both to Root and each is counted once, and Child's binding is the one that goes. With Root,
+/// which has no parent, in the same call, they go with it and neither is counted; Root's binding
+/// goes too (AR-675).
+#[test]
+fn packages_of_one_chain_removed_together_count_what_they_hand_up_once() {
+    let mut st = store(0);
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let root = st.create_with_uuid(PACKAGE, Uuid([0x40; 16])).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(root)).unwrap();
+    let parent = packaged(&mut st, PACKAGE, "Parent", root);
+    let child = packaged(&mut st, PACKAGE, "Child", parent);
+    let class = packaged(&mut st, archforge_uml::CLASS, "Order", child);
+    // Root and Child each bound to a diagram of their own: Root needs one to take Child's.
+    let [_, d] = [(root, 0x41), (child, 0x51)].map(|(package, id)| {
+        let d = st.create_with_uuid(DIAGRAM, Uuid([id; 16])).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(d)).unwrap();
+        DiagramObj::set_kind(&mut st, d, Some(STRUCTURE_DIAGRAM)).unwrap();
+        DiagramObj::set_element(&mut st, d, Some(package)).unwrap();
+        bind(&mut st, id + 1, package, d);
+        d
+    });
+    let [root, parent, child, class, diagram] = [root, parent, child, class, d].map(|o| st.uuid(o).unwrap().to_string());
+    let mut s = over(st);
+    for ids in [[child.as_str(), parent.as_str()], [parent.as_str(), child.as_str()]] {
+        let answer = removal(&mut s, &ids);
+        assert_eq!(counts(&answer), (1, 1, 1, 0), "{ids:?}: {answer}");
+        assert!(alive(&s, &class) && alive(&s, &diagram), "{ids:?}: both are handed up to Root");
+        assert_eq!(parent_of(&s, &class), Some(obj(&s, &root)), "{ids:?}");
+        assert_eq!(refers(&s, &diagram, archforge_diagram::diagram::ELEMENT), Some(obj(&s, &root)), "{ids:?}");
+        assert_eq!(problems(s.doc()), []);
+        s.undo().unwrap();
+    }
+    let answer = removal(&mut s, &[&child, &parent, &root]);
+    assert_eq!(counts(&answer), (0, 0, 2, 0), "{answer}");
+    assert!(!alive(&s, &class) && !alive(&s, &diagram), "both go with Root");
     assert_eq!(problems(s.doc()), []);
 }

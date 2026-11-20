@@ -650,9 +650,10 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   diagrams a removed nested package handed up to the package above, counting only those still
   there: what is removed in the same call, and what a package with no parent takes along, is not
   counted. `bindings` says how many default-diagram bindings went, and `relationships` how many
-  relationships of any kind went, those taken along with a class, a table or a package included;
-  those between elements that stay are kept and not counted. One call that removes ER and UML
-  elements together adds up what each took.
+  relationships of any kind went: one named in `ids` is counted even though both its ends stay,
+  and so is one taken along with a class, a table or a package. A relationship that is not named
+  and whose ends stay is kept, and not counted. One call that removes ER and UML elements
+  together adds up what each took.
 - **Choosing a package's default diagram**: `uml_package_default_set`
   (`uml.package.default.set`) makes one of the package's own class diagrams its default, given
   `package`, `diagram` and `expected_revision`, which it needs: left out or changed since read, it
