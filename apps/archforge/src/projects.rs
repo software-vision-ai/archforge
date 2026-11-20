@@ -6062,6 +6062,46 @@ mod tests {
         assert_eq!(on_disk(host, &path)[1], unread, "the branch whose kinds were not read is not written");
     }
 
+    /// A model's rows: a project with a package `Sales` and a UML structure diagram of it.
+    fn structure_diagram() -> Rows {
+        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
+        let sales = s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value["id"].as_str().unwrap().to_string();
+        s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": sales, "name": "Sales" })).unwrap();
+        let (tables, junctions) = archforge_notations::storage();
+        archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
+    }
+
+    /// AR-551: a saved project whose UML diagrams an earlier version stored as `uml.class` is
+    /// refused, naming that kind as stored, before anything is written: no recovery, no upgrade of
+    /// its earlier fingerprint, no tab. Stored as `uml.structure`, the same project opens.
+    #[test]
+    fn a_project_whose_uml_diagrams_are_stored_as_the_earlier_uml_class_is_refused_and_left_as_it_was() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        host.write(&path, structure_diagram());
+        assert_eq!(saved(host, &path), Ok(true));
+        let earlier = format!("UPDATE settings SET `value` = '{}' WHERE `key` = 'model_schema'", archforge_project::EARLIER_MODELS.last().unwrap());
+        let start = {
+            let open = lock(&host.inner.open);
+            let run = |statement: &str| open[0].run_on_branch("main", statement).unwrap();
+            let stored = "SELECT CAST(GROUP_CONCAT(DISTINCT kind) AS CHAR) FROM diagram_diagram";
+            assert_eq!(open[0].first_on_branch("main", stored).as_deref(), Ok("uml.structure"), "saved as the one UML kind");
+            run("CALL DOLT_BRANCH('kinds')");
+            run("UPDATE diagram_diagram SET kind = 'uml.class'");
+            run(&earlier);
+            open[0].head_of("scripted").unwrap()
+        };
+        close(host, &path).unwrap();
+        stopped_creation(&path, "scripted", "main", &start);
+        let before = on_disk(host, &path);
+        assert_eq!(wait(&host.open(&path)), Err(CreateError::UnsupportedKinds { kinds: vec!["uml.class".into()] }));
+        assert!(open_paths(host).is_empty(), "no tab");
+        assert_eq!(on_disk(host, &path), before, "nothing written");
+        assert!(path.join(".creating-branch").exists(), "no recovery");
+        closed(host, &path, |p| p.run_on_branch("main", "UPDATE diagram_diagram SET kind = 'uml.structure'"));
+        assert!(wait(&host.open(&path)).is_ok(), "stored as uml.structure, it opens");
+    }
+
     /// Once the branch it was left on is read, a `main` whose kinds cannot be read keeps the project
     /// from opening there neither when that branch's kinds are known nor, naming them, when they are
     /// not; an opening that falls back to that `main`, or needs it, is refused with why, before
