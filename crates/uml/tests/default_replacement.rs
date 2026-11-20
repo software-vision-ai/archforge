@@ -161,25 +161,26 @@ fn refused(s: &mut S, p: Json) -> (Option<String>, Option<Reason>) {
 /// A choice read before an agent chose another default is stale in both forms, naming the revision
 /// read and the one now. Retried on the revision read now, the old default needs no replacement in
 /// either form; a new one's invalid name is refused, and a replacement removed since is stale on the
-/// revision it was chosen on and no diagram on the one after, each with nothing made.
+/// revision it was chosen on and no diagram on the one after, each with nothing made and a step
+/// waiting to be redone kept.
 #[test]
 fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() {
     let mut s = session();
     let c = scene(&mut s);
+    // A class added and undone, waiting to be made again while each choice is refused.
+    let pending = |s: &mut S, name: &str| {
+        run(s, "uml.class.add", json!({ "package": c.sales, "name": name }));
+        s.undo().unwrap();
+    };
     let (read, at) = (token(&s), s.token());
     let set = json!({ "package": c.sales, "diagram": c.detail, "expected_revision": read });
     s.execute_from("uml.package.default.set", &set, Some("Claude")).unwrap();
-    let now = s.token();
+    pending(&mut s, "Invoice");
+    let (now, fresh) = (s.token(), token(&s));
     for form in forms(&c) {
         let stale = Reason::StaleRevision { expected: Some(at), current: now };
         let p = joined(json!({ "diagram": c.overview, "expected_revision": read }), &form);
         assert_eq!(refused(&mut s, p), (Some("expected_revision".into()), Some(stale)), "{form}");
-    }
-    // A step undone waits to be made again while the choice is retried.
-    run(&mut s, "uml.class.add", json!({ "package": c.sales, "name": "Invoice" }));
-    s.undo().unwrap();
-    let fresh = token(&s);
-    for form in forms(&c) {
         let p = joined(json!({ "diagram": c.overview, "expected_revision": fresh }), &form);
         assert_eq!(refused(&mut s, p).1, Some(Reason::ReplacementNotNeeded { diagram: "Sales overview".into() }), "{form}: retried");
     }
@@ -189,11 +190,13 @@ fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() 
     assert_eq!(s.redo().unwrap(), "Add class", "the step undone is still there to make again");
     let (chosen, at) = (token(&s), s.token());
     s.execute("diagram.remove", &json!({ "diagram": c.overview })).unwrap();
+    pending(&mut s, "Receipt");
     let choice = |revision: Json| json!({ "diagram": c.detail, "replacement_diagram": c.overview, "expected_revision": revision });
     let stale = Reason::StaleRevision { expected: Some(at), current: s.token() };
     assert_eq!(refused(&mut s, choice(chosen)), (Some("expected_revision".into()), Some(stale)), "stale before its replacement is looked at");
     let (gone, current) = (Reason::NoElement { id: c.overview.clone() }, token(&s));
     assert_eq!(refused(&mut s, choice(current)), (Some("replacement_diagram".into()), Some(gone)));
+    assert_eq!(s.redo().unwrap(), "Add class", "the step undone is still there to make again");
     assert_eq!(default_of(&s, &c.sales), Some(c.detail.clone()), "the agent's choice stays");
 }
 

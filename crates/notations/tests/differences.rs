@@ -883,7 +883,9 @@ fn a_replaced_default_reads_back_compares_and_stays_in_an_earlier_version() {
         earlier.set_read_only(true).unwrap();
         let get = earlier.execute("uml.package.default.get", &json!({ "package": sales })).unwrap().value;
         assert_eq!((&get["binding"], &get["diagram"]), (&json!(binding), &json!(overview)), "{form}: the old binding");
-        assert!(matches!(earlier.execute("diagram.remove", &p), Err(EngineError::ReadOnly)), "{form}");
+        let own = earlier.token();
+        p["expected_revision"] = json!({ "history": own.history, "revision": own.revision });
+        assert!(matches!(earlier.execute("diagram.remove", &p), Err(EngineError::ReadOnly)), "{form}: on the version's own revision");
         assert!(state(&earlier) == before, "{form}: the version as it was");
     }
 }
