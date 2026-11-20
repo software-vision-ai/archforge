@@ -207,7 +207,9 @@ impl std::fmt::Display for RestoreError {
             RestoreError::OutcomeUnknown => f.write_str("whether an earlier restore finished could not be told"),
             RestoreError::Version(e) => e.fmt(f),
             RestoreError::UnsupportedKinds { kinds, accepted } => {
-                write!(f, "the version holds diagrams of kinds no notation knows: {}; the kinds known are {}", kinds.join(", "), accepted.join(", "))
+                // Quoted, so an empty kind or one holding a comma reads as it is stored.
+                let quoted = kinds.iter().map(|k| format!("{k:?}")).collect::<Vec<_>>().join(", ");
+                write!(f, "the version holds diagrams of kinds no notation knows: {quoted}; the kinds known are {}", accepted.join(", "))
             }
         }
     }
@@ -1958,8 +1960,8 @@ const RESTORED_KIND_BYTES: usize = 256;
 
 /// Refuses a version's `rows` holding diagrams of kinds no notation knows, naming those kinds as
 /// stored, as an opening names them: each cut to [`RESTORED_KIND_BYTES`] at a character boundary,
-/// once, and at most [`MOST_UNKNOWN_KINDS`]; and the kinds the notations know. Only the kinds
-/// named are copied, however many diagrams hold others.
+/// once, and at most [`MOST_UNKNOWN_KINDS`]; and the kinds the notations know. The notations'
+/// check gives each such diagram; of those, only the kinds named are copied into the refusal.
 fn known_kinds_in(rows: &Rows) -> Result<(), RestoreError> {
     let (tables, _) = archforge_notations::storage();
     archforge_notations::check_kinds_in_rows(rows, &tables).map_err(|refused| {
@@ -3945,7 +3947,7 @@ mod tests {
             matches!(&refused, Err(RestoreError::UnsupportedKinds { kinds, accepted: known }) if kinds == &["uml.class"] && known == &accepted),
             "{refused:?}"
         );
-        let logged = "the version holds diagrams of kinds no notation knows: uml.class; the kinds known are er, uml.structure";
+        let logged = "the version holds diagrams of kinds no notation knows: \"uml.class\"; the kinds known are er, uml.structure";
         assert_eq!(refused.as_ref().unwrap_err().to_string(), logged);
         assert_eq!(state(), before, "nothing written, no version made");
         archforge_ui_egui::i18n::set_language("en");
@@ -3978,6 +3980,9 @@ mod tests {
         let mut named = vec!["uml.class".to_string(), "k".repeat(RESTORED_KIND_BYTES - 1)];
         named.extend(more.iter().take(MOST_UNKNOWN_KINDS - 2).cloned());
         assert_eq!(kinds, named);
+        // The reason quotes each kind: an empty one, or one holding a comma, reads as stored.
+        let odd = RestoreError::UnsupportedKinds { kinds: vec![String::new(), "a, b".into()], accepted: vec!["er"] };
+        assert_eq!(odd.to_string(), "the version holds diagrams of kinds no notation knows: \"\", \"a, b\"; the kinds known are er");
     }
 
     /// With only a conversation's rows uncommitted, the restore makes its own version alone and
