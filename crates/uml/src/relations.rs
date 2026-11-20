@@ -748,7 +748,8 @@ pub(crate) fn follow_client(store: &mut Store, c: Obj) -> Result<(), CommandErro
 /// leaving no undo step; several make the caller choose one, under `existing`, with nothing
 /// changed. A choice that no longer joins the two is refused, naming those that do. A dependency
 /// reused keeps its name and description. Every result has `id`, null only while a choice is
-/// needed, its `outcome` and the `candidates` that joined the two when the call came.
+/// needed, its `outcome` and its `candidates`: every dependency that joins the two while a choice
+/// is needed, the one selected after a selection, none after one is added.
 fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     let client = dependency_end(ctx.doc, p, "client", End::Source)?;
     let supplier = dependency_end(ctx.doc, p, "supplier", End::Target)?;
@@ -760,18 +761,21 @@ fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     let name = text(p, "name");
     check_name(name)?;
     let found = existing_matches(ctx.doc, Kind::Dependency, client, supplier);
-    // A choice is checked before any candidate is written out, so a stale one costs no result.
+    // A choice is checked before any candidate is written out, so a stale one costs no result; a
+    // reply lists every candidate only while a choice is needed, a selection only the one selected.
     let reused = match p.str("existing") {
         Some(chosen) => Some(chosen_match(ctx.doc, &found, chosen, (client, supplier))?),
         None => found.first().copied().filter(|_| found.len() == 1),
     };
-    let candidates = found.iter().map(|d| candidate_json(ctx.doc, Kind::Dependency, *d, ["client", "supplier"])).collect::<Result<Vec<Json>, _>>()?;
-    if reused.is_none() && !found.is_empty() {
-        return Ok(json!({ "id": Json::Null, "outcome": "choiceRequired", "candidates": candidates }));
-    }
+    let candidate = |d: &Obj| candidate_json(ctx.doc, Kind::Dependency, *d, ["client", "supplier"]);
     if let Some(d) = reused {
+        let chosen = candidate(&d)?;
         ctx.view.selection = vec![d];
-        return Ok(json!({ "id": uuid_of(ctx.doc, d)?, "outcome": "selected", "candidates": candidates }));
+        return Ok(json!({ "id": uuid_of(ctx.doc, d)?, "outcome": "selected", "candidates": [chosen] }));
+    }
+    if !found.is_empty() {
+        let candidates = found.iter().map(candidate).collect::<Result<Vec<Json>, _>>()?;
+        return Ok(json!({ "id": Json::Null, "outcome": "choiceRequired", "candidates": candidates }));
     }
     let d = ctx.doc.create(DEPENDENCY).map_err(fail)?;
     set_name(ctx.doc, d, name)?;
@@ -779,7 +783,7 @@ fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     ctx.doc.push(d, dependency::CLIENT, Value::Ref(client)).map_err(fail)?;
     ctx.doc.push(d, dependency::SUPPLIER, Value::Ref(supplier)).map_err(fail)?;
     ctx.view.selection = vec![d];
-    Ok(json!({ "id": uuid_of(ctx.doc, d)?, "outcome": "created", "candidates": candidates }))
+    Ok(json!({ "id": uuid_of(ctx.doc, d)?, "outcome": "created", "candidates": [] }))
 }
 
 /// The most candidates a stale choice's sentence names; its reason holds them all.

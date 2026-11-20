@@ -149,7 +149,8 @@ fn the_reverse_direction_another_kind_or_the_same_names_elsewhere_add_a_new_depe
 /// Several dependencies joining the client to the supplier, as an earlier version may have made,
 /// give the outcome `choiceRequired` with a null id and every candidate, same-named and unnamed
 /// ones told apart by their ids, with nothing changed and no undo step; `existing` then picks one,
-/// which is selected with nothing changed either. The parallel ones are never merged.
+/// which is selected with nothing changed either, its reply listing it alone. The parallel ones are
+/// never merged.
 #[test]
 fn several_matches_need_a_choice_and_existing_picks_one_with_nothing_changed() {
     let mut built = session();
@@ -166,7 +167,7 @@ fn several_matches_need_a_choice_and_existing_picks_one_with_nothing_changed() {
     assert_eq!(state(&s), before, "nothing changed and no undo step");
     assert!(s.view().selection.is_empty(), "nothing selected");
     let picked = add(&mut s, json!({ "client": order, "supplier": line, "existing": unnamed }));
-    assert_eq!(picked, json!({ "id": unnamed, "outcome": "selected", "candidates": all }));
+    assert_eq!(picked, json!({ "id": unnamed, "outcome": "selected", "candidates": [all[2]] }), "the one selected alone");
     assert_eq!(state(&s), before, "picked with nothing changed and no undo step");
     assert_eq!(s.view().selection, [obj(&s, &unnamed)]);
 }

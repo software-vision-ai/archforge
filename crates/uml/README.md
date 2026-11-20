@@ -119,7 +119,8 @@ Archforge's rule, not UML's: one is selected (`outcome` `selected`), nothing cha
 step, its name and description kept, several give `choiceRequired` with a null `id`, nothing
 changed, until `existing` names one, a choice that no longer joins the two refused as
 `Reason::StaleChoice` naming those that do, and none adds one (`created`); every result has `id`,
-`outcome` and `candidates`; `element.remove` refuses a package,
+`outcome` and `candidates`, every match only while a choice is needed and otherwise the one
+selected or none; `element.remove` refuses a package,
 or one a package with no parent takes along, while a dependency that stays has it as its client or
 its supplier (`Reason::DependencyEnd`, naming the dependency's id and its other end), until 402-C,
 AR-698, replaces both refusals by removing such dependencies with the package; a dependency's new
