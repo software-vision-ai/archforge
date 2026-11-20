@@ -1164,7 +1164,10 @@ as when you draw the line. When you move an end of an association or an associat
 the same step. The canvas names what was dropped, and you can undo it. For an interface
 realization, drag the class end onto another class, or the interface end onto another interface.
 A generalization in a generalization set keeps its ends: take it out of its sets first (see
-[Generalization sets](#generalization-sets)).
+[Generalization sets](#generalization-sets)). A dependency keeps its name and description when an
+end moves. Moving it so that it joins the same two elements, in the same direction, as another
+dependency is refused, and the canvas says that the connection already exists: select that
+dependency instead.
 
 ### What each line can join
 

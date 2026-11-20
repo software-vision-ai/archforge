@@ -7393,6 +7393,9 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let to = "Die Abhängigkeit d-7 von Auftrag hängt von Buchhaltung ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
         let from = "Buchhaltung hängt über die Abhängigkeit d-7 von Auftrag ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
         assert_eq!([said(Target), said(Source)], [Some(to.into()), Some(from.into())], "{theme:?}");
+        // A dependency moved onto the client and supplier another has (AR-697).
+        let exists = "Diese Verbindung besteht bereits. Verwenden Sie „Art ändern“ oder wählen Sie die bestehende Beziehung aus.";
+        assert_eq!(crate::panels::said(&archforge_engine::Reason::ConnectionExists), Some(exists.to_string()), "{theme:?}");
         // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
         use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
         let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
@@ -22560,6 +22563,48 @@ fn a_realization_shows_its_class_and_interface_in_properties_and_its_ends_reconn
         drag(&mut h, handle, to);
         assert_eq!(h.state().canvas.notice.as_deref(), Some("A class realizes only an interface"));
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision);
+    }
+}
+
+/// A dependency's end dragged onto another class moves there, the canvas sending the revision it
+/// shows, which a dependency's reconnect needs; dragged onto the client and supplier another
+/// dependency has, it is refused in words and nothing changes; in light and dark (AR-697).
+#[test]
+fn a_dependency_end_dragged_onto_another_class_carries_the_revision_and_a_repeated_pair_is_refused() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (dep, order, payment) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let dep = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::DEPENDENCY)).unwrap();
+            let named = |n: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == n);
+            let uuid = |o: archforge_mof::Obj| st.uuid(o).unwrap().to_string();
+            (uuid(dep), uuid(named("Order").unwrap()), uuid(named("Payment").unwrap()))
+        };
+        let supplier = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let (_, to) = archforge_uml::figures::ends(st, st.by_uuid(archforge_mof::Uuid::parse(&dep).unwrap()).unwrap()).unwrap();
+            archforge_core::name_of(st, to)
+        };
+        assert_eq!(supplier(&h), "PricingService", "{theme:?}");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [dep] })).unwrap();
+        h.run();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Product"])).center();
+        drag(&mut h, handle, to);
+        assert_eq!(supplier(&h), "Product", "{theme:?}: moved, notice {:?}", h.state().canvas.notice);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Reconnect relationship"), "{theme:?}");
+        // Another dependency from Order to Payment: moving this one onto that pair is refused.
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("uml.dependency.add", &serde_json::json!({ "client": order, "supplier": payment })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [dep] })).unwrap();
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Payment"])).center();
+        drag(&mut h, handle, to);
+        let said = crate::i18n::tr("This connection already exists. Use Change kind or select the existing relationship.");
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(said.as_str()), "{theme:?}");
+        assert_eq!((supplier(&h), h.state().session.as_ref().unwrap().revision()), ("Product".to_string(), revision), "{theme:?}: unchanged");
     }
 }
 

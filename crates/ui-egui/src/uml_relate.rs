@@ -623,8 +623,8 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
     }
 }
 
-/// Moves the source or target end of `element` to the class of `to_node`; dropped back on its own
-/// class it changes nothing, and a refusal is said at the canvas's top: a realization's, a
+/// Moves the source or target end of `element` to the class of `to_node`, on the revision of the
+/// model it was dropped on; dropped back on its own class it changes nothing, and a refusal is said at the canvas's top: a realization's, a
 /// generalization's, and an association's moved onto an enumeration, a data type or a primitive type, in the user's
 /// words.
 pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid) {
@@ -706,7 +706,11 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     }
     let Ok(class) = store.uuid(target) else { return };
     let end = if source { "source" } else { "target" };
-    match run(shell, "uml.relationship.reconnect", json!({ "relationship": element.to_string(), "end": end, "class": class.to_string() })) {
+    // The revision the line was dropped on, which a dependency's reconnect needs (AR-697).
+    let Some(at) = shell.session.as_ref().map(|s| s.token()) else { return };
+    let revision = json!({ "history": at.history, "revision": at.revision });
+    let params = json!({ "relationship": element.to_string(), "end": end, "class": class.to_string(), "expected_revision": revision });
+    match run(shell, "uml.relationship.reconnect", params) {
         // What the moved ends no longer subset or redefine went in the same step: said.
         Ok(out) => {
             let names: Vec<&str> =

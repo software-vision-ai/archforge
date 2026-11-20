@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, ProjectView, defaults, diagram};
-use archforge_engine::{BindingFault, CommandError, Ctx, EXPECTED_REVISION, Params, Reason, expected_revision};
+use archforge_engine::{BindingFault, CommandError, Ctx, Params, Reason, expected_revision, expected_revision_if_given};
 use archforge_mof::{Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -113,9 +113,7 @@ pub fn problems(store: &Store) -> Vec<Diagnosis> {
 /// [`Reason::StaleRevision`] on another. An unsound binding is refused as
 /// [`Reason::InvalidBinding`], naming the ids concerned and what to do. It only reads.
 pub(crate) fn default_get(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> Result<Json, CommandError> {
-    if p.get(EXPECTED_REVISION).is_some() {
-        expected_revision(ctx, p)?;
-    }
+    expected_revision_if_given(ctx, p)?;
     let store = &*ctx.doc;
     let package = id_of(store, p, "package", PROFILE, "a package").or_else(|_| id_of(store, p, "package", PACKAGE, "a package"))?;
     let (state, binding, diagram) = match resolve(store, package) {

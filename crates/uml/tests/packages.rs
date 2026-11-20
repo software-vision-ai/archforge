@@ -142,7 +142,8 @@ fn a_clash_a_package_into_itself_and_a_self_dependency_carry_their_reason_typed(
     // Reconnected onto its client, a dependency would make it depend on itself too.
     let line = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Line" }));
     let uses = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": line }));
-    let p = json!({ "relationship": uses, "end": "target", "class": order });
+    let at = s.token();
+    let p = json!({ "relationship": uses, "end": "target", "class": order, "expected_revision": { "history": at.history, "revision": at.revision } });
     let Err(EngineError::Failed { error, .. }) = s.execute("uml.relationship.reconnect", &p) else { panic!("{p} is refused") };
     assert_eq!((error.reason, error.message), itself, "reconnected");
 }

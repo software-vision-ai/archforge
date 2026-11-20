@@ -22,6 +22,7 @@ pub mod testing;
 
 pub use cmd::{
     CommandInfo, CommandSpec, CommitCheck, Ctx, EXPECTED_REVISION, Facts, Handler, ParamInfo, Registry, Revision, always, expected_revision,
+    expected_revision_if_given,
 };
 pub use error::{
     Accepted, BindingFault, CommandError, DefaultKind, DependencyOf, End, EngineError, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty,

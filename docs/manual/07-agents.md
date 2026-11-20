@@ -688,7 +688,16 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   takes the dependencies it is the only client of to its new package too. A dependency with more than one client or
   supplier, or a new end outside the model, is refused, and so is a reconnect that would keep an
   end that is no package or classifier, or is outside the model, naming that end's role: move that
-  end instead. `uml_relationship_rename` renames a dependency between packages in a project with no
+  end instead. A reconnected dependency stays the same dependency, with its id, name and
+  description, and its line follows on every diagram that shows the new end; a diagram that does
+  not show it loses that line alone. Reconnecting a dependency needs `expected_revision`, as
+  `inspect_document` gives it. This is a change from earlier versions: a call that reconnects a
+  dependency without it, or with another revision, is now refused and changes nothing. Read the project
+  again and retry with the revision it gives. The other relationships' ends move without it as
+  before, and only on that revision when it is given. Moving a dependency so that it joins one
+  client to one supplier that another dependency alone joins already is refused, naming that
+  dependency: the two are never merged into one, so select that one instead. Like the two ends and no dependency on itself,
+  this is Archforge's rule, not UML's. `uml_relationship_rename` renames a dependency between packages in a project with no
   classifier.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
