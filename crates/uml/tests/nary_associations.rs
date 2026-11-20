@@ -304,6 +304,13 @@ fn a_class_repeats_at_two_ends_with_different_roles() {
     assert_eq!(legs(&s, &shop.d, &a), ["Customer", "Customer", "Product"], "two legs to the one card");
     run(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "role": "referrer", "multiplicity": "0..1", "navigable": true }));
     assert_eq!(ends(&s, &a)[1], triple("referrer", "Customer", "0..1"));
+    let end = nary::ends(s.doc(), obj(s.doc(), &a))[1];
+    let leg = archforge_uml::figures::line(s.doc(), end).unwrap();
+    assert_eq!(
+        (leg.ends[1].role.as_deref(), leg.ends[1].text.as_deref()),
+        (Some("referrer"), Some("0..1")),
+        "the leg writes its end's role and text"
+    );
     let why = refused(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "role": "CUSTOMER" }));
     assert!(why.contains("role customer already"), "{why}");
     let why = refused(&mut s, "uml.association.add-end", json!({ "association": a, "class": shop.store, "role": "Product" }));

@@ -234,15 +234,18 @@ pub fn attribute_text(store: &Store, a: Obj) -> String {
 }
 
 /// An association end's role as its line writes it: `/` before it when the end is derived; empty
-/// when it has neither.
+/// when it has neither. Only the name and the derived flag are read; a line that writes the end's
+/// text too reads [`PropertyValues::of`] once for both.
 pub fn end_role(store: &Store, end: Obj) -> String {
-    PropertyValues::of(store, end).end_role()
+    PropertyValues { derived: crate::modifiers::is_derived(store, end), name: name(store, end), ..PropertyValues::default() }.end_role()
 }
 
 /// What an association end's line writes beside its end after the role: its multiplicity, then
 /// `= default` and the braces, as in `0..* = none {ordered}` (AR-126); empty when it has none.
+/// Only those are read.
 pub fn end_text(store: &Store, end: Obj) -> String {
-    PropertyValues::of(store, end).end_text()
+    let (default, braces) = (crate::modifiers::default_shown(store, end), crate::modifiers::braces(store, end));
+    PropertyValues { bounds: bounds(store, end), default, braces, ..PropertyValues::default() }.end_text()
 }
 
 /// An operation as plain values (AR-669), from the model by [`OperationValues::of`] or from a
@@ -625,8 +628,8 @@ fn diamond_card(store: &Store, a: Obj) -> Card {
 /// multiplicity beside it.
 fn leg_line(store: &Store, end: Obj) -> Option<Line> {
     let a = crate::nary::association_of_end(store, end)?;
-    let m = end_text(store, end);
-    let role = end_role(store, end);
+    let values = PropertyValues::of(store, end);
+    let (m, role) = (values.end_text(), values.end_role());
     let to = End {
         mark: if navigable(store, a, end) { EndMark::OpenArrow } else { EndMark::None },
         text: (!m.is_empty()).then_some(m),
@@ -707,8 +710,8 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
                     AggregationKind::NoneKind if navigable(store, element, here) => EndMark::OpenArrow,
                     AggregationKind::NoneKind => EndMark::None,
                 };
-                let m = end_text(store, here);
-                let role = end_role(store, here);
+                let values = PropertyValues::of(store, here);
+                let (m, role) = (values.end_text(), values.end_role());
                 End {
                     mark,
                     text: (!m.is_empty()).then_some(m),

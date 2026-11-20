@@ -756,6 +756,7 @@ fn subsets_and_redefines_on_association_ends_take_the_other_end_s_properties() {
     let line = archforge_uml::figures::line(s.doc(), obj(&s, &a)).unwrap();
     assert_eq!((line.ends[1].role.as_deref(), line.ends[1].text.as_deref()), (Some("/items"), Some("* = none {ordered, subsets all}")));
     assert_eq!(archforge_uml::figures::slot_text(s.doc(), obj(&s, &a), "to_end"), "* = none {ordered, subsets all}");
+    assert_eq!(archforge_uml::figures::slot_text(s.doc(), obj(&s, &a), "to_role"), "/items", "the role read alone, derived");
     // Not composite: products is, so it is refused; composite, it is taken.
     refused(&mut s, "uml.association.set-end", set(json!({ "redefines": [products] })), "redefines", &[products.as_str(), "composite"]);
     run(&mut s, "uml.association.set-end", json!({ "association": a, "end": 0, "multiplicity": "1", "navigable": false }));
