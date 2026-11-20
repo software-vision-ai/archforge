@@ -154,8 +154,8 @@ fn refused(s: &mut S, p: Json) -> (Option<String>, Option<Reason>) {
 
 /// A choice read before an agent chose another default is stale in both forms, naming the revision
 /// read and the one now. Retried on the revision read now, the old default needs no replacement in
-/// either form; a new one's invalid name is refused, and a replacement removed since is no diagram,
-/// each with nothing made.
+/// either form; a new one's invalid name is refused, and a replacement removed since is stale on the
+/// revision it was chosen on and no diagram on the one after, each with nothing made.
 #[test]
 fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() {
     let mut s = session();
@@ -177,9 +177,13 @@ fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() 
     let named = |name: &str| json!({ "diagram": c.detail, "create_replacement": { "name": name }, "expected_revision": fresh });
     assert_eq!(refused(&mut s, named(" ")).1, Some(Reason::NameEmpty));
     assert_eq!(refused(&mut s, named("Sales\u{7}map")).1, Some(Reason::ControlCharacter));
+    let (chosen, at) = (token(&s), s.token());
     s.execute("diagram.remove", &json!({ "diagram": c.overview })).unwrap();
-    let p = json!({ "diagram": c.detail, "replacement_diagram": c.overview, "expected_revision": token(&s) });
-    assert_eq!(refused(&mut s, p), (Some("replacement_diagram".into()), Some(Reason::NoElement { id: c.overview.clone() })));
+    let choice = |revision: Json| json!({ "diagram": c.detail, "replacement_diagram": c.overview, "expected_revision": revision });
+    let stale = Reason::StaleRevision { expected: Some(at), current: s.token() };
+    assert_eq!(refused(&mut s, choice(chosen)), (Some("expected_revision".into()), Some(stale)), "stale before its replacement is looked at");
+    let (gone, current) = (Reason::NoElement { id: c.overview.clone() }, token(&s));
+    assert_eq!(refused(&mut s, choice(current)), (Some("replacement_diagram".into()), Some(gone)));
     assert_eq!(default_of(&s, &c.sales), Some(c.detail.clone()), "the agent's choice stays");
 }
 
