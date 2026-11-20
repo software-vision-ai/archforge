@@ -522,18 +522,18 @@ card where nothing lies over it to select the package.
   path bar says why. A double click still renames the package, as it does a class.
 - **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
   least zoom, 10 %. Reach 10 % and the diagram you went in from opens again, even when that
-  diagram belongs to another branch of your model, as you left it, provided it still shows the
-  package you were in. If it no longer does, the diagram is fitted to the view instead: all of it
-  shows, unless it is too wide or tall to fit even at 10 %, the least zoom; then the middle of it
-  shows at 10 %, which can be empty space between its cards. Three cases open it at
-  100 %, with the package you were in at its centre: you went in by zooming; or, however you went
-  in (zooming, ⌘↓ or Open), the view you left would now hide the package you were in; or it would
-  now show a package filling most of the canvas (60 % or more), the amount at which zooming in
-  goes into a package. Both are measured on the window as it is when you come back, so a smaller
-  window counts. Zoom out to 10 % again to go back one more step
-  the way you came; coming back adds no step of its own. Once no step is left, or when you opened
-  the diagram without going in through a package, zooming out opens the parent package's default
-  diagram instead, at 100 % with the package you were in at its centre, or, when that diagram shows
+  diagram belongs to another branch of your model, as you left it, provided it still has a card of
+  the package you were in. If that card has been removed from it, the diagram is fitted to the
+  view instead: all of it shows, unless it is too wide or tall to fit even at 10 %, the least zoom;
+  then the middle of it shows at 10 %, which can be empty space between its cards. While the card
+  is still there, three cases open the diagram at 100 % with that card at its centre: you went in
+  by zooming; or, however you went in (zooming, ⌘↓ or Open), the view you left would now put the
+  card out of sight; or it would now show a package filling most of the canvas (60 % or more), the
+  amount at which zooming in goes into a package. Both are measured on the window as it is when
+  you come back, so a smaller window counts. Zoom out to 10 % again to go back one more step the
+  way you came; coming back adds no step of its own. Once no step is left, or when you opened the
+  diagram without going in through a package, zooming out opens the parent package's default
+  diagram instead, at 100 % with the package you were in at its centre, or, when that diagram has
   no card of it, fitted to the view the same way. At your project's root there is no parent: the
   diagram stays at 10 %, and a note under the path bar says so.
 - **Come back by the path bar.** The path bar at the canvas's top left names the packages from
