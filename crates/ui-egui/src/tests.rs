@@ -31110,13 +31110,14 @@ fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
 /// its saved view was sound (AR-668): Top, left at 60 % by entering Sales, loses Sales' card; the
 /// return shows both classes far apart in view, below 100 %. Emptied entirely, Top shows at 100 %
 /// from its top left, as an empty diagram fits. So does Top as the owning parent's default when
-/// Sales' diagram was opened directly, with no route back.
+/// Sales' diagram was opened directly, with no route back. Classes wider apart than ten canvases
+/// fit only down to the least zoom, 10 %.
 #[test]
 fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        for (emptied, routed) in [(false, true), (true, true), (false, false), (true, false)] {
+        for (far, routed) in [(&[0, 4000][..], true), (&[], true), (&[0, 4000], false), (&[], false), (&[0, 400_000], false)] {
+            let emptied = far.is_empty();
             let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-            let far: &[i64] = if emptied { &[] } else { &[0, 4000] };
             let (top, sales, card, sales_d) = top_with_sales(&mut h, (240, 148), far);
             crate::canvas::open(h.state_mut(), top);
             h.run();
@@ -31136,6 +31137,8 @@ fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
             let c = &h.state().canvas;
             if emptied {
                 assert_eq!((c.pan, c.zoom), (egui::Vec2::ZERO, 1.0), "{theme:?} routed {routed}: the empty diagram from its top left");
+            } else if far[1] > 4000 {
+                assert_eq!(c.zoom, crate::canvas::ZOOM_RANGE.0, "{theme:?}: too wide to fit, at the least zoom");
             } else {
                 let seen = [0.0, 4200.0].iter().all(|x| (0.0..=c.size.x).contains(&(c.pan.x + x * c.zoom)));
                 assert!(seen && c.zoom < 1.0, "{theme:?} routed {routed}: both classes fitted in view, {:?}", (c.pan, c.zoom));

@@ -9,9 +9,9 @@
 //!   [`ENTER_COVER`] of the canvas opens the package's diagram at 100 %, its content centred.
 //! - **Out by zoom**: a package's diagram stays open until the zoom reaches its least, 10 %
 //!   ([`crate::canvas::ZOOM_RANGE`]); there the diagram it was entered from opens again, even when
-//!   that diagram is in another branch (Decision 4), as it was left when that view is still
-//!   sound ([`restorable`]); else at 100 %, the package left centred, or the whole diagram fitted
-//!   when it no longer shows the package (AR-668). The return takes its step off the tab's route
+//!   that diagram is in another branch (Decision 4): fitted, down to 10 %, when it no longer shows
+//!   the package; else as it was left when that view is still sound ([`restorable`]); else at
+//!   100 %, the package left centred (AR-668). The return takes its step off the tab's route
 //!   and makes none. With no way in left, the parent's default opens instead, landing as a return
 //!   with no view kept does; at the root, 10 % stays put and says so.
 //! - **Out by the path bar or ⌘↑**: the owning ancestor's default diagram as it was last left, by
@@ -243,7 +243,8 @@ fn most_covered(store: &Store, d: Obj, view: crate::canvas::View, r: Rect) -> Op
         .max_by(|a, b| a.1.total_cmp(&b.1))
 }
 
-/// Whether `view`, the pan and zoom diagram `d` was left with, can be shown again on canvas `r`:
+/// Whether `view`, the pan and zoom diagram `d` was left with, can be shown again on canvas `r`,
+/// `d` still showing the card of the package left ([`land`] checks that first):
 /// both finite, the zoom within [`crate::canvas::ZOOM_RANGE`], and no package card of `d` covering
 /// [`ENTER_COVER`] of the canvas there, the measure zooming in enters by ([`most_covered`]). A view
 /// some package covers more of is no place to come back to, since the next zoom-in tick would
@@ -258,9 +259,9 @@ fn restorable(store: &Store, r: Rect, d: Obj, (pan, zoom): (Vec2, f32)) -> bool 
     most_covered(store, d, view, r).is_none_or(|(_, cover)| cover < ENTER_COVER)
 }
 
-/// Lands diagram `d` on canvas `r` after a zoom out: at the view it was left with when that is
-/// [`restorable`]; else at [`LANDING`] with the card of the package left centred; or, when `d`
-/// shows no card of it, its whole content fitted, as an emptied diagram is.
+/// Lands diagram `d` on canvas `r` after a zoom out. When `d` shows no card of the package left,
+/// its content fitted, down to the least zoom, as an emptied diagram is; else at the view it was
+/// left with when that is [`restorable`]; else at [`LANDING`] with that card centred.
 fn land(shell: &mut Shell, r: Rect, d: Obj, landing: Landing) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let card = store.by_uuid(landing.package).and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p)));
