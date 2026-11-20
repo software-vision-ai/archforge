@@ -114,13 +114,7 @@ pub fn application(store: &Store, element: Obj, stereotype: Obj) -> Option<Obj> 
 /// The stereotypes on `element` as it shows them, `«Entity»` or `«Entity, Auditable»`; none when it
 /// carries none. A stereotype's name is the model's, never translated.
 pub fn keywords(store: &Store, element: Obj) -> Option<String> {
-    let names: Vec<String> = applied_to(store, element).into_iter().map(|(s, _)| name_of(store, s)).collect();
-    (!names.is_empty()).then(|| format!("«{}»", names.join(", ")))
-}
-
-/// What a member's row or a line writes before its text: `«Id» `, or nothing.
-pub fn prefix(store: &Store, element: Obj) -> String {
-    keywords(store, element).map(|k| format!("{k} ")).unwrap_or_default()
+    crate::figures::stereotype_keywords(&crate::figures::stereotypes(store, element))
 }
 
 // What may be applied.

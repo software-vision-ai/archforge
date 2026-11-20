@@ -18,7 +18,8 @@
 //! keyword kind keeps its keyword first), start a member's row and sit at a line's middle; a diagram
 //! that shows them lists the values set in a compartment per stereotype. A package's card names
 //! its owners from the model's root down to its parent (AR-564), and is drawn under the diagram's
-//! other figures (AR-570). The canvas draws these descriptions.
+//! other figures (AR-570). The canvas draws these descriptions; rows, ends and keywords are written
+//! from plain values the cards fill from the model, as values from elsewhere can be (AR-669).
 
 use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
@@ -32,7 +33,7 @@ use crate::{
 
 /// The most parameters an operation's row names, and the longest row a card draws: a row is
 /// built every frame, so neither grows with what the model holds.
-const MAX_PARAMETERS: usize = 8;
+pub const MAX_PARAMETERS: usize = 8;
 const MAX_ROW: usize = 200;
 /// The most rows a card lists, across its compartments: a card is at most
 /// [`archforge_diagram::rules::MAX_SIZE`] tall, which holds no more than this many rows, so the
@@ -79,22 +80,45 @@ pub fn is_static(store: &Store, feature: Obj) -> bool {
     flag(store, feature, crate::feature::IS_STATIC)
 }
 
-/// The sign of an element's visibility, when it has one.
-pub fn visibility(store: &Store, o: Obj) -> Option<&'static str> {
+/// The sign of a visibility: `+` public, `-` private, `#` protected, `~` package.
+pub fn visibility_mark(v: VisibilityKind) -> &'static str {
+    match v {
+        VisibilityKind::Public => "+",
+        VisibilityKind::Private => "-",
+        VisibilityKind::Protected => "#",
+        VisibilityKind::Package => "~",
+    }
+}
+
+/// An element's visibility, when it has one the model knows.
+fn visibility_kind(store: &Store, o: Obj) -> Option<VisibilityKind> {
     match store.get(o, named_element::VISIBILITY).ok()? {
-        Value::Enum(i) => Some(match VisibilityKind::from_index(i)? {
-            VisibilityKind::Public => "+",
-            VisibilityKind::Private => "-",
-            VisibilityKind::Protected => "#",
-            VisibilityKind::Package => "~",
-        }),
+        Value::Enum(i) => VisibilityKind::from_index(i),
         _ => None,
     }
+}
+
+/// The sign of an element's visibility, when it has one.
+pub fn visibility(store: &Store, o: Obj) -> Option<&'static str> {
+    visibility_kind(store, o).map(visibility_mark)
+}
+
+/// A multiplicity's bounds as plain values (AR-669): `lower` and `upper` None when the element
+/// names none, `upper` `Some(None)` when it is unlimited.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Bounds {
+    pub lower: Option<i64>,
+    pub upper: Option<Option<u64>>,
 }
 
 /// A multiplicity's bounds as written: `1`, `0..1`, `*` (none to many), `1..*`; empty when the
 /// element names none.
 pub fn multiplicity(store: &Store, o: Obj) -> String {
+    multiplicity_text(bounds(store, o))
+}
+
+/// The bounds of element `o`'s multiplicity, as the model holds them.
+pub fn bounds(store: &Store, o: Obj) -> Bounds {
     let lower = one(store, o, multiplicity_element::LOWER_VALUE).and_then(|v| match store.get(v, literal_integer::VALUE).ok()? {
         Value::Int(n) => Some(n),
         _ => None,
@@ -104,6 +128,12 @@ pub fn multiplicity(store: &Store, o: Obj) -> String {
         Value::Unlimited(Some(n)) => Some(Some(n)),
         _ => None,
     });
+    Bounds { lower, upper }
+}
+
+/// Bounds as a multiplicity writes them: `1`, `0..1`, `*` (none to many), `1..*`, a bound not
+/// named read as 1; empty when neither is named.
+pub fn multiplicity_text(Bounds { lower, upper }: Bounds) -> String {
     if lower.is_none() && upper.is_none() {
         return String::new();
     }
@@ -127,70 +157,159 @@ fn type_name(store: &Store, o: Obj) -> Option<String> {
     one(store, o, typed_element::TYPE).map(|t| name(store, t)).filter(|n| !n.is_empty())
 }
 
+/// An attribute or an association end as plain values (AR-669), from the model by
+/// [`PropertyValues::of`] or from a caller that has them elsewhere, so both write the same text;
+/// `default` as a card shows it, `braces` the words between them (`readOnly`, `subsets lines`, …).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PropertyValues {
+    pub visibility: Option<VisibilityKind>,
+    pub derived: bool,
+    pub name: String,
+    pub type_name: Option<String>,
+    pub bounds: Bounds,
+    pub default: Option<String>,
+    pub braces: Vec<String>,
+}
+
+impl PropertyValues {
+    /// The values property `p` has in the model.
+    pub fn of(store: &Store, p: Obj) -> Self {
+        Self {
+            visibility: visibility_kind(store, p),
+            derived: crate::modifiers::is_derived(store, p),
+            name: name(store, p),
+            type_name: type_name(store, p),
+            bounds: bounds(store, p),
+            default: crate::modifiers::default_shown(store, p),
+            braces: crate::modifiers::braces(store, p),
+        }
+    }
+
+    /// The property as a card's row writes it: `+ / total : Money [0..1] = 0 {ordered}`, the
+    /// multiplicity left out when it is `1` or unnamed.
+    pub fn attribute_text(&self) -> String {
+        let mut text = self.visibility.map(|v| format!("{} ", visibility_mark(v))).unwrap_or_default();
+        if self.derived {
+            text.push_str("/ ");
+        }
+        text.push_str(&self.name);
+        if let Some(ty) = &self.type_name {
+            text.push_str(&format!(" : {ty}"));
+        }
+        let m = multiplicity_text(self.bounds);
+        if !m.is_empty() && m != "1" {
+            text.push_str(&format!(" [{m}]"));
+        }
+        text.push_str(&modifier_text(self.default.as_deref(), &self.braces));
+        cut(text)
+    }
+
+    /// The end's role as its line writes it: its name, `/` before it when the end is derived.
+    pub fn end_role(&self) -> String {
+        if self.derived { cut(format!("/{}", self.name)) } else { self.name.clone() }
+    }
+
+    /// What the end's line writes after the role: its multiplicity, then `= default` and the
+    /// braces, as in `0..* = none {ordered}`; empty when it has none of them.
+    pub fn end_text(&self) -> String {
+        cut(format!("{}{}", multiplicity_text(self.bounds), modifier_text(self.default.as_deref(), &self.braces)).trim_start().to_string())
+    }
+}
+
+/// What follows a property's multiplicity: ` = default` when it has one, then ` {…}` when
+/// `braces` holds any word, as in ` = 0 {readOnly, ordered}`; empty otherwise.
+pub fn modifier_text(default: Option<&str>, braces: &[String]) -> String {
+    let mut text = default.map(|d| format!(" = {d}")).unwrap_or_default();
+    if !braces.is_empty() {
+        text.push_str(&format!(" {{{}}}", braces.join(", ")));
+    }
+    text
+}
+
 /// An attribute as a class's card lists it: `+ total : Money [0..1]`; a derived one with `/ `
 /// before its name, then its default after `=` and what differs from the usual in braces (AR-126,
 /// as the design writes it: `+ / total : Money = 0`, `+ lines : OrderLine [1..*] {ordered}`).
 pub fn attribute_text(store: &Store, a: Obj) -> String {
-    let mut text = visibility(store, a).map(|v| format!("{v} ")).unwrap_or_default();
-    if crate::modifiers::is_derived(store, a) {
-        text.push_str("/ ");
-    }
-    text.push_str(&name(store, a));
-    if let Some(ty) = type_name(store, a) {
-        text.push_str(&format!(" : {ty}"));
-    }
-    let m = multiplicity(store, a);
-    if !m.is_empty() && m != "1" {
-        text.push_str(&format!(" [{m}]"));
-    }
-    text.push_str(&crate::modifiers::suffix(store, a));
-    cut(text)
+    PropertyValues::of(store, a).attribute_text()
 }
 
 /// An association end's role as its line writes it: `/` before it when the end is derived; empty
-/// when it has neither.
+/// when it has neither. Only the name and the derived flag are read; a line that writes the end's
+/// text too reads [`PropertyValues::of`] once for both.
 pub fn end_role(store: &Store, end: Obj) -> String {
-    let role = name(store, end);
-    if crate::modifiers::is_derived(store, end) { cut(format!("/{role}")) } else { role }
+    PropertyValues { derived: crate::modifiers::is_derived(store, end), name: name(store, end), ..PropertyValues::default() }.end_role()
 }
 
 /// What an association end's line writes beside its end after the role: its multiplicity, then
 /// `= default` and the braces, as in `0..* = none {ordered}` (AR-126); empty when it has none.
+/// Only those are read.
 pub fn end_text(store: &Store, end: Obj) -> String {
-    let text = format!("{}{}", multiplicity(store, end), crate::modifiers::suffix(store, end));
-    cut(text.trim_start().to_string())
+    let (default, braces) = (crate::modifiers::default_shown(store, end), crate::modifiers::braces(store, end));
+    PropertyValues { bounds: bounds(store, end), default, braces, ..PropertyValues::default() }.end_text()
+}
+
+/// An operation as plain values (AR-669), from the model by [`OperationValues::of`] or from a
+/// caller: `inputs` its parameters but the return one, name and type, past [`MAX_PARAMETERS`]
+/// written `…`; `returns` its return type; `leaf` when nothing may redefine it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OperationValues {
+    pub visibility: Option<VisibilityKind>,
+    pub name: String,
+    pub inputs: Vec<(String, Option<String>)>,
+    pub returns: Option<String>,
+    pub leaf: bool,
+}
+
+impl OperationValues {
+    /// The values operation `op` has in the model; of its inputs, one more than
+    /// [`MAX_PARAMETERS`] at most, which is enough to say there are more.
+    pub fn of(store: &Store, op: Obj) -> Self {
+        let direction = |p: Obj| match store.get(p, parameter::DIRECTION).ok() {
+            Some(Value::Enum(i)) => ParameterDirectionKind::from_index(i),
+            _ => None,
+        };
+        let params = list(store, op, operation::OWNED_PARAMETER);
+        let inputs = params
+            .iter()
+            .filter(|p| direction(**p) != Some(ParameterDirectionKind::Return))
+            .take(MAX_PARAMETERS.saturating_add(1))
+            .map(|p| (name(store, *p), type_name(store, *p)))
+            .collect();
+        let returns = params.iter().find(|p| direction(**p) == Some(ParameterDirectionKind::Return)).and_then(|p| type_name(store, *p));
+        Self { visibility: visibility_kind(store, op), name: name(store, op), inputs, returns, leaf: crate::relations::is_leaf(store, op) }
+    }
+
+    /// The operation as a card's row writes it: `+ total(currency : Currency) : Money`, then
+    /// `{leaf}` when nothing may redefine it.
+    pub fn text(&self) -> String {
+        let mut inputs: Vec<String> = self
+            .inputs
+            .iter()
+            .take(MAX_PARAMETERS)
+            .map(|(name, ty)| match ty {
+                Some(ty) => format!("{name} : {ty}"),
+                None => name.clone(),
+            })
+            .collect();
+        if self.inputs.len() > MAX_PARAMETERS {
+            inputs.push("…".into());
+        }
+        let mut text = self.visibility.map(|v| format!("{} ", visibility_mark(v))).unwrap_or_default();
+        text.push_str(&format!("{}({})", self.name, inputs.join(", ")));
+        if let Some(ty) = &self.returns {
+            text.push_str(&format!(" : {ty}"));
+        }
+        if self.leaf {
+            text.push_str(" {leaf}");
+        }
+        cut(text)
+    }
 }
 
 /// An operation as a class's card lists it: `+ total(currency : Currency) : Money`, then `{leaf}`
 /// when nothing may redefine it (AR-138).
 pub fn operation_text(store: &Store, op: Obj) -> String {
-    let direction = |p: Obj| match store.get(p, parameter::DIRECTION).ok() {
-        Some(Value::Enum(i)) => ParameterDirectionKind::from_index(i),
-        _ => None,
-    };
-    let params = list(store, op, operation::OWNED_PARAMETER);
-    let all_inputs: Vec<Obj> = params.iter().copied().filter(|p| direction(*p) != Some(ParameterDirectionKind::Return)).collect();
-    let mut inputs: Vec<String> = all_inputs
-        .iter()
-        .take(MAX_PARAMETERS)
-        .map(|p| match type_name(store, *p) {
-            Some(ty) => format!("{} : {ty}", name(store, *p)),
-            None => name(store, *p),
-        })
-        .collect();
-    if all_inputs.len() > MAX_PARAMETERS {
-        inputs.push("…".into());
-    }
-    let returns = params.iter().find(|p| direction(**p) == Some(ParameterDirectionKind::Return)).and_then(|p| type_name(store, *p));
-    let mut text = visibility(store, op).map(|v| format!("{v} ")).unwrap_or_default();
-    text.push_str(&format!("{}({})", name(store, op), inputs.join(", ")));
-    if let Some(ty) = returns {
-        text.push_str(&format!(" : {ty}"));
-    }
-    if crate::relations::is_leaf(store, op) {
-        text.push_str(" {leaf}");
-    }
-    cut(text)
+    OperationValues::of(store, op).text()
 }
 
 /// A class's, an interface's, a data type's or an association class's card on `diagram`: its name,
@@ -275,23 +394,49 @@ pub fn grow_node(store: &mut Store, element: Obj, n: Obj) -> Result<(), archforg
 /// Integer` (AR-135, F3).
 pub fn member_text(store: &Store, m: Obj) -> String {
     let text = if store.class_of(m).ok() == Some(crate::OPERATION) { operation_text(store, m) } else { attribute_text(store, m) };
-    cut(format!("{}{text}", crate::applications::prefix(store, m)))
+    row_text(&stereotypes(store, m), &text)
 }
 
-/// A classifier's eyebrow: its stereotypes in place of its kind's word (`«Entity»` for `Class`);
-/// a kind written as a UML keyword keeps it first in the same guillemets (`«interface, Entity»`);
-/// the package beside it for an outsider (AR-135, F3). `here` and `away` are the kind's own
-/// eyebrow, alone and with the package.
+/// The names of the stereotypes applied to `element`, in the order its keywords list them.
+pub fn stereotypes(store: &Store, element: Obj) -> Vec<String> {
+    crate::applications::applied_to(store, element).into_iter().map(|(s, _)| name(store, s)).collect()
+}
+
+/// Stereotypes' names as an element shows them, `«Entity»` or `«Entity, Auditable»`; None for
+/// none. A stereotype's name is the model's, never translated.
+pub fn stereotype_keywords(stereotypes: &[String]) -> Option<String> {
+    (!stereotypes.is_empty()).then(|| format!("«{}»", stereotypes.join(", ")))
+}
+
+/// A member's row from its stereotypes' names and its text: `«Id» + id : Integer`, the text alone
+/// when it has none (AR-135, F3).
+pub fn row_text(stereotypes: &[String], text: &str) -> String {
+    match stereotype_keywords(stereotypes) {
+        Some(k) => cut(format!("{k} {text}")),
+        None => cut(text.to_string()),
+    }
+}
+
+/// What a classifier's eyebrow says for its stereotypes: their keywords in place of its kind's
+/// word `kind` (`«Entity»` for `Class`), a kind written as a UML keyword kept first in the same
+/// guillemets (`«interface, Entity»`); None when it has no stereotype, so the kind's word stays.
+pub fn kind_keywords(kind: &str, stereotypes: &[String]) -> Option<String> {
+    let keywords = stereotype_keywords(stereotypes)?;
+    Some(match kind.strip_prefix('«').and_then(|k| k.strip_suffix('»')) {
+        Some(kind) => format!("«{kind}, {}", keywords.trim_start_matches('«')),
+        None => keywords,
+    })
+}
+
+/// A classifier's eyebrow: its stereotypes in place of its kind's word, as [`kind_keywords`]
+/// writes them; the package beside it for an outsider (AR-135, F3). `here` and `away` are the
+/// kind's own eyebrow, alone and with the package.
 fn eyebrow(store: &Store, c: Obj, here: &'static str, away: &'static str, elsewhere: Option<Obj>) -> Text {
-    let Some(keywords) = crate::applications::keywords(store, c) else {
+    let Some(keywords) = kind_keywords(here, &stereotypes(store, c)) else {
         return match elsewhere {
             Some(p) => Text::Said(away, vec![("package", name(store, p))]),
             None => Text::said(here),
         };
-    };
-    let keywords = match here.strip_prefix('«').and_then(|k| k.strip_suffix('»')) {
-        Some(kind) => format!("«{kind}, {}", keywords.trim_start_matches('«')),
-        None => keywords,
     };
     match elsewhere {
         Some(p) => Text::Said("{keywords} · {package}", vec![("keywords", keywords), ("package", name(store, p))]),
@@ -483,8 +628,8 @@ fn diamond_card(store: &Store, a: Obj) -> Card {
 /// multiplicity beside it.
 fn leg_line(store: &Store, end: Obj) -> Option<Line> {
     let a = crate::nary::association_of_end(store, end)?;
-    let m = end_text(store, end);
-    let role = end_role(store, end);
+    let values = PropertyValues::of(store, end);
+    let (m, role) = (values.end_text(), values.end_role());
     let to = End {
         mark: if navigable(store, a, end) { EndMark::OpenArrow } else { EndMark::None },
         text: (!m.is_empty()).then_some(m),
@@ -565,8 +710,8 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
                     AggregationKind::NoneKind if navigable(store, element, here) => EndMark::OpenArrow,
                     AggregationKind::NoneKind => EndMark::None,
                 };
-                let m = end_text(store, here);
-                let role = end_role(store, here);
+                let values = PropertyValues::of(store, here);
+                let (m, role) = (values.end_text(), values.end_role());
                 End {
                     mark,
                     text: (!m.is_empty()).then_some(m),

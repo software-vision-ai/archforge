@@ -180,6 +180,21 @@ fn attributes_and_operations_are_added_changed_moved_and_removed_as_one_step_eac
     let _ = Value::Null;
 }
 
+/// An operation's row, read from the model, names eight parameters and writes `…` for more (AR-669).
+#[test]
+fn an_operations_row_names_eight_parameters_and_marks_the_rest() {
+    let mut s = session();
+    let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Order" }));
+    let text = |s: &mut S, n: usize| {
+        let parameters: Vec<Json> = (0..n).map(|i| json!({ "name": format!("p{i}") })).collect();
+        let op = run(s, "uml.operation.add", json!({ "class": order, "name": format!("f{n}"), "parameters": parameters, "returns": "Integer" }));
+        archforge_uml::figures::operation_text(s.doc(), s.doc().by_uuid(Uuid::parse(&op).unwrap()).unwrap())
+    };
+    assert_eq!(text(&mut s, 8), "+ f8(p0, p1, p2, p3, p4, p5, p6, p7) : Integer");
+    assert_eq!(text(&mut s, 9), "+ f9(p0, p1, p2, p3, p4, p5, p6, p7, …) : Integer");
+}
+
 #[test]
 fn a_types_package_an_older_project_kept_at_the_top_level_is_taken_into_the_root_and_its_types_reused() {
     let named = |st: &mut Store, class, name: &str| {
