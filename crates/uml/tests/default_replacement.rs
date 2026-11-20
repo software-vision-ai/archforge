@@ -167,15 +167,18 @@ fn refused(s: &mut S, p: Json) -> (Option<String>, Option<Reason>) {
 fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() {
     let mut s = session();
     let c = scene(&mut s);
-    // A class added and undone, waiting to be made again while each choice is refused.
+    // A class added and undone, waiting to be made again while each choice is refused: the rows
+    // with it, which redo must bring back.
     let pending = |s: &mut S, name: &str| {
         run(s, "uml.class.add", json!({ "package": c.sales, "name": name }));
+        let added = rows_of(s);
         s.undo().unwrap();
+        added
     };
     let (read, at) = (token(&s), s.token());
     let set = json!({ "package": c.sales, "diagram": c.detail, "expected_revision": read });
     s.execute_from("uml.package.default.set", &set, Some("Claude")).unwrap();
-    pending(&mut s, "Invoice");
+    let added = pending(&mut s, "Invoice");
     let (now, fresh) = (s.token(), token(&s));
     for form in forms(&c) {
         let stale = Reason::StaleRevision { expected: Some(at), current: now };
@@ -188,15 +191,17 @@ fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() 
     assert_eq!(refused(&mut s, named(" ")).1, Some(Reason::NameEmpty));
     assert_eq!(refused(&mut s, named("Sales\u{7}map")).1, Some(Reason::ControlCharacter));
     assert_eq!(s.redo().unwrap(), "Add class", "the step undone is still there to make again");
+    assert!(rows_of(&s) == added, "and makes the class again");
     let (chosen, at) = (token(&s), s.token());
     s.execute("diagram.remove", &json!({ "diagram": c.overview })).unwrap();
-    pending(&mut s, "Receipt");
+    let added = pending(&mut s, "Receipt");
     let choice = |revision: Json| json!({ "diagram": c.detail, "replacement_diagram": c.overview, "expected_revision": revision });
     let stale = Reason::StaleRevision { expected: Some(at), current: s.token() };
     assert_eq!(refused(&mut s, choice(chosen)), (Some("expected_revision".into()), Some(stale)), "stale before its replacement is looked at");
     let (gone, current) = (Reason::NoElement { id: c.overview.clone() }, token(&s));
     assert_eq!(refused(&mut s, choice(current)), (Some("replacement_diagram".into()), Some(gone)));
     assert_eq!(s.redo().unwrap(), "Add class", "the step undone is still there to make again");
+    assert!(rows_of(&s) == added, "and makes the class again");
     assert_eq!(default_of(&s, &c.sales), Some(c.detail.clone()), "the agent's choice stays");
 }
 
