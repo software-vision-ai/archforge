@@ -12,9 +12,6 @@
 //! as is a default diagram chosen for no package or from another element's diagrams (AR-580), a
 //! package with no class diagram yet to open (AR-582), and a nested package's diagrams that
 //! cannot move up to a parent with no diagram yet or no valid default (AR-673).
-//!
-//! A package kept because a dependency that stays depends on it, or starts at it, is said here too
-//! (AR-696).
 
 use archforge_engine::{BindingFault, EngineError, Reason};
 
@@ -68,9 +65,8 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 /// or a class diagram of another element (AR-580), and a package with no class diagram to open yet
 /// (AR-582), and a default diagram's replacement that is the diagram removed, is no other diagram
 /// of the same kind of its package, or is named for a diagram that is no default (AR-640), or is
-/// given both as another diagram and as a new one, or a new one's name that is no text (AR-641), or
-/// a package a dependency that stays depends on or starts at (AR-696); none for another reason,
-/// or for a kind of element the catalogues don't name.
+/// given both as another diagram and as a new one, or a new one's name that is no text (AR-641); none
+/// for another reason, or for a kind of element the catalogues don't name.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
     Some(match reason {
@@ -114,14 +110,6 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
         Reason::DefaultDiagramOf { package, fault: Some(BindingFault::WrongOwner) } => fmt(
             &tr("{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first."),
             &[("package", package)],
-        ),
-        Reason::DependencyEnd(of) if of.end == archforge_engine::End::Target => fmt(
-            &tr("The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first."),
-            &[("package", &of.package), ("client", &of.other), ("dependency", &of.dependency)],
-        ),
-        Reason::DependencyEnd(of) => fmt(
-            &tr("{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first."),
-            &[("package", &of.package), ("supplier", &of.other), ("dependency", &of.dependency)],
         ),
         Reason::ReplacementIsRemoved => tr("A diagram cannot replace itself as it is removed. Choose another diagram as the replacement."),
         Reason::OneReplacement => tr("Choose either an existing diagram or a new one as the replacement, not both."),

@@ -111,10 +111,12 @@ supplier, each a package or a classifier of the model in any mix, never the UML 
 metaclass; a package client owns the dependency, a classifier client's home package does
 otherwise; any other end refused typed as `Reason::WrongEnd`, an element depending on itself as
 `DependsOnItself`, and a cycle of dependencies allowed; two ends, no dependency on itself and
-both ends in one model are Archforge's rules, not UML's; `element.remove` refuses a package,
-or one a package with no parent takes along, while a dependency that stays has it as its client or
-its supplier (`Reason::DependencyEnd`, naming the dependency's id and its other end), until 402-C,
-AR-698, replaces both refusals by removing such dependencies with the package; a dependency's new
+both ends in one model are Archforge's rules, not UML's; `element.remove` (AR-698) takes a
+dependency whose client or supplier is a package that goes, named or taken along by a package with
+no parent, along in the same step, with its stereotype applications and its lines, never moving
+that end onto another element, while a nested package hands up the dependencies it holds whose
+ends both stay; `commands::incident_to_packages(store, packages, kinds)` finds the relationships
+of the given kinds that refer to a package, for imports and merges to go the same way; a dependency's new
 client takes it to the package that owns its dependencies in the same step, as a classifier client
 moved or nested elsewhere (`uml.*.move`, `uml.classifier.set-owner`) takes the dependencies it is the only client of; a
 dependency's end moves onto a package or a classifier of the model, and `uml.relationship.reconnect` is open
@@ -193,8 +195,8 @@ unchanged.
 **What a removal reports** (AR-675). `commands::remove_elements` gives an
 `archforge_diagram::Removed`: the objects that went, the elements and diagrams a nested package
 handed up that are still in the model at the end, the bindings that went, and every relationship
-that went, of any kind UML's `Relationship` generalizes, so imports, merges and dependencies a
-package takes along later count there too.
+that went, of any kind UML's `Relationship` generalizes, so the dependencies at a package that goes
+count there too (AR-698), and the imports and merges a package takes along later.
 
 **A package's default diagram** (AR-575). `defaults::resolve` reads a package's one
 `DefaultDiagramBinding` (the diagram crate's) and gives `DefaultDiagram::Bound` with the structure
