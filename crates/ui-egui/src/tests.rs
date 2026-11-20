@@ -31030,6 +31030,47 @@ fn a_return_to_the_view_a_zoom_entry_left_centres_the_package_and_the_next_tick_
     }
 }
 
+/// A return by zoom measures the view it would restore as zooming in does, by every package card
+/// (AR-668): Top, left by ⌘↓-style entry into Sales at a view where Archive's card covers most of
+/// the canvas, lands at 100 % with Sales' card centred instead, and one tick of zooming in on
+/// Archive then stays on Top.
+#[test]
+fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, card, sales_d) = top_with_sales(&mut h, (240, 148), &[]);
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive" })).unwrap().value);
+        let p = serde_json::json!({ "diagram": top.to_string(), "element": archive.to_string(), "x": 460, "y": 160, "width": 480, "height": 300 });
+        let archive_card = id(s.execute("diagram.place", &p).unwrap().value);
+        let archive_d = own_diagram(s, archive);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        // Archive's card fills the canvas from its top left, Sales' card still partly in view.
+        let zoom = 3.0;
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(60.0 - 460.0 * zoom, 40.0 - 160.0 * zoom), zoom);
+        h.run();
+        let c = &h.state().canvas;
+        let archive_rect = rect_of(&h, &format!("workspace.canvas.node.{archive_card}"));
+        let canvas = rect_of(&h, "workspace.canvas");
+        let covered = archive_rect.intersect(canvas);
+        let share = covered.width() * covered.height() / (canvas.width() * canvas.height());
+        assert!(share >= crate::package_nav::ENTER_COVER, "{theme:?}: Archive covers {share} at {:?}", (c.pan, c.zoom));
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
+        assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{archive_card}")).center()));
+        h.event(egui::Event::Zoom(1.25));
+        h.step();
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(top), "{theme:?}: one tick in does not enter Archive, {archive_d}");
+    }
+}
+
 /// A return to a diagram that no longer shows the package left fits that diagram's content, though
 /// its saved view was sound (AR-668): Top, left at 60 % by entering Sales, loses Sales' card; the
 /// return shows both classes far apart in view, below 100 %. Emptied entirely, Top shows at 100 %

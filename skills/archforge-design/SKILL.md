@@ -728,11 +728,14 @@ What is UML's own, beside the shared rules above.
   class diagram yet, or an unsound binding, stays closed and the notice under the path bar says why
   (AR-582). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it
   opens the diagram the package was entered from, even in another branch (Decision 4, AR-664), as
-  it was left while that view is finite, within the zoom range and shows the package's card
-  covering less than 60 %; else at 100 %, the package left centred, so a view a zoom entry left
-  never lets the next tick re-enter; or fitted when the card is gone (AR-668, delegated UX
-  decision). The return takes the newest step off the tab's route and adds none, since a return
-  is no entry. With no step left it opens the parent's default, the package left centred; at the
+  it was left while that view is finite, within the zoom range and shows no package card covering
+  60 % or more, the measure zoom entry uses, whether the entry was by zoom, ⌘↓ or Open; a zoom
+  entry keeps no view at all. Else it lands at 100 %, the package left centred, which makes no
+  promise about the next zoom-in (a small window can let the card fill 60 % there); or fitted
+  when the card is gone (AR-668, delegated UX decision). The return takes the newest step off
+  the tab's route and adds none, since a return is no entry. With no step left it opens the
+  parent's default the same way with no view kept: the package left centred at 100 %, or the
+  whole diagram fitted when it shows no card of it; at the
   root, 10 % stays put with a notice ("This is the top package: zooming out goes no further"). The path bar at the canvas's top
   left (root to here, ancestors as buttons) and ⌘↑ follow ownership, never the route: they open the
   ancestor's default as it was last left (by navigation, a tab switch or a close), and start that

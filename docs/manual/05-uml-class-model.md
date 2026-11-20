@@ -522,13 +522,16 @@ card where nothing lies over it to select the package.
   path bar says why. A double click still renames the package, as it does a class.
 - **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
   least zoom, 10 %. Reach 10 % and the diagram you went in from opens again, even when that
-  diagram belongs to another branch of your model, as you left it. If you went in by zooming, the
-  package still filled most of the view when you left, so the diagram opens at 100 % with the
-  package you were in at its centre instead, and zooming in a little doesn't take you straight back
-  in. If the diagram no longer shows that package, the whole diagram fits the view. Zoom out to
-  10 % again to go back one more step the way you came; coming back adds no step of its own. Once no step is left, or when you opened the diagram without going in through a
-  package, zooming out opens the parent package's default diagram instead. At your project's root
-  there is no parent: the diagram stays at 10 %, and a note under the path bar says so.
+  diagram belongs to another branch of your model, as you left it. Two cases open it at 100 %
+  instead, with the package you were in at its centre: you went in by zooming, or, however you
+  went in (zooming, ⌘↓ or Open), a package filled most of the view you left (60 % or more), where
+  zooming in would open that package again. If the diagram no longer shows the package you were
+  in, the whole diagram fits the view. Zoom out to 10 % again to go back one more step the way you
+  came; coming back adds no step of its own. Once no step is left, or when you opened the diagram
+  without going in through a package, zooming out opens the parent package's default diagram
+  instead, at 100 % with the package you were in at its centre, or, when that diagram shows no
+  card of it, with the whole diagram fitted to the view. At your project's root there is no
+  parent: the diagram stays at 10 %, and a note under the path bar says so.
 - **Come back by the path bar.** The path bar at the canvas's top left names the packages from
   your project's root down to the one open: the packages that hold it, whichever diagram you went
   in from. Choose one of them, or press ⌘↑ (Ctrl+↑) for the parent: that package's default

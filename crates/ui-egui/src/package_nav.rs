@@ -232,19 +232,30 @@ fn take_return(shell: &mut Shell) -> Option<(Uuid, Option<(Vec2, f32)>)> {
     Some((step.source, step.view))
 }
 
-/// Whether `view`, the pan and zoom a diagram was left with, can be shown again on canvas `r`
-/// holding `card`, the diagram's card of the package just left: both finite, the zoom within
-/// [`crate::canvas::ZOOM_RANGE`], and the card covering less than [`ENTER_COVER`] of the canvas.
-/// A view the package covered more of is no place to come back to, since the next zoom-in tick
-/// would enter it again (delegated UX decision, AR-668); a zoom entry keeps no view at all
+/// The package whose card on diagram `d` covers the most of canvas `r` at `view`, with the share of
+/// the canvas it covers; none when `d` shows no package. Zooming in enters it once that share
+/// reaches [`ENTER_COVER`].
+fn most_covered(store: &Store, d: Obj, view: crate::canvas::View, r: Rect) -> Option<(Obj, f32)> {
+    let canvas_area = area(r).max(1.0);
+    nodes(store, d)
+        .into_iter()
+        .filter_map(|n| element(store, n).filter(|e| is_package(store, *e)).map(|e| (e, area(screen(view, store, n).intersect(r)) / canvas_area)))
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// Whether `view`, the pan and zoom diagram `d` was left with, can be shown again on canvas `r`:
+/// both finite, the zoom within [`crate::canvas::ZOOM_RANGE`], and no package card of `d` covering
+/// [`ENTER_COVER`] of the canvas there, the measure zooming in enters by ([`most_covered`]). A view
+/// some package covers more of is no place to come back to, since the next zoom-in tick would
+/// enter that package (delegated UX decision, AR-668); a zoom entry keeps no view at all
 /// ([`enter_by`]).
-fn restorable(store: &Store, r: Rect, card: Obj, (pan, zoom): (Vec2, f32)) -> bool {
+fn restorable(store: &Store, r: Rect, d: Obj, (pan, zoom): (Vec2, f32)) -> bool {
     let (least, most) = crate::canvas::ZOOM_RANGE;
     if !pan.is_finite() || !zoom.is_finite() || !(least..=most).contains(&zoom) {
         return false;
     }
     let view = crate::canvas::View { origin: r.min, pan, zoom };
-    area(screen(view, store, card).intersect(r)) / area(r).max(1.0) < ENTER_COVER
+    most_covered(store, d, view, r).is_none_or(|(_, cover)| cover < ENTER_COVER)
 }
 
 /// Lands diagram `d` on canvas `r` after a zoom out: at the view it was left with when that is
@@ -255,7 +266,7 @@ fn land(shell: &mut Shell, r: Rect, d: Obj, landing: Landing) {
     let card = store.by_uuid(landing.package).and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p)));
     shell.canvas.fit_pending = false;
     match (card, landing.view) {
-        (Some(card), Some(view)) if restorable(store, r, card, view) => (shell.canvas.pan, shell.canvas.zoom) = view,
+        (Some(_), Some(view)) if restorable(store, r, d, view) => (shell.canvas.pan, shell.canvas.zoom) = view,
         (Some(card), _) => {
             let b = bounds_of(store, card);
             let centre = vec2((b.x + b.width / 2.0) as f32, (b.y + b.height / 2.0) as f32);
@@ -319,14 +330,9 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let view = crate::canvas::View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
-    let canvas_area = area(r).max(1.0);
     if intent > 1.0 {
         // In: the package covering the most of the canvas, once it covers enough.
-        let best = nodes(store, d)
-            .into_iter()
-            .filter_map(|n| element(store, n).filter(|e| is_package(store, *e)).map(|e| (e, area(screen(view, store, n).intersect(r)) / canvas_area)))
-            .max_by(|a, b| a.1.total_cmp(&b.1));
-        if let Some((package, cover)) = best
+        if let Some((package, cover)) = most_covered(store, d, view, r)
             && cover >= ENTER_COVER
             && let Ok(id) = store.uuid(package)
         {
