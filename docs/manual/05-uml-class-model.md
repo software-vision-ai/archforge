@@ -183,7 +183,12 @@ The menu's other kinds of line, for later:
   part's end in **Properties**; the diamond then shows at the other end, the whole's.
 - **Generalization**: one class is a more specific kind of another, as a card payment is a kind
   of payment. It is drawn as a solid line with a hollow triangle at the general class.
-- **Dependency**: one element uses another, drawn as a dashed line with an open arrow.
+- **Dependency**: one element uses another, drawn as a dashed line with an open arrow. Drawing a
+  dependency again from the same element to the same element adds no second one: when the diagram
+  shows it already, the canvas says so, and otherwise its line is added to the diagram, keeping its
+  name and description. When several dependencies already join them, as a project made with an
+  earlier version may have, none is added and the canvas says so. A dependency the other way round
+  is a new one. Not repeating a dependency is Archforge's rule, not UML's.
 - **Interface realization** and **Association class**: steps 9 and 10.
 
 ## 5. Give an order a status: an enumeration

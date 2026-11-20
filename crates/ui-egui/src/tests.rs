@@ -7331,6 +7331,8 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// other diagram of the same kind of its package, or is named for a diagram that is no default,
 /// each in a sentence of its own that speaks of replacing, not of choosing a default (AR-640), and
 /// one given both as another diagram and as a new one, or a new one's name that is no text (AR-641).
+/// A relationship chosen to reuse that does not join its two elements, or no longer does, is said in
+/// one sentence, whichever candidates remain (AR-699).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -7418,6 +7420,12 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let exists = "Diese Verbindung besteht bereits: die Abhängigkeit zahlt. Wählen Sie die bestehende Beziehung aus.";
         let repeated = archforge_engine::Reason::ConnectionExists { dependency: "zahlt".into() };
         assert_eq!(crate::panels::said(&repeated), Some(exists.to_string()), "{theme:?}");
+        // A relationship chosen to reuse that does not join the two, or was removed or reconnected since, whatever ids still match (AR-699).
+        let stale = "Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr. \
+                     Wählen Sie erneut unter denen, die sie verbinden. Es wurde nichts geändert.";
+        let chosen = [Box::default(), vec!["d-2".into()].into_boxed_slice()]
+            .map(|candidates| crate::panels::said(&archforge_engine::Reason::StaleChoice { candidates }));
+        assert_eq!(chosen, [Some(stale.to_string()), Some(stale.to_string())], "{theme:?}");
         // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
         use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
         let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
@@ -23510,7 +23518,8 @@ fn enumeration_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collec
 
 /// The Relationship tool joins no association to or from an enumeration, saying so at the canvas's
 /// top; an enumeration specializes only an enumeration, the refusals said too, and a generalization
-/// dragged out of one onto empty canvas makes an enumeration; a dependency may touch it; an
+/// dragged out of one onto empty canvas makes an enumeration; a dependency may touch it, and drawn
+/// again it is not repeated, nor added to where several join the two already (AR-699); an
 /// association's end dragged onto one is refused; in light and dark.
 #[test]
 fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_one_only_by_an_enumeration() {
@@ -23535,6 +23544,55 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         let (from, to) = (node(&h, &nodes["OrderLine"]), node(&h, &status));
         relate(&mut h, Relate::Dependency, from, to);
         assert_eq!(edge_count(&h), before + 2, "notice {:?}", h.state().canvas.notice);
+        // Drawn again, the dependency there is reused, never repeated: the diagram shows it already,
+        // which is said, and nothing changes (AR-699).
+        let dependencies = |h: &Harness<'static, Shell>| {
+            let doc = h.state().session.as_ref().unwrap().doc();
+            doc.alive().filter(|o| doc.class_of(*o).ok() == Some(archforge_uml::DEPENDENCY)).count()
+        };
+        let (count, revision) = (dependencies(&h), h.state().session.as_ref().unwrap().revision());
+        relate(&mut h, Relate::Dependency, from, to);
+        assert!(h.state().canvas.notice.is_some(), "{theme:?}: said");
+        assert_eq!((dependencies(&h), edge_count(&h), h.state().session.as_ref().unwrap().revision()), (count, before + 2, revision), "{theme:?}");
+        // Two from OrderLine to OrderStatus, as a document of an earlier version may hold: drawn
+        // again, neither is added to, which is said, and nothing changes.
+        let [line, order, order_status] =
+            [(archforge_uml::CLASS, "OrderLine"), (archforge_uml::CLASS, "Order"), (archforge_uml::ENUMERATION, "OrderStatus")]
+                .map(|(k, n)| named(&h, k, n));
+        let s = h.state_mut().session.as_mut().unwrap();
+        let twin = s.execute("uml.dependency.add", &serde_json::json!({ "client": line.to_string(), "supplier": order.to_string() })).unwrap();
+        let twin = archforge_mof::Uuid::parse(twin.value["id"].as_str().unwrap()).unwrap();
+        let (tables, junctions) = archforge_notations::storage();
+        let old = h.state_mut().session.take().unwrap();
+        let rows = archforge_mof::rows::snapshot(old.doc(), &tables, &junctions).unwrap();
+        let mut n = 0u64;
+        let mint = move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            archforge_mof::Uuid::v7(1_761_670_900_000, r)
+        };
+        let mut st =
+            archforge_mof::rows::restore_into_empty(archforge_notations::store(Box::new(mint)).unwrap(), &rows, &tables, &junctions).unwrap();
+        let (d, was, now) = (st.by_uuid(twin).unwrap(), st.by_uuid(order).unwrap(), st.by_uuid(order_status).unwrap());
+        st.remove_value(d, archforge_uml::dependency::SUPPLIER, &archforge_mof::Value::Ref(was)).unwrap();
+        st.push(d, archforge_uml::dependency::SUPPLIER, archforge_mof::Value::Ref(now)).unwrap();
+        let parallel = archforge_uml::matches::existing_matches(&st, archforge_uml::matches::Kind::Dependency, st.by_uuid(line).unwrap(), now);
+        assert_eq!(parallel.len(), 2, "{theme:?}: two parallel dependencies loaded");
+        let view = old.view().clone();
+        h.state_mut().session = Some(archforge_engine::Session::with_view(
+            archforge_notations::registry().unwrap(),
+            st,
+            old.counter(),
+            archforge_engine::Options::default(),
+            view,
+        ));
+        h.run();
+        let (count, revision) = (dependencies(&h), h.state().session.as_ref().unwrap().revision());
+        relate(&mut h, Relate::Dependency, from, to);
+        let several = "Several dependencies already join these two elements in this direction, so none was added.";
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(several), "{theme:?}");
+        assert_eq!((dependencies(&h), edge_count(&h), h.state().session.as_ref().unwrap().revision()), (count, before + 2, revision), "{theme:?}");
         // Refused, said, and nothing changes.
         let revision = h.state().session.as_ref().unwrap().revision();
         for (kind, from, to, why) in [

@@ -576,6 +576,21 @@ fn a_dependency_moved_onto_a_package_keeps_its_identity_its_lines_follow_and_und
     assert_eq!(dependency_state(&s, &dep, &ds), ((obj(&s, &order), obj(&s, &line)), lines_before), "the first move undone, every line back");
 }
 
+/// The session `built` reloaded as a project is, with the dependency `dep` depending on `supplier`
+/// instead, as a document of an earlier version may have it.
+fn reloaded_with_supplier(built: &S, dep: &str, supplier: &str) -> S {
+    let (tables, junctions) = tables();
+    let rows = archforge_mof::rows::snapshot(built.doc(), &tables, &junctions).unwrap();
+    let mut st = store(1000);
+    archforge_mof::rows::restore(&mut st, &rows, &tables, &junctions).unwrap();
+    let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let r = at(&st, dep);
+    let was = archforge_uml::figures::ends(&st, r).unwrap().1;
+    st.remove_value(r, archforge_uml::dependency::SUPPLIER, &Value::Ref(was)).unwrap();
+    st.push(r, archforge_uml::dependency::SUPPLIER, Value::Ref(at(&st, supplier))).unwrap();
+    Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE))
+}
+
 /// A dependency dropped back on the supplier it has changes nothing in the model, its lines
 /// included, though a loaded document draws its line to another box on a diagram that does not
 /// show that supplier (AR-697).
@@ -587,15 +602,7 @@ fn a_dependency_dropped_back_on_its_supplier_leaves_a_line_drawn_elsewhere_as_it
     let edge = run(&mut built, "diagram.connect", json!({ "diagram": d, "element": dep, "source": nodes[0], "target": nodes[1] }));
     // Loaded: the dependency depends on Billing now, which the diagram does not show, while its line
     // still ends at Line's box.
-    let (tables, junctions) = tables();
-    let rows = archforge_mof::rows::snapshot(built.doc(), &tables, &junctions).unwrap();
-    let mut st = store(1000);
-    archforge_mof::rows::restore(&mut st, &rows, &tables, &junctions).unwrap();
-    let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
-    let (r, line, billing) = (at(&st, &dep), at(&st, &c[1]), at(&st, &c[2]));
-    st.remove_value(r, archforge_uml::dependency::SUPPLIER, &Value::Ref(line)).unwrap();
-    st.push(r, archforge_uml::dependency::SUPPLIER, Value::Ref(billing)).unwrap();
-    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
+    let mut s = reloaded_with_supplier(&built, &dep, &c[2]);
     let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));
     s.execute("uml.relationship.reconnect", &json!({ "relationship": dep, "end": "target", "class": c[2], "expected_revision": token(&s) })).unwrap();
     assert_eq!((snapshot(&s), s.token(), s.undo_label().map(str::to_string)), before, "no change and no undo step");
@@ -675,8 +682,10 @@ fn a_dependency_moved_onto_a_pair_another_has_onto_itself_a_wrong_end_or_a_stale
         assert_eq!((reason(&mut s, "uml.relationship.reconnect", p), s.undo_label().map(str::to_string)), (Some(why), label));
     }
     // Dropped back on billing, the end it has, `other` changes nothing in the model, though `twin`
-    // has its ends too.
-    let twin = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing, "name": "twin" }));
+    // has its ends too, as a document of an earlier version may have it: no command repeats a
+    // dependency now (AR-699).
+    let twin = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": priced, "name": "twin" }));
+    let mut s = reloaded_with_supplier(&s, &twin, &billing);
     run(&mut s, "view.select", json!({ "ids": [twin] }));
     let p = json!({ "relationship": other, "end": "target", "class": billing, "expected_revision": token(&s) });
     let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));

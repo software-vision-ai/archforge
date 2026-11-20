@@ -15,7 +15,7 @@
 //!
 //! A package kept because a dependency that stays depends on it, or starts at it, is said here too
 //! (AR-696), as is a relationship moved onto two elements another of its kind joins already
-//! (AR-697).
+//! (AR-697), and a relationship chosen to reuse that does not join its two elements, or no longer does (AR-699).
 
 use archforge_engine::{BindingFault, EngineError, Reason};
 
@@ -71,7 +71,8 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 /// of the same kind of its package, or is named for a diagram that is no default (AR-640), or is
 /// given both as another diagram and as a new one, or a new one's name that is no text (AR-641), or
 /// a package a dependency that stays depends on or starts at (AR-696), or a relationship moved onto
-/// the ends another of its kind has (AR-697); none for another reason,
+/// the ends another of its kind has (AR-697), or a relationship chosen to reuse that does not join
+/// the two elements, or was removed or reconnected since (AR-699); none for another reason,
 /// or for a kind of element the catalogues don't name.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
@@ -127,6 +128,9 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
         ),
         Reason::ConnectionExists { dependency } => {
             fmt(&tr("This connection already exists: the dependency {dependency}. Select the existing relationship."), &[("dependency", dependency)])
+        }
+        Reason::StaleChoice { .. } => {
+            tr("The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.")
         }
         Reason::ReplacementIsRemoved => tr("A diagram cannot replace itself as it is removed. Choose another diagram as the replacement."),
         Reason::OneReplacement => tr("Choose either an existing diagram or a new one as the replacement, not both."),

@@ -679,7 +679,22 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   changes nothing, as are UML's own library and metaclasses, a template parameter's own
   classifier and a package outside the model. An element cannot depend on itself, while a cycle
   of dependencies is allowed. Two ends, no dependency on itself and both ends in one model are
-  Archforge's own rules, not UML's. `element_remove` refuses a package, or a package taken along
+  Archforge's own rules, not UML's. A dependency from that client to that supplier that exists
+  already is reused, never repeated: this is a change from earlier versions, where a second call
+  for the same two ends added a parallel dependency. The match is by the two ends' ids in that
+  order and the kind, never by a name: the reverse direction, a realization, an import or a merge
+  is no match. Every result keeps `id` and adds `outcome` and `candidates`, the dependencies that
+  joined the two when the call came, each with its `id`, `name`, `client`, `supplier` and
+  `detail` (empty for a dependency). With none, the dependency is added as before
+  (`"outcome": "created"`). With one, that one is returned and selected (`"selected"`): nothing in
+  the model changes, no undo step is added, and its name and description stay as they are, so a
+  `name` sent is not applied; rename it with `uml_relationship_rename`. With several, nothing
+  changes and `id` is null (`"choiceRequired"`): call again with `existing` set to the id of the
+  candidate to use. One that was removed or reconnected since, or never joined the two, is refused
+  under `existing`, naming the ids of those that join them now, and another is never picked in its
+  place. Reusing a dependency rather than repeating it is Archforge's rule, not UML's, which
+  allows parallel dependencies; parallel dependencies loaded from earlier versions stay as they
+  are. `element_remove` refuses a package, or a package taken along
   with another, while a dependency that stays has it as its client or its supplier, naming the
   package, the dependency's id and its other end; remove that dependency first with
   `element_remove` and its id. For now this holds for both ends; a later version removes such

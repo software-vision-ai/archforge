@@ -370,7 +370,8 @@ pub(crate) fn tool_hint(shell: &Shell) -> Option<String> {
 /// Draws the chosen kind between the classes of two nodes, its line on diagram `d` with its name
 /// at the middle, as one undo step; selects it. A refusal is said at the canvas's top, in the
 /// user's words where the shell knows the rule (a realization's, a generalization's, an
-/// association's at an enumeration, a data type or a primitive type).
+/// association's at an enumeration, a data type or a primitive type). A dependency drawn again
+/// reuses the one that joins the two already, and several are refused rather than added to (AR-699).
 pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     shell.canvas.notice = None;
     let kind = shell.canvas.uml_relation;
@@ -413,6 +414,12 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
             Some(why) => shell.canvas.notice = Some(why),
             None => crate::uml_bindings::open_new(shell, d, (from_node, to_node), from, to),
         }
+        return;
+    }
+    // A dependency drawn again reuses the one there is (AR-699); several, as a document of an
+    // earlier version may hold, are never added to, and the canvas offers no choice among them yet.
+    if kind == Relate::Dependency && archforge_uml::matches::existing_matches(store, archforge_uml::matches::Kind::Dependency, from, to).len() > 1 {
+        shell.canvas.notice = Some(tr("Several dependencies already join these two elements in this direction, so none was added."));
         return;
     }
     let (Ok(from), Ok(to), Ok(diagram)) = (store.uuid(from), store.uuid(to), store.uuid(d)) else { return };

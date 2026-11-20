@@ -782,6 +782,8 @@ str		{package} has another element's diagram as its default, so that diagram sta
 str		The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.	La dependencia {dependency} de {client} depende de {package}, así que {package} se queda. Quita primero esa dependencia.
 str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} depende de {supplier} mediante la dependencia {dependency}, así que {package} se queda. Quita primero esa dependencia.
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	Esta conexión ya existe: la dependencia {dependency}. Selecciona la relación existente.
+str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	La relación elegida no une estos dos elementos, o ya no los une. Vuelve a elegir entre las que sí los unen. No se ha cambiado nada.
+str		Several dependencies already join these two elements in this direction, so none was added.	Varias dependencias ya unen estos dos elementos en esta dirección, así que no se ha añadido ninguna.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Un diagrama no puede sustituirse a sí mismo al eliminarse. Elija otro diagrama como sustituto.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Elija como sustituto un diagrama existente o uno nuevo, no ambos.
 str		A name has to be text.	Un nombre tiene que ser texto.

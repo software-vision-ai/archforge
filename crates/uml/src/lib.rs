@@ -47,6 +47,7 @@ pub mod effective;
 pub mod figures;
 pub mod generalization_sets;
 mod generated;
+pub mod matches;
 pub mod members;
 pub mod modifiers;
 pub mod names;
