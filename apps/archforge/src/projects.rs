@@ -207,16 +207,26 @@ impl std::fmt::Display for RestoreError {
             RestoreError::CannotTell { why, kept_work } => write!(f, "{why}{}", kept_note(*kept_work)),
             RestoreError::OutcomeUnknown => f.write_str("whether an earlier restore finished could not be told"),
             RestoreError::Version(e) => e.fmt(f),
-            RestoreError::UnsupportedKinds { kinds, accepted } => {
-                // Quoted, so an empty kind or one holding a comma reads as it is stored.
-                let quoted = kinds.iter().map(|k| format!("{k:?}")).collect::<Vec<_>>().join(", ");
-                write!(f, "the version holds diagrams of kinds no notation knows: {quoted}; the kinds known are {}", accepted.join(", "))
-            }
+            RestoreError::UnsupportedKinds { kinds, accepted } => unknown_kinds_reason(f, "the version", kinds, accepted),
         }
     }
 }
 
 impl std::error::Error for RestoreError {}
+
+/// The reason, in English, that `holder` (a version, a branch) holds diagrams of `kinds` no notation
+/// knows, where the notations know the `accepted` ones.
+fn unknown_kinds_reason(f: &mut std::fmt::Formatter<'_>, holder: &str, kinds: &[String], accepted: &[&str]) -> std::fmt::Result {
+    // Quoted, so an empty kind or one holding a comma reads as it is stored.
+    let quoted = kinds.iter().map(|k| format!("{k:?}")).collect::<Vec<_>>().join(", ");
+    write!(f, "{holder} holds diagrams of kinds no notation knows: {quoted}; the kinds known are {}", accepted.join(", "))
+}
+
+/// The person's words for a version or a branch refused, with nothing changed, as it holds diagrams
+/// of `kinds` no notation knows: as the window refuses a model it cannot build, the kinds as stored.
+fn unsupported_kinds_words(kinds: &[String]) -> String {
+    fmt(&tr("{why} Nothing was changed."), &[("why", &archforge_ui_egui::unsupported_kinds(kinds))])
+}
 
 /// What a failed restore's reason adds about the version of the unsaved work.
 fn kept_note(kept_work: bool) -> &'static str {
@@ -300,6 +310,13 @@ pub enum SwitchError {
     Checks(archforge_project::Error),
     /// The model's tables could not be described, or the writer has stopped.
     Failed(String),
+    /// The target branch holds diagrams of these kinds, which no notation knows, as an opening
+    /// names them, where the notations know the `accepted` ones: read raw and refused before its
+    /// checks, so nothing was written to it (AR-761).
+    UnsupportedKinds {
+        kinds: Vec<String>,
+        accepted: Vec<&'static str>,
+    },
 }
 
 impl std::fmt::Display for SwitchError {
@@ -314,6 +331,7 @@ impl std::fmt::Display for SwitchError {
             SwitchError::NotOpen => f.write_str("the project is no longer open"),
             SwitchError::Unwritten(why) | SwitchError::Failed(why) => f.write_str(why),
             SwitchError::Checks(e) => e.fmt(f),
+            SwitchError::UnsupportedKinds { kinds, accepted } => unknown_kinds_reason(f, "the branch", kinds, accepted),
         }
     }
 }
@@ -322,7 +340,8 @@ impl std::error::Error for SwitchError {}
 
 impl SwitchError {
     /// What a person is told. The project stayed on its branch in every case, and nothing more is
-    /// claimed, as the check may have upgraded the target's tables.
+    /// claimed, as the check may have upgraded the target's tables, except for a target refused for
+    /// its diagram kinds, which was refused before anything was written to it.
     pub fn words(&self) -> String {
         match self {
             SwitchError::AlreadyOnIt => tr("You are already on this branch."),
@@ -332,6 +351,7 @@ impl SwitchError {
             SwitchError::Unwritten(_) => tr("Your latest changes could not be written, so the project stayed on its branch."),
             SwitchError::Checks(e) => fmt(&tr("The project stayed on its branch: {why}"), &[("why", &e.to_string())]),
             SwitchError::Failed(why) => fmt(&tr("The project stayed on its branch: {why}"), &[("why", why)]),
+            SwitchError::UnsupportedKinds { kinds, .. } => unsupported_kinds_words(kinds),
         }
     }
 }
@@ -1808,6 +1828,8 @@ fn switch(
 
 /// The first step of a switch, on the writer: what [`checked_target`] does, and no move. The
 /// target's checks may upgrade its tables, which stays: the project stays on the branch it was on.
+/// A target holding diagrams of kinds no notation knows is refused before those checks, so it is
+/// not written.
 fn check_switch(
     inner: &Inner,
     path: &Path,
@@ -1824,9 +1846,12 @@ fn check_switch(
 
 /// What both steps of a switch do, in this order, on the writer: a job from before a close or
 /// another switch is refused, and so is the branch the project is on, before anything is written;
-/// what waits is written; the waiting conversations are committed, which does not stop the switch
-/// when it fails, as their rows stay uncommitted on the branch left; the target is checked and its
-/// model built; and `then` runs on the result. `failed` changes only once the write has been tried.
+/// what waits is written; the target's diagram kinds are read raw, and a target holding kinds no
+/// notation knows is refused, naming them as an opening does, with nothing more written (AR-394's
+/// first decision: a refused branch is not written at all); the waiting conversations are
+/// committed, which does not stop the switch when it fails, as their rows stay uncommitted on the
+/// branch left; the target is checked, which may upgrade its tables, and its model built; and
+/// `then` runs on the result. `failed` changes only once the write has been tried.
 fn checked_target<T>(
     inner: &Inner,
     path: &Path,
@@ -1853,6 +1878,7 @@ fn checked_target<T>(
     }
     let (open, at) = open_as_asked(inner, path, (generation, instance), (SwitchError::Reopened, SwitchError::BranchChanged, SwitchError::NotOpen))?;
     let project = &open[at];
+    known_kinds_on(project, target)?;
     if let Err(e) = keep_conversations(inner, project) {
         log::warn!("the conversations of {} wait in their branch: {e}", path.display());
     }
@@ -1862,6 +1888,14 @@ fn checked_target<T>(
         step();
     }
     then(project, rows)
+}
+
+/// Refuses a switch to `target` when it holds diagrams of kinds no notation knows, naming them as an
+/// opening does, or when its kinds cannot be read: read raw, so before anything is written to it.
+fn known_kinds_on(project: &Project, target: &SafeBranch) -> Result<(), SwitchError> {
+    let accepted = archforge_notations::kinds();
+    let kinds = project.unknown_diagram_kinds(target, &accepted).map_err(SwitchError::Checks)?;
+    if kinds.is_empty() { Ok(()) } else { Err(SwitchError::UnsupportedKinds { kinds, accepted }) }
 }
 
 /// Whether what `classified` found means the restore goes on. A comparison too large to finish
@@ -2140,10 +2174,7 @@ fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> 
         RestoreError::OutcomeUnknown => JobFailure::Failed(earlier_unknown()),
         RestoreError::Version(e) => JobFailure::Failed(not_restored(&e.to_string())),
         RestoreError::Failed(why) => JobFailure::Failed(not_restored(&why)),
-        // As the window refuses a version it cannot build: in the user's words, the kinds as stored.
-        RestoreError::UnsupportedKinds { kinds, .. } => {
-            JobFailure::Failed(fmt(&tr("{why} Nothing was changed."), &[("why", &archforge_ui_egui::unsupported_kinds(&kinds))]))
-        }
+        RestoreError::UnsupportedKinds { kinds, .. } => JobFailure::Failed(unsupported_kinds_words(&kinds)),
         RestoreError::NotRestored { why, kept_work, written_back } => {
             let text = fmt(&not_restored_template(kept_work, written_back), &[("why", &why)]);
             if kept_work { JobFailure::WorkSaved(text) } else { JobFailure::Failed(text) }
@@ -4972,6 +5003,7 @@ mod tests {
                 words(SwitchError::NotOpen),
                 words(SwitchError::Unwritten("w".to_string())),
                 words(SwitchError::Failed("reason".to_string())),
+                words(SwitchError::UnsupportedKinds { kinds: vec!["uml.class".into()], accepted: vec!["er"] }),
             ]
         };
         let english = reasons();
@@ -4983,6 +5015,9 @@ mod tests {
         assert_eq!(english[2], english[5], "one wording for changed or busy");
         assert_ne!(english[0], english[1]);
         assert_ne!(english[6], english[1]);
+        assert!(german[8].contains("uml.class"), "the kinds are named as stored");
+        let refused = SwitchError::UnsupportedKinds { kinds: vec![String::new(), "a, b".into()], accepted: vec!["er"] };
+        assert_eq!(refused.to_string(), "the branch holds diagrams of kinds no notation knows: \"\", \"a, b\"; the kinds known are er");
         assert!(matches!(switch_answer(Ok(Switched::AlreadyThere)), Ok(())));
         assert!(matches!(switch_answer(Err(SwitchError::NoAnswer)), Err(JobFailure::Failed(_))));
     }
@@ -6220,6 +6255,60 @@ mod tests {
         assert!(wait(&host.open(&path)).is_ok(), "stored as uml.structure, it opens");
     }
 
+    /// AR-761: a switch to a branch whose UML diagrams an earlier version stored as `uml.class` is
+    /// refused, naming that kind as stored and in the window's words, before anything is written
+    /// to it: its working set, whose earlier fingerprint the branch's checks would upgrade, and the
+    /// branches stay as they were, and the project stays where it was. So is one whose kinds cannot
+    /// be read. Stored as the one UML kind, the same branch is switched to.
+    #[test]
+    fn a_switch_to_a_branch_of_unsupported_kinds_is_refused_before_it_is_written() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        host.write(&path, structure_diagram());
+        assert_eq!(saved(host, &path), Ok(true));
+        let earlier = format!("UPDATE settings SET `value` = '{}' WHERE `key` = 'model_schema'", archforge_project::EARLIER_MODELS.last().unwrap());
+        let run = |statement: &str| lock(&host.inner.open)[0].run_on_branch("kinds", statement).unwrap();
+        let stored = || {
+            let open = lock(&host.inner.open);
+            let hash = open[0].first_on_branch("kinds", "SELECT CAST(DOLT_HASHOF_DB('WORKING') AS CHAR)").unwrap();
+            (hash, open[0].first_on_branch("main", "SELECT CAST(COUNT(*) AS CHAR) FROM dolt_branches").unwrap())
+        };
+        let before = host.generation_of(&path);
+        let unmoved = |why: &str| assert_eq!((on(host).as_str(), host.generation_of(&path)), ("main", before), "{why}");
+        lock(&host.inner.open)[0].run_on_branch("main", "CALL DOLT_BRANCH('kinds')").unwrap();
+        run("UPDATE diagram_diagram SET kind = 'uml.class'");
+        run(&earlier);
+        let left = stored();
+        let refused = switch_to(host, &path, "kinds");
+        assert!(
+            matches!(&refused, Err(SwitchError::UnsupportedKinds { kinds, accepted }) if kinds == &["uml.class"] && accepted == &archforge_notations::kinds()),
+            "{refused:?}"
+        );
+        assert_eq!(stored(), left, "nothing written to the branch, and no branch made or removed");
+        unmoved("the move");
+        // The window's first step refuses it the same way, in the person's words.
+        let check = host.begin_branch_switch(&path, "kinds".into()).unwrap();
+        let words = format!("{} Nothing was changed.", archforge_ui_egui::unsupported_kinds(&["uml.class".into()]));
+        assert_eq!(check.read.recv_timeout(Duration::from_secs(60)).unwrap(), Err(words.into()));
+        drop(check);
+        assert_eq!(stored(), left, "nothing written by the check");
+        unmoved("the check");
+        // A branch whose kinds cannot be read is not written either.
+        run("UPDATE diagram_diagram SET kind = REPEAT('x', 262141)");
+        let unread = stored();
+        let refused = switch_to(host, &path, "kinds");
+        assert!(
+            matches!(&refused, Err(SwitchError::Checks(archforge_project::Error::Damaged { why, .. })) if why.contains("longer than")),
+            "{refused:?}"
+        );
+        assert_eq!(stored(), unread, "the branch whose kinds were not read is not written");
+        unmoved("unread kinds");
+        // Back to the one UML kind and today's fingerprint, as saved, it is switched to.
+        run("CALL DOLT_RESET('--hard')");
+        assert!(matches!(switch_to(host, &path, "kinds"), Ok(Switched::Moved(_))));
+        assert_eq!(on(host), "kinds");
+    }
+
     /// Once the branch it was left on is read, a `main` whose kinds cannot be read keeps the project
     /// from opening there neither when that branch's kinds are known nor, naming them, when they are
     /// not; an opening that falls back to that `main`, or needs it, is refused with why, before
@@ -6503,7 +6592,9 @@ mod tests {
         let (chat, _) = undone_since_the_save(host, &path);
         let before = host.generation_of(&path);
         let unmoved = || assert_eq!((on(host).as_str(), host.generation_of(&path)), ("main", before));
-        assert!(matches!(switch_to(host, &path, "nosuchbranch"), Err(SwitchError::Checks(Error::Damaged { .. }))));
+        // Its diagram kinds are read first, so a branch that is not there is not found by that read.
+        let gone = switch_to(host, &path, "nosuchbranch");
+        assert!(matches!(&gone, Err(SwitchError::Checks(Error::Sql { what: "cannot use the project database", .. }))), "{gone:?}");
         unmoved();
         assert!(matches!(switch_to(host, &path, "scripted"), Err(SwitchError::Checks(Error::Scripted { what: "triggers", .. }))));
         unmoved();

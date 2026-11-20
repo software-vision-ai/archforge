@@ -76,7 +76,8 @@ a version is and how to save one with a description.
 - A project holding diagrams of a kind Archforge does not support, such as the UML class diagrams
   (`uml.class`) earlier versions stored, is refused: Home, or the status bar, names the kinds and
   suggests creating a new project, and the projects already open stay as they were. A branch or a
-  version holding such diagrams is refused in the same words when you switch to it or restore it.
+  version holding such diagrams is refused in the same words when you switch to it or restore it,
+  and nothing in it is changed.
 - **Pin a folder** on Home keeps a folder of projects one click away.
 - While a folder picker is open, Home waits for it: the recent projects, the pinned folders and
   every other way to open a project are off, and the search lists none of them, until you choose
