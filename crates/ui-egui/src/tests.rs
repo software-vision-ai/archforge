@@ -31161,6 +31161,36 @@ fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
     }
 }
 
+/// A return by zoom rejects a saved view at exactly the entry threshold, where zooming in would try
+/// to enter (AR-668): Top, left by Open-style entry into Sales at a view where Sales' card covers
+/// exactly [`crate::package_nav::ENTER_COVER`] of the canvas, comes back at 100 % with the card
+/// centred. The card spans the canvas's height and its right 60 % in whole points, so the share is
+/// exactly the threshold.
+#[test]
+fn a_return_by_zoom_rejects_a_view_at_exactly_the_entry_threshold() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        // A window one point wider than usual makes the canvas 845 points wide, a multiple of 5.
+        let mut h = workspace_harness(theme, egui::vec2(1601.0, 1000.0));
+        let (top, sales, card, sales_d) = top_with_sales(&mut h, (3000, 3000), &[]);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        let canvas = rect_of(&h, "workspace.canvas");
+        assert_eq!(canvas.width() % 5.0, 0.0, "{theme:?}: canvas {canvas:?}");
+        // At 100 %, the card's left edge 40 % in, its top above the canvas.
+        let view = (egui::vec2(canvas.width() * 0.4 - 200.0, -400.0), 1.0);
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
+        h.run();
+        let covered = rect_of(&h, &format!("workspace.canvas.node.{card}")).intersect(canvas);
+        let share = covered.width() * covered.height() / (canvas.width() * canvas.height());
+        assert_eq!(share, crate::package_nav::ENTER_COVER, "{theme:?}: Sales covers exactly the threshold, {covered:?}");
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
+        assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
+    }
+}
+
 /// A return that lands at the least zoom goes back one more step on the next zoom-out once the
 /// switch has rested, with no zoom-in first (AR-668): Top → Sales → Archive, Archive's card then
 /// removed from Sales' diagram, whose classes lie too far apart to fit above 10 %; zooming out of
