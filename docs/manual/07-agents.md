@@ -692,8 +692,9 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   changes and `id` is null (`"choiceRequired"`): call again with `existing` set to the id of the
   candidate to use. One that was removed or reconnected since, or never joined the two, is refused
   under `existing`, naming the ids of those that join them now (the sentence names the first 12 and
-  how many more), and another is never picked in its place: send one of those ids as `existing`.
-  A call without `existing` is no lookup: it lists every candidate only while several remain, and
+  how many more), and another is never picked in its place: when it names any, send one of them
+  as `existing`; when it names none, nothing joins the two any more, so stop if the aim was only
+  to reuse one. A call without `existing` is no lookup: it lists every candidate only while several remain, and
   otherwise reuses the one left or, with none left, adds a dependency. A reply larger than the
   control channel's 16 MiB is replaced whole by an error saying so. Reusing a dependency rather than repeating it is Archforge's rule, not UML's, which
   allows parallel dependencies; parallel dependencies loaded from earlier versions stay as they

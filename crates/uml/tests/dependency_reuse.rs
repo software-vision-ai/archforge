@@ -246,27 +246,71 @@ fn a_stale_choice_among_many_names_the_first_twelve_and_how_many_more() {
     assert_eq!(error.reason, Some(Reason::StaleChoice { candidates: deps.iter().map(|d| d.as_str().into()).collect() }));
 }
 
-/// A dependency of one client and two suppliers, as a loaded document may hold, joins no single
-/// pair: drawing one of its pairs again adds a dependency of its own and leaves that one as it is.
+/// A dependency of one client and two suppliers, or of two clients and one supplier, as a loaded
+/// document may hold, joins no single pair: drawing one of its pairs again adds a dependency of its
+/// own and leaves those as they are.
 #[test]
-fn a_dependency_of_several_suppliers_is_no_match_for_one_of_them() {
+fn a_dependency_of_several_suppliers_or_clients_is_no_match_for_one_of_them() {
     let mut built = session();
     let sales = run(&mut built, "uml.package.add", json!({ "name": "sales" }));
     let [order, line, product] = ["Order", "Line", "Product"].map(|n| run(&mut built, "uml.class.add", json!({ "package": sales, "name": n })));
-    let both = add(&mut built, json!({ "client": order, "supplier": line, "name": "both" }))["id"].as_str().unwrap().to_string();
+    let suppliers = add(&mut built, json!({ "client": order, "supplier": line, "name": "suppliers" }))["id"].as_str().unwrap().to_string();
+    // Order first among its clients, so only both together decide.
+    let clients = add(&mut built, json!({ "client": order, "supplier": product, "name": "clients" }))["id"].as_str().unwrap().to_string();
     let (tables, junctions) = tables();
     let rows = archforge_mof::rows::snapshot(built.doc(), &tables, &junctions).unwrap();
     let mut st = store(1000);
     archforge_mof::rows::restore(&mut st, &rows, &tables, &junctions).unwrap();
     let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
-    let (d, also) = (at(&st, &both), at(&st, &product));
-    st.push(d, archforge_uml::dependency::SUPPLIER, Value::Ref(also)).unwrap();
+    let (by_suppliers, by_clients, line_at, product_at) = (at(&st, &suppliers), at(&st, &clients), at(&st, &line), at(&st, &product));
+    st.push(by_suppliers, archforge_uml::dependency::SUPPLIER, Value::Ref(product_at)).unwrap();
+    st.remove_value(by_clients, archforge_uml::dependency::SUPPLIER, &Value::Ref(product_at)).unwrap();
+    st.push(by_clients, archforge_uml::dependency::SUPPLIER, Value::Ref(line_at)).unwrap();
+    st.push(by_clients, archforge_uml::dependency::CLIENT, Value::Ref(product_at)).unwrap();
     let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
-    let suppliers = |s: &S| s.doc().list(obj(s, &both), archforge_uml::dependency::SUPPLIER).unwrap().to_vec();
-    let before = suppliers(&s);
-    assert_eq!(before.len(), 2, "loaded with two suppliers");
+    let ends = |s: &S| {
+        let list = |d: &str, prop| s.doc().list(obj(s, d), prop).unwrap().to_vec();
+        [list(&suppliers, archforge_uml::dependency::SUPPLIER), list(&clients, archforge_uml::dependency::CLIENT)]
+    };
+    let before = ends(&s);
+    assert_eq!(before.each_ref().map(Vec::len), [2, 2], "loaded with two suppliers and with two clients");
     let out = add(&mut s, json!({ "client": order, "supplier": line }));
     assert_eq!((&out["outcome"], &out["candidates"]), (&json!("created"), &json!([])));
-    assert_ne!(out["id"].as_str(), Some(both.as_str()), "a dependency of its own");
-    assert_eq!(suppliers(&s), before, "the one of two suppliers as it was");
+    assert!(![suppliers.as_str(), clients.as_str()].contains(&out["id"].as_str().unwrap()), "a dependency of its own");
+    assert_eq!(ends(&s), before, "those of several ends as they were");
+}
+
+/// A dependency drawn again on a second diagram that shows both its ends, as the canvas draws it
+/// (the reuse, then its line, as one step), gets a line there for the same dependency, the first
+/// diagram's line left as it is; Undo takes back the second line alone.
+#[test]
+fn drawn_again_on_another_diagram_it_gets_a_line_there_for_the_same_dependency() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let [order, line] = ["Order", "Line"].map(|n| run(&mut s, "uml.class.add", json!({ "package": sales, "name": n })));
+    let diagrams =
+        ["first", "second"].map(|n| run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": n })));
+    let nodes =
+        diagrams.clone().map(|d| [&order, &line].map(|c| run(&mut s, "diagram.place", json!({ "diagram": d, "element": c, "x": 0, "y": 0 }))));
+    let dep = add(&mut s, json!({ "client": order, "supplier": line }))["id"].as_str().unwrap().to_string();
+    run(&mut s, "diagram.connect", json!({ "diagram": diagrams[0], "element": dep, "source": nodes[0][0], "target": nodes[0][1] }));
+    let lines = |s: &S| {
+        diagrams.clone().map(|d| {
+            let st = s.doc();
+            let edges = st.list(obj(s, &d), archforge_diagram::diagram::EDGE).unwrap();
+            edges.iter().filter_map(|e| e.as_ref()).filter_map(|e| st.get(e, archforge_diagram::edge::ELEMENT).ok()?.as_ref()).collect::<Vec<_>>()
+        })
+    };
+    let before = lines(&s);
+    assert_eq!(before, [vec![obj(&s, &dep)], vec![]]);
+    s.batch("Add dependency", |b| {
+        let reused = b.execute("uml.dependency.add", &json!({ "client": order, "supplier": line }))?;
+        assert_eq!((reused["id"].as_str(), &reused["outcome"]), (Some(dep.as_str()), &json!("selected")));
+        b.execute("diagram.connect", &json!({ "diagram": diagrams[1], "element": dep, "source": nodes[1][0], "target": nodes[1][1] }))?;
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(lines(&s), [vec![obj(&s, &dep)], vec![obj(&s, &dep)]], "a line on each, both for the same dependency");
+    s.undo().unwrap();
+    assert_eq!(lines(&s), before, "Undo takes back the second line alone");
 }
