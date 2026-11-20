@@ -174,7 +174,7 @@ fn several_matches_need_a_choice_and_existing_picks_one_with_nothing_changed() {
 }
 
 /// A choice under `existing` that no longer joins the client to the supplier, removed or reconnected
-/// since, or that never did, is refused as a stale choice under `existing`, naming the ids of those
+/// since (its id living on), or that never did, is refused as a stale choice under `existing`, naming the ids of those
 /// that join them now, none when none does, with nothing changed; another is never picked in its
 /// place.
 #[test]
@@ -183,15 +183,23 @@ fn a_stale_choice_is_refused_naming_the_current_candidates_with_nothing_changed(
     let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let [order, line, product] = ["Order", "Line", "Product"].map(|n| run(&mut s, "uml.class.add", json!({ "package": sales, "name": n })));
     let dep = add(&mut s, json!({ "client": order, "supplier": line }))["id"].as_str().unwrap().to_string();
-    let moved = add(&mut s, json!({ "client": product, "supplier": line }))["id"].as_str().unwrap().to_string();
+    let other = add(&mut s, json!({ "client": product, "supplier": line }))["id"].as_str().unwrap().to_string();
     let gone = add(&mut s, json!({ "client": line, "supplier": order }))["id"].as_str().unwrap().to_string();
     run(&mut s, "element.remove", json!({ "ids": [gone] }));
+    // Offered for Line to Product, then reconnected to Line to Order: its id lives on, its pair not.
+    let moved = add(&mut s, json!({ "client": line, "supplier": product }))["id"].as_str().unwrap().to_string();
+    let at = s.token();
+    let p =
+        json!({ "relationship": moved, "end": "target", "class": order, "expected_revision": { "history": at.history, "revision": at.revision } });
+    s.execute("uml.relationship.reconnect", &p).unwrap();
+    run(&mut s, "view.select", json!({ "ids": [order] }));
     let cases = [
         (json!({ "client": order, "supplier": line, "existing": gone }), vec![dep.clone()]),
-        (json!({ "client": order, "supplier": line, "existing": moved }), vec![dep.clone()]),
+        (json!({ "client": order, "supplier": line, "existing": other }), vec![dep.clone()]),
+        (json!({ "client": line, "supplier": product, "existing": moved }), vec![]),
         (json!({ "client": order, "supplier": line, "existing": sales }), vec![dep.clone()]),
         (json!({ "client": order, "supplier": line, "existing": "no id" }), vec![dep.clone()]),
-        (json!({ "client": line, "supplier": order, "existing": gone }), vec![]),
+        (json!({ "client": line, "supplier": order, "existing": gone }), vec![moved.clone()]),
     ];
     for (p, now) in cases {
         let before = state(&s);
@@ -202,6 +210,7 @@ fn a_stale_choice_is_refused_naming_the_current_candidates_with_nothing_changed(
         let says = if now.is_empty() { "none does now".to_string() } else { format!("those that do now: {}", now.join(", ")) };
         assert!(error.message.ends_with(&says), "{p}: {}", error.message);
         assert_eq!(state(&s), before, "{p} changed nothing");
+        assert_eq!(s.view().selection, [obj(&s, &order)], "{p}: the selection kept");
     }
 }
 

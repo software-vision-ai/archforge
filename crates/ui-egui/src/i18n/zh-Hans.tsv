@@ -783,6 +783,7 @@ str		The dependency {dependency} from {client} depends on {package}, so {package
 str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} 通过依赖 {dependency} 依赖于 {supplier}，因此 {package} 保留。请先移除该依赖。
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	此连接已存在：依赖 {dependency}。请选择现有的关系。
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	所选的关系未连接这两个元素，或已不再连接。请在连接它们的关系中重新选择。未做任何更改。
+str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	所选的关系未连接这两个元素，或已不再连接，目前也没有任何关系连接它们。未做任何更改。
 str		Several dependencies already join these two elements in this direction, so none was added.	已有多个依赖按此方向连接这两个元素，因此未添加任何依赖。
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	图在删除时不能替换自身。请选择另一个图作为替换。
 str		Choose either an existing diagram or a new one as the replacement, not both.	请选择现有的图或新图作为替换，不能同时选择两者。

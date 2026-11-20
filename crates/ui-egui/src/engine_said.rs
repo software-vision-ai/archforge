@@ -129,6 +129,9 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
         Reason::ConnectionExists { dependency } => {
             fmt(&tr("This connection already exists: the dependency {dependency}. Select the existing relationship."), &[("dependency", dependency)])
         }
+        Reason::StaleChoice { candidates } if candidates.is_empty() => {
+            tr("The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.")
+        }
         Reason::StaleChoice { .. } => {
             tr("The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.")
         }

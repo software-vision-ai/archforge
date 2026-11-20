@@ -7331,8 +7331,8 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// other diagram of the same kind of its package, or is named for a diagram that is no default,
 /// each in a sentence of its own that speaks of replacing, not of choosing a default (AR-640), and
 /// one given both as another diagram and as a new one, or a new one's name that is no text (AR-641).
-/// A relationship chosen to reuse that does not join its two elements, or no longer does, is said in
-/// one sentence, whichever candidates remain (AR-699).
+/// A relationship chosen to reuse that does not join its two elements, or no longer does, is said
+/// with the choice to make again when others remain, and as such when none does (AR-699).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -7420,12 +7420,14 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let exists = "Diese Verbindung besteht bereits: die Abhängigkeit zahlt. Wählen Sie die bestehende Beziehung aus.";
         let repeated = archforge_engine::Reason::ConnectionExists { dependency: "zahlt".into() };
         assert_eq!(crate::panels::said(&repeated), Some(exists.to_string()), "{theme:?}");
-        // A relationship chosen to reuse that does not join the two, or was removed or reconnected since, whatever ids still match (AR-699).
+        // A relationship chosen to reuse that does not join the two, or was removed or reconnected since: with none left, or some to choose among (AR-699).
         let stale = "Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr. \
                      Wählen Sie erneut unter denen, die sie verbinden. Es wurde nichts geändert.";
+        let none_left = "Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr, und keine andere tut es jetzt. \
+                         Es wurde nichts geändert.";
         let chosen = [Box::default(), vec!["d-2".into()].into_boxed_slice()]
             .map(|candidates| crate::panels::said(&archforge_engine::Reason::StaleChoice { candidates }));
-        assert_eq!(chosen, [Some(stale.to_string()), Some(stale.to_string())], "{theme:?}");
+        assert_eq!(chosen, [Some(none_left.to_string()), Some(stale.to_string())], "{theme:?}: none left, or some to choose among");
         // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
         use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
         let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };

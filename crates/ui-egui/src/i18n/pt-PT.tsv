@@ -783,6 +783,7 @@ str		The dependency {dependency} from {client} depends on {package}, so {package
 str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} depende de {supplier} através da dependência {dependency}, por isso {package} fica. Retire primeiro essa dependência.
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	Esta ligação já existe: a dependência {dependency}. Selecione a relação existente.
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	A relação escolhida não liga estes dois elementos, ou já não os liga. Escolha novamente entre as que os ligam. Nada foi alterado.
+str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	A relação escolhida não liga estes dois elementos, ou já não os liga, e nenhuma os liga agora. Nada foi alterado.
 str		Several dependencies already join these two elements in this direction, so none was added.	Várias dependências já ligam estes dois elementos neste sentido, pelo que nenhuma foi adicionada.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Um diagrama não pode substituir-se a si próprio ao ser removido. Escolha outro diagrama como substituto.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Escolha como substituto um diagrama existente ou um novo, não ambos.

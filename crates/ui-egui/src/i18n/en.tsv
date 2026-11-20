@@ -782,6 +782,7 @@ str		The dependency {dependency} from {client} depends on {package}, so {package
 str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	This connection already exists: the dependency {dependency}. Select the existing relationship.
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.
+str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.
 str		Several dependencies already join these two elements in this direction, so none was added.	Several dependencies already join these two elements in this direction, so none was added.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Choose either an existing diagram or a new one as the replacement, not both.
