@@ -924,6 +924,38 @@ mod tests {
             assert_eq!((closed, pickers.on_screen()), (gives_up, !gives_up), "{what}");
         }
     }
+
+    /// The handoff over a picker that never answers: New project's Change… picker hangs, New project
+    /// closes, and Open project asks meanwhile, so its pick waits. A press in the window gives the
+    /// hung picker up, and the waiting Open pick shows once, in a picker of its own, and answers.
+    #[test]
+    fn a_pick_waiting_behind_a_picker_given_up_shows_once_and_answers() {
+        let chosen = std::env::temp_dir();
+        let (mut pickers, shown, _) = hanging_pickers(&chosen);
+        pickers.in_front = true;
+        let services = with_pickers(&pickers.asks());
+        let (pick_folder, pick_project, withdraw) =
+            (services.pick_folder.clone().unwrap(), services.pick_project.clone().unwrap(), services.withdraw_pick.clone().unwrap());
+        let ctx = egui::Context::default();
+        let frame = |pickers: &mut Pickers, events| {
+            ctx.run_ui(input(true, events), |ui| pickers.answer(ui.ctx())).textures_delta.clear();
+            pickers.show(None);
+        };
+
+        drop(pick_folder("Choose project location"));
+        pickers.show(None);
+        withdraw();
+        let open = pick_project(Some(&chosen));
+        frame(&mut pickers, vec![]);
+        frame(&mut pickers, vec![]);
+        assert_eq!((shown.get(), open.try_recv()), (0, Err(std::sync::mpsc::TryRecvError::Empty)), "shown over the hung picker");
+
+        frame(&mut pickers, vec![press()]);
+        frame(&mut pickers, vec![]);
+        assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())));
+        frame(&mut pickers, vec![]);
+        assert_eq!(shown.get(), 1, "the waiting pick did not show once");
+    }
 }
 
 #[cfg(test)]
