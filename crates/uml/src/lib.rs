@@ -314,8 +314,9 @@ impl Notation for UmlNotation {
         end.then_some("an association's end carries no skill; its association's classes do")
     }
 
-    /// Removes UML elements with what they hold and what shows them; an enumeration with its literals.
-    fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, archforge_engine::CommandError> {
+    /// Removes UML elements with what they hold and what shows them; an enumeration with its
+    /// literals. Counts what went and what a nested package handed up (AR-675).
+    fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<archforge_diagram::Removed, archforge_engine::CommandError> {
         commands::remove_elements(store, objs)
     }
 

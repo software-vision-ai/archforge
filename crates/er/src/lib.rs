@@ -118,8 +118,12 @@ impl Notation for ErNotation {
         Some((ATTRIBUTE, attribute::TYPE))
     }
 
-    fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, archforge_engine::CommandError> {
-        commands::remove_elements(store, objs)
+    /// Removes ER elements with what goes with them, and counts the relationships among what went,
+    /// those a table or a schema took along included (AR-675).
+    fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<archforge_diagram::Removed, archforge_engine::CommandError> {
+        let standing = archforge_diagram::Standing::before(store, |c| c == RELATIONSHIP);
+        let gone = commands::remove_elements(store, objs)?;
+        Ok(standing.removed(store, gone))
     }
 
     fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), archforge_engine::CommandError> {

@@ -27,7 +27,7 @@ pub use generated::meta::*;
 pub use generated::schema::{JUNCTIONS, TABLES};
 pub use generated::slabs::DiagramSlabs;
 pub use grid::{Grid, Hit, Rect};
-pub use project::{Notation, ProjectView};
+pub use project::{Notation, ProjectView, Removed, Standing};
 pub use route::{Way, route};
 
 /// What the view brings to the diagram commands: the open diagram and the selection, which

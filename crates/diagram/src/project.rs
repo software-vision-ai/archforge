@@ -128,10 +128,10 @@ pub trait Notation: Send + Sync + 'static {
         let _ = (store, element);
         None
     }
-    /// Removes `objs`, live elements of its metamodel, with everything that goes with them; how
-    /// many went. Refused, changing nothing the command keeps, when one of them cannot go; by
-    /// default every one, the reason typed.
-    fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
+    /// Removes `objs`, live elements of its metamodel, with everything that goes with them; what
+    /// went and what a removed package handed up ([`Removed`]). Refused, changing nothing the
+    /// command keeps, when one of them cannot go; by default every one, the reason typed.
+    fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<Removed, CommandError> {
         let _ = (store, objs);
         let notation = self.name();
         Err(CommandError::about("ids", format!("{notation} elements cannot be removed yet")).because(Reason::NotRemovable { notation }))
@@ -148,6 +148,69 @@ pub trait Notation: Send + Sync + 'static {
     fn description(&self, store: &Store, obj: Obj) -> String {
         let _ = (store, obj);
         String::new()
+    }
+}
+
+/// What a notation's removal took away and handed up (AR-675), which `element.remove` answers
+/// beside `removed`: how many objects went in all, how many elements and diagrams a removed package
+/// handed up are still in the model once it is done, and how many default-diagram bindings and
+/// relationships went. A notation counts its relationships by its own metamodel, every kind in one
+/// field, so a kind removed with a package later lands there without a field of its own.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Removed {
+    /// How many objects went, the bindings and the relationships among them.
+    pub gone: usize,
+    /// How many elements a removed package handed up are still in the model once the removal is done.
+    pub moved_elements: usize,
+    /// How many diagrams a removed package handed up are still in the model once the removal is done.
+    pub moved_diagrams: usize,
+    /// How many default-diagram bindings went.
+    pub bindings: usize,
+    /// How many relationships went, of every kind the notation has, each once.
+    pub relationships: usize,
+}
+
+impl std::ops::AddAssign for Removed {
+    /// Adds what another notation's removal in the same call took and handed up.
+    fn add_assign(&mut self, other: Removed) {
+        self.gone = self.gone.saturating_add(other.gone);
+        self.moved_elements = self.moved_elements.saturating_add(other.moved_elements);
+        self.moved_diagrams = self.moved_diagrams.saturating_add(other.moved_diagrams);
+        self.bindings = self.bindings.saturating_add(other.bindings);
+        self.relationships = self.relationships.saturating_add(other.relationships);
+    }
+}
+
+/// The default-diagram bindings and the relationships that stand before a removal starts, for
+/// [`Standing::removed`] to count those it took once it is done, whatever step of it took them. It
+/// looks at every live object once: a removal's own steps, and those later kinds add, need not
+/// count what they take.
+pub struct Standing {
+    bindings: Vec<Obj>,
+    relationships: Vec<Obj>,
+}
+
+impl Standing {
+    /// What stands in `store` now: its live bindings, and its live objects of a class `relationship`
+    /// holds for, the notation's relationships.
+    pub fn before(store: &Store, relationship: impl Fn(ClassId) -> bool) -> Standing {
+        let (mut bindings, mut relationships) = (Vec::new(), Vec::new());
+        for o in store.alive() {
+            match store.class_of(o) {
+                Ok(c) if c == crate::DEFAULT_DIAGRAM_BINDING => bindings.push(o),
+                Ok(c) if relationship(c) => relationships.push(o),
+                _ => {}
+            }
+        }
+        Standing { bindings, relationships }
+    }
+
+    /// What the removal took, `gone` objects in all: the bindings and the relationships that stood
+    /// before it and are gone from `store` now. It hands nothing up; a notation whose removal does
+    /// sets the moved counts itself.
+    pub fn removed(&self, store: &Store, gone: usize) -> Removed {
+        let went = |objs: &[Obj]| objs.iter().filter(|o| !store.is_alive(**o)).count();
+        Removed { gone, bindings: went(&self.bindings), relationships: went(&self.relationships), ..Removed::default() }
     }
 }
 
@@ -394,8 +457,10 @@ fn view_select(ctx: &mut C<'_>, p: &Params) -> R {
 }
 
 /// Removes elements of any notation at once (the selection's delete): each notation removes its
-/// own, in the order the project holds them. An empty list, and an element of no notation, refused
-/// with the reason typed.
+/// own, in the order the project holds them. It answers how many objects went (`removed`) and, added
+/// up over the notations ([`Removed`]), how many elements and diagrams a removed package handed up
+/// (`moved_elements`, `moved_diagrams`) and how many bindings and relationships went (AR-675). An
+/// empty list, and an element of no notation, refused with the reason typed.
 fn element_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let ids = id_list(ctx.doc, p, "ids")?;
     if ids.is_empty() {
@@ -409,15 +474,21 @@ fn element_remove(ctx: &mut C<'_>, p: &Params) -> R {
         };
         by_notation[at].push(*o);
     }
-    let mut gone = 0;
+    let mut removed = Removed::default();
     for (n, objs) in ctx.view.notations.iter().zip(by_notation) {
         // What an earlier notation's removal took along is gone already.
         let objs: Vec<Obj> = objs.into_iter().filter(|o| ctx.doc.is_alive(*o)).collect();
         if !objs.is_empty() {
-            gone += n.remove(ctx.doc, &objs)?;
+            removed += n.remove(ctx.doc, &objs)?;
         }
     }
-    Ok(json!({ "removed": gone }))
+    Ok(json!({
+        "removed": removed.gone,
+        "moved_elements": removed.moved_elements,
+        "moved_diagrams": removed.moved_diagrams,
+        "bindings": removed.bindings,
+        "relationships": removed.relationships,
+    }))
 }
 
 /// `element.describe`: sets an element's description through its notation, or clears it. No id,
