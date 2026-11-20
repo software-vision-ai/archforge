@@ -10,6 +10,8 @@
 //! one, and refuses anything but one of the package's own class diagrams on the revision read
 //! (AR-580). A nested package handing a structure diagram up to a package with no sound default,
 //! the root among them, is refused with nothing changed; one handing up none goes (AR-673).
+//! Below a package a profile holds, read back from rows, the handoff passes the profile when it
+//! stays and judges nothing when it or that package goes (AR-745).
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
