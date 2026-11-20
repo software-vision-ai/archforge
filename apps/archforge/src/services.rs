@@ -232,6 +232,16 @@ impl Pickers {
         self.dialogs.show_pending(parent);
     }
 
+    /// Shows the picks asked for, as [`Self::show`] does, when the window is hidden (minimized or
+    /// covered). eframe then runs only the window's logic, with no drawing, so a pick asked from the
+    /// menu bar meanwhile would otherwise wait until the window shows again. A window that shows, or
+    /// whose state is unknown, is drawn, and its drawing shows them; eframe decides the same way.
+    pub fn show_if_hidden(&mut self, ctx: &egui::Context, parent: Option<&eframe::Frame>) {
+        if ctx.input(|i| i.viewport().visible()) == Some(false) {
+            self.show(parent);
+        }
+    }
+
     /// Whether a picker is on screen, or its answer not yet collected.
     fn on_screen(&self) -> bool {
         #[cfg(test)]
@@ -690,6 +700,51 @@ mod tests {
         assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())));
         pickers.show(None);
         assert_eq!(shown.borrow().len(), 1, "the Open pick showed again");
+    }
+
+    /// A hidden window (minimized or covered) runs only its logic, so a pick asked then, from the
+    /// menu bar, shows from the logic and answers. A window that shows, or whose state is unknown,
+    /// is drawn, and the drawing shows the pick, never the logic.
+    #[test]
+    fn a_pick_asked_while_the_window_is_hidden_shows_from_its_logic() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        archforge_ui_egui::i18n::set_language("en");
+        let chosen = std::env::temp_dir();
+        let mut pickers = Pickers::new(std::sync::Arc::new(|| {}));
+        let shown = Rc::new(Cell::new(0_usize));
+        let (seen, folder) = (shown.clone(), chosen.clone());
+        pickers.dialogs.set_override(Some(Box::new(move |_: &craft_dialogs::Request| {
+            seen.set(seen.get() + 1);
+            Answer::Paths(vec![folder.clone()])
+        })));
+        let asks = pickers.asks();
+        let ctx = egui::Context::default();
+        let window = |minimized: Option<bool>, occluded: Option<bool>| {
+            let mut input = egui::RawInput::default();
+            let root = input.viewports.entry(egui::ViewportId::ROOT).or_default();
+            (root.minimized, root.occluded) = (minimized, occluded);
+            input
+        };
+        let cases = [
+            ("minimized", window(Some(true), Some(false)), true),
+            ("covered", window(Some(false), Some(true)), true),
+            ("showing", window(Some(false), Some(false)), false),
+            ("unknown", window(None, None), false),
+        ];
+        for (state, input, hidden) in cases {
+            let open = pick_project(&asks, Some(&chosen));
+            let before = shown.get();
+            let _ = ctx.run_logic(&input, |ctx| pickers.show_if_hidden(ctx, None));
+            assert_eq!(shown.get() - before, usize::from(hidden), "a {state} window's logic");
+            if !hidden {
+                pickers.show(None);
+                assert_eq!(shown.get() - before, 1, "a {state} window's drawing");
+            }
+            pickers.answer();
+            assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())), "a {state} window's pick");
+        }
     }
 }
 

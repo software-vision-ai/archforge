@@ -52,17 +52,19 @@ default one.
 Archforge window, then drag a file from Finder over the window and hold it there for a few seconds
 before letting go of it back in Finder; then pick a folder in the picker. Choose **+ Open project…**
 at the top (or press ⌘O), pick a `.archforge` folder and open it; then try ⌘O with a folder that is
-not a project.
+not a project. Last, choose **Window ▸ Minimise** (⌘M), then **File ▸ Open project…** in the
+menu bar; cancel the picker.
 
 **Expect:** the first picker is a panel of its own beside the window and says **Pin a folder** above
 its folders. While it is open the window keeps answering (Home's ways to open a project wait, shown
 off), the picker stays where you moved it, and the file held over the window changes nothing:
 Archforge keeps running. The folder picked appears under Pinned folders. The project opens in a tab
 of its own. The folder that is not a project is refused: Home says in red **The project could not be
-opened:** and why, and nothing else changes.
+opened:** and why, and nothing else changes. With the window minimised, the picker still shows at
+once, without the window coming back.
 
-**Covers:** the system pickers for pinning and opening, shown beside a window that keeps running,
-and the refusal of a folder that is not a project.
+**Covers:** the system pickers for pinning and opening, shown beside a window that keeps running or
+is minimised, and the refusal of a folder that is not a project.
 
 ## 5. The menu bar
 
