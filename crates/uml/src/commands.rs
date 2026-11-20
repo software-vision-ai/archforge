@@ -656,9 +656,10 @@ fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
 
 /// The relationships of one of `kinds`, or of a kind specializing one, that refer to any of
 /// `packages` through a stored reference, each once, in the order the packages are given (AR-698):
-/// a dependency or a usage whose client or supplier one of them is, say. A package that owns one
-/// does not refer to it, so an element is not incident to the package that merely holds it.
-/// Removing packages takes these along (AR-698); AR-592 and AR-611 call it with their own kinds.
+/// a dependency or a usage whose client or supplier one of them is, say. What a package merely
+/// holds is not among them: the package refers to it through a composite property, and nothing it
+/// stores refers back to the package. Removing packages takes these along (AR-698); AR-592 and
+/// AR-611 call it with their own kinds.
 pub(crate) fn incident_to_packages(store: &Store, packages: &[Obj], kinds: &[ClassId]) -> Vec<Obj> {
     let of_kind = |c: ClassId| kinds.iter().any(|k| store.universe().conforms(c, archforge_mof::TypeRef::Class(*k)));
     let (mut out, mut seen) = (Vec::new(), std::collections::BTreeSet::new());

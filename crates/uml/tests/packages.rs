@@ -431,10 +431,10 @@ fn a_package_with_no_parent_takes_the_dependencies_at_every_package_within_it_al
 }
 
 /// A diagram of a dependency at a package that goes, as a loaded document may hold one, goes with
-/// the dependency, so a package that stays whose default-diagram binding names that diagram keeps
-/// the package removed, refused typed with nothing changed, as when the dependency is named. Bound to
-/// a diagram of its own instead, the package goes with the dependency and its diagram, the binding
-/// staying, one undo step (AR-698).
+/// the dependency: while Sales, which stays, has that diagram as its default, removing Billing at
+/// the dependency's other end is refused typed with nothing changed, as removing the dependency is.
+/// With Sales bound to a diagram of its own instead, Billing goes with the dependency and its
+/// diagram, Sales's binding staying, one undo step (AR-698).
 #[test]
 fn a_binding_that_stays_on_a_diagram_of_a_dependency_at_a_package_keeps_the_package() {
     use archforge_engine::{BindingFault, Reason};
