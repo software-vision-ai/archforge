@@ -51,6 +51,7 @@ model.
 | `Settings` | format, name, created by, created at |
 | `timestamp` | `pub fn timestamp(unix_seconds: u64) -> String` (RFC 3339, UTC) |
 | `Project::{prepare_model, write_model, read_model, has_unsaved, commit}` | the model's tables; Save commits every changed table but the conversations' |
+| `Project::check_branch_settings` | what `check_branch` checks first, writing nothing: the branch's database is usable, its settings read cleanly, and it holds no triggers, procedures or events |
 | `Project::{unknown_diagram_kinds, branch_named}`, `MOST_UNKNOWN_KINDS` | the kinds of a branch's diagrams outside the known ones, at most `MOST_UNKNOWN_KINDS`, read raw from `diagram_diagram.kind` on every shape it has had, as UTF-8 text whatever its character set and cut to 256 bytes, before the project is prepared and writing nothing (no table, no diagrams; a generated `kind` is damaged, as the shape check finds it; held while a rename is unclear); the branch a stored name means, only looked up: what a host checks before an opening writes anything |
 | `Project::discard` | `pub fn discard(&self, now: &str) -> Result<(), Error>`: Don't save; the conversations are kept, and this session's change links go back to their state at the last save |
 | `Project::{create_chat, start_turn, append_reply, append_tool_call, end_turn}` | make a conversation (its title refused when it holds a kept key); start a turn with its question (refused over 64 KiB or holding a kept key); append replies and tool calls; end it with what it changed, then a chat commit |

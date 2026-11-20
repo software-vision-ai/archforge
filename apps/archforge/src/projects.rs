@@ -1846,8 +1846,9 @@ fn check_switch(
 
 /// What both steps of a switch do, in this order, on the writer: a job from before a close or
 /// another switch is refused, and so is the branch the project is on, before anything is written;
-/// what waits is written; the target's diagram kinds are read raw, and a target holding kinds no
-/// notation knows is refused, naming them as an opening does, with nothing more written (AR-394's
+/// what waits is written; the target's checks that write nothing run and its diagram kinds are read
+/// raw, and a target holding kinds no notation knows is refused, naming them as an opening does,
+/// with nothing more written (AR-394's
 /// first decision: a refused branch is not written at all); the waiting conversations are
 /// committed, which does not stop the switch when it fails, as their rows stay uncommitted on the
 /// branch left; the target is checked, which may upgrade its tables, and its model built; and
@@ -1892,7 +1893,10 @@ fn checked_target<T>(
 
 /// Refuses a switch to `target` when it holds diagrams of kinds no notation knows, naming them as an
 /// opening does, or when its kinds cannot be read: read raw, so before anything is written to it.
+/// The target's own checks that write nothing come first, so a branch that is gone, damaged or
+/// scripted is refused for that, as before.
 fn known_kinds_on(project: &Project, target: &SafeBranch) -> Result<(), SwitchError> {
+    project.check_branch_settings(target).map_err(SwitchError::Checks)?;
     let accepted = archforge_notations::kinds();
     let kinds = project.unknown_diagram_kinds(target, &accepted).map_err(SwitchError::Checks)?;
     if kinds.is_empty() { Ok(()) } else { Err(SwitchError::UnsupportedKinds { kinds, accepted }) }
@@ -6267,7 +6271,7 @@ mod tests {
         let host = &sandbox.host;
         host.write(&path, structure_diagram());
         assert_eq!(saved(host, &path), Ok(true));
-        undone_since_the_save(host, &path);
+        let (_, turn) = undone_since_the_save(host, &path);
         let earlier = format!("UPDATE settings SET `value` = '{}' WHERE `key` = 'model_schema'", archforge_project::EARLIER_MODELS.last().unwrap());
         let run = |statement: &str| lock(&host.inner.open)[0].run_on_branch("kinds", statement).unwrap();
         let stored = || {
@@ -6295,9 +6299,16 @@ mod tests {
         drop(check);
         assert_eq!(stored(), left, "nothing written by the check");
         unmoved("the check");
-        let chats = on_writer(&host.inner, &path, |p| p.commit_chats().map_err(|e| e.to_string()));
-        assert_eq!(chats.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true), "the conversations still waited");
-        // A branch whose kinds cannot be read is not written either.
+        let waited = || {
+            let chats = on_writer(&host.inner, &path, |p| p.commit_chats().map_err(|e| e.to_string()));
+            assert_eq!(chats.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true), "the conversations still waited");
+        };
+        waited();
+        // A branch whose kinds cannot be read is not written either, by either step.
+        let redone = on_writer(&host.inner, &path, move |p| {
+            p.set_change_states(&[(turn, archforge_project::ChangeState::Applied)], &now()).map_err(|e| e.to_string())
+        });
+        assert_eq!(redone.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
         run("UPDATE diagram_diagram SET kind = REPEAT('x', 262141)");
         let unread = stored();
         let refused = switch_to(host, &path, "kinds");
@@ -6305,8 +6316,13 @@ mod tests {
             matches!(&refused, Err(SwitchError::Checks(archforge_project::Error::Damaged { why, .. })) if why.contains("longer than")),
             "{refused:?}"
         );
+        let check = host.begin_branch_switch(&path, "kinds".into()).unwrap();
+        let said = check.read.recv_timeout(Duration::from_secs(60)).unwrap();
+        assert!(matches!(&said, Err(why) if why.to_string().contains("longer than")), "{said:?}");
+        drop(check);
         assert_eq!(stored(), unread, "the branch whose kinds were not read is not written");
         unmoved("unread kinds");
+        waited();
         // Back to the one UML kind and today's fingerprint, as saved, it is switched to.
         run("CALL DOLT_RESET('--hard')");
         assert!(matches!(switch_to(host, &path, "kinds"), Ok(Switched::Moved(_))));
@@ -6596,9 +6612,7 @@ mod tests {
         let (chat, _) = undone_since_the_save(host, &path);
         let before = host.generation_of(&path);
         let unmoved = || assert_eq!((on(host).as_str(), host.generation_of(&path)), ("main", before));
-        // Its diagram kinds are read first, so a branch that is not there is not found by that read.
-        let gone = switch_to(host, &path, "nosuchbranch");
-        assert!(matches!(&gone, Err(SwitchError::Checks(Error::Sql { what: "cannot use the project database", .. }))), "{gone:?}");
+        assert!(matches!(switch_to(host, &path, "nosuchbranch"), Err(SwitchError::Checks(Error::Damaged { .. }))));
         unmoved();
         assert!(matches!(switch_to(host, &path, "scripted"), Err(SwitchError::Checks(Error::Scripted { what: "triggers", .. }))));
         unmoved();

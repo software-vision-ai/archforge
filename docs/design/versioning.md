@@ -517,9 +517,10 @@ conversations." Each Dolt branch has its own working set, so unsaved work needs 
   invisible from it (measured), so a
   foreign project must be checked per branch. Reopening on a stored branch runs them too. Arriving on a
   branch whose tables are upgraded reads as unsaved, as opening such a project does today.
-  Before those checks, which may upgrade the target's tables, the switch reads the target's diagram
-  kinds raw, as an opening does: a branch holding kinds no notation knows, or whose kinds cannot be
-  read, is refused with nothing written to it (AR-761, after AR-394's first decision).
+  Before the checks that may upgrade the target's tables, the switch runs those that write nothing
+  (`check_branch_settings`) and reads the target's diagram kinds raw, as an opening does: a branch
+  holding kinds no notation knows, or whose kinds cannot be read, is refused with nothing written
+  to it (AR-761, after AR-394's first decision).
 
 ### Names
 
