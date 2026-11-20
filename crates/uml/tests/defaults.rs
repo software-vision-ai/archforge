@@ -1044,6 +1044,53 @@ fn a_handoff_past_a_removed_ancestor_goes_to_the_first_package_above_it_that_sta
     }
 }
 
+/// Inner, a package a profile holds directly, which no command makes but a project's rows may
+/// hold, read back from them: Leaf in Inner hands its class diagram up past the profile as past any
+/// parent. Removed with the profile, or with Inner, Leaf goes and so does its diagram, taken along
+/// with them, Inner's lack of a diagram not judged; removed alone, Inner judges it, refused. With
+/// the profile in Shop, a nested package, removing Shop with Leaf hands the diagram past Inner and
+/// the profile, which only stay as Shop hands them up, into R, the first package above (AR-745).
+#[test]
+fn a_package_a_profile_holds_hands_its_diagrams_up_past_the_profile() {
+    let built = |in_shop: bool| {
+        let (mut st, model) = store();
+        let r = add(&mut st, model, PACKAGE, 0x10);
+        st.set(r, archforge_uml::named_element::NAME, Value::str("R")).unwrap();
+        let own = diagram(&mut st, model, 0x11, STRUCTURE_DIAGRAM, r);
+        bind(&mut st, model, 0x12, r, own);
+        let holder = if in_shop { nested(&mut st, r, 0x20, "Shop") } else { r };
+        let profile = st.create_with_uuid(PROFILE, Uuid([0x30; 16])).unwrap();
+        st.push(holder, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(profile)).unwrap();
+        let inner = nested(&mut st, profile, 0x40, "Inner");
+        let leaf = nested(&mut st, inner, 0x50, "Leaf");
+        let handed = diagram(&mut st, model, 0x51, STRUCTURE_DIAGRAM, leaf);
+        bind(&mut st, model, 0x52, leaf, handed);
+        let mut back = bare();
+        let (tables, junctions) = tables();
+        rows::restore(&mut back, &rows_of(&st), &tables, &junctions).unwrap();
+        assert_eq!(back.first_problem(), None, "the rows read back whole");
+        let at = |n: u8| back.by_uuid(Uuid([n; 16])).unwrap();
+        let (r, profile, inner, handed) = (at(0x10), at(0x30), at(0x40), at(0x51));
+        assert_eq!(back.container(inner).unwrap().map(|(o, _)| o), Some(profile), "Inner sits in the profile");
+        (over(back), r, profile, handed)
+    };
+    let unsound = Reason::ParentDefaultUnsound { parent: "Inner".into(), fault: None };
+    assert_eq!(refused(&mut built(false).0, "element.remove", json!({ "ids": [id(0x50)] })).1, Some(unsound), "Inner takes it");
+    for (with, profile_stays) in [(0x30, false), (0x40, true)] {
+        let (mut s, r, profile, handed) = built(false);
+        s.execute("element.remove", &json!({ "ids": [id(0x50), id(with)] })).unwrap();
+        let st = s.doc();
+        assert!(!st.is_alive(handed), "{with:#x}: Leaf's diagram went along");
+        assert_eq!(st.is_alive(profile), profile_stays, "{with:#x}");
+        assert_eq!((resolve(st, r), problems(st)), (Ok(DefaultDiagram::Bound(st.by_uuid(Uuid([0x11; 16])).unwrap())), vec![]), "{with:#x}");
+    }
+    let (mut s, r, profile, handed) = built(true);
+    s.execute("element.remove", &json!({ "ids": [id(0x50), id(0x20)] })).unwrap();
+    let st = s.doc();
+    assert_eq!(st.container(profile).unwrap().map(|(o, _)| o), Some(r), "Shop handed the profile up to R");
+    assert_eq!(st.get(handed, archforge_diagram::diagram::ELEMENT).unwrap(), Value::Ref(r), "past Inner and the profile, into R");
+}
+
 /// A and B hold each other, a loop the store and a project's reading refuse, made by a recorded move
 /// of A into B applied again after B moved into A. Removing C, with a class diagram, and P, holding
 /// C, ends in the guard's time: B, first to stay, would take the diagram; with none yet it is refused,
