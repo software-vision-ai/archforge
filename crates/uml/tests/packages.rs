@@ -432,7 +432,9 @@ fn a_package_with_no_parent_takes_the_dependencies_at_every_package_within_it_al
 
 /// A diagram of a dependency at a package that goes, as a loaded document may hold one, goes with
 /// the dependency, so a package that stays whose default-diagram binding names that diagram keeps
-/// the package removed, refused typed with nothing changed, as when the dependency is named (AR-698).
+/// the package removed, refused typed with nothing changed, as when the dependency is named. Bound to
+/// a diagram of its own instead, the package goes with the dependency and its diagram, the binding
+/// staying, one undo step (AR-698).
 #[test]
 fn a_binding_that_stays_on_a_diagram_of_a_dependency_at_a_package_keeps_the_package() {
     use archforge_engine::{BindingFault, Reason};
@@ -445,13 +447,25 @@ fn a_binding_that_stays_on_a_diagram_of_a_dependency_at_a_package_keeps_the_pack
     st.push(model, archforge_core::model::MEMBER, Value::Ref(diagram)).unwrap();
     DiagramObj::set_kind(&mut st, diagram, Some(STRUCTURE_DIAGRAM)).unwrap();
     DiagramObj::set_element(&mut st, diagram, Some(d)).unwrap();
-    bind(&mut st, 0x60, sales, diagram);
-    let [billing, d] = [billing, d].map(|o| st.uuid(o).unwrap().to_string());
+    let own = st.create(DIAGRAM).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(own)).unwrap();
+    DiagramObj::set_kind(&mut st, own, Some(STRUCTURE_DIAGRAM)).unwrap();
+    DiagramObj::set_element(&mut st, own, Some(sales)).unwrap();
+    let binding = bind(&mut st, 0x60, sales, diagram);
+    let [billing, d, diagram, own] = [billing, d, diagram, own].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = over(st);
     let kept = Some(Reason::DefaultDiagramOf { package: "Sales".into(), fault: Some(BindingFault::WrongOwner) });
     for ids in [json!([d]), json!([billing])] {
         assert_eq!(refusal(&mut s, "element.remove", json!({ "ids": ids })).0, kept, "{ids}");
     }
+    let mut st = reread(&s);
+    let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let (b, target) = (at(&st, &binding), at(&st, &own));
+    st.set(b, DEFAULT_DIAGRAM, Value::Ref(target)).unwrap();
+    let mut s = over(st);
+    assert_eq!(counts(&removal(&mut s, &[&billing])).3, 1);
+    assert!(!alive(&s, &d) && !alive(&s, &diagram), "the dependency went with its diagram");
+    assert_eq!(refers(&s, &binding, DEFAULT_DIAGRAM), Some(obj(&s, &own)), "Sales keeps its own default");
 }
 
 /// A dependency at a package that goes takes its stereotype application along, as a loaded document
