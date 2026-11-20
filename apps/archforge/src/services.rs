@@ -171,8 +171,8 @@ impl Asks {
 /// On macOS the picker is a panel of its own beside the window.
 pub struct Pickers {
     asks: Asks,
-    /// The pick asked for while a picker is on screen, shown once it closes unless withdrawn
-    /// meanwhile; a newer ask takes its place.
+    /// The pick asked for while a picker is on screen, shown once it closes or is given up, unless
+    /// withdrawn meanwhile; a newer ask takes its place.
     waiting: Option<Ask>,
     dialogs: Dialogs<Sender<Picked>>,
     /// Makes the queue that takes the place of one whose picker never answered.
@@ -223,18 +223,22 @@ impl Pickers {
     }
 
     /// Gives up on the picker on screen when the user works in the window again (a pointer or key
-    /// pressed while it has the focus) where a picker stays in front of the window until it closes:
-    /// none is up then, so it never appeared or went without answering, as a hung desktop portal
-    /// does. craft-dialogs cannot say whether its picker is up, nor give one up, so its queue is
-    /// left behind with the picker's worker and a fresh one shows the picks from then on. The pick
-    /// it held ends as a cancel: the shell, its channel closed, frees Open project, Pin a folder and
-    /// Change… in this frame, and an answer the old picker gives later reaches nothing. A slow user
-    /// is never cut off: a picker up holds the window, which then takes no presses.
+    /// pressed while it shows and has the focus) where a picker stays in front of the window until
+    /// it closes: none is up then, so it never appeared or went without answering, as a hung
+    /// desktop portal does. craft-dialogs cannot say whether its picker is up, nor give one up, so
+    /// its queue is left behind with the picker's worker and a fresh one shows the picks from then
+    /// on. The pick it held ends as a cancel: the shell, its channel closed, frees Open project, Pin
+    /// a folder and Change… in this frame, and an answer the old picker gives later reaches nothing.
+    /// No time limit ends a pick: only a press in the window does, which a picker in front of it
+    /// keeps from the window; a desktop that lets the window take presses while its picker shows
+    /// gives that picker up too, and what is chosen in it is ignored. A hidden window's logic reads
+    /// the input of the last frame it showed, so it gives nothing up.
     fn give_up_if_left(&mut self, ctx: &egui::Context) {
         let pressed = |i: &egui::InputState| {
             i.pointer.any_pressed() || i.events.iter().any(|e| matches!(e, egui::Event::Key { pressed: true, repeat: false, .. }))
         };
-        if !self.in_front || !self.on_screen() || !ctx.input(|i| i.focused && pressed(i)) {
+        let in_use = |i: &egui::InputState| i.viewport().visible() != Some(false) && i.focused && pressed(i);
+        if !self.in_front || !self.on_screen() || !ctx.input(in_use) {
             return;
         }
         log::warn!("the folder picker did not answer and the window is in use again: the pick is given up as a cancel");
@@ -885,18 +889,20 @@ mod tests {
 
     /// Only a press, or a key going down, in the focused window gives a picker up, and only where
     /// pickers stay in front of the window: a key held down since before the picker showed (the
-    /// Enter that asked for it, say) repeating, or let go, is not the user back in the window. On
+    /// Enter that asked for it, say) repeating, or let go, is not the user back in the window, and
+    /// neither is the press a hidden window's logic still reads from the last frame it showed. On
     /// macOS the picker is a panel beside the window, which keeps working, so a press there leaves
     /// the panel waiting for its answer.
     #[test]
     fn only_a_press_in_the_focused_window_gives_up_and_never_beside_a_macos_panel() {
         let chosen = std::env::temp_dir();
         let cases = [
-            ("a key going down", true, vec![], vec![key(true)], true),
-            ("a key held down", true, vec![key(true)], vec![key(true)], false),
-            ("a key let go", true, vec![key(true)], vec![key(false)], false),
-            ("the pointer moving", true, vec![], vec![egui::Event::PointerMoved(egui::pos2(1.0, 1.0))], false),
-            ("a press beside a macOS panel", false, vec![], vec![press()], false),
+            ("a key going down", true, vec![], Some(vec![key(true)]), true),
+            ("a key held down", true, vec![key(true)], Some(vec![key(true)]), false),
+            ("a key let go", true, vec![key(true)], Some(vec![key(false)]), false),
+            ("the pointer moving", true, vec![], Some(vec![egui::Event::PointerMoved(egui::pos2(1.0, 1.0))]), false),
+            ("a press beside a macOS panel", false, vec![], Some(vec![press()]), false),
+            ("a hidden window's last press", true, vec![press()], None, false),
         ];
         for (what, in_front, before, events, gives_up) in cases {
             let (mut pickers, ..) = hanging_pickers(&chosen);
@@ -906,7 +912,14 @@ mod tests {
             frame(&mut pickers, before);
             let pin = pick_folder(&pickers.asks(), "Pin a folder");
             pickers.show(None);
-            frame(&mut pickers, events);
+            match events {
+                Some(events) => frame(&mut pickers, events),
+                None => {
+                    let mut minimized = input(true, vec![]);
+                    minimized.viewports.entry(egui::ViewportId::ROOT).or_default().minimized = Some(true);
+                    let _ = ctx.run_logic(&minimized, |ctx| pickers.answer(ctx));
+                }
+            }
             let closed = pin.try_recv() == Err(std::sync::mpsc::TryRecvError::Disconnected);
             assert_eq!((closed, pickers.on_screen()), (gives_up, !gives_up), "{what}");
         }
