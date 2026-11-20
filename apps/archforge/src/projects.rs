@@ -6258,14 +6258,16 @@ mod tests {
     /// AR-761: a switch to a branch whose UML diagrams an earlier version stored as `uml.class` is
     /// refused, naming that kind as stored and in the window's words, before anything is written
     /// to it: its working set, whose earlier fingerprint the branch's checks would upgrade, and the
-    /// branches stay as they were, and the project stays where it was. So is one whose kinds cannot
-    /// be read. Stored as the one UML kind, the same branch is switched to.
+    /// branches stay as they were, the conversations waiting on the branch left stay uncommitted,
+    /// and the project stays where it was. So is one whose kinds cannot be read. Stored as the one
+    /// UML kind, the same branch is switched to.
     #[test]
     fn a_switch_to_a_branch_of_unsupported_kinds_is_refused_before_it_is_written() {
         let (sandbox, path) = branched();
         let host = &sandbox.host;
         host.write(&path, structure_diagram());
         assert_eq!(saved(host, &path), Ok(true));
+        undone_since_the_save(host, &path);
         let earlier = format!("UPDATE settings SET `value` = '{}' WHERE `key` = 'model_schema'", archforge_project::EARLIER_MODELS.last().unwrap());
         let run = |statement: &str| lock(&host.inner.open)[0].run_on_branch("kinds", statement).unwrap();
         let stored = || {
@@ -6293,6 +6295,8 @@ mod tests {
         drop(check);
         assert_eq!(stored(), left, "nothing written by the check");
         unmoved("the check");
+        let chats = on_writer(&host.inner, &path, |p| p.commit_chats().map_err(|e| e.to_string()));
+        assert_eq!(chats.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true), "the conversations still waited");
         // A branch whose kinds cannot be read is not written either.
         run("UPDATE diagram_diagram SET kind = REPEAT('x', 262141)");
         let unread = stored();
