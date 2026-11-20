@@ -538,7 +538,8 @@ fn a_dependency_moved_onto_a_package_keeps_its_identity_its_lines_follow_and_und
 
 /// A dependency's reconnect is refused, typed, with nothing changed and no undo step: onto the
 /// client and supplier another dependency has already, naming that one; onto its other end; onto
-/// what is no package or classifier; and for a revision other than the one it runs on, or none.
+/// what is no package or classifier; and for a revision other than the one it runs on, or none,
+/// a revision read before the dependency went included.
 /// The same two ends the other way round, those of a realization or of a dependency removed are no
 /// repeat, and a dependency dropped back on its own end changes nothing though another has its ends
 /// (AR-697).
@@ -559,9 +560,14 @@ fn a_dependency_moved_onto_a_pair_another_has_onto_itself_a_wrong_end_or_a_stale
         round_trip(&mut s, "uml.relationship.reconnect", p);
         s.undo().unwrap();
     }
-    // One removed joins those ends no longer.
+    // One removed joins those ends no longer; a reconnect of it on the revision read before it went
+    // hears that the model changed.
     let gone = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing }));
+    let read = s.token();
+    let p = json!({ "relationship": gone, "end": "target", "class": sales, "expected_revision": token(&s) });
     run(&mut s, "element.remove", json!({ "ids": [gone] }));
+    let late = reason(&mut s, "uml.relationship.reconnect", p);
+    assert_eq!(late, Some(Reason::StaleRevision { expected: Some(read), current: s.token() }));
     let p = moved(&s, &billing);
     round_trip(&mut s, "uml.relationship.reconnect", p);
     s.undo().unwrap();
@@ -586,9 +592,9 @@ fn a_dependency_moved_onto_a_pair_another_has_onto_itself_a_wrong_end_or_a_stale
         refused(&mut s, "uml.relationship.reconnect", p.clone(), &says);
         assert_eq!((reason(&mut s, "uml.relationship.reconnect", p), s.undo_label().map(str::to_string)), (Some(why), label));
     }
-    // Dropped back on billing, the end it has, `other` changes nothing, though `dep` will share it.
-    let p = moved(&s, &billing);
-    let p = json!({ "relationship": other, "end": "target", "class": billing, "expected_revision": p["expected_revision"] });
+    // Dropped back on billing, the end it has, `other` changes nothing, though `twin` has its ends too.
+    run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing, "name": "twin" }));
+    let p = json!({ "relationship": other, "end": "target", "class": billing, "expected_revision": token(&s) });
     let before = snapshot(&s);
     s.execute("uml.relationship.reconnect", &p).unwrap();
     assert_eq!(snapshot(&s), before);

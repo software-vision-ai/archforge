@@ -1120,6 +1120,9 @@ fn wrong_end(store: &Store, which: &str, end: Obj, needs: &str) -> String {
 /// an association's ends drop, in the same step, what they subset or redefine that the rules no
 /// longer allow, each listed under `dropped` (AR-126).
 fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
+    // A revision given is checked before anything else, so a caller that read the model before its
+    // relationship went hears that the model changed, not that the relationship is unknown (AR-697).
+    expected_revision_if_given(ctx, p)?;
     let key = "relationship";
     let id = text(p, key);
     let r = crate::RELATIONSHIPS.into_iter().find_map(|k| id_of(ctx.doc, p, key, k, "").ok()).ok_or_else(|| {
@@ -1138,11 +1141,9 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     };
     let class = ctx.doc.class_of(r).map_err(fail)?;
     // A dependency is reconnected only on the revision its caller read, as the contract for it says;
-    // every other relationship keeps its released call, its revision checked only when given (AR-697).
+    // every other relationship keeps its released call, without one (AR-697).
     if class == DEPENDENCY {
         expected_revision(ctx, p)?;
-    } else {
-        expected_revision_if_given(ctx, p)?;
     }
     // A dependency's end moves onto a package or a classifier, as one is drawn; every other
     // relationship's onto a classifier only (AR-696).
