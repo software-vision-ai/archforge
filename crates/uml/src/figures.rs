@@ -200,7 +200,7 @@ impl PropertyValues {
         if !m.is_empty() && m != "1" {
             text.push_str(&format!(" [{m}]"));
         }
-        text.push_str(&self.suffix());
+        text.push_str(&modifier_text(self.default.as_deref(), &self.braces));
         cut(text)
     }
 
@@ -212,18 +212,18 @@ impl PropertyValues {
     /// What the end's line writes after the role: its multiplicity, then `= default` and the
     /// braces, as in `0..* = none {ordered}`; empty when it has none of them.
     pub fn end_text(&self) -> String {
-        cut(format!("{}{}", multiplicity_text(self.bounds), self.suffix()).trim_start().to_string())
+        cut(format!("{}{}", multiplicity_text(self.bounds), modifier_text(self.default.as_deref(), &self.braces)).trim_start().to_string())
     }
+}
 
-    /// What follows the multiplicity: ` = default` when there is one, then ` {…}` when the braces
-    /// hold any word; empty otherwise.
-    fn suffix(&self) -> String {
-        let mut text = self.default.as_ref().map(|d| format!(" = {d}")).unwrap_or_default();
-        if !self.braces.is_empty() {
-            text.push_str(&format!(" {{{}}}", self.braces.join(", ")));
-        }
-        text
+/// What follows a property's multiplicity: ` = default` when it has one, then ` {…}` when
+/// `braces` holds any word, as in ` = 0 {readOnly, ordered}`; empty otherwise.
+pub fn modifier_text(default: Option<&str>, braces: &[String]) -> String {
+    let mut text = default.map(|d| format!(" = {d}")).unwrap_or_default();
+    if !braces.is_empty() {
+        text.push_str(&format!(" {{{}}}", braces.join(", ")));
     }
+    text
 }
 
 /// An attribute as a class's card lists it: `+ total : Money [0..1]`; a derived one with `/ `

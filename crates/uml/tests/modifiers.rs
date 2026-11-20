@@ -331,6 +331,7 @@ fn a_rename_without_modifier_fields_keeps_them() {
     round_trip(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "role": "goods" }));
     let end = archforge_uml::figures::member_ends(s.doc(), obj(&s, &a)).unwrap()[1];
     assert_eq!(archforge_uml::figures::end_text(s.doc(), end), "* = none {ordered}");
+    assert_eq!(archforge_uml::modifiers::suffix(s.doc(), end), " = none {ordered}", "the end editor's text, as the line writes it");
     assert_eq!(archforge_core::name_of(s.doc(), end), "goods");
     assert!(s.doc().get(end, archforge_uml::feature::IS_STATIC).unwrap().as_bool().unwrap(), "static kept");
     // The read's {id, name} objects go back into a set as they are.

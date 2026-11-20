@@ -57,6 +57,10 @@ fn an_attribute_writes_every_part_in_order_and_leaves_out_a_single_multiplicity(
         PropertyValues { name: "lines".into(), bounds: Bounds { lower: Some(1), upper: Some(None) }, braces: s(&["leaf"]), ..Default::default() };
     assert_eq!(braces.attribute_text(), "lines [1..*] {leaf}");
     assert_eq!(PropertyValues { name: "n".repeat(300), ..Default::default() }.attribute_text(), format!("{}…", "n".repeat(199)));
+    assert_eq!(figures::modifier_text(Some("0"), &s(&["readOnly", "ordered"])), " = 0 {readOnly, ordered}");
+    assert_eq!(figures::modifier_text(None, &s(&["leaf"])), " {leaf}");
+    assert_eq!(figures::modifier_text(Some("none"), &[]), " = none");
+    assert_eq!(figures::modifier_text(None, &[]), "");
 }
 
 /// An end writes its role, a derived one after `/`, and its bounds, default and braces.

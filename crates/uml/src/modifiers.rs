@@ -397,15 +397,7 @@ pub fn braces(store: &Store, p: Obj) -> Vec<String> {
 /// What follows a property's multiplicity on a card or beside its end: ` = default` when it has
 /// one, then ` {…}` when [`braces`] has anything to say; empty otherwise.
 pub fn suffix(store: &Store, p: Obj) -> String {
-    let mut text = String::new();
-    if let Some(d) = default_shown(store, p) {
-        text.push_str(&format!(" = {d}"));
-    }
-    let b = braces(store, p);
-    if !b.is_empty() {
-        text.push_str(&format!(" {{{}}}", b.join(", ")));
-    }
-    text
+    crate::figures::modifier_text(default_shown(store, p).as_deref(), &braces(store, p))
 }
 
 /// Whether `p` is derived: a card writes `/` before its name.
