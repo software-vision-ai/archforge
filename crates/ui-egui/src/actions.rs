@@ -728,7 +728,7 @@ pub(crate) mod tests {
             }
             run(&mut shell, id);
             // A pick's answer, as the next frame takes it.
-            shell.take_pick();
+            shell.take_pick(&egui::Context::default());
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
         for id in [APPEARANCE, VIEW, SORT] {
