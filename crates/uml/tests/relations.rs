@@ -412,8 +412,8 @@ fn a_package_outside_the_model_or_a_classifier_client_in_no_package_is_refused_a
     refused(&mut s, "uml.relationship.reconnect", p, "does not join one client to one supplier");
     let p = reconnect(&s, &d, &away);
     refused(&mut s, "uml.relationship.reconnect", p, &format!("class: {away} is outside this project's model"));
-    // Dropped back on the client it has, `spare` changes nothing: it stays held nowhere, with no undo
-    // step (AR-697).
+    // Dropped back on the client it has, `spare` changes nothing in the model: it stays held
+    // nowhere, with no undo step (AR-697).
     let p = reconnect(&s, &spare, &order);
     let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));
     s.execute("uml.relationship.reconnect", &p).unwrap();
@@ -532,8 +532,8 @@ fn a_dependency_moved_onto_a_package_keeps_its_identity_its_lines_follow_and_und
     let ds: Vec<&String> = diagrams.iter().map(|(d, _)| d).collect();
     let (_, lines_before) = dependency_state(&s, &dep, &ds);
     let assoc_lines = archforge_diagram::views_of(s.doc(), obj(&s, &assoc)).1;
-    // Dropped back on Line, the end it has, it changes nothing, its three lines and the bend of one
-    // included, and leaves no undo step.
+    // Dropped back on Line, the end it has, it changes nothing in the model, its three lines and
+    // the bend of one included, and leaves no undo step.
     let bent = s.doc().uuid(lines_before[0][0]).unwrap().to_string();
     run(&mut s, "diagram.route", json!({ "edge": bent, "points": [{ "x": 150, "y": 200 }] }));
     let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));
@@ -572,9 +572,9 @@ fn a_dependency_moved_onto_a_package_keeps_its_identity_its_lines_follow_and_und
     assert_eq!(dependency_state(&s, &dep, &ds), ((obj(&s, &order), obj(&s, &line)), lines_before), "the first move undone, every line back");
 }
 
-/// A dependency dropped back on the supplier it has changes nothing, its lines included, though a
-/// loaded document draws its line to another box on a diagram that does not show that supplier
-/// (AR-697).
+/// A dependency dropped back on the supplier it has changes nothing in the model, its lines
+/// included, though a loaded document draws its line to another box on a diagram that does not
+/// show that supplier (AR-697).
 #[test]
 fn a_dependency_dropped_back_on_its_supplier_leaves_a_line_drawn_elsewhere_as_it_is() {
     let mut built = session();
@@ -604,8 +604,8 @@ fn a_dependency_dropped_back_on_its_supplier_leaves_a_line_drawn_elsewhere_as_it
 /// what is no package or classifier; and for a revision other than the one it runs on, or none or null,
 /// a revision read before the dependency went included.
 /// The same two ends the other way round, those of a realization or of a dependency removed are no
-/// repeat, and a dependency dropped back on its own end changes nothing and leaves no undo step,
-/// though another has its ends (AR-697).
+/// repeat, and a dependency dropped back on its own end changes nothing in the model and leaves no
+/// undo step, though another has its ends (AR-697).
 #[test]
 fn a_dependency_moved_onto_a_pair_another_has_onto_itself_a_wrong_end_or_a_stale_revision_is_refused_unchanged() {
     use archforge_engine::{End, Revision};
@@ -670,7 +670,8 @@ fn a_dependency_moved_onto_a_pair_another_has_onto_itself_a_wrong_end_or_a_stale
         refused(&mut s, "uml.relationship.reconnect", p.clone(), &says);
         assert_eq!((reason(&mut s, "uml.relationship.reconnect", p), s.undo_label().map(str::to_string)), (Some(why), label));
     }
-    // Dropped back on billing, the end it has, `other` changes nothing, though `twin` has its ends too.
+    // Dropped back on billing, the end it has, `other` changes nothing in the model, though `twin`
+    // has its ends too.
     run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing, "name": "twin" }));
     let p = json!({ "relationship": other, "end": "target", "class": billing, "expected_revision": token(&s) });
     let before = (snapshot(&s), s.token(), s.undo_label().map(str::to_string));
