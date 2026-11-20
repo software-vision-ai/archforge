@@ -2239,6 +2239,7 @@ str		The changes since the last write are lost.	上次写入以来的更改将�
 str		The changes to {name} cannot be written	无法写入对 {name} 的更改
 # Linux 文件夹选择器
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	无法打开文件夹选择器：请为你的桌面安装 xdg-desktop-portal 和一个后端。
+str		No folder picker could open; Archforge's log says why.	无法打开文件夹选择器；原因见 Archforge 的日志。
 str		{day} {month} {time}	{month}{day}日 {time}
 str		Unsaved changes	未保存的更改
 str		No unsaved changes	没有未保存的更改

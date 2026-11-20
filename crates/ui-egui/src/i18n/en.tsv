@@ -2238,6 +2238,7 @@ str		The changes since the last write are lost.	The changes since the last write
 str		The changes to {name} cannot be written	The changes to {name} cannot be written
 # Linux folder picker
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	No folder picker could open: install xdg-desktop-portal and a backend for your desktop.
+str		No folder picker could open; Archforge's log says why.	No folder picker could open; Archforge's log says why.
 str		{day} {month} {time}	{day} {month} {time}
 str		Unsaved changes	Unsaved changes
 str		No unsaved changes	No unsaved changes

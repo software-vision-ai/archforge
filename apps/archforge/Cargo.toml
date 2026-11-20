@@ -25,11 +25,13 @@ archforge-secrets.workspace = true
 archforge-ui-egui.workspace = true
 getrandom.workspace = true
 eframe.workspace = true
+# Not called: here for its `wayland` feature, which craft-dialogs builds rfd without.
 rfd.workspace = true
 winit.workspace = true
 fontdb.workspace = true
 egui.workspace = true
 craft-atomic.workspace = true
+craft-dialogs.workspace = true
 log.workspace = true
 serde.workspace = true
 serde_json.workspace = true

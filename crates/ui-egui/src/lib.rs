@@ -128,6 +128,10 @@ pub struct Services {
     /// desktop portal answers nothing, as a cancel does); asked when a pick comes back with
     /// [`Picked::Nothing`].
     pub picker_unavailable: Option<std::sync::Arc<dyn Fn() -> Option<String> + Send + Sync>>,
+    /// Withdraws the folder pick asked for last, which the shell has let go of before its answer
+    /// (its New project closed, a quit going ahead): a host whose picker for it has not appeared yet
+    /// never shows it. None: a pick let go of may still show a picker, whose answer does nothing.
+    pub withdraw_pick: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
     /// Where About Archforge sends support: the provider pages the host has set up; a
     /// destination left out says it is not set up yet.
     pub support: support::Destinations,
@@ -156,8 +160,8 @@ pub enum Picked {
 }
 
 impl Picked {
-    /// The channel of a pick already answered, as a host whose picker blocks until it closes
-    /// hands it back: the folder chosen, or nothing.
+    /// The channel of a pick already answered, as a stand-in host hands it back: the folder chosen,
+    /// or nothing.
     pub fn at_once(folder: Option<std::path::PathBuf>) -> std::sync::mpsc::Receiver<Picked> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(folder.map_or(Picked::Nothing, Picked::Folder));
@@ -1294,7 +1298,7 @@ impl Shell {
     /// answer that comes after all opens, pins or changes nothing (AR-759).
     fn confirm_quit(&mut self, ctx: &egui::Context) {
         self.quit_confirmed = true;
-        self.picking = None;
+        self.let_go_of_pick();
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
@@ -1773,6 +1777,16 @@ impl Shell {
     pub(crate) fn ask_pick(&mut self, pick: Pick, ask: impl FnOnce() -> std::sync::mpsc::Receiver<Picked>) {
         if self.picking.is_none() && !self.open_waits() {
             self.picking = Some((pick, ask()));
+        }
+    }
+
+    /// Lets go of the folder pick waiting, without its answer, and withdraws it from the host, so a
+    /// picker for it that has not appeared yet never does.
+    pub(crate) fn let_go_of_pick(&mut self) {
+        if self.picking.take().is_some()
+            && let Some(withdraw) = &self.services.withdraw_pick
+        {
+            withdraw();
         }
     }
 
