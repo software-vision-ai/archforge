@@ -249,7 +249,7 @@ fn an_agents_removal_gives_what_the_interfaces_step_gives_undone_and_redone_exac
 fn removing_a_whole_package_never_makes_a_replacement() {
     let mut s = session();
     let c = scene(&mut s);
-    let (all, was, before, of) = (diagrams(&s), bound(&s), rows_of(&s), elements(&s));
+    let (all, was, before, of, steps) = (diagrams(&s), bound(&s), rows_of(&s), elements(&s), history(&s));
     let owner = |s: &S, of: &str| s.doc().container(at(s, of)).unwrap().map(|(o, _)| s.doc().uuid(o).unwrap().to_string());
     for (removed, up, handed) in [(&c.archive, &c.sales, 1), (&c.sales, &c.root, 2)] {
         s.execute("element.remove", &json!({ "ids": [removed] })).unwrap();
@@ -264,6 +264,8 @@ fn removing_a_whole_package_never_makes_a_replacement() {
         assert_eq!(bound(&s), kept, "{removed}: its binding goes, the others stay");
         s.undo().unwrap();
         assert!(rows_of(&s) == before, "{removed}: one undo step");
+        assert_eq!(history(&s).0, steps.0, "{removed}: the step before on top again, none added");
+        assert_eq!(history(&s).1, steps.1, "{removed}");
     }
     s.execute("element.remove", &json!({ "ids": [c.sales] })).unwrap();
     assert_eq!(owner(&s, &c.archive), Some(c.root.clone()), "what Sales held moves up");
