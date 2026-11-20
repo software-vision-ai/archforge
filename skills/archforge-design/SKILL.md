@@ -743,7 +743,7 @@ What is UML's own, beside the shared rules above.
   one still there, and the notice under the path bar says "{deleted} was deleted. Returned to
   {reached}.": the name the deleted diagram had when left, the reached one's name now (Decision 24,
   AR-670, N2); a step of another history is passed over silently. With no step left it opens the
-  parent's default the same way
+  parent's default the same way, with the same notice when a deleted step was passed over, and
   with no view kept: fitted when it has no card of the package left, else that card centred at
   100 %; at the root, 10 % stays put with a notice ("This is the top package: zooming out goes no further").
   With no parent's default either, or at the root after passing over deleted steps, it stays and
