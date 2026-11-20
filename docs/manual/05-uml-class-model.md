@@ -521,10 +521,12 @@ card where nothing lies over it to select the package.
   class diagram yet, or whose default diagram can't be read, stays closed, and a note under the
   path bar says why. A double click still renames the package, as it does a class.
 - **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
-  least zoom, 10 %. Reach 10 % and the diagram you went in from opens again, at 100 %, with the
-  package you were in at its centre, even when that diagram belongs to another branch of your
-  model. Zoom out to 10 % again to go back one more step the way you came; coming back adds no step
-  of its own. Once no step is left, or when you opened the diagram without going in through a
+  least zoom, 10 %. Reach 10 % and the diagram you went in from opens again, even when that
+  diagram belongs to another branch of your model, as you left it. If you went in by zooming, the
+  package still filled most of the view when you left, so the diagram opens at 100 % with the
+  package you were in at its centre instead, and zooming in a little doesn't take you straight back
+  in. If the diagram no longer shows that package, the whole diagram fits the view. Zoom out to
+  10 % again to go back one more step the way you came; coming back adds no step of its own. Once no step is left, or when you opened the diagram without going in through a
   package, zooming out opens the parent package's default diagram instead. At your project's root
   there is no parent: the diagram stays at 10 %, and a note under the path bar says so.
 - **Come back by the path bar.** The path bar at the canvas's top left names the packages from
