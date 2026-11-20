@@ -12231,10 +12231,12 @@ fn zooming_out_passes_over_deleted_ways_in_to_the_nearest_one_left_and_says_so()
                 rest(&mut h);
             }
             assert_eq!(route_of(&h, d[3]), vec![(d[0], d[1]), (d[1], d[2]), (d[2], d[3])], "{theme:?}");
-            // Each deleted as its package's default, a new empty one taking its place.
+            // Each renamed, then deleted as its package's default, a new empty one taking its
+            // place: the notice keeps the name it had when it was left.
             {
                 let s = h.state_mut().session.as_mut().unwrap();
                 for i in gone {
+                    s.execute("diagram.rename", &serde_json::json!({ "diagram": d[*i].to_string(), "name": "Renamed since" })).unwrap();
                     let at = s.token();
                     let p = serde_json::json!({ "diagram": d[*i].to_string(), "create_replacement": { "name": "Replacement" }, "expected_revision": { "history": at.history, "revision": at.revision } });
                     s.execute("diagram.remove", &p).unwrap();
@@ -12330,27 +12332,39 @@ fn zooming_out_with_nowhere_to_return_stays_and_points_to_models() {
         assert_eq!(zoom_out_gesture(&mut h, 40, false), vec![top], "{theme:?}: the root stays");
         assert_eq!(h.state().canvas.notice.as_deref(), Some(said), "{theme:?}: not the top package's note");
         assert_eq!(model_unchanged(&h), before, "{theme:?}");
+        // Nothing left to pass over, the next gesture says the root is the top again.
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, false), vec![top], "{theme:?}: the root still stays");
+        let top_note = "This is the top package: zooming out goes no further";
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(top_note), "{theme:?}: the top package's note");
     }
 }
 
 /// A way in made in another history is passed over without saying it was deleted (AR-670): its
-/// diagram belongs to another revision, not gone. The route spent, the owning parent's default
-/// opens, and nothing is said.
+/// diagram, Elsewhere, belongs to another revision, though a diagram of that id is here. The route
+/// spent, the owning parent's default, Top, opens instead, and nothing is said.
 #[test]
 fn zooming_out_passes_over_a_way_in_of_another_history_without_saying_it_was_deleted() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
         let (top, sales, _, sales_d) = top_with_sales(&mut h, (240, 148), &[]);
+        // The root's second diagram, no default, alive here.
+        let elsewhere = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+            let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Elsewhere" });
+            archforge_mof::Uuid::parse(s.execute("diagram.add", &p).unwrap().value["id"].as_str().unwrap()).unwrap()
+        };
         crate::canvas::open(h.state_mut(), top);
         h.run();
         crate::package_nav::enter(h.state_mut(), sales, 0.0);
         h.run();
         let mut route = crate::nav_route::Route::default();
         let history = h.state().session.as_ref().unwrap().history().wrapping_add(1);
-        route.push(crate::nav_route::Step { source: top, destination: sales_d, source_name: "Top".into(), view: None, history });
+        route.push(crate::nav_route::Step { source: elsewhere, destination: sales_d, source_name: "Elsewhere".into(), view: None, history });
         h.state_mut().canvas.nav.routes.insert(sales_d, route);
         rest(&mut h);
-        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}: the root's default, by ownership");
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}: the root's default, not Elsewhere");
         assert_eq!(h.state().canvas.notice, None, "{theme:?}: nothing deleted, nothing said");
     }
 }

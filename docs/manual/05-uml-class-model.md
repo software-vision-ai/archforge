@@ -537,14 +537,18 @@ card where nothing lies over it to select the package.
   zooming in first; a zoom-out started straight after the switch does nothing. Coming back adds no
   step of its own. When the diagram you went in from has been deleted since, zooming out passes
   over it, and over any deleted before it, to the nearest one on your way in that is still there;
-  a note under the path bar says which diagram was deleted and names the one you returned to.
+  a note under the path bar names the diagram you went in from, as it was called when you left it,
+  says it was deleted, and names the one you returned to, as it is called now.
   Once no step is left, or when you opened the diagram without going in through a
   package, zooming out opens the parent package's default diagram instead, at 100 % with the
   package you were in at its centre, or, when that diagram has no card of it, fitted to the view
-  the same way. At your project's root there is no parent: the
+  the same way. If the way back passed over a deleted diagram first, the same note names the
+  diagram you went in from and the parent package's diagram you returned to. At your project's root there is no parent: the
   diagram stays at 10 %, and a note under the path bar says so. When the parent package has no
   default diagram to open either, the diagram stays too, and the note says there is nowhere to
-  return to: open a diagram from **Models**. Coming back never makes a diagram.
+  return to: open a diagram from **Models**. So does a zoom out at the root that passed over the
+  last way back because its diagram was deleted; with nothing left to pass over, the next one says
+  again that there is no package above. Coming back never makes a diagram.
 - **Come back by the path bar.** The path bar at the canvas's top left names the packages from
   your project's root down to the one open: the packages that hold it, whichever diagram you went
   in from. Choose one of them, or press ⌘↑ (Ctrl+↑) for the parent: that package's default

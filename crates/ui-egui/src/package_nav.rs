@@ -15,8 +15,11 @@
 //!   and makes none. A step whose diagram was deleted is passed over to the nearest one still there,
 //!   and the notice under the path bar says which was deleted and where the return went (Decision
 //!   24, AR-670). With no way in left, the parent's default opens instead, landing as a return with
-//!   no view kept does; at the root, 10 % stays put and says so, and with no parent's default
-//!   either, it stays and points to Models. Nothing is made and no diagram is picked by its name.
+//!   no view kept does, the same notice said when a deleted step was passed over; at the root,
+//!   10 % stays put and says it is the top. With no parent's default either, and at the root on
+//!   the zoom out that passed over the last way in because its diagram was deleted, it stays and
+//!   points to Models; the next zoom out at the root, the route spent, says it is the top again.
+//!   Nothing is made and no diagram is picked by its name.
 //! - **Out by the path bar or ⌘↑**: the owning ancestor's default diagram as it was last left, by
 //!   ownership and never the way in; its tab starts a new route.
 //! - One switch per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
