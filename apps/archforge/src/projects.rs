@@ -182,8 +182,9 @@ pub enum RestoreError {
     /// An earlier restore of this project ended in [`RestoreError::CannotTell`].
     OutcomeUnknown,
     /// The version holds diagrams of these kinds, which no notation knows, as an opening names
-    /// them, where the notations know the `accepted` ones: refused before anything was written or
-    /// any version made (AR-551).
+    /// them, where the notations know the `accepted` ones: refused once what waited was written, as
+    /// every restore first writes it, and before any of the version was written or any version
+    /// made (AR-551).
     UnsupportedKinds {
         kinds: Vec<String>,
         accepted: Vec<&'static str>,
