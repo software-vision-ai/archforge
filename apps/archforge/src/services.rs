@@ -643,6 +643,54 @@ mod tests {
         assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())));
         assert_eq!(shown.borrow().len(), 2);
     }
+
+    /// The handoff: New project's Change… picker stays on screen after the shell let go of it (New
+    /// project closed), and Home's Open project asks meanwhile. The Open pick waits, frame after
+    /// frame, without being withdrawn or lost; once the old picker closes, it shows without another
+    /// ask, and its answer reaches the Open request.
+    #[test]
+    fn a_pick_asked_while_an_old_picker_is_on_screen_shows_once_it_closes_and_answers() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        use std::sync::mpsc::TryRecvError;
+
+        use craft_dialogs::Request;
+
+        archforge_ui_egui::i18n::set_language("en");
+        let chosen = std::env::temp_dir();
+        let mut pickers = Pickers::new(std::sync::Arc::new(|| {}));
+        let shown = Rc::new(RefCell::new(Vec::<FileDialog>::new()));
+        let (seen, folder) = (shown.clone(), chosen.clone());
+        pickers.dialogs.set_override(Some(Box::new(move |request: &Request| {
+            let Request::File(dialog) = request else { return Answer::Unavailable("not a file dialog".into()) };
+            seen.borrow_mut().push(dialog.clone());
+            Answer::Paths(vec![folder.clone()])
+        })));
+        let services = with_pickers(&pickers.asks());
+        let (pick_project, withdraw) = (services.pick_project.clone().unwrap(), services.withdraw_pick.clone().unwrap());
+
+        // Change…'s picker on screen; New project closes, which lets its pick go.
+        pickers.held = true;
+        withdraw();
+        // Home's Open project asks, and the shell keeps waiting for it over several frames.
+        let open = pick_project(Some(&chosen));
+        for _ in 0..3 {
+            pickers.answer();
+            pickers.show(None);
+            assert!(shown.borrow().is_empty(), "shown over the picker on screen");
+            assert_eq!(open.try_recv(), Err(TryRecvError::Empty));
+        }
+
+        // The old picker closes: the Open pick shows in the next frame, asked once, and answers.
+        pickers.held = false;
+        pickers.answer();
+        pickers.show(None);
+        assert_eq!(shown.borrow().as_slice(), [FileDialog::folder().directory(&chosen)], "the Open pick did not show once");
+        pickers.answer();
+        assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())));
+        pickers.show(None);
+        assert_eq!(shown.borrow().len(), 1, "the Open pick showed again");
+    }
 }
 
 #[cfg(test)]
