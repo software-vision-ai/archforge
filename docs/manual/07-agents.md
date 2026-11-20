@@ -690,9 +690,10 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   end that is no package or classifier, or is outside the model, naming that end's role: move that
   end instead. A reconnected dependency stays the same dependency, with its id, name and
   description, and its line follows on every diagram that shows the new end; a diagram that does
-  not show it loses that line alone. Once the ends it keeps pass the checks above (a kept end that
-  is wrong is still refused), one moved onto the end it has already changes nothing in the model
-  and adds no undo step; like any reconnect, it selects the dependency. Reconnecting a dependency needs `expected_revision`, as
+  not show it loses that line alone. One moved onto the end it has already is checked like any
+  other move first, so a wrong end that stays, or a classifier client in no package, is still
+  refused; once every check passes, it changes nothing in the model and adds no undo step, and
+  like any reconnect it selects the dependency. Reconnecting a dependency needs `expected_revision`, as
   `inspect_document` gives it. This is a change from earlier versions: a call that reconnects a
   dependency without it, with null or with another revision, is now refused and changes nothing. Read the project
   again, check that the dependency's client and supplier are still the ones the move was planned
