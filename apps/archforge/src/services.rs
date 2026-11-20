@@ -178,7 +178,8 @@ pub struct Pickers {
     /// Makes the queue that takes the place of one whose picker never answered.
     fresh: Box<dyn Fn() -> Dialogs<Sender<Picked>>>,
     /// Whether a picker stays in front of the window until it closes, so that the user working in
-    /// the window means none is up: everywhere but macOS, whose picker is a panel beside the window.
+    /// the window is taken as none being up: everywhere but macOS, whose picker is a panel beside
+    /// the window.
     in_front: bool,
     /// Tests: a picker counts as on screen, as a real one does until the user closes it.
     #[cfg(test)]
@@ -224,10 +225,10 @@ impl Pickers {
 
     /// Gives up on the picker on screen when the user works in the window again (a pointer or key
     /// pressed while it shows and has the focus) where a picker stays in front of the window until
-    /// it closes: none is up then, so it never appeared or went without answering, as a hung
-    /// desktop portal does. craft-dialogs cannot say whether its picker is up, nor give one up, so
-    /// its queue is left behind with the picker's worker and a fresh one shows the picks from then
-    /// on. The pick it held ends as a cancel: the shell, its channel closed, frees Open project, Pin
+    /// it closes: that is taken as none being up, so it never appeared or went without answering,
+    /// as a hung desktop portal does. craft-dialogs cannot say whether its picker is up, nor give
+    /// one up, so its queue is left behind with the picker's worker and a fresh one shows the picks
+    /// from then on. The pick it held ends as a cancel: the shell, its channel closed, frees Open project, Pin
     /// a folder and Change… in this frame, and an answer the old picker gives later reaches nothing.
     /// No time limit ends a pick: only a press in the window does, which a picker in front of it
     /// keeps from the window; a desktop that lets the window take presses while its picker shows

@@ -176,11 +176,13 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   folders. Enter, in the search or in an open menu, runs the row last shown highlighted, never one
   a change of the list put in its place (AR-749).
 - A picker that never answers gives way to the user (AR-760), never to a time limit. Outside
-  macOS the picker stays in front of the window, so a pointer press or a key going down in the
-  focused window while one is open means none is up: the pick ends as a cancel, saying nothing,
-  Home's openings are free in that frame, and the next pick shows a picker of its own; one that
-  shows up late answers into nothing. macOS's panel sits beside the window, which keeps working,
-  so there a press leaves the pick waiting for the panel.
+  macOS the picker stays in front of the window, so a pointer press or a key going down (not a
+  repeat, a modifier alone or a cut, copy or paste shortcut) in the focused window while one is
+  open is taken as the signal to stop waiting: the pick ends as a cancel, saying nothing, Home's
+  openings are free in that frame, and the next pick shows a picker of its own. What is chosen in
+  a picker still open then (a desktop that lets the window take presses while its picker shows),
+  or in one that shows up late, is ignored. macOS's panel sits beside the window, which keeps
+  working, so there a press leaves the pick waiting for the panel.
 - The recent projects show as rows or as a gallery of cards in the page's grid (four columns
   where the width takes them, so two start cards line up with them), sorted by last opened
   (newest first) or by name; both choices are kept in the preferences.

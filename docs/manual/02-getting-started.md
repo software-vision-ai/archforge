@@ -87,8 +87,8 @@ a version is and how to save one with a description.
   stopped responding, for example), click in the window or press a key such as Esc there (a
   modifier key such as Shift alone, or a cut, copy or paste shortcut such as Ctrl+C, does not
   count): Archforge stops waiting for that picker, as if you had cancelled it, and Home's openings
-  work again. What you choose in a picker still open
-  after that, or in one that shows up after all, is ignored; ask for a new one instead.
+  work again. What you choose in a picker still open after that, or in one that shows up after
+  all, is ignored; ask for a new one instead.
 - Closing the New project dialog while its **Change…** picker is still open on macOS gives Home
   back at once, though that picker stays on screen until you close it, and what you choose in it
   is ignored. A picker you ask for meanwhile, with **Browse files** for example, waits for it: the
