@@ -877,16 +877,18 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     // that stays names it, and so does what it is of.
     let nested = |o: Obj| store.class_of(o).ok() == Some(PACKAGE) && package_of(store, o).is_some();
     let roots = objs.iter().copied().filter(|o| store.is_alive(*o) && !nested(*o)).chain(with.iter().copied());
-    let doomed: std::collections::BTreeSet<Obj> = roots.flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default()).collect();
+    let mut doomed: std::collections::BTreeSet<Obj> = roots.flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default()).collect();
+    // A dependency whose client or supplier is a package that goes goes with it in the same step,
+    // never moved onto another end (AR-698): a package named, or one a package with no parent takes
+    // along. A nested package's own dependencies whose ends both stay are handed up with the rest.
+    // Each goes as a root does, its diagrams among what the bindings are checked against.
+    let packages: Vec<Obj> = objs.iter().chain(&doomed).copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
+    let incident = incident_to_packages(store, &packages, &[crate::DEPENDENCY]);
+    doomed.extend(incident.iter().flat_map(|d| archforge_diagram::within(store, *d).unwrap_or_default()));
     let plan: std::collections::BTreeSet<Obj> = doomed.iter().copied().chain(objs.iter().copied().filter(|o| nested(*o))).collect();
     if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, doomed.iter().copied(), "ids", |b| plan.contains(&b)) {
         return Err(refused);
     }
-    // A dependency whose client or supplier is a package that goes goes with it in the same step,
-    // never moved onto another end (AR-698): a package named, or one a package with no parent takes
-    // along. A nested package's own dependencies whose ends both stay are handed up with the rest.
-    let packages: Vec<Obj> = objs.iter().chain(&doomed).copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
-    let incident = incident_to_packages(store, &packages, &[crate::DEPENDENCY]);
     let going: Vec<Obj> = with.into_iter().chain(objs.iter().copied()).collect();
     if let Some(why) = crate::bindings::argument_removal_problem(store, &classes, &going) {
         return Err(refuse("ids", why));

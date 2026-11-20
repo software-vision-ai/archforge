@@ -382,6 +382,9 @@ fn a_nested_package_removed_takes_the_dependencies_at_it_and_hands_up_those_betw
     assert_eq!(refers(&s, &detail, archforge_diagram::diagram::ELEMENT), Some(obj(&s, &root)));
     assert!(alive(&s, &on_ledger) && alive(&s, &order), "the dependency on Ledger stays, Ledger staying");
     assert_eq!((edges(&s, &between), edges(&s, &on_ledger)), (1, 1), "their lines stay");
+    // Named beside Billing, a dependency at it goes once, counted once.
+    s.undo().unwrap();
+    assert_eq!(counts(&removal(&mut s, &[&billing, &from_billing])), (3, 1, 1, 2));
     // Ledger, now under the root, goes with the dependency on it.
     let answer = removal(&mut s, &[&ledger]);
     assert_eq!(counts(&answer).3, 1, "{answer}");
@@ -425,6 +428,30 @@ fn a_package_with_no_parent_takes_the_dependencies_at_every_package_within_it_al
         assert!(!alive(&s, gone), "{gone} went");
     }
     assert!(alive(&s, &stays) && alive(&s, &order), "the classes elsewhere and their dependency stay");
+}
+
+/// A diagram of a dependency at a package that goes, as a loaded document may hold one, goes with
+/// the dependency, so a package that stays whose default-diagram binding names that diagram keeps
+/// the package removed, refused typed with nothing changed, as when the dependency is named (AR-698).
+#[test]
+fn a_binding_that_stays_on_a_diagram_of_a_dependency_at_a_package_keeps_the_package() {
+    use archforge_engine::{BindingFault, Reason};
+    let mut st = store(0);
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let root = archforge_uml::commands::ensure_root(&mut st).unwrap();
+    let [sales, billing] = ["Sales", "Billing"].map(|name| packaged(&mut st, PACKAGE, name, root));
+    let d = depending(&mut st, sales, billing, sales);
+    let diagram = st.create(DIAGRAM).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(diagram)).unwrap();
+    DiagramObj::set_kind(&mut st, diagram, Some(STRUCTURE_DIAGRAM)).unwrap();
+    DiagramObj::set_element(&mut st, diagram, Some(d)).unwrap();
+    bind(&mut st, 0x60, sales, diagram);
+    let [billing, d] = [billing, d].map(|o| st.uuid(o).unwrap().to_string());
+    let mut s = over(st);
+    let kept = Some(Reason::DefaultDiagramOf { package: "Sales".into(), fault: Some(BindingFault::WrongOwner) });
+    for ids in [json!([d]), json!([billing])] {
+        assert_eq!(refusal(&mut s, "element.remove", json!({ "ids": ids })).0, kept, "{ids}");
+    }
 }
 
 /// A dependency at a package that goes takes its stereotype application along, as a loaded document
