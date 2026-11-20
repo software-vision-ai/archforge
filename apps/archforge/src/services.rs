@@ -234,9 +234,18 @@ impl Pickers {
     /// gives that picker up too, and what is chosen in it is ignored. A hidden window's logic reads
     /// the input of the last frame it showed, so it gives nothing up.
     fn give_up_if_left(&mut self, ctx: &egui::Context) {
-        let pressed = |i: &egui::InputState| {
-            i.pointer.any_pressed() || i.events.iter().any(|e| matches!(e, egui::Event::Key { pressed: true, repeat: false, .. }))
+        // A clipboard shortcut (Ctrl+C) comes as its own event, not as a key.
+        let key = |e: &egui::Event| {
+            matches!(
+                e,
+                egui::Event::Key { pressed: true, repeat: false, .. }
+                    | egui::Event::Cut
+                    | egui::Event::Copy
+                    | egui::Event::Paste(_)
+                    | egui::Event::PasteImage(_)
+            )
         };
+        let pressed = |i: &egui::InputState| i.pointer.any_pressed() || i.events.iter().any(key);
         let in_use = |i: &egui::InputState| i.viewport().visible() != Some(false) && i.focused && pressed(i);
         if !self.in_front || !self.on_screen() || !ctx.input(in_use) {
             return;
@@ -887,17 +896,18 @@ mod tests {
         assert_eq!((shown.get(), shell.state.pinned.as_slice()), (1, [chosen].as_slice()), "the next pick's picker");
     }
 
-    /// Only a press, or a key going down, in the focused window gives a picker up, and only where
-    /// pickers stay in front of the window: a key held down since before the picker showed (the
-    /// Enter that asked for it, say) repeating, or let go, is not the user back in the window, and
-    /// neither is the press a hidden window's logic still reads from the last frame it showed. On
-    /// macOS the picker is a panel beside the window, which keeps working, so a press there leaves
-    /// the panel waiting for its answer.
+    /// Only a press, or a key going down (a clipboard shortcut too), in the focused window gives a
+    /// picker up, and only where pickers stay in front of the window: a key held down since before
+    /// the picker showed (the Enter that asked for it, say) repeating, or let go, is not the user
+    /// back in the window, and neither is the press a hidden window's logic still reads from the
+    /// last frame it showed. On macOS the picker is a panel beside the window, which keeps working,
+    /// so a press there leaves the panel waiting for its answer.
     #[test]
     fn only_a_press_in_the_focused_window_gives_up_and_never_beside_a_macos_panel() {
         let chosen = std::env::temp_dir();
         let cases = [
             ("a key going down", true, vec![], Some(vec![key(true)]), true),
+            ("a copy shortcut", true, vec![], Some(vec![egui::Event::Copy]), true),
             ("a key held down", true, vec![key(true)], Some(vec![key(true)]), false),
             ("a key let go", true, vec![key(true)], Some(vec![key(false)]), false),
             ("the pointer moving", true, vec![], Some(vec![egui::Event::PointerMoved(egui::pos2(1.0, 1.0))]), false),
