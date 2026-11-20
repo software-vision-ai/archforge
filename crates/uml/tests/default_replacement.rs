@@ -105,15 +105,15 @@ fn elements(s: &S) -> BTreeMap<String, String> {
     st.alive().filter(|o| st.class_of(*o).ok() == Some(DIAGRAM)).map(|d| (id(d), element(d))).collect()
 }
 
-/// Every binding by its owner's id: (the binding's id, the diagram's).
-fn bound(s: &S) -> BTreeMap<String, (String, String)> {
+/// Every binding by its ids: (its owner's, its own, its diagram's).
+fn bound(s: &S) -> BTreeSet<(String, String, String)> {
     let st = s.doc();
     let id = |o: Obj| st.uuid(o).unwrap().to_string();
     let end = |b: Obj, prop| match st.get(b, prop) {
         Ok(Value::Ref(o)) => id(o),
         other => panic!("{other:?}"),
     };
-    let ends = |b: Obj| (end(b, OWNER_ELEMENT), (id(b), end(b, DEFAULT_DIAGRAM)));
+    let ends = |b: Obj| (end(b, OWNER_ELEMENT), id(b), end(b, DEFAULT_DIAGRAM));
     archforge_diagram::defaults::bindings(st).into_iter().map(ends).collect()
 }
 
@@ -153,8 +153,9 @@ fn refused(s: &mut S, p: Json) -> (Option<String>, Option<Reason>) {
 }
 
 /// A choice read before an agent chose another default is stale in both forms, naming the revision
-/// read and the one now. On the revision read now the old default needs no replacement, a new one's
-/// invalid name is refused, and a replacement removed since is no diagram, each with nothing made.
+/// read and the one now. Retried on the revision read now, the old default needs no replacement in
+/// either form; a new one's invalid name is refused, and a replacement removed since is no diagram,
+/// each with nothing made.
 #[test]
 fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() {
     let mut s = session();
@@ -168,9 +169,11 @@ fn a_choice_read_before_a_concurrent_default_set_is_refused_and_judged_afresh() 
         let p = joined(json!({ "diagram": c.overview, "expected_revision": read }), &form);
         assert_eq!(refused(&mut s, p), (Some("expected_revision".into()), Some(stale)), "{form}");
     }
-    let p = json!({ "diagram": c.overview, "replacement_diagram": c.archived, "expected_revision": token(&s) });
-    assert_eq!(refused(&mut s, p).1, Some(Reason::ReplacementNotNeeded { diagram: "Sales overview".into() }));
     let fresh = token(&s);
+    for form in forms(&c) {
+        let p = joined(json!({ "diagram": c.overview, "expected_revision": fresh }), &form);
+        assert_eq!(refused(&mut s, p).1, Some(Reason::ReplacementNotNeeded { diagram: "Sales overview".into() }), "{form}: retried");
+    }
     let named = |name: &str| json!({ "diagram": c.detail, "create_replacement": { "name": name }, "expected_revision": fresh });
     assert_eq!(refused(&mut s, named(" ")).1, Some(Reason::NameEmpty));
     assert_eq!(refused(&mut s, named("Sales\u{7}map")).1, Some(Reason::ControlCharacter));
@@ -192,7 +195,7 @@ fn an_agents_removal_gives_what_the_interfaces_step_gives_undone_and_redone_exac
         // Each session reads its own revision, as the dialog and the agent each do.
         let asked = |s: &S| joined(json!({ "diagram": c.overview, "expected_revision": token(s) }), &form);
         let (p, by_agent_p) = (asked(&ui), asked(&agent));
-        let (before, binding) = (rows_of(&ui), bound(&ui)[&c.sales].0.clone());
+        let (before, binding) = (rows_of(&ui), bound(&ui).into_iter().find(|b| b.0 == c.sales).unwrap().1);
         let mut answer = Json::Null;
         ui.batch("Delete diagram", |b| b.execute("diagram.remove", &p).map(|v| answer = v)).unwrap();
         let by_agent = agent.execute_from("diagram.remove", &by_agent_p, Some("Claude")).unwrap().value;
@@ -232,8 +235,8 @@ fn removing_a_whole_package_never_makes_a_replacement() {
         moved.values_mut().filter(|e| *e == removed).for_each(|e| *e = up.clone());
         assert_eq!(elements(&s), moved, "{removed}: its {handed} diagrams handed up, the others where they were");
         assert_eq!(of.values().filter(|e| *e == removed).count(), handed, "{removed}");
-        let mut kept = was.clone();
-        kept.remove(removed);
+        let kept: BTreeSet<_> = was.iter().filter(|b| b.0 != *removed).cloned().collect();
+        assert_eq!(kept.len() + 1, was.len(), "{removed} had one binding");
         assert_eq!(bound(&s), kept, "{removed}: its binding goes, the others stay");
         s.undo().unwrap();
         assert!(rows_of(&s) == before, "{removed}: one undo step");
