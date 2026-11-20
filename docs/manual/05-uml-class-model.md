@@ -531,7 +531,9 @@ card where nothing lies over it to select the package.
   card out of sight; or it would now show a package filling most of the canvas (60 % or more), the
   amount at which zooming in goes into a package. Both are measured on the window as it is when
   you come back, so a smaller window counts. Zoom out to 10 % again to go back one more step the
-  way you came; coming back adds no step of its own. Once no step is left, or when you opened the
+  way you came; when the return already landed at 10 %, a new zoom-out, once the one that brought
+  you back has ended, takes you back at once, without zooming in first. Coming back adds no step of
+  its own. Once no step is left, or when you opened the
   diagram without going in through a package, zooming out opens the parent package's default
   diagram instead, at 100 % with the package you were in at its centre, or, when that diagram has
   no card of it, fitted to the view the same way. At your project's root there is no parent: the
