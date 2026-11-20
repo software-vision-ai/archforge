@@ -43,7 +43,7 @@ impl Kind {
 
     /// The property by which a relationship of this kind refers to its from end, its client's for a
     /// dependency: the only references through which a match can be found.
-    fn from_end(self) -> archforge_mof::PropId {
+    fn source_prop(self) -> archforge_mof::PropId {
         match self {
             Kind::Dependency => dependency::CLIENT,
         }
@@ -75,7 +75,7 @@ pub fn existing_matches(store: &Store, kind: Kind, from: Obj, to: Obj) -> Vec<Ob
     let mut out: Vec<Obj> = store
         .referrers(from)
         .into_iter()
-        .filter(|(_, prop)| *prop == kind.from_end())
+        .filter(|(_, prop)| *prop == kind.source_prop())
         .map(|(r, _)| r)
         .filter(|r| store.is_alive(*r) && kind.ends(store, *r) == Some((from, to)))
         .collect();
