@@ -288,7 +288,7 @@ fn refusals_name_their_key_and_change_nothing() {
     }
     let before = (picture(s.doc()), s.view().clone(), s.counter());
     let refused: Vec<(&str, Json)> = vec![
-        ("diagram.add", json!({ "kind": "uml.class" })),
+        ("diagram.add", json!({ "kind": "uml.structure" })),
         ("diagram.add", json!({ "kind": "Toy Class" })),
         ("diagram.add", json!({ "kind": "toy.class", "element": a })),
         ("diagram.add", json!({ "kind": "toy.class", "name": " spaced" })),
@@ -421,8 +421,8 @@ fn every_place_text_route_and_kind_refusal_carries_its_reason_typed() {
         let known = known.iter().map(|k| k.to_string()).collect();
         Reason::NotOneOf(Box::new(archforge_engine::NotOneOf { what, word: word.into(), known }))
     };
-    let unknown = not_one_of(archforge_engine::WordPlace::DiagramKind, "uml.class", &["toy.class"]);
-    check(&mut s, "diagram.add", json!({ "kind": "uml.class" }), "kind", unknown, "\"uml.class\" is not one of toy.class");
+    let unknown = not_one_of(archforge_engine::WordPlace::DiagramKind, "uml.structure", &["toy.class"]);
+    check(&mut s, "diagram.add", json!({ "kind": "uml.structure" }), "kind", unknown, "\"uml.structure\" is not one of toy.class");
     check(&mut s, "diagram.place", place(d, &c, json!({ "kind": "Port" })), "kind", Reason::NotAPlainWord, plain);
     let label = |kind: &str| json!({ "edge": sm.edge, "kind": kind });
     check(&mut s, "diagram.label", label("Name"), "kind", Reason::NotAPlainWord, plain);

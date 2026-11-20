@@ -36,10 +36,11 @@ pub use route::{Way, route};
 pub trait DiagramView: archforge_engine::View<Store> {
     /// The diagram the canvas shows.
     fn open_diagram(&self) -> Option<Obj>;
+    /// Makes `diagram` the one the canvas shows, or none.
     fn set_open_diagram(&mut self, diagram: Option<Obj>);
     /// The selection, which the commands set to what they made.
     fn selection_mut(&mut self) -> &mut Vec<Obj>;
-    /// The diagram kinds the notations know, such as `er` or `uml.class`.
+    /// The diagram kinds the notations know, such as `er` or `uml.structure`.
     fn kinds(&self) -> Vec<&'static str>;
     /// Where a new diagram goes: a container and its list property, None for a diagram without a
     /// container, or why no diagram can be added now.

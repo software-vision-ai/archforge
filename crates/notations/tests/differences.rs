@@ -983,7 +983,7 @@ fn only_what_a_box_lists_marks_it() {
     let (mut s, shop, order, _) = uml_project();
     let item = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Item" }));
     let pay = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "parameters": [{ "name": "sum" }] }));
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": shop, "name": "Orders" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": shop, "name": "Orders" }));
     let card = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 0, "y": 0 }));
     let before = state(&s);
     run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": item }));

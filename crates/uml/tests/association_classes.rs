@@ -101,7 +101,7 @@ fn gone(s: &S, id: &str) -> bool {
 /// classes: the package, the diagram, the classifiers' ids in that order and the classes' nodes.
 fn shop(s: &mut S) -> (String, String, Vec<String>, Vec<String>) {
     let pkg = run(s, "uml.package.add", json!({ "name": "Shop" }));
-    let d = run(s, "diagram.add", json!({ "kind": "uml.class", "element": pkg, "name": "Shop" }));
+    let d = run(s, "diagram.add", json!({ "kind": "uml.structure", "element": pkg, "name": "Shop" }));
     let mut ids = Vec::new();
     let mut nodes = Vec::new();
     for (i, name) in ["Customer", "Product", "Store"].into_iter().enumerate() {

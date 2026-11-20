@@ -6558,7 +6558,7 @@ mod tests {
         id("skill.add", serde_json::json!({ "name": "Review export conventions", "body": "Everywhere." }));
         let package = id("uml.package.add", serde_json::json!({ "name": "Review domain" }));
         let invoice = id("uml.class.add", serde_json::json!({ "package": package, "name": "Invoice" }));
-        let diagram = id("diagram.add", serde_json::json!({ "kind": "uml.class", "element": package, "name": "Review domain" }));
+        let diagram = id("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": package, "name": "Review domain" }));
         id("diagram.place", serde_json::json!({ "diagram": diagram, "element": invoice, "x": 100, "y": 120 }));
         id("skill.add", serde_json::json!({ "subject": invoice, "name": "Review export conventions", "body": "Invoices only." }));
         let (tables, junctions) = archforge_notations::storage();

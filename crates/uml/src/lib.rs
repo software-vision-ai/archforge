@@ -74,9 +74,9 @@ pub fn universe() -> Result<Arc<Universe>, MetaError> {
 }
 
 /// The UML structure diagram kind: a diagram of a package that holds its classes and packages and
-/// shows its classes as cards. Its stored value is still `uml.class`; AR-551 moves it to
-/// `uml.structure`.
-pub const STRUCTURE_DIAGRAM: &str = "uml.class";
+/// shows its classes as cards. It is stored as `uml.structure`, the one UML diagram kind; a model
+/// holding a diagram of the earlier `uml.class` kind is refused, never read as this one (AR-551).
+pub const STRUCTURE_DIAGRAM: &str = "uml.structure";
 
 /// The kinds of classifier a class diagram places, each a card with its members: a class, an
 /// interface, an enumeration, whose members are its literals, a data type, a value without
