@@ -7394,7 +7394,7 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let from = "Buchhaltung hängt über die Abhängigkeit d-7 von Auftrag ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
         assert_eq!([said(Target), said(Source)], [Some(to.into()), Some(from.into())], "{theme:?}");
         // A dependency moved onto the client and supplier another has (AR-697).
-        let exists = "Diese Verbindung besteht bereits. Verwenden Sie „Art ändern“ oder wählen Sie die bestehende Beziehung aus.";
+        let exists = "Diese Verbindung besteht bereits. Wählen Sie die bestehende Beziehung aus.";
         assert_eq!(crate::panels::said(&archforge_engine::Reason::ConnectionExists), Some(exists.to_string()), "{theme:?}");
         // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
         use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
@@ -22602,7 +22602,7 @@ fn a_dependency_end_dragged_onto_another_class_carries_the_revision_and_a_repeat
         let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
         let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Payment"])).center();
         drag(&mut h, handle, to);
-        let said = crate::i18n::tr("This connection already exists. Use Change kind or select the existing relationship.");
+        let said = crate::i18n::tr("This connection already exists. Select the existing relationship.");
         assert_eq!(h.state().canvas.notice.as_deref(), Some(said.as_str()), "{theme:?}");
         assert_eq!((supplier(&h), h.state().session.as_ref().unwrap().revision()), ("Product".to_string(), revision), "{theme:?}: unchanged");
     }
