@@ -728,8 +728,9 @@ What is UML's own, beside the shared rules above.
   class diagram yet, or an unsound binding, stays closed and the notice under the path bar says why
   (AR-582). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it
   opens the diagram the package was entered from, even in another branch (Decision 4, AR-664).
-  When the package left's card has been removed from that diagram, it is fitted (down to 10 %, so
-  of a diagram wider than ten canvases only its middle shows, maybe empty space between cards).
+  When that diagram has no card of the package just left (removed, or never there when a step to
+  a gone diagram was skipped), it is fitted (down to 10 %, so of a diagram wider than ten
+  canvases only its middle shows, maybe empty space between cards).
   While the card is there, it shows as it was left while that view is finite, within the zoom
   range, puts the card at least in part on the canvas (out of sight is no fit, but a centring),
   and shows

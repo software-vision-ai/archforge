@@ -522,11 +522,12 @@ card where nothing lies over it to select the package.
   path bar says why. A double click still renames the package, as it does a class.
 - **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
   least zoom, 10 %. Reach 10 % and the diagram you went in from opens again, even when that
-  diagram belongs to another branch of your model, as you left it, provided it still has a card of
-  the package you were in. If that card has been removed from it, the diagram is fitted to the
-  view instead: all of it shows, unless it is too wide or tall to fit even at 10 %, the least zoom;
-  then the middle of it shows at 10 %, which can be empty space between its cards. While the card
-  is still there, three cases open the diagram at 100 % with that card at its centre: you went in
+  diagram belongs to another branch of your model, as you left it, provided it has a card of the
+  package you just left. If it has none (the card was removed, or a step was skipped because its
+  diagram is gone, so you land further back), the diagram is fitted to the view instead: all of
+  it shows, unless it is too wide or tall to fit even at 10 %, the least zoom; then the middle of
+  it shows at 10 %, which can be empty space between its cards. While it has the card, three
+  cases open the diagram at 100 % with that card at its centre: you went in
   by zooming; or, however you went in (zooming, ⌘↓ or Open), the view you left would now put the
   card out of sight; or it would now show a package filling most of the canvas (60 % or more), the
   amount at which zooming in tries to go into a package, even one that can't open and only shows a
