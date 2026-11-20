@@ -854,9 +854,10 @@ fn a_nested_package_removed_reports_what_it_handed_up_and_its_one_binding() {
 }
 
 /// A package with no parent removed hands nothing up and reports every binding in it and every
-/// relationship that went: the generalization and the dependency inside it, and a generalization
-/// onto one of its classes from a class that stays elsewhere. That generalization named alone is
-/// counted too, both its ends staying. Each answer is the same after Undo and Redo (AR-675).
+/// relationship that went: the generalization and the dependency inside it, a generalization onto
+/// one of its classes from a class that stays elsewhere, and a dependency it holds between two
+/// classes that stay elsewhere. That generalization named alone is counted too, both its ends
+/// staying. Each answer is the same after Undo and Redo (AR-675).
 #[test]
 fn a_package_with_no_parent_removed_reports_its_bindings_and_relationships() {
     use archforge_uml::{CLASS, GENERALIZATION, classifier, generalization};
@@ -877,6 +878,9 @@ fn a_package_with_no_parent_removed_reports_its_bindings_and_relationships() {
         g
     });
     depending(&mut st, party, customer, outer);
+    // A dependency the package holds between two classes elsewhere goes with it, its ends staying.
+    let host = packaged(&mut st, CLASS, "Host", other);
+    depending(&mut st, guest, host, outer);
     for (package, id) in [(outer, 0x11), (inner, 0x21)] {
         let d = st.create_with_uuid(DIAGRAM, Uuid([id; 16])).unwrap();
         st.push(model, archforge_core::model::MEMBER, Value::Ref(d)).unwrap();
@@ -884,7 +888,7 @@ fn a_package_with_no_parent_removed_reports_its_bindings_and_relationships() {
         DiagramObj::set_element(&mut st, d, Some(package)).unwrap();
         bind(&mut st, id + 1, package, d);
     }
-    let [guest, guest_is_party] = [guest, guest_is_party].map(|o| st.uuid(o).unwrap().to_string());
+    let [guest, host, guest_is_party] = [guest, host, guest_is_party].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = over(st);
     // A relationship named alone goes and is counted, though both its ends stay.
     let answer = removal(&mut s, &[&guest_is_party]);
@@ -892,8 +896,8 @@ fn a_package_with_no_parent_removed_reports_its_bindings_and_relationships() {
     assert!(alive(&s, &guest), "its specific end stays");
     s.undo().unwrap();
     let answer = removal(&mut s, &[&Uuid([0x10; 16]).to_string()]);
-    assert_eq!(counts(&answer), (0, 0, 2, 3), "{answer}");
-    assert!(alive(&s, &guest), "the class elsewhere stays");
+    assert_eq!(counts(&answer), (0, 0, 2, 4), "{answer}");
+    assert!(alive(&s, &guest) && alive(&s, &host), "the classes elsewhere stay");
     assert_eq!(problems(s.doc()), []);
 }
 
