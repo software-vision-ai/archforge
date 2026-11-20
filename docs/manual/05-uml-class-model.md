@@ -188,8 +188,9 @@ The menu's other kinds of line, for later:
   adds no second one. If the diagram shows that dependency already, the canvas says so; otherwise
   its line is added to the diagram, and its name and description stay as they are. If several
   dependencies already join them, as a project made with an earlier version may have, none is
-  added and the canvas says so. A dependency the other way round is a new one. Not repeating a
-  dependency is Archforge's rule, not UML's.
+  added and the canvas says so. Each direction counts on its own: a dependency drawn the other way
+  round is added unless one already goes that way. Not repeating a dependency is Archforge's rule,
+  not UML's.
 - **Interface realization** and **Association class**: steps 9 and 10.
 
 ## 5. Give an order a status: an enumeration
