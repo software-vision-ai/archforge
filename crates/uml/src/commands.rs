@@ -789,8 +789,11 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// substitutions, and with its bound element or its template; a classifier a binding that stays
 /// uses as an argument is refused, naming the binding (AR-131,
 /// [`crate::bindings::argument_removal_problem`]). An element UML does not remove yet is refused
-/// typed, as [`Reason::ElementNotRemovable`] (AR-530).
-pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
+/// typed, as [`Reason::ElementNotRemovable`] (AR-530). It counts what went and what was handed up
+/// ([`archforge_diagram::Removed`], AR-675): the elements and diagrams handed up that are still in
+/// the model at the end, each once, so not those that went with a package removed in the same call;
+/// the bindings that went; and every relationship that went, of whatever kind ([`is_relationship_kind`]).
+pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diagram::Removed, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     // Where each nested package's diagrams go, worked out on the model as it is before anything moves.
     let mut receivers = std::collections::BTreeMap::new();
@@ -917,6 +920,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             objs.push(n);
         }
     }
+    // What stands before anything goes, for what went to be counted at the end (AR-675).
+    let standing = archforge_diagram::Standing::before(store, |c| is_relationship_kind(store, c));
     // Template parameters go first, each signature left with none going with its last (AR-130);
     // those of a template that goes too go with it.
     let params = removed_parameters(store, &objs);
@@ -929,10 +934,13 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // A nested package's contents move up to its parent before it goes, and its diagrams to their
     // receiver; inside a package with no parent that goes they stay below it, and go with it.
     let nested: Vec<Obj> = objs.iter().copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
+    let (mut moved, mut moved_diagrams) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
     for o in nested {
         let Some(parent) = package_of(store, o) else { continue };
         let (diagrams, _, _) = archforge_diagram::views_of(store, o);
         let to = receivers.get(&o).copied().unwrap_or(parent);
+        moved.extend(held(store, o));
+        moved_diagrams.extend(diagrams.iter().copied());
         store
             .transaction(|st| {
                 for child in held(st, o) {
@@ -1003,7 +1011,17 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             })
             .map_err(fail)?;
     }
-    Ok(gone)
+    // What was handed up and went again with a package removed in the same call is not counted.
+    let standing_now = |set: &std::collections::BTreeSet<Obj>| set.iter().filter(|o| store.is_alive(**o)).count();
+    let (moved_elements, moved_diagrams) = (standing_now(&moved), standing_now(&moved_diagrams));
+    Ok(archforge_diagram::Removed { moved_elements, moved_diagrams, ..standing.removed(store, gone) })
+}
+
+/// Whether an element of `class` is a relationship, as a removal counts them (AR-675): any kind
+/// UML's `Relationship` generalizes, so associations, generalizations, dependencies, realizations,
+/// template bindings, profile applications, imports and merges alike.
+fn is_relationship_kind(store: &Store, class: archforge_mof::ClassId) -> bool {
+    store.universe().conforms(class, archforge_mof::TypeRef::Class(crate::RELATIONSHIP))
 }
 
 /// What removing `objs` takes away that a specialization path may run through, worked out before

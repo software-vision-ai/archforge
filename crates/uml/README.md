@@ -190,6 +190,12 @@ a classifier template parameter that is no template's as `Reason::ElementNotRemo
 element by its name, or its id when it has none; the English, "{id} cannot be removed yet", is
 unchanged.
 
+**What a removal reports** (AR-675). `commands::remove_elements` gives an
+`archforge_diagram::Removed`: the objects that went, the elements and diagrams a nested package
+handed up that are still in the model at the end, the bindings that went, and every relationship
+that went, of any kind UML's `Relationship` generalizes, so imports, merges and dependencies a
+package takes along later count there too.
+
 **A package's default diagram** (AR-575). `defaults::resolve` reads a package's one
 `DefaultDiagramBinding` (the diagram crate's) and gives `DefaultDiagram::Bound` with the structure
 diagram it names, `NoDiagramYet` for a package with no structure diagram, `DoesNotApply` for a
