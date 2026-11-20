@@ -1761,6 +1761,8 @@ str		{what} moved into {where}	{what} nach {where} verschoben
 str		Open this package's diagram	Diagramm dieses Pakets öffnen
 str		Open this package's diagram (⌘↓)	Diagramm dieses Pakets öffnen (⌘↓)
 str		This is the top package: zooming out goes no further	Dies ist das oberste Paket: weiter hinauszoomen führt nirgendwohin
+str		{deleted} was deleted. Returned to {reached}.	{deleted} wurde gelöscht. Zurück zu {reached}.
+str		No return destination is available. Open a diagram from Models.	Kein Rückkehrziel verfügbar. Öffnen Sie ein Diagramm aus Modelle.
 # Klassen in Beziehung setzen
 str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
 str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnittstelle

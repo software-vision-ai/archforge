@@ -12,8 +12,11 @@
 //!   that diagram is in another branch (Decision 4): fitted, down to 10 %, when it no longer has
 //!   a card of the package; else as it was left when that view is still sound ([`restorable`]);
 //!   else at 100 %, the package left centred (AR-668). The return takes its step off the tab's route
-//!   and makes none. With no way in left, the parent's default opens instead, landing as a return
-//!   with no view kept does; at the root, 10 % stays put and says so.
+//!   and makes none. A step whose diagram was deleted is passed over to the nearest one still there,
+//!   and the notice under the path bar says which was deleted and where the return went (Decision
+//!   24, AR-670). With no way in left, the parent's default opens instead, landing as a return with
+//!   no view kept does; at the root, 10 % stays put and says so, and with no parent's default
+//!   either, it stays and points to Models. Nothing is made and no diagram is picked by its name.
 //! - **Out by the path bar or ⌘↑**: the owning ancestor's default diagram as it was last left, by
 //!   ownership and never the way in; its tab starts a new route.
 //! - One switch per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
@@ -194,8 +197,8 @@ pub(crate) fn leave(shell: &mut Shell, package: Uuid, now: f64) {
 
 /// Opens the diagram `d` on the way out of the open one, keeping the view of the diagram left: after a zoom
 /// out (`reveal`) as its next frame lands it ([`land`]); else as `d` was left, or fitted when it
-/// never was.
-fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Landing>, now: f64) {
+/// never was. Gives `d` when it opened; none when the session refused it, and the notice says why.
+fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Landing>, now: f64) -> Option<Uuid> {
     crate::canvas::open(shell, d);
     match (reveal, shell.canvas.nav.views.get(&d).copied()) {
         (Some(_), _) => {
@@ -213,23 +216,38 @@ fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Landing>, now: f64) {
     shell.canvas.nav.centre = false;
     shell.canvas.nav.switched = Some(now);
     shell.canvas.nav.disarmed = true;
+    (shell.canvas.active == Some(d)).then_some(d)
+}
+
+/// What a return by zoom took off the open diagram's route ([`take_return`]).
+#[derive(Debug, Default)]
+struct Back {
+    /// The source the return opens, which may be in another branch than the open diagram, and the
+    /// view it was left with; none when no step leads anywhere.
+    to: Option<(Uuid, Option<(Vec2, f32)>)>,
+    /// The name, when it was left, of the newest diagram passed over because it was deleted: the
+    /// one the return would have opened. A step of another history is passed over without one, as
+    /// its diagrams belong to another revision rather than being gone.
+    deleted: Option<String>,
 }
 
 /// The way back from the open diagram by zoom: the newest step on its tab's route made in this
 /// session's history whose source is still a diagram, taken off the route with every newer one
-/// passed over. Gives that source, which may be in another branch than the open diagram, and the
-/// view it was left with; the tab of the source keeps what is left of the route, the one left
-/// keeps none, and nothing is added, since a return is no entry. Gives none, the route spent,
-/// when no step leads anywhere.
-fn take_return(shell: &mut Shell) -> Option<(Uuid, Option<(Vec2, f32)>)> {
-    let from = shell.canvas.active?;
-    let session = shell.session.as_ref()?;
-    let store = session.doc();
-    let mut route = shell.canvas.nav.routes.remove(&from)?;
+/// passed over (Decision 24). The tab of the source keeps what is left of the route, the one left
+/// keeps none, and nothing is added, since a return is no entry. No step leading anywhere spends
+/// the route. Never picks a diagram by its name.
+fn take_return(shell: &mut Shell) -> Back {
+    let (Some(from), Some(session)) = (shell.canvas.active, shell.session.as_ref()) else { return Back::default() };
+    let Some(mut route) = shell.canvas.nav.routes.remove(&from) else { return Back::default() };
+    let (store, history) = (session.doc(), session.history());
     let shown = |s: Uuid| store.by_uuid(s).is_some_and(|d| store.is_alive(d) && store.class_of(d).ok() == Some(archforge_diagram::DIAGRAM));
-    let step = route.take_return(session.history(), shown).reached?;
-    shell.canvas.nav.routes.insert(step.source, route);
-    Some((step.source, step.view))
+    let taken = route.take_return(history, shown);
+    let deleted = taken.skipped.into_iter().find(|s| s.history == history).map(|s| s.source_name);
+    let to = taken.reached.map(|step| {
+        shell.canvas.nav.routes.insert(step.source, route);
+        (step.source, step.view)
+    });
+    Back { to, deleted }
 }
 
 /// The package whose card on diagram `d` covers the most of canvas `r` at `view`, with the share of
@@ -342,26 +360,52 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
         }
     } else if shell.canvas.zoom <= crate::canvas::ZOOM_RANGE.0 + f32::EPSILON {
         // Out: the zoom has reached its least, 10 %: back the way in came, even into another
-        // branch; with no way in, one level up; at the root, no further.
+        // branch, past diagrams deleted since; with no way in, one level up; at the root, or with
+        // no parent's default, no further.
         let Ok(left) = store.uuid(here) else { return };
         let parent = archforge_uml::commands::package_of(store, here).map(|p| store.uuid(p));
-        match (take_return(shell), parent) {
-            (Some((back, view)), _) => switch_out(shell, back, Some(Landing { package: left, view }), now),
-            (None, Some(Ok(parent))) => {
-                // The owning parent's default; its tab keeps its own route.
-                if let Some(d) = default_of(shell, parent) {
-                    switch_out(shell, d, Some(Landing { package: left, view: None }), now);
-                }
+        let back = take_return(shell);
+        let target = match (back.to, parent) {
+            (Some(way_in), _) => Some(way_in),
+            // The owning parent's default; its tab keeps its own route.
+            (None, Some(Ok(parent))) => default_of(shell, parent).map(|d| (d, None)),
+            (None, None) if back.deleted.is_none() => {
+                stay(shell, tr("This is the top package: zooming out goes no further"), now);
+                return;
             }
-            (None, Some(Err(_))) => {}
-            (None, None) => {
-                // Said under the path bar until the next action.
-                shell.canvas.notice = Some(tr("This is the top package: zooming out goes no further"));
-                shell.canvas.nav.disarmed = true;
-                shell.canvas.nav.switched = Some(now);
-            }
+            (None, _) => None,
+        };
+        // Nowhere to go: stay, pointing to Models; nothing is made and no diagram picked by name.
+        let Some((to, view)) = target else {
+            stay(shell, tr("No return destination is available. Open a diagram from Models."), now);
+            return;
+        };
+        if switch_out(shell, to, Some(Landing { package: left, view }), now).is_some()
+            && let Some(deleted) = back.deleted
+        {
+            say_returned(shell, &deleted, to);
         }
     }
+}
+
+/// Says under the path bar, until the next action, that a zoom out passed over a deleted diagram
+/// and opened `reached` instead (Decision 24): `deleted` is the name the diagram it would have
+/// opened had when it was left, `reached` is called by its name now.
+fn say_returned(shell: &mut Shell, deleted: &str, reached: Uuid) {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    // Either unnamed is called as the tabs call it.
+    let deleted = if deleted.is_empty() { tr("Unnamed diagram") } else { deleted.to_string() };
+    let name = store.by_uuid(reached).map(|d| crate::diagrams::subject_name(store, d)).unwrap_or_default();
+    let text = crate::i18n::fmt(&tr("{deleted} was deleted. Returned to {reached}."), &[("deleted", deleted.as_str()), ("reached", name.as_str())]);
+    shell.canvas.notice = Some(text);
+}
+
+/// Stays on the open diagram at the end of a zoom out and says `why` under the path bar until the
+/// next action; the gesture that got here makes no switch after.
+fn stay(shell: &mut Shell, why: String, now: f64) {
+    shell.canvas.notice = Some(why);
+    shell.canvas.nav.disarmed = true;
+    shell.canvas.nav.switched = Some(now);
 }
 
 /// ⌘↓ opens the selected package, ⌘↑ the parent; +, = and − zoom about the canvas's centre. Only

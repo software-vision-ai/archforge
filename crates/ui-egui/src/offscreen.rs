@@ -98,6 +98,9 @@ pub enum Screen {
     WorkspacePackageParent,
     /// The root's diagram zoomed out to 10 %, its notice saying no package is above (AR-110).
     WorkspacePackageTop,
+    /// Inside Sales after a zoom out passed over a deleted diagram, its notice saying which and
+    /// where the return went (AR-670).
+    WorkspacePackageReturned,
     /// The root's diagram with packages of other branches beside Sales and Billing, each with its
     /// owning path under its card, a long one folded at its front (AR-565).
     WorkspacePackagePaths,
@@ -794,6 +797,12 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         shell.canvas.zoom = crate::canvas::ZOOM_RANGE.0;
         shell.canvas.pan = egui::vec2(420.0, 380.0);
         shell.canvas.notice = Some(crate::i18n::tr("This is the top package: zooming out goes no further"));
+    }
+    if screen == Screen::WorkspacePackageReturned {
+        shell.adopt_project();
+        sample_packages(&mut shell, true)?;
+        let said = [("deleted", "Sales overview"), ("reached", "Sales")];
+        shell.canvas.notice = Some(crate::i18n::fmt(&crate::i18n::tr("{deleted} was deleted. Returned to {reached}."), &said));
     }
     if screen == Screen::WorkspaceDiagrams {
         shell.adopt_project();

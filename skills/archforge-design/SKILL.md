@@ -739,9 +739,16 @@ What is UML's own, beside the shared rules above.
   Open; a zoom entry keeps no view at all. Else it lands at 100 %, the package left centred, which
   makes no promise about the next zoom-in (a small window can let the card fill 60 % there)
   (AR-668, delegated UX decision). The return takes the newest step off the tab's route and adds
-  none, since a return is no entry. With no step left it opens the parent's default the same way
+  none, since a return is no entry. Steps whose diagram was deleted are passed over to the nearest
+  one still there, and the notice under the path bar says "{deleted} was deleted. Returned to
+  {reached}.": the name the deleted diagram had when left, the reached one's name now (Decision 24,
+  AR-670, N2); a step of another history is passed over silently. With no step left it opens the
+  parent's default the same way
   with no view kept: fitted when it has no card of the package left, else that card centred at
-  100 %; at the root, 10 % stays put with a notice ("This is the top package: zooming out goes no further"). The path bar at the canvas's top
+  100 %; at the root, 10 % stays put with a notice ("This is the top package: zooming out goes no further").
+  With no parent's default either, or at the root after passing over deleted steps, it stays and
+  says "No return destination is available. Open a diagram from Models." (N3); nothing is made and
+  no diagram is picked by its name. The path bar at the canvas's top
   left (root to here, ancestors as buttons) and ⌘↑ follow ownership, never the route: they open the
   ancestor's default as it was last left (by navigation, a tab switch or a close), and start that
   tab's route empty, with no step made up from the package left (AR-666), so a later zoom out

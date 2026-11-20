@@ -12178,6 +12178,180 @@ fn zooming_out_past_a_removed_way_in_opens_the_owning_parents_default() {
         rest(&mut h);
         assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![archive_d, operations_d], "{theme:?}: Operations' default");
         assert_eq!(route_of(&h, archive_d), vec![], "{theme:?}: the route spent");
+        // Said under the path bar: the deleted diagram by its name when left, and where the return went (AR-670).
+        let said = "Commerce overview was deleted. Returned to Operations.";
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(said), "{theme:?}");
+        assert!(painted(&h).iter().any(|t| t == said), "{theme:?}: shown");
+    }
+}
+
+/// Whether the session's model, undo history and saved state are as `before` says, with as many
+/// diagrams: browsing changes none of them.
+fn model_unchanged(h: &Harness<'static, Shell>) -> (u64, bool, bool, bool, usize) {
+    let s = h.state().session.as_ref().unwrap();
+    let st = s.doc();
+    let diagrams = st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).count();
+    (s.revision(), s.can_undo(), s.can_redo(), s.is_dirty(), diagrams)
+}
+
+/// Zooming out passes over the deleted diagrams a package was entered from to the nearest one still
+/// there (AR-670, Decision 24): Alpha → Beta → Gamma → Delta, each entered by its card on the
+/// diagram before. With Gamma deleted, the return lands on Beta, the nearest left; with Beta and
+/// Gamma deleted and Alpha renamed since, on Alpha, called by its name now. The notice names the
+/// diagram deleted as it was called when left, Gamma, or as the tabs call one unnamed then, and
+/// the one reached. One gesture makes one switch,
+/// the steps passed over are spent, and nothing in the model, its undo history or what is saved
+/// changes.
+#[test]
+fn zooming_out_passes_over_deleted_ways_in_to_the_nearest_one_left_and_says_so() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for (gone, renamed, gamma) in [(&[2_usize][..], None, "Gamma"), (&[1, 2][..], Some("Alpha renamed"), "")] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+            // Four packages, each with its own diagram showing the next one's card.
+            let (packages, d) = {
+                let s = h.state_mut().session.as_mut().unwrap();
+                let packages: Vec<_> = ["Alpha", "Beta", "Gamma", "Delta"]
+                    .into_iter()
+                    .map(|name| id(s.execute("uml.package.add", &serde_json::json!({ "name": name })).unwrap().value))
+                    .collect();
+                let d: Vec<_> = packages.iter().map(|p| own_diagram(s, *p)).collect();
+                for (on, what) in d.iter().zip(&packages[1..]) {
+                    let p = serde_json::json!({ "diagram": on.to_string(), "element": what.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                    s.execute("diagram.place", &p).unwrap();
+                }
+                s.execute("diagram.rename", &serde_json::json!({ "diagram": d[2].to_string(), "name": gamma })).unwrap();
+                (packages, d)
+            };
+            crate::canvas::open(h.state_mut(), d[0]);
+            h.run();
+            for package in &packages[1..] {
+                crate::package_nav::enter(h.state_mut(), *package, 0.0);
+                h.run();
+                rest(&mut h);
+            }
+            assert_eq!(route_of(&h, d[3]), vec![(d[0], d[1]), (d[1], d[2]), (d[2], d[3])], "{theme:?}");
+            // Each deleted as its package's default, a new empty one taking its place.
+            {
+                let s = h.state_mut().session.as_mut().unwrap();
+                for i in gone {
+                    let at = s.token();
+                    let p = serde_json::json!({ "diagram": d[*i].to_string(), "create_replacement": { "name": "Replacement" }, "expected_revision": { "history": at.history, "revision": at.revision } });
+                    s.execute("diagram.remove", &p).unwrap();
+                }
+                if let Some(name) = renamed {
+                    s.execute("diagram.rename", &serde_json::json!({ "diagram": d[0].to_string(), "name": name })).unwrap();
+                }
+            }
+            h.run();
+            rest(&mut h);
+            let before = model_unchanged(&h);
+            let (reached, left) = if gone.len() == 1 { (1, vec![(d[0], d[1])]) } else { (0, vec![]) };
+            assert_eq!(zoom_out_gesture(&mut h, 40, false), vec![d[3], d[reached]], "{theme:?} {gone:?}: one switch, to the nearest left");
+            let said =
+                format!("{} was deleted. Returned to {}.", if gamma.is_empty() { "Unnamed diagram" } else { gamma }, renamed.unwrap_or("Beta"));
+            assert_eq!(h.state().canvas.notice.as_deref(), Some(said.as_str()), "{theme:?} {gone:?}");
+            assert!(painted(&h).contains(&said), "{theme:?} {gone:?}: shown under the path bar");
+            assert_eq!(route_of(&h, d[reached]), left, "{theme:?} {gone:?}: the steps passed over spent");
+            assert_eq!(route_of(&h, d[3]), vec![], "{theme:?} {gone:?}");
+            assert_eq!(model_unchanged(&h), before, "{theme:?} {gone:?}: no change, no undo step, nothing to save");
+        }
+    }
+}
+
+/// With no way in left and no parent's default to fall back on, zooming out stays and points to
+/// Models (AR-670, Decision 24). Archive, owned by Operations, which has no class diagram, was
+/// entered from the Commerce overview, deleted since: the gesture passes over it, spends the route
+/// and stays on Archive; the next, with no route at all, says the same. The root's diagram entered
+/// from a diagram deleted since stays too, saying the same rather than that it is the top package.
+/// Nothing is made: no diagram and no undo step.
+#[test]
+fn zooming_out_with_nowhere_to_return_stays_and_points_to_models() {
+    let said = "No return destination is available. Open a diagram from Models.";
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (overview, archive, archive_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let operations = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Operations" })).unwrap().value);
+            let archive =
+                id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": operations.to_string() })).unwrap().value);
+            own_diagram(s, commerce);
+            let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": commerce.to_string(), "name": "Commerce overview" });
+            let overview = id(s.execute("diagram.add", &p).unwrap().value);
+            let archive_d = own_diagram(s, archive);
+            let p = serde_json::json!({ "diagram": overview.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+            s.execute("diagram.place", &p).unwrap();
+            (overview, archive, archive_d)
+        };
+        crate::canvas::open(h.state_mut(), overview);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        h.state_mut().session.as_mut().unwrap().execute("diagram.remove", &serde_json::json!({ "diagram": overview.to_string() })).unwrap();
+        h.run();
+        rest(&mut h);
+        let before = model_unchanged(&h);
+        for case in ["the way in deleted", "no way in"] {
+            h.state_mut().canvas.notice = None;
+            assert_eq!(zoom_out_gesture(&mut h, 40, false), vec![archive_d], "{theme:?} {case}: stays");
+            assert_eq!(h.state().canvas.notice.as_deref(), Some(said), "{theme:?} {case}");
+            assert!(painted(&h).iter().any(|t| t == said), "{theme:?} {case}: shown under the path bar");
+            assert_eq!(route_of(&h, archive_d), vec![], "{theme:?} {case}: the route spent");
+            assert_eq!(model_unchanged(&h), before, "{theme:?} {case}: nothing made, no undo step");
+            rest(&mut h);
+        }
+    }
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (top, sales, _, _) = top_with_sales(&mut h, (240, 148), &[]);
+        // Sales' second diagram, the overview, shows the root's card.
+        let (root, overview) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales overview" });
+            let overview = id(s.execute("diagram.add", &p).unwrap().value);
+            let p =
+                serde_json::json!({ "diagram": overview.to_string(), "element": root.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+            s.execute("diagram.place", &p).unwrap();
+            (root, overview)
+        };
+        crate::canvas::open(h.state_mut(), overview);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), root, 0.0);
+        h.run();
+        assert_eq!(route_of(&h, top), vec![(overview, top)], "{theme:?}: the root's diagram entered from Sales overview");
+        h.state_mut().session.as_mut().unwrap().execute("diagram.remove", &serde_json::json!({ "diagram": overview.to_string() })).unwrap();
+        h.run();
+        rest(&mut h);
+        let before = model_unchanged(&h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, false), vec![top], "{theme:?}: the root stays");
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(said), "{theme:?}: not the top package's note");
+        assert_eq!(model_unchanged(&h), before, "{theme:?}");
+    }
+}
+
+/// A way in made in another history is passed over without saying it was deleted (AR-670): its
+/// diagram belongs to another revision, not gone. The route spent, the owning parent's default
+/// opens, and nothing is said.
+#[test]
+fn zooming_out_passes_over_a_way_in_of_another_history_without_saying_it_was_deleted() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, _, sales_d) = top_with_sales(&mut h, (240, 148), &[]);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        let mut route = crate::nav_route::Route::default();
+        let history = h.state().session.as_ref().unwrap().history().wrapping_add(1);
+        route.push(crate::nav_route::Step { source: top, destination: sales_d, source_name: "Top".into(), view: None, history });
+        h.state_mut().canvas.nav.routes.insert(sales_d, route);
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}: the root's default, by ownership");
+        assert_eq!(h.state().canvas.notice, None, "{theme:?}: nothing deleted, nothing said");
     }
 }
 

@@ -535,11 +535,16 @@ card where nothing lies over it to select the package.
   Zoom out to 10 % again to go back one more step the way you came. When the return already landed
   at 10 %, stop zooming for a moment, then zoom out again: that takes you back at once, without
   zooming in first; a zoom-out started straight after the switch does nothing. Coming back adds no
-  step of its own. Once no step is left, or when you opened the diagram without going in through a
+  step of its own. When the diagram you went in from has been deleted since, zooming out passes
+  over it, and over any deleted before it, to the nearest one on your way in that is still there;
+  a note under the path bar says which diagram was deleted and names the one you returned to.
+  Once no step is left, or when you opened the diagram without going in through a
   package, zooming out opens the parent package's default diagram instead, at 100 % with the
   package you were in at its centre, or, when that diagram has no card of it, fitted to the view
   the same way. At your project's root there is no parent: the
-  diagram stays at 10 %, and a note under the path bar says so.
+  diagram stays at 10 %, and a note under the path bar says so. When the parent package has no
+  default diagram to open either, the diagram stays too, and the note says there is nowhere to
+  return to: open a diagram from **Models**. Coming back never makes a diagram.
 - **Come back by the path bar.** The path bar at the canvas's top left names the packages from
   your project's root down to the one open: the packages that hold it, whichever diagram you went
   in from. Choose one of them, or press ⌘↑ (Ctrl+↑) for the parent: that package's default
@@ -556,6 +561,8 @@ still carries the package's name.
 <!-- picture: workspace-inside-package dark | Inside Sales: its classes, its own package Payments, and the path bar back to the root -->
 
 <!-- picture: workspace-package-top light | The root's diagram zoomed out to 10 %: the note under the path bar says there is no package above -->
+
+<!-- picture: workspace-package-returned dark | Back in Sales after zooming out: the note under the path bar says the diagram gone in from was deleted and names Sales -->
 
 ### Move an element into a package
 
