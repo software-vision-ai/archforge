@@ -177,9 +177,9 @@ pub struct Pickers {
     dialogs: Dialogs<Sender<Picked>>,
     /// Makes the queue that takes the place of one whose picker never answered.
     fresh: Box<dyn Fn() -> Dialogs<Sender<Picked>>>,
-    /// Whether a picker stays in front of the window until it closes, so that the user working in
-    /// the window is taken as none being up: everywhere but macOS, whose picker is a panel beside
-    /// the window.
+    /// Whether a picker normally stays in front of the window until it closes, so that the user
+    /// working in the window is taken as none being up: everywhere but macOS, whose picker is a
+    /// panel beside the window.
     in_front: bool,
     /// Tests: a picker counts as on screen, as a real one does until the user closes it.
     #[cfg(test)]
@@ -224,9 +224,9 @@ impl Pickers {
     }
 
     /// Gives up on the picker on screen when the user works in the window again (a pointer or key
-    /// pressed while it shows and has the focus) where a picker stays in front of the window until
-    /// it closes: that is taken as none being up, so it never appeared or went without answering,
-    /// as a hung desktop portal does. craft-dialogs cannot say whether its picker is up, nor give
+    /// pressed while it shows and has the focus) where a picker normally stays in front of the
+    /// window until it closes: that is taken as none being up, so it never appeared or went without
+    /// answering, as a hung desktop portal does. craft-dialogs cannot say whether its picker is up, nor give
     /// one up, so its queue is left behind with the picker's worker and a fresh one shows the picks
     /// from then on. The pick it held ends as a cancel: the shell, its channel closed, frees Open project, Pin
     /// a folder and Change… in this frame, and an answer the old picker gives later reaches nothing.
@@ -926,6 +926,32 @@ mod tests {
             let closed = pin.try_recv() == Err(std::sync::mpsc::TryRecvError::Disconnected);
             assert_eq!((closed, pickers.on_screen()), (gives_up, !gives_up), "{what}");
         }
+    }
+
+    /// The queue that takes a given-up picker's place wakes the window with its answers as the
+    /// first did, so a pick asked after it answers with no more input to the window.
+    #[test]
+    fn the_queue_that_takes_a_given_up_pickers_place_wakes_the_window() {
+        let woken = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let wake = woken.clone();
+        let mut pickers = Pickers::new(std::sync::Arc::new(move || {
+            wake.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }));
+        (pickers.in_front, pickers.hung) = (true, Some(None));
+        drop(pick_folder(&pickers.asks(), "Pin a folder"));
+        pickers.show(None);
+        let ctx = egui::Context::default();
+        ctx.run_ui(input(true, vec![press()]), |ui| pickers.answer(ui.ctx())).textures_delta.clear();
+        assert!(pickers.hung.is_none(), "not given up");
+        let chosen = std::env::temp_dir();
+        let folder = chosen.clone();
+        pickers.dialogs.set_override(Some(Box::new(move |_: &craft_dialogs::Request| Answer::Paths(vec![folder.clone()]))));
+        let pin = pick_folder(&pickers.asks(), "Pin a folder");
+        let before = woken.load(std::sync::atomic::Ordering::SeqCst);
+        pickers.show(None);
+        assert!(woken.load(std::sync::atomic::Ordering::SeqCst) > before, "the fresh queue did not wake the window");
+        pickers.answer(&egui::Context::default());
+        assert_eq!(pin.try_recv(), Ok(Picked::Folder(chosen)));
     }
 
     /// The handoff over a picker that never answers: New project's Change… picker hangs, New project

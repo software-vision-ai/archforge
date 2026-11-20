@@ -176,7 +176,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   folders. Enter, in the search or in an open menu, runs the row last shown highlighted, never one
   a change of the list put in its place (AR-749).
 - A picker that never answers gives way to the user (AR-760), never to a time limit. Outside
-  macOS the picker stays in front of the window, so a pointer press or a key going down (not a
+  macOS the picker normally stays in front of the window, so a pointer press or a key going down (not a
   repeat, a modifier alone or a cut, copy or paste shortcut) in the focused window while one is
   open is taken as the signal to stop waiting: the pick ends as a cancel, saying nothing, Home's
   openings are free in that frame, and the next pick shows a picker of its own. What is chosen in
