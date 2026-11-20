@@ -260,7 +260,8 @@ fn restorable(store: &Store, r: Rect, d: Obj, card: Obj, (pan, zoom): (Vec2, f32
 }
 
 /// Lands diagram `d` on canvas `r` after a zoom out. When `d` shows no card of the package left,
-/// its content fitted, down to the least zoom, as an emptied diagram is; else at the view it was
+/// its content fitted, down to the least zoom, its middle shown when it is too big for that
+/// ([`crate::canvas::fit`]), as an emptied diagram is; else at the view it was
 /// left with when that is [`restorable`]; else at [`LANDING`] with that card centred.
 fn land(shell: &mut Shell, r: Rect, d: Obj, landing: Landing) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };

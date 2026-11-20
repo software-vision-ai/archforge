@@ -31119,7 +31119,7 @@ fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
 /// return shows both classes far apart in view, below 100 %. Emptied entirely, Top shows at 100 %
 /// from its top left, as an empty diagram fits. So does Top as the owning parent's default when
 /// Sales' diagram was opened directly, with no route back. Classes wider apart than ten canvases
-/// fit only down to the least zoom, 10 %.
+/// fit only down to the least zoom, 10 %, the middle between them in the canvas's centre.
 #[test]
 fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -31147,6 +31147,9 @@ fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
                 assert_eq!((c.pan, c.zoom), (egui::Vec2::ZERO, 1.0), "{theme:?} routed {routed}: the empty diagram from its top left");
             } else if far[1] > 4000 {
                 assert_eq!(c.zoom, crate::canvas::ZOOM_RANGE.0, "{theme:?}: too wide to fit, at the least zoom");
+                // The classes span x 0 to 400 200 and y 0 to 120: their middle at the centre.
+                let middle = c.pan + egui::vec2(200_100.0, 60.0) * c.zoom;
+                assert!((middle - c.size / 2.0).length() < 1.0, "{theme:?}: the middle shown, {middle:?} in {:?}", c.size);
             } else {
                 let seen = [0.0, 4200.0].iter().all(|x| (0.0..=c.size.x).contains(&(c.pan.x + x * c.zoom)));
                 assert!(seen && c.zoom < 1.0, "{theme:?} routed {routed}: both classes fitted in view, {:?}", (c.pan, c.zoom));
