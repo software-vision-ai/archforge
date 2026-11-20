@@ -823,18 +823,16 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
 }
 
 /// The dialog's frame of `size`, centred in `window`, with its title and the step under it. The
-/// title is read out as the dialog's heading, as it is painted.
+/// title is read out as the dialog's heading, found where it is painted.
 fn dialog_frame(ui: &egui::Ui, paint: &egui::Painter, p: &Palette, window: Rect, size: Vec2, title: &str, step: &str) -> Rect {
     let dialog = Rect::from_center_size(window.center(), size);
     ux::shadow(paint, dialog, 10.0, p.shadow);
     paint.rect_filled(dialog, 10.0, p.surface);
     paint.rect_stroke(dialog, 10.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
     let width = Some((size.x - 40.0).max(0.0));
-    ux::text(paint, dialog.min + vec2(20.0, 20.0), title, types::CARD_TITLE, p.text, width);
-    ui.ctx().accesskit_node_builder(widgets::egui_id("workspace.new-diagram.title"), |node| {
-        node.set_role(egui::accesskit::Role::Heading);
-        node.set_label(title);
-    });
+    let drawn = ux::text(paint, dialog.min + vec2(20.0, 20.0), title, types::CARD_TITLE, p.text, width);
+    ui.interact(drawn, widgets::egui_id("workspace.new-diagram.title"), Sense::hover())
+        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Heading, true, title));
     ux::text(paint, dialog.min + vec2(20.0, 46.0), step, types::SMALL, p.text_secondary, width);
     dialog
 }

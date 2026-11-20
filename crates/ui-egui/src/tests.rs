@@ -10323,6 +10323,9 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(found.iter().any(|t| t == "UML structure diagram") && found.iter().any(|t| t == said), "{theme:?}: {found:?}");
         assert_eq!(h.get_by_label("UML structure diagram").accesskit_node().role(), egui::accesskit::Role::RadioButton, "{theme:?}");
         assert_eq!(headings(&h), ["New diagram"], "{theme:?}");
+        // Found where it is painted: above the cards, from their left edge.
+        let title = h.get_by_role_and_label(egui::accesskit::Role::Heading, "New diagram").accesskit_node().bounding_box().expect("bounds");
+        assert!((title.x0 as f32 - er.left()).abs() < 0.5 && title.y1 as f32 <= er.top() && title.y0 < title.y1, "{theme:?}: {title:?}");
         // The arrow keys move the choice; the name the dialog gave follows the kind.
         key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
