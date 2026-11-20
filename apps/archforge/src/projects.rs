@@ -181,6 +181,11 @@ pub enum RestoreError {
     },
     /// An earlier restore of this project ended in [`RestoreError::CannotTell`].
     OutcomeUnknown,
+    /// The version holds diagrams of these kinds, which no notation knows, as an opening names
+    /// them: refused before anything was written or any version made (AR-551).
+    UnsupportedKinds {
+        kinds: Vec<String>,
+    },
 }
 
 impl std::fmt::Display for RestoreError {
@@ -199,6 +204,7 @@ impl std::fmt::Display for RestoreError {
             RestoreError::CannotTell { why, kept_work } => write!(f, "{why}{}", kept_note(*kept_work)),
             RestoreError::OutcomeUnknown => f.write_str("whether an earlier restore finished could not be told"),
             RestoreError::Version(e) => e.fmt(f),
+            RestoreError::UnsupportedKinds { kinds } => write!(f, "the version holds diagrams of kinds no notation knows: {}", kinds.join(", ")),
         }
     }
 }
@@ -1863,8 +1869,9 @@ fn differs(found: Result<Vec<Difference>, ClassifyError>) -> Result<bool, Restor
 }
 
 /// Restores a version of `path` as a new version, on the writer. In this order: what waits is
-/// written; the version is compared with what is stored, and when nothing differs nothing more is
-/// written or made; unsaved work is kept as a version; the version's rows are written in today's
+/// written; a version holding diagrams of kinds no notation knows is refused, as an opening refuses
+/// it, with nothing more written or made; the version is compared with what is stored, and when
+/// nothing differs nothing more is written or made; unsaved work is kept as a version; the version's rows are written in today's
 /// table shape, which leaves `settings` and the conversations as they are; and they are committed.
 ///
 /// The comparison is here, not in the window as step 6 of the design's order has it: this spares
@@ -1872,6 +1879,7 @@ fn differs(found: Result<Vec<Difference>, ClassifyError>) -> Result<bool, Restor
 ///
 /// | Fails at | Versions made | The working set | The answer |
 /// |---|---|---|---|
+/// | The version's diagram kinds | None | Unchanged | [`RestoreError::UnsupportedKinds`] |
 /// | Keeping the work: no version | None | Unchanged | [`RestoreError::WorkNotKept`] |
 /// | Keeping the work: cannot tell | Perhaps that one | Unchanged | [`RestoreError::WorkUnknown`] |
 /// | Writing the rows, however it failed | Any of the work | The work's rows are written back | [`RestoreError::NotRestored`] |
@@ -1912,6 +1920,9 @@ fn restore(
         open_as_asked(inner, path, (generation, instance), (RestoreError::Reopened, RestoreError::BranchChanged, RestoreError::NotOpen))?;
     let project = &open[at];
     let version = project.read_model_at(&schema, &request.commit).map_err(RestoreError::Version)?;
+    // Before the comparison, the work's version and the version's rows: one an opening would refuse
+    // is never written in (AR-551).
+    known_kinds_in(&version)?;
     let current = project.read_model(&schema).map_err(|e| RestoreError::Failed(e.to_string()))?;
     if !differs(archforge_notations::differences::classified(&current, &version, request.repair))? {
         return Ok(Restored::Same { kept_work: false });
@@ -1936,6 +1947,17 @@ fn restore(
         }
         Err(Stop::CannotTell { why, kept_work }) => Err(RestoreError::CannotTell { why, kept_work }),
     }
+}
+
+/// Refuses a version's `rows` holding diagrams of kinds no notation knows, naming those kinds as
+/// stored, each once and at most [`MOST_UNKNOWN_KINDS`], as an opening names them.
+fn known_kinds_in(rows: &Rows) -> Result<(), RestoreError> {
+    let (tables, _) = archforge_notations::storage();
+    archforge_notations::check_kinds_in_rows(rows, &tables).map_err(|refused| {
+        let mut kinds = Vec::new();
+        add_kinds(&mut kinds, refused.diagrams.into_iter().map(|d| d.kind).collect());
+        RestoreError::UnsupportedKinds { kinds }
+    })
 }
 
 /// Hands a restore to the writer and returns its answer's channel at once, as a [`Job`]'s callback
@@ -2099,6 +2121,10 @@ fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> 
         RestoreError::OutcomeUnknown => JobFailure::Failed(earlier_unknown()),
         RestoreError::Version(e) => JobFailure::Failed(not_restored(&e.to_string())),
         RestoreError::Failed(why) => JobFailure::Failed(not_restored(&why)),
+        // As the window refuses a version it cannot build: in the user's words, the kinds as stored.
+        RestoreError::UnsupportedKinds { kinds } => {
+            JobFailure::Failed(fmt(&tr("{why} Nothing was changed."), &[("why", &archforge_ui_egui::unsupported_kinds(&kinds))]))
+        }
         RestoreError::NotRestored { why, kept_work, written_back } => {
             let text = fmt(&not_restored_template(kept_work, written_back), &[("why", &why)]);
             if kept_work { JobFailure::WorkSaved(text) } else { JobFailure::Failed(text) }
@@ -3866,6 +3892,45 @@ mod tests {
         assert_eq!(close(host, &path), Ok(()));
         wait(&host.open(&path)).unwrap();
         assert_eq!(lock(&host.inner.open)[0].settings().name, "Renamed");
+    }
+
+    /// AR-551: a version holding diagrams of the earlier `uml.class` kind is refused by the restore
+    /// itself, naming that kind as an opening does, before anything is written or any version made:
+    /// the unsaved work stays as it was and unsaved, and so do the versions and the branches. The
+    /// window says so in the words of a version it cannot build. A version of known kinds restores.
+    #[test]
+    fn a_restore_of_a_version_holding_uml_class_diagrams_is_refused_before_anything_is_written() {
+        let sandbox = Sandbox::new(None);
+        let path = sandbox.project();
+        let host = &sandbox.host;
+        host.write(&path, structure_diagram());
+        assert_eq!(saved(host, &path), Ok(true));
+        let known = version(host, 0);
+        let mut legacy = structure_diagram();
+        let (tables, _) = archforge_notations::storage();
+        let at = tables.iter().position(|t| t.name == "diagram_diagram").unwrap();
+        let kind = tables[at].columns.iter().position(|c| c.name == "kind").unwrap();
+        legacy.tables[at].iter_mut().for_each(|row| row[kind] = archforge_mof::rows::Cell::Text("uml.class".into()));
+        host.write(&path, legacy);
+        assert_eq!(saved(host, &path), Ok(true));
+        let earlier = version(host, 0);
+        host.write(&path, model("c"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        let state = || {
+            let stored = "SELECT CONCAT(DOLT_HASHOF_DB('WORKING'), ' ', (SELECT COUNT(*) FROM dolt_branches))";
+            let hashed = lock(&host.inner.open)[0].first_on_branch("main", stored).unwrap();
+            (hashed, sandbox.messages(), work(host), unsaved(host))
+        };
+        let before = state();
+        assert!(before.3, "the work is unsaved");
+        let refused = restore_of(host, &path, &earlier);
+        assert!(matches!(&refused, Err(RestoreError::UnsupportedKinds { kinds }) if kinds == &["uml.class"]), "{refused:?}");
+        assert_eq!(state(), before, "nothing written, no version made");
+        archforge_ui_egui::i18n::set_language("en");
+        let said = "It holds diagrams whose kind Archforge does not support (uml.class); create a new project to carry on. Nothing was changed.";
+        assert!(matches!(job_answer(refused), Err(JobFailure::Failed(text)) if text == said));
+        assert_eq!(restore_of(host, &path, &known).unwrap(), Restored::Version { kept_work: true });
+        assert_eq!(work(host), structure_diagram());
     }
 
     /// With only a conversation's rows uncommitted, the restore makes its own version alone and
