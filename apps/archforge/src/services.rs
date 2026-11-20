@@ -18,11 +18,6 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::
         fonts: Some(std::sync::Arc::new(crate::fonts::SystemFonts::installed())),
         projects_folder: projects_folder(),
         projects: Some(projects),
-        pick_project: Some(std::sync::Arc::new({
-            let asks = asks.clone();
-            move |start: Option<&std::path::Path>| pick_project(&asks, start)
-        })),
-        pick_folder: Some(std::sync::Arc::new(move |title: &str| pick_folder(&asks, title))),
         picker_unavailable: Some(std::sync::Arc::new(picker_unavailable)),
         find_projects: Some(std::sync::Arc::new(find_projects)),
         ids: Some(std::sync::Arc::new(fresh_id)),
@@ -30,6 +25,18 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::
         agents: Some(agents),
         chats: Some(chats),
         clock: Some(std::sync::Arc::new(clock)),
+        ..with_pickers(&asks)
+    }
+}
+
+/// The shell's folder pickers, asked through `asks`, and the withdrawal of a pick it lets go of.
+fn with_pickers(asks: &Asks) -> Services {
+    let (project, folder, withdraw) = (asks.clone(), asks.clone(), asks.clone());
+    Services {
+        pick_project: Some(std::sync::Arc::new(move |start: Option<&std::path::Path>| pick_project(&project, start))),
+        pick_folder: Some(std::sync::Arc::new(move |title: &str| pick_folder(&folder, title))),
+        withdraw_pick: Some(std::sync::Arc::new(move || withdraw.withdraw())),
+        ..Services::default()
     }
 }
 
@@ -122,14 +129,40 @@ fn support() -> archforge_ui_egui::support::Destinations {
 /// frame, where a picker that blocks lets AppKit's modal loop re-enter winit's handler (a file
 /// dragged over the window) and abort the app; so nothing is shown here.
 #[derive(Clone, Default)]
-pub struct Asks(std::sync::Arc<std::sync::Mutex<Vec<(FileDialog, Sender<Picked>)>>>);
+pub struct Asks(std::sync::Arc<std::sync::Mutex<Queue>>);
+
+/// One folder pick asked for: its number in the order asked, its dialog, and where its answer goes.
+type Ask = (u64, FileDialog, Sender<Picked>);
+
+/// The picks asked for and not yet taken by the window, and which of all those asked the shell
+/// has withdrawn.
+#[derive(Default)]
+struct Queue {
+    asked: Vec<Ask>,
+    /// The number of the last pick asked for.
+    last: u64,
+    /// Every pick numbered up to this one was withdrawn: never shown unless it already was.
+    withdrawn: u64,
+}
 
 impl Asks {
     /// Queues `dialog`; its answer comes on the channel returned, on a later frame.
     fn ask(&self, dialog: FileDialog) -> Receiver<Picked> {
         let (tx, rx) = std::sync::mpsc::channel();
-        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push((dialog, tx));
+        let mut queue = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        queue.last = queue.last.saturating_add(1);
+        let number = queue.last;
+        queue.asked.push((number, dialog, tx));
         rx
+    }
+
+    /// Withdraws the pick asked for last, and any before it, which the shell has let go of: one
+    /// not yet shown never is. The shell asks for one pick at a time, after the last one was
+    /// answered or let go of, so the last asked is the one it lets go of.
+    pub fn withdraw(&self) {
+        let mut queue = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        queue.withdrawn = queue.last;
+        queue.asked.clear();
     }
 }
 
@@ -138,16 +171,25 @@ impl Asks {
 /// On macOS the picker is a panel of its own beside the window.
 pub struct Pickers {
     asks: Asks,
-    /// The pick asked for while a picker is on screen, shown once it closes; a newer ask takes
-    /// its place.
-    waiting: Option<(FileDialog, Sender<Picked>)>,
+    /// The pick asked for while a picker is on screen, shown once it closes unless withdrawn
+    /// meanwhile; a newer ask takes its place.
+    waiting: Option<Ask>,
     dialogs: Dialogs<Sender<Picked>>,
+    /// Tests: a picker counts as on screen, as a real one does until the user closes it.
+    #[cfg(test)]
+    held: bool,
 }
 
 impl Pickers {
     /// Pickers whose answers call `wake`, which runs a frame of the window to take them.
     pub fn new(wake: craft_dialogs::Wake) -> Self {
-        Self { asks: Asks::default(), waiting: None, dialogs: Dialogs::new(wake) }
+        Self {
+            asks: Asks::default(),
+            waiting: None,
+            dialogs: Dialogs::new(wake),
+            #[cfg(test)]
+            held: false,
+        }
     }
 
     /// The queue the shell's pickers ask through (`native`'s `asks`).
@@ -168,20 +210,35 @@ impl Pickers {
     /// The shell asks for one pick at a time, after the last one was answered or let go of (its
     /// New project closed, say), so a newer ask means one still waiting was let go of: only the
     /// newest is kept, and it waits, with the open picker brought to the front, until that picker
-    /// closes. A picker let go of while on screen stays until the user closes it: craft-dialogs
-    /// cannot close one.
+    /// closes. A waiting pick the shell withdraws is dropped and never shown. A picker already on
+    /// screen stays until the user closes it, withdrawn or not: craft-dialogs cannot close one.
     pub fn show(&mut self, parent: Option<&eframe::Frame>) {
-        let asked = std::mem::take(&mut *self.asks.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
+        let (asked, withdrawn) = {
+            let mut queue = self.asks.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            (std::mem::take(&mut queue.asked), queue.withdrawn)
+        };
+        if self.waiting.as_ref().is_some_and(|(number, ..)| *number <= withdrawn) {
+            self.waiting = None;
+        }
         if let Some(newest) = asked.into_iter().last() {
             self.waiting = Some(newest);
             self.dialogs.raise();
         }
-        if !self.dialogs.is_open()
-            && let Some((dialog, tx)) = self.waiting.take()
+        if !self.on_screen()
+            && let Some((_, dialog, tx)) = self.waiting.take()
         {
             self.dialogs.ask(dialog, tx);
         }
         self.dialogs.show_pending(parent);
+    }
+
+    /// Whether a picker is on screen, or its answer not yet collected.
+    fn on_screen(&self) -> bool {
+        #[cfg(test)]
+        if self.held {
+            return true;
+        }
+        self.dialogs.is_open()
     }
 }
 
@@ -521,6 +578,70 @@ mod tests {
         let Some(Request::File(dialog)) = shown.borrow().last().cloned() else { panic!("no file dialog shown") };
         assert_eq!(dialog.title.as_deref(), Some("Pin a folder"), "the newest pick shows");
         assert_eq!(answers.borrow().len(), 1, "one answer left for a pick never shown");
+    }
+
+    /// A pick asked while a picker is on screen waits for it; withdrawn by the shell before that
+    /// picker closes (its New project closed, a quit going ahead), it is never shown, and neither is
+    /// one withdrawn in the frame it was asked. A withdrawal once a pick is shown changes nothing:
+    /// its answer still comes. Picks asked after a withdrawal show.
+    #[test]
+    fn a_waiting_pick_the_shell_withdraws_is_never_shown_and_a_shown_one_still_answers() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        use std::sync::mpsc::TryRecvError;
+
+        use craft_dialogs::Request;
+
+        archforge_ui_egui::i18n::set_language("en");
+        let chosen = std::env::temp_dir();
+        let mut pickers = Pickers::new(std::sync::Arc::new(|| {}));
+        let shown = Rc::new(RefCell::new(Vec::<Option<String>>::new()));
+        let (seen, folder) = (shown.clone(), chosen.clone());
+        pickers.dialogs.set_override(Some(Box::new(move |request: &Request| {
+            let Request::File(dialog) = request else { return Answer::Unavailable("not a file dialog".into()) };
+            seen.borrow_mut().push(dialog.title.clone());
+            Answer::Paths(vec![folder.clone()])
+        })));
+        let services = with_pickers(&pickers.asks());
+        let (pick_folder, withdraw) = (services.pick_folder.clone().unwrap(), services.withdraw_pick.clone().unwrap());
+
+        // A picker on screen for a pick the shell already let go of; it asks Pin a folder meanwhile.
+        pickers.held = true;
+        let pin = pick_folder("Pin a folder");
+        pickers.show(None);
+        pickers.answer();
+        assert!(shown.borrow().is_empty(), "shown over the picker on screen");
+        assert_eq!(pin.try_recv(), Err(TryRecvError::Empty));
+        // The shell lets it go too, then the picker on screen closes: nothing shows.
+        withdraw();
+        drop(pin);
+        pickers.held = false;
+        pickers.show(None);
+        pickers.answer();
+        assert!(shown.borrow().is_empty(), "a withdrawn pick showed");
+
+        // The next pick shows; withdrawn once shown, its answer still comes.
+        let location = pick_folder("Choose project location");
+        pickers.show(None);
+        assert_eq!(shown.borrow().as_slice(), [Some("Choose project location".to_string())]);
+        withdraw();
+        pickers.answer();
+        assert_eq!(location.try_recv(), Ok(Picked::Folder(chosen.clone())));
+
+        // Withdrawn in the frame it was asked, before the window took it: never shown.
+        let gone = pick_folder("Pin a folder");
+        withdraw();
+        drop(gone);
+        pickers.show(None);
+        pickers.answer();
+        assert_eq!(shown.borrow().len(), 1, "a pick withdrawn in its own frame showed");
+
+        // A withdrawal holds only for the picks asked before it.
+        let open = (services.pick_project.clone().unwrap())(Some(&chosen));
+        pickers.show(None);
+        pickers.answer();
+        assert_eq!(open.try_recv(), Ok(Picked::Folder(chosen.clone())));
+        assert_eq!(shown.borrow().len(), 2);
     }
 }
 

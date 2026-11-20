@@ -296,7 +296,8 @@ fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_on
 
 /// A Change… pick belongs to its dialog (AR-737): Create project waits for its answer, a creation
 /// running keeps its folder whatever a picker answers late, and closing the dialog lets the pick go,
-/// so New project is back at once and a later dialog never takes the old answer.
+/// withdrawn from the host (AR-738), so New project is back at once and a later dialog never takes
+/// the old answer.
 #[test]
 fn a_change_pick_belongs_to_its_dialog_and_holds_create_until_it_is_answered() {
     let acme = || std::path::PathBuf::from("/Volumes/Work/Clients/Acme");
@@ -310,6 +311,7 @@ fn a_change_pick_belongs_to_its_dialog_and_holds_create_until_it_is_answered() {
             asked.lock().unwrap().push(tx);
             rx
         }));
+        let withdrawn = count_withdrawals(&mut h);
         h.run();
         let (change, create) = (centre_of(&h, "new-project.location.change"), centre_of(&h, "new-project.create"));
         press(&mut h, change);
@@ -328,10 +330,12 @@ fn a_change_pick_belongs_to_its_dialog_and_holds_create_until_it_is_answered() {
         assert_eq!(h.state().new_project.as_ref().and_then(|d| d.folder.clone()), Some(acme()), "{theme:?}: the creation keeps its folder");
         answer(&mut h, &host, Err(crate::CreateError::FolderUnusable { detail: "read-only volume".into() }));
         // A pick still waiting when the dialog closes goes with it.
+        assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 0, "{theme:?}: picks answered are not withdrawn");
         press(&mut h, change);
         let cancel = centre_of(&h, "new-project.cancel");
         press(&mut h, cancel);
         assert!(crate::actions::available(h.state(), "file.new"), "{theme:?}: New project is back at once");
+        assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 1, "{theme:?}: the pick is withdrawn from the host");
         open_new_project(&mut h);
         let _ = waiting.lock().unwrap().pop().expect("a pick was asked for").send(Picked::Folder("/Users/robin/Old".into()));
         h.run_steps(4);
@@ -3873,6 +3877,16 @@ fn pick_waiting(h: &mut Harness<'static, Shell>, pick: crate::Pick) -> std::sync
     answer
 }
 
+/// Counts the picks the shell withdraws from its host (`Services::withdraw_pick`).
+fn count_withdrawals(h: &mut Harness<'static, Shell>) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+    let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = count.clone();
+    h.state_mut().services.withdraw_pick = Some(std::sync::Arc::new(move || {
+        counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }));
+    count
+}
+
 /// Whether [`PICKED`] was taken for `pick`: a project opening, a folder pinned, or the New project
 /// dialog's folder.
 fn pick_taken(h: &Harness<'static, Shell>, host: &SavingHost, pick: crate::Pick) -> bool {
@@ -3885,8 +3899,9 @@ fn pick_taken(h: &Harness<'static, Shell>, host: &SavingHost, pick: crate::Pick)
 }
 
 /// A quit by `request_quit`, the window's close button, ⌘Q or a field letting go first goes ahead
-/// while an Open, a Pin or a Location pick waits, and the pick goes with it: an answer that comes
-/// after all, or in the quit's own frame, opens, pins or changes nothing (AR-759).
+/// while an Open, a Pin or a Location pick waits, and the pick goes with it, withdrawn from the host
+/// once (AR-738): an answer that comes after all, or in the quit's own frame, opens, pins or
+/// changes nothing (AR-759).
 #[test]
 fn a_quit_goes_ahead_while_a_folder_pick_waits_and_lets_the_pick_go() {
     let ways: [(&str, fn(&mut Harness<'static, Shell>)); 4] = [
@@ -3905,12 +3920,14 @@ fn a_quit_goes_ahead_while_a_folder_pick_waits_and_lets_the_pick_go() {
             let (mut h, host) = saving_harness(Some(commerce()), None);
             h.state_mut().state.theme = theme;
             let answer = pick_waiting(&mut h, pick);
+            let withdrawn = count_withdrawals(&mut h);
             quit(&mut h);
             if in_its_frame {
                 answer.send(Picked::Folder(PICKED.into())).unwrap();
             }
             h.run_steps(3);
             assert!(h.state().quit_confirmed(), "{what}: the quit goes ahead");
+            assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 1, "{what}: the pick is withdrawn from the host once");
             // The pick was let go: an answer still sent finds nobody waiting for it.
             assert!(answer.send(Picked::Folder(PICKED.into())).is_err(), "{what}: the pick is let go");
             h.run_steps(3);
@@ -3921,7 +3938,8 @@ fn a_quit_goes_ahead_while_a_folder_pick_waits_and_lets_the_pick_go() {
 
 /// A quit asking about unsaved changes keeps a waiting pick's answer until the question is
 /// answered: called off with Cancel, the pick still waits and its answer, come meanwhile or after,
-/// is taken; gone ahead with Don't save, the answer that came meanwhile does nothing (AR-759).
+/// is taken, nothing withdrawn; gone ahead with Don't save, the answer that came meanwhile does
+/// nothing (AR-759) and the pick is withdrawn from the host (AR-738).
 #[test]
 fn a_quit_asking_about_unsaved_changes_holds_a_folder_picks_answer_until_it_is_answered() {
     in_both_appearances(|theme| {
@@ -3930,6 +3948,7 @@ fn a_quit_asking_about_unsaved_changes_holds_a_folder_picks_answer_until_it_is_a
             let (mut h, host) = edited_project();
             h.state_mut().state.theme = theme;
             let answer = pick_waiting(&mut h, pick);
+            let withdrawn = count_withdrawals(&mut h);
             h.state_mut().request_quit();
             h.run_steps(2);
             assert_eq!(h.state().ask, asked_unsaved(COMMERCE), "{what}: the quit asks first");
@@ -3948,11 +3967,13 @@ fn a_quit_asking_about_unsaved_changes_holds_a_folder_picks_answer_until_it_is_a
                 }
                 h.run_steps(3);
                 assert!(pick_taken(&h, &host, pick), "{what}: the answer is taken");
+                assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 0, "{what}: nothing withdrawn");
             } else {
                 host.closings.lock().unwrap().pop().expect("the project closes without its changes").send(Ok(())).unwrap();
                 h.run_steps(3);
                 assert!(h.state().quit_confirmed(), "{what}: the quit goes ahead");
                 assert!(!pick_taken(&h, &host, pick), "{what}: the answer does nothing");
+                assert_eq!(withdrawn.load(std::sync::atomic::Ordering::SeqCst), 1, "{what}: the pick is withdrawn from the host");
             }
         }
     });
