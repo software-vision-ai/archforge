@@ -126,8 +126,8 @@ fn one_match_is_selected_with_nothing_changed_and_no_undo_step() {
 
 /// No dependency joins the client to the supplier in that order, so one is added as before: the
 /// reverse direction, a realization of the same two, and a classifier of the same name elsewhere
-/// are no match, and no name decides one. Each result has its id, the outcome `created` and no
-/// candidates.
+/// are no match, and no name decides one, `existing` sent as null too. Each result has its id, the
+/// outcome `created` and no candidates.
 #[test]
 fn the_reverse_direction_another_kind_or_the_same_names_elsewhere_add_a_new_dependency() {
     let mut s = session();
@@ -137,8 +137,9 @@ fn the_reverse_direction_another_kind_or_the_same_names_elsewhere_add_a_new_depe
     let other_order = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Order" }));
     let dep = add(&mut s, json!({ "client": order, "supplier": priced, "name": "uses" }))["id"].as_str().unwrap().to_string();
     run(&mut s, "uml.realization.add", json!({ "class": other_order, "interface": priced }));
+    // An explicit null `existing` is no choice, as one left out.
     for (client, supplier) in [(&priced, &order), (&other_order, &priced)] {
-        let out = add(&mut s, json!({ "client": client, "supplier": supplier, "name": "uses" }));
+        let out = add(&mut s, json!({ "client": client, "supplier": supplier, "name": "uses", "existing": null }));
         assert_eq!((&out["outcome"], &out["candidates"]), (&json!("created"), &json!([])), "{client} to {supplier}");
         let id = out["id"].as_str().unwrap();
         assert!(!id.is_empty() && id != dep, "a new dependency: {out}");

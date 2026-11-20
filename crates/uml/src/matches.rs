@@ -41,6 +41,14 @@ impl Kind {
         }
     }
 
+    /// The property by which a relationship of this kind refers to its from end, its client's for a
+    /// dependency: the only references through which a match can be found.
+    fn from_end(self) -> archforge_mof::PropId {
+        match self {
+            Kind::Dependency => dependency::CLIENT,
+        }
+    }
+
     /// What else tells a candidate of this kind apart, beside its name and ends: nothing for a
     /// dependency.
     fn detail(self, _store: &Store, _r: Obj) -> Map<String, Json> {
@@ -64,8 +72,13 @@ fn only_live(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> 
 /// The live relationships of `kind` that join `from` to `to`, in that order, each once and in a
 /// stable order; none when nothing does. Only identities count, never names.
 pub fn existing_matches(store: &Store, kind: Kind, from: Obj, to: Obj) -> Vec<Obj> {
-    let mut out: Vec<Obj> =
-        store.referrers(from).into_iter().map(|(r, _)| r).filter(|r| store.is_alive(*r) && kind.ends(store, *r) == Some((from, to))).collect();
+    let mut out: Vec<Obj> = store
+        .referrers(from)
+        .into_iter()
+        .filter(|(_, prop)| *prop == kind.from_end())
+        .map(|(r, _)| r)
+        .filter(|r| store.is_alive(*r) && kind.ends(store, *r) == Some((from, to)))
+        .collect();
     out.sort();
     out.dedup();
     out
