@@ -122,8 +122,10 @@ while a package of the model exists; a reconnect checks both ends it leaves, a w
 `relationship`; a reconnect of a
 dependency with several clients or suppliers, or onto an end outside the model, refused; a dependency's
 reconnect needs `expected_revision` (`StaleRevision` without it or for another revision), every other
-relationship's checks it only when given, and one onto the single client and supplier another
-dependency has is refused as `Reason::ConnectionExists`, naming that one, never merged (AR-697); and
+relationship's checks it only when given, and one whose moved end makes it join the single client
+and supplier another dependency of just those two ends joins is refused as
+`Reason::ConnectionExists`, naming that one, never merged, while one dropped back on the end it has,
+its revision and kept ends checked, changes nothing in the model and is selected (AR-697); and
 `uml.relationship.rename` is open while a classifier or a package exists; `uml.realization.add`: a class
 realizes an interface, owned by the class, its client and supplier kept in step with its
 implementing classifier and contract; reconnected through `uml.relationship.reconnect` and removed
