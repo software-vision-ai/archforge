@@ -689,8 +689,9 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   (`"outcome": "created"`). With one, that one is returned and selected (`"selected"`): nothing in
   the model changes, no undo step is added, and its name and description stay as they are, so a
   `name` sent is not applied, though it is still checked first, as every part of the call is, and
-  refused when it is no valid name; leaving `name` out skips that check. Only `existing` set to
-  the id of a dependency that still joins the two makes sure that no dependency is added. Rename a
+  refused when it is no valid name; leaving `name` out skips that check. Sending `existing` makes
+  the call reuse only: a dependency that still joins the two is selected and any other choice is
+  refused, so nothing is added; only a call with `existing` left out or null may add one. Rename a
   reused dependency with `uml_relationship_rename`. With several, nothing
   changes and `id` is null (`"choiceRequired"`): call again with `existing` set to the id of the
   candidate to use. One that was removed or reconnected since, or never joined the two, is refused

@@ -36,10 +36,7 @@ impl Kind {
                 if store.class_of(r).ok() != Some(DEPENDENCY) {
                     return None;
                 }
-                match (live(store, r, dependency::CLIENT).as_slice(), live(store, r, dependency::SUPPLIER).as_slice()) {
-                    ([client], [supplier]) => Some((*client, *supplier)),
-                    _ => None,
-                }
+                Some((only_live(store, r, dependency::CLIENT)?, only_live(store, r, dependency::SUPPLIER)?))
             }
         }
     }
@@ -53,9 +50,15 @@ impl Kind {
     }
 }
 
-/// The live elements `o` lists under `prop`.
-fn live(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
-    store.list(o, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|x| store.is_alive(*x)).collect()
+/// The one live element `o` lists under `prop`; none when it lists no live one or more than one,
+/// read only as far as the second.
+fn only_live(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
+    let values = store.list(o, prop).ok()?;
+    let mut live = values.iter().filter_map(Value::as_ref).filter(|x| store.is_alive(*x));
+    match (live.next(), live.next()) {
+        (Some(one), None) => Some(one),
+        _ => None,
+    }
 }
 
 /// The live relationships of `kind` that join `from` to `to`, in that order, each once and in a
