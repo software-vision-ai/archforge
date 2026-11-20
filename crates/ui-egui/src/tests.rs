@@ -30950,15 +30950,17 @@ fn centred_at_landing(h: &Harness<'static, Shell>, card: archforge_mof::Uuid) ->
 }
 
 /// A return by zoom shows the diagram as it was left when that view is sound (AR-668): Top, left
-/// at a view of its own by opening Sales, comes back at exactly that view. A view in which Sales'
-/// card covers most of the canvas, a saved zoom outside the zoom range, or a pan that is not
-/// finite is no view to restore: the return lands at 100 % with Sales' card centred instead.
+/// at a view of its own by opening Sales, comes back at exactly that view, at the least zoom, 10 %,
+/// too. A view in which Sales' card covers most of the canvas, a saved zoom outside the zoom range,
+/// or a pan that is not finite is no view to restore: the return lands at 100 % with Sales' card
+/// centred instead.
 #[test]
 fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let sound = (egui::vec2(-50.0, 30.0), 0.6);
         for (case, left, saved) in [
             ("as left", sound, None),
+            ("as left at the least zoom", (egui::vec2(100.0, 100.0), crate::canvas::ZOOM_RANGE.0), None),
             ("the card covering the canvas", (egui::vec2(-590.0, -470.0), 3.0), None),
             ("zoom beyond the range", sound, Some((egui::vec2(-50.0, 30.0), crate::canvas::ZOOM_RANGE.1 * 2.0))),
             ("pan not finite", sound, Some((egui::vec2(f32::NAN, 30.0), 0.6))),
@@ -30979,8 +30981,8 @@ fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound(
             }
             rest(&mut h);
             assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {case}");
-            if case == "as left" {
-                assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?}: Top as it was left");
+            if case.starts_with("as left") {
+                assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?} {case}: Top as it was left");
             } else {
                 assert!(
                     centred_at_landing(&h, card),
