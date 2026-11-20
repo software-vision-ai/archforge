@@ -12073,8 +12073,9 @@ fn zooming_out_returns_across_branches_to_the_diagram_entered_from_without_a_bou
     }
 }
 
-/// Repeated visits A → B → A → B return B → A → B → A, one step a gesture, each landing at 100 %
-/// with the package left centred; once the route is spent, the owning parent's default opens.
+/// Repeated visits A → B → A → B return B → A → B → A, one step a gesture, each landing as it was
+/// left, fitted here, so at 100 % with the package left centred; once the route is spent, the owning
+/// parent's default opens.
 #[test]
 fn zooming_out_walks_repeated_visits_back_one_step_a_gesture_then_follows_ownership() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -12252,7 +12253,7 @@ fn zoom_out_to(h: &mut Harness<'static, Shell>, to: archforge_mof::Uuid) {
         h.step();
     }
     assert_eq!(h.state().canvas.active, Some(to), "zoomed out to the diagram entered from");
-    assert!(h.state().canvas.nav.reveal.is_some(), "not drawn yet: the package left still to be centred on it");
+    assert!(h.state().canvas.nav.reveal.is_some(), "not drawn yet: the landing still pending");
 }
 
 /// The path bar restores a diagram as it was last left, however it was left (AR-666): First, left
@@ -12329,7 +12330,8 @@ fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
 /// wide diagram opened in a new tab before First or Sales draws, is fitted below 100 %, neither
 /// landed at 100 % nor centred. Taking over from First before it draws, by First's removal or by
 /// reopening its closed tab, Support shows as last shown, or fitted when it never was; so does First
-/// after Support, opened new. First opened again before it draws still lands, Sales' card centred.
+/// after Support, opened new. First opened again before it draws still lands, at the view it was
+/// left with (AR-668).
 #[test]
 fn a_landing_pending_for_one_tab_never_places_another() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -12385,10 +12387,7 @@ fn a_landing_pending_for_one_tab_never_places_another() {
             h.run();
             let (pan, zoom, size) = (h.state().canvas.pan, h.state().canvas.zoom, h.state().canvas.size);
             match case {
-                "out, First again" => {
-                    let card = pan + egui::vec2(320.0, 234.0) * zoom;
-                    assert!(zoom == 1.0 && (card - size / 2.0).length() < 1.0, "{theme:?}: Sales' card centred at 100 %, {pan:?} {zoom}");
-                }
+                "out, First again" => assert_eq!((pan, zoom), first_view, "{theme:?}: First landed as it was left"),
                 "out, First gone" | "out, reopened" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(support), shown), "{theme:?} {case}"),
                 "out, Support, First" => assert_eq!((h.state().canvas.active, (pan, zoom)), (Some(first), first_view), "{theme:?}: as last shown"),
                 _ => {
@@ -30992,6 +30991,437 @@ fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
         assert_eq!(h.state().panels.stereotypes.filter, "e", "{theme:?}: Backspace edits the filter");
         assert_eq!(shown(&h), cards, "{theme:?}: the card stays on the diagram");
         assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypePick));
+    }
+}
+
+/// The root's diagram, Top, with a card of Sales `size` big at (200, 160), and of the classes
+/// `far` names at those x, far apart; Sales' own diagram. Gives Top, Sales, Sales' card and
+/// Sales' diagram.
+fn top_with_sales(
+    h: &mut Harness<'static, Shell>,
+    size: (u32, u32),
+    far: &[i64],
+) -> (archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid) {
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let s = h.state_mut().session.as_mut().unwrap();
+    let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+    let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Top" });
+    let top = id(s.execute("diagram.add", &p).unwrap().value);
+    let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+    let p = serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": size.0, "height": size.1 });
+    let card = id(s.execute("diagram.place", &p).unwrap().value);
+    for (i, x) in far.iter().enumerate() {
+        let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": format!("Far{i}") })).unwrap().value);
+        let p = serde_json::json!({ "diagram": top.to_string(), "element": c.to_string(), "x": x, "y": 0, "width": 200, "height": 120 });
+        s.execute("diagram.place", &p).unwrap();
+    }
+    let sales_d = own_diagram(s, sales);
+    (top, sales, card, sales_d)
+}
+
+/// Whether the canvas shows the card `card` at 100 %, centred, by its pan and zoom.
+fn centred_at_landing(h: &Harness<'static, Shell>, card: archforge_mof::Uuid) -> bool {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let b = archforge_diagram::grid::bounds_of(st, st.by_uuid(card).unwrap());
+    let c = &h.state().canvas;
+    let centre = egui::vec2((b.x + b.width / 2.0) as f32, (b.y + b.height / 2.0) as f32);
+    c.zoom == 1.0 && (c.pan + centre - c.size / 2.0).length() < 1.0
+}
+
+/// A return by zoom shows the diagram as it was left when that view is sound (AR-668): Top, left
+/// at a view of its own by opening Sales, comes back at exactly that view, at the least zoom, 10 %,
+/// too. A view in which Sales' card covers most of the canvas, a saved zoom outside the zoom range,
+/// or a pan that is not finite is no view to restore: the return lands at 100 % with Sales' card
+/// centred instead.
+#[test]
+fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let sound = (egui::vec2(-50.0, 30.0), 0.6);
+        for (case, left, saved) in [
+            ("as left", sound, None),
+            ("as left at the least zoom", (egui::vec2(100.0, 100.0), crate::canvas::ZOOM_RANGE.0), None),
+            ("the card covering the canvas", (egui::vec2(-590.0, -470.0), 3.0), None),
+            ("zoom beyond the range", sound, Some((egui::vec2(-50.0, 30.0), crate::canvas::ZOOM_RANGE.1 * 2.0))),
+            ("pan not finite", sound, Some((egui::vec2(f32::NAN, 30.0), 0.6))),
+        ] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
+            h.run();
+            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.run();
+            if let Some(view) = saved {
+                let mut route = crate::nav_route::Route::default();
+                let history = h.state().session.as_ref().unwrap().history();
+                route.push(crate::nav_route::Step { source: top, destination: sales_d, source_name: "Top".into(), view: Some(view), history });
+                h.state_mut().canvas.nav.routes.insert(sales_d, route);
+            }
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {case}");
+            if case.starts_with("as left") {
+                assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?} {case}: Top as it was left");
+            } else {
+                assert!(
+                    centred_at_landing(&h, card),
+                    "{theme:?} {case}: Sales centred at 100 %, {:?}",
+                    (h.state().canvas.pan, h.state().canvas.zoom)
+                );
+            }
+        }
+    }
+}
+
+/// A return by zoom measures the view it would restore on the canvas as it is at the return
+/// (AR-668): Top, left by ⌘↓-style entry into Sales at a view that shows Sales' card in part,
+/// covering less than [`crate::package_nav::ENTER_COVER`] of the canvas, comes back at 100 % with
+/// the card centred once the window has shrunk so far that the card would cover more at that view,
+/// or, near the canvas's right edge, would be out of view entirely.
+#[test]
+fn a_return_by_zoom_measures_the_saved_view_on_the_window_it_returns_to() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for (case, zoom) in [("covering", 1.6), ("hidden", 0.6)] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            // Sales' card at the canvas's top left, or with only its left 100 points in view at the right.
+            let width = rect_of(&h, "workspace.canvas").width();
+            let left = if case == "covering" { 20.0 } else { width - 100.0 };
+            let view = (egui::vec2(left - 200.0 * zoom, 20.0 - 160.0 * zoom), zoom);
+            // The share of the canvas Sales' card covers at `view`.
+            let share = |h: &Harness<'static, Shell>| {
+                let canvas = rect_of(h, "workspace.canvas");
+                let shown = egui::Rect::from_min_size(canvas.min + view.0 + egui::vec2(200.0, 160.0) * zoom, egui::vec2(480.0, 300.0) * zoom);
+                let covered = shown.intersect(canvas);
+                covered.width().max(0.0) * covered.height().max(0.0) / (canvas.width() * canvas.height())
+            };
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
+            h.run();
+            let before = share(&h);
+            assert!(before > 0.0 && before < crate::package_nav::ENTER_COVER, "{theme:?} {case}: Sales covers {before} when left");
+            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.run();
+            h.set_size(egui::vec2(1000.0, 700.0));
+            h.run();
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {case}");
+            let landed = (h.state().canvas.pan, h.state().canvas.zoom);
+            assert!(centred_at_landing(&h, card), "{theme:?} {case}: Sales centred at 100 %, {landed:?}");
+            let after = share(&h);
+            let changed = if case == "covering" { after >= crate::package_nav::ENTER_COVER } else { after == 0.0 };
+            assert!(changed, "{theme:?} {case}: Sales would cover {after} at the view left now");
+        }
+    }
+}
+
+/// A view a zoom entry was made at shows the package covering most of the canvas, so a return
+/// there would let the next zoom-in tick enter again (AR-668, delegated UX decision): zooming in
+/// on Sales' card until Sales opens, then out again, lands Top at 100 % with the card centred, and
+/// one tick of zooming in on the card then stays on Top. So it does when the window grew while
+/// Sales was open, though the card then covers less of the larger canvas at the entry's view.
+#[test]
+fn a_return_to_the_view_a_zoom_entry_left_centres_the_package_and_the_next_tick_stays() {
+    for (theme, grown) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, _, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{card}")).center()));
+        for _ in 0..40 {
+            if h.state().canvas.active == Some(sales_d) {
+                break;
+            }
+            h.event(egui::Event::Zoom(1.25));
+            h.step();
+        }
+        assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}: zooming in entered Sales");
+        if grown {
+            h.set_size(egui::vec2(2600.0, 1700.0));
+        }
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} grown {grown}");
+        assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{card}")).center()));
+        h.event(egui::Event::Zoom(1.25));
+        h.step();
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(top), "{theme:?}: one tick in does not enter Sales again");
+    }
+}
+
+/// A return by zoom measures the view it would restore as zooming in does, by every package card
+/// (AR-668): Top, left by ⌘↓-style entry into Sales at a view where Archive's card covers most of
+/// the canvas and Sales' card shows in part, lands at 100 % with Sales' card centred instead, and
+/// one tick of zooming in on Archive then stays on Top.
+#[test]
+fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, card, sales_d) = top_with_sales(&mut h, (240, 148), &[]);
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive" })).unwrap().value);
+        let p = serde_json::json!({ "diagram": top.to_string(), "element": archive.to_string(), "x": 460, "y": 160, "width": 480, "height": 300 });
+        let archive_card = id(s.execute("diagram.place", &p).unwrap().value);
+        let archive_d = own_diagram(s, archive);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        // Archive's card fills the canvas from 120 points in, Sales' card's right 60 points in view.
+        let zoom = 3.0;
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(120.0 - 460.0 * zoom, 40.0 - 160.0 * zoom), zoom);
+        h.run();
+        let c = &h.state().canvas;
+        let canvas = rect_of(&h, "workspace.canvas");
+        let share = |n| {
+            let covered = rect_of(&h, &format!("workspace.canvas.node.{n}")).intersect(canvas);
+            covered.width().max(0.0) * covered.height().max(0.0) / (canvas.width() * canvas.height())
+        };
+        let (archive_share, sales_share) = (share(archive_card), share(card));
+        assert!(archive_share >= crate::package_nav::ENTER_COVER, "{theme:?}: Archive covers {archive_share} at {:?}", (c.pan, c.zoom));
+        assert!(sales_share > 0.0, "{theme:?}: Sales' card partly in view, {sales_share}");
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
+        assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{archive_card}")).center()));
+        h.event(egui::Event::Zoom(1.25));
+        h.step();
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(top), "{theme:?}: one tick in does not enter Archive, {archive_d}");
+    }
+}
+
+/// A return to a diagram that no longer shows the package left fits that diagram's content, though
+/// its saved view was sound (AR-668): Top, left at 60 % by entering Sales, loses Sales' card; the
+/// return shows both classes far apart in view, below 100 %. Emptied entirely, Top shows at 100 %
+/// from its top left, as an empty diagram fits. So does Top as the owning parent's default when
+/// Sales' diagram was opened directly, with no route back. Classes wider apart than ten canvases
+/// fit only down to the least zoom, 10 %, the middle between them in the canvas's centre.
+#[test]
+fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for (far, routed) in [(&[0, 4000][..], true), (&[], true), (&[0, 4000], false), (&[], false), (&[0, 400_000], false)] {
+            let emptied = far.is_empty();
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (240, 148), far);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(-50.0, 30.0), 0.6);
+            h.run();
+            if routed {
+                crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            } else {
+                crate::canvas::open(h.state_mut(), sales_d);
+                assert!(h.state().canvas.nav.routes.get(&sales_d).is_none_or(|r| r == &crate::nav_route::Route::default()), "{theme:?}: no route");
+            }
+            h.run();
+            h.state_mut().session.as_mut().unwrap().execute("diagram.unplace", &serde_json::json!({ "nodes": [card.to_string()] })).unwrap();
+            h.run();
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} emptied {emptied} routed {routed}");
+            let c = &h.state().canvas;
+            if emptied {
+                assert_eq!((c.pan, c.zoom), (egui::Vec2::ZERO, 1.0), "{theme:?} routed {routed}: the empty diagram from its top left");
+            } else if far[1] > 4000 {
+                assert_eq!(c.zoom, crate::canvas::ZOOM_RANGE.0, "{theme:?}: too wide to fit, at the least zoom");
+                // The classes span x 0 to 400 200 and y 0 to 120: their middle at the centre.
+                let middle = c.pan + egui::vec2(200_100.0, 60.0) * c.zoom;
+                assert!((middle - c.size / 2.0).length() < 1.0, "{theme:?}: the middle shown, {middle:?} in {:?}", c.size);
+            } else {
+                let seen = [0.0, 4200.0].iter().all(|x| (0.0..=c.size.x).contains(&(c.pan.x + x * c.zoom)));
+                assert!(seen && c.zoom < 1.0, "{theme:?} routed {routed}: both classes fitted in view, {:?}", (c.pan, c.zoom));
+            }
+        }
+    }
+}
+
+/// A return by zoom rejects a saved view at exactly the entry threshold, where zooming in would try
+/// to enter (AR-668): Top, left by Open-style entry into Sales at a view where Sales' card covers
+/// exactly [`crate::package_nav::ENTER_COVER`] of the canvas, comes back at 100 % with the card
+/// centred. The card spans the canvas's height and its right 60 % in whole points, so the share is
+/// exactly the threshold.
+#[test]
+fn a_return_by_zoom_rejects_a_view_at_exactly_the_entry_threshold() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        // A window one point wider than usual makes the canvas 845 points wide, a multiple of 5.
+        let mut h = workspace_harness(theme, egui::vec2(1601.0, 1000.0));
+        let (top, sales, card, sales_d) = top_with_sales(&mut h, (3000, 3000), &[]);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        let canvas = rect_of(&h, "workspace.canvas");
+        assert_eq!(canvas.width() % 5.0, 0.0, "{theme:?}: canvas {canvas:?}");
+        // At 100 %, the card's left edge 40 % in, its top above the canvas.
+        let view = (egui::vec2(canvas.width() * 0.4 - 200.0, -400.0), 1.0);
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
+        h.run();
+        let covered = rect_of(&h, &format!("workspace.canvas.node.{card}")).intersect(canvas);
+        let share = covered.width() * covered.height() / (canvas.width() * canvas.height());
+        assert_eq!(share, crate::package_nav::ENTER_COVER, "{theme:?}: Sales covers exactly the threshold, {covered:?}");
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
+        assert!(centred_at_landing(&h, card), "{theme:?}: Sales centred at 100 %, {:?}", (h.state().canvas.pan, h.state().canvas.zoom));
+    }
+}
+
+/// Each return restores the view of its own visit (AR-668): A → B → A → B by Open, A left first at
+/// one view and then at another, B at a third; zooming out goes back B → A → B → A, landing on A's
+/// second view, then B's, then A's first.
+#[test]
+fn returns_restore_the_view_each_visit_was_left_with() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // A is Commerce's diagram and shows Archive; B is Archive's and shows Commerce.
+        let (commerce, archive, a, b) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive" })).unwrap().value);
+            let (a, b) = (own_diagram(s, commerce), own_diagram(s, archive));
+            for (on, what) in [(a, archive), (b, commerce)] {
+                let p =
+                    serde_json::json!({ "diagram": on.to_string(), "element": what.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                s.execute("diagram.place", &p).unwrap();
+            }
+            (commerce, archive, a, b)
+        };
+        let views = [(egui::vec2(40.0, 30.0), 0.8), (egui::vec2(60.0, 20.0), 0.9), (egui::vec2(-20.0, 50.0), 0.7)];
+        crate::canvas::open(h.state_mut(), a);
+        h.run();
+        for (package, view) in [archive, commerce, archive].into_iter().zip(views) {
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
+            h.run();
+            crate::package_nav::enter(h.state_mut(), package, 0.0);
+            h.run();
+            rest(&mut h);
+        }
+        assert_eq!(h.state().canvas.active, Some(b), "{theme:?}");
+        for (from, to, view) in [(b, a, views[2]), (a, b, views[1]), (b, a, views[0])] {
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![from, to], "{theme:?}");
+            assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), view, "{theme:?}: {to} as that visit left it");
+            rest(&mut h);
+        }
+    }
+}
+
+/// A return that skips a step to a removed diagram lands on one with no card of the package left,
+/// and fits it rather than restoring the view it was left with (AR-668): Top → Sales → Archive,
+/// Sales' diagram then removed; zooming out of Archive opens Top with both its far classes in view.
+#[test]
+fn a_return_past_a_removed_diagram_fits_the_one_it_lands_on() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, _, sales_d) = top_with_sales(&mut h, (240, 148), &[0, 4000]);
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": sales.to_string() })).unwrap().value);
+        let p =
+            serde_json::json!({ "diagram": sales_d.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+        s.execute("diagram.place", &p).unwrap();
+        let archive_d = own_diagram(s, archive);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        let left = (egui::vec2(-50.0, 30.0), 0.6);
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
+        // Sales' diagram is its default: removing it makes Sales a new, empty one.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let at = s.token();
+        let p = serde_json::json!({ "diagram": sales_d.to_string(), "create_replacement": { "name": "Sales" }, "expected_revision": { "history": at.history, "revision": at.revision } });
+        s.execute("diagram.remove", &p).unwrap();
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![archive_d, top], "{theme:?}: past Sales' removed diagram");
+        let c = &h.state().canvas;
+        let seen = [0.0, 4200.0].iter().all(|x| (0.0..=c.size.x).contains(&(c.pan.x + x * c.zoom)));
+        assert!(seen && (c.pan, c.zoom) != left, "{theme:?}: Top fitted, not as left, {:?}", (c.pan, c.zoom));
+    }
+}
+
+/// A return restores the view an entry by Open or ⌘↓ left (AR-668): Top, at a view of its own with
+/// Sales selected and in view, entered through Sales' Open button or ⌘↓, comes back on zooming out
+/// at exactly that pan and zoom.
+#[test]
+fn a_return_restores_the_view_an_entry_by_open_or_command_down_left() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for control in ["Open", "⌘↓"] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+            let (top, sales, card, sales_d) = top_with_sales(&mut h, (480, 300), &[]);
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            let left = (egui::vec2(-50.0, 30.0), 0.6);
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
+            h.run();
+            rest(&mut h);
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
+            h.state_mut().canvas.focused = true;
+            h.run();
+            if control == "Open" {
+                let at = rect_of(&h, &format!("workspace.canvas.node.{card}.enter")).center();
+                click(&mut h, at);
+            } else {
+                key(&mut h, egui::Key::ArrowDown, egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND);
+            }
+            assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}: {control} entered Sales");
+            h.run();
+            rest(&mut h);
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {control}");
+            assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?}: Top as {control} left it");
+        }
+    }
+}
+
+/// A return that lands at the least zoom goes back one more step on the next zoom-out once the
+/// switch has rested, with no zoom-in first (AR-668): Top → Sales → Archive, Archive's card then
+/// removed from Sales' diagram, whose classes lie too far apart to fit above 10 %; zooming out of
+/// Archive lands on Sales fitted at 10 %, where a zoom-out straight away does nothing, and after
+/// the rest one fresh zoom-out returns to Top.
+#[test]
+fn a_return_landing_at_the_least_zoom_goes_back_on_the_next_zoom_out() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, _, sales_d) = top_with_sales(&mut h, (240, 148), &[]);
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": sales.to_string() })).unwrap().value);
+        let p =
+            serde_json::json!({ "diagram": sales_d.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+        let archive_card = id(s.execute("diagram.place", &p).unwrap().value);
+        for (i, x) in [0, 400_000].iter().enumerate() {
+            let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": format!("Wide{i}") })).unwrap().value);
+            let p = serde_json::json!({ "diagram": sales_d.to_string(), "element": c.to_string(), "x": x, "y": 0, "width": 200, "height": 120 });
+            s.execute("diagram.place", &p).unwrap();
+        }
+        let archive_d = own_diagram(s, archive);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
+        let p = serde_json::json!({ "nodes": [archive_card.to_string()] });
+        h.state_mut().session.as_mut().unwrap().execute("diagram.unplace", &p).unwrap();
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![archive_d, sales_d], "{theme:?}: back to Sales");
+        assert_eq!(h.state().canvas.zoom, crate::canvas::ZOOM_RANGE.0, "{theme:?}: Sales too wide, fitted at 10 %");
+        assert_eq!(zoom_out_gesture(&mut h, 1, true), vec![sales_d], "{theme:?}: a zoom-out straight after the switch does nothing");
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 1, true), vec![sales_d, top], "{theme:?}: one fresh zoom-out back to Top");
     }
 }
 
