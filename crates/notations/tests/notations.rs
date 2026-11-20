@@ -64,6 +64,42 @@ fn a_model_of_er_and_uml_comes_back_from_its_rows() {
     );
 }
 
+/// AR-556: a fresh project's mixed structure diagram, a package, a class and an interface on it
+/// and the class's dependency on the package drawn, saved as rows and opened again through
+/// `session_from_rows`, is the same store row for row: the diagram still a structure diagram of
+/// Sales, each box showing its element by the same id, the line drawn as it was. The real save, to
+/// a project's database and back, is the app's
+/// `a_project_whose_class_skill_overrides_a_project_skill_saves_and_opens_again`.
+#[test]
+fn a_mixed_structure_diagram_saved_as_rows_opens_again_as_the_same_store() {
+    let mut s = new_project_session("Commerce", ids(0)).unwrap();
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = id(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let order = id(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let payable = id(&mut s, "uml.interface.add", json!({ "package": sales, "name": "Payable" }));
+    let d = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let shown = [&orders, &order, &payable];
+    let boxes: Vec<String> =
+        shown.iter().zip(0..).map(|(e, i)| id(&mut s, "diagram.place", json!({ "diagram": d, "element": e, "x": 300 * i, "y": 0 }))).collect();
+    let dep = id(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": orders }));
+    id(&mut s, "diagram.connect", json!({ "diagram": d, "element": dep, "source": boxes[1], "target": boxes[0] }));
+    let (tables, junctions) = storage();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let back = session_from_rows(&saved, ids(1 << 40)).unwrap();
+    assert_eq!(rows::snapshot(back.doc(), &tables, &junctions).unwrap(), saved, "the same store, row for row");
+    let st = back.doc();
+    let at = |id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let referred = |o: Obj, prop| uuid(st, st.get(o, prop).unwrap().as_ref().unwrap());
+    assert_eq!(st.get(at(&d), archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::STRUCTURE_DIAGRAM));
+    assert_eq!(referred(at(&d), archforge_diagram::diagram::ELEMENT), sales);
+    for (b, e) in boxes.iter().zip(shown) {
+        assert_eq!(&referred(at(b), archforge_diagram::node::ELEMENT), e, "the box shows the same element");
+    }
+    let line = |st: &Store| archforge_uml::UmlNotation.line(st, st.by_uuid(Uuid::parse(&dep).unwrap()).unwrap());
+    assert!(line(st).is_some_and(|l| l.dashed), "drawn dashed");
+    assert_eq!(line(st), line(s.doc()), "the line drawn as it was");
+}
+
 /// A second notation, for the test alone: diagrams of a UML package that show its classes and
 /// their generalizations; removing a class takes it and its views, and describing one names it.
 struct Sketch;
