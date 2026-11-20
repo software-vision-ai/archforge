@@ -31193,6 +31193,85 @@ fn a_return_by_zoom_rejects_a_view_at_exactly_the_entry_threshold() {
     }
 }
 
+/// Each return restores the view of its own visit (AR-668): A → B → A → B by Open, A left first at
+/// one view and then at another, B at a third; zooming out goes back B → A → B → A, landing on A's
+/// second view, then B's, then A's first.
+#[test]
+fn returns_restore_the_view_each_visit_was_left_with() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // A is Commerce's diagram and shows Archive; B is Archive's and shows Commerce.
+        let (commerce, archive, a, b) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let commerce = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Commerce" })).unwrap().value);
+            let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive" })).unwrap().value);
+            let (a, b) = (own_diagram(s, commerce), own_diagram(s, archive));
+            for (on, what) in [(a, archive), (b, commerce)] {
+                let p =
+                    serde_json::json!({ "diagram": on.to_string(), "element": what.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+                s.execute("diagram.place", &p).unwrap();
+            }
+            (commerce, archive, a, b)
+        };
+        let views = [(egui::vec2(40.0, 30.0), 0.8), (egui::vec2(60.0, 20.0), 0.9), (egui::vec2(-20.0, 50.0), 0.7)];
+        crate::canvas::open(h.state_mut(), a);
+        h.run();
+        for (package, view) in [archive, commerce, archive].into_iter().zip(views) {
+            (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
+            h.run();
+            crate::package_nav::enter(h.state_mut(), package, 0.0);
+            h.run();
+            rest(&mut h);
+        }
+        assert_eq!(h.state().canvas.active, Some(b), "{theme:?}");
+        for (from, to, view) in [(b, a, views[2]), (a, b, views[1]), (b, a, views[0])] {
+            assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![from, to], "{theme:?}");
+            assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), view, "{theme:?}: {to} as that visit left it");
+            rest(&mut h);
+        }
+    }
+}
+
+/// A return that skips a step to a removed diagram lands on one with no card of the package left,
+/// and fits it rather than restoring the view it was left with (AR-668): Top → Sales → Archive,
+/// Sales' diagram then removed; zooming out of Archive opens Top with both its far classes in view.
+#[test]
+fn a_return_past_a_removed_diagram_fits_the_one_it_lands_on() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (top, sales, _, sales_d) = top_with_sales(&mut h, (240, 148), &[0, 4000]);
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let archive = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Archive", "parent": sales.to_string() })).unwrap().value);
+        let p =
+            serde_json::json!({ "diagram": sales_d.to_string(), "element": archive.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+        s.execute("diagram.place", &p).unwrap();
+        let archive_d = own_diagram(s, archive);
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        let left = (egui::vec2(-50.0, 30.0), 0.6);
+        (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.run();
+        assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
+        // Sales' diagram is its default: removing it makes Sales a new, empty one.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let at = s.token();
+        let p = serde_json::json!({ "diagram": sales_d.to_string(), "create_replacement": { "name": "Sales" }, "expected_revision": { "history": at.history, "revision": at.revision } });
+        s.execute("diagram.remove", &p).unwrap();
+        h.run();
+        rest(&mut h);
+        assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![archive_d, top], "{theme:?}: past Sales' removed diagram");
+        let c = &h.state().canvas;
+        let seen = [0.0, 4200.0].iter().all(|x| (0.0..=c.size.x).contains(&(c.pan.x + x * c.zoom)));
+        assert!(seen && (c.pan, c.zoom) != left, "{theme:?}: Top fitted, not as left, {:?}", (c.pan, c.zoom));
+    }
+}
+
 /// A return that lands at the least zoom goes back one more step on the next zoom-out once the
 /// switch has rested, with no zoom-in first (AR-668): Top → Sales → Archive, Archive's card then
 /// removed from Sales' diagram, whose classes lie too far apart to fit above 10 %; zooming out of
