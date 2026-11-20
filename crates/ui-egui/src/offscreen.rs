@@ -209,6 +209,10 @@ pub enum Screen {
     /// Order, `nested` after its name; on the diagram its card is tied to Order's by the line ending
     /// in ⊕ at Order; it is selected, Properties showing its Owner, Order (AR-132, D2).
     WorkspaceNestedClassifiers,
+    /// The sample class model with the packages Sales and Shared beside it, the class
+    /// CurrencyConverter in Shared, and Sales's dependency on it selected: Properties names its
+    /// client and supplier by kind and owning path (AR-702, R1).
+    WorkspaceDependency,
     /// The sample class model with Repository a template of T : Class and Key : DataType =
     /// Integer, its signature box over its card's top-right corner; Repository selected with the
     /// template parameter editor open on Key (AR-130, C1).
@@ -929,6 +933,11 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         crate::uml_ui::open_sample(&mut shell)?;
         sample_nested(&mut shell)?;
     }
+    if screen == Screen::WorkspaceDependency {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_dependency(&mut shell)?;
+    }
     if screen == Screen::WorkspaceProfiles || screen == Screen::WorkspaceProfileRefused {
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
@@ -1537,6 +1546,20 @@ fn sample_nested(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = z;
     shell.canvas.pan = egui::vec2(140.0 - b.x as f32 * z, 360.0 - b.y as f32 * z);
+    Ok(())
+}
+
+/// Sales's dependency on Shared's CurrencyConverter beside the sample, selected, Properties open
+/// (AR-702, R1).
+fn sample_dependency(shell: &mut Shell) -> Result<(), String> {
+    let id = |v: serde_json::Value| v["id"].as_str().map(str::to_string).ok_or_else(|| "a sample element has no id".to_string());
+    let sales = id(crate::panels::run(shell, "uml.package.add", serde_json::json!({ "name": "Sales" }))?)?;
+    let shared = id(crate::panels::run(shell, "uml.package.add", serde_json::json!({ "name": "Shared" }))?)?;
+    let converter = id(crate::panels::run(shell, "uml.class.add", serde_json::json!({ "package": shared, "name": "CurrencyConverter" }))?)?;
+    let d = id(crate::panels::run(shell, "uml.dependency.add", serde_json::json!({ "client": sales, "supplier": converter }))?)?;
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [d] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_explorer(crate::state::Explorer::Models);
     Ok(())
 }
 
