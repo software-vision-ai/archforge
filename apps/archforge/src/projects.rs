@@ -1953,14 +1953,25 @@ fn restore(
     }
 }
 
+/// The most bytes of a kind a refused restore names, as an opening's reading of the kinds cuts it.
+const RESTORED_KIND_BYTES: usize = 256;
+
 /// Refuses a version's `rows` holding diagrams of kinds no notation knows, naming those kinds as
-/// stored, each once and at most [`MOST_UNKNOWN_KINDS`], as an opening names them, and the kinds
-/// the notations know.
+/// stored, as an opening names them: each cut to [`RESTORED_KIND_BYTES`] at a character boundary,
+/// once, and at most [`MOST_UNKNOWN_KINDS`]; and the kinds the notations know. Only the kinds
+/// named are copied, however many diagrams hold others.
 fn known_kinds_in(rows: &Rows) -> Result<(), RestoreError> {
     let (tables, _) = archforge_notations::storage();
     archforge_notations::check_kinds_in_rows(rows, &tables).map_err(|refused| {
-        let mut kinds = Vec::new();
-        add_kinds(&mut kinds, refused.diagrams.iter().map(|d| d.kind.clone()).collect());
+        let mut kinds: Vec<String> = Vec::new();
+        for kind in refused.diagrams.iter().map(|d| archforge_ui_egui::chat_panel::cut(&d.kind, RESTORED_KIND_BYTES)) {
+            if kinds.len() >= MOST_UNKNOWN_KINDS {
+                break;
+            }
+            if !kinds.iter().any(|named| named == kind) {
+                kinds.push(kind.to_string());
+            }
+        }
         RestoreError::UnsupportedKinds { kinds, accepted: refused.accepted }
     })
 }
@@ -3942,6 +3953,31 @@ mod tests {
         assert!(matches!(job_answer(refused), Err(JobFailure::Failed(text)) if text == said));
         assert_eq!(restore_of(host, &path, &known).unwrap(), Restored::Version { kept_work: true });
         assert_eq!(work(host), structure_diagram());
+    }
+
+    /// A refused restore names the kinds as an opening does: each cut to [`RESTORED_KIND_BYTES`] at
+    /// a character boundary, once, in the order found and at most [`MOST_UNKNOWN_KINDS`] of them.
+    #[test]
+    fn a_refused_restore_names_each_kind_cut_once_and_at_most_the_most() {
+        let mut rows = structure_diagram();
+        let (tables, _) = archforge_notations::storage();
+        let at = tables.iter().position(|t| t.name == "diagram_diagram").unwrap();
+        let kind = tables[at].columns.iter().position(|c| c.name == "kind").unwrap();
+        let long = format!("{}é", "k".repeat(RESTORED_KIND_BYTES - 1));
+        let more: Vec<String> = (0..MOST_UNKNOWN_KINDS).map(|n| format!("kind.{n}")).collect();
+        let stored = ["uml.class", long.as_str(), "uml.class", "uml.structure"].into_iter().chain(more.iter().map(String::as_str));
+        let first = rows.tables[at][0].clone();
+        rows.tables[at] = stored
+            .map(|k| {
+                let mut row = first.clone();
+                row[kind] = archforge_mof::rows::Cell::Text(k.into());
+                row
+            })
+            .collect();
+        let Err(RestoreError::UnsupportedKinds { kinds, .. }) = known_kinds_in(&rows) else { panic!("refused") };
+        let mut named = vec!["uml.class".to_string(), "k".repeat(RESTORED_KIND_BYTES - 1)];
+        named.extend(more.iter().take(MOST_UNKNOWN_KINDS - 2).cloned());
+        assert_eq!(kinds, named);
     }
 
     /// With only a conversation's rows uncommitted, the restore makes its own version alone and
