@@ -383,16 +383,34 @@ fn a_token_file_is_never_made_over_another_and_removed_only_while_it_is_the_same
     assert!(matches!(create_token_file(&path, &mint_token().unwrap()), Err(Created::Taken)));
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "someone else's", "never replaced");
     let mine = dir.join("control-1-1111111111111111.token");
-    let id = create_token_file(&mine, &mint_token().unwrap()).ok().unwrap();
+    let token = mint_token().unwrap();
+    let id = create_token_file(&mine, &token).ok().unwrap();
     // Replaced by another file under the same name: left alone.
     std::fs::remove_file(&mine).unwrap();
     std::fs::write(&mine, "another").unwrap();
-    remove_token_file(&mine, id);
+    remove_token_file(&mine, id, &token);
     assert!(mine.exists(), "a file that is not the one written is left");
-    // The very file: removed.
+    // Another start's token under the very same device and inode, as when Linux hands the removed
+    // file's inode number to the next file made: left alone, since its token is not this one.
     std::fs::remove_file(&mine).unwrap();
-    let id = create_token_file(&mine, &mint_token().unwrap()).ok().unwrap();
-    remove_token_file(&mine, id);
+    let id = create_token_file(&mine, &token).ok().unwrap();
+    let theirs = mint_token().unwrap();
+    std::fs::write(&mine, format!("{theirs}\n")).unwrap();
+    remove_token_file(&mine, id, &token);
+    assert_eq!(std::fs::read_to_string(&mine).unwrap(), format!("{theirs}\n"), "another start's token file under the same identity is left");
+    // A link to the very file in its place: left alone, never followed.
+    std::fs::remove_file(&mine).unwrap();
+    let id = create_token_file(&mine, &token).ok().unwrap();
+    let aside = dir.join("aside.token");
+    std::fs::rename(&mine, &aside).unwrap();
+    std::os::unix::fs::symlink(&aside, &mine).unwrap();
+    remove_token_file(&mine, id, &token);
+    assert!(std::fs::symlink_metadata(&mine).is_ok() && aside.exists(), "a link is left, and the file it names");
+    std::fs::remove_file(&mine).unwrap();
+    std::fs::remove_file(&aside).unwrap();
+    // The very file, holding its token: removed.
+    let id = create_token_file(&mine, &token).ok().unwrap();
+    remove_token_file(&mine, id, &token);
     assert!(!mine.exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
