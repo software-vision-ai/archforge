@@ -1,11 +1,13 @@
 # Gate: `cargo xtask ci`, the repository's whole gate, on every pull request into main and on every
 # push to main, so a change merges on a green run GitHub made, not on a run on someone's machine.
 #
-# The run is the gate a contributor runs (CONTRIBUTING.md): update, format, lint, test, assets,
-# skills, layers, portable, generated and deny. Two of its inputs come from outside the repository,
-# as on a contributor's machine: the interface's fonts from craft-fonts beside the checkout, and
-# Dolt for the storage tests. OMG's UML files are not here, so the generated step checks our own
-# metamodels and skips UML's, as it does wherever ARCHFORGE_SPECS_DIR is unset.
+# The run is the gate a contributor runs (CONTRIBUTING.md): format, lint, test, assets, skills,
+# layers, portable, generated and deny, all with the committed Cargo.lock (`--locked`), so a
+# manifest changed without its lock fails here as it does on a contributor's machine. Two of its
+# inputs come from outside the repository, as on a contributor's machine: the interface's fonts
+# from craft-fonts beside the checkout, and Dolt for the storage tests. OMG's UML files are not
+# here, so the generated step checks our own metamodels and skips UML's, as it does wherever
+# ARCHFORGE_SPECS_DIR is unset.
 #
 # Rust is the version rust-toolchain.toml names, which rustup reads wherever cargo runs in the
 # checkout, here as on a contributor's machine and in the release jobs. Dolt and cargo-deny are the

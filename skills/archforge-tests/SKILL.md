@@ -73,9 +73,10 @@ description: "Use when writing, placing or running tests in Archforge: a regress
 - Before a release: `docs/release-checklist.md`, by hand in the running app on macOS, for what
   the gate cannot drive (the menu bar, system pickers, the browser, the real window). A change to
   such behaviour updates that list.
-- Before proposing a change: the gate, `cargo xtask ci`. Its steps are update (craft-libs to their
-  newest main), format, lint, test, assets, skills, layers, portable, generated, kinds and deny. It
-  stops at the first failure and prints a table of steps.
+- Before proposing a change: the gate, `cargo xtask ci`. Its steps are format, lint, test, assets,
+  skills, layers, portable, generated, kinds and deny. It stops at the first failure and prints a
+  table of steps. It builds with `--locked` and never changes `Cargo.lock`, so there is nothing to put
+  back after it; a manifest changed without its lock fails it before the first step.
 - The test step needs dolt 2.6 or later on the PATH or in `ARCHFORGE_DOLT`; without it the
   server and project tests fail and say so. A test that starts a server stops it on every path,
   so a failed run leaves no server behind: in the app, every test over the real project host
@@ -84,5 +85,5 @@ description: "Use when writing, placing or running tests in Archforge: a regress
 - The portable step needs the `wasm32-unknown-unknown` target, which `rust-toolchain.toml` lists so
   rustup installs it with the pinned version, and a cargo from rustup on `PATH` (one from a package
   manager ignores the toolchain file); the deny step needs cargo-deny at the version `xtask/src/main.rs`
-  names; both the update and deny steps need the network.
+  names, and the network.
 - `cargo xtask stats` prints the tests and lines per crate.
