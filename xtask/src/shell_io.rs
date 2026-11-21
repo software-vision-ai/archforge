@@ -138,7 +138,7 @@ pub fn blank(source: &str) -> String {
 }
 
 /// Where a raw string starting at `i` (`r"`, `r#"`, `br"`, …) opens its quote, and its hashes.
-fn raw_start(chars: &[char], i: usize) -> Option<(usize, usize)> {
+pub(crate) fn raw_start(chars: &[char], i: usize) -> Option<(usize, usize)> {
     let mut j = if chars.get(i) == Some(&'b') { i + 2 } else { i + 1 };
     let mut hashes = 0;
     while chars.get(j) == Some(&'#') {
@@ -149,7 +149,7 @@ fn raw_start(chars: &[char], i: usize) -> Option<(usize, usize)> {
 }
 
 /// The end of a character literal opening at `i` (its quote), or none for a lifetime.
-fn char_end(chars: &[char], i: usize) -> Option<usize> {
+pub(crate) fn char_end(chars: &[char], i: usize) -> Option<usize> {
     match chars.get(i + 1)? {
         '\\' => {
             // A unicode escape runs to its closing brace, a byte escape (`\x7f`) takes two digits,

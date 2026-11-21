@@ -86,7 +86,7 @@ fn card_on_a_diagram(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::A
     let mut made = |command: &str, with: serde_json::Value| s.execute(command, &with).unwrap().value["id"].as_str().unwrap().to_string();
     let schema = made("er.schema.add", serde_json::json!({ "name": "Shop" }));
     let customer = made("er.entity.add", serde_json::json!({ "schema": schema, "name": "Customer" }));
-    let diagram = made("diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" }));
+    let diagram = made("diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }));
     let placed = serde_json::json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 });
     let card = format!("workspace.canvas.node.{}", made("diagram.place", placed));
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&diagram).unwrap());

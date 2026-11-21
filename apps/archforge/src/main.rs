@@ -399,7 +399,7 @@ mod tests {
         let order = id(tool("er_entity_add", json!({ "schema": schema, "name": "Order" })));
         tool("er_attribute_add", json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
         let places = id(tool("er_relationship_add", json!({ "from": customer, "to": order, "name": "places", "create_foreign_key": true })));
-        let diagram = id(tool("diagram_add", json!({ "kind": "er", "element": schema, "name": "Shop" })));
+        let diagram = id(tool("diagram_add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })));
         let c = id(tool("diagram_place", json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 })));
         let o = id(tool("diagram_place", json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 166 })));
         tool("diagram_connect", json!({ "diagram": diagram, "element": places, "source": c, "target": o })).unwrap();

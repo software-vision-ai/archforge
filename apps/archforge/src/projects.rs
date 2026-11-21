@@ -3978,7 +3978,7 @@ mod tests {
         let before = state();
         assert!(before.3, "the work is unsaved");
         let refused = restore_of(host, &path, &earlier);
-        let accepted = ["er", "uml.structure"];
+        let accepted = [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM];
         assert!(
             matches!(&refused, Err(RestoreError::UnsupportedKinds { kinds, accepted: known }) if kinds == &["uml.class"] && known == &accepted),
             "{refused:?}"
@@ -4003,7 +4003,7 @@ mod tests {
         let kind = tables[at].columns.iter().position(|c| c.name == "kind").unwrap();
         let long = format!("{}é", "k".repeat(RESTORED_KIND_BYTES - 1));
         let more: Vec<String> = (0..MOST_UNKNOWN_KINDS).map(|n| format!("kind.{n}")).collect();
-        let stored = ["uml.class", long.as_str(), "uml.class", "uml.structure"].into_iter().chain(more.iter().map(String::as_str));
+        let stored = ["uml.class", long.as_str(), "uml.class", archforge_uml::STRUCTURE_DIAGRAM].into_iter().chain(more.iter().map(String::as_str));
         let first = rows.tables[at][0].clone();
         rows.tables[at] = stored
             .map(|k| {
@@ -4017,7 +4017,7 @@ mod tests {
         named.extend(more.iter().take(MOST_UNKNOWN_KINDS - 2).cloned());
         assert_eq!(kinds, named);
         // The reason quotes each kind: an empty one, or one holding a comma, reads as stored.
-        let odd = RestoreError::UnsupportedKinds { kinds: vec![String::new(), "a, b".into()], accepted: vec!["er"] };
+        let odd = RestoreError::UnsupportedKinds { kinds: vec![String::new(), "a, b".into()], accepted: vec![archforge_er::DIAGRAM_KIND] };
         assert_eq!(odd.to_string(), "the version holds diagrams of kinds no notation knows: \"\", \"a, b\"; the kinds known are er");
     }
 
@@ -4074,7 +4074,8 @@ mod tests {
         let shop = id(s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
         let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": shop, "name": "customer" })).unwrap().value);
         s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT", "primary_key": true })).unwrap();
-        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": shop, "name": "Shop" })).unwrap().value);
+        let diagram =
+            id(s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" })).unwrap().value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 })).unwrap();
         let (tables, junctions) = archforge_notations::storage();
         let short = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
@@ -5007,7 +5008,7 @@ mod tests {
                 words(SwitchError::NotOpen),
                 words(SwitchError::Unwritten("w".to_string())),
                 words(SwitchError::Failed("reason".to_string())),
-                words(SwitchError::UnsupportedKinds { kinds: vec!["uml.class".into()], accepted: vec!["er"] }),
+                words(SwitchError::UnsupportedKinds { kinds: vec!["uml.class".into()], accepted: vec![archforge_er::DIAGRAM_KIND] }),
             ]
         };
         let english = reasons();
@@ -5020,7 +5021,7 @@ mod tests {
         assert_ne!(english[0], english[1]);
         assert_ne!(english[6], english[1]);
         assert!(german[8].contains("uml.class"), "the kinds are named as stored");
-        let refused = SwitchError::UnsupportedKinds { kinds: vec![String::new(), "a, b".into()], accepted: vec!["er"] };
+        let refused = SwitchError::UnsupportedKinds { kinds: vec![String::new(), "a, b".into()], accepted: vec![archforge_er::DIAGRAM_KIND] };
         assert_eq!(refused.to_string(), "the branch holds diagrams of kinds no notation knows: \"\", \"a, b\"; the kinds known are er");
         assert!(matches!(switch_answer(Ok(Switched::AlreadyThere)), Ok(())));
         assert!(matches!(switch_answer(Err(SwitchError::NoAnswer)), Err(JobFailure::Failed(_))));
@@ -6223,7 +6224,7 @@ mod tests {
     fn structure_diagram() -> Rows {
         let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
         let sales = s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value["id"].as_str().unwrap().to_string();
-        s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": sales, "name": "Sales" })).unwrap();
+        s.execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" })).unwrap();
         let (tables, junctions) = archforge_notations::storage();
         archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
     }
@@ -6242,7 +6243,7 @@ mod tests {
             let open = lock(&host.inner.open);
             let run = |statement: &str| open[0].run_on_branch("main", statement).unwrap();
             let stored = "SELECT CAST(GROUP_CONCAT(DISTINCT kind) AS CHAR) FROM diagram_diagram";
-            assert_eq!(open[0].first_on_branch("main", stored).as_deref(), Ok("uml.structure"), "saved as the one UML kind");
+            assert_eq!(open[0].first_on_branch("main", stored).as_deref(), Ok(archforge_uml::STRUCTURE_DIAGRAM), "saved as the one UML kind");
             run("CALL DOLT_BRANCH('kinds')");
             run("UPDATE diagram_diagram SET kind = 'uml.class'");
             run(&earlier);
@@ -6825,7 +6826,7 @@ mod tests {
         id("skill.add", serde_json::json!({ "name": "Review export conventions", "body": "Everywhere." }));
         let package = id("uml.package.add", serde_json::json!({ "name": "Review domain" }));
         let invoice = id("uml.class.add", serde_json::json!({ "package": package, "name": "Invoice" }));
-        let diagram = id("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": package, "name": "Review domain" }));
+        let diagram = id("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Review domain" }));
         id("diagram.place", serde_json::json!({ "diagram": diagram, "element": invoice, "x": 100, "y": 120 }));
         id("skill.add", serde_json::json!({ "subject": invoice, "name": "Review export conventions", "body": "Invoices only." }));
         let (tables, junctions) = archforge_notations::storage();
