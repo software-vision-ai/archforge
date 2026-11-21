@@ -5383,8 +5383,10 @@ dependencies = [
  "archforge-mof",
  "craft-atomic",
  "png",
+ "proc-macro2",
  "quick-xml",
  "serde_json",
+ "syn 2.0.119",
 ]
 
 [[package]]
