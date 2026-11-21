@@ -188,7 +188,7 @@ mod tests {
     /// The usage text lists the verbs the skills may name, in sorted order.
     #[test]
     fn verbs_are_read_from_the_usage_text() {
-        assert_eq!(verbs(crate::USAGE).into_iter().take(3).collect::<Vec<_>>(), ["assets", "ci", "generate"]);
+        assert_eq!(verbs(crate::USAGE).into_iter().take(3).collect::<Vec<_>>(), ["assets", "bump", "ci"]);
         assert!(verbs(crate::USAGE).contains("skills"));
     }
 

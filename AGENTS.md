@@ -12,10 +12,13 @@ cargo xtask ci                            # the gate: every check, in order
 cargo xtask shot dark                     # an offscreen screenshot and a small copy to read
 ```
 
-- The gate is `cargo xtask ci`. Its first step moves the craft-libs crates to the newest commit of
-  their main branch, so a change is always checked against the latest shared crates; never pin a
-  revision of craft-libs or craft-fonts. Run targeted checks such as `cargo test -p <crate>` while
-  working and the gate before proposing a change; a change is proposed only from a green gate.
+- The gate is `cargo xtask ci`. It never changes `Cargo.lock`: the task runner's build and every
+  cargo command of the gate that resolves dependencies run with `--locked`, so a manifest changed
+  without its lock fails the gate. craft-libs moves only through `cargo xtask bump`, which moves
+  its crates to the newest commit of its main branch and nothing else, in a pull request of its
+  own (`CONTRIBUTING.md`); never pin a revision of craft-libs or craft-fonts. Run targeted checks
+  such as `cargo test -p <crate>` while working and the gate before proposing a change; a change
+  is proposed only from a green gate.
 - Look at every change to the user interface in a screenshot (`cargo xtask shot`, `light` or
   `dark`), not only in the tests.
 - A change to a flow a user sees updates the user manual's chapter for it (`docs/manual/`) in the
