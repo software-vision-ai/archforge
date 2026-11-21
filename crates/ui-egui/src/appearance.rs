@@ -62,18 +62,15 @@ pub struct Picker {
 }
 
 impl Picker {
+    /// The picker for `group`, open on `colour`: its hue, saturation and brightness, and its code.
     pub fn new(group: Group, colour: Color32) -> Self {
-        let h = egui::ecolor::HsvaGamma::from(colour);
-        Picker { group, hsv: [h.h, h.s, h.v], code: hex(colour) }
+        Picker { group, hsv: ux::to_hsv(colour), code: hex(colour) }
     }
 
+    /// The colour chosen so far.
     fn colour(&self) -> Color32 {
-        hsv(self.hsv[0], self.hsv[1], self.hsv[2])
+        ux::from_hsv(self.hsv[0], self.hsv[1], self.hsv[2])
     }
-}
-
-fn hsv(h: f32, s: f32, v: f32) -> Color32 {
-    egui::ecolor::HsvaGamma { h, s, v, a: 1.0 }.into()
 }
 
 /// The nodes and edges of the open diagram the selection names: the selected nodes and edges
@@ -512,7 +509,7 @@ fn spectrum(paint: &egui::Painter, centre: Pos2, radius: f32) {
     let mut mesh = egui::epaint::Mesh::default();
     for i in 0..SLICES {
         let (a, b) = (i as f32 / SLICES as f32 * std::f32::consts::TAU, (i + 1) as f32 / SLICES as f32 * std::f32::consts::TAU);
-        let c: Color32 = egui::ecolor::Hsva::new(i as f32 / SLICES as f32, 0.75, 0.95, 1.0).into();
+        let c = ux::swatch_hue(i as f32 / SLICES as f32);
         let base = mesh.vertices.len() as u32;
         mesh.colored_vertex(centre, c);
         mesh.colored_vertex(centre + vec2(a.cos(), a.sin()) * radius, c);
@@ -575,7 +572,7 @@ fn picker_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, pane
         for row in 0..=CELLS {
             for col in 0..=CELLS {
                 let (x, y) = (col as f32 / CELLS as f32, row as f32 / CELLS as f32);
-                mesh.colored_vertex(field.min + vec2(x * field.width(), y * field.height()), hsv(h, x, 1.0 - y));
+                mesh.colored_vertex(field.min + vec2(x * field.width(), y * field.height()), ux::from_hsv(h, x, 1.0 - y));
             }
         }
         let w = (CELLS + 1) as u32;
@@ -588,8 +585,8 @@ fn picker_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, pane
         }
         paint.add(mesh);
         let mark = pos2(field.left() + s * field.width(), field.top() + (1.0 - v) * field.height());
-        paint.circle_stroke(mark, 6.0, Stroke::new(2.0, Color32::WHITE));
-        paint.circle_stroke(mark, 7.0, Stroke::new(1.0, Color32::from_black_alpha(90)));
+        paint.circle_stroke(mark, 6.0, Stroke::new(2.0, ux::MARK));
+        paint.circle_stroke(mark, 7.0, Stroke::new(1.0, ux::MARK_EDGE));
         widgets::record_visible(ui, &mut shell.registry, "workspace.appearance.picker.field", "slider", field);
         let resp = ui.interact(field, widgets::egui_id("workspace.appearance.picker.field"), egui::Sense::click_and_drag());
         if let Some(at) = resp.interact_pointer_pos().filter(|_| resp.is_pointer_button_down_on() || resp.clicked()) {
@@ -603,7 +600,7 @@ fn picker_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, pane
         const STEPS: usize = 36;
         for i in 0..=STEPS {
             let t = i as f32 / STEPS as f32;
-            let c = hsv(t, 1.0, 1.0);
+            let c = ux::from_hsv(t, 1.0, 1.0);
             mesh.colored_vertex(pos2(bar.left() + t * bar.width(), bar.top()), c);
             mesh.colored_vertex(pos2(bar.left() + t * bar.width(), bar.bottom()), c);
         }
@@ -614,8 +611,8 @@ fn picker_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, pane
         }
         paint.add(mesh);
         let knob = Rect::from_center_size(pos2(bar.left() + h * bar.width(), bar.center().y), vec2(6.0, bar.height() + 4.0));
-        paint.rect_filled(knob, 3.0, Color32::WHITE);
-        paint.rect_stroke(knob, 3.0, Stroke::new(1.0, Color32::from_black_alpha(90)), StrokeKind::Outside);
+        paint.rect_filled(knob, 3.0, ux::MARK);
+        paint.rect_stroke(knob, 3.0, Stroke::new(1.0, ux::MARK_EDGE), StrokeKind::Outside);
         widgets::record_visible(ui, &mut shell.registry, "workspace.appearance.picker.hue", "slider", bar);
         let resp = ui.interact(bar.expand2(vec2(0.0, 4.0)), widgets::egui_id("workspace.appearance.picker.hue"), egui::Sense::click_and_drag());
         if let Some(at) = resp.interact_pointer_pos().filter(|_| resp.is_pointer_button_down_on() || resp.clicked()) {
@@ -641,8 +638,8 @@ fn picker_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, pane
         if out.response.changed()
             && let Some(c) = colour(picker.code.trim())
         {
-            let typed = egui::ecolor::HsvaGamma::from(c);
-            picker.hsv = [if typed.s > 0.0 { typed.h } else { picker.hsv[0] }, typed.s, typed.v];
+            let [h, s, v] = ux::to_hsv(c);
+            picker.hsv = [if s > 0.0 { h } else { picker.hsv[0] }, s, v];
         }
         let y = card.bottom() - 12.0 - FIELD;
         let cancel = crate::panels::icon_button(

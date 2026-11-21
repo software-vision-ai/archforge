@@ -2,3 +2,28 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
+
+# The interface draws through `ux` (AGENTS.md): a colour or a font is made there alone, which calls
+# these under a scoped allow. Colour constants (`Color32::RED`) and `FontId { .. }` are no methods;
+# the gate's ux scan (xtask/src/ux_literals.rs) refuses those.
+disallowed-methods = [
+    { path = "egui::Color32::from_rgb", reason = "a colour is the design's: take a role of ux::Palette or a named ux colour (ux::CLEAR, ux::UNTINTED, ux::MARK), or ux::data_colour for a colour the document holds" },
+    { path = "egui::Color32::from_rgb_additive", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },
+    { path = "egui::Color32::from_rgba_premultiplied", reason = "a colour is the design's: take a role of ux::Palette (scrim, shadow), or add a named colour to ux" },
+    { path = "egui::Color32::from_rgba_unmultiplied", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },
+    { path = "egui::Color32::from_rgba_unmultiplied_const", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },
+    { path = "egui::Color32::from_gray", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },
+    { path = "egui::Color32::from_black_alpha", reason = "a colour is the design's: take a role of ux::Palette (scrim, shadow) or ux::MARK_EDGE" },
+    { path = "egui::Color32::from_white_alpha", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },
+    { path = "egui::Color32::from_additive_luminance", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },
+    { path = "egui::Color32::from_hex", reason = "a colour code the document holds is read by canvas::colour, which makes it with ux::data_colour" },
+    { path = "egui::FontId::new", reason = "a font is the design's: take a style of ux::types (its .font(), or .code() for the monospace face)" },
+    { path = "egui::FontId::proportional", reason = "a font is the design's: take a style of ux::types and its .font()" },
+    { path = "egui::FontId::monospace", reason = "a font is the design's: take a style of ux::types and its .code()" },
+]
+disallowed-types = [
+    { path = "egui::ecolor::Hsva", reason = "a colour is the design's: the own-colour swatch's hues are ux::swatch_hue" },
+    { path = "egui::ecolor::HsvaGamma", reason = "a colour is the design's: the colour picker goes through ux::from_hsv and ux::to_hsv" },
+    { path = "egui::Rgba", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },
+    { path = "egui::ecolor::HexColor", reason = "a colour code the document holds is read by canvas::colour, which makes it with ux::data_colour" },
+]

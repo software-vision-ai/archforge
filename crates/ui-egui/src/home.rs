@@ -267,7 +267,7 @@ pub(crate) fn brand(paint: &egui::Painter, p: &Palette, r: Rect) -> Rect {
     let side = (mark.width() * paint.ctx().pixels_per_point()).round().max(1.0) as usize;
     match ux::app_icon(paint.ctx(), side) {
         Some(icon) => {
-            paint.image(icon.id(), mark, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+            paint.image(icon.id(), mark, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ux::UNTINTED);
         }
         None => {
             paint.rect_filled(mark, 6.0, p.accent_fill);
@@ -364,7 +364,7 @@ pub(crate) fn initials(name: &str) -> Option<String> {
 /// A button as the design draws it, `BUTTON` tall at `at`: an optional icon,
 /// then the label, `BUTTON_PAD` either side, hugging its content. Gives its rect.
 fn button_rect(paint: &egui::Painter, at: Pos2, label: &str, icon: bool) -> (Rect, std::sync::Arc<egui::Galley>) {
-    let g = ux::galley(paint, label, types::UI_STRONG, Color32::PLACEHOLDER, None);
+    let g = ux::galley(paint, label, types::UI_STRONG, ux::PLACEHOLDER_INK, None);
     let icon_w = if icon { 18.0 + BUTTON_GAP } else { 0.0 };
     (Rect::from_min_size(at, vec2(BUTTON_PAD * 2.0 + icon_w + g.size().x, BUTTON)), g)
 }

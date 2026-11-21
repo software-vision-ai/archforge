@@ -17,6 +17,7 @@ mod shot;
 mod skills;
 mod stats;
 mod util;
+mod ux_literals;
 mod version;
 mod wasm;
 

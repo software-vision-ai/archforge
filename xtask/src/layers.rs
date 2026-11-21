@@ -3,8 +3,9 @@
 //! Reads `cargo metadata`, strips the application prefix from each package name, classifies the
 //! remainder through `TABLE`, walks normal, build and development edges between workspace crates,
 //! checks toolkit crates against their minimum layer, refuses process and network crates as the
-//! shell's dependencies and scans the shell's sources for process and network code
-//! (`shell_io`), reports every violation and prints the table. Applications under `apps/` and the
+//! shell's dependencies, scans the shell's sources for process and network code (`shell_io`) and
+//! every source for colours and fonts made outside `ux` (`ux_literals`), reports every violation
+//! and prints the table. Applications under `apps/` and the
 //! task runner are exempt.
 
 use std::collections::BTreeMap;
@@ -183,6 +184,7 @@ pub fn run() -> Result<(), String> {
     }
     let mut v = violations(&packages);
     v.extend(crate::shell_io::scan(&util::root().join("crates").join(SHELL).join("src"))?);
+    v.extend(crate::ux_literals::scan(&util::root())?);
     if v.is_empty() {
         println!("layers: {} crates, no violation", packages.len());
         Ok(())

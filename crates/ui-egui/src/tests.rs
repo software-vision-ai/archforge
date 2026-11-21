@@ -4789,11 +4789,11 @@ fn a_letter_cut_from_its_label_is_not_underlined() {
     let h = harness(ThemeKind::Light);
     let mut out = h.ctx.run_ui(egui::RawInput::default(), |ui| {
         let (paint, at) = (ui.painter(), egui::pos2(0.0, 0.0));
-        let text = crate::ux::galley(paint, "Generate every diagram", crate::ux::types::SMALL, egui::Color32::BLACK, Some(60.0));
+        let text = crate::ux::galley(paint, "Generate every diagram", crate::ux::types::SMALL, crate::ux::LIGHT.text, Some(60.0));
         let glyphs: Vec<char> = text.rows.iter().flat_map(|r| r.glyphs.iter().map(|g| g.chr)).collect();
         assert_eq!(glyphs.last(), Some(&'…'), "cut: {glyphs:?}");
         for index in [glyphs.len() - 1, glyphs.len() + 3, 0] {
-            crate::ux::underline_char(paint, at, &text, index, crate::ux::types::SMALL, egui::Color32::BLACK);
+            crate::ux::underline_char(paint, at, &text, index, crate::ux::types::SMALL, crate::ux::LIGHT.text);
         }
     });
     out.textures_delta.clear();
@@ -18205,6 +18205,29 @@ fn the_badge_names_the_model_and_a_changed_setting_never_switches_a_running_conv
     assert_eq!((started[1].provider, started[1].model.as_str(), started[1].resume), (Provider::Claude, "opus", true));
 }
 
+/// A reply keeps its faces and sizes in both appearances: its words in Inter at 13 on 19 with no
+/// background, code in the monospace face a point smaller on the field colour, and between two
+/// blocks a gap of a third of a line.
+#[test]
+fn a_reply_keeps_its_faces_and_sizes() {
+    for dark in [false, true] {
+        let p = crate::ux::palette(dark);
+        let r = crate::chat_markdown::render("Name it `snake_case`.\n\nNext block.", p, 400.0);
+        let format = |needle: &str| {
+            let at = r.job.text.find(needle).unwrap();
+            r.job.sections.iter().find(|s| s.byte_range.start.0 <= at && at < s.byte_range.end.0).unwrap().format.clone()
+        };
+        let words = format("Name");
+        assert_eq!((words.font_id.size, words.font_id.family, words.line_height), (13.0, crate::ux::regular(), Some(19.0)));
+        assert_eq!(words.background.to_array(), [0; 4], "words have no background");
+        let code = format("snake_case");
+        assert_eq!((code.font_id.size, code.font_id.family, code.background), (12.0, egui::FontFamily::Monospace, p.field));
+        let gaps: Vec<_> = r.job.sections.iter().filter(|s| s.format.font_id.size < 12.0).map(|s| s.format.clone()).collect();
+        assert_eq!(gaps.len(), 1, "one gap between the two blocks");
+        assert_eq!((gaps[0].font_id.size, gaps[0].font_id.family.clone(), gaps[0].line_height), (6.0, crate::ux::regular(), Some(7.0)));
+    }
+}
+
 /// Only a web link in a reply is a control, and it opens only after its confirmation.
 #[test]
 fn only_a_web_link_in_a_reply_opens_and_only_after_its_confirmation() {
@@ -27047,7 +27070,7 @@ fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<egui::Color32>
         match s {
             egui::Shape::Text(t) if t.galley.job.text == text => {
                 let colour = t.galley.job.sections.first().map_or(t.fallback_color, |s| s.format.color);
-                Some(t.override_text_color.unwrap_or(if colour == egui::Color32::PLACEHOLDER { t.fallback_color } else { colour }))
+                Some(t.override_text_color.unwrap_or(if colour == crate::ux::PLACEHOLDER_INK { t.fallback_color } else { colour }))
             }
             egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, text)),
             _ => None,

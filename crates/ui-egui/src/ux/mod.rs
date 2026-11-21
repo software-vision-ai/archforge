@@ -2,6 +2,15 @@
 //! helpers that draw them. Home draws through this module; `crate::theme` gives the toolkit's own
 //! visuals the same palette. The design has two appearances, Light and Dark, chosen by the
 //! shell's theme.
+//!
+//! The interface's colours and fonts are made here alone: the gate refuses egui's colour and font
+//! constructors elsewhere (`clippy.toml`) and its colour constants and font literals (the ux scan
+//! of `cargo xtask layers`).
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "ux is where the interface's colours and fonts are made; everything else draws through it"
+)]
 
 pub mod icons;
 mod raster;
@@ -262,6 +271,46 @@ pub fn palette(dark: bool) -> &'static Palette {
     if dark { &DARK } else { &LIGHT }
 }
 
+/// No paint: a background or an edge that is not drawn.
+pub const CLEAR: Color32 = Color32::TRANSPARENT;
+
+/// The tint that draws a picture in its own colours.
+pub const UNTINTED: Color32 = Color32::WHITE;
+
+/// The colour of text laid out to be measured, or to be drawn in the colour given when it is
+/// painted.
+pub const PLACEHOLDER_INK: Color32 = Color32::PLACEHOLDER;
+
+/// The ring that marks the chosen point on the colour picker's field and hue bar: white in both
+/// appearances, so it shows on every colour, with a thin dark edge ([`MARK_EDGE`]).
+pub const MARK: Color32 = Color32::WHITE;
+
+/// The thin dark edge round the picker's [`MARK`]: black at 35 %.
+pub const MARK_EDGE: Color32 = Color32::from_black_alpha(90);
+
+/// A colour the document holds (a node's own fill, line or text, chosen in the Appearance panel),
+/// not one of the design's: the one way a colour read from data is made.
+pub fn data_colour(r: u8, g: u8, b: u8) -> Color32 {
+    Color32::from_rgb(r, g, b)
+}
+
+/// The colour picker's colour of hue, saturation and brightness, each from 0 to 1, as the picker
+/// shows them (in gamma space), fully opaque.
+pub fn from_hsv(h: f32, s: f32, v: f32) -> Color32 {
+    egui::ecolor::HsvaGamma { h, s, v, a: 1.0 }.into()
+}
+
+/// `c` as the colour picker's hue, saturation and brightness ([`from_hsv`]).
+pub fn to_hsv(c: Color32) -> [f32; 3] {
+    let hsv = egui::ecolor::HsvaGamma::from(c);
+    [hsv.h, hsv.s, hsv.v]
+}
+
+/// The own-colour swatch's colour at `t` (0 to 1) round its disc: every hue, a little soft.
+pub fn swatch_hue(t: f32) -> Color32 {
+    egui::ecolor::Hsva::new(t, 0.75, 0.95, 1.0).into()
+}
+
 /// A text style of the design: Inter at a size, in a line of a height, regular or semibold, with
 /// extra space between letters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -285,8 +334,14 @@ impl Type {
         Self { size: self.size * z, line: self.line * z, semibold: self.semibold, spacing: self.spacing * z }
     }
 
+    /// The style's face at its size: Inter, regular or semibold.
     pub fn font(self) -> FontId {
         FontId::new(self.size, if self.semibold { semibold() } else { regular() })
+    }
+
+    /// The monospace face a point under the style's size: code set in its text.
+    pub fn code(self) -> FontId {
+        FontId::new(self.size - 1.0, FontFamily::Monospace)
     }
 }
 
@@ -317,6 +372,15 @@ pub mod types {
     /// A smaller eyebrow, over a section below a list.
     pub const EYEBROW_SMALL: Type = Type { size: 10.0, line: 12.0, semibold: true, spacing: 0.4 };
     pub const TINY: Type = Type::regular(10.0, 15.0);
+    /// A skill's Markdown, in its editor and its preview: three sizes of heading, then the text
+    /// (and the fourth heading, semibold) at a looser line than Body's.
+    pub const MARKDOWN_H1: Type = Type::semibold(22.0, 32.0);
+    pub const MARKDOWN_H2: Type = Type::semibold(18.0, 27.0);
+    pub const MARKDOWN_H3: Type = Type::semibold(16.0, 24.0);
+    pub const MARKDOWN_BODY: Type = Type::regular(14.0, 22.0);
+    pub const MARKDOWN_STRONG: Type = Type::semibold(14.0, 22.0);
+    /// The small gap between a chat reply's blocks: an empty line of a third of the reply's.
+    pub const CHAT_GAP: Type = Type::regular(6.0, 7.0);
 }
 
 /// A face from the optional fonts input: empty unless built with `CRAFT_FONTS_DIR`.

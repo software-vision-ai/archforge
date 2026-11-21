@@ -446,10 +446,10 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, id: Uuid
 /// The page's look in Preview: the shell's faces and colours in place of egui's. The viewer sizes
 /// its headings between Body and Heading, and marks strong text by its colour alone.
 fn preview_style(style: &mut egui::Style, p: &Palette) {
-    use egui::{FontId, TextStyle};
+    use egui::TextStyle;
     style.text_styles.insert(TextStyle::Body, types::BODY.font());
-    style.text_styles.insert(TextStyle::Heading, FontId::new(22.0, types::BODY_STRONG.font().family));
-    style.text_styles.insert(TextStyle::Monospace, FontId::new(13.0, egui::FontFamily::Monospace));
+    style.text_styles.insert(TextStyle::Heading, types::MARKDOWN_H1.font());
+    style.text_styles.insert(TextStyle::Monospace, types::BODY.code());
     style.spacing.item_spacing = vec2(8.0, 8.0);
     let v = &mut style.visuals;
     v.widgets.noninteractive.fg_stroke.color = p.text_secondary;

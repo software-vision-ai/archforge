@@ -31,6 +31,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - the control channel's tokens, roles and revocation: `crates/control/src/tests.rs`; what the
     window lets a read-only token do: the `tests` module in `crates/ui-egui/src/control.rs`
   - the shell's process and network scan: the `tests` module in `xtask/src/shell_io.rs`
+  - the scan for colours and fonts made outside `ux`: the `tests` module in
+    `xtask/src/ux_literals.rs`
   - name rules: the case table in `crates/names/src/lib.rs`
   - API keys: `crates/secrets/src/tests.rs`, against `MemoryStore`; another crate's tests use
     `archforge_secrets::MemoryStore` (feature `testing`), never the system's store

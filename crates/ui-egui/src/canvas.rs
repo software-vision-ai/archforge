@@ -413,7 +413,7 @@ pub(crate) struct Look {
 pub(crate) fn colour(hex: &str) -> Option<egui::Color32> {
     let h = hex.strip_prefix('#').filter(|h| h.len() == 6 && h.is_ascii())?;
     let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
-    Some(egui::Color32::from_rgb(byte(0)?, byte(2)?, byte(4)?))
+    Some(crate::ux::data_colour(byte(0)?, byte(2)?, byte(4)?))
 }
 
 /// A colour as `#rrggbb`.

@@ -713,7 +713,7 @@ fn an_open_editor_stops_every_way_of_leaving() {
 #[test]
 fn leaving_closes_a_colour_picker_and_a_refusal_keeps_it() {
     use crate::appearance::{Group, Picker};
-    let picker = || Some(Picker::new(Group::Fill, egui::Color32::RED));
+    let picker = || Some(Picker::new(Group::Fill, crate::ux::data_colour(0xFF, 0x00, 0x00)));
     in_both(|mut h, _| {
         let earlier = rows_now(&h);
         h.state_mut().panels.picker = picker();
