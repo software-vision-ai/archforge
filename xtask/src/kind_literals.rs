@@ -582,6 +582,11 @@ mod tests {
         assert_eq!(found("const F: (&str, &str) = (\"er\", \"// not a diagram kind: x\");"), [er_at(1)]);
         // A `//` inside a literal opens no comment, and the real one after it still counts.
         assert_eq!(found("const F: (&str, &str) = (\"http://x\", \"er\"); // not a diagram kind: a search"), Vec::<String>::new());
+        // Columns count characters, as the parser's do: thirty bytes more than characters before a
+        // literal leave its `//` inside it, so a mark written in a string marks nothing.
+        let wide = "€".repeat(15);
+        assert_eq!(found(&format!("const F: (&str, &str) = (\"{wide}\", \"// not a diagram kind: x\");\nconst G: &str = \"er\";")), [er_at(2)]);
+        assert_eq!(found(&format!("const F: (&str, &str) = (\"{wide}\", \"er\"); // not a diagram kind: a search")), Vec::<String>::new());
     }
 
     /// A raw C string is one literal, so the string after it is read as it is (CodeRabbit on #572).
