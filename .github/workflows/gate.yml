@@ -7,9 +7,11 @@
 # Dolt for the storage tests. OMG's UML files are not here, so the generated step checks our own
 # metamodels and skips UML's, as it does wherever ARCHFORGE_SPECS_DIR is unset.
 #
-# Rust, Dolt and cargo-deny are the versions the gate runs with on the maintainer's machine, each
-# downloaded at a fixed version and, where it is a download, checked against its checksum. A pull
-# request from a fork runs with a read-only token and no secrets.
+# Rust is the version rust-toolchain.toml names, which rustup reads wherever cargo runs in the
+# checkout, here as on a contributor's machine and in the release jobs. Dolt and cargo-deny are the
+# versions the gate runs with on the maintainer's machine, each downloaded at a fixed version and
+# checked against its checksum. A pull request from a fork runs with a read-only token and no
+# secrets.
 name: Gate
 
 on:
@@ -33,7 +35,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
-  RUST_VERSION: "1.96.1"
   DOLT_VERSION: "2.7.5"
   DOLT_SHA256: ab4f57f6031da5123d4edb9fa43676d5fe50cd08d099cdf3e0ae632bf378dbba
   DENY_VERSION: "0.20.2"
@@ -55,10 +56,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev \
             libxrandr-dev libxi-dev libxcursor-dev libgl1-mesa-dev mesa-vulkan-drivers libvulkan1
-      - name: Rust, with the lints, the formatter and the web target the portable step builds for
+      - name: Rust at the version rust-toolchain.toml names, with what the file lists
+        # With no toolchain named, rustup installs the checkout's own: the version, the lints, the
+        # formatter and the web target the portable step builds for.
         run: |
-          rustup toolchain install "$RUST_VERSION" --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
-          rustup default "$RUST_VERSION"
+          rustup toolchain install
+          rustup show active-toolchain
           rustc --version
       - name: Dolt, for the storage tests
         run: |
