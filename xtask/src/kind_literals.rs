@@ -15,9 +15,11 @@
 //! Generated code (any `generated` folder) is left out: `cargo xtask generate` writes it from the
 //! XMI and the `generated` step checks it; the word there is a metamodel's name.
 //!
-//! The table cannot fall behind the notations: outside tests, every `fn kinds` that lists its
-//! diagram kinds (`&[…]`, how a notation registers them) must list constants of [`KINDS`], never a
-//! literal or a constant missing from the table.
+//! The table cannot fall behind the notations: outside tests, every `fn kinds` returning a slice
+//! of strings (how a notation registers its diagram kinds) must be a list (`&[…]`) whose every
+//! element, parentheses taken off, is a constant of [`KINDS`] named at its crate's root; a literal,
+//! a constant missing from the table or named through another module, and anything this check
+//! cannot read (a cast, a macro, a block, a body that is no list) is a finding.
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path};
@@ -175,58 +177,152 @@ fn literals(lexed: &Lexed, words: &[(String, &str)], exempt: Option<usize>) -> V
     out
 }
 
-/// What a notation registers as one of its diagram kinds: a constant by name, or a literal.
+/// What a notation registers as one of its diagram kinds: a constant by its path, a literal, or an
+/// element this check cannot read (a cast, a macro, a block, a list it cannot find the end of),
+/// written out as it reads.
 #[derive(Debug, Clone, PartialEq)]
 enum Registered {
-    Constant(String),
+    Constant(Vec<String>),
     Literal(String),
+    Unreadable(String),
 }
 
-/// What each `fn kinds` of `lexed` lists (`&[A, crate::B, …]`), with its line. A `kinds` that
-/// declares no body, or returns anything but such a list, registers nothing here.
-fn registered(lexed: &Lexed) -> Vec<(Registered, usize)> {
-    let t = &lexed.tokens;
-    let mut out = Vec::new();
-    for at in 0..t.len() {
-        if !matches!(t.get(at..at + 2), Some([(Tok::Name(f), _), (Tok::Name(k), _)]) if f == "fn" && k == "kinds") {
-            continue;
-        }
-        // The body opens after the signature; a declaration ends at its semicolon.
-        let Some(open) = (at + 2..at + 40).find(|j| matches!(t.get(*j), Some((Tok::Punct('{' | ';'), _)))) else { continue };
-        if !matches!(t.get(open..open + 3), Some([(Tok::Punct('{'), _), (Tok::Punct('&'), _), (Tok::Punct('['), _)])) {
-            continue;
-        }
-        let mut last: Option<(String, usize)> = None;
-        for (token, line) in t.iter().skip(open + 3) {
-            match token {
-                Tok::Text(v) => out.push((Registered::Literal(v.clone()), *line)),
-                Tok::Name(n) => last = Some((n.clone(), *line)),
-                Tok::Punct(':') => {}
-                Tok::Punct(',') => out.extend(last.take().map(|(n, l)| (Registered::Constant(n), l))),
-                _ => {
-                    out.extend(last.take().map(|(n, l)| (Registered::Constant(n), l)));
-                    break;
+/// How many tokens a `fn kinds` signature may take before its body opens.
+const MAX_SIGNATURE: usize = 40;
+
+/// `tokens` written out again, a space between two names.
+fn shown(tokens: &[(Tok, usize)]) -> String {
+    let mut out = String::new();
+    for (i, (token, _)) in tokens.iter().enumerate() {
+        let after_name = i > 0 && matches!(tokens.get(i - 1), Some((Tok::Name(_), _)));
+        match token {
+            Tok::Name(n) => {
+                if after_name {
+                    out.push(' ');
                 }
+                out.push_str(n);
             }
+            Tok::Text(v) => out.push_str(&format!("\"{v}\"")),
+            Tok::Punct(c) => out.push(*c),
         }
     }
     out
 }
 
-/// The findings for what `rel` (a source of the crate `krate`, outside its tests) registers: a
-/// literal, or a constant [`KINDS`] does not name for that crate.
+/// One element of a kinds list, its parentheses taken off: a path of names (`A`, `crate::A`), a
+/// literal, or anything else, unreadable.
+fn element(mut tokens: &[(Tok, usize)]) -> Registered {
+    while let [(Tok::Punct('('), _), inner @ .., (Tok::Punct(')'), _)] = tokens {
+        tokens = inner;
+    }
+    if let [(Tok::Text(v), _)] = tokens {
+        return Registered::Literal(v.clone());
+    }
+    // A path: names joined by `::`.
+    let mut path = Vec::new();
+    let mut rest = tokens;
+    loop {
+        match rest {
+            [(Tok::Name(n), _), (Tok::Punct(':'), _), (Tok::Punct(':'), _), more @ ..] if !more.is_empty() => {
+                path.push(n.clone());
+                rest = more;
+            }
+            [(Tok::Name(n), _)] => {
+                path.push(n.clone());
+                return Registered::Constant(path);
+            }
+            _ => return Registered::Unreadable(shown(tokens)),
+        }
+    }
+}
+
+/// What each `fn kinds` of `lexed` registers, with its line: every element of the list its body is
+/// (`&[A, crate::B, …]`). Only a `kinds` returning a slice of strings (its signature ending in
+/// `str]`) registers; one that is declared only, or returns anything else (a `Vec`), does not. A
+/// registering `kinds` whose body is no list, or whose list does not end, is unreadable.
+fn registered(lexed: &Lexed) -> Vec<(Registered, usize)> {
+    let t = &lexed.tokens;
+    let mut out = Vec::new();
+    for at in 0..t.len() {
+        let Some([(Tok::Name(f), line), (Tok::Name(k), _)]) = t.get(at..at + 2) else { continue };
+        if f != "fn" || k != "kinds" {
+            continue;
+        }
+        // The body opens after the signature; a declaration ends at its semicolon.
+        let Some(open) = (at + 2..at + MAX_SIGNATURE).find(|j| matches!(t.get(*j), Some((Tok::Punct('{' | ';'), _)))) else {
+            out.push((Registered::Unreadable("a signature too long to read".into()), *line));
+            continue;
+        };
+        let slice = matches!(t.get(open.saturating_sub(2)..open), Some([(Tok::Name(s), _), (Tok::Punct(']'), _)]) if s == "str");
+        if !slice || !matches!(t.get(open), Some((Tok::Punct('{'), _))) {
+            continue;
+        }
+        if !matches!(t.get(open + 1..open + 3), Some([(Tok::Punct('&'), _), (Tok::Punct('['), _)])) {
+            let body = t.get(open + 1..(open + 6).min(t.len())).unwrap_or_default();
+            out.push((Registered::Unreadable(format!("a body that is no list: {}", shown(body))), *line));
+            continue;
+        }
+        // The elements, split at the commas outside any bracket, up to the list's own `]`.
+        let (mut depth, mut from, mut closed) = (0usize, open + 3, false);
+        for j in open + 3..t.len() {
+            match t.get(j) {
+                Some((Tok::Punct('(' | '[' | '{'), _)) => depth += 1,
+                Some((Tok::Punct(')' | '}'), _)) => depth = depth.saturating_sub(1),
+                Some((Tok::Punct(']'), _)) if depth > 0 => depth -= 1,
+                Some((Tok::Punct(c @ (',' | ']')), _)) if depth == 0 => {
+                    let items = t.get(from..j).unwrap_or_default();
+                    if let Some((_, first)) = items.first() {
+                        out.push((element(items), *first));
+                    }
+                    from = j + 1;
+                    if *c == ']' {
+                        closed = true;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if !closed {
+            out.push((Registered::Unreadable("a list that does not end".into()), *line));
+        }
+    }
+    out
+}
+
+/// The findings for what `rel` (a source of the crate `krate`, outside its tests) registers. A
+/// constant passes when [`KINDS`] lists its name for that crate and its path leads to the crate's
+/// root: the name alone (the root's, or brought in by `use`), or through `crate`, `self`, `super`
+/// or the crate's own name. A path through any other module, a literal, or an element this check
+/// cannot read is a finding.
 fn unlisted(rel: &str, krate: &str, lexed: &Lexed) -> Vec<String> {
     let home = format!("crates/{krate}/");
+    let own = format!("archforge_{}", krate.replace('-', "_"));
+    let rooted = |p: &[String]| p.iter().all(|s| s == "crate" || s == "self" || s == "super" || *s == own);
     registered(lexed)
         .into_iter()
         .filter_map(|(r, line)| match r {
             Registered::Literal(v) => Some(format!(
                 "{rel} line {line}: the diagram kind \"{v}\" is registered as a literal; give it a public constant in this crate and list it in KINDS (xtask/src/kind_literals.rs)"
             )),
-            Registered::Constant(n) if KINDS.iter().any(|k| k.file.starts_with(&home) && k.name == n) => None,
-            Registered::Constant(n) => Some(format!(
-                "{rel} line {line}: the diagram kind {n} is missing from KINDS (xtask/src/kind_literals.rs), so its word is not checked"
+            Registered::Unreadable(what) => Some(format!(
+                "{rel} line {line}: a diagram kind registered as {what}, which this check cannot read; list the kind's constant by name"
             )),
+            Registered::Constant(path) => {
+                let Some((name, through)) = path.split_last() else {
+                    return Some(format!("{rel} line {line}: a diagram kind registered as an empty path; list the kind's constant by name"));
+                };
+                if !rooted(through) {
+                    Some(format!(
+                        "{rel} line {line}: the diagram kind {} is named through a module; name the constant at the crate's root, as KINDS (xtask/src/kind_literals.rs) lists it",
+                        path.join("::")
+                    ))
+                } else if KINDS.iter().any(|k| k.file.starts_with(&home) && k.name == name) {
+                    None
+                } else {
+                    Some(format!("{rel} line {line}: the diagram kind {name} is missing from KINDS (xtask/src/kind_literals.rs), so its word is not checked"))
+                }
+            }
         })
         .collect()
 }
@@ -386,6 +482,52 @@ mod tests {
         assert_eq!(registered(&lex(declared)), Vec::new());
         assert_eq!(registered(&lex("fn kinds(&self) -> Vec<&'static str> { self.all() }")), Vec::new());
         assert_eq!(registered(&lex("fn kinds(&self) -> &'static [&'static str] { &[] }")), Vec::new());
+    }
+
+    /// Every element of a kinds list is read, in parentheses too: a constant named at the crate's
+    /// root passes, and a constant missing from KINDS, one named through another module, or an
+    /// element the check cannot read is a finding, never skipped.
+    #[test]
+    fn every_element_of_a_kinds_list_is_read_and_what_cannot_be_is_a_finding() {
+        let found = |list: &str| unlisted("crates/er/src/lib.rs", "er", &lex(&format!("fn kinds(&self) -> &'static [&'static str] {{ {list} }}")));
+        for passes in [
+            "&[(DIAGRAM_KIND)]",
+            "&[((crate::DIAGRAM_KIND))]",
+            "&[self::DIAGRAM_KIND, super::DIAGRAM_KIND, archforge_er::DIAGRAM_KIND,]",
+            "&[\n    DIAGRAM_KIND,\n]",
+        ] {
+            assert_eq!(found(passes), Vec::<String>::new(), "{passes}");
+        }
+        let missing =
+            "crates/er/src/lib.rs line 1: the diagram kind NEW_KIND is missing from KINDS (xtask/src/kind_literals.rs), so its word is not checked";
+        assert_eq!(found("&[(NEW_KIND)]"), [missing]);
+        assert_eq!(found("&[DIAGRAM_KIND, (crate::NEW_KIND)]"), [missing]);
+        assert_eq!(
+            found("&[generated::DIAGRAM_KIND]"),
+            [
+                "crates/er/src/lib.rs line 1: the diagram kind generated::DIAGRAM_KIND is named through a module; name the constant at the crate's root, as KINDS (xtask/src/kind_literals.rs) lists it"
+            ]
+        );
+        let unread = |what: &str| {
+            format!(
+                "crates/er/src/lib.rs line 1: a diagram kind registered as {what}, which this check cannot read; list the kind's constant by name"
+            )
+        };
+        assert_eq!(found("&[DIAGRAM_KIND as &str]"), [unread("DIAGRAM_KIND as&str")]);
+        assert_eq!(found("&[concat!(\"e\", \"r\"), DIAGRAM_KIND]"), [unread("concat!(\"e\",\"r\")")]);
+        assert_eq!(found("&[{ NEW_KIND }]"), [unread("{NEW_KIND}")]);
+        assert_eq!(found("&[[NEW_KIND][0]]"), [unread("[NEW_KIND][0]")]);
+        assert_eq!(found("&[crate::]"), [unread("crate::")]);
+        assert_eq!(found("KINDS"), [unread("a body that is no list: KINDS}")]);
+        assert_eq!(found("&KINDS"), [unread("a body that is no list: &KINDS}")]);
+        // A list that never ends, and a signature too long to find its body, are findings too.
+        let open = lex("fn kinds(&self) -> &'static [&'static str] { &[DIAGRAM_KIND");
+        assert_eq!(registered(&open), [(Registered::Unreadable("a list that does not end".into()), 1)]);
+        let long = lex(&format!("fn kinds{}", " x".repeat(MAX_SIGNATURE)));
+        assert_eq!(registered(&long), [(Registered::Unreadable("a signature too long to read".into()), 1)]);
+        // A kinds of another shape (a Vec), or a function named otherwise, registers nothing.
+        assert_eq!(registered(&lex("fn kinds(&self) -> Vec<&'static str> { vec![\"er\"] }")), Vec::new());
+        assert_eq!(registered(&lex("fn kind_names(&self) -> &'static [&'static str] { &[\"er\"] }")), Vec::new());
     }
 
     /// Tests and generated code are told apart by their paths, and a source's crate by its folder.
