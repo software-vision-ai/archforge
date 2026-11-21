@@ -23,9 +23,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: gate-${{ github.ref }}
-  # A new push to a pull request replaces the run of the push before it; runs on main all finish.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # A new push to a pull request replaces the run of the push before it. Every other run has a
+  # group of its own, so each push to main is checked: within one group GitHub also drops a queued
+  # run when a newer one arrives, whatever cancel-in-progress says.
+  group: gate-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
