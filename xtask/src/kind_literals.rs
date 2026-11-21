@@ -171,23 +171,33 @@ impl Literals {
 }
 
 impl Literals {
-    /// Takes the literals of an attribute's tokens (`doc = …` or `cfg_attr(…)` in a macro, the list
-    /// of a `cfg_attr(…)` or `serde(…)` in the code):
-    /// each part between commas that starts with `doc` (`doc = …`, `doc(…)`) is documentation, at
-    /// any depth, so `cfg_attr(…, doc = …)` is documentation as `doc` is: its literals, in macros
-    /// such as `concat!` too, are placed but never read. Every other part is read.
+    /// Takes the literals of one attribute's tokens, its path and what follows (`doc = …`,
+    /// `cfg_attr(…)`, `serde(…)`), as written in a macro or applied by a `cfg_attr`. A `doc`
+    /// attribute (`doc = …`, `doc(…)`) is documentation: its literals, in macros such as `concat!`
+    /// too, are placed but never read. A `cfg_attr(…)` is read by position
+    /// ([`Literals::cfg_attr`]), as the parser reads one in the code, whatever brackets hold its
+    /// arguments. Every other attribute is read.
     fn attribute(&mut self, stream: TokenStream) {
+        let trees: Vec<TokenTree> = stream.clone().into_iter().collect();
+        match trees.as_slice() {
+            [TokenTree::Ident(i), ..] if i == "doc" => self.tokens(stream, false),
+            [TokenTree::Ident(i), TokenTree::Group(g)] if i == "cfg_attr" => self.cfg_attr(g.stream()),
+            _ => self.tokens(stream, true),
+        }
+    }
+
+    /// Takes the literals of a `cfg_attr`'s arguments by position. The first is its condition,
+    /// code that is read even where it names `doc` (`cfg_attr(doc = "…", …)`, `all(doc, …)`); each
+    /// one after it is an attribute the condition applies, read as one ([`Literals::attribute`]),
+    /// so only a real `doc` among them, in a nested `cfg_attr` too, is documentation.
+    fn cfg_attr(&mut self, stream: TokenStream) {
         let trees: Vec<TokenTree> = stream.into_iter().collect();
-        for part in trees.split(|t| matches!(t, TokenTree::Punct(p) if p.as_char() == ',')) {
-            let doc = matches!(part.first(), Some(TokenTree::Ident(i)) if i == "doc");
-            for tree in part {
-                match tree {
-                    TokenTree::Group(g) if doc => self.tokens(g.stream(), false),
-                    TokenTree::Group(g) => self.attribute(g.stream()),
-                    TokenTree::Literal(l) => self.take(&Lit::new(l.clone()), !doc),
-                    TokenTree::Ident(_) | TokenTree::Punct(_) => {}
-                }
-            }
+        let mut parts = trees.split(|t| matches!(t, TokenTree::Punct(p) if p.as_char() == ','));
+        if let Some(condition) = parts.next() {
+            self.tokens(condition.iter().cloned().collect(), true);
+        }
+        for part in parts {
+            self.attribute(part.iter().cloned().collect());
         }
     }
 
@@ -212,15 +222,17 @@ impl<'ast> Visit<'ast> for Literals {
     }
 
     /// An attribute's literals. Documentation (`doc = …` whatever expression it holds, `doc(…)`, and
-    /// a `doc` part of a list such as `cfg_attr(…, doc = …)`) is placed, so nothing in it reads as a
-    /// comment mark or a block comment's start, but never read; every other value is read.
+    /// a `doc` that a `cfg_attr(…)` applies, after its condition) is placed, so nothing in it reads
+    /// as a comment mark or a block comment's start, but never read; every other value, a
+    /// `cfg_attr`'s condition too, is read.
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         let doc = attr.path().is_ident("doc");
         match &attr.meta {
             Meta::NameValue(nv) if doc => self.placed(|me| me.visit_expr(&nv.value)),
             Meta::NameValue(nv) => self.visit_expr(&nv.value),
             Meta::List(list) if doc => self.tokens(list.tokens.clone(), false),
-            Meta::List(list) => self.attribute(list.tokens.clone()),
+            Meta::List(list) if list.path.is_ident("cfg_attr") => self.cfg_attr(list.tokens.clone()),
+            Meta::List(list) => self.tokens(list.tokens.clone(), true),
             Meta::Path(_) => {}
         }
     }
@@ -483,6 +495,23 @@ mod tests {
         assert_eq!(found("#[cfg_attr(feature = \"er\", doc = \"x\")]\nfn f() {}"), [er_at(1)]);
         assert_eq!(found("#[serde(rename = \"er\")]\nstruct S;"), [er_at(1)]);
         assert_eq!(found("m! {\n    #[cfg_attr(feature = \"er\", doc = \"x\")]\n    fn f() {}\n}"), [er_at(2)]);
+    }
+
+    /// A `cfg_attr`'s first argument is its condition, code even when it names `doc`; only the
+    /// attributes after it can be documentation (CodeRabbit on #572: `cfg_attr(doc = "er", …)`).
+    #[test]
+    fn a_cfg_attr_condition_is_read_and_only_its_attributes_document() {
+        assert_eq!(found("#[cfg_attr(doc = \"er\", allow(dead_code))]\nfn f() {}"), [er_at(1)]);
+        assert_eq!(found("#[cfg_attr(all(doc, feature = \"er\"), doc = \"er\")]\nfn f() {}"), [er_at(1)]);
+        assert_eq!(found("#[cfg_attr(test, cfg_attr(doc = \"er\", doc = \"er\"))]\nfn f() {}"), [er_at(1)]);
+        assert_eq!(found("#[cfg(doc = \"er\")]\nfn f() {}"), [er_at(1)]);
+        assert_eq!(found("m! {\n    #[cfg_attr(doc = \"er\", doc = \"er\")]\n    fn f() {}\n}"), [er_at(2)]);
+        assert_eq!(found("m! {\n    #![cfg_attr(test, cfg_attr(doc = \"er\", doc = \"er\"))]\n    fn f() {}\n}"), [er_at(2)]);
+        // Each attribute a `cfg_attr` applies is judged on its own: a doc beside another is
+        // documentation, the other attribute is read.
+        assert_eq!(found("#[cfg_attr(test, allow(dead_code), doc = \"er\")]\nfn f() {}"), Vec::<String>::new());
+        assert_eq!(found("#[cfg_attr(test, name = \"er\", doc = \"x\")]\nfn f() {}"), [er_at(1)]);
+        assert_eq!(found("#[cfg_attr(test, serde(rename = \"er\"))]\nstruct S;"), [er_at(1)]);
     }
 
     /// A mark with words after it, on the literal's line or the line above, lets it stand; two
