@@ -7,8 +7,9 @@
 //! project is a [`Session`] the project knows by its connection id, with the databases it may be
 //! using. Each one leaves its database before it closes, which the server has done once the reply
 //! comes. Before a rename, [`Sessions::let_go`] ends the ones still on the branch and waits until
-//! the server's process list no longer holds them; a session that still holds the branch after that
-//! is another program's, and Dolt's refusal stands.
+//! the server's process list no longer holds them, within [`LET_GO_BUDGET`] of wall-clock time; a
+//! session that still holds the branch after that is another program's, unless one of the
+//! project's own entered during the hold, and Dolt's refusal stands.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -18,13 +19,16 @@ use mysql::prelude::Queryable;
 
 use crate::Error;
 
-/// How long a rename waits for the server to drop the sessions it ended, and a new session for a
-/// rename of its database to finish: a bound, not a guess, as the server says when it is done.
+/// How long a rename may take to end its own sessions and see them dropped, all requests included,
+/// and how long a new session waits for a rename of its database to finish: a bound, not a guess,
+/// as the server says when it is done.
 const LET_GO_BUDGET: Duration = Duration::from_secs(10);
 /// The pause between two looks at the process list.
 const LOOK_AGAIN: Duration = Duration::from_millis(5);
 /// The database a session moves to before it closes: it is on no branch there.
 const NO_BRANCH: &str = "information_schema";
+/// Why a release stopped when its budget was spent.
+const LATE: &str = "the server did not let go of this Archforge's own sessions on the branch in time";
 
 /// What the project knows of its sessions.
 #[derive(Debug, Default)]
@@ -34,6 +38,9 @@ struct Known {
     sessions: HashMap<u32, BTreeSet<String>>,
     /// The database, lower case, whose branch is being renamed: no session moves to it meanwhile.
     renaming: Option<String>,
+    /// Whether a session moved to that database during the hold, once its wait ran out, whether it
+    /// is still there or not.
+    entered: bool,
 }
 
 /// The register and the signal that a rename has let go.
@@ -73,6 +80,59 @@ pub(crate) struct Renaming {
     register: Arc<Register>,
 }
 
+impl Renaming {
+    /// Whether a session of the project's moved to the database during the hold: a refusal then
+    /// may be the project's own doing, even if that session has left since.
+    pub(crate) fn entered(&self) -> bool {
+        self.register.lock().entered
+    }
+}
+
+/// What a release asks over its own connection, and the answer, as rows or why there are none.
+type Answer = Result<Vec<mysql::Row>, String>;
+
+/// The connection a release's requests run over, on a thread of its own: see
+/// [`Sessions::let_go_within`]. Dropping this lets the thread end.
+struct Release {
+    asks: std::sync::mpsc::Sender<String>,
+    answers: std::sync::mpsc::Receiver<Answer>,
+    until: Instant,
+}
+
+impl Release {
+    /// Starts the thread, which connects first and then answers each request in turn.
+    fn start(connector: archforge_dolt::Connector, until: Instant, before_each: Box<dyn Fn() + Send>) -> Result<Release, String> {
+        let (asks, asked) = std::sync::mpsc::channel::<String>();
+        let (answer, answers) = std::sync::mpsc::channel::<Answer>();
+        let work = move || {
+            let mut conn = connector.connect().map_err(|e| e.to_string());
+            for query in asked {
+                before_each();
+                let rows = match conn.as_mut() {
+                    Ok(c) => c.query::<mysql::Row, _>(query).map_err(|e| e.to_string()),
+                    Err(e) => Err(e.clone()),
+                };
+                if answer.send(rows).is_err() {
+                    break;
+                }
+            }
+        };
+        let started = std::thread::Builder::new().name("archforge-release".into()).spawn(work);
+        started.map_err(|e| format!("no thread could end this Archforge's own sessions: {e}"))?;
+        Ok(Release { asks, answers, until })
+    }
+
+    /// Asks `query` and waits for its answer until the budget is spent.
+    fn ask(&self, query: String) -> Answer {
+        self.asks.send(query).map_err(|_| "the release's connection has ended".to_string())?;
+        match self.answers.recv_timeout(self.until.saturating_duration_since(Instant::now())) {
+            Ok(answer) => answer,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(LATE.into()),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err("the release's connection has ended".into()),
+        }
+    }
+}
+
 impl Sessions {
     /// The sessions of the server `connector` reaches, none open yet.
     pub(crate) fn new(connector: archforge_dolt::Connector) -> Sessions {
@@ -87,33 +147,42 @@ impl Sessions {
         Ok(Session { conn, id, register: self.register.clone(), closing: false })
     }
 
-    /// Ends every other session of the project's that may be using `database` and waits until the
-    /// server has dropped them, over `by`, which is not on it. Until the hold it gives is dropped,
-    /// a session asked to move to `database` waits. A read on the branch at that moment fails.
-    pub(crate) fn let_go(&self, by: &mut Session, database: &str) -> Result<Renaming, String> {
+    /// Ends every session of the project's that may be using `database` and waits until the server
+    /// has dropped them, within [`LET_GO_BUDGET`]. Until the hold it gives is dropped, a session asked
+    /// to move to `database` waits. A read on the branch at that moment fails.
+    pub(crate) fn let_go(&self, database: &str) -> Result<Renaming, String> {
+        self.let_go_within(database, LET_GO_BUDGET, Box::new(|| {}))
+    }
+
+    /// [`Sessions::let_go`] within `budget`, with `before_each` run on the release's thread before
+    /// each of its requests, for a test to stall them. The requests go over a connection of their
+    /// own on a thread of their own, so the budget bounds the whole release, the connection and
+    /// every answer included, whatever the server does: once it is spent, the release stops asking
+    /// and waits for nothing more. A request left running ends at the server's answer or at the
+    /// connection's own timeout, and its thread with it; a `KILL` left running may still end its
+    /// session, which was on the branch.
+    pub(crate) fn let_go_within(&self, database: &str, budget: Duration, before_each: Box<dyn Fn() + Send>) -> Result<Renaming, String> {
+        let until = Instant::now() + budget;
         let database = database.to_ascii_lowercase();
         let ended: Vec<u32> = {
             let mut known = self.register.lock();
             known.renaming = Some(database.clone());
+            known.entered = false;
             known.sessions.iter().filter(|(_, dbs)| dbs.contains(&database)).map(|(id, _)| *id).collect()
         };
         let held = Renaming { register: self.register.clone() };
         if ended.is_empty() {
             return Ok(held);
         }
-        let until = Instant::now() + LET_GO_BUDGET;
-        let late = || "the server did not let go of this Archforge's own sessions on the branch".to_string();
+        let release = Release::start(self.connector.clone(), until, before_each)?;
         for id in &ended {
-            if Instant::now() >= until {
-                return Err(late());
-            }
             // An id the server no longer has is no error (measured on 2.7.5).
-            by.query_drop(format!("KILL {id}")).map_err(|e| format!("this Archforge's own session on the branch could not be ended: {e}"))?;
+            release.ask(format!("KILL {id}")).map_err(|e| format!("this Archforge's own session on the branch could not be ended: {e}"))?;
         }
         loop {
             // Read as rows, not numbers: an id that is not one fails the listing, never a panic.
             let unlisted = |why: String| format!("the server's sessions cannot be listed: {why}");
-            let rows: Vec<mysql::Row> = by.query("SELECT ID FROM information_schema.processlist").map_err(|e| unlisted(e.to_string()))?;
+            let rows = release.ask("SELECT ID FROM information_schema.processlist".into()).map_err(unlisted)?;
             let listed = rows
                 .iter()
                 .map(|r| r.get_opt::<u64, usize>(0).and_then(Result::ok).ok_or_else(|| unlisted("an id is not a number".into())))
@@ -123,18 +192,12 @@ impl Sessions {
             if ended.iter().all(gone) {
                 return Ok(held);
             }
-            if Instant::now() >= until {
-                return Err(late());
+            let left = until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err(LATE.into());
             }
-            std::thread::sleep(LOOK_AGAIN);
+            std::thread::sleep(LOOK_AGAIN.min(left));
         }
-    }
-
-    /// Whether a session of the project's may be using `database`: one asked to move there after a
-    /// rename's hold had lasted past [`LET_GO_BUDGET`].
-    pub(crate) fn may_use(&self, database: &str) -> bool {
-        let database = database.to_ascii_lowercase();
-        self.register.lock().sessions.values().any(|dbs| dbs.contains(&database))
     }
 
     /// The ids of the sessions known now, for a test to count.
@@ -161,7 +224,8 @@ impl Session {
 
     /// Moves this session to `database`, once no rename holds it; the register has it first, so a
     /// rename that starts meanwhile ends this session. A hold that lasts past [`LET_GO_BUDGET`] is
-    /// waited out no longer: the rename then meets this session as Dolt reports it.
+    /// waited out no longer, and the hold records that a session entered: the rename then meets
+    /// this session as Dolt reports it, never as another program's.
     pub(crate) fn use_database(&mut self, database: &str) -> Result<(), mysql::Error> {
         let name = database.to_ascii_lowercase();
         {
@@ -173,6 +237,9 @@ impl Session {
                     break;
                 }
                 known = self.register.done.wait_timeout(known, left).map(|(k, _)| k).unwrap_or_else(|poisoned| poisoned.into_inner().0);
+            }
+            if known.renaming.as_ref() == Some(&name) {
+                known.entered = true;
             }
             known.sessions.entry(self.id).or_default().insert(name.clone());
         }

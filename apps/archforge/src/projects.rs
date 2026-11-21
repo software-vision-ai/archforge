@@ -5922,17 +5922,22 @@ mod tests {
         let (release, held) = channel::<()>();
         let (renamed, read) = std::thread::scope(|scope| {
             let mut started = None;
-            let renamed = open[0].rename_branch_meanwhile(&target, &branch("moved"), || {
-                let target = target.clone();
-                started = Some(scope.spawn(move || {
-                    reader.branch_counts_interrupted(&target, || {
-                        let _ = reached.send(());
-                        let _ = held.recv_timeout(Duration::from_secs(30));
-                    })
-                }));
-                // Unheld, the read would be on the branch well within this.
-                assert!(on_it.recv_timeout(Duration::from_secs(1)).is_err(), "the read reached the branch during the rename");
-            });
+            let renamed = open[0].rename_branch_meanwhile(
+                &target,
+                &branch("moved"),
+                || {
+                    let target = target.clone();
+                    started = Some(scope.spawn(move || {
+                        reader.branch_counts_interrupted(&target, || {
+                            let _ = reached.send(());
+                            let _ = held.recv_timeout(Duration::from_secs(30));
+                        })
+                    }));
+                    // Unheld, the read would be on the branch well within this.
+                    assert!(on_it.recv_timeout(Duration::from_secs(1)).is_err(), "the read reached the branch during the rename");
+                },
+                || {},
+            );
             drop(release);
             (renamed, started.map(|read| read.join().unwrap()))
         });
@@ -5941,18 +5946,58 @@ mod tests {
     }
 
     /// A session of this Archforge's own that waited for the rename past its bound and went on to the
-    /// branch is not taken for another program's: the rename fails with Dolt's words.
-    #[test]
-    fn a_rename_never_blames_another_program_for_its_own_session() {
+    /// branch is not taken for another program's: the rename fails with Dolt's words. With
+    /// `leaves`, that session leaves again once Dolt has refused, before the refusal is looked at.
+    fn own_late_session_is_not_another_program(leaves: bool) {
         let (sandbox, _path) = branched();
         let open = lock(&sandbox.host.inner.open);
         open[0].run_on_branch("main", "CALL DOLT_BRANCH('Upper')").unwrap();
-        let mut late = None;
-        let answer = open[0].rename_branch_meanwhile(&branch("Upper"), &branch("moved"), || {
-            late = Some(open[0].own_session_on("UPPER").unwrap());
-        });
+        let late = std::cell::RefCell::new(None);
+        let enter = || *late.borrow_mut() = Some(open[0].own_session_on("UPPER").unwrap());
+        let answered = || {
+            if leaves {
+                drop(late.borrow_mut().take());
+            }
+        };
+        let answer = open[0].rename_branch_meanwhile(&branch("Upper"), &branch("moved"), enter, answered);
         assert!(matches!(&answer, Err(RenameBranchError::Failed(why)) if why.contains("in use")), "{answer:?}");
-        assert!(late.is_some_and(|mut s| s.active_branch() == Ok(Some("Upper".into()))));
+        assert!(has_branch(&open[0], "Upper") && !has_branch(&open[0], "moved"));
+        let still = late.into_inner();
+        assert_eq!(still.is_none(), leaves);
+        assert!(still.is_none_or(|mut s| s.active_branch() == Ok(Some("Upper".into()))));
+        // The next hold starts clear: another program on the branch now is said to be one.
+        let _outside = open[0].outside_session_on("Upper").unwrap();
+        assert_eq!(open[0].rename_branch(&branch("Upper"), &branch("moved")), Err(RenameBranchError::InUse));
+    }
+
+    /// [`own_late_session_is_not_another_program`], the late session still there.
+    #[test]
+    fn a_rename_never_blames_another_program_for_its_own_session() {
+        own_late_session_is_not_another_program(false);
+    }
+
+    /// [`own_late_session_is_not_another_program`], the late session gone again before the refusal
+    /// is looked at: that it entered during the hold is what counts.
+    #[test]
+    fn a_rename_never_blames_another_program_for_its_own_session_gone_since() {
+        own_late_session_is_not_another_program(true);
+    }
+
+    /// Letting go of the project's own sessions stops once its budget is spent, however long the
+    /// server takes to answer: the rename fails by that reason, nothing is renamed, and the session
+    /// it could not end stays.
+    #[test]
+    fn a_rename_stops_letting_go_when_its_budget_is_spent() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let mut idle = open[0].own_session_on("elsewhere").unwrap();
+        let started = Instant::now();
+        let (budget, stall) = (Duration::from_millis(300), Duration::from_secs(30));
+        let answer = open[0].rename_branch_stalled(&branch("elsewhere"), &branch("moved"), budget, stall);
+        assert!(started.elapsed() < stall / 2, "it waited for the stalled request: {:?}", started.elapsed());
+        assert!(matches!(&answer, Err(RenameBranchError::Failed(why)) if why.contains("in time")), "{answer:?}");
+        assert!(has_branch(&open[0], "elsewhere") && !has_branch(&open[0], "moved"));
+        assert_eq!(idle.active_branch(), Ok(Some("elsewhere".into())), "nothing was ended");
     }
 
     /// Another program's session on the branch is left alone: the rename is refused by its own

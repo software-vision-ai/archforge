@@ -10,7 +10,7 @@ use crate::branch_name::{SafeBranch, UnsafeBranch};
 use crate::chat::{head, is_commit};
 use crate::creation::{self, BranchStore, CreationRecord, CreationRecovery, Found};
 use crate::model::{ModelSchema, database_connection, database_name, sql, unsaved_tables};
-use crate::sessions::{Renaming, Session, Sessions};
+use crate::sessions::{Renaming, Session};
 use crate::{DATABASE, Error, Project, VersionReader};
 use archforge_mof::Uuid;
 use archforge_mof::rows::Rows;
@@ -36,12 +36,6 @@ struct OpenBranches(Result<Session, String>);
 const IN_USE: &str = "branches in use in other sessions";
 
 impl OpenBranches {
-    /// Lets go of `database` everywhere but here: see [`Sessions::let_go`].
-    fn let_go(&mut self, sessions: &Sessions, database: &str) -> Result<Renaming, String> {
-        let c = self.0.as_mut().map_err(|e| e.clone())?;
-        sessions.let_go(c, database)
-    }
-
     /// Renames the branch; what the answer is worth is for the caller to read back.
     fn rename(&mut self, from: &SafeBranch, to: &SafeBranch) -> Result<(), String> {
         let c = self.0.as_mut().map_err(|e| e.clone())?;
@@ -374,18 +368,41 @@ impl Project {
             let done = if lands { store.rename(from, to) } else { Ok(()) };
             done.and_then(|()| if answered { Ok(()) } else { Err("the reply was lost".to_string()) })
         };
-        self.rename_steps(from, to, ask, || if readable { self.where_is(from, to) } else { Err("it cannot be read".to_string()) })
+        let read = || if readable { self.where_is(from, to) } else { Err("it cannot be read".to_string()) };
+        self.rename_steps(from, to, |db| self.sessions.let_go(db), ask, read)
     }
 
     /// [`Project::rename_branch`] with `meanwhile` run once this project's own sessions have let go
-    /// of `from`, just before the rename is asked for.
+    /// of `from`, just before the rename is asked for, and `answered` once Dolt has answered.
     #[cfg(feature = "testing")]
-    pub fn rename_branch_meanwhile(&self, from: &SafeBranch, to: &SafeBranch, meanwhile: impl FnOnce()) -> Result<(), RenameBranchError> {
+    pub fn rename_branch_meanwhile(
+        &self,
+        from: &SafeBranch,
+        to: &SafeBranch,
+        meanwhile: impl FnOnce(),
+        answered: impl FnOnce(),
+    ) -> Result<(), RenameBranchError> {
         let ask = |store: &mut OpenBranches| {
             meanwhile();
-            store.rename(from, to)
+            let answer = store.rename(from, to);
+            answered();
+            answer
         };
-        self.rename_steps(from, to, ask, || self.where_is(from, to))
+        self.rename_steps(from, to, |db| self.sessions.let_go(db), ask, || self.where_is(from, to))
+    }
+
+    /// [`Project::rename_branch`] with this project's own sessions let go of within `budget`, each
+    /// request of that taking `stall` longer, for a test to see the budget hold.
+    #[cfg(feature = "testing")]
+    pub fn rename_branch_stalled(
+        &self,
+        from: &SafeBranch,
+        to: &SafeBranch,
+        budget: std::time::Duration,
+        stall: std::time::Duration,
+    ) -> Result<(), RenameBranchError> {
+        let let_go = |db: &str| self.sessions.let_go_within(db, budget, Box::new(move || std::thread::sleep(stall)));
+        self.rename_steps(from, to, let_go, |store| store.rename(from, to), || self.where_is(from, to))
     }
 
     /// A session on `branch` that this project does not know, as another program's would be, for a
@@ -428,7 +445,7 @@ impl Project {
     /// types: [`SafeBranch::typed`] encodes anything not lower case, so `foo` and `Foo` from the
     /// dialog are two different stored names and both allowed.
     pub fn rename_branch(&self, from: &SafeBranch, to: &SafeBranch) -> Result<(), RenameBranchError> {
-        self.rename_steps(from, to, |store| store.rename(from, to), || self.where_is(from, to))
+        self.rename_steps(from, to, |db| self.sessions.let_go(db), |store| store.rename(from, to), || self.where_is(from, to))
     }
 
     /// The rename, from and to, whose outcome could not be told.
@@ -455,14 +472,15 @@ impl Project {
         }
     }
 
-    /// [`Project::rename_branch`], `ask` making the rename and `read` saying which of the names
-    /// exist. Dolt's success is taken as the rename done. Its failure is read back, as the reply
+    /// [`Project::rename_branch`], `let_go` letting go of the branch's database, `ask` making the
+    /// rename and `read` saying which of the names exist. Dolt's success is taken as the rename done. Its failure is read back, as the reply
     /// can be what was lost: only "still at the old name" is a failure, and not being able to tell
     /// holds the project until the same rename is asked for again or it closes.
     fn rename_steps(
         &self,
         from: &SafeBranch,
         to: &SafeBranch,
+        let_go: impl FnOnce(&str) -> Result<Renaming, String>,
         ask: impl FnOnce(&mut OpenBranches) -> Result<(), String>,
         read: impl Fn() -> Result<(bool, bool), String>,
     ) -> Result<(), RenameBranchError> {
@@ -503,7 +521,7 @@ impl Project {
         // (measured on 2.7.5). Its `--force` would pass over another program's session and overwrite
         // a branch named `to`, so it is never used: this project's own sessions let go first, held
         // off the branch until the answer is read, and a refusal left is another program's.
-        let _held = store.let_go(&self.sessions, &database_name(from)).map_err(failed)?;
+        let held = let_go(&database_name(from)).map_err(failed)?;
         let Err(why) = ask(&mut store) else {
             self.renamed(from, to);
             return Ok(());
@@ -513,9 +531,9 @@ impl Project {
                 self.renamed(from, to);
                 Ok(())
             }
-            // Only when no session of this project's may be on it: one that waited past the hold's
-            // budget is no other program's.
-            Ok((true, false)) if why.contains(IN_USE) && !self.sessions.may_use(&database_name(from)) => Err(RenameBranchError::InUse),
+            // Only when no session of this project's entered during the hold, there or gone since:
+            // one that waited past its budget is no other program's.
+            Ok((true, false)) if why.contains(IN_USE) && !held.entered() => Err(RenameBranchError::InUse),
             Ok((true, false)) => Err(failed(why)),
             _ => {
                 *self.unclear() = Some((from.clone(), to.clone()));
