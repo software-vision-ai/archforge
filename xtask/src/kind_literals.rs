@@ -112,11 +112,13 @@ struct Text {
 }
 
 /// The literals of a source: its string values, and where every literal of any kind (doc text
-/// too) starts and ends, so a `//` inside one is no comment.
+/// too) starts and ends, so a `//` inside one is no comment. `placing` is set while documentation
+/// is walked: its literals are placed, never read.
 #[derive(Default)]
 struct Literals {
     texts: Vec<Text>,
     spans: Vec<(Pos, Pos)>,
+    placing: bool,
 }
 
 impl Literals {
@@ -136,9 +138,9 @@ impl Literals {
         }
     }
 
-    /// Takes every literal of a macro's or an attribute's tokens, in its groups too. A doc comment
-    /// among them (`#` or `#!`, then a bracketed `doc = "…"`) is a comment: its text is placed but
-    /// never read.
+    /// Takes every literal of a macro's tokens, in its groups too. An attribute among them (`#` or
+    /// `#!`, then a bracketed group) is read as an attribute is ([`Literals::attribute`]), so a doc
+    /// comment's text is placed but never read.
     fn tokens(&mut self, stream: TokenStream, read: bool) {
         let trees: Vec<TokenTree> = stream.into_iter().collect();
         let mut i = 0;
@@ -149,9 +151,12 @@ impl Literals {
             if hash
                 && let Some(TokenTree::Group(g)) = trees.get(at)
                 && g.delimiter() == Delimiter::Bracket
-                && is_doc(&g.stream())
             {
-                self.tokens(g.stream(), false);
+                if read {
+                    self.attribute(g.stream());
+                } else {
+                    self.tokens(g.stream(), false);
+                }
                 i = at + 1;
                 continue;
             }
@@ -165,35 +170,57 @@ impl Literals {
     }
 }
 
-/// Whether an attribute's tokens are a doc comment's: `doc = …`.
-fn is_doc(stream: &TokenStream) -> bool {
-    let mut trees = stream.clone().into_iter();
-    matches!((trees.next(), trees.next()), (Some(TokenTree::Ident(i)), Some(TokenTree::Punct(p))) if i == "doc" && p.as_char() == '=')
+impl Literals {
+    /// Takes the literals of an attribute's tokens (`doc = …` or `cfg_attr(…)` in a macro, the list
+    /// of a `cfg_attr(…)` or `serde(…)` in the code):
+    /// each part between commas that starts with `doc` (`doc = …`, `doc(…)`) is documentation, at
+    /// any depth, so `cfg_attr(…, doc = …)` is documentation as `doc` is: its literals, in macros
+    /// such as `concat!` too, are placed but never read. Every other part is read.
+    fn attribute(&mut self, stream: TokenStream) {
+        let trees: Vec<TokenTree> = stream.into_iter().collect();
+        for part in trees.split(|t| matches!(t, TokenTree::Punct(p) if p.as_char() == ',')) {
+            let doc = matches!(part.first(), Some(TokenTree::Ident(i)) if i == "doc");
+            for tree in part {
+                match tree {
+                    TokenTree::Group(g) if doc => self.tokens(g.stream(), false),
+                    TokenTree::Group(g) => self.attribute(g.stream()),
+                    TokenTree::Literal(l) => self.take(&Lit::new(l.clone()), !doc),
+                    TokenTree::Ident(_) | TokenTree::Punct(_) => {}
+                }
+            }
+        }
+    }
+
+    /// Runs `walk` with the literals it meets placed but never read: documentation.
+    fn placed(&mut self, walk: impl FnOnce(&mut Self)) {
+        let before = std::mem::replace(&mut self.placing, true);
+        walk(self);
+        self.placing = before;
+    }
 }
 
 impl<'ast> Visit<'ast> for Literals {
     /// A literal of the code.
     fn visit_lit(&mut self, lit: &'ast Lit) {
-        self.take(lit, true);
+        self.take(lit, !self.placing);
     }
 
     /// A macro's path, and the literals of its tokens, which the parser leaves unread.
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
         visit::visit_macro(self, mac);
-        self.tokens(mac.tokens.clone(), true);
+        self.tokens(mac.tokens.clone(), !self.placing);
     }
 
-    /// An attribute's literals; a doc comment's text is placed, so nothing in it reads as a comment
-    /// mark or a block comment's start, but never read.
+    /// An attribute's literals. Documentation (`doc = …` whatever expression it holds, `doc(…)`, and
+    /// a `doc` part of a list such as `cfg_attr(…, doc = …)`) is placed, so nothing in it reads as a
+    /// comment mark or a block comment's start, but never read; every other value is read.
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
+        let doc = attr.path().is_ident("doc");
         match &attr.meta {
-            Meta::NameValue(nv) if attr.path().is_ident("doc") => {
-                if let Expr::Lit(syn::ExprLit { lit, .. }) = &nv.value {
-                    self.take(lit, false);
-                }
-            }
+            Meta::NameValue(nv) if doc => self.placed(|me| me.visit_expr(&nv.value)),
             Meta::NameValue(nv) => self.visit_expr(&nv.value),
-            Meta::List(list) => self.tokens(list.tokens.clone(), true),
+            Meta::List(list) if doc => self.tokens(list.tokens.clone(), false),
+            Meta::List(list) => self.attribute(list.tokens.clone()),
             Meta::Path(_) => {}
         }
     }
@@ -434,6 +461,28 @@ mod tests {
         // An attribute other than doc is read, in a macro and outside one.
         assert_eq!(found("m! {\n    #[name = \"er\"]\n    fn f() {}\n}"), [er_at(2)]);
         assert_eq!(found("#[cfg(feature = \"er\")]\nfn f() {}"), [er_at(1)]);
+    }
+
+    /// Documentation is placed but never read whatever expression or list holds it: a mark or a
+    /// kind's word inside it is text (CodeRabbit on #572: `doc = concat!(…)`), while every other
+    /// attribute value is read.
+    #[test]
+    fn documentation_in_any_attribute_shape_is_placed_and_never_read() {
+        assert_eq!(found("#[doc = concat!(\"// not a diagram kind: documentation\")] pub const COPY: &str = \"er\";"), [er_at(1)]);
+        assert_eq!(found("#[doc = concat!(\"e\", \"r\", \"er\")]\nfn f() {}"), Vec::<String>::new());
+        assert_eq!(found("#[cfg_attr(test, doc = \"er\")]\nfn f() {}"), Vec::<String>::new());
+        assert_eq!(found("#[cfg_attr(test, cfg_attr(unix, doc = concat!(\"er\")))]\nfn f() {}"), Vec::<String>::new());
+        assert_eq!(found("#[cfg_attr(test, doc = \"// not a diagram kind: x\")] pub const COPY: &str = \"er\";"), [er_at(1)]);
+        assert_eq!(found("#[doc(alias = \"er\")]\nfn f() {}"), Vec::<String>::new());
+        assert_eq!(found("m! {\n    #[cfg_attr(test, doc = \"er\")]\n    #[doc = concat!(\"er\")]\n    fn f() {}\n}"), Vec::<String>::new());
+        // A doc expression before a real mark leaves the mark working.
+        assert_eq!(found("#[doc = concat!(\"a\", \"b\")]\nconst F: &str = \"er\"; // not a diagram kind: a search"), Vec::<String>::new());
+        // Every other attribute value is read: a name-value, a list's parts beside a doc part, in a
+        // macro too.
+        assert_eq!(found("#[name = concat!(\"er\")]\nfn f() {}"), [er_at(1)]);
+        assert_eq!(found("#[cfg_attr(feature = \"er\", doc = \"x\")]\nfn f() {}"), [er_at(1)]);
+        assert_eq!(found("#[serde(rename = \"er\")]\nstruct S;"), [er_at(1)]);
+        assert_eq!(found("m! {\n    #[cfg_attr(feature = \"er\", doc = \"x\")]\n    fn f() {}\n}"), [er_at(2)]);
     }
 
     /// A mark with words after it, on the literal's line or the line above, lets it stand; two
