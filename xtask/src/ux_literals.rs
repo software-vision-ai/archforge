@@ -1,10 +1,11 @@
 //! The ux part of the layer check: the interface draws through `ux` (AGENTS.md), so a colour or a
 //! font is made there alone. Clippy refuses egui's colour and font constructors everywhere else
 //! (`disallowed-methods` and `disallowed-types` in `clippy.toml`); this scan refuses what clippy
-//! cannot see: a colour constant (`Color32::RED`, `<Color32>::RED`, or brought in with `use
-//! egui::Color32::*`), a font or a colour built as a struct literal (`FontId { size, family }`,
-//! `HsvaGamma { .. }`), and a watched type renamed (`use egui::FontId as Face`) or aliased (`type
-//! Ink = egui::Color32`), which would hide its constants and literals from the scan.
+//! cannot see: a colour constant (`Color32::RED`, `<Color32>::RED`), a font or a colour built as
+//! a struct literal (`FontId { size, family }`, `HsvaGamma { .. }`), and a watched type renamed
+//! (`use egui::FontId as Face`) or aliased (`type Ink = egui::Color32`), which would hide its
+//! constants and literals from the scan. (A struct's constants cannot be imported, so `use
+//! egui::Color32::RED` is the compiler's to refuse.)
 //!
 //! Every Rust source under `crates/` and `apps/`, tests included, is parsed as Rust (`syn`), so a
 //! string, a comment, a raw identifier or a pattern is what the compiler takes it for: a struct
@@ -20,7 +21,7 @@ use syn::ext::IdentExt;
 use syn::parse::{ParseStream, Parser};
 use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
-use syn::{Expr, Ident, Token, Type, UseTree};
+use syn::{Expr, Ident, Token, Type};
 
 /// The `ux` module, from the repository's root: where colours and fonts are made.
 pub const UX: [&str; 4] = ["crates", "ui-egui", "src", "ux"];
@@ -100,16 +101,9 @@ impl Scan {
         self.find(line, format!("Color32::{constant}, a colour constant: {USE_COLOUR}"));
     }
 
-    /// The findings of `Color32`'s use tree `tree` (what `use egui::Color32::…` brings in), the
-    /// constants by name.
-    fn color32_use(&mut self, tree: &UseTree) {
-        match tree {
-            UseTree::Name(n) if constant_case(&name(&n.ident)) => self.constant(line(n.ident.span()), &name(&n.ident)),
-            UseTree::Rename(r) if constant_case(&name(&r.ident)) => self.constant(line(r.ident.span()), &name(&r.ident)),
-            UseTree::Glob(g) => self.find(line(g.star_token.spans[0]), format!("Color32::*, which brings its colour constants in: {USE_COLOUR}")),
-            UseTree::Group(g) => g.items.iter().for_each(|t| self.color32_use(t)),
-            _ => {}
-        }
+    /// The finding for a watched type `n` renamed on `line`.
+    fn renamed(&mut self, line: usize, n: &str) {
+        self.find(line, format!("{n} renamed, which hides its uses from this check: {}", instead(n)));
     }
 
     /// Walks an assignment's target (`FontId { size, family } = font;`, `(a, Pair(b, c)) = …`): its
@@ -159,7 +153,7 @@ impl Scan {
         let punct = |i: usize, c: char| matches!(trees.get(i), Some(TokenTree::Punct(p)) if p.as_char() == c);
         for (i, tree) in trees.iter().enumerate() {
             match tree {
-                TokenTree::Group(g) => self.tokens(g.stream()),
+                TokenTree::Group(g) => self.macro_body(&g.stream()),
                 TokenTree::Ident(id) => {
                     let n = name(id);
                     if !WATCHED.contains(&n.as_str()) {
@@ -170,9 +164,7 @@ impl Scan {
                         && punct(i + 2, ':');
                     match (trees.get(i + 1), trees.get(i + 3)) {
                         (_, Some(TokenTree::Ident(c))) if n == "Color32" && path && constant_case(&name(c)) => self.constant(at, &name(c)),
-                        (Some(TokenTree::Ident(a)), _) if a == "as" => {
-                            self.find(at, format!("{n} renamed, which hides its uses from this check: {}", instead(&n)));
-                        }
+                        (Some(TokenTree::Ident(a)), _) if a == "as" => self.renamed(at, &n),
                         (Some(TokenTree::Group(g)), _) if g.delimiter() == Delimiter::Brace && LITERALS.contains(&n.as_str()) => {
                             // `-> FontId {` opens a body; `&`, `mut` and the path before the type
                             // (`-> &mut egui::FontId {`) are passed over.
@@ -209,17 +201,9 @@ impl<'ast> Visit<'ast> for Scan {
     fn visit_use_rename(&mut self, r: &'ast syn::UseRename) {
         let n = name(&r.ident);
         if WATCHED.contains(&n.as_str()) {
-            self.find(line(r.ident.span()), format!("{n} renamed, which hides its uses from this check: {}", instead(&n)));
+            self.renamed(line(r.ident.span()), &n);
         }
         visit::visit_use_rename(self, r);
-    }
-
-    /// `use egui::Color32::{RED, WHITE};` and `use egui::Color32::*;`.
-    fn visit_use_path(&mut self, p: &'ast syn::UsePath) {
-        if name(&p.ident) == "Color32" {
-            self.color32_use(&p.tree);
-        }
-        visit::visit_use_path(self, p);
     }
 
     /// `type Ink = egui::Color32;`: an alias of a watched type.
@@ -293,11 +277,38 @@ impl<'ast> Visit<'ast> for Scan {
         self.visit_expr(&e.right);
     }
 
-    /// A macro's tokens ([`Scan::macro_body`]).
+    /// A macro's tokens: `matches!` and its asserting forms take an expression and a pattern
+    /// ([`PATTERN_MACROS`]); the others are read by [`Scan::macro_body`].
     fn visit_macro(&mut self, m: &'ast syn::Macro) {
         visit::visit_macro(self, m);
-        self.macro_body(&m.tokens);
+        let takes_pattern = m.path.segments.last().is_some_and(|s| PATTERN_MACROS.contains(&name(&s.ident).as_str()));
+        match takes_pattern.then(|| m.parse_body_with(pattern_args).ok()).flatten() {
+            Some((value, pattern, guard, rest)) => {
+                self.visit_expr(&value);
+                self.visit_pat(&pattern);
+                guard.iter().chain(rest.iter()).for_each(|e| self.visit_expr(e));
+            }
+            None => self.macro_body(&m.tokens),
+        }
     }
+}
+
+/// Macros whose second argument is a pattern, with an optional guard: `matches!(font, FontId {
+/// size, family } if size > 1.0)`, and the asserting forms, which may add a message.
+const PATTERN_MACROS: [&str; 3] = ["matches", "assert_matches", "debug_assert_matches"];
+
+/// The arguments of a [`PATTERN_MACROS`] macro: the value, the pattern, its guard and what follows
+/// (an assertion's message and its arguments).
+fn pattern_args(input: ParseStream) -> syn::Result<(Expr, syn::Pat, Option<Expr>, Vec<Expr>)> {
+    let value: Expr = input.parse()?;
+    input.parse::<Token![,]>()?;
+    let pattern = syn::Pat::parse_multi_with_leading_vert(input)?;
+    let guard = if input.parse::<Option<Token![if]>>()?.is_some() { Some(input.parse::<Expr>()?) } else { None };
+    let mut rest = Vec::new();
+    while input.parse::<Option<Token![,]>>()?.is_some() && !input.is_empty() {
+        rest.push(input.parse::<Expr>()?);
+    }
+    Ok((value, pattern, guard, rest))
 }
 
 /// The colours and fonts made outside ux in one source file's text, each `line N: …`, in the
@@ -316,37 +327,80 @@ pub fn findings(source: &str) -> Vec<String> {
     scan.found.into_iter().map(|(line, what)| format!("line {line}: {what}")).collect()
 }
 
-/// Every `.rs` file under `dir`, sorted, leaving out `skip`, build output and hidden folders.
-fn sources(dir: &Path, skip: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut out = Vec::new();
+/// The most bytes one source may hold, and all of them together: a file over either is a
+/// finding, never read whole.
+const MAX_FILE: u64 = 16 << 20;
+const MAX_TOTAL: u64 = 256 << 20;
+
+/// Every `.rs` file under `dir`, sorted, leaving out `skip`, build output and hidden folders; and
+/// what the walk will not follow: a link, or a `.rs` entry that is no plain file (a pipe), whose
+/// reading could block, each a finding with its path. Entries are judged by their own type, so a
+/// link is never followed.
+fn sources(dir: &Path, skip: &Path) -> Result<(Vec<PathBuf>, Vec<(PathBuf, &'static str)>), String> {
+    let (mut out, mut refused) = (Vec::new(), Vec::new());
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
         for entry in std::fs::read_dir(&d).map_err(|e| format!("{}: {e}", d.display()))? {
-            let path = entry.map_err(|e| format!("{}: {e}", d.display()))?.path();
+            let entry = entry.map_err(|e| format!("{}: {e}", d.display()))?;
+            let (path, kind) = (entry.path(), entry.file_type().map_err(|e| format!("{}: {e}", entry.path().display()))?);
             let hidden = path.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.') || n == "target");
-            if path.is_dir() {
+            if kind.is_symlink() {
+                refused.push((path, "a link, which this check does not follow"));
+            } else if kind.is_dir() {
                 if !hidden && path != skip {
                     stack.push(path);
                 }
             } else if path.extension().is_some_and(|x| x == "rs") {
-                out.push(path);
+                if kind.is_file() {
+                    out.push(path);
+                } else {
+                    refused.push((path, "no plain file, so this check does not read it"));
+                }
             }
         }
     }
     out.sort();
-    Ok(out)
+    refused.sort();
+    Ok((out, refused))
+}
+
+/// The text of `file`, read up to `limit` bytes; none when it holds more.
+fn read_capped(file: &Path, limit: u64) -> Result<Option<String>, String> {
+    use std::io::Read;
+    let mut text = String::new();
+    std::fs::File::open(file)
+        .and_then(|f| f.take(limit.saturating_add(1)).read_to_string(&mut text))
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    Ok((text.len() as u64 <= limit).then_some(text))
 }
 
 /// The colours and fonts made outside ux in every source under `root`'s crates and applications,
-/// each named with its file from `root`.
+/// each named with its file from `root`; a source this check cannot read safely (a link, no plain
+/// file, over [`MAX_FILE`], or past [`MAX_TOTAL`] in all) is a finding too.
 pub fn scan(root: &Path) -> Result<Vec<String>, String> {
+    scan_within(root, MAX_FILE, MAX_TOTAL)
+}
+
+/// [`scan`] with its limits given.
+fn scan_within(root: &Path, max_file: u64, max_total: u64) -> Result<Vec<String>, String> {
     let ux = UX.iter().fold(root.to_path_buf(), |p, part| p.join(part));
-    let mut out = Vec::new();
+    let (mut out, mut budget) = (Vec::new(), max_total);
+    let rel = |p: &Path| p.strip_prefix(root).unwrap_or(p).display().to_string();
     for dir in SCANNED.iter().map(|d| root.join(d)).filter(|d| d.is_dir()) {
-        for file in sources(&dir, &ux)? {
-            let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
-            let rel = file.strip_prefix(root).unwrap_or(&file).display().to_string();
-            out.extend(findings(&text).into_iter().map(|f| format!("{rel} {f}")));
+        let (files, refused) = sources(&dir, &ux)?;
+        out.extend(refused.iter().map(|(p, why)| format!("{}: {why}", rel(p))));
+        for file in files {
+            let limit = max_file.min(budget);
+            match read_capped(&file, limit)? {
+                Some(text) => {
+                    budget = budget.saturating_sub(text.len() as u64);
+                    out.extend(findings(&text).into_iter().map(|f| format!("{} {f}", rel(&file))));
+                }
+                None if limit < max_file => {
+                    out.push(format!("{}: past the {max_total} bytes this check reads in all, so it is not read", rel(&file)))
+                }
+                None => out.push(format!("{}: more than {limit} bytes, so this check does not read it", rel(&file))),
+            }
         }
     }
     Ok(out)
@@ -425,18 +479,6 @@ mod tests {
         let declared = "trait Paint {\n    type Ink;\n    const BASE: egui::Color32;\n}";
         assert_eq!(findings(none), Vec::<String>::new());
         assert_eq!(findings(declared), Vec::<String>::new());
-    }
-
-    /// Color32's constants brought in by a glob or a group are found, each by its name.
-    #[test]
-    fn color32_constants_brought_in_are_found() {
-        let found = findings("use egui::Color32::*;");
-        assert_eq!(found.len(), 1, "{found:?}");
-        assert!(found[0].starts_with("line 1: Color32::*, which brings its colour constants in: "), "{found:?}");
-        let found = findings("use egui::Color32::{\n    RED,\n    WHITE,\n};");
-        assert_eq!(found.len(), 2, "{found:?}");
-        assert!(found[0].starts_with("line 2: Color32::RED, a colour constant: ") && found[1].starts_with("line 3: Color32::WHITE, "), "{found:?}");
-        assert_eq!(findings("use egui::Color32::{self};"), Vec::<String>::new());
     }
 
     /// A struct pattern takes a font or a colour apart and makes none: in a let, an if let, a
@@ -556,6 +598,9 @@ mod tests {
             "macro_rules! m { ($f:expr) => { use egui::Color32 as C; } }",
             "assert!(matches!(c, egui::Color32::BLACK));",
             "thread_local! { static C: Color32 = Color32::RED; }",
+            "macro_rules! red { () => { <egui::Color32>::RED }; }",
+            "assert_matches!(font, FontId { .. }, \"{:?}\", Color32::RED);",
+            "assert!(matches!(FontId { size, family }, _));",
             "m!(::FontId { size, family } and more);",
         ] {
             let found = findings(source);
@@ -563,6 +608,9 @@ mod tests {
         }
         for source in [
             "assert!(matches!(f, FontId { size, .. }));",
+            "assert!(matches!(font, egui::FontId { size, family }));",
+            "let big = matches!(font, FontId { size, family } if size > 1.0);",
+            "assert_matches!(font, FontId { size, family } | FontId { size, family }, \"font {}\", 1);",
             "with_font! { let FontId { size, family } = font; }",
             "with_font! { FontId { size, family } = font; }",
             "macro_rules! m { () => { fn f() -> &egui::FontId { x } } }",
@@ -579,6 +627,73 @@ mod tests {
         let source =
             "// Color32::RED in a comment\n/// FontId { size } in a doc comment\nlet s = \"Color32::BLACK\";\nlet r = r#\"FontId { x }\"#;\n";
         assert_eq!(findings(source), Vec::<String>::new());
+    }
+
+    /// A folder of the test's own under the temp dir, removed when dropped, on every path.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        /// A new, empty folder: created, never adopted.
+        fn new() -> Self {
+            let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(0);
+            for attempt in 0..16u32 {
+                let dir = std::env::temp_dir().join(format!("archforge-ux-scan-{}-{nanos}-{attempt}", std::process::id()));
+                if std::fs::create_dir(&dir).is_ok() {
+                    return Scratch(dir);
+                }
+            }
+            panic!("no free temporary folder");
+        }
+    }
+
+    impl Drop for Scratch {
+        /// Removes the folder and what the test left in it.
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A source over the size limit, or past the total, is a finding and is never read whole.
+    #[test]
+    fn a_source_over_the_limits_is_a_finding() {
+        let root = Scratch::new();
+        let src = root.0.join("crates").join("a").join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("big.rs"), format!("const C: u8 = 1;\n{}", " ".repeat(200))).unwrap();
+        std::fs::write(src.join("small.rs"), "const D: egui::Color32 = egui::Color32::RED;\n").unwrap();
+        let found = scan_within(&root.0, 100, 1000).unwrap();
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(found[0].starts_with("crates/a/src/big.rs: more than 100 bytes"), "{found:?}");
+        assert!(found[1].starts_with("crates/a/src/small.rs line 1: Color32::RED, "), "{found:?}");
+        // The total budget (50 bytes) holds either file, not both: the second is not read.
+        std::fs::write(src.join("big.rs"), "const C: u8 = 1;\n").unwrap();
+        let found = scan_within(&root.0, 100, 50).unwrap();
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].starts_with("crates/a/src/small.rs: past the 50 bytes this check reads in all"), "{found:?}");
+    }
+
+    /// A link, to a file or to a folder, is never followed, and a `.rs` entry that is no plain
+    /// file (a pipe, whose reading could block) is never opened: each is a finding.
+    #[cfg(unix)]
+    #[test]
+    fn links_and_pipes_are_findings_and_never_followed() {
+        let root = Scratch::new();
+        let src = root.0.join("apps").join("b").join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(root.0.join("outside.rs"), "const E: Color32 = Color32::RED;\n").unwrap();
+        std::os::unix::fs::symlink(root.0.join("outside.rs"), src.join("linked.rs")).unwrap();
+        std::os::unix::fs::symlink(&root.0, src.join("loop")).unwrap();
+        let made = std::process::Command::new("mkfifo").arg(src.join("pipe.rs")).status().unwrap();
+        assert!(made.success(), "mkfifo");
+        let found = scan_within(&root.0, MAX_FILE, MAX_TOTAL).unwrap();
+        assert_eq!(
+            found,
+            vec![
+                "apps/b/src/linked.rs: a link, which this check does not follow",
+                "apps/b/src/loop: a link, which this check does not follow",
+                "apps/b/src/pipe.rs: no plain file, so this check does not read it",
+            ]
+        );
     }
 
     /// The repository as it stands makes no colour or font outside ux, and ux itself is left out.
