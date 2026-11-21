@@ -17,6 +17,10 @@ archforge-mof.workspace = true
 png.workspace = true
 # Writes the contact sheets of cargo xtask screens atomically; already a workspace dependency.
 craft-atomic.workspace = true
+# Parse the sources for the ux scan (ux_literals.rs) as Rust, with each token's line. MIT OR
+# Apache-2.0, both already in the lockfile through the derive macros; this major of syn only.
+proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
+syn = { version = "2.0.119", default-features = false, features = ["full", "parsing", "visit"] }
 
 [dev-dependencies]
 archforge-mof = { workspace = true, features = ["testing"] }

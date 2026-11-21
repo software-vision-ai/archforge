@@ -1,20 +1,26 @@
 //! The ux part of the layer check: the interface draws through `ux` (AGENTS.md), so a colour or a
 //! font is made there alone. Clippy refuses egui's colour and font constructors everywhere else
 //! (`disallowed-methods` and `disallowed-types` in `clippy.toml`); this scan refuses what clippy
-//! cannot see: a colour constant (`Color32::RED`, or brought in with `use egui::Color32::*`), a
-//! font or a colour built as a struct literal (`FontId { size, family }`, `HsvaGamma { .. }`), and
-//! a watched type renamed (`use egui::FontId as Face`) or aliased (`type Ink = egui::Color32`),
-//! which would hide its constants and literals from the scan. A struct pattern, which takes a font
-//! apart (`let FontId { size, family } = …`), and the `{` of a body after a return type (`->
-//! &egui::FontId {`) or an impl's type are no literals.
+//! cannot see: a colour constant (`Color32::RED`, `<Color32>::RED`, or brought in with `use
+//! egui::Color32::*`), a font or a colour built as a struct literal (`FontId { size, family }`,
+//! `HsvaGamma { .. }`), and a watched type renamed (`use egui::FontId as Face`) or aliased (`type
+//! Ink = egui::Color32`), which would hide its constants and literals from the scan.
 //!
-//! Every Rust source under `crates/` and `apps/` is read with its strings, characters and comments
-//! blanked ([`crate::shell_io::blank`]), so a finding's line is its line in the file. `ux` itself
-//! ([`UX`]) is exempt.
+//! Every Rust source under `crates/` and `apps/`, tests included, is parsed as Rust (`syn`), so a
+//! string, a comment, a raw identifier or a pattern is what the compiler takes it for: a struct
+//! pattern (`let FontId { size, family } = …`) takes a font apart and is no literal, and a return
+//! type (`-> &egui::FontId {`) is a type. A macro's tokens are read as expressions or statements
+//! when they parse as such, and otherwise token by token. A finding's line is its line in the
+//! file. `ux` itself ([`UX`]) is exempt.
 
 use std::path::{Path, PathBuf};
 
-use crate::shell_io::blank;
+use proc_macro2::{Delimiter, Spacing, TokenStream, TokenTree};
+use syn::ext::IdentExt;
+use syn::parse::{ParseStream, Parser};
+use syn::punctuated::Punctuated;
+use syn::visit::{self, Visit};
+use syn::{Expr, Ident, Token, Type, UseTree};
 
 /// The `ux` module, from the repository's root: where colours and fonts are made.
 pub const UX: [&str; 4] = ["crates", "ui-egui", "src", "ux"];
@@ -39,168 +45,6 @@ const USE_FONT: &str = "the interface draws its fonts through ux: take a style o
 const USE_DATA: &str =
     "the interface draws its colours through ux: take a role of ux::Palette, ux::data_colour for a colour the document holds, or ux::from_hsv";
 
-/// A name in blanked source: the name, where it starts and ends (character indexes), its line.
-struct Word {
-    name: String,
-    start: usize,
-    end: usize,
-    line: usize,
-}
-
-/// The names of `chars` (blanked source), each with its place and line; numbers are skipped.
-fn words(chars: &[char]) -> Vec<Word> {
-    let (mut out, mut line, mut i) = (Vec::new(), 1usize, 0usize);
-    while let Some(&c) = chars.get(i) {
-        if c == '\n' {
-            line += 1;
-            i += 1;
-        } else if c.is_alphanumeric() || c == '_' {
-            let start = i;
-            while chars.get(i).is_some_and(|c| c.is_alphanumeric() || *c == '_') {
-                i += 1;
-            }
-            if !c.is_ascii_digit() {
-                out.push(Word { name: chars.get(start..i).unwrap_or_default().iter().collect(), start, end: i, line });
-            }
-        } else {
-            i += 1;
-        }
-    }
-    out
-}
-
-/// The first character at or after `i` that is no white space, and its index.
-fn next_char(chars: &[char], i: usize) -> Option<(usize, char)> {
-    chars.iter().enumerate().skip(i).find(|(_, c)| !c.is_whitespace()).map(|(j, c)| (j, *c))
-}
-
-/// Where the path whose last name starts at `i` (`egui::FontId`) starts: over every `::` and the
-/// name before it.
-fn path_start(chars: &[char], mut i: usize) -> usize {
-    loop {
-        let Some(at) = chars.get(..i).and_then(|c| c.iter().rposition(|c| !c.is_whitespace())) else { return i };
-        if at == 0 || chars.get(at) != Some(&':') || chars.get(at - 1) != Some(&':') {
-            return i;
-        }
-        let Some(name_end) = chars.get(..at - 1).and_then(|c| c.iter().rposition(|c| !c.is_whitespace())).map(|j| j + 1) else { return at - 1 };
-        i = chars.get(..name_end).unwrap_or_default().iter().rposition(|c| !is_ident(*c)).map_or(0, |j| j + 1);
-    }
-}
-
-/// Whether `c` belongs in a name.
-fn is_ident(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
-}
-
-/// The name that ends at `end` (exclusive) and where it starts.
-fn word_before(chars: &[char], end: usize) -> (String, usize) {
-    let start = chars.get(..end).unwrap_or_default().iter().rposition(|c| !is_ident(*c)).map_or(0, |j| j + 1);
-    (chars.get(start..end).unwrap_or_default().iter().collect(), start)
-}
-
-/// Whether the type whose path starts at `start` is in a place where the `{` after it opens a body,
-/// not a literal: a function's return type (`-> &'a mut egui::FontId {`, `Fn() -> FontId {`) or
-/// the type an impl is for (`impl Trait for &FontId {`); a for loop's pattern (`for FontId { .. }
-/// in`) is no literal either. References, lifetimes and raw pointers in front are passed over.
-fn opens_a_body(chars: &[char], start: usize) -> bool {
-    let mut i = start;
-    loop {
-        let Some(at) = chars.get(..i).and_then(|c| c.iter().rposition(|c| !c.is_whitespace())) else { return false };
-        match chars.get(at).copied() {
-            Some('&' | '*') => i = at,
-            Some('>') => return at > 0 && chars.get(at - 1) == Some(&'-'),
-            Some(c) if is_ident(c) => {
-                let (word, from) = word_before(chars, at + 1);
-                if from > 0 && chars.get(from - 1) == Some(&'\'') {
-                    i = from - 1;
-                } else if word == "mut" || word == "const" {
-                    i = from;
-                } else {
-                    return word == "for" || word == "impl";
-                }
-            }
-            _ => return false,
-        }
-    }
-}
-
-/// The index of the `}` that closes the `{` at `open`; none when it is never closed.
-fn closing(chars: &[char], open: usize) -> Option<usize> {
-    let mut depth = 0usize;
-    for (j, c) in chars.iter().enumerate().skip(open) {
-        match c {
-            '{' => depth += 1,
-            '}' => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 {
-                    return Some(j);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-/// From `i`, past one item of a list (a tuple's or an argument's), to the `,`, the `;` or the
-/// closing bracket that ends it at its own depth; none at the end of the text.
-fn past_item(chars: &[char], i: usize) -> Option<usize> {
-    let mut depth = 0usize;
-    for (j, c) in chars.iter().enumerate().skip(i) {
-        match c {
-            '(' | '[' | '{' => depth += 1,
-            ')' | ']' | '}' if depth == 0 => return Some(j),
-            ')' | ']' | '}' => depth -= 1,
-            ',' | ';' if depth == 0 => return Some(j),
-            _ => {}
-        }
-    }
-    None
-}
-
-/// Whether the braces from `open` to `close` after a type's name are a struct pattern, which takes
-/// a value apart, rather than a literal, which makes one. A body that ends in the rest `..` is a
-/// pattern. Otherwise the place decides: past the brackets that close around it and the items
-/// beside it in a tuple (`let (FontId { size, family }, b) = …`), a pattern is followed by `=` (a
-/// let, an if let, a destructuring assignment), `=>` (a match arm), `:` (a parameter), `|` (a
-/// closure's parameter or another alternative), `if` (a match guard) or `in` (a for loop); a
-/// literal by anything else. Undecided is a literal, so the check fails closed.
-fn is_pattern(chars: &[char], open: usize, close: usize) -> bool {
-    let inner = chars.get(open + 1..close).unwrap_or_default().iter().rposition(|c| !c.is_whitespace());
-    if let Some(at) = inner
-        && at >= 1
-        && chars.get(open + 1 + at) == Some(&'.')
-        && chars.get(open + at) == Some(&'.')
-        && matches!(chars.get(..open + at).and_then(|c| c.iter().rposition(|c| !c.is_whitespace())).and_then(|j| chars.get(j)), Some(',' | '{'))
-    {
-        return true;
-    }
-    let mut j = close + 1;
-    let (at, c) = loop {
-        let Some((at, c)) = next_char(chars, j) else { return false };
-        match c {
-            ')' | ']' => j = at + 1,
-            ',' => match past_item(chars, at + 1) {
-                Some(end) => j = end,
-                None => return false,
-            },
-            _ => break (at, c),
-        }
-    };
-    let next = chars.get(at + 1).copied();
-    match c {
-        '=' => next != Some('='),
-        ':' => next != Some(':'),
-        '|' => next != Some('|'),
-        c if is_ident(c) => {
-            let end = chars.iter().skip(at).position(|c| !is_ident(*c)).map_or(chars.len(), |n| at + n);
-            let word: String = chars.get(at..end).unwrap_or_default().iter().collect();
-            word == "if" || word == "in"
-        }
-        _ => false,
-    }
-}
-
 /// Whether `name` is written as a constant: capitals, digits and underscores, a capital first.
 fn constant_case(name: &str) -> bool {
     name.starts_with(|c: char| c.is_ascii_uppercase()) && name.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
@@ -215,89 +59,261 @@ fn instead(name: &str) -> &'static str {
     }
 }
 
-/// The watched type the `type` alias named by the word at `k` of `words` stands for: `type Ink =
-/// egui::Color32;`, a plain path ending in a watched name. An alias of a type built on one
-/// (`Option<Color32>`) has no constants or literal of its own and is none.
-fn aliased<'a>(chars: &[char], words: &'a [Word], k: usize) -> Option<&'a str> {
-    let alias = words.get(k)?;
-    let (mut at, mut c) = next_char(chars, alias.end)?;
-    // Generic parameters of the alias, if any.
-    if c == '<' {
-        let mut depth = 0usize;
-        let close = chars.iter().enumerate().skip(at).find_map(|(j, c)| {
-            match c {
-                '<' => depth += 1,
-                '>' => depth = depth.saturating_sub(1),
-                _ => {}
-            }
-            (depth == 0).then_some(j)
-        })?;
-        (at, c) = next_char(chars, close + 1)?;
-    }
-    if c != '=' {
-        return None;
-    }
-    // The path runs to the first character that is no part of one.
-    let end =
-        chars.iter().enumerate().skip(at + 1).find(|(_, c)| !(c.is_whitespace() || is_ident(**c) || **c == ':')).map_or(chars.len(), |(j, _)| j);
-    let last = words.iter().skip(k + 1).take_while(|w| w.end <= end).last()?;
-    WATCHED.contains(&last.name.as_str()).then_some(last.name.as_str())
+/// `ident` as written, a raw identifier (`r#Color32`) as its name.
+fn name(ident: &Ident) -> String {
+    ident.unraw().to_string()
 }
 
-/// The colours and fonts made outside ux in one source file's text, each `line N: …`.
-pub fn findings(source: &str) -> Vec<String> {
-    let chars: Vec<char> = blank(source).chars().collect();
-    let words = words(&chars);
-    let mut out = Vec::new();
-    for (k, w) in words.iter().enumerate() {
-        let after = next_char(&chars, w.end);
-        let next = words.get(k + 1);
-        let follows = |n: &Word| after.map(|(j, _)| j) == Some(n.start);
-        if w.name == "type"
-            && let Some(name) = aliased(&chars, &words, k + 1)
+/// The line `span` starts on, from 1.
+fn line(span: proc_macro2::Span) -> usize {
+    span.start().line
+}
+
+/// The watched type `ty` is, as a plain path (`egui::Color32`, `(FontId)`); none for a type built
+/// on one (`Option<Color32>`, `&Color32`), which has no constants or literal of its own.
+fn watched_type(ty: &Type) -> Option<String> {
+    match ty {
+        Type::Paren(t) => watched_type(&t.elem),
+        Type::Group(t) => watched_type(&t.elem),
+        Type::Path(t) => {
+            let n = name(&t.path.segments.last()?.ident);
+            WATCHED.contains(&n.as_str()).then_some(n)
+        }
+        _ => None,
+    }
+}
+
+/// The walk over one file's syntax tree, gathering findings with their lines.
+#[derive(Default)]
+struct Scan {
+    found: Vec<(usize, String)>,
+}
+
+impl Scan {
+    /// Records a finding on `line`.
+    fn find(&mut self, line: usize, what: String) {
+        self.found.push((line, what));
+    }
+
+    /// The finding for a colour constant `constant` of `Color32`, written on `line`.
+    fn constant(&mut self, line: usize, constant: &str) {
+        self.find(line, format!("Color32::{constant}, a colour constant: {USE_COLOUR}"));
+    }
+
+    /// The findings of `Color32`'s use tree `tree` (what `use egui::Color32::…` brings in), the
+    /// constants by name.
+    fn color32_use(&mut self, tree: &UseTree) {
+        match tree {
+            UseTree::Name(n) if constant_case(&name(&n.ident)) => self.constant(line(n.ident.span()), &name(&n.ident)),
+            UseTree::Rename(r) if constant_case(&name(&r.ident)) => self.constant(line(r.ident.span()), &name(&r.ident)),
+            UseTree::Glob(g) => self.find(line(g.star_token.spans[0]), format!("Color32::*, which brings its colour constants in: {USE_COLOUR}")),
+            UseTree::Group(g) => g.items.iter().for_each(|t| self.color32_use(t)),
+            _ => {}
+        }
+    }
+
+    /// Walks an assignment's target (`FontId { size, family } = font;`, `(a, Pair(b, c)) = …`): its
+    /// structs, tuples, arrays and tuple structs take the value apart as a pattern does, so a
+    /// struct there is no literal. Any other place (`*slot(FontId { .. })`) is an expression.
+    fn visit_target(&mut self, e: &Expr) {
+        match e {
+            Expr::Struct(s) => s.fields.iter().for_each(|f| self.visit_target(&f.expr)),
+            Expr::Tuple(t) => t.elems.iter().for_each(|x| self.visit_target(x)),
+            Expr::Array(a) => a.elems.iter().for_each(|x| self.visit_target(x)),
+            Expr::Paren(p) => self.visit_target(&p.expr),
+            Expr::Call(c) => {
+                self.visit_expr(&c.func);
+                c.args.iter().for_each(|x| self.visit_target(x));
+            }
+            _ => self.visit_expr(e),
+        }
+    }
+
+    /// Reads a macro's tokens: as expressions separated by commas (`vec![…]`, `format!(…)`), as
+    /// `expression; count` (`vec![x; n]`), or as statements and items; tokens that are none of
+    /// these (`json!`, a `macro_rules!` body) are read one by one ([`Scan::tokens`]).
+    fn macro_body(&mut self, tokens: &TokenStream) {
+        if let Ok(exprs) = Punctuated::<Expr, Token![,]>::parse_terminated.parse2(tokens.clone()) {
+            exprs.iter().for_each(|e| self.visit_expr(e));
+        } else if let Ok((value, count)) = (|input: ParseStream| {
+            let value: Expr = input.parse()?;
+            input.parse::<Token![;]>()?;
+            Ok((value, input.parse::<Expr>()?))
+        })
+        .parse2(tokens.clone())
         {
-            let alias = words.get(k + 1).map_or("", |a| a.name.as_str());
-            out.push(format!("line {}: type {alias} = {name}, an alias that hides its uses from this check: {}", w.line, instead(name)));
-            continue;
+            self.visit_expr(&value);
+            self.visit_expr(&count);
+        } else if let Ok(stmts) = syn::Block::parse_within.parse2(tokens.clone()) {
+            stmts.iter().for_each(|s| self.visit_stmt(s));
+        } else {
+            self.tokens(tokens.clone());
         }
-        if !WATCHED.contains(&w.name.as_str()) {
-            continue;
-        }
-        // `FontId as Face` in an import, or `<Color32 as From<_>>` in a path.
-        if next.is_some_and(|n| n.name == "as" && follows(n)) {
-            out.push(format!("line {}: {} renamed, which hides its uses from this check: {}", w.line, w.name, instead(&w.name)));
-            continue;
-        }
-        if w.name == "Color32"
-            && let Some((j, _)) = after.filter(|(j, c)| *c == ':' && chars.get(j + 1) == Some(&':'))
-        {
-            match next_char(&chars, j + 2) {
-                // `Color32::RED`.
-                Some((m, _)) if next.is_some_and(|n| n.start == m && constant_case(&n.name)) => {
-                    let name = next.map_or("", |n| n.name.as_str());
-                    out.push(format!("line {}: Color32::{name}, a colour constant: {USE_COLOUR}", w.line));
-                }
-                // `use egui::Color32::*;` or `use egui::Color32::{RED, WHITE};`.
-                Some((_, '*')) => out.push(format!("line {}: Color32::*, which brings its colour constants in: {USE_COLOUR}", w.line)),
-                Some((open, '{')) => {
-                    let close = closing(&chars, open).unwrap_or(chars.len());
-                    for n in words.iter().skip(k + 1).take_while(|n| n.start < close).filter(|n| constant_case(&n.name)) {
-                        out.push(format!("line {}: Color32::{}, a colour constant: {USE_COLOUR}", n.line, n.name));
+    }
+
+    /// Reads tokens that are no Rust one by one, failing closed: `Color32::CONSTANT`, a watched
+    /// type followed by `as`, and a literal type followed by braces (unless `->` comes before it)
+    /// are findings, inside every group too.
+    fn tokens(&mut self, tokens: TokenStream) {
+        let trees: Vec<TokenTree> = tokens.into_iter().collect();
+        let punct = |i: usize, c: char| matches!(trees.get(i), Some(TokenTree::Punct(p)) if p.as_char() == c);
+        for (i, tree) in trees.iter().enumerate() {
+            match tree {
+                TokenTree::Group(g) => self.tokens(g.stream()),
+                TokenTree::Ident(id) => {
+                    let n = name(id);
+                    if !WATCHED.contains(&n.as_str()) {
+                        continue;
+                    }
+                    let at = line(id.span());
+                    let path = matches!(trees.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == ':' && p.spacing() == Spacing::Joint)
+                        && punct(i + 2, ':');
+                    match (trees.get(i + 1), trees.get(i + 3)) {
+                        (_, Some(TokenTree::Ident(c))) if n == "Color32" && path && constant_case(&name(c)) => self.constant(at, &name(c)),
+                        (Some(TokenTree::Ident(a)), _) if a == "as" => {
+                            self.find(at, format!("{n} renamed, which hides its uses from this check: {}", instead(&n)));
+                        }
+                        (Some(TokenTree::Group(g)), _) if g.delimiter() == Delimiter::Brace && LITERALS.contains(&n.as_str()) => {
+                            // `-> FontId {` opens a body; `&`, `mut` and the path before the type
+                            // (`-> &mut egui::FontId {`) are passed over.
+                            let ident = |k: usize| matches!(trees.get(k), Some(TokenTree::Ident(_)));
+                            let mut j = i;
+                            loop {
+                                if j >= 1 && (punct(j - 1, '&') || matches!(trees.get(j - 1), Some(TokenTree::Ident(m)) if m == "mut")) {
+                                    j -= 1;
+                                } else if j >= 2 && punct(j - 1, ':') && punct(j - 2, ':') {
+                                    j -= 2;
+                                    if j >= 1 && ident(j - 1) {
+                                        j -= 1;
+                                    }
+                                } else {
+                                    break;
+                                }
+                            }
+                            let body = j >= 2 && punct(j - 1, '>') && punct(j - 2, '-');
+                            if !body {
+                                self.find(at, format!("{n} {{ .. }}, built by hand: {}", instead(&n)));
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 _ => {}
             }
-            continue;
-        }
-        if LITERALS.contains(&w.name.as_str())
-            && let Some((open, '{')) = after
-            && !opens_a_body(&chars, path_start(&chars, w.start))
-            && !closing(&chars, open).is_some_and(|close| is_pattern(&chars, open, close))
-        {
-            out.push(format!("line {}: {} {{ .. }}, built by hand: {}", w.line, w.name, instead(&w.name)));
         }
     }
-    out
+}
+
+impl<'ast> Visit<'ast> for Scan {
+    /// `use egui::FontId as Face;`: a rename of a watched type.
+    fn visit_use_rename(&mut self, r: &'ast syn::UseRename) {
+        let n = name(&r.ident);
+        if WATCHED.contains(&n.as_str()) {
+            self.find(line(r.ident.span()), format!("{n} renamed, which hides its uses from this check: {}", instead(&n)));
+        }
+        visit::visit_use_rename(self, r);
+    }
+
+    /// `use egui::Color32::{RED, WHITE};` and `use egui::Color32::*;`.
+    fn visit_use_path(&mut self, p: &'ast syn::UsePath) {
+        if name(&p.ident) == "Color32" {
+            self.color32_use(&p.tree);
+        }
+        visit::visit_use_path(self, p);
+    }
+
+    /// `type Ink = egui::Color32;`: an alias of a watched type.
+    fn visit_item_type(&mut self, t: &'ast syn::ItemType) {
+        if let Some(n) = watched_type(&t.ty) {
+            self.find(
+                line(t.type_token.span),
+                format!("type {} = {n}, an alias that hides its uses from this check: {}", name(&t.ident), instead(&n)),
+            );
+        }
+        visit::visit_item_type(self, t);
+    }
+
+    /// `type Output = Color32;` in an impl: an alias too.
+    fn visit_impl_item_type(&mut self, t: &'ast syn::ImplItemType) {
+        if let Some(n) = watched_type(&t.ty) {
+            self.find(
+                line(t.type_token.span),
+                format!("type {} = {n}, an alias that hides its uses from this check: {}", name(&t.ident), instead(&n)),
+            );
+        }
+        visit::visit_impl_item_type(self, t);
+    }
+
+    /// `Color32::RED`, in an expression, a pattern or a type.
+    fn visit_path(&mut self, p: &'ast syn::Path) {
+        let segments: Vec<&syn::PathSegment> = p.segments.iter().collect();
+        for pair in segments.windows(2) {
+            if let [owner, member] = pair
+                && name(&owner.ident) == "Color32"
+                && constant_case(&name(&member.ident))
+            {
+                self.constant(line(owner.ident.span()), &name(&member.ident));
+            }
+        }
+        visit::visit_path(self, p);
+    }
+
+    /// `<Color32>::RED` and `<egui::Color32 as Trait>::RED`: a constant through a qualified path.
+    fn visit_expr_path(&mut self, e: &'ast syn::ExprPath) {
+        if let Some(q) = &e.qself
+            && watched_type(&q.ty).as_deref() == Some("Color32")
+            && let Some(member) = e.path.segments.last()
+            && constant_case(&name(&member.ident))
+        {
+            self.constant(line(q.lt_token.spans[0]), &name(&member.ident));
+        }
+        visit::visit_expr_path(self, e);
+    }
+
+    /// `FontId { size, family }`: a font made by hand; not with the rest `..` and no base, which
+    /// takes a value apart (`matches!(f, FontId { size, .. })`).
+    fn visit_expr_struct(&mut self, e: &'ast syn::ExprStruct) {
+        let pattern = e.dot2_token.is_some() && e.rest.is_none();
+        if let Some(last) = e.path.segments.last()
+            && e.qself.is_none()
+            && LITERALS.contains(&name(&last.ident).as_str())
+            && !pattern
+        {
+            let n = name(&last.ident);
+            self.find(line(last.ident.span()), format!("{n} {{ .. }}, built by hand: {}", instead(&n)));
+        }
+        visit::visit_expr_struct(self, e);
+    }
+
+    /// `FontId { size, family } = font;`: the target is a pattern ([`Scan::visit_target`]), the
+    /// value an expression.
+    fn visit_expr_assign(&mut self, e: &'ast syn::ExprAssign) {
+        e.attrs.iter().for_each(|a| self.visit_attribute(a));
+        self.visit_target(&e.left);
+        self.visit_expr(&e.right);
+    }
+
+    /// A macro's tokens ([`Scan::macro_body`]).
+    fn visit_macro(&mut self, m: &'ast syn::Macro) {
+        visit::visit_macro(self, m);
+        self.macro_body(&m.tokens);
+    }
+}
+
+/// The colours and fonts made outside ux in one source file's text, each `line N: …`, in the
+/// order of their lines. A text that is no Rust file is read as statements (a fragment, as the
+/// tests give); one that is neither is a finding, so the check fails closed.
+pub fn findings(source: &str) -> Vec<String> {
+    let mut scan = Scan::default();
+    match syn::parse_file(source) {
+        Ok(file) => scan.visit_file(&file),
+        Err(e) => match syn::Block::parse_within.parse_str(source) {
+            Ok(stmts) => stmts.iter().for_each(|s| scan.visit_stmt(s)),
+            Err(_) => scan.find(line(e.span()), format!("not read as Rust ({e}), so this check cannot see into it")),
+        },
+    }
+    scan.found.sort_by_key(|(line, _)| *line);
+    scan.found.into_iter().map(|(line, what)| format!("line {line}: {what}")).collect()
 }
 
 /// Every `.rs` file under `dir`, sorted, leaving out `skip`, build output and hidden folders.
@@ -442,6 +458,9 @@ mod tests {
             "let (Hsva { h, s, v, a }, b) = pair;",
             "let [FontId { size, family }, rest] = fonts;",
             "FontId { size, family } = font;",
+            "S { font: FontId { size, family } } = s;",
+            "[FontId { size, family }, rest] = fonts;",
+            "(FontId { size, family }) = font;",
             "let S { font: FontId { size, .. } } = s;",
         ];
         for source in patterns {
@@ -457,7 +476,7 @@ mod tests {
             "fn f() -> X { FontId { size, family } }\nconst A: u8 = 1;",
             "let r = &FontId { size, family };",
             "let m = &mut FontId { size, family };",
-            "if a == FontId { size, family } {}",
+            "if a == (FontId { size, family }) {}",
             "let v = vec![Rgba { r, g, b, a }];",
             "match k { A => FontId { size, family }, B => x }",
             "let f = FontId { size, ..base };",
@@ -468,6 +487,11 @@ mod tests {
             assert_eq!(found.len(), 1, "{source}: {found:?}");
             assert!(found[0].contains("{ .. }, built by hand"), "{source}: {found:?}");
         }
+        // Unparenthesized, the compiler refuses that condition; the scan, which cannot read it,
+        // still refuses it.
+        let unread = findings("if a == FontId { size, family } {}");
+        assert_eq!(unread.len(), 1, "{unread:?}");
+        assert!(unread[0].starts_with("line 1: not read as Rust ("), "{unread:?}");
     }
 
     /// A `{` after a type that opens a body is no literal: a function's return type behind a
@@ -490,6 +514,63 @@ mod tests {
         // A parameter or a return type in angle brackets is followed by no `{` at all.
         assert_eq!(findings("fn f(a: Option<&FontId>, b: &mut Rgba) -> Option<&FontId> { a }"), Vec::<String>::new());
         assert_eq!(findings("fn f() -> Box<dyn Fn() -> FontId> { g() }"), Vec::<String>::new());
+    }
+
+    /// What a hand-written token scan misreads is read as the compiler reads it: a raw C string
+    /// holding a quote, a raw identifier, a parenthesized type, a qualified path, and a struct
+    /// pattern among several closure parameters.
+    #[test]
+    fn token_corners_are_read_as_the_compiler_reads_them() {
+        let alias = "type Ink = Color32, an alias that hides its uses from this check: ";
+        let cases: [(&str, &[&str]); 8] = [
+            ("let s = cr#\"a\"b Color32::RED\"#;\nlet t = c\"x\";", &[]),
+            ("type Ink = egui::r#Color32;", &[alias]),
+            ("type Ink = (egui::Color32);", &[alias]),
+            ("let c = <egui::Color32>::RED;", &["Color32::RED, a colour constant: "]),
+            ("let d = egui::r#Color32::WHITE;", &["Color32::WHITE, a colour constant: "]),
+            ("let g = |FontId { size, family }, scale: f32| size * scale;", &[]),
+            ("*slot(FontId { size, family }) = font;", &["FontId { .. }, built by hand: "]),
+            ("(Pair(FontId { size, family }, n), m) = pairs;", &[]),
+        ];
+        // Every case is checked before the test fails, so a failure names all the misread ones.
+        let misread: Vec<String> = cases
+            .iter()
+            .filter_map(|(source, expected)| {
+                let found = findings(source);
+                let right = found.len() == expected.len() && found.iter().zip(expected.iter()).all(|(f, e)| f.starts_with(&format!("line 1: {e}")));
+                (!right).then(|| format!("{source} gave {found:?}"))
+            })
+            .collect();
+        assert_eq!(misread, Vec::<String>::new());
+    }
+
+    /// A macro's tokens are read as expressions or statements where they parse as such, and token
+    /// by token where they do not, so a constant or a literal in one is found and a pattern is not.
+    #[test]
+    fn macros_are_read_too() {
+        for source in [
+            "let v = vec![FontId { size, family }; 3];",
+            "let j = json!({ \"font\": FontId { size: 1.0, family } });",
+            "println!(\"{:?}\", Color32::RED);",
+            "macro_rules! m { () => { Color32::RED } }",
+            "macro_rules! m { ($f:expr) => { use egui::Color32 as C; } }",
+            "assert!(matches!(c, egui::Color32::BLACK));",
+            "thread_local! { static C: Color32 = Color32::RED; }",
+            "m!(::FontId { size, family } and more);",
+        ] {
+            let found = findings(source);
+            assert_eq!(found.len(), 1, "{source}: {found:?}");
+        }
+        for source in [
+            "assert!(matches!(f, FontId { size, .. }));",
+            "with_font! { let FontId { size, family } = font; }",
+            "with_font! { FontId { size, family } = font; }",
+            "macro_rules! m { () => { fn f() -> &egui::FontId { x } } }",
+            "macro_rules! m { () => { fn f() -> &mut egui::FontId { x } } }",
+            "let s = format!(\"Color32::RED {}\", 1);",
+        ] {
+            assert_eq!(findings(source), Vec::<String>::new(), "{source}");
+        }
     }
 
     /// Strings, characters and comments never count.
