@@ -397,7 +397,7 @@ fn a_token_file_is_never_made_over_another_and_removed_only_while_it_is_the_same
     let theirs = mint_token().unwrap();
     std::fs::write(&mine, format!("{theirs}\n")).unwrap();
     remove_token_file(&mine, id, &token);
-    assert_eq!(std::fs::read_to_string(&mine).unwrap(), format!("{theirs}\n"), "another start's token file under the same identity is left");
+    assert_eq!(std::fs::read_to_string(&mine).ok(), Some(format!("{theirs}\n")), "another start's token file under the same identity is left");
     // A link to the very file in its place: left alone, never followed.
     std::fs::remove_file(&mine).unwrap();
     let id = create_token_file(&mine, &token).ok().unwrap();
