@@ -92,6 +92,9 @@ struct Scan {
     /// The names the file defines as macros or imports itself, so that an unqualified call of one
     /// of [`PATTERN_MACROS`] among them is not the standard library's.
     shadowed: Vec<String>,
+    /// Whether the scan is inside the input of a macro it does not know, which may match a
+    /// `stringify!` there as tokens and never call it, so [`UNEVALUATED`] spares nothing.
+    opaque: bool,
 }
 
 /// The names a file gives a meaning of its own: its `macro_rules!` and its imports (`use
@@ -398,14 +401,15 @@ impl<'ast> Visit<'ast> for Scan {
     }
 
     /// A macro's tokens: `matches!` and its asserting forms take an expression and a pattern
-    /// ([`PATTERN_MACROS`]); `stringify!` makes a string of them unread ([`UNEVALUATED`]); the
-    /// others are read by [`Scan::macro_body`].
+    /// ([`PATTERN_MACROS`]); `stringify!` makes a string of them unread ([`UNEVALUATED`]), unless
+    /// it stands in another macro's input ([`Scan::opaque`]); the others are read by
+    /// [`Scan::macro_body`] as opaque input.
     fn visit_macro(&mut self, m: &'ast syn::Macro) {
         visit::visit_macro(self, m);
         if m.path.is_ident("macro_rules") {
             return self.macro_rules(&m.tokens);
         }
-        if std_macro(&m.path, &UNEVALUATED, &self.shadowed) {
+        if !self.opaque && std_macro(&m.path, &UNEVALUATED, &self.shadowed) {
             return;
         }
         let takes_pattern = std_macro(&m.path, &PATTERN_MACROS, &self.shadowed);
@@ -415,7 +419,11 @@ impl<'ast> Visit<'ast> for Scan {
                 self.visit_pat(&pattern);
                 guard.iter().chain(rest.iter()).for_each(|e| self.visit_expr(e));
             }
-            None => self.macro_body(&m.tokens),
+            None => {
+                let outer = std::mem::replace(&mut self.opaque, true);
+                self.macro_body(&m.tokens);
+                self.opaque = outer;
+            }
         }
     }
 }
@@ -457,8 +465,9 @@ fn qualified_constant(trees: &[TokenTree], i: usize) -> Option<String> {
 }
 
 /// The standard library's macros that take paths and expressions as tokens without evaluating
-/// them: `stringify!(egui::Color32::RED)` is a string. (`concat!`, `include_str!` and the like take
-/// literals only.)
+/// them: `stringify!(egui::Color32::RED)` is a string where it is called, not where it stands in
+/// another macro's input ([`Scan::opaque`]). (`concat!`, `include_str!` and the like take literals
+/// only.)
 const UNEVALUATED: [&str; 1] = ["stringify"];
 
 /// Macros whose second argument is a pattern, with an optional guard: `matches!(font, FontId {
@@ -819,7 +828,10 @@ mod tests {
 
     /// The standard library's `stringify!` turns its tokens into a string without evaluating them,
     /// so they are not read: through `std` or `core`, or unqualified when the file gives the name
-    /// no meaning of its own. Another macro of that name, and an evaluating macro around it, are.
+    /// no meaning of its own, where the code calls it or a `macro_rules!` transcriber or
+    /// `matches!` writes the call out. Another macro of that name, an evaluating macro around it,
+    /// and a `stringify!` in any other macro's input, which that macro may match as tokens and
+    /// never call (`evaluate!(stringify!($e:expr)) => $e`), are read.
     #[test]
     fn std_stringify_is_a_string() {
         let none = [
@@ -827,6 +839,9 @@ mod tests {
             "let s = stringify!(Color32::WHITE);",
             "let s = ::core::stringify!(FontId { size, family });",
             "use helpers::other;\nlet s = stringify!(Color32::RED);",
+            "macro_rules! name { () => { stringify!(Color32::RED) }; }",
+            "let b = matches!(c, _ if stringify!(Color32::RED).is_empty());",
+            "let a = other!(x);\nlet s = stringify!(Color32::RED);",
         ];
         let found = [
             "macro_rules! stringify { ($e:expr) => { $e }; }\nlet c = stringify!(Color32::RED);",
@@ -834,6 +849,10 @@ mod tests {
             "let c = other::stringify!(Color32::RED);",
             "let c = ::stringify!(Color32::RED);",
             "assert_eq!(stringify!(red), Color32::RED);",
+            "macro_rules! evaluate { (stringify!($e:expr)) => { $e }; }\nfn f() {\n    let c = evaluate!(stringify!(egui::Color32::RED));\n}",
+            "let c = evaluate!(std::stringify!(Color32::RED));",
+            "let c = outer!(inner!(x), stringify!(Color32::RED));",
+            "let c = outer!(matches!(c, _ if stringify!(Color32::RED).is_empty()));",
         ];
         // Every case is checked before the test fails, so a failure names all the misread ones.
         let misread: Vec<String> = none
