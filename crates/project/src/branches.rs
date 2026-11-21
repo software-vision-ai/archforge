@@ -10,6 +10,8 @@ use crate::branch_name::{SafeBranch, UnsafeBranch};
 use crate::chat::{head, is_commit};
 use crate::creation::{self, BranchStore, CreationRecord, CreationRecovery, Found};
 use crate::model::{ModelSchema, database_connection, database_name, sql, unsaved_tables};
+#[cfg(feature = "testing")]
+use crate::sessions::Watch;
 use crate::sessions::{Renaming, Session};
 use crate::{DATABASE, Error, Project, VersionReader};
 use archforge_mof::Uuid;
@@ -391,17 +393,22 @@ impl Project {
         self.rename_steps(from, to, |db| self.sessions.let_go(db), ask, || self.where_is(from, to))
     }
 
-    /// [`Project::rename_branch`] with this project's own sessions let go of within `budget`, each
-    /// request of that taking `stall` longer, for a test to see the budget hold.
+    /// [`Project::rename_branch`] with this project's own sessions let go of within `budget`, for a
+    /// test to see the budget hold: `received` runs on the release's thread as each request reaches
+    /// it, before the budget is looked at, `started` just before one is started, and `answered` on
+    /// this thread after each answer.
     #[cfg(feature = "testing")]
-    pub fn rename_branch_stalled(
+    pub fn rename_branch_watched(
         &self,
         from: &SafeBranch,
         to: &SafeBranch,
         budget: std::time::Duration,
-        stall: std::time::Duration,
+        received: impl Fn() + Send + 'static,
+        started: impl Fn() + Send + 'static,
+        answered: impl Fn() + 'static,
     ) -> Result<(), RenameBranchError> {
-        let let_go = |db: &str| self.sessions.let_go_within(db, budget, Box::new(move || std::thread::sleep(stall)));
+        let watch = Watch { received: Box::new(received), started: Box::new(started), answered: Box::new(answered) };
+        let let_go = |db: &str| self.sessions.let_go_within(db, budget, watch);
         self.rename_steps(from, to, let_go, |store| store.rename(from, to), || self.where_is(from, to))
     }
 

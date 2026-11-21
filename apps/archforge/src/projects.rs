@@ -5983,21 +5983,50 @@ mod tests {
         own_late_session_is_not_another_program(true);
     }
 
+    /// How many times `signals` is told something before its sender goes, for a test of a release:
+    /// the release's thread drops its senders when it ends.
+    fn signals_until_gone(signals: &Receiver<()>) -> usize {
+        let mut count = 0;
+        while signals.recv_timeout(Duration::from_secs(60)).is_ok() {
+            count += 1;
+        }
+        count
+    }
+
     /// Letting go of the project's own sessions stops once its budget is spent, however long the
-    /// server takes to answer: the rename fails by that reason, nothing is renamed, and the session
-    /// it could not end stays.
+    /// server or the release's thread takes: the rename fails by that reason, nothing is renamed, a
+    /// request the thread comes to too late is never started, and the session it was to end stays.
     #[test]
     fn a_rename_stops_letting_go_when_its_budget_is_spent() {
         let (sandbox, _path) = branched();
         let open = lock(&sandbox.host.inner.open);
         let mut idle = open[0].own_session_on("elsewhere").unwrap();
-        let started = Instant::now();
-        let (budget, stall) = (Duration::from_millis(300), Duration::from_secs(30));
-        let answer = open[0].rename_branch_stalled(&branch("elsewhere"), &branch("moved"), budget, stall);
-        assert!(started.elapsed() < stall / 2, "it waited for the stalled request: {:?}", started.elapsed());
+        let (budget, stall) = (Duration::from_millis(300), Duration::from_secs(5));
+        let (started, starts) = channel::<()>();
+        let begun = Instant::now();
+        let stalled = move || std::thread::sleep(stall);
+        let answer = open[0].rename_branch_watched(&branch("elsewhere"), &branch("moved"), budget, stalled, move || started.send(()).unwrap(), || {});
+        assert!(begun.elapsed() < stall, "it waited for the stalled thread: {:?}", begun.elapsed());
         assert!(matches!(&answer, Err(RenameBranchError::Failed(why)) if why.contains("in time")), "{answer:?}");
         assert!(has_branch(&open[0], "elsewhere") && !has_branch(&open[0], "moved"));
+        assert_eq!(signals_until_gone(&starts), 0, "the request it came to after the budget was not started");
         assert_eq!(idle.active_branch(), Ok(Some("elsewhere".into())), "nothing was ended");
+    }
+
+    /// Once the budget is spent after an answer, the release asks nothing more: the rename fails by
+    /// that reason and nothing is renamed.
+    #[test]
+    fn a_release_asks_nothing_once_its_budget_is_spent() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let _idle = open[0].own_session_on("elsewhere").unwrap();
+        let budget = Duration::from_secs(2);
+        let (received, receipts) = channel::<()>();
+        let spend = move || std::thread::sleep(budget + Duration::from_millis(500));
+        let answer = open[0].rename_branch_watched(&branch("elsewhere"), &branch("moved"), budget, move || received.send(()).unwrap(), || {}, spend);
+        assert!(matches!(&answer, Err(RenameBranchError::Failed(why)) if why.contains("in time")), "{answer:?}");
+        assert!(has_branch(&open[0], "elsewhere") && !has_branch(&open[0], "moved"));
+        assert_eq!(signals_until_gone(&receipts), 1, "only the request before the budget ran out was sent");
     }
 
     /// Another program's session on the branch is left alone: the rename is refused by its own

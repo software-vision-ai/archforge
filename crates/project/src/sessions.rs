@@ -97,17 +97,43 @@ struct Release {
     asks: std::sync::mpsc::Sender<String>,
     answers: std::sync::mpsc::Receiver<Answer>,
     until: Instant,
+    /// Told of each answer, on the renaming thread.
+    answered: Box<dyn Fn()>,
+}
+
+/// What a test sees of a release, and where it can slow it down; production watches nothing.
+pub(crate) struct Watch {
+    /// Run on the release's thread as a request reaches it, before the budget is looked at.
+    pub(crate) received: Box<dyn Fn() + Send>,
+    /// Run on the release's thread just before a request is started.
+    pub(crate) started: Box<dyn Fn() + Send>,
+    /// Run on the renaming thread after each answer.
+    pub(crate) answered: Box<dyn Fn()>,
+}
+
+impl Watch {
+    /// Watches nothing.
+    pub(crate) fn none() -> Watch {
+        Watch { received: Box::new(|| {}), started: Box::new(|| {}), answered: Box::new(|| {}) }
+    }
 }
 
 impl Release {
-    /// Starts the thread, which connects first and then answers each request in turn.
-    fn start(connector: archforge_dolt::Connector, until: Instant, before_each: Box<dyn Fn() + Send>) -> Result<Release, String> {
+    /// Starts the thread, which connects first and then answers each request in turn, while the
+    /// budget lasts: a request it comes to once the budget is spent is not started, and the thread
+    /// ends.
+    fn start(connector: archforge_dolt::Connector, until: Instant, watch: Watch) -> Result<Release, String> {
         let (asks, asked) = std::sync::mpsc::channel::<String>();
         let (answer, answers) = std::sync::mpsc::channel::<Answer>();
+        let Watch { received, started, answered } = watch;
         let work = move || {
             let mut conn = connector.connect().map_err(|e| e.to_string());
             for query in asked {
-                before_each();
+                received();
+                if Instant::now() >= until {
+                    break;
+                }
+                started();
                 let rows = match conn.as_mut() {
                     Ok(c) => c.query::<mysql::Row, _>(query).map_err(|e| e.to_string()),
                     Err(e) => Err(e.clone()),
@@ -117,19 +143,26 @@ impl Release {
                 }
             }
         };
-        let started = std::thread::Builder::new().name("archforge-release".into()).spawn(work);
-        started.map_err(|e| format!("no thread could end this Archforge's own sessions: {e}"))?;
-        Ok(Release { asks, answers, until })
+        let spawned = std::thread::Builder::new().name("archforge-release".into()).spawn(work);
+        spawned.map_err(|e| format!("no thread could end this Archforge's own sessions: {e}"))?;
+        Ok(Release { asks, answers, until, answered })
     }
 
-    /// Asks `query` and waits for its answer until the budget is spent.
+    /// Asks `query` and waits for its answer until the budget is spent; once it is, nothing more is
+    /// asked.
     fn ask(&self, query: String) -> Answer {
-        self.asks.send(query).map_err(|_| "the release's connection has ended".to_string())?;
-        match self.answers.recv_timeout(self.until.saturating_duration_since(Instant::now())) {
+        let ended = || if Instant::now() >= self.until { LATE.to_string() } else { "the release's connection has ended".to_string() };
+        if Instant::now() >= self.until {
+            return Err(LATE.into());
+        }
+        self.asks.send(query).map_err(|_| ended())?;
+        let answer = match self.answers.recv_timeout(self.until.saturating_duration_since(Instant::now())) {
             Ok(answer) => answer,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(LATE.into()),
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err("the release's connection has ended".into()),
-        }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(ended()),
+        };
+        (self.answered)();
+        answer
     }
 }
 
@@ -151,17 +184,16 @@ impl Sessions {
     /// has dropped them, within [`LET_GO_BUDGET`]. Until the hold it gives is dropped, a session asked
     /// to move to `database` waits. A read on the branch at that moment fails.
     pub(crate) fn let_go(&self, database: &str) -> Result<Renaming, String> {
-        self.let_go_within(database, LET_GO_BUDGET, Box::new(|| {}))
+        self.let_go_within(database, LET_GO_BUDGET, Watch::none())
     }
 
-    /// [`Sessions::let_go`] within `budget`, with `before_each` run on the release's thread before
-    /// each of its requests, for a test to stall them. The requests go over a connection of their
-    /// own on a thread of their own, so the budget bounds the whole release, the connection and
-    /// every answer included, whatever the server does: once it is spent, the release stops asking
-    /// and waits for nothing more. A request left running ends at the server's answer or at the
+    /// [`Sessions::let_go`] within `budget`, `watch` seeing its requests. The requests go over a
+    /// connection of their own on a thread of their own, so the budget bounds the whole release, the
+    /// connection and every answer included, whatever the server does: once it is spent, the
+    /// release sends no request, its thread starts none it was sent, and it waits for nothing more. A request left running ends at the server's answer or at the
     /// connection's own timeout, and its thread with it; a `KILL` left running may still end its
     /// session, which was on the branch.
-    pub(crate) fn let_go_within(&self, database: &str, budget: Duration, before_each: Box<dyn Fn() + Send>) -> Result<Renaming, String> {
+    pub(crate) fn let_go_within(&self, database: &str, budget: Duration, watch: Watch) -> Result<Renaming, String> {
         let until = Instant::now() + budget;
         let database = database.to_ascii_lowercase();
         let ended: Vec<u32> = {
@@ -174,7 +206,7 @@ impl Sessions {
         if ended.is_empty() {
             return Ok(held);
         }
-        let release = Release::start(self.connector.clone(), until, before_each)?;
+        let release = Release::start(self.connector.clone(), until, watch)?;
         for id in &ended {
             // An id the server no longer has is no error (measured on 2.7.5).
             release.ask(format!("KILL {id}")).map_err(|e| format!("this Archforge's own session on the branch could not be ended: {e}"))?;

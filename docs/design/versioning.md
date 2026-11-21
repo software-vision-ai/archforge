@@ -556,8 +556,9 @@ until the server's process list no longer holds them (go-mysql-server removes a 
 list the in-use check walks before it leaves the process list), and holds new sessions off the
 branch until the answer is read. Ending them and waiting for the server takes at most 10 seconds,
 whatever the server does: its requests run over a connection of their own, on a thread of their
-own, and once the 10 seconds are spent the rename stops waiting and fails, nothing renamed (a
-request left running ends at the server's answer or at the connection's 30-second timeout). A new
+own, and once the 10 seconds are spent the rename sends no further request, the thread starts none
+it was sent, and the rename fails, nothing renamed (a request already running ends at the server's
+answer or at the connection's 30-second timeout; a `KILL` among them may still end its session). A new
 session waits at most 10 seconds too, and then goes on. `--force` is never used: it skips the check
 for every session, another program's too, and overwrites a branch of the new name (measured). A
 refusal that remains is another program's, unless a session of the project's own went on to the
