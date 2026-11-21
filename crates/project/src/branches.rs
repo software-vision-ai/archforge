@@ -10,6 +10,9 @@ use crate::branch_name::{SafeBranch, UnsafeBranch};
 use crate::chat::{head, is_commit};
 use crate::creation::{self, BranchStore, CreationRecord, CreationRecovery, Found};
 use crate::model::{ModelSchema, database_connection, database_name, sql, unsaved_tables};
+#[cfg(feature = "testing")]
+use crate::sessions::Watch;
+use crate::sessions::{Renaming, Session};
 use crate::{DATABASE, Error, Project, VersionReader};
 use archforge_mof::Uuid;
 use archforge_mof::rows::Rows;
@@ -29,7 +32,10 @@ pub(crate) fn branch_now(current: &CurrentBranch) -> SafeBranch {
 }
 
 /// The branches over one connection, as recovery asks of them.
-struct OpenBranches(Result<mysql::Conn, String>);
+struct OpenBranches(Result<Session, String>);
+
+/// What Dolt says, in no code of its own, when another session has the branch a rename names.
+const IN_USE: &str = "branches in use in other sessions";
 
 impl OpenBranches {
     /// Renames the branch; what the answer is worth is for the caller to read back.
@@ -57,6 +63,43 @@ impl BranchStore for OpenBranches {
     fn delete(&mut self, branch: &SafeBranch) -> Result<(), String> {
         let c = self.0.as_mut().map_err(|e| e.clone())?;
         c.exec_drop("CALL DOLT_BRANCH('-D', ?)", (branch.stored(),)).map_err(|e| e.to_string())
+    }
+}
+
+/// A session the project does not know, as another program's would be: for a test.
+#[cfg(feature = "testing")]
+pub struct OutsideSession(mysql::Conn);
+
+#[cfg(feature = "testing")]
+impl OutsideSession {
+    /// The branch this session is on, as Dolt names it.
+    pub fn active_branch(&mut self) -> Result<Option<String>, String> {
+        let on: Option<Option<String>> = self.0.query_first("SELECT active_branch()").map_err(|e| e.to_string())?;
+        Ok(on.flatten())
+    }
+}
+
+/// A session of the project's that is closed but not yet dropped by the server: for a test.
+#[cfg(feature = "testing")]
+pub struct ClosedSession {
+    _held: Session,
+}
+
+/// A session of the project's, open and idle: for a test.
+#[cfg(feature = "testing")]
+pub struct OwnSession(Session);
+
+#[cfg(feature = "testing")]
+impl OwnSession {
+    /// Moves the session to `branch`.
+    pub fn use_branch(&mut self, branch: &str) -> Result<(), String> {
+        self.0.use_database(&format!("project/{branch}")).map_err(|e| e.to_string())
+    }
+
+    /// The branch this session is on, as Dolt names it.
+    pub fn active_branch(&mut self) -> Result<Option<String>, String> {
+        let on: Option<Option<String>> = self.0.query_first("SELECT active_branch()").map_err(|e| e.to_string())?;
+        Ok(on.flatten())
     }
 }
 
@@ -132,7 +175,10 @@ pub enum RenameBranchError {
     NameTaken,
     /// A creation record names one of the two, until the next opening clears it.
     RecordRemains,
-    /// The rename did not happen; Dolt's own words, such as another session being on the branch.
+    /// Another program's session on the project's server is on the branch, so it was not renamed.
+    /// This Archforge's own sessions are no reason: they let go of it first.
+    InUse,
+    /// The rename did not happen; Dolt's own words.
     Failed(String),
     /// The reply was lost and where the branch is could not be read. Until the same rename is asked
     /// again or the project closes, nothing is written to either name if it is the branch in use.
@@ -147,6 +193,7 @@ impl fmt::Display for RenameBranchError {
             RenameBranchError::NoSuchBranch => f.write_str("there is no such branch"),
             RenameBranchError::NameTaken => f.write_str("a branch of that name exists"),
             RenameBranchError::RecordRemains => f.write_str("the last new branch is not cleaned up yet"),
+            RenameBranchError::InUse => f.write_str("another program is using the branch"),
             RenameBranchError::Failed(why) | RenameBranchError::CannotTell(why) => f.write_str(why),
         }
     }
@@ -269,24 +316,24 @@ impl Project {
     /// Runs `statement` on `branch`, for a test to shape a branch with.
     #[cfg(feature = "testing")]
     pub fn run_on_branch(&self, branch: &str, statement: &str) -> Result<(), String> {
-        let mut c = self.server().connector().connect().map_err(|e| e.to_string())?;
-        c.query_drop(format!("USE `project/{branch}`")).map_err(|e| e.to_string())?;
+        let mut c = self.sessions.open().map_err(|e| e.to_string())?;
+        c.use_database(&format!("project/{branch}")).map_err(|e| e.to_string())?;
         c.query_drop(statement).map_err(|e| e.to_string())
     }
 
     /// The head of `branch`, for a test to record as a start.
     #[cfg(feature = "testing")]
     pub fn head_of(&self, branch: &str) -> Result<String, String> {
-        let mut c = self.server().connector().connect().map_err(|e| e.to_string())?;
-        c.query_drop(format!("USE `project/{branch}`")).map_err(|e| e.to_string())?;
+        let mut c = self.sessions.open().map_err(|e| e.to_string())?;
+        c.use_database(&format!("project/{branch}")).map_err(|e| e.to_string())?;
         crate::chat::head(&mut c)
     }
 
     /// Runs `query` on `branch` and gives its first column as text, for a test to look with.
     #[cfg(feature = "testing")]
     pub fn first_on_branch(&self, branch: &str, query: &str) -> Result<String, String> {
-        let mut c = self.server().connector().connect().map_err(|e| e.to_string())?;
-        c.query_drop(format!("USE `project/{branch}`")).map_err(|e| e.to_string())?;
+        let mut c = self.sessions.open().map_err(|e| e.to_string())?;
+        c.use_database(&format!("project/{branch}")).map_err(|e| e.to_string())?;
         let row: Option<mysql::Row> = c.query_first(query).map_err(|e| e.to_string())?;
         row.and_then(|r| r.get_opt::<String, usize>(0)).and_then(Result::ok).ok_or_else(|| "no text".to_string())
     }
@@ -323,7 +370,77 @@ impl Project {
             let done = if lands { store.rename(from, to) } else { Ok(()) };
             done.and_then(|()| if answered { Ok(()) } else { Err("the reply was lost".to_string()) })
         };
-        self.rename_steps(from, to, ask, || if readable { self.where_is(from, to) } else { Err("it cannot be read".to_string()) })
+        let read = || if readable { self.where_is(from, to) } else { Err("it cannot be read".to_string()) };
+        self.rename_steps(from, to, |db| self.sessions.let_go(db), ask, read)
+    }
+
+    /// [`Project::rename_branch`] with `meanwhile` run once this project's own sessions have let go
+    /// of `from`, just before the rename is asked for, and `answered` once Dolt has answered.
+    #[cfg(feature = "testing")]
+    pub fn rename_branch_meanwhile(
+        &self,
+        from: &SafeBranch,
+        to: &SafeBranch,
+        meanwhile: impl FnOnce(),
+        answered: impl FnOnce(),
+    ) -> Result<(), RenameBranchError> {
+        let ask = |store: &mut OpenBranches| {
+            meanwhile();
+            let answer = store.rename(from, to);
+            answered();
+            answer
+        };
+        self.rename_steps(from, to, |db| self.sessions.let_go(db), ask, || self.where_is(from, to))
+    }
+
+    /// [`Project::rename_branch`] with this project's own sessions let go of within `budget`, for a
+    /// test to see the budget hold: `received` runs on the release's thread as each request reaches
+    /// it, before the budget is looked at, `started` just before one is started, and `answered` on
+    /// this thread after each answer.
+    #[cfg(feature = "testing")]
+    pub fn rename_branch_watched(
+        &self,
+        from: &SafeBranch,
+        to: &SafeBranch,
+        budget: std::time::Duration,
+        received: impl Fn() + Send + 'static,
+        started: impl Fn() + Send + 'static,
+        answered: impl Fn() + 'static,
+    ) -> Result<(), RenameBranchError> {
+        let watch = Watch { received: Box::new(received), started: Box::new(started), answered: Box::new(answered) };
+        let let_go = |db: &str| self.sessions.let_go_within(db, budget, watch);
+        self.rename_steps(from, to, let_go, |store| store.rename(from, to), || self.where_is(from, to))
+    }
+
+    /// A session on `branch` that this project does not know, as another program's would be, for a
+    /// test to hold.
+    #[cfg(feature = "testing")]
+    pub fn outside_session_on(&self, branch: &str) -> Result<OutsideSession, String> {
+        let mut c = self.server().connect().map_err(|e| e.to_string())?;
+        c.query_drop(format!("USE `project/{branch}`")).map_err(|e| e.to_string())?;
+        Ok(OutsideSession(c))
+    }
+
+    /// A session of this project's on `branch`, open, for a test to hold.
+    #[cfg(feature = "testing")]
+    pub fn own_session_on(&self, branch: &str) -> Result<OwnSession, String> {
+        let mut c = OwnSession(self.sessions.open().map_err(|e| e.to_string())?);
+        c.use_branch(branch)?;
+        Ok(c)
+    }
+
+    /// A session of this project's on `branch`, closed as every one is, but held open on the server
+    /// as the server may hold one a while after it is closed, for a test.
+    #[cfg(feature = "testing")]
+    pub fn closed_session_on(&self, branch: &str) -> Result<ClosedSession, String> {
+        let OwnSession(c) = self.own_session_on(branch)?;
+        Ok(ClosedSession { _held: c.closed() })
+    }
+
+    /// How many of this project's sessions it knows of now, for a test to see closed ones forgotten.
+    #[cfg(feature = "testing")]
+    pub fn sessions_known(&self) -> usize {
+        self.sessions.known()
     }
 
     /// Renames the branch `from` to `to`, on the writer only. A branch this project is on stays
@@ -335,7 +452,7 @@ impl Project {
     /// types: [`SafeBranch::typed`] encodes anything not lower case, so `foo` and `Foo` from the
     /// dialog are two different stored names and both allowed.
     pub fn rename_branch(&self, from: &SafeBranch, to: &SafeBranch) -> Result<(), RenameBranchError> {
-        self.rename_steps(from, to, |store| store.rename(from, to), || self.where_is(from, to))
+        self.rename_steps(from, to, |db| self.sessions.let_go(db), |store| store.rename(from, to), || self.where_is(from, to))
     }
 
     /// The rename, from and to, whose outcome could not be told.
@@ -351,7 +468,7 @@ impl Project {
     /// Whether `from` and `to` exist, over a connection of its own, as the one that asked may be
     /// the one that was lost, and on `main`, which no unclear rename can be.
     fn where_is(&self, from: &SafeBranch, to: &SafeBranch) -> Result<(bool, bool), String> {
-        let mut store = OpenBranches(database_connection(&self.server().connector(), &SafeBranch::default()).map_err(|e| e.to_string()));
+        let mut store = OpenBranches(database_connection(&self.sessions, &SafeBranch::default()).map_err(|e| e.to_string()));
         Ok((store.head(from)?.is_some(), store.head(to)?.is_some()))
     }
 
@@ -362,14 +479,15 @@ impl Project {
         }
     }
 
-    /// [`Project::rename_branch`], `ask` making the rename and `read` saying which of the names
-    /// exist. Dolt's success is taken as the rename done. Its failure is read back, as the reply
+    /// [`Project::rename_branch`], `let_go` letting go of the branch's database, `ask` making the
+    /// rename and `read` saying which of the names exist. Dolt's success is taken as the rename done. Its failure is read back, as the reply
     /// can be what was lost: only "still at the old name" is a failure, and not being able to tell
     /// holds the project until the same rename is asked for again or it closes.
     fn rename_steps(
         &self,
         from: &SafeBranch,
         to: &SafeBranch,
+        let_go: impl FnOnce(&str) -> Result<Renaming, String>,
         ask: impl FnOnce(&mut OpenBranches) -> Result<(), String>,
         read: impl Fn() -> Result<(bool, bool), String>,
     ) -> Result<(), RenameBranchError> {
@@ -398,8 +516,7 @@ impl Project {
         {
             return Err(RenameBranchError::RecordRemains);
         }
-        // Over a connection on `main`, which stays good whatever becomes of the branch. Dolt refuses
-        // while another session is on the branch (measured); that comes back as a failure.
+        // Over a connection on `main`, which stays good whatever becomes of the branch.
         let mut store = OpenBranches(self.connection_to(&SafeBranch::default()).map_err(|e| e.to_string()));
         if store.head(from).map_err(failed)?.is_none() {
             return Err(RenameBranchError::NoSuchBranch);
@@ -407,6 +524,11 @@ impl Project {
         if self.branch_name_taken(to).map_err(|e| failed(e.to_string()))? {
             return Err(RenameBranchError::NameTaken);
         }
+        // Dolt refuses while any other session has the branch as its database, idle or not
+        // (measured on 2.7.5). Its `--force` would pass over another program's session and overwrite
+        // a branch named `to`, so it is never used: this project's own sessions let go first, held
+        // off the branch until the answer is read, and a refusal left is another program's.
+        let held = let_go(&database_name(from)).map_err(failed)?;
         let Err(why) = ask(&mut store) else {
             self.renamed(from, to);
             return Ok(());
@@ -416,6 +538,9 @@ impl Project {
                 self.renamed(from, to);
                 Ok(())
             }
+            // Only when no session of this project's entered during the hold, there or gone since:
+            // one that waited past its budget is no other program's.
+            Ok((true, false)) if why.contains(IN_USE) && !held.entered() => Err(RenameBranchError::InUse),
             Ok((true, false)) => Err(failed(why)),
             _ => {
                 *self.unclear() = Some((from.clone(), to.clone()));
@@ -451,7 +576,7 @@ impl Project {
 
     /// Whether `branch` exists, over a connection of its own on `main`.
     fn branch_is_there(&self, branch: &SafeBranch) -> Result<bool, String> {
-        let mut store = OpenBranches(database_connection(&self.server().connector(), &SafeBranch::default()).map_err(|e| e.to_string()));
+        let mut store = OpenBranches(database_connection(&self.sessions, &SafeBranch::default()).map_err(|e| e.to_string()));
         Ok(store.head(branch)?.is_some())
     }
 
@@ -575,7 +700,7 @@ impl Project {
         }
         // As an opening checks a branch, and of the commit itself: only looking, so nothing is written
         // to a version whose scripts could run, and there is nothing to undo.
-        match crate::checked_database(self.server(), self.path(), &format!("{DATABASE}/{}", record.start)) {
+        match crate::checked_database(&self.sessions, self.path(), &format!("{DATABASE}/{}", record.start)) {
             Ok(_) => {}
             Err(Error::Scripted { what, .. }) => return Err(BranchCreationError::Scripted { what }),
             Err(e) => return Err(refused(CreationStep::CheckVersion, e)),
@@ -652,7 +777,7 @@ impl Project {
     pub fn branch_named(&self, stored: &str) -> Result<SafeBranch, StoredBranch> {
         let cannot = |e: &dyn fmt::Display| StoredBranch::CannotOpen(e.to_string());
         let asked = SafeBranch::found(stored).map_err(|e| cannot(&e))?;
-        let mut c = database_connection(&self.server().connector(), &SafeBranch::default()).map_err(|e| cannot(&e))?;
+        let mut c = database_connection(&self.sessions, &SafeBranch::default()).map_err(|e| cannot(&e))?;
         let row: Option<mysql::Row> = c
             .exec_first(format!("SELECT LEFT(CAST(name AS CHAR), {NAME_BYTES}) FROM dolt_branches WHERE LOWER(name) = LOWER(?)"), (asked.stored(),))
             .map_err(|e| cannot(&e))?;
@@ -717,8 +842,8 @@ impl VersionReader {
     }
 
     /// Whether `branch`'s own working set holds changes other than conversations.
-    fn model_changed_on(&self, c: &mut mysql::Conn, branch: &SafeBranch) -> Result<bool, Error> {
-        c.query_drop(format!("USE `{}`", database_name(branch))).map_err(sql("cannot use the branch"))?;
+    fn model_changed_on(&self, c: &mut Session, branch: &SafeBranch) -> Result<bool, Error> {
+        c.use_database(&database_name(branch)).map_err(sql("cannot use the branch"))?;
         Ok(!unsaved_tables(c, self.path())?.is_empty())
     }
 

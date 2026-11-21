@@ -13,11 +13,15 @@
 # (docs/releasing.md). Its notes are GitHub's, made from the pull requests merged since the last
 # release, under Archforge's own lines. The owner reads the draft and publishes it, which creates
 # the tag v<version>. A version with a suffix (0.2.0-rc.1) is a pre-release. A version published
-# already is refused: bump it first. A pull request that touches packaging or this file, and a run
-# started by hand, build every package as a dry run: the packages stay workflow artefacts and
-# nothing is released. Every package reports its version, commit and date. The README's
-# screenshots and the wiki's guide screens (`cargo xtask screens --gallery`) are rendered here and
-# attached to every release. Nothing is signed yet; the scripts' signing steps wait for their secrets.
+# already is refused: bump it first. A pull request that touches packaging, this file or
+# rust-toolchain.toml, and a run started by hand, build every package as a dry run: the packages
+# stay workflow artefacts and nothing is released. Every package reports its version, commit and
+# date. The README's screenshots and the wiki's guide screens (`cargo xtask screens --gallery`) are
+# rendered here and attached to every release. Nothing is signed yet; the scripts' signing steps
+# wait for their secrets.
+# Every job that builds installs Rust at the version rust-toolchain.toml names, the one the gate
+# runs: with no toolchain named, `rustup toolchain install` in the checkout installs the file's, and
+# rustup reads the file for every cargo run there, whatever the runner's default is.
 name: Release
 
 on:
@@ -27,6 +31,8 @@ on:
     paths:
       - ".github/workflows/release.yml"
       - "packaging/**"
+      # A new Rust version is built on every platform before it reaches a release.
+      - "rust-toolchain.toml"
   workflow_dispatch:
 
 permissions:
@@ -84,11 +90,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The interface's fonts, from craft-fonts beside the checkout
         run: git clone --depth 1 https://github.com/storytold/craft-fonts ../craft-fonts
-      - name: Rust for both halves of the universal binary
+      - name: Rust at the version rust-toolchain.toml names, for both halves of the universal binary
         run: |
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          rustup toolchain install
           rustup target add x86_64-apple-darwin aarch64-apple-darwin
+          rustup show active-toolchain
       - name: Build and package (dmg)
         run: sh packaging/macos/package.sh "$VERSION"
       - name: Check the disk image
@@ -152,9 +158,12 @@ jobs:
             Add-Content $env:GITHUB_PATH $bin
             $env:PATH = "$bin;$env:PATH"
           }
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          # In the checkout, rustup installs and adds the target to the version rust-toolchain.toml names.
+          rustup toolchain install
+          if ($LASTEXITCODE -ne 0) { throw 'rustup toolchain install failed' }
           rustup target add $env:TARGET
+          if ($LASTEXITCODE -ne 0) { throw 'rustup target add failed' }
+          rustup show active-toolchain
           dotnet tool install --global wix --version $env:WIX_VERSION
           wix extension add -g "WixToolset.UI.wixext/$env:WIX_VERSION" "WixToolset.Util.wixext/$env:WIX_VERSION"
       - name: The icon in every size
@@ -206,13 +215,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The interface's fonts, from craft-fonts beside the checkout
         run: git clone --depth 1 https://github.com/storytold/craft-fonts ../craft-fonts
-      - name: Rust and the window system's development packages
+      - name: Rust at the version rust-toolchain.toml names, and the window system's development packages
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev \
             libxrandr-dev libxi-dev libxcursor-dev libgl1-mesa-dev zsync rpm
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          rustup toolchain install
+          rustup show active-toolchain
       - name: Build and package (AppImage, deb, rpm, tar.gz)
         run: sh packaging/linux/package.sh "$VERSION" "${{ matrix.arch }}"
       - name: Check the packages
@@ -259,13 +268,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The interface's fonts, from craft-fonts beside the checkout
         run: git clone --depth 1 https://github.com/storytold/craft-fonts ../craft-fonts
-      - name: Rust, the window system's development packages and a software Vulkan driver
+      - name: Rust at the version rust-toolchain.toml names, the window system's development packages and a software Vulkan driver
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev \
             libxrandr-dev libxi-dev libxcursor-dev libgl1-mesa-dev mesa-vulkan-drivers libvulkan1
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          rustup toolchain install
+          rustup show active-toolchain
       - name: Render the gallery
         run: cargo xtask screens --gallery dist/screenshots
       - name: Check the pictures

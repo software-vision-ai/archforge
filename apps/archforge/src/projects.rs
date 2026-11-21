@@ -2546,6 +2546,7 @@ fn not_renamed(error: RenameJobError) -> BranchRefused {
     match error {
         RenameJobError::Rename(RenameBranchError::NameTaken) => BranchRefused::Taken,
         RenameJobError::Rename(RenameBranchError::RecordRemains) => BranchRefused::NotCleanedUp,
+        RenameJobError::Rename(RenameBranchError::InUse) => BranchRefused::InUse,
         RenameJobError::Rename(RenameBranchError::CannotTell(why)) => BranchRefused::Unclear(why),
         RenameJobError::BranchChanged | RenameJobError::Reopened | RenameJobError::NotOpen => BranchRefused::Moved,
         other => BranchRefused::Failed(other.to_string()),
@@ -5838,6 +5839,227 @@ mod tests {
         let target = branch("elsewhere");
         let read = open[0].version_reader().branch_counts_interrupted(&target, || assert_eq!(open[0].delete_branch(&target), Ok(Vec::new())));
         assert!(read.is_err(), "{read:?}");
+    }
+
+    /// A session of this Archforge's own on the branch, here a read in flight, does not stop a
+    /// rename of another branch or of the one in use, whatever the case it names the branch in: the
+    /// project lets go of it first, and the read fails. Dolt refuses such a rename while the session
+    /// is there.
+    #[test]
+    fn a_rename_lets_go_of_this_archforges_own_session_on_the_branch() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        {
+            let open = lock(&host.inner.open);
+            open[0].run_on_branch("main", "CALL DOLT_BRANCH('Upper')").unwrap();
+            // Held in another case, which Dolt takes as the same branch; and a name made elsewhere.
+            for (held, from, to) in [("ELSEWHERE", "elsewhere", "moved"), ("Upper", "Upper", "lower")] {
+                let renamed = || assert_eq!(open[0].rename_branch(&branch(from), &branch(to)), Ok(()));
+                let read = open[0].version_reader().branch_counts_interrupted(&branch(held), renamed);
+                assert!(read.is_err(), "{read:?}");
+                assert!(has_branch(&open[0], to) && !has_branch(&open[0], from));
+            }
+        }
+        switch_to(host, &path, "moved").unwrap();
+        let open = lock(&host.inner.open);
+        let (current, to) = (open[0].current_branch(), branch("again"));
+        let read = open[0].version_reader().branch_counts_interrupted(&current, || assert_eq!(open[0].rename_branch(&current, &to), Ok(())));
+        assert!(read.is_err(), "{read:?}");
+        assert_eq!(open[0].current_branch().stored(), "again");
+        assert!(open[0].version_reader().branch_counts(&to).is_ok(), "the next read finds it under its new name");
+    }
+
+    /// A rename ends the project's own sessions still on the branch, idle ones too, and only those:
+    /// one that has moved off it goes on.
+    #[test]
+    fn a_rename_ends_only_the_own_sessions_still_on_the_branch() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let mut idle = open[0].own_session_on("elsewhere").unwrap();
+        let mut left = open[0].own_session_on("elsewhere").unwrap();
+        left.use_branch("main").unwrap();
+        assert_eq!(open[0].rename_branch(&branch("elsewhere"), &branch("moved")), Ok(()));
+        assert!(idle.active_branch().is_err(), "the idle session on it was ended");
+        assert_eq!(left.active_branch(), Ok(Some("main".into())), "the one that left goes on");
+    }
+
+    /// A session the project has closed may stay on the server a while, as Dolt drops it some time
+    /// after the quit; it left the branch first, so it stops no rename. These were the sessions
+    /// behind the refusals on Linux: a rename of another branch, of the branch in use by the host,
+    /// of the branch in use held in another case, and an unclear rename asked again.
+    #[test]
+    fn a_session_closed_but_not_yet_dropped_stops_no_rename() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let renamed = |from: &str, to: &str| {
+            let open = lock(&host.inner.open);
+            let closed = (open[0].closed_session_on(from).unwrap(), open[0].closed_session_on(&from.to_uppercase()).unwrap());
+            let answer = open[0].rename_branch(&branch(from), &branch(to));
+            drop(closed);
+            answer
+        };
+        assert_eq!(renamed("elsewhere", "other"), Ok(()));
+        switch_to(host, &path, "other").unwrap();
+        let held = lock(&host.inner.open)[0].closed_session_on("other").unwrap();
+        assert_eq!(host.rename_branch(&path, branch("other"), branch("again")).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+        drop(held);
+        lock(&host.inner.open)[0].set_current_branch(branch("AGAIN"));
+        assert_eq!(renamed("again", "third"), Ok(()));
+        let unclear = lock(&host.inner.open)[0].rename_branch_faulted(&branch("third"), &branch("fourth"), false, false, false);
+        assert!(matches!(unclear, Err(RenameBranchError::CannotTell(_))), "{unclear:?}");
+        assert_eq!(renamed("third", "fourth"), Ok(()), "asked again, it is settled and goes ahead");
+        assert_eq!(on(host), "fourth");
+    }
+
+    /// A read asked to start on the branch once the rename has let go of it waits for the rename,
+    /// so it cannot stand in its way, and then finds the branch gone.
+    #[test]
+    fn a_read_that_starts_on_the_branch_during_a_rename_waits_for_it() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let (target, reader) = (branch("elsewhere"), open[0].version_reader());
+        let (reached, on_it) = channel::<()>();
+        let (release, held) = channel::<()>();
+        let (renamed, read) = std::thread::scope(|scope| {
+            let mut started = None;
+            let renamed = open[0].rename_branch_meanwhile(
+                &target,
+                &branch("moved"),
+                || {
+                    let target = target.clone();
+                    started = Some(scope.spawn(move || {
+                        reader.branch_counts_interrupted(&target, || {
+                            let _ = reached.send(());
+                            let _ = held.recv_timeout(Duration::from_secs(30));
+                        })
+                    }));
+                    // Unheld, the read would be on the branch well within this.
+                    assert!(on_it.recv_timeout(Duration::from_secs(1)).is_err(), "the read reached the branch during the rename");
+                },
+                || {},
+            );
+            drop(release);
+            (renamed, started.map(|read| read.join().unwrap()))
+        });
+        assert_eq!(renamed, Ok(()));
+        assert!(read.is_some_and(|read| read.is_err()), "the read found the branch gone");
+    }
+
+    /// A session of this Archforge's own that waited for the rename past its bound and went on to the
+    /// branch is not taken for another program's: the rename fails with Dolt's words. With
+    /// `leaves`, that session leaves again once Dolt has refused, before the refusal is looked at.
+    fn own_late_session_is_not_another_program(leaves: bool) {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        open[0].run_on_branch("main", "CALL DOLT_BRANCH('Upper')").unwrap();
+        let late = std::cell::RefCell::new(None);
+        let enter = || *late.borrow_mut() = Some(open[0].own_session_on("UPPER").unwrap());
+        let answered = || {
+            if leaves {
+                drop(late.borrow_mut().take());
+            }
+        };
+        let answer = open[0].rename_branch_meanwhile(&branch("Upper"), &branch("moved"), enter, answered);
+        assert!(matches!(&answer, Err(RenameBranchError::Failed(why)) if why.contains("in use")), "{answer:?}");
+        assert!(has_branch(&open[0], "Upper") && !has_branch(&open[0], "moved"));
+        let still = late.into_inner();
+        assert_eq!(still.is_none(), leaves);
+        assert!(still.is_none_or(|mut s| s.active_branch() == Ok(Some("Upper".into()))));
+        // The next hold starts clear: another program on the branch now is said to be one.
+        let _outside = open[0].outside_session_on("Upper").unwrap();
+        assert_eq!(open[0].rename_branch(&branch("Upper"), &branch("moved")), Err(RenameBranchError::InUse));
+    }
+
+    /// [`own_late_session_is_not_another_program`], the late session still there.
+    #[test]
+    fn a_rename_never_blames_another_program_for_its_own_session() {
+        own_late_session_is_not_another_program(false);
+    }
+
+    /// [`own_late_session_is_not_another_program`], the late session gone again before the refusal
+    /// is looked at: that it entered during the hold is what counts.
+    #[test]
+    fn a_rename_never_blames_another_program_for_its_own_session_gone_since() {
+        own_late_session_is_not_another_program(true);
+    }
+
+    /// How many times `signals` is told something before its sender goes, for a test of a release:
+    /// the release's thread drops its senders when it ends.
+    fn signals_until_gone(signals: &Receiver<()>) -> usize {
+        let mut count = 0;
+        while signals.recv_timeout(Duration::from_secs(60)).is_ok() {
+            count += 1;
+        }
+        count
+    }
+
+    /// Letting go of the project's own sessions stops once its budget is spent, however long the
+    /// server or the release's thread takes: the rename fails by that reason, nothing is renamed, a
+    /// request the thread comes to too late is never started, and the session it was to end stays.
+    #[test]
+    fn a_rename_stops_letting_go_when_its_budget_is_spent() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let mut idle = open[0].own_session_on("elsewhere").unwrap();
+        let (budget, stall) = (Duration::from_millis(300), Duration::from_secs(5));
+        let (started, starts) = channel::<()>();
+        let begun = Instant::now();
+        let stalled = move || std::thread::sleep(stall);
+        let answer = open[0].rename_branch_watched(&branch("elsewhere"), &branch("moved"), budget, stalled, move || started.send(()).unwrap(), || {});
+        assert!(begun.elapsed() < stall, "it waited for the stalled thread: {:?}", begun.elapsed());
+        assert!(matches!(&answer, Err(RenameBranchError::Failed(why)) if why.contains("in time")), "{answer:?}");
+        assert!(has_branch(&open[0], "elsewhere") && !has_branch(&open[0], "moved"));
+        assert_eq!(signals_until_gone(&starts), 0, "the request it came to after the budget was not started");
+        assert_eq!(idle.active_branch(), Ok(Some("elsewhere".into())), "nothing was ended");
+    }
+
+    /// Once the budget is spent after an answer, the release asks nothing more: the rename fails by
+    /// that reason and nothing is renamed.
+    #[test]
+    fn a_release_asks_nothing_once_its_budget_is_spent() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let _idle = open[0].own_session_on("elsewhere").unwrap();
+        let budget = Duration::from_secs(2);
+        let (received, receipts) = channel::<()>();
+        let spend = move || std::thread::sleep(budget + Duration::from_millis(500));
+        let answer = open[0].rename_branch_watched(&branch("elsewhere"), &branch("moved"), budget, move || received.send(()).unwrap(), || {}, spend);
+        assert!(matches!(&answer, Err(RenameBranchError::Failed(why)) if why.contains("in time")), "{answer:?}");
+        assert!(has_branch(&open[0], "elsewhere") && !has_branch(&open[0], "moved"));
+        assert_eq!(signals_until_gone(&receipts), 1, "only the request before the budget ran out was sent");
+    }
+
+    /// Another program's session on the branch is left alone: the rename is refused by its own
+    /// reason, not Dolt's words, and the name stays. Once that session leaves, the rename goes ahead.
+    #[test]
+    fn a_rename_is_refused_while_another_program_is_on_the_branch() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let (target, to) = (branch("elsewhere"), branch("moved"));
+        let mut outside = open[0].outside_session_on("elsewhere").unwrap();
+        assert_eq!(open[0].rename_branch(&target, &to), Err(RenameBranchError::InUse));
+        assert!(has_branch(&open[0], "elsewhere") && !has_branch(&open[0], "moved"));
+        assert_eq!(outside.active_branch(), Ok(Some("elsewhere".into())), "the other program's session goes on");
+        assert_eq!(not_renamed(RenameJobError::Rename(RenameBranchError::InUse)), BranchRefused::InUse);
+        drop(outside);
+        let until = Instant::now() + Duration::from_secs(30);
+        while open[0].rename_branch(&target, &to) == Err(RenameBranchError::InUse) && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(has_branch(&open[0], "moved") && !has_branch(&open[0], "elsewhere"));
+    }
+
+    /// A session the project closes leaves its branch first and is forgotten, so the project keeps
+    /// no record of every read it made.
+    #[test]
+    fn closed_sessions_are_forgotten() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let before = open[0].sessions_known();
+        for _ in 0..3 {
+            open[0].version_reader().branch_counts(&branch("elsewhere")).unwrap();
+        }
+        assert_eq!(open[0].sessions_known(), before);
     }
 
     /// Forgetting one project's rows, by Close without writing or by Don't save, leaves alone what
