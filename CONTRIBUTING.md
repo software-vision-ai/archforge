@@ -20,7 +20,8 @@ come one at a time. Small, focused changes are the easiest to review.
    write screenshots under `plan/shots/`.
 4. Run the gate, `cargo xtask ci`, until it is green.
 5. Open a pull request. Describe what changed, why, and how you checked it; attach before and after
-   screenshots for interface changes.
+   screenshots for interface changes. The Gate workflow (`.github/workflows/gate.yml`) runs the
+   same `cargo xtask ci` on the pull request, and a pull request merges only when that run is green.
 
 ## Translations
 
