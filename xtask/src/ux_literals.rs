@@ -128,12 +128,12 @@ impl Shadows {
     }
 }
 
-/// Whether the macro called through `path` is the standard library's pattern macro: one of
-/// [`PATTERN_MACROS`] named through `std` or `core` (`std::matches!`, `::core::matches!`), or
-/// unqualified when the file gives that name no meaning of its own (`shadowed`).
-fn std_pattern_macro(path: &syn::Path, shadowed: &[String]) -> bool {
+/// Whether the macro called through `path` is the standard library's macro of one of `names`:
+/// named through `std` or `core` (`std::matches!`, `::core::stringify!`), or unqualified when
+/// the file gives that name no meaning of its own (`shadowed`).
+fn std_macro(path: &syn::Path, names: &[&str], shadowed: &[String]) -> bool {
     let Some(last) = path.segments.last().map(|s| name(&s.ident)) else { return false };
-    if !PATTERN_MACROS.contains(&last.as_str()) {
+    if !names.contains(&last.as_str()) {
         return false;
     }
     match path.segments.first().map(|s| name(&s.ident)) {
@@ -398,13 +398,17 @@ impl<'ast> Visit<'ast> for Scan {
     }
 
     /// A macro's tokens: `matches!` and its asserting forms take an expression and a pattern
-    /// ([`PATTERN_MACROS`]); the others are read by [`Scan::macro_body`].
+    /// ([`PATTERN_MACROS`]); `stringify!` makes a string of them unread ([`UNEVALUATED`]); the
+    /// others are read by [`Scan::macro_body`].
     fn visit_macro(&mut self, m: &'ast syn::Macro) {
         visit::visit_macro(self, m);
         if m.path.is_ident("macro_rules") {
             return self.macro_rules(&m.tokens);
         }
-        let takes_pattern = std_pattern_macro(&m.path, &self.shadowed);
+        if std_macro(&m.path, &UNEVALUATED, &self.shadowed) {
+            return;
+        }
+        let takes_pattern = std_macro(&m.path, &PATTERN_MACROS, &self.shadowed);
         match takes_pattern.then(|| m.parse_body_with(pattern_args).ok()).flatten() {
             Some((value, pattern, guard, rest)) => {
                 self.visit_expr(&value);
@@ -451,6 +455,11 @@ fn qualified_constant(trees: &[TokenTree], i: usize) -> Option<String> {
     let Some(TokenTree::Ident(member)) = trees.get(k + 3) else { return None };
     (punct(k, '>') && punct(k + 1, ':') && punct(k + 2, ':') && constant_case(&name(member))).then(|| name(member))
 }
+
+/// The standard library's macros that take paths and expressions as tokens without evaluating
+/// them: `stringify!(egui::Color32::RED)` is a string. (`concat!`, `include_str!` and the like take
+/// literals only.)
+const UNEVALUATED: [&str; 1] = ["stringify"];
 
 /// Macros whose second argument is a pattern, with an optional guard: `matches!(font, FontId {
 /// size, family } if size > 1.0)`, and the asserting forms, which may add a message.
@@ -806,6 +815,37 @@ mod tests {
         let source =
             "// Color32::RED in a comment\n/// FontId { size } in a doc comment\nlet s = \"Color32::BLACK\";\nlet r = r#\"FontId { x }\"#;\n";
         assert_eq!(findings(source), Vec::<String>::new());
+    }
+
+    /// The standard library's `stringify!` turns its tokens into a string without evaluating them,
+    /// so they are not read: through `std` or `core`, or unqualified when the file gives the name
+    /// no meaning of its own. Another macro of that name, and an evaluating macro around it, are.
+    #[test]
+    fn std_stringify_is_a_string() {
+        let none = [
+            "let s = std::stringify!(egui::Color32::RED);",
+            "let s = stringify!(Color32::WHITE);",
+            "let s = ::core::stringify!(FontId { size, family });",
+            "use helpers::other;\nlet s = stringify!(Color32::RED);",
+        ];
+        let found = [
+            "macro_rules! stringify { ($e:expr) => { $e }; }\nlet c = stringify!(Color32::RED);",
+            "use helpers::paint as stringify;\nlet c = stringify!(Color32::RED);",
+            "let c = other::stringify!(Color32::RED);",
+            "let c = ::stringify!(Color32::RED);",
+            "assert_eq!(stringify!(red), Color32::RED);",
+        ];
+        // Every case is checked before the test fails, so a failure names all the misread ones.
+        let misread: Vec<String> = none
+            .iter()
+            .map(|s| (s, 0))
+            .chain(found.iter().map(|s| (s, 1)))
+            .filter_map(|(source, n)| {
+                let got = findings(source);
+                (got.len() != n).then(|| format!("{source} gave {got:?}"))
+            })
+            .collect();
+        assert_eq!(misread, Vec::<String>::new());
     }
 
     /// The repository as it stands makes no colour or font outside ux, and ux itself is left out.
