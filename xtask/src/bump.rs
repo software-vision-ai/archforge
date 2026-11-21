@@ -191,8 +191,9 @@ pub fn run() -> Result<(), String> {
 }
 
 /// One bump through `io`; the lines to print. A lock checked out with CRLF line endings is read
-/// with LF, as its tables are split on LF, and written with CRLF again; a failure after `cargo
-/// update` writes back the file as it was.
+/// with LF, as its tables are split on LF, and written with CRLF again. From `cargo update` on,
+/// every failure, that update's own included (cargo may have cut the file short), writes back the
+/// file as it was.
 fn bump(io: &Io) -> Result<Vec<String>, String> {
     let original = (io.read)()?;
     let before = lf(&original);
@@ -200,27 +201,25 @@ fn bump(io: &Io) -> Result<Vec<String>, String> {
     if packages.is_empty() {
         return Err(format!("bump: no crate in Cargo.lock comes from {SOURCE}"));
     }
-    (io.update)(&packages)?;
     let write = |text: &str| (io.write)(&endings_of(&original, text));
-    let mut relisted = Vec::new();
-    let after = restoring(&original, &write, || {
+    restoring(&original, &write, || {
+        (io.update)(&packages)?;
         let after = lf(&(io.read)()?);
-        relisted = settle(&before, &after, &write, io.check)?;
-        Ok(after)
-    })?;
-    let mut lines = Vec::new();
-    if !relisted.is_empty() {
-        lines.push(format!("kept the dependency lists `cargo update` re-chose for {} as Cargo.lock had them", relisted.join(", ")));
-    }
-    let moved = moves(&before, &after, SOURCE)?;
-    if moved.is_empty() {
-        lines.push(match entries(&after)?.1.iter().find(|e| e.comes_from(SOURCE)).and_then(Entry::commit) {
-            Some(commit) => format!("the craft-libs crates are at the newest main already, {commit}"),
-            None => "no craft-libs crate moved".to_string(),
-        });
-    }
-    lines.extend(moved);
-    Ok(lines)
+        let relisted = settle(&before, &after, &write, io.check)?;
+        let mut lines = Vec::new();
+        if !relisted.is_empty() {
+            lines.push(format!("kept the dependency lists `cargo update` re-chose for {} as Cargo.lock had them", relisted.join(", ")));
+        }
+        let moved = moves(&before, &after, SOURCE)?;
+        if moved.is_empty() {
+            lines.push(match entries(&after)?.1.iter().find(|e| e.comes_from(SOURCE)).and_then(Entry::commit) {
+                Some(commit) => format!("the craft-libs crates are at the newest main already, {commit}"),
+                None => "no craft-libs crate moved".to_string(),
+            });
+        }
+        lines.extend(moved);
+        Ok(lines)
+    })
 }
 
 /// `text` with CRLF line endings turned into LF.
@@ -235,9 +234,9 @@ fn endings_of(original: &str, text: &str) -> String {
     if text == original || !original.contains("\r\n") { text.to_string() } else { lf(text).replace('\n', "\r\n") }
 }
 
-/// Runs `step`, the part of a bump after `cargo update` rewrote the lock. When it fails, `before`
-/// is written back through `write`, and the error says whether that worked.
-fn restoring(before: &str, write: &dyn Fn(&str) -> Result<(), String>, step: impl FnOnce() -> Result<String, String>) -> Result<String, String> {
+/// Runs `step`, the part of a bump from `cargo update` on, which can change the lock. When it
+/// fails, `before` is written back through `write`, and the error says whether that worked.
+fn restoring<T>(before: &str, write: &dyn Fn(&str) -> Result<(), String>, step: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
     step().map_err(|refusal| match write(before) {
         Ok(()) => format!("{refusal}\nbump: Cargo.lock is back as it was"),
         Err(e) => format!("{refusal}\nbump: could not put the lock back as it was: {e}; `git checkout -- Cargo.lock` puts back the committed one"),
@@ -429,7 +428,7 @@ mod tests {
         };
         assert_eq!(restoring("old", &write, || Ok("new".to_string())).unwrap(), "new");
         assert_eq!(*written.borrow(), Vec::<String>::new());
-        let error = restoring("old", &write, || Err("bump: refused".to_string())).unwrap_err();
+        let error = restoring("old", &write, || Err::<String, _>("bump: refused".to_string())).unwrap_err();
         assert_eq!(error, "bump: refused\nbump: Cargo.lock is back as it was");
         assert_eq!(*written.borrow(), ["old"]);
         // The whole path: the kept lock is written, its check fails, and the old lock follows it.
@@ -439,7 +438,7 @@ mod tests {
         assert!(error.ends_with("pull request\nbump: Cargo.lock is back as it was"), "{error}");
         assert_eq!(*written.borrow(), [lock(NEW, "0.36.2"), before.clone()]);
         let failing = |_: &str| -> Result<(), String> { Err("disk full".to_string()) };
-        let error = restoring("old", &failing, || Err("bump: refused".to_string())).unwrap_err();
+        let error = restoring("old", &failing, || Err::<String, _>("bump: refused".to_string())).unwrap_err();
         assert_eq!(
             error,
             "bump: refused\nbump: could not put the lock back as it was: disk full; `git checkout -- Cargo.lock` puts back the committed one"
@@ -450,9 +449,9 @@ mod tests {
     /// move, a refusal, a check that fails, an update that fails, a CRLF lock and a lock already new.
     #[test]
     fn a_bump_leaves_the_lock_moved_or_as_it_was() {
-        /// Runs a bump on `lock`, where `cargo update` writes `updated` (or fails when none) and the
-        /// check says `resolves`; returns the result and the lock left behind.
-        fn bump_on(lock: &str, updated: Option<&str>, resolves: bool) -> (Result<Vec<String>, String>, String) {
+        /// Runs a bump on `lock`, where `cargo update` writes `updated` and then fails unless
+        /// `update_ok`, and the check says `resolves`; returns the result and the lock left behind.
+        fn bump_on(lock: &str, updated: &str, update_ok: bool, resolves: bool) -> (Result<Vec<String>, String>, String) {
             let file = RefCell::new(lock.to_string());
             let read = || -> Result<String, String> { Ok(file.borrow().clone()) };
             let write = |text: &str| -> Result<(), String> {
@@ -460,9 +459,8 @@ mod tests {
                 Ok(())
             };
             let update = |_: &[String]| -> Result<(), String> {
-                let text = updated.ok_or("bump: `cargo update` could not move craft-atomic")?;
-                *file.borrow_mut() = text.to_string();
-                Ok(())
+                *file.borrow_mut() = updated.to_string();
+                if update_ok { Ok(()) } else { Err("bump: `cargo update` could not move craft-atomic".to_string()) }
             };
             let check = || -> Result<(), String> { if resolves { Ok(()) } else { Err("cargo metadata failed".to_string()) } };
             let result = bump(&Io { read: &read, write: &write, update: &update, check: &check });
@@ -470,26 +468,29 @@ mod tests {
         }
         let (old, new) = (lock(OLD, "0.36.2"), lock(NEW, "0.36.2"));
         let relisted = new.replace(" \"egui\",\n", "");
-        let (result, left) = bump_on(&old, Some(&relisted), true);
+        let (result, left) = bump_on(&old, &relisted, true, true);
         assert_eq!(
             result.unwrap(),
             ["kept the dependency lists `cargo update` re-chose for local 0.1.0 as Cargo.lock had them", "craft-atomic d40c2be0aaaa -> 1a2b3c4d5e6f"]
         );
         assert_eq!(left, new, "craft-libs moved, the rest as it was");
-        let (result, left) = bump_on(&old, Some(&lock(NEW, "0.37.0")), true);
+        let (result, left) = bump_on(&old, &lock(NEW, "0.37.0"), true, true);
         assert!(result.unwrap_err().ends_with("\nbump: Cargo.lock is back as it was"));
         assert_eq!(left, old, "a refusal leaves the old lock");
-        let (result, left) = bump_on(&old, Some(&relisted), false);
+        let (result, left) = bump_on(&old, &relisted, true, false);
         assert!(result.unwrap_err().starts_with("cargo metadata failed\n"));
         assert_eq!(left, old, "a failed check leaves the old lock");
-        let (result, left) = bump_on(&old, None, true);
-        assert_eq!(result.unwrap_err(), "bump: `cargo update` could not move craft-atomic");
-        assert_eq!(left, old);
+        // A `cargo update` that fails, untouched lock or cut short, leaves the old lock too.
+        for written in [old.as_str(), "# This file is automatically @gen"] {
+            let (result, left) = bump_on(&old, written, false, true);
+            assert_eq!(result.unwrap_err(), "bump: `cargo update` could not move craft-atomic\nbump: Cargo.lock is back as it was");
+            assert_eq!(left, old, "a failed update leaves the old lock");
+        }
         let crlf = |text: &str| text.replace('\n', "\r\n");
-        let (result, left) = bump_on(&crlf(&old), Some(&relisted), true);
+        let (result, left) = bump_on(&crlf(&old), &relisted, true, true);
         assert!(result.is_ok());
         assert_eq!(left, crlf(&new), "a CRLF lock stays CRLF");
-        let (result, left) = bump_on(&new, Some(&new), true);
+        let (result, left) = bump_on(&new, &new, true, true);
         assert_eq!(result.unwrap(), ["the craft-libs crates are at the newest main already, 1a2b3c4d5e6f77777777777777777777777777"]);
         assert_eq!(left, new);
     }
