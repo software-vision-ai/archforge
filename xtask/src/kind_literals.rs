@@ -187,9 +187,6 @@ enum Registered {
     Unreadable(String),
 }
 
-/// How many tokens a `fn kinds` signature may take before its body opens.
-const MAX_SIGNATURE: usize = 40;
-
 /// `tokens` written out again, a space between two names.
 fn shown(tokens: &[(Tok, usize)]) -> String {
     let mut out = String::new();
@@ -237,9 +234,10 @@ fn element(mut tokens: &[(Tok, usize)]) -> Registered {
 }
 
 /// What each `fn kinds` of `lexed` registers, with its line: every element of the list its body is
-/// (`&[A, crate::B, …]`). Only a `kinds` returning a slice of strings (its signature ending in
-/// `str]`) registers; one that is declared only, or returns anything else (a `Vec`), does not. A
-/// registering `kinds` whose body is no list, or whose list does not end, is unreadable.
+/// (`&[A, crate::B, …]`). Only a `kinds` returning a slice of strings registers: its signature,
+/// however long, ends in `str]` before any `where` clause. One that is declared only, or returns
+/// anything else (a `Vec`, an array), does not. A registering `kinds` whose body is no list, or
+/// whose list does not end, and a `kinds` with no body nor `;` after it, are unreadable.
 fn registered(lexed: &Lexed) -> Vec<(Registered, usize)> {
     let t = &lexed.tokens;
     let mut out = Vec::new();
@@ -248,12 +246,18 @@ fn registered(lexed: &Lexed) -> Vec<(Registered, usize)> {
         if f != "fn" || k != "kinds" {
             continue;
         }
-        // The body opens after the signature; a declaration ends at its semicolon.
-        let Some(open) = (at + 2..at + MAX_SIGNATURE).find(|j| matches!(t.get(*j), Some((Tok::Punct('{' | ';'), _)))) else {
-            out.push((Registered::Unreadable("a signature too long to read".into()), *line));
+        // The body opens after the signature, however long; a declaration ends at its semicolon.
+        let Some(open) = (at + 2..t.len()).find(|j| matches!(t.get(*j), Some((Tok::Punct('{' | ';'), _)))) else {
+            out.push((Registered::Unreadable("a signature with no body".into()), *line));
             continue;
         };
-        let slice = matches!(t.get(open.saturating_sub(2)..open), Some([(Tok::Name(s), _), (Tok::Punct(']'), _)]) if s == "str");
+        // The return type ends the signature, before a `where` clause; with none, a `)` does.
+        let signature = t.get(at + 2..open).unwrap_or_default();
+        let head = signature
+            .iter()
+            .position(|(t, _)| matches!(t, Tok::Name(w) if w == "where"))
+            .map_or(signature, |w| signature.get(..w).unwrap_or_default());
+        let slice = matches!(head, [.., (Tok::Name(s), _), (Tok::Punct(']'), _)] if s == "str");
         if !slice || !matches!(t.get(open), Some((Tok::Punct('{'), _))) {
             continue;
         }
@@ -520,14 +524,38 @@ mod tests {
         assert_eq!(found("&[crate::]"), [unread("crate::")]);
         assert_eq!(found("KINDS"), [unread("a body that is no list: KINDS}")]);
         assert_eq!(found("&KINDS"), [unread("a body that is no list: &KINDS}")]);
-        // A list that never ends, and a signature too long to find its body, are findings too.
+        // A list that never ends, and a kinds with no body, are findings too.
         let open = lex("fn kinds(&self) -> &'static [&'static str] { &[DIAGRAM_KIND");
         assert_eq!(registered(&open), [(Registered::Unreadable("a list that does not end".into()), 1)]);
-        let long = lex(&format!("fn kinds{}", " x".repeat(MAX_SIGNATURE)));
-        assert_eq!(registered(&long), [(Registered::Unreadable("a signature too long to read".into()), 1)]);
+        let bodiless = lex(&format!("fn kinds{}", " x".repeat(60)));
+        assert_eq!(registered(&bodiless), [(Registered::Unreadable("a signature with no body".into()), 1)]);
         // A kinds of another shape (a Vec), or a function named otherwise, registers nothing.
         assert_eq!(registered(&lex("fn kinds(&self) -> Vec<&'static str> { vec![\"er\"] }")), Vec::new());
         assert_eq!(registered(&lex("fn kind_names(&self) -> &'static [&'static str] { &[\"er\"] }")), Vec::new());
+    }
+
+    /// A signature is read to its end however long it is: a long one returning a slice of strings
+    /// registers its list, a `where` clause after it included, and a long one returning anything
+    /// else registers nothing, never a finding about its length.
+    #[test]
+    fn a_long_signature_is_read_to_its_end_and_only_a_slice_of_strings_registers() {
+        let bounds = (0..12).map(|n| format!("T{n}: Clone + Send")).collect::<Vec<_>>().join(", ");
+        let params = (0..12).map(|n| format!("p{n}: T{n}")).collect::<Vec<_>>().join(", ");
+        let found = |rest: &str| unlisted("crates/er/src/lib.rs", "er", &lex(&format!("fn kinds<{bounds}>(&self, {params}) {rest}")));
+        let missing =
+            "crates/er/src/lib.rs line 1: the diagram kind NEW_KIND is missing from KINDS (xtask/src/kind_literals.rs), so its word is not checked";
+        assert_eq!(found("-> &'static [&'static str] { &[(NEW_KIND)] }"), [missing]);
+        assert_eq!(found("-> &'static [&'static str] where T0: Copy, T1: Fn() -> u8 { &[NEW_KIND] }"), [missing]);
+        assert_eq!(found("-> &'static [&'static str] { &[DIAGRAM_KIND] }"), Vec::<String>::new());
+        for other in [
+            "-> Vec<&'static str> { vec![\"er\"] }",
+            "-> Vec<&'static str> where T0: Fn() -> &'static [&'static str] { vec![] }",
+            "-> [&'static str; 2] { [\"er\", \"x\"] }",
+            "where T0: Fn() -> &'static [&'static str] { let _ = p0; }",
+            "-> usize;",
+        ] {
+            assert_eq!(found(other), Vec::<String>::new(), "{other}");
+        }
     }
 
     /// Tests and generated code are told apart by their paths, and a source's crate by its folder.
