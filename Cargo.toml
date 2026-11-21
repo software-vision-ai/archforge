@@ -5,7 +5,8 @@ members = ["crates/*", "apps/*", "xtask"]
 [workspace.package]
 version = "0.14.0"
 edition = "2024"
-rust-version = "1.95"
+# The version rust-toolchain.toml pins, the one the gate builds with; the two change together.
+rust-version = "1.96.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/software-vision-ai/archforge"
 
