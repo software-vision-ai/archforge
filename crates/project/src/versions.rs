@@ -12,6 +12,7 @@ use crate::branches::{CurrentBranch, branch_now};
 use crate::chat::{id_at, is_commit, limits};
 use crate::model::{database_connection, sql, unsaved_tables};
 use crate::saving::{is_agent, is_version, shown_author};
+use crate::sessions::{Session, Sessions};
 use crate::{Error, Project};
 
 /// How many commits at the old end of a line are not versions: Dolt's root and the creation.
@@ -56,7 +57,8 @@ pub struct Versions {
 /// the project has closed.
 #[derive(Debug, Clone)]
 pub struct VersionReader {
-    connector: archforge_dolt::Connector,
+    /// The project's sessions, which this reader's connections are.
+    sessions: Sessions,
     path: std::path::PathBuf,
     /// The project's current branch, followed as it moves.
     branch: CurrentBranch,
@@ -120,7 +122,7 @@ impl Gathering<'_> {
 impl Project {
     /// A reader of this project's versions and their models, for a thread of its own.
     pub fn version_reader(&self) -> VersionReader {
-        VersionReader { connector: self.server().connector(), path: self.path().to_path_buf(), branch: self.branch.clone() }
+        VersionReader { sessions: self.sessions.clone(), path: self.path().to_path_buf(), branch: self.branch.clone() }
     }
 
     /// [`VersionReader::versions`], on this project.
@@ -167,11 +169,11 @@ impl VersionReader {
     /// A conversation can reach another branch only through shared history, as a branch made
     /// outside Archforge keeps its source's, so the heads are enough, and an unsafe name no bar.
     pub(crate) fn chats_only_on(&self, branch: &SafeBranch) -> Result<Vec<Uuid>, Error> {
-        let mut c = database_connection(&self.connector, branch)?;
+        let mut c = database_connection(&self.sessions, branch)?;
         let others = self.other_heads(&mut c, branch)?;
         let mut only = self.chat_ids(&mut c)?;
         for head in others {
-            c.query_drop(format!("USE `{DATABASE}/{head}`")).map_err(sql("cannot read another branch's conversations"))?;
+            c.use_database(&format!("{DATABASE}/{head}")).map_err(sql("cannot read another branch's conversations"))?;
             let there = self.chat_ids(&mut c)?;
             only.retain(|id| !there.contains(id));
         }
@@ -201,7 +203,7 @@ impl VersionReader {
 
     /// [`VersionReader::branch_counts`], with `meanwhile` run once its connection is on the branch.
     fn branch_counts_after(&self, branch: &SafeBranch, meanwhile: impl FnOnce()) -> Result<BranchCounts, Error> {
-        let mut c = database_connection(&self.connector, branch)?;
+        let mut c = database_connection(&self.sessions, branch)?;
         meanwhile();
         let others = self.other_heads(&mut c, branch)?;
         let versions_only_here = self.versions_only_on(&mut c, branch, &others)?;
@@ -254,7 +256,7 @@ impl VersionReader {
 
     /// The name Dolt gives the branch a connection to this project is on now.
     pub fn active_branch(&self) -> Result<String, Error> {
-        let mut c = database_connection(&self.connector, &branch_now(&self.branch))?;
+        let mut c = database_connection(&self.sessions, &branch_now(&self.branch))?;
         let name: Option<String> = c.query_first("SELECT active_branch()").map_err(sql("cannot read the current branch"))?;
         name.ok_or_else(|| self.damaged_log())
     }
@@ -265,13 +267,13 @@ impl VersionReader {
     }
 
     /// A connection of this reader's own, using the project's database.
-    pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
-        database_connection(&self.connector, &branch_now(&self.branch))
+    pub(crate) fn model_connection(&self) -> Result<Session, Error> {
+        database_connection(&self.sessions, &branch_now(&self.branch))
     }
 
     /// A connection of this reader's own, using `branch` of the project's database.
-    pub(crate) fn branch_connection(&self, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
-        database_connection(&self.connector, branch)
+    pub(crate) fn branch_connection(&self, branch: &SafeBranch) -> Result<Session, Error> {
+        database_connection(&self.sessions, branch)
     }
 
     /// The branch the project is on now.
@@ -292,7 +294,7 @@ impl VersionReader {
         if limit > MOST_IN_A_PAGE {
             return Err(Error::TooLarge { what: "a page of versions", size: limit, max: MOST_IN_A_PAGE, unit: "versions" });
         }
-        let mut c = database_connection(&self.connector, branch)?;
+        let mut c = database_connection(&self.sessions, branch)?;
         let base = self.shared_with_main(&mut c, branch)?;
         let query = format!(
             "SELECT commit_hash, LEFT(committer, {TEXT_CHARS}), email, DATE_FORMAT(date, '%Y-%m-%dT%H:%i:%sZ'), LEFT(message, {TEXT_CHARS}) \

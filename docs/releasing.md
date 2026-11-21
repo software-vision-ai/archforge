@@ -48,9 +48,10 @@ can't be released again, so the next release always bumps it first.
 Pushing to `release` again before publishing rebuilds the same draft: its packages and notes are
 replaced. Once the draft is published, the workflow refuses that version, so bump it first.
 
-**Dry runs:** a pull request that touches `packaging/` or the workflow, and a run started by hand
-(*Actions → Release → Run workflow*), build and check every package without releasing anything;
-the packages stay on the run as artefacts.
+**Dry runs:** a pull request that touches `packaging/`, the workflow or `rust-toolchain.toml` (the
+Rust version every package is built with), and a run started by hand (*Actions → Release → Run
+workflow*), build and check every package without releasing anything; the packages stay on the run
+as artefacts.
 
 ## What gets built
 

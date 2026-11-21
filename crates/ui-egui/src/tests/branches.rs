@@ -883,6 +883,7 @@ fn a_branch_row_menu_renames_any_branch_but_main() {
 #[test]
 fn a_refused_rename_says_why_and_a_lost_one_can_be_asked_again() {
     let cases = [
+        (Some(crate::BranchRefused::InUse), "Another program is using this branch. Close that program, then try again."),
         (Some(crate::BranchRefused::Moved), "The project changed before the branch was renamed, so its name stayed."),
         (Some(crate::BranchRefused::Failed("disk full".into())), "Couldn't rename the branch: disk full"),
         (None, "Archforge could not tell whether the branch was renamed to later. Rename it to later again to find out."),

@@ -56,7 +56,8 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   has an automation id.
 - Every string the user sees goes through the catalogues, with a row in every one.
 - Behaviour, icons and wording are our own: never copy another product's.
-- A lint added by a toolchain release is fixed in code at once, never by pinning the toolchain.
+- The Rust version is the one `rust-toolchain.toml` pins. A lint added by a newer release is fixed
+  in code in the change that raises it, never by allowing the lint or by holding the version back.
 - Hot files (the translation catalogues in `crates/ui-egui/src/i18n/`, `xtask/src/layers.rs`,
   `ATTRIBUTION.toml`) are edited surgically, with new rows placed beside related entries and never
   appended at the end of the file.
