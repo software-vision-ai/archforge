@@ -23,6 +23,18 @@ come one at a time. Small, focused changes are the easiest to review.
    screenshots for interface changes. The Gate workflow (`.github/workflows/gate.yml`) runs the
    same `cargo xtask ci` on the pull request, and a pull request merges only when that run is green.
 
+## The Rust version
+
+The Rust version lives in one place: `rust-toolchain.toml` at the repository's root, with the
+formatter, the lints and the web target the gate needs. rustup reads it wherever cargo runs in the
+checkout, so the gate on your machine, the Gate workflow and the release jobs build with the same
+compiler, whatever your default toolchain is; the first cargo command installs it. Use the cargo
+rustup provides: one from a package manager ignores the file.
+
+Raising the version is one change to that file's `channel`. Cargo does not read the file, so the
+same commit sets `rust-version` in `Cargo.toml` to the same number, and fixes in code the lints the
+new release adds. Neither workflow names a version of its own.
+
 ## Translations
 
 The interface strings live in `crates/ui-egui/src/i18n/<language>.tsv`, keyed by the English text.

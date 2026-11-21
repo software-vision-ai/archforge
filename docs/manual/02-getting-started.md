@@ -14,8 +14,9 @@
   **System Settings** → **Privacy & Security** (**Open Anyway**), and Windows SmartScreen asks you
   to choose **More info**, then **Run anyway**.
 
-To build Archforge from its source instead, you need stable [Rust](https://www.rust-lang.org/tools/install)
-1.95 or later; on Linux also the development packages for xkbcommon, Wayland, X11, Xrandr, Xi and
+To build Archforge from its source instead, you need [Rust](https://www.rust-lang.org/tools/install)
+through rustup, which installs the version the checkout's `rust-toolchain.toml` names on the first
+build; on Linux also the development packages for xkbcommon, Wayland, X11, Xrandr, Xi and
 Mesa GL; and optionally a checkout of [craft-fonts](https://github.com/storytold/craft-fonts) next
 to the Archforge checkout, so the interface is drawn in Inter.
 
