@@ -49,8 +49,9 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   target.
 - The user interface never touches the file system or the operating system itself: the host
   injects `Services`. Only `crates/ui-egui` and the application may use the toolkit.
-- The interface draws through `ux`: no literal colour, font or icon outside it, and every control
-  has an automation id.
+- The interface draws through `ux`: no literal colour, font or icon outside it (the gate refuses
+  egui's colour and font constructors and colour constants elsewhere), and every control has an
+  automation id.
 - Every string the user sees goes through the catalogues, with a row in every one.
 - Behaviour, icons and wording are our own: never copy another product's.
 - A lint added by a toolchain release is fixed in code at once, never by pinning the toolchain.

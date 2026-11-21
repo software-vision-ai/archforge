@@ -13,10 +13,17 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
 ## Draw through `ux`
 - Colours come from the palette, `ux::palette(dark)` (`crates/ui-egui/src/ux/mod.rs`): `LIGHT` and
   `DARK`, one field per role. No literal colour outside that file; a new role is a new field in
-  both appearances.
+  both appearances. A colour that is the same in both is a named constant there (`ux::CLEAR`,
+  `ux::UNTINTED`, `ux::PLACEHOLDER_INK`, `ux::MARK`); a colour the document holds is made with
+  `ux::data_colour`, and the colour picker's with `ux::from_hsv`.
 - Text uses the design's styles, `ux::types::*`, drawn with `ux::text`, `ux::galley` or
   `ux::galley_rows`, which place a line box's top-left corner as the design does. No raw `FontId`
-  in a screen. A screen checks `ux::ready` before its first text.
+  in a screen: a style's `.font()` is its face, `.code()` the monospace face a point under it. A
+  screen checks `ux::ready` before its first text.
+- The gate holds both rules: outside `ux`, clippy refuses egui's colour and font constructors
+  (`clippy.toml`), and the layer check refuses colour constants such as `Color32::WHITE` and a
+  `FontId` built by hand (`xtask/src/ux_literals.rs`). Each refusal names the ux item to use; `ux`
+  itself makes them under one scoped allow.
 - Icons are strokes in `crates/ui-egui/src/ux/icons.rs`, drawn with `ux::icon` or `ux::icon_in` at
   the design's stroke weight.
 - `crates/ui-egui/src/theme.rs` gives the toolkit's own visuals (tooltips, scroll bars) the same

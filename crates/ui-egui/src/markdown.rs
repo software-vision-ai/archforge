@@ -10,8 +10,8 @@
 
 use std::ops::Range;
 
+use egui::Color32;
 use egui::text::{LayoutJob, TextFormat};
-use egui::{Color32, FontFamily, FontId};
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag};
 
 use crate::ux::{Palette, types};
@@ -237,20 +237,15 @@ fn line_ranges(text: &str, range: Range<usize>) -> Vec<Range<usize>> {
 
 /// The format one look is drawn in.
 fn format(look: Look, p: &Palette) -> TextFormat {
-    let (size, line, semibold) = match look.heading {
-        1 => (22.0, 32.0, true),
-        2 => (18.0, 27.0, true),
-        3 => (16.0, 24.0, true),
-        4 => (types::BODY.size, 22.0, true),
-        _ => (types::BODY.size, 22.0, look.strong),
+    let ty = match look.heading {
+        1 => types::MARKDOWN_H1,
+        2 => types::MARKDOWN_H2,
+        3 => types::MARKDOWN_H3,
+        4 => types::MARKDOWN_STRONG,
+        _ if look.strong => types::MARKDOWN_STRONG,
+        _ => types::MARKDOWN_BODY,
     };
-    let font = if look.code || look.meta {
-        FontId::new(size - 1.0, FontFamily::Monospace)
-    } else if semibold {
-        FontId::new(size, types::BODY_STRONG.font().family)
-    } else {
-        FontId::new(size, types::BODY.font().family)
-    };
+    let font = if look.code || look.meta { ty.code() } else { ty.font() };
     let color: Color32 = if look.dim {
         p.text_muted
     } else if look.code {
@@ -262,7 +257,7 @@ fn format(look: Look, p: &Palette) -> TextFormat {
     } else {
         p.text
     };
-    TextFormat { font_id: font, color, italics: look.italic && !look.code, line_height: Some(line), ..TextFormat::default() }
+    TextFormat { font_id: font, color, italics: look.italic && !look.code, line_height: Some(ty.line), ..TextFormat::default() }
 }
 
 /// The styled source of `text`, wrapped at `wrap` points; plain when it is over the budget.
