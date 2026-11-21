@@ -35,6 +35,25 @@ Raising the version is one change to that file's `channel`. Cargo does not read 
 same commit sets `rust-version` in `Cargo.toml` to the same number, and fixes in code the lints the
 new release adds. Neither workflow names a version of its own.
 
+## Cargo.lock and craft-libs
+
+The gate never changes `Cargo.lock`. The task runner's build and every cargo command of the gate
+that resolves dependencies run with `--locked`, so a manifest changed without its lock stops the
+gate at once, with cargo's `cannot update the lock file … because --locked was passed to prevent
+this`. Its hint to drop `--locked` is not the fix here:
+
+- For a dependency you added or changed, run `cargo build` (or `cargo update -p <crate>`), check
+  that the lock's diff holds only that dependency and what it brings in, and commit `Cargo.lock`
+  with the change.
+- craft-libs, whose crates follow its main branch, moves only through `cargo xtask bump`. It moves
+  every craft-libs crate in `Cargo.lock` to the newest commit of that branch, prints each crate's
+  old and new commit, and keeps every other package as the lock had it; when the newest craft-libs
+  needs another package added, removed or at another version, it puts the lock back and names
+  them. Run it on an up-to-date `main`, run the gate, and open a pull request for the bump alone.
+  A bump stopped part way (Ctrl-C) can leave `cargo update`'s lock behind;
+  `git checkout -- Cargo.lock` puts it back.
+  A change that needs a newer craft-libs waits for that pull request to merge.
+
 ## Translations
 
 The interface strings live in `crates/ui-egui/src/i18n/<language>.tsv`, keyed by the English text.

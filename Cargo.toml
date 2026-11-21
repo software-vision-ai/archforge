@@ -86,9 +86,9 @@ zeroize = "1"
 # already in the lockfile, Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT.
 rustix = { version = "1", default-features = false, features = ["std", "process", "fs"] }
 
-# Shared crates from craft-libs (the ArtCraft team, MIT OR Apache-2.0), always at its latest main:
-# the gate's first step moves Cargo.lock to the newest commit. It is the only git source
-# `deny.toml` allows.
+# Shared crates from craft-libs (the ArtCraft team, MIT OR Apache-2.0), following its main branch:
+# `cargo xtask bump` moves Cargo.lock to its newest commit, in a pull request of its own; the gate
+# never does. It is the only git source `deny.toml` allows.
 craft-atomic = { git = "https://github.com/storytold/craft-libs", branch = "main" }
 craft-mcp-server = { git = "https://github.com/storytold/craft-libs", branch = "main" }
 # The folder pickers, queued in the frame and shown at its end, answered on a later frame: a
