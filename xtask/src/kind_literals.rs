@@ -13,7 +13,9 @@
 //! label's), and a kind's word inside a longer text (an expected message, an automation id, a line
 //! of SQL) is part of that text. Comments, doc comments included, are not code and never match. A
 //! literal whose value is a kind's word but means something else (the ER part's name, a search for
-//! `er`) carries [`MARK`] in a `//` comment on its line or the line above, followed by what it is.
+//! `er`) carries [`MARK`] in a plain `//` comment, followed by what it is: on its own line, or on a
+//! line of its own (nothing but the comment) right above it. A doc comment or a block comment never
+//! marks.
 //! A source that does not parse is a finding, so nothing is passed unread.
 //!
 //! Generated code (any `generated` folder) is left out: `cargo xtask generate` writes it from the
@@ -24,7 +26,10 @@
 //! registers its diagram kinds) must have a body that is one list (`&[…]`) whose every element is a
 //! constant of [`KINDS`] that resolves to its crate's root from the module the function is in; a
 //! literal, a constant missing from the table, one that resolves elsewhere, and anything else (a
-//! cast, a macro, a block, a body that is not one list) is a finding.
+//! cast, a macro, a block, a body that is not one list) is a finding. A `fn kinds` returning strings
+//! in any other type (a `Vec`, an array) is a finding too, unless [`GATHERS`] lists it as a view
+//! that gathers the notations' kinds: the `Notation` trait fixes the slice, so a kind can only be
+//! registered there.
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path};
@@ -52,6 +57,11 @@ pub const KINDS: &[Kind] = &[
     Kind { file: "crates/er/src/lib.rs", name: "DIAGRAM_KIND", path: "archforge_er::DIAGRAM_KIND" },
     Kind { file: "crates/uml/src/lib.rs", name: "STRUCTURE_DIAGRAM", path: "archforge_uml::STRUCTURE_DIAGRAM" },
 ];
+
+/// The `fn kinds` that may return strings in another shape than a notation's slice: views that
+/// gather the kinds the notations register, never registering one of their own. Each is the file
+/// and the type it is a method of, or `""` for a free function.
+pub const GATHERS: &[(&str, &str)] = &[("crates/diagram/src/project.rs", "ProjectView"), ("crates/notations/src/lib.rs", "")];
 
 /// The comment that marks a literal spelled like a kind as no diagram kind; it must be followed by
 /// what the literal is.
@@ -132,7 +142,14 @@ impl<'ast> Visit<'ast> for Literals {
     /// An attribute's literals; a doc comment's text is a comment, never code.
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         match &attr.meta {
-            Meta::NameValue(_) if attr.path().is_ident("doc") => {}
+            // Its text is a comment's: its place is kept, so nothing in it reads as a comment
+            // mark or a block comment's start, but its words never match.
+            Meta::NameValue(nv) if attr.path().is_ident("doc") => {
+                if let Expr::Lit(syn::ExprLit { lit, .. }) = &nv.value {
+                    let span = lit.span();
+                    self.spans.push((pos(span.start()), pos(span.end())));
+                }
+            }
             Meta::NameValue(nv) => self.visit_expr(&nv.value),
             Meta::List(list) => self.tokens(list.tokens.clone()),
             Meta::Path(_) => {}
@@ -140,32 +157,70 @@ impl<'ast> Visit<'ast> for Literals {
     }
 }
 
-/// The lines of `text` whose `//` comment holds [`MARK`] with some words after it. The first `//`
-/// of a line outside every literal (`spans`) opens its comment; one inside a literal is text.
-fn marked(text: &str, spans: &[(Pos, Pos)]) -> BTreeSet<usize> {
-    let inside = |p: Pos| spans.iter().any(|(s, e)| *s <= p && p < *e);
-    let mut out = BTreeSet::new();
-    for (n, line) in text.lines().enumerate() {
-        let number = n + 1;
-        let chars: Vec<char> = line.chars().collect();
-        let opens = |c: &usize| chars.get(*c) == Some(&'/') && chars.get(c + 1) == Some(&'/') && !inside((number, *c));
-        let Some(open) = (0..chars.len()).find(opens) else { continue };
-        let comment: String = chars.get(open..).unwrap_or_default().iter().collect();
-        if comment.find(MARK).is_some_and(|at| comment.get(at + MARK.len()..).is_some_and(|after| !after.trim().is_empty())) {
-            out.insert(number);
+/// The marks of `text`: the lines whose plain `//` comment holds [`MARK`] with some words after it,
+/// and of those the lines that hold nothing else (no code before the comment). The text is read
+/// once, with the literals the parser placed (`spans`) skipped as code: a `//` or `/*` inside one is
+/// text. Block comments, nested ones too, never mark, and neither do doc comments: the parser
+/// places them as doc text, so they are skipped with the literals.
+fn marks(text: &str, spans: &[(Pos, Pos)]) -> (BTreeSet<usize>, BTreeSet<usize>) {
+    let chars: Vec<char> = text.chars().collect();
+    // Where each line starts, as a character index, to place the parser's line and column.
+    let mut starts = vec![0usize];
+    starts.extend(chars.iter().enumerate().filter(|(_, c)| **c == '\n').map(|(i, _)| i + 1));
+    let index = |(line, column): Pos| starts.get(line.checked_sub(1)?).map(|s| s + column);
+    let line_of = |i: usize| starts.partition_point(|s| *s <= i);
+    let mut literals: Vec<(usize, usize)> = spans.iter().filter_map(|(s, e)| Some((index(*s)?, index(*e)?))).collect();
+    literals.sort_unstable();
+    let (mut any, mut alone, mut code) = (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+    let (mut i, mut next, mut depth) = (0usize, 0usize, 0usize);
+    while let Some(&c) = chars.get(i) {
+        let after = chars.get(i + 1).copied();
+        while literals.get(next).is_some_and(|(_, end)| *end <= i) {
+            next += 1;
+        }
+        if depth > 0 {
+            match (c, after) {
+                ('/', Some('*')) => (depth, i) = (depth + 1, i + 2),
+                ('*', Some('/')) => (depth, i) = (depth - 1, i + 2),
+                _ => i += 1,
+            }
+        } else if let Some((_, end)) = literals.get(next).filter(|(start, _)| *start == i) {
+            code.insert(line_of(i));
+            i = (*end).max(i + 1);
+        } else if (c, after) == ('/', Some('/')) {
+            let end = chars.iter().skip(i).position(|c| *c == '\n').map_or(chars.len(), |n| i + n);
+            let comment = chars.get(i..end).unwrap_or_default();
+            let text: String = comment.iter().collect();
+            let worded = text.find(MARK).is_some_and(|at| text.get(at + MARK.len()..).is_some_and(|rest| !rest.trim().is_empty()));
+            if worded {
+                let line = line_of(i);
+                any.insert(line);
+                if !code.contains(&line) {
+                    alone.insert(line);
+                }
+            }
+            i = end;
+        } else if (c, after) == ('/', Some('*')) {
+            (depth, i) = (1, i + 2);
+        } else {
+            if !c.is_whitespace() {
+                code.insert(line_of(i));
+            }
+            i += 1;
         }
     }
-    out
+    (any, alone)
 }
 
 /// The kind literals of a parsed source, each `line N: …`: every string whose value is one of
 /// `words` (a kind's word and the constant to use), but those starting at `exempt` (the constants'
-/// own values) and those on or under a line marked [`MARK`].
+/// own values), those on a line marked [`MARK`], and those under a line that holds the mark alone.
 fn literals(file: &syn::File, text: &str, words: &[(String, &str)], exempt: &BTreeSet<Pos>) -> Vec<String> {
     let mut found = Literals::default();
     found.visit_file(file);
-    let marks = marked(text, &found.spans);
-    let is_marked = |line: usize| marks.contains(&line) || marks.contains(&line.saturating_sub(1));
+    let (any, alone) = marks(text, &found.spans);
+    // A mark stands for its own line, or, on a line of its own, for the line under it.
+    let is_marked = |line: usize| any.contains(&line) || line.checked_sub(1).is_some_and(|above| alone.contains(&above));
     let mut out = Vec::new();
     for t in &found.texts {
         let Some((word, path)) = words.iter().find(|(w, _)| w.as_bytes() == t.bytes.as_slice()) else { continue };
@@ -224,6 +279,23 @@ fn strip_type(t: &Type) -> &Type {
         Type::Group(g) => strip_type(&g.elem),
         other => other,
     }
+}
+
+/// Whether a type names `str` anywhere in it (`Vec<&str>`, `[&str; 2]`, `&[&str]`): a type that can
+/// carry kinds.
+fn holds_str(ty: &Type) -> bool {
+    /// Finds a path segment `str`.
+    struct Finds(bool);
+    impl<'ast> Visit<'ast> for Finds {
+        /// A segment of a path in the type.
+        fn visit_path_segment(&mut self, s: &'ast syn::PathSegment) {
+            self.0 |= s.ident == "str";
+            visit::visit_path_segment(self, s);
+        }
+    }
+    let mut finds = Finds(false);
+    finds.visit_type(ty);
+    finds.0
 }
 
 /// Whether a function returns a slice of strings (`&[&str]`, whatever its lifetimes and
@@ -285,23 +357,45 @@ fn listed(body: &Block) -> Vec<Registered> {
 struct Registration {
     line: usize,
     module: Vec<String>,
-    registered: Vec<Registered>,
+    shape: Shape,
+}
+
+/// How a `fn kinds` returns its strings: as a notation's slice, with what its list registers; or in
+/// another type (shown), with the type it is a method of (`""` for a free function).
+enum Shape {
+    Slice(Vec<Registered>),
+    Other { returns: String, owner: String },
 }
 
 /// The registrations of a parsed source outside test items, read as the parser gives them, with
 /// the module each is in.
 struct Registrations {
     module: Vec<String>,
+    owner: String,
     found: Vec<Registration>,
 }
 
 impl Registrations {
-    /// Records a function named `kinds` (a raw `r#kinds` too) returning a slice of strings.
+    /// Records a function named `kinds` (a raw `r#kinds` too) returning strings: a slice of them,
+    /// with what its list registers, or any other type that names `str`.
     fn consider(&mut self, sig: &Signature, body: &Block) {
-        if sig.ident.unraw() == "kinds" && returns_strs(&sig.output) {
-            let line = sig.ident.span().start().line;
-            self.found.push(Registration { line, module: self.module.clone(), registered: listed(body) });
+        let ReturnType::Type(_, ty) = &sig.output else { return };
+        if sig.ident.unraw() != "kinds" || !holds_str(ty) {
+            return;
         }
+        let shape = if returns_strs(&sig.output) {
+            Shape::Slice(listed(body))
+        } else {
+            Shape::Other { returns: shown(ty.as_ref(), "a type"), owner: self.owner.clone() }
+        };
+        self.found.push(Registration { line: sig.ident.span().start().line, module: self.module.clone(), shape });
+    }
+
+    /// Visits an impl's or a trait's items with `owner` as the type their methods belong to.
+    fn owned(&mut self, owner: String, visit: impl FnOnce(&mut Self)) {
+        let before = std::mem::replace(&mut self.owner, owner);
+        visit(self);
+        self.owner = before;
     }
 }
 
@@ -327,7 +421,11 @@ impl<'ast> Visit<'ast> for Registrations {
     /// An impl block, unless it is test code.
     fn visit_item_impl(&mut self, i: &'ast ItemImpl) {
         if !is_test_item(&i.attrs) {
-            visit::visit_item_impl(self, i);
+            let owner = match strip_type(&i.self_ty) {
+                Type::Path(p) => p.path.segments.last().map(|s| s.ident.unraw().to_string()).unwrap_or_default(),
+                other => shown(other, "a type"),
+            };
+            self.owned(owner, |me| visit::visit_item_impl(me, i));
         }
     }
 
@@ -342,7 +440,7 @@ impl<'ast> Visit<'ast> for Registrations {
     /// A trait, unless it is test code.
     fn visit_item_trait(&mut self, t: &'ast ItemTrait) {
         if !is_test_item(&t.attrs) {
-            visit::visit_item_trait(self, t);
+            self.owned(t.ident.unraw().to_string(), |me| visit::visit_item_trait(me, t));
         }
     }
 
@@ -385,14 +483,25 @@ fn reaches_root(through: &[String], module: &[String], own: &str) -> bool {
 /// The findings for what a source of the crate `krate`, in `module` (outside its tests),
 /// registers. A constant passes when [`KINDS`] lists its name for that crate and its path resolves
 /// to the crate's root from where it is written; a literal, a constant missing from the table or
-/// resolving elsewhere, and an element or body this check cannot read are findings.
+/// resolving elsewhere, an element or body this check cannot read, and a `kinds` returning strings
+/// in another shape than the slice, unless [`GATHERS`] lists it, are findings.
 fn unlisted(rel: &str, krate: &str, module: &[String], file: &syn::File) -> Vec<String> {
     let home = format!("crates/{krate}/");
     let own = format!("archforge_{}", krate.replace('-', "_"));
-    let mut found = Registrations { module: module.to_vec(), found: Vec::new() };
+    let mut found = Registrations { module: module.to_vec(), owner: String::new(), found: Vec::new() };
     found.visit_file(file);
     let mut out = Vec::new();
-    for Registration { line, module, registered } in found.found {
+    for Registration { line, module, shape } in found.found {
+        let registered = match shape {
+            Shape::Slice(registered) => registered,
+            Shape::Other { owner, .. } if GATHERS.contains(&(rel, owner.as_str())) => continue,
+            Shape::Other { returns, .. } => {
+                out.push(format!(
+                    "{rel} line {line}: kinds returns {returns}, which this check cannot read; a notation registers its kinds as &'static [&'static str] (Notation::kinds), and a view that gathers them is listed in GATHERS (xtask/src/kind_literals.rs)"
+                ));
+                continue;
+            }
+        };
         for r in registered {
             match r {
                 Registered::Literal(v) => out.push(format!(
@@ -541,6 +650,13 @@ mod tests {
     const MISSING: &str =
         "crates/er/src/lib.rs line 1: the diagram kind NEW_KIND is missing from KINDS (xtask/src/kind_literals.rs), so its word is not checked";
 
+    /// The finding for a `kinds` on line 1 of ER's root returning `returns`.
+    fn other(returns: &str) -> String {
+        format!(
+            "crates/er/src/lib.rs line 1: kinds returns {returns}, which this check cannot read; a notation registers its kinds as &'static [&'static str] (Notation::kinds), and a view that gathers them is listed in GATHERS (xtask/src/kind_literals.rs)"
+        )
+    }
+
     /// A kind's word as a whole literal, in any shape and inside macros, is found with its line and
     /// its constant.
     #[test]
@@ -587,6 +703,31 @@ mod tests {
         let wide = "€".repeat(15);
         assert_eq!(found(&format!("const F: (&str, &str) = (\"{wide}\", \"// not a diagram kind: x\");\nconst G: &str = \"er\";")), [er_at(2)]);
         assert_eq!(found(&format!("const F: (&str, &str) = (\"{wide}\", \"er\"); // not a diagram kind: a search")), Vec::<String>::new());
+    }
+
+    /// A mark on the line above counts only when that line holds nothing else: a mark trailing code
+    /// is that line's (pr-agent on c01213a6). Doc comments and block comments never mark, and a
+    /// doc attribute's text opens no comment.
+    #[test]
+    fn only_a_plain_line_comment_marks_and_only_one_alone_marks_the_line_under_it() {
+        assert_eq!(found("fn f() {\n    let label = \"x\"; // not a diagram kind: a label\n    json!({ \"kind\": \"er\" });\n}"), [er_at(3)]);
+        assert_eq!(found("fn f() {\n    // not a diagram kind: a label\n    json!({ \"kind\": \"er\" });\n}"), Vec::<String>::new());
+        // A literal before the comment is code, even with nothing else on its line.
+        assert_eq!(found("const F: [&str; 2] = [\n    \"x\" // not a diagram kind: a label\n    , \"er\"];"), [er_at(3)]);
+        // Code before the comment only in a block comment is no code.
+        assert_eq!(found("/* c */ // not a diagram kind: a label\nconst F: &str = \"er\";"), Vec::<String>::new());
+        assert_eq!(found("/// not a diagram kind: a doc\nconst F: &str = \"er\";"), [er_at(2)]);
+        assert_eq!(found("//! not a diagram kind: a doc\nconst F: &str = \"er\";"), [er_at(2)]);
+        assert_eq!(found("const F: &str = \"er\"; /// not a diagram kind: a doc\nconst G: u8 = 1;"), [er_at(1)]);
+        // Four slashes are a plain comment.
+        assert_eq!(found("const F: &str = \"er\"; //// not a diagram kind: a search"), Vec::<String>::new());
+        assert_eq!(found("/* // not a diagram kind: x */\nconst F: &str = \"er\";"), [er_at(2)]);
+        assert_eq!(found("const F: &str = \"er\"; /* // not a diagram kind: x */"), [er_at(1)]);
+        // Block comments nest: the inner one's end leaves the mark inside the outer one.
+        assert_eq!(found("/* /* */ // not a diagram kind: x */\nconst F: &str = \"er\";"), [er_at(2)]);
+        // After a block comment ends, a line comment marks again.
+        assert_eq!(found("/* x */ const F: &str = \"er\"; // not a diagram kind: a search"), Vec::<String>::new());
+        assert_eq!(found("#[doc = \"a /* b\"]\nconst F: &str = \"er\"; // not a diagram kind: a search"), Vec::<String>::new());
     }
 
     /// A raw C string is one literal, so the string after it is read as it is (CodeRabbit on #572).
@@ -652,10 +793,35 @@ mod tests {
         for none in [
             "trait Notation { fn kinds(&self) -> &'static [&'static str]; }",
             "trait Notation { fn kinds(&self) -> &'static [&'static str] { &[] } }",
-            "impl V { fn kinds(&self) -> Vec<&'static str> { vec![\"er\"] } }",
-            "impl V { fn kinds(&self) -> [&'static str; 1] { [\"er\"] } }",
             "impl V { fn kind_names(&self) -> &'static [&'static str] { &[\"er\"] } }",
             "fn kinds<F: Fn() -> &'static [&'static str]>(f: F) { let _ = f; }",
+        ] {
+            assert_eq!(registers(none, &[]), Vec::<String>::new(), "{none}");
+        }
+    }
+
+    /// A `kinds` returning strings in any shape but the slice is a finding, so no notation registers
+    /// a kind past the check (pr-agent on c01213a6), unless GATHERS lists it as a view gathering the
+    /// notations' kinds; a `kinds` returning no strings is no registration.
+    #[test]
+    fn a_kinds_returning_strings_in_another_shape_is_a_finding_unless_it_gathers() {
+        assert_eq!(registers("impl V { fn kinds(&self) -> Vec<&'static str> { vec![NEW_KIND] } }", &[]), [other("Vec<&'static str>")]);
+        assert_eq!(registers("impl V { fn kinds(&self) -> [&'static str; 1] { [\"bpmn\"] } }", &[]), [other("[&'static str; 1]")]);
+        assert_eq!(registers("fn kinds() -> Box<[&'static str]> { Box::new([]) }", &[]), [other("Box<[&'static str]>")]);
+        assert_eq!(registers("trait T { fn kinds(&self) -> Vec<&'static str> { Vec::new() } }", &[]), [other("Vec<&'static str>")]);
+        let gather = "impl DiagramView for ProjectView {\n    fn kinds(&self) -> Vec<&'static str> {\n        self.notations.iter().flat_map(|n| n.kinds().iter().copied()).collect()\n    }\n}";
+        let free = "pub fn kinds() -> Vec<&'static str> {\n    view().kinds()\n}";
+        let at = |rel: &str, krate: &str, source: &str| unlisted(rel, krate, &[], &parse(source).unwrap());
+        assert_eq!(at("crates/diagram/src/project.rs", "diagram", gather), Vec::<String>::new());
+        assert_eq!(at("crates/notations/src/lib.rs", "notations", free), Vec::<String>::new());
+        // Listed for one file and one owner only.
+        assert_eq!(at("crates/er/src/lib.rs", "er", gather).len(), 1);
+        assert_eq!(at("crates/notations/src/lib.rs", "notations", gather).len(), 1);
+        assert_eq!(at("crates/diagram/src/project.rs", "diagram", free).len(), 1);
+        for none in [
+            "pub fn kinds(metaclass: &str, n: u64) -> String { String::new() }",
+            "trait DiagramView { fn kinds(&self) -> Vec<&'static str>; }",
+            "#[cfg(test)]\nimpl V { fn kinds(&self) -> Vec<&'static str> { vec![\"x\"] } }",
         ] {
             assert_eq!(registers(none, &[]), Vec::<String>::new(), "{none}");
         }
@@ -719,7 +885,7 @@ mod tests {
         let long = format!("fn kinds<{bounds}>(p: T0) -> &'static [&'static str] where T1: Fn() -> u8 {{ &[NEW_KIND] }}");
         assert_eq!(registers(&long, &[]), [MISSING]);
         let long_vec = format!("fn kinds<{bounds}>(p: T0) -> Vec<&'static str> where T1: Fn() -> &'static [&'static str] {{ vec![] }}");
-        assert_eq!(registers(&long_vec, &[]), Vec::<String>::new());
+        assert_eq!(registers(&long_vec, &[]), [other("Vec<&'static str>")]);
     }
 
     /// A constant resolves from the module its kinds is in: `self::` and a bare name only at the
