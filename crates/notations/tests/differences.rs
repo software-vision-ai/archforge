@@ -92,7 +92,7 @@ fn the_area_comes_from_the_table_and_never_from_a_name() {
     let (mut s, shop, customer, _) = project();
     let before = state(&s);
     let lookalike = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "diagram_node" }));
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "customer" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "customer" }));
     let node = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0 }));
     let found = differences(&before, &state(&s));
     assert_eq!(about(&found, &lookalike).area, Area::Model);
@@ -144,7 +144,7 @@ fn an_owner_is_changed_only_by_what_its_list_really_did() {
 #[test]
 fn the_same_repair_on_both_sides_shows_no_false_layout_change() {
     let (mut s, shop, customer, _) = project();
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop }));
     let node = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0, "width": 100, "height": 40 }));
     let before = state(&s);
     let stored = before.clone();
@@ -655,7 +655,7 @@ fn a_binding_is_listed_on_the_bound_element_and_the_template() {
 fn a_card_shows_each_side_as_an_opening_repairs_it() {
     use archforge_diagram::node::HEIGHT;
     let (mut s, shop, customer, _) = project();
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop }));
     let node = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0, "width": 100, "height": 40 }));
     let before = state(&s);
     run(&mut s, "diagram.resize", json!({ "node": node, "width": 100, "height": 200 }));
@@ -906,7 +906,7 @@ struct Placed {
 fn placed() -> Placed {
     let (mut s, shop, customer, _) = project();
     let invoice = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "invoice" }));
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Billing" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Billing" }));
     let first = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0 }));
     let second = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": invoice, "x": 400, "y": 0 }));
     Placed { s, shop, customer, invoice, diagram, first, second }
@@ -971,7 +971,7 @@ fn boxes_are_marked_by_their_own_change_and_by_what_they_show() {
     assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Changed), None), "moved, and left alone");
 
     let Placed { mut s, shop, customer, diagram, .. } = placed();
-    let other = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Other" }));
+    let other = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Other" }));
     let elsewhere = run(&mut s, "diagram.place", json!({ "diagram": other, "element": customer, "x": 0, "y": 0 }));
     let before = state(&s);
     run(&mut s, "diagram.move", json!({ "nodes": [elsewhere], "dx": 40, "dy": 40 }));
@@ -1015,7 +1015,7 @@ fn a_member_on_one_side_marks_the_box_that_lists_it() {
 #[test]
 fn a_box_moved_between_diagrams_is_removed_from_one_and_added_to_the_other() {
     let Placed { mut s, shop, diagram, first, second, .. } = placed();
-    let other = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Other" }));
+    let other = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Other" }));
     let before = state(&s);
     let mut after = before.clone();
     let (from, to, moved) = (Uuid::parse(&diagram).unwrap(), Uuid::parse(&other).unwrap(), Uuid::parse(&second).unwrap());
@@ -1045,7 +1045,7 @@ fn only_what_a_box_lists_marks_it() {
     let (mut s, shop, order, _) = uml_project();
     let item = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Item" }));
     let pay = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "parameters": [{ "name": "sum" }] }));
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": shop, "name": "Orders" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": shop, "name": "Orders" }));
     let card = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 0, "y": 0 }));
     let before = state(&s);
     run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": item }));

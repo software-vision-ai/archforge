@@ -31,6 +31,7 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - the control channel's tokens, roles and revocation: `crates/control/src/tests.rs`; what the
     window lets a read-only token do: the `tests` module in `crates/ui-egui/src/control.rs`
   - the shell's process and network scan: the `tests` module in `xtask/src/shell_io.rs`
+  - the diagram-kind scan: the `tests` module in `xtask/src/kind_literals.rs`
   - name rules: the case table in `crates/names/src/lib.rs`
   - API keys: `crates/secrets/src/tests.rs`, against `MemoryStore`; another crate's tests use
     `archforge_secrets::MemoryStore` (feature `testing`), never the system's store
@@ -73,8 +74,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   the gate cannot drive (the menu bar, system pickers, the browser, the real window). A change to
   such behaviour updates that list.
 - Before proposing a change: the gate, `cargo xtask ci`. Its steps are update (craft-libs to their
-  newest main), format, lint, test, assets, skills, layers, portable, generated and deny. It stops at the
-  first failure and prints a table of steps.
+  newest main), format, lint, test, assets, skills, layers, portable, generated, kinds and deny. It
+  stops at the first failure and prints a table of steps.
 - The test step needs dolt 2.6 or later on the PATH or in `ARCHFORGE_DOLT`; without it the
   server and project tests fail and say so. A test that starts a server stops it on every path,
   so a failed run leaves no server behind: in the app, every test over the real project host

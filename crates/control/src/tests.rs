@@ -127,9 +127,11 @@ fn a_call_with_the_token_is_answered_and_anything_else_closes_the_connection() {
     let (server, dir) = echo("serve");
     let port = server.port();
     let client = Client::new(&dir, port).unwrap();
+    // not a diagram kind: a filter the echo server sends back as it came
+    let filter = "er";
     assert_eq!(
-        client.call("engine.commands", json!({ "filter": "er" })).unwrap(),
-        json!({ "method": "engine.commands", "params": { "filter": "er" } })
+        client.call("engine.commands", json!({ "filter": filter })).unwrap(),
+        json!({ "method": "engine.commands", "params": { "filter": filter } })
     );
     assert_eq!(client.call("refuse", json!({})), Err(CallError::Refused("refused on purpose".into())));
     // A handler that panics answers with an error, and the channel goes on.

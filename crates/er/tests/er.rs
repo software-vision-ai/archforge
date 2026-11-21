@@ -209,7 +209,7 @@ fn name_and_text_rules_carry_their_reason_typed() {
     let mut s = session();
     let schema = run(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let entity = run(&mut s, "er.entity.add", json!({ "schema": schema, "name": "Order" }));
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": schema, "name": "shop" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "shop" }));
     let long = "n".repeat(MAX_NAME + 1);
     for (cmd, p, reason, message) in [
         ("er.entity.add", json!({ "schema": schema, "name": "" }), Reason::NameEmpty, "the name is empty".to_string()),
@@ -1441,7 +1441,7 @@ fn a_many_to_many_relationship_resolves_into_a_mapping_table_on_every_diagram() 
     );
     let schema = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }));
     assert_eq!(schema["notices"][0]["relationship"], m2n, "many-to-many is noticed, not refused");
-    let d = run(&mut s, "diagram.add", json!({ "kind": "er", "element": sm.schema }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": sm.schema }));
     let a = run(&mut s, "diagram.place", json!({ "diagram": d, "element": sm.order, "x": 0, "y": 0 }));
     let b = run(&mut s, "diagram.place", json!({ "diagram": d, "element": product, "x": 400, "y": 0 }));
     run(&mut s, "diagram.connect", json!({ "diagram": d, "element": m2n, "source": a, "target": b }));
@@ -1655,7 +1655,7 @@ fn a_many_to_many_relationship_of_an_entity_with_itself_resolves_beside_it() {
     let part = run(&mut s, "er.entity.add", json!({ "schema": schema, "name": "Part" }));
     run(&mut s, "er.attribute.add", json!({ "entity": part, "name": "id", "type": "BIGINT", "primary_key": true }));
     let r = run(&mut s, "er.relationship.add", json!({ "from": part, "to": part, "from_end": "zero-or-more", "to_end": "zero-or-more" }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": "er", "element": schema }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema }));
     let n = run(&mut s, "diagram.place", json!({ "diagram": d, "element": part, "x": 0, "y": 0 }));
     run(&mut s, "diagram.connect", json!({ "diagram": d, "element": r, "source": n, "target": n }));
     let m = run(&mut s, "er.relationship.resolve", json!({ "relationship": r }));
@@ -2608,7 +2608,7 @@ fn relationships_and_keys_agree_through_nullability_growing_keys_links_and_colla
         "er.relationship.add",
         json!({ "from": sm.order, "to": tag, "from_end": "zero-or-more", "to_end": "zero-or-more", "from_role": "tagged" }),
     );
-    let d = run(&mut s, "diagram.add", json!({ "kind": "er", "element": sm.schema }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": sm.schema }));
     let n_order = run(&mut s, "diagram.place", json!({ "diagram": d, "element": sm.order, "x": 0.0, "y": 0.0 }));
     let n_tag = run(&mut s, "diagram.place", json!({ "diagram": d, "element": tag, "x": 400.0, "y": 0.0 }));
     run(&mut s, "diagram.connect", json!({ "diagram": d, "element": m2m, "source": n_order, "target": n_tag }));
@@ -3077,7 +3077,7 @@ fn subtypes_share_their_supertypes_key_and_keep_it_in_step() {
         assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
     }
     // A generalization draws on a diagram from the subtype to the supertype.
-    let d = run(&mut s, "diagram.add", json!({ "kind": "er", "element": sm.schema }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": sm.schema }));
     let n_party = run(&mut s, "diagram.place", json!({ "diagram": d, "element": party, "x": 200, "y": 0 }));
     let n_person = run(&mut s, "diagram.place", json!({ "diagram": d, "element": person, "x": 0, "y": 300 }));
     round_trip(&mut s, "diagram.connect", &json!({ "diagram": d, "element": g_person, "source": n_person, "target": n_party }));
