@@ -141,6 +141,7 @@ fn words(refused: &BranchRefused, renaming: Option<&str>) -> String {
     match (refused, renaming.is_some()) {
         (BranchRefused::Taken, _) => tr("That name is already in use."),
         (BranchRefused::NotCleanedUp, _) => tr("The last new branch is not cleaned up yet. Opening the project again removes it."),
+        (BranchRefused::InUse, _) => tr("Another program is using this branch. Close that program, then try again."),
         (BranchRefused::Moved, false) => tr("The project changed before the branch was made, so none was made."),
         (BranchRefused::Moved, true) => tr("The project changed before the branch was renamed, so its name stayed."),
         (BranchRefused::Unclear(_), false) => tr("Archforge could not tell whether the branch was made. Look at Branches before trying again."),

@@ -653,6 +653,7 @@ str		Rename branch	ブランチの名前を変更
 str		The conversations and versions on this branch are not affected.	このブランチの会話とバージョンには影響しません。
 str		The project changed before the branch was renamed, so its name stayed.	名前を変更する前にプロジェクトが変わったため、ブランチの名前はそのままです。
 str		Couldn't rename the branch: {why}	ブランチの名前を変更できませんでした: {why}
+str		Another program is using this branch. Close that program, then try again.	別のプログラムがこのブランチを使用しています。そのプログラムを閉じてから、もう一度お試しください。
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	ブランチの名前が {name} に変更されたかどうか Archforge では判断できませんでした。確かめるには、もう一度 {name} に変更してください。
 str		Delete…	削除…
 str		Delete {branch}?	{branch} を削除しますか？

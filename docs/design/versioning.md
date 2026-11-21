@@ -543,8 +543,22 @@ All run on the writer, in order with every model and conversation write.
 | **Create from current work** | Versions panel `+`, chip list, Versions menu | Writes what waits; checks the name is free and writes the creation record (below); `DOLT_BRANCH` at `HEAD`; removes inherited conversations on the new branch; prepares its model tables (`prepare_model`, since `HEAD` may be the creation commit, which has none); copies the current working rows to it; removes the record; switches. The source branch keeps its unsaved work as well | The new branch is deleted, then the record is removed; you stay where you were. If the deletion fails too, the record stays: the branch stays out of the list, and the next opening removes it |
 | **Create from a version** | **Start a branch here…** in details and the viewing banner | The creation record; `DOLT_BRANCH` at that hash; removes inherited conversations; removes the record; switches. Viewing ends | The same. Not offered on a version that cannot be read |
 | **Switch** | Branch row, chip list | Section 6's rules, then: writes what waits, commits waiting conversations, runs the opening checks on the target and builds its model, moves the connection, reloads. A conversation commit that fails does not stop it: those rows wait in that branch's working set for the next chat commit | Connection and session stay on the current branch |
-| **Rename** | Branch row menu | `DOLT_BRANCH('-m')`. Allowed on the current branch; the connection and the stored current branch follow | Name stays |
+| **Rename** | Branch row menu | `DOLT_BRANCH('-m')`. Allowed on the current branch; the connection and the stored current branch follow. Dolt refuses while any other session has the branch as its database, idle or not, so the project lets go of it first (below) | Name stays. Another program's session on the branch: refused by its own reason (`RenameBranchError::InUse`, *Another program is using this branch*), not Dolt's words |
 | **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); then `DOLT_BRANCH('-D')`; once the branch is seen gone, conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
+
+Every connection of a project is a session it knows by its connection id, with the databases it
+may be using (`crates/project/src/sessions.rs`). A session leaves its database for
+`information_schema` before it closes: Dolt drops a closed session some time after its quit, and
+also after a `KILL`, and a session it still holds on the branch made renames fail now and then
+(AR-771, measured on dolt 2.7.5). Before a rename, the project ends its own sessions still on the
+branch, a read in flight there included, which then fails as it would after the rename, waits
+until the server's process list no longer holds them (go-mysql-server removes a session from the
+list the in-use check walks before it leaves the process list), and holds new sessions off the
+branch until the answer is read; each wait is bounded at 10 seconds, after which the rename fails
+or the new session goes on. `--force` is never used: it skips the check for every session, another
+program's too, and overwrites a branch of the new name (measured). A refusal that remains is
+another program's, unless a session of the project's own went on to the branch after its wait: that
+fails the rename with Dolt's words.
 
 Creating a branch keeps a record in the project folder, beside the `.creating` marker: the branch being
 made and the branch it was made from. The record is written atomically and flushed to disk, its folder included, once
