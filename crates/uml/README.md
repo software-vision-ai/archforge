@@ -320,7 +320,12 @@ shown in two branches moved where its new owner's diagram lacks it and where it 
 appearance and keeping each one, its bounds and a route beside it; a later placement its own undo
 step; the rows read back; an earlier version built from its rows unchanged and read-only; the
 package removed with every appearance in one undo step; an agent's commands giving the store the
-interface's give. `tests/defaults.rs` (AR-578): a default diagram's removal refused with no undo step,
+interface's give. `tests/structure.rs` (AR-556): a fresh project's structure diagram showing a
+child package, a class, an interface and an enumeration, each box by its element's own id, no
+element copied, moved or changed, each keeping its owner, the diagram's kind and notation kept; a
+dependency from a class to a package and back dashed with an open arrow at the supplier's box;
+every step undone and redone exactly; an agent's `diagram.add` and placements giving the store the
+Package and classifier tools give. `tests/defaults.rs` (AR-578): a default diagram's removal refused with no undo step,
 another diagram's leaving the binding, and a foreign binding keeping its diagram and the package
 that holds it, while a nested package that holds one hands it up and goes; that package and the
 binding's owner removed together in either order, as one undo step; the diagram of an association
