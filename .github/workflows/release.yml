@@ -13,11 +13,12 @@
 # (docs/releasing.md). Its notes are GitHub's, made from the pull requests merged since the last
 # release, under Archforge's own lines. The owner reads the draft and publishes it, which creates
 # the tag v<version>. A version with a suffix (0.2.0-rc.1) is a pre-release. A version published
-# already is refused: bump it first. A pull request that touches packaging or this file, and a run
-# started by hand, build every package as a dry run: the packages stay workflow artefacts and
-# nothing is released. Every package reports its version, commit and date. The README's
-# screenshots and the wiki's guide screens (`cargo xtask screens --gallery`) are rendered here and
-# attached to every release. Nothing is signed yet; the scripts' signing steps wait for their secrets.
+# already is refused: bump it first. A pull request that touches packaging, this file or
+# rust-toolchain.toml, and a run started by hand, build every package as a dry run: the packages
+# stay workflow artefacts and nothing is released. Every package reports its version, commit and
+# date. The README's screenshots and the wiki's guide screens (`cargo xtask screens --gallery`) are
+# rendered here and attached to every release. Nothing is signed yet; the scripts' signing steps
+# wait for their secrets.
 # Every job that builds installs Rust at the version rust-toolchain.toml names, the one the gate
 # runs: with no toolchain named, `rustup toolchain install` in the checkout installs the file's, and
 # rustup reads the file for every cargo run there, whatever the runner's default is.
@@ -30,6 +31,8 @@ on:
     paths:
       - ".github/workflows/release.yml"
       - "packaging/**"
+      # A new Rust version is built on every platform before it reaches a release.
+      - "rust-toolchain.toml"
   workflow_dispatch:
 
 permissions:

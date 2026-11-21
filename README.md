@@ -99,9 +99,10 @@ cargo run -p archforge
 
 You need Rust from [rustup](https://rustup.rs): the first cargo command in the checkout installs the
 version `rust-toolchain.toml` names, the one the gate runs, whatever your default toolchain is (a
-cargo from a package manager ignores that file). On Linux, install the development packages for xkbcommon, Wayland, X11, Xrandr, Xi and Mesa GL first. The shared
-crates come from [craft-libs](https://github.com/storytold/craft-libs), by the ArtCraft team, always
-at its latest main.
+cargo from a package manager ignores that file). On Linux, install the development packages for
+xkbcommon, Wayland, X11, Xrandr, Xi and Mesa GL first. The shared crates come from
+[craft-libs](https://github.com/storytold/craft-libs), by the ArtCraft team, always at its latest
+main.
 
 The interface is drawn in Inter. The build embeds it from a checkout of
 [craft-fonts](https://github.com/storytold/craft-fonts) next to this one (`CRAFT_FONTS_DIR` in
