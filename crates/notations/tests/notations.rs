@@ -592,6 +592,19 @@ fn a_diagram_of_a_kind_no_notation_knows_refuses_its_model_before_anything_is_bu
     assert!(matches!(&why, OpenError::UnknownKinds(e) if e.diagrams[0].kind == "legacy.kind"), "{why}");
 }
 
+/// The gate's table of diagram kinds (`xtask/diagram-kinds.tsv`) lists exactly the kinds the
+/// notations register: `cargo xtask kinds` refuses each listed word written out anywhere but its
+/// constant, so a kind registered without its row would slip past that check (AR-770).
+#[test]
+fn the_gates_table_of_kinds_lists_every_registered_kind() {
+    let table = include_str!("../../../xtask/diagram-kinds.tsv");
+    let mut listed: Vec<&str> = table.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).filter_map(|l| l.split('\t').next()).collect();
+    let mut registered = archforge_notations::kinds();
+    listed.sort_unstable();
+    registered.sort_unstable();
+    assert_eq!(registered, listed, "every registered kind needs its row in xtask/diagram-kinds.tsv, and every row a registered kind");
+}
+
 /// AR-551: the project knows the ER kind and the one UML kind, `uml.structure`, which a new UML
 /// diagram is stored as; the earlier `uml.class` is no alias of it: adding a diagram of it is
 /// refused, typed and naming the kinds known, with no undo entry, and rows holding one are refused.
