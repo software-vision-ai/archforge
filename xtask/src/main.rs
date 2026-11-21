@@ -1,11 +1,14 @@
 //! The repository task runner: the gate, its checks, and the metamodel generator.
 //!
-//! `cargo xtask ci` is the gate: it first moves the shared crates to the newest commit of their
-//! main branch, then runs every check in order, stops at the first failure and prints a summary of
-//! step, result and duration.
+//! `cargo xtask ci` is the gate: it runs every check in order, stops at the first failure and
+//! prints a summary of step, result and duration. It never changes `Cargo.lock`: every cargo
+//! command it runs that resolves dependencies takes `--locked`, as the `xtask` alias does, so a
+//! manifest changed without its lock fails the gate. `cargo xtask bump` alone moves the shared
+//! crates to the newest commit of their main branch.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod assets;
+mod bump;
 mod generate;
 mod ico;
 mod layers;
@@ -27,6 +30,7 @@ const DENY_VERSION: &str = "0.20.2";
 
 const USAGE: &str = "usage: cargo xtask <verb>
   ci                 the gate: every check, in order, stopping at the first failure
+  bump               move the craft-libs crates in Cargo.lock to the newest main, for a pull request of its own
   layers             the layer check
   wasm               the portable-target check
   assets [--check]   the attribution check; regenerates ATTRIBUTION.md unless --check
@@ -53,59 +57,20 @@ fn cargo_step(args: &'static [&'static str]) -> Box<dyn Fn() -> Result<(), Strin
     })
 }
 
-/// The git source whose crates the gate moves to their newest commit before it checks anything,
-/// so the repository always builds against the latest main of the shared crates.
-const LATEST: &str = "git+https://github.com/storytold/craft-libs";
-
-/// The packages of `lock` (a `Cargo.lock`) whose source is `source`, each once, in lock order.
-fn packages_from(lock: &str, source: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut name = None;
-    for line in lock.lines().map(str::trim) {
-        if line == "[[package]]" {
-            name = None;
-        } else if let Some(n) = line.strip_prefix("name = \"").and_then(|r| r.strip_suffix('"')) {
-            name = Some(n.to_string());
-        } else if let Some(s) = line.strip_prefix("source = \"")
-            && s.starts_with(source)
-            && let Some(n) = name.take()
-            && !out.contains(&n)
-        {
-            out.push(n);
-        }
-    }
-    out
-}
-
-/// Moves the shared crates in `Cargo.lock` to the newest commit of their branch.
-fn update_latest() -> Result<(), String> {
-    let lock = std::fs::read_to_string(util::root().join("Cargo.lock")).map_err(|e| format!("Cargo.lock: {e}"))?;
-    let packages = packages_from(&lock, LATEST);
-    if packages.is_empty() {
-        println!("update: no crate comes from {LATEST}");
-        return Ok(());
-    }
-    let mut cmd = util::cargo();
-    cmd.arg("update");
-    for p in &packages {
-        cmd.args(["-p", p]);
-    }
-    util::run(cmd).map_err(|e| format!("{e}\nupdate: moving {} to the newest main needs the network", packages.join(", ")))
-}
-
+/// The gate's steps in order. Each cargo command that resolves dependencies takes `--locked`, so
+/// none of them writes `Cargo.lock`; `cargo fmt` reads no lock file.
 fn steps() -> Vec<Step> {
     let mut s: Vec<Step> = vec![
-        ("update", Box::new(update_latest)),
         ("format", cargo_step(&["fmt", "--all", "--", "--check"])),
-        ("lint", cargo_step(&["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"])),
-        ("test", cargo_step(&["test", "--workspace"])),
+        ("lint", cargo_step(&["clippy", "--locked", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"])),
+        ("test", cargo_step(&["test", "--locked", "--workspace"])),
         ("assets", Box::new(|| assets::run(true))),
         ("skills", Box::new(skills::run)),
         ("layers", Box::new(layers::run)),
         ("portable", Box::new(wasm::run)),
         ("generated", Box::new(generate::check)),
     ];
-    let deny = cargo_step(&["deny", "check"]);
+    let deny = cargo_step(&["deny", "--locked", "check"]);
     s.push((
         "deny",
         Box::new(move || {
@@ -167,6 +132,7 @@ fn main() {
     let check = rest.iter().any(|a| a == "--check");
     let result = match args.first().map(String::as_str) {
         Some("ci") => ci(),
+        Some("bump") => bump::run(),
         Some("layers") => layers::run(),
         Some("wasm") => wasm::run(),
         Some("assets") => assets::run(check),
@@ -190,19 +156,5 @@ fn main() {
     if let Err(e) = result {
         eprintln!("xtask: {e}");
         std::process::exit(1);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_shared_crates_are_read_from_the_lock_once_each() {
-        let lock = "version = 4\n\n[[package]]\nname = \"craft-atomic\"\nversion = \"0.1.0\"\nsource = \"git+https://github.com/storytold/craft-libs?branch=main#d40c2be\"\n\n\
-                    [[package]]\nname = \"egui\"\nversion = \"0.36.2\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"\n\n\
-                    [[package]]\nname = \"local\"\nversion = \"0.1.0\"\n";
-        assert_eq!(packages_from(lock, LATEST), ["craft-atomic"]);
-        assert!(packages_from("", LATEST).is_empty());
     }
 }
