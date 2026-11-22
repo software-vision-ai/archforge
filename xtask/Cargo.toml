@@ -29,6 +29,11 @@ proc-macro2 = { version = "1.0.107", default-features = false, features = ["span
 # serde or writer. MIT OR Apache-2.0; never a dependency of the application.
 toml = { version = "1.1.8", default-features = false, features = ["parse"] }
 
+[target.'cfg(unix)'.dependencies]
+# The open flags for the ux check's reads (ux_literals.rs): never through a link, never waiting on
+# a pipe. Already a workspace dependency (the control token and the agent records open the same way).
+rustix.workspace = true
+
 [dev-dependencies]
 archforge-mof = { workspace = true, features = ["testing"] }
 

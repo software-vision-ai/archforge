@@ -111,15 +111,48 @@ const MAX_FILE: u64 = 16 << 20;
 /// The most bytes the scan reads of all the sources together.
 const MAX_TOTAL: u64 = 256 << 20;
 
-/// The text of `file`, read up to one byte past `limit`, so a file that holds more than `limit`
-/// shows it by its length.
+/// The bytes of the plain file `file`, read up to one byte past `limit`, so a file that holds more
+/// than `limit` shows it by its length. Anything else stops the check without waiting for it: a
+/// link, a pipe or a device is judged by its own kind before the open, and once more on the
+/// opened file ([`opened_plain`]), since it may have been put in place in between.
 fn read_capped(file: &Path, limit: u64) -> Result<Vec<u8>, String> {
     use std::io::Read;
+    let named = std::fs::symlink_metadata(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    if !named.file_type().is_file() {
+        return Err(format!("{}: a link or no plain file, which this check neither follows nor reads", file.display()));
+    }
     let mut bytes = Vec::new();
-    std::fs::File::open(file)
-        .and_then(|f| f.take(limit.saturating_add(1)).read_to_end(&mut bytes))
-        .map_err(|e| format!("{}: {e}", file.display()))?;
+    opened_plain(file, &named)?.take(limit.saturating_add(1)).read_to_end(&mut bytes).map_err(|e| format!("{}: {e}", file.display()))?;
     Ok(bytes)
+}
+
+/// `file` opened for reading, never through a link and never waiting for a writer, so a pipe put
+/// in its place cannot hold the check up (CodeRabbit on #573); refused unless the opened file is
+/// a plain file and the one `named` describes.
+#[cfg(unix)]
+fn opened_plain(file: &Path, named: &std::fs::Metadata) -> Result<std::fs::File, String> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let flags = rustix::fs::OFlags::NOFOLLOW | rustix::fs::OFlags::NONBLOCK;
+    let flags = i32::try_from(flags.bits()).map_err(|_| format!("{}: the open flags do not fit", file.display()))?;
+    let f = std::fs::OpenOptions::new().read(true).custom_flags(flags).open(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let opened = f.metadata().map_err(|e| format!("{}: {e}", file.display()))?;
+    if !opened.file_type().is_file() || opened.dev() != named.dev() || opened.ino() != named.ino() {
+        return Err(format!("{}: changed while it was opened, so this check does not read it", file.display()));
+    }
+    Ok(f)
+}
+
+/// `file` opened for reading, refused unless the opened file is a plain file. Outside Unix a
+/// path does not open a pipe, and the standard library gives no stable file identity to compare
+/// with `named`.
+#[cfg(not(unix))]
+fn opened_plain(file: &Path, _named: &std::fs::Metadata) -> Result<std::fs::File, String> {
+    let f = std::fs::File::open(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let opened = f.metadata().map_err(|e| format!("{}: {e}", file.display()))?;
+    if !opened.file_type().is_file() {
+        return Err(format!("{}: changed while it was opened, so this check does not read it", file.display()));
+    }
+    Ok(f)
 }
 
 /// The types `root`'s `clippy.toml` bans ([`banned`]) named outside ux in every source under its
@@ -135,7 +168,7 @@ pub fn scan(root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// The types `root`'s `clippy.toml` bans ([`banned`]), the file read up to `cap` bytes: a larger
-/// one, one that cannot be read and one that is no text stop the check.
+/// one, one that cannot be read, a link or no plain file, and one that is no text stop the check.
 fn rules_of(root: &Path, cap: u64) -> Result<Vec<Banned>, String> {
     let bytes = read_capped(&root.join("clippy.toml"), cap)?;
     if bytes.len() as u64 > cap {
@@ -334,6 +367,63 @@ mod tests {
         bytes.extend([0xff, b'"', b' ', b'}', b']', b'\n']);
         std::fs::write(s.path.join("clippy.toml"), &bytes).unwrap();
         assert!(rules_of(&s.path, 100).is_err_and(|e| e.starts_with("clippy.toml: ")), "no text");
+    }
+
+    /// A `clippy.toml` that is a link or a pipe stops the check before it is opened, and a pipe
+    /// with no writer does not hold it up (CodeRabbit on #573).
+    #[cfg(unix)]
+    #[test]
+    fn a_clippy_toml_that_is_no_plain_file_stops_the_check_without_waiting() {
+        let s = crate::util::Scratch::new("ux-rules-kind").unwrap();
+        s.file("crates/a/src/lib.rs", "fn f() {}\n").unwrap();
+        std::fs::create_dir(s.path.join("apps")).unwrap();
+        s.file("real.toml", "disallowed-types = [\"egui::Color32\"]\n").unwrap();
+        let config = s.path.join("clippy.toml");
+        std::os::unix::fs::symlink(s.path.join("real.toml"), &config).unwrap();
+        let refused = "clippy.toml: a link or no plain file, which this check neither follows nor reads";
+        let linked = scan(&s.path);
+        assert!(linked.as_ref().is_err_and(|e| e.ends_with(refused)), "{linked:?}");
+        std::fs::remove_file(&config).unwrap();
+        assert!(std::process::Command::new("mkfifo").arg(&config).status().unwrap().success(), "mkfifo");
+        let root = s.path.clone();
+        let piped = within_seconds(move || scan(&root));
+        assert!(piped.as_ref().is_err_and(|e| e.ends_with(refused)), "{piped:?}");
+    }
+
+    /// Opening never waits for a pipe's writer, and refuses what it opened unless it is a plain
+    /// file and the one looked at first: the checks that hold when a pipe or another file is put
+    /// in place between the look and the open.
+    #[cfg(unix)]
+    #[test]
+    fn what_is_opened_must_be_the_plain_file_looked_at() {
+        let s = crate::util::Scratch::new("ux-opened").unwrap();
+        s.file("a.rs", "fn a() {}\n").unwrap();
+        s.file("b.rs", "fn b() {}\n").unwrap();
+        let (a, b) = (s.path.join("a.rs"), s.path.join("b.rs"));
+        let looked = std::fs::symlink_metadata(&a).unwrap();
+        assert!(opened_plain(&a, &looked).is_ok());
+        let changed = "changed while it was opened, so this check does not read it";
+        let other = opened_plain(&b, &looked);
+        assert!(other.as_ref().is_err_and(|e| e.ends_with(changed)), "another file: {:?}", other.map(|_| ()));
+        // A link put in place, even one to the very file looked at, is not followed.
+        let link = s.path.join("link.rs");
+        std::os::unix::fs::symlink(&a, &link).unwrap();
+        assert!(opened_plain(&link, &looked).is_err(), "a link is never opened");
+        let pipe = s.path.join("pipe.rs");
+        assert!(std::process::Command::new("mkfifo").arg(&pipe).status().unwrap().success(), "mkfifo");
+        // Looked at as itself, so only its kind refuses it.
+        let itself = std::fs::symlink_metadata(&pipe).unwrap();
+        let piped = within_seconds(move || opened_plain(&pipe, &itself).map(|_| ()));
+        assert!(piped.as_ref().is_err_and(|e| e.ends_with(changed)), "{piped:?}");
+    }
+
+    /// What `work` returns, failing the test if it takes more than ten seconds, so a read that
+    /// waits on a pipe fails instead of holding the gate up.
+    #[cfg(unix)]
+    fn within_seconds<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || send.send(work()));
+        receive.recv_timeout(std::time::Duration::from_secs(10)).expect("the read waited on a pipe")
     }
 
     /// A source that is not Rust is a finding, so nothing passes unread.
