@@ -10,12 +10,13 @@
 //! Every Rust source under `crates/` and `apps/`, tests included, is parsed as Rust (`syn`), so a
 //! string, a comment, a raw identifier or a pattern is what the compiler takes it for: a struct
 //! pattern (`let FontId { size, family } = …`) takes a font apart and is no literal, and a return
-//! type (`-> &egui::FontId {`) is a type. A macro's tokens are read as expressions or statements
-//! when they parse as such, and otherwise token by token; a `macro_rules!` matcher is never read,
-//! its transcribers are, and `matches!` takes a pattern only when it is the standard library's.
-//! None of these exemptions holds in the input of a macro the scan does not know, which may match
-//! those tokens and emit them as code. A finding's line is its line in the file. `ux` itself
-//! ([`UX`]) is exempt.
+//! type (`-> &egui::FontId {`) is a type. A macro's input is read as Rust only where the scan
+//! knows the macro: the standard library's `stringify!` (a string), `matches!` and its asserting
+//! forms (an expression and a pattern), and its macros that evaluate their input (expressions);
+//! a `macro_rules!` matcher is never read. Everything else, the input of any other macro and a
+//! `macro_rules!` transcriber, is no Rust until a macro makes it so, and fails closed: every
+//! watched name in it is a finding, since the scan cannot know what the macro makes of it. A
+//! finding's line is its line in the file. `ux` itself ([`UX`]) is exempt.
 //!
 //! The walk is strict ([`util::walk_strict_all`]): `crates` and `apps` are judged by their own
 //! kind, never through a link; a folder that cannot be opened stops the check; a link or an entry
@@ -24,7 +25,7 @@
 
 use std::path::Path;
 
-use proc_macro2::{Delimiter, Spacing, TokenStream, TokenTree};
+use proc_macro2::{TokenStream, TokenTree};
 use syn::ext::IdentExt;
 use syn::parse::{ParseStream, Parser};
 use syn::punctuated::Punctuated;
@@ -99,12 +100,9 @@ fn watched_type(ty: &Type) -> Option<String> {
 struct Scan {
     found: Vec<(usize, String)>,
     /// The names the file defines as macros or imports itself, so that an unqualified call of one
-    /// of [`PATTERN_MACROS`] among them is not the standard library's.
+    /// of [`UNEVALUATED`], [`PATTERN_MACROS`] or [`EVALUATING`] among them is not the standard
+    /// library's.
     shadowed: Vec<String>,
-    /// Whether the scan is inside the input of a macro it does not know, which may match a
-    /// `stringify!`, a `matches!` or a `macro_rules!` there as tokens and emit them as code, so
-    /// [`UNEVALUATED`], [`PATTERN_MACROS`] and a matcher spare nothing.
-    opaque: bool,
 }
 
 /// The names a file gives a meaning of its own: its `macro_rules!` and its imports (`use
@@ -156,45 +154,6 @@ fn std_macro(path: &syn::Path, names: &[&str], shadowed: &[String]) -> bool {
     }
 }
 
-/// `tokens` of a `macro_rules!` transcriber made readable as Rust: a metavariable (`$x`) becomes
-/// a plain name, and a repetition (`$( … ) sep *`) its body once.
-fn transcribed(tokens: TokenStream) -> TokenStream {
-    let trees: Vec<TokenTree> = tokens.into_iter().collect();
-    let is_punct = |k: usize, cs: &str| matches!(trees.get(k), Some(TokenTree::Punct(p)) if cs.contains(p.as_char()));
-    let mut out = Vec::new();
-    let mut i = 0;
-    while let Some(tree) = trees.get(i) {
-        match (tree, trees.get(i + 1)) {
-            (TokenTree::Punct(p), Some(TokenTree::Ident(id))) if p.as_char() == '$' => {
-                out.push(TokenTree::Ident(Ident::new("metavariable", id.span())));
-                i += 2;
-            }
-            (TokenTree::Punct(p), Some(TokenTree::Group(g))) if p.as_char() == '$' && g.delimiter() == Delimiter::Parenthesis => {
-                out.extend(transcribed(g.stream()));
-                // The repetition's operator, after an optional separator.
-                i += if is_punct(i + 2, "*+?") {
-                    3
-                } else if is_punct(i + 3, "*+?") {
-                    4
-                } else {
-                    2
-                };
-            }
-            (TokenTree::Group(g), _) => {
-                let mut group = proc_macro2::Group::new(g.delimiter(), transcribed(g.stream()));
-                group.set_span(g.span());
-                out.push(TokenTree::Group(group));
-                i += 1;
-            }
-            _ => {
-                out.push(tree.clone());
-                i += 1;
-            }
-        }
-    }
-    out.into_iter().collect()
-}
-
 impl Scan {
     /// Records a finding on `line`.
     fn find(&mut self, line: usize, what: String) {
@@ -228,9 +187,9 @@ impl Scan {
         }
     }
 
-    /// Reads a macro's tokens: as expressions separated by commas (`vec![…]`, `format!(…)`), as
-    /// `expression; count` (`vec![x; n]`), or as statements and items; tokens that are none of
-    /// these (`json!`, a `macro_rules!` body) are read one by one ([`Scan::tokens`]).
+    /// Reads the input of a standard macro that evaluates it as code ([`EVALUATING`]): expressions
+    /// separated by commas (`format!(…)`, `vec![…]`), or `expression; count` (`vec![x; n]`). Input
+    /// that is neither is read as tokens ([`Scan::tokens`]).
     fn macro_body(&mut self, tokens: &TokenStream) {
         if let Ok(exprs) = Punctuated::<Expr, Token![,]>::parse_terminated.parse2(tokens.clone()) {
             exprs.iter().for_each(|e| self.visit_expr(e));
@@ -243,17 +202,14 @@ impl Scan {
         {
             self.visit_expr(&value);
             self.visit_expr(&count);
-        } else if let Ok(stmts) = syn::Block::parse_within.parse2(tokens.clone()) {
-            stmts.iter().for_each(|s| self.visit_stmt(s));
         } else {
             self.tokens(tokens.clone());
         }
     }
 
     /// Reads a `macro_rules!` definition: its rules (`(matcher) => { transcriber };`). A matcher only
-    /// recognises tokens and is never read; each transcriber is read as Rust with its metavariables
-    /// in place ([`transcribed`], [`Scan::macro_body`]). A body not in that shape is read token by
-    /// token, failing closed.
+    /// recognises tokens and is never read. A transcriber is no Rust until the macro is called, so
+    /// it is read as tokens ([`Scan::tokens`]), as is a body not in that shape.
     fn macro_rules(&mut self, tokens: &TokenStream) {
         let trees: Vec<TokenTree> = tokens.clone().into_iter().collect();
         let punct = |k: usize, c: char| matches!(trees.get(k), Some(TokenTree::Punct(p)) if p.as_char() == c);
@@ -269,59 +225,25 @@ impl Scan {
                 _ => return self.tokens(tokens.clone()),
             }
         }
-        transcribers.into_iter().for_each(|body| self.macro_body(&transcribed(body)));
+        transcribers.into_iter().for_each(|body| self.tokens(body));
     }
 
-    /// Reads tokens that are no Rust one by one, failing closed: `Color32::CONSTANT`, a watched
-    /// type followed by `as`, and a literal type followed by braces (unless `->` comes before it)
-    /// are findings, inside every group too.
+    /// Reads tokens the scan does not read as Rust, failing closed: what a macro makes of them is
+    /// its own, so every watched name among them, inside every group too, is a finding, whatever
+    /// the tokens around it look like (a pattern, a return type, a qualified path, a `stringify!`).
     fn tokens(&mut self, tokens: TokenStream) {
-        let trees: Vec<TokenTree> = tokens.into_iter().collect();
-        let punct = |i: usize, c: char| matches!(trees.get(i), Some(TokenTree::Punct(p)) if p.as_char() == c);
-        for (i, tree) in trees.iter().enumerate() {
+        for tree in tokens {
             match tree {
-                TokenTree::Group(g) => self.macro_body(&g.stream()),
-                TokenTree::Ident(id) => {
-                    let n = name(id);
-                    if !WATCHED.contains(&n.as_str()) {
-                        continue;
-                    }
-                    let at = line(id.span());
-                    if n == "Color32"
-                        && let Some(constant) = qualified_constant(&trees, i)
-                    {
-                        self.constant(at, &constant);
-                        continue;
-                    }
-                    let path = matches!(trees.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == ':' && p.spacing() == Spacing::Joint)
-                        && punct(i + 2, ':');
-                    match (trees.get(i + 1), trees.get(i + 3)) {
-                        (_, Some(TokenTree::Ident(c))) if n == "Color32" && path && constant_case(&name(c)) => self.constant(at, &name(c)),
-                        (Some(TokenTree::Ident(a)), _) if a == "as" => self.renamed(at, &n),
-                        (Some(TokenTree::Group(g)), _) if g.delimiter() == Delimiter::Brace && LITERALS.contains(&n.as_str()) => {
-                            // `-> FontId {` opens a body; `&`, `mut` and the path before the type
-                            // (`-> &mut egui::FontId {`) are passed over.
-                            let ident = |k: usize| matches!(trees.get(k), Some(TokenTree::Ident(_)));
-                            let mut j = i;
-                            loop {
-                                if j >= 1 && (punct(j - 1, '&') || matches!(trees.get(j - 1), Some(TokenTree::Ident(m)) if m == "mut")) {
-                                    j -= 1;
-                                } else if j >= 2 && punct(j - 1, ':') && punct(j - 2, ':') {
-                                    j -= 2;
-                                    if j >= 1 && ident(j - 1) {
-                                        j -= 1;
-                                    }
-                                } else {
-                                    break;
-                                }
-                            }
-                            let body = j >= 2 && punct(j - 1, '>') && punct(j - 2, '-');
-                            if !body {
-                                self.find(at, format!("{n} {{ .. }}, built by hand: {}", instead(&n)));
-                            }
-                        }
-                        _ => {}
-                    }
+                TokenTree::Group(g) => self.tokens(g.stream()),
+                TokenTree::Ident(id) if WATCHED.contains(&name(&id).as_str()) => {
+                    let n = name(&id);
+                    self.find(
+                        line(id.span()),
+                        format!(
+                            "{n} in tokens this check does not read as Rust (a macro's input or a macro_rules! transcriber), where the macro may make a colour or a font of it: {}",
+                            instead(&n)
+                        ),
+                    );
                 }
                 _ => {}
             }
@@ -387,14 +309,12 @@ impl<'ast> Visit<'ast> for Scan {
         visit::visit_expr_path(self, e);
     }
 
-    /// `FontId { size, family }`: a font made by hand; not with the rest `..` and no base, which
-    /// takes a value apart (`matches!(f, FontId { size, .. })`).
+    /// `FontId { size, family }`: a font made by hand, with a base (`..base`) or default field
+    /// values (`..`) too.
     fn visit_expr_struct(&mut self, e: &'ast syn::ExprStruct) {
-        let pattern = e.dot2_token.is_some() && e.rest.is_none();
         if let Some(last) = e.path.segments.last()
             && e.qself.is_none()
             && LITERALS.contains(&name(&last.ident).as_str())
-            && !pattern
         {
             let n = name(&last.ident);
             self.find(line(last.ident.span()), format!("{n} {{ .. }}, built by hand: {}", instead(&n)));
@@ -410,79 +330,39 @@ impl<'ast> Visit<'ast> for Scan {
         self.visit_expr(&e.right);
     }
 
-    /// A macro's tokens: a `macro_rules!` definition leaves its matchers unread
-    /// ([`Scan::macro_rules`]); `matches!` and its asserting forms take an expression and a pattern
-    /// ([`PATTERN_MACROS`]); `stringify!` makes a string of them unread ([`UNEVALUATED`]). None of
-    /// these is granted in another macro's input ([`Scan::opaque`]), which may match the tokens
-    /// and emit them as code: there they are read like any other tokens. The others are read by
-    /// [`Scan::macro_body`], as opaque input unless the macro is a standard one that evaluates its
-    /// input as code ([`EVALUATING`]).
+    /// A macro's tokens, read as Rust only where the scan knows the macro: a `macro_rules!`
+    /// definition leaves its matchers unread ([`Scan::macro_rules`]); the standard library's
+    /// `stringify!` makes a string of them unread ([`UNEVALUATED`]); its `matches!` and asserting
+    /// forms take an expression and a pattern ([`PATTERN_MACROS`]); and its macros that evaluate
+    /// their input take expressions ([`EVALUATING`], [`Scan::macro_body`]). Any other input, and
+    /// one of these that does not parse as such, is read as tokens ([`Scan::tokens`]), so nothing
+    /// inside it, a `stringify!` or a `matches!` either, is spared.
     fn visit_macro(&mut self, m: &'ast syn::Macro) {
         visit::visit_macro(self, m);
         if m.path.is_ident("macro_rules") {
-            return if self.opaque { self.tokens(m.tokens.clone()) } else { self.macro_rules(&m.tokens) };
+            return self.macro_rules(&m.tokens);
         }
-        if !self.opaque && std_macro(&m.path, &UNEVALUATED, &self.shadowed) {
+        if std_macro(&m.path, &UNEVALUATED, &self.shadowed) {
             return;
         }
-        let takes_pattern = !self.opaque && std_macro(&m.path, &PATTERN_MACROS, &self.shadowed);
-        match takes_pattern.then(|| m.parse_body_with(pattern_args).ok()).flatten() {
-            Some((value, pattern, guard, rest)) => {
-                self.visit_expr(&value);
-                self.visit_pat(&pattern);
-                guard.iter().chain(rest.iter()).for_each(|e| self.visit_expr(e));
-            }
-            None => {
-                let evaluates = std_macro(&m.path, &EVALUATING, &self.shadowed);
-                let outer = self.opaque;
-                self.opaque = outer || !evaluates;
-                self.macro_body(&m.tokens);
-                self.opaque = outer;
-            }
+        if std_macro(&m.path, &PATTERN_MACROS, &self.shadowed)
+            && let Ok((value, pattern, guard, rest)) = m.parse_body_with(pattern_args)
+        {
+            self.visit_expr(&value);
+            self.visit_pat(&pattern);
+            guard.iter().chain(rest.iter()).for_each(|e| self.visit_expr(e));
+        } else if std_macro(&m.path, &EVALUATING, &self.shadowed) {
+            self.macro_body(&m.tokens);
+        } else {
+            self.tokens(m.tokens.clone());
         }
     }
-}
-
-/// The constant of a qualified path through `Color32` in raw tokens, `Color32` at `i`:
-/// `<egui::Color32>::RED` or `<Color32 as Default>::WHITE`; none for anything else.
-fn qualified_constant(trees: &[TokenTree], i: usize) -> Option<String> {
-    let punct = |k: usize, c: char| matches!(trees.get(k), Some(TokenTree::Punct(p)) if p.as_char() == c);
-    // Back over the path to the `<` that opens the qualified type.
-    let mut j = i;
-    while j >= 2 && punct(j - 1, ':') && punct(j - 2, ':') {
-        j -= 2;
-        if j >= 1 && matches!(trees.get(j - 1), Some(TokenTree::Ident(_))) {
-            j -= 1;
-        }
-    }
-    // A turbofish (`Wrapper::<Color32>::RED`) is a generic argument, not a qualified type.
-    let turbofish = j >= 3 && punct(j - 2, ':') && punct(j - 3, ':');
-    if j == 0 || !punct(j - 1, '<') || turbofish {
-        return None;
-    }
-    // On to the `>` that closes it, past `as Trait<…>`.
-    let mut k = i + 1;
-    if matches!(trees.get(k), Some(TokenTree::Ident(a)) if a == "as") {
-        let mut depth = 0usize;
-        loop {
-            k += 1;
-            match trees.get(k) {
-                None => return None,
-                Some(TokenTree::Punct(p)) if p.as_char() == '<' => depth += 1,
-                Some(TokenTree::Punct(p)) if p.as_char() == '>' && depth == 0 => break,
-                Some(TokenTree::Punct(p)) if p.as_char() == '>' => depth -= 1,
-                _ => {}
-            }
-        }
-    }
-    let Some(TokenTree::Ident(member)) = trees.get(k + 3) else { return None };
-    (punct(k, '>') && punct(k + 1, ':') && punct(k + 2, ':') && constant_case(&name(member))).then(|| name(member))
 }
 
 /// The standard library's macros that take paths and expressions as tokens without evaluating
 /// them: `stringify!(egui::Color32::RED)` is a string where it is called, not where it stands in
-/// another macro's input ([`Scan::opaque`]). (`concat!`, `include_str!` and the like take literals
-/// only.)
+/// another macro's input, which is read as tokens ([`Scan::tokens`]). (`concat!`, `include_str!`
+/// and the like take literals only.)
 const UNEVALUATED: [&str; 1] = ["stringify"];
 
 /// The standard library's macros that read their input as expressions and evaluate them where
@@ -749,6 +629,8 @@ mod tests {
             "match k { A => FontId { size, family }, B => x }",
             "let f = FontId { size, ..base };",
             "return FontId { size, family };",
+            // Default field values: an expression, though it ends like a pattern.
+            "let f = FontId { size, .. };",
         ];
         for source in literals {
             let found = findings(source);
@@ -812,8 +694,9 @@ mod tests {
         assert_eq!(misread, Vec::<String>::new());
     }
 
-    /// A macro's tokens are read as expressions or statements where they parse as such, and token
-    /// by token where they do not, so a constant or a literal in one is found and a pattern is not.
+    /// A standard macro's input is read as Rust, so a constant or a literal in it is found and a
+    /// pattern is not; any other macro's input is read as tokens, where a watched name is found
+    /// whatever it looks like.
     #[test]
     fn macros_are_read_too() {
         for source in [
@@ -823,11 +706,15 @@ mod tests {
             "macro_rules! m { () => { Color32::RED } }",
             "macro_rules! m { ($f:expr) => { use egui::Color32 as C; } }",
             "assert!(matches!(c, egui::Color32::BLACK));",
-            "thread_local! { static C: Color32 = Color32::RED; }",
+            "thread_local! { static C: Ink = Color32::RED; }",
             "macro_rules! red { () => { <egui::Color32>::RED }; }",
             "assert_matches!(font, FontId { .. }, \"{:?}\", Color32::RED);",
             "assert!(matches!(FontId { size, family }, _));",
             "m!(::FontId { size, family } and more);",
+            "with_font! { let FontId { size, family } = font; }",
+            "with_font! { FontId { size, family } = font; }",
+            "macro_rules! m { () => { fn f() -> &egui::FontId { x } } }",
+            "m!(fn f() -> &mut egui::FontId { x } @);",
         ] {
             let found = findings(source);
             assert_eq!(found.len(), 1, "{source}: {found:?}");
@@ -837,12 +724,6 @@ mod tests {
             "assert!(matches!(font, egui::FontId { size, family }));",
             "let big = matches!(font, FontId { size, family } if size > 1.0);",
             "assert_matches!(font, FontId { size, family } | FontId { size, family }, \"font {}\", 1);",
-            "with_font! { let FontId { size, family } = font; }",
-            "with_font! { FontId { size, family } = font; }",
-            "macro_rules! m { () => { fn f() -> &egui::FontId { x } } }",
-            "macro_rules! m { () => { fn f() -> &mut egui::FontId { x } } }",
-            "m!(fn f() -> &egui::FontId { x } @);",
-            "m!(fn f() -> &mut egui::FontId { x } @);",
             "let s = format!(\"Color32::RED {}\", 1);",
         ] {
             assert_eq!(findings(source), Vec::<String>::new(), "{source}");
@@ -850,40 +731,35 @@ mod tests {
     }
 
     /// A `macro_rules!` matcher only recognises tokens, so it is never read; a transcriber is read
-    /// as Rust with its metavariables and repetitions in place. `matches!` takes a pattern only
-    /// when it is the standard library's: unqualified and not shadowed by a macro or an import of
-    /// that name in the file, or named through `std` or `core`. A qualified constant
-    /// (`<egui::Color32>::RED`) is found in tokens that are no Rust too.
+    /// as tokens, where a watched name is found whatever it looks like. `matches!` takes a pattern
+    /// only when it is the standard library's: unqualified and not shadowed by a macro or an
+    /// import of that name in the file, or named through `std` or `core`.
     #[test]
     fn macro_rules_and_pattern_macros_are_read_by_what_they_are() {
-        let constant = "Color32::";
-        let built = "{ .. }, built by hand";
+        let tokens = "in tokens this check does not read as Rust";
         let found = [
-            ("macro_rules! red { ($note:expr) => {{ let _ = $note; <egui::Color32>::RED }}; }", constant),
-            ("macro_rules! reds { ($($x:ident),*) => { $(let $x = Color32::RED;)* }; }", constant),
-            ("macro_rules! paint { ($c:expr) => { $crate::fill(<Color32 as Default>::WHITE, $c) }; }", constant),
-            ("macro_rules! m { Color32::RED }", constant),
-            ("let j = json!({ \"c\": <egui::Color32>::RED });", constant),
-            ("let j = json!({ \"c\": <egui::Color32 as Default>::WHITE });", "Color32::WHITE, a colour constant"),
-            ("macro_rules! matches { ($x:expr, $font:expr) => { $font }; }\nlet f = matches!((), FontId { size, family });", built),
-            ("use helpers::matches;\nlet f = matches!((), FontId { size, family });", built),
-            ("use helpers::pick as matches;\nlet f = matches!((), FontId { size, family });", built),
-            ("let f = other::matches!((), FontId { size, family });", built),
-            ("let f = ::matches!((), FontId { size, family });", built),
-            ("let j = json!({ \"c\": <egui::Color32 as Tint<u8>>::RED });", "Color32::RED, a colour constant"),
+            ("macro_rules! red { ($note:expr) => {{ let _ = $note; <egui::Color32>::RED }}; }", tokens),
+            ("macro_rules! reds { ($($x:ident),*) => { $(let $x = Color32::RED;)* }; }", tokens),
+            ("macro_rules! paint { ($c:expr) => { $crate::fill(<Color32 as Default>::WHITE, $c) }; }", tokens),
+            ("macro_rules! m { Color32::RED }", tokens),
+            ("let j = json!({ \"c\": <egui::Color32>::RED });", tokens),
+            ("let j = json!({ \"c\": <egui::Color32 as Default>::WHITE });", tokens),
+            ("macro_rules! matches { ($x:expr, $font:expr) => { $font }; }\nlet f = matches!((), FontId { size, family });", tokens),
+            ("use helpers::matches;\nlet f = matches!((), FontId { size, family });", tokens),
+            ("use helpers::pick as matches;\nlet f = matches!((), FontId { size, family });", tokens),
+            ("let f = other::matches!((), FontId { size, family });", tokens),
+            ("let f = ::matches!((), FontId { size, family });", tokens),
+            ("let j = json!({ \"c\": <egui::Color32 as Tint<u8>>::RED });", tokens),
+            ("macro_rules! sizes { ($($f:ident),*) => { $(let FontId { size, .. } = $f;)* }; }", tokens),
+            ("let j = json!({ \"c\": <egui::Color32>::default() });", tokens),
+            ("let j = json!({ \"c\": Wrapper::<Color32>::RED });", tokens),
         ];
         let none = [
             "macro_rules! accepts_face { (FontId { $($fields:tt)* }) => { () }; }",
-            "macro_rules! sizes { ($($f:ident),*) => { $(let FontId { size, .. } = $f;)* }; }",
-            "macro_rules! pairs { ($($f:expr),*) => { let ($(FontId { size, family }),*) = ($($f),*); }; }",
-            "macro_rules! inner { ($f:expr) => {{ let FontId { size, .. } = $f; size }}; }",
             "let b = std::matches!(f, FontId { size, family });",
             "let b = ::core::matches!(f, FontId { size, family });",
             "let b = matches!(f, FontId { size, family });",
             "use helpers::other;\nlet b = matches!(f, FontId { size, family });",
-            "let j = json!({ \"c\": <egui::Color32>::default() });",
-            "let j = json!({ \"c\": Wrapper::<Color32>::RED });",
-            "m!(shift: Color32 >::RED @);",
         ];
         // Every case is checked before the test fails, so a failure names all the misread ones.
         let misread: Vec<String> = found
@@ -912,10 +788,10 @@ mod tests {
 
     /// The standard library's `stringify!` turns its tokens into a string without evaluating them,
     /// so they are not read: through `std` or `core`, or unqualified when the file gives the name
-    /// no meaning of its own, where the code calls it or a `macro_rules!` transcriber or
-    /// `matches!` writes the call out. Another macro of that name, an evaluating macro around it,
-    /// and a `stringify!` in any other macro's input, which that macro may match as tokens and
-    /// never call (`evaluate!(stringify!($e:expr)) => $e`), are read.
+    /// no meaning of its own, where the code calls it or `matches!` writes the call out. Another
+    /// macro of that name, an evaluating macro around it, and a `stringify!` in any other macro's
+    /// input or a `macro_rules!` transcriber, which are read as tokens
+    /// (`evaluate!(stringify!($e:expr)) => $e`), are read.
     #[test]
     fn std_stringify_is_a_string() {
         let none = [
@@ -923,7 +799,6 @@ mod tests {
             "let s = stringify!(Color32::WHITE);",
             "let s = ::core::stringify!(FontId { size, family });",
             "use helpers::other;\nlet s = stringify!(Color32::RED);",
-            "macro_rules! name { () => { stringify!(Color32::RED) }; }",
             "let b = matches!(c, _ if stringify!(Color32::RED).is_empty());",
             "let a = other!(x);\nlet s = stringify!(Color32::RED);",
         ];
@@ -953,9 +828,9 @@ mod tests {
 
     /// In a macro's input that the scan does not know, which may match the tokens and emit them as
     /// code, a `macro_rules!` matcher and a `matches!` pattern are read like any other tokens
-    /// (CodeRabbit on #573). A real `macro_rules!` keeps its matchers unread, a nested definition
-    /// in its transcriber too, and the standard library's `matches!` keeps its pattern where it is
-    /// called, in the code or in a standard macro that evaluates its input (`assert!`).
+    /// (CodeRabbit on #573), as is a definition nested in a transcriber. A real `macro_rules!`
+    /// keeps its matchers unread, and the standard library's `matches!` keeps its pattern where it
+    /// is called, in the code or in a standard macro that evaluates its input (`assert!`).
     #[test]
     fn opaque_input_reads_matchers_and_patterns_as_tokens() {
         let found = [
@@ -964,10 +839,10 @@ mod tests {
             "fn f() {\n    check!(matches!(font, egui::FontId { size, family }));\n}",
             "macro_rules! assert { ($e:expr) => { $e }; }\nfn f() {\n    assert!(matches!((), FontId { size, family }));\n}",
             "fn f() {\n    keep!(std::matches!((), FontId { size, family }));\n}",
+            "macro_rules! outer { () => { macro_rules! inner { (Color32::RED) => {} } }; }",
         ];
         let none = [
             "macro_rules! accepts { (egui::Color32::RED) => {} }",
-            "macro_rules! outer { () => { macro_rules! inner { (Color32::RED) => {} } }; }",
             "fn f() {\n    assert_eq!(matches!(font, egui::FontId { size, family }), true);\n}",
             "fn f() {\n    debug_assert!(std::matches!(font, egui::FontId { size, family }), \"{}\", 1);\n}",
             "fn f() -> String {\n    format!(\"{}\", matches!(font, egui::FontId { size, family }))\n}",
@@ -980,6 +855,58 @@ mod tests {
             .filter_map(|(source, n)| {
                 let got = findings(source);
                 (got.len() != n).then(|| format!("{source} gave {got:?}"))
+            })
+            .collect();
+        assert_eq!(misread, Vec::<String>::new());
+    }
+
+    /// Tokens the scan does not read as Rust, the input of a macro it does not know and a
+    /// `macro_rules!` transcriber, fail closed: every watched name in them is a finding, whatever
+    /// the tokens around it look like, since the macro decides what it becomes (owner, 2026-11-22;
+    /// CodeRabbit on #573). Code the scan parses keeps its exemptions.
+    #[test]
+    fn tokens_not_read_as_rust_fail_closed_on_every_watched_name() {
+        let found: [(&str, usize); 13] = [
+            // A repetition taken no times leaves `egui::Color32::RED`.
+            ("macro_rules! ink { ($($p:ident)*) => { egui::Color32::$($p::)*RED }; }", 1),
+            // The caller names the member: `ink!(RED)`.
+            ("macro_rules! ink { ($c:ident) => { egui::Color32::$c }; }", 1),
+            // The input looks like a pattern; the macro makes a literal of it.
+            (
+                "macro_rules! make { (let $ty:ident $fields:tt = $value:expr;) => { $ty $fields }; }\nfn f() {\n    let _ = make!(let FontId { size, family } = (););\n}",
+                1,
+            ),
+            // An alias the macro may emit, of the type itself or of one built on it.
+            ("macro_rules! emit { (@ $item:item) => { $item }; }\nemit!(@ type Ink = egui::Color32;);", 1),
+            ("emit!(@ type Ink = Option<egui::Color32>;);", 1),
+            // A qualified path is no rename, but what the macro makes of it is unknown.
+            ("fn f() {\n    let _ = read!(@ <egui::Color32 as Paint>::current());\n}", 1),
+            ("fn f() {\n    let _ = paint!(egui::Color32::from_rgb(1, 2, 3));\n}", 1),
+            ("fn f() {\n    let _ = size!(FontId::proportional(12.0));\n}", 1),
+            ("thread_local! { static C: std::cell::Cell<Color32> = std::cell::Cell::new(ux::MARK); }", 1),
+            ("macro_rules! name { () => { stringify!(Color32::RED) }; }", 1),
+            ("macro_rules! inner { ($f:expr) => {{ let FontId { size, .. } = $f; size }}; }", 1),
+            ("fn f() {\n    with_font! { fn g() -> &egui::FontId { x } }\n}", 1),
+            // A standard macro's input that is no Rust, which the compiler refuses, is read as tokens.
+            ("println!(\"{:?}\", Color32::RED @);", 1),
+        ];
+        // Parsed code: a qualified call, a constructor in a standard macro that evaluates its
+        // input (clippy's to refuse), and a struct pattern.
+        let none = [
+            "let c = <egui::Color32 as Paint>::current();",
+            "assert_eq!(c, egui::Color32::from_rgb(1, 2, 3));",
+            "let egui::FontId { size, .. } = font;",
+        ];
+        let says = "where the macro may make a colour or a font of it: ";
+        // Every case is checked before the test fails, so a failure names all the misread ones.
+        let misread: Vec<String> = found
+            .iter()
+            .copied()
+            .chain(none.iter().map(|s| (*s, 0)))
+            .filter_map(|(source, n)| {
+                let got = findings(source);
+                let right = got.len() == n && got.iter().all(|f| f.contains(says));
+                (!right).then(|| format!("{source} gave {got:?}"))
             })
             .collect();
         assert_eq!(misread, Vec::<String>::new());
