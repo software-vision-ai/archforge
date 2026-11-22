@@ -31,8 +31,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - the control channel's tokens, roles and revocation: `crates/control/src/tests.rs`; what the
     window lets a read-only token do: the `tests` module in `crates/ui-egui/src/control.rs`
   - the shell's process and network scan: the `tests` module in `xtask/src/shell_io.rs`
-  - the scan for colours and fonts made outside `ux`: the `tests` module in
-    `xtask/src/ux_literals.rs`
+  - the check for fonts and colours written as struct literals outside `ux`: the `tests` module
+    in `xtask/src/ux_literals.rs`
   - the diagram-kind scan: the `tests` module in `xtask/src/kind_literals.rs`; its table of kinds
     against what the notations register: `crates/notations/tests/notations.rs`
   - name rules: the case table in `crates/names/src/lib.rs`

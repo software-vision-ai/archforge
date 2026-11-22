@@ -3,9 +3,9 @@
 //! visuals the same palette. The design has two appearances, Light and Dark, chosen by the
 //! shell's theme.
 //!
-//! The interface's colours and fonts are made here alone: the gate refuses egui's colour and font
-//! constructors elsewhere (`clippy.toml`) and its colour constants and font literals (the ux scan
-//! of `cargo xtask layers`).
+//! The interface's colours and fonts are made here alone: `clippy.toml` bans egui's colour and
+//! font types everywhere else, and the ux check of `cargo xtask layers` refuses a font or colour
+//! written there as a struct literal, which no type ban sees.
 #![allow(
     clippy::disallowed_methods,
     clippy::disallowed_types,
