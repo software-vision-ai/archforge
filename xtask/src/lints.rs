@@ -268,6 +268,8 @@ mod tests {
     #[test]
     fn a_table_in_a_comment_or_a_string_does_not_count() {
         assert_eq!(check(&manifest("# [lints]\n# workspace = true\n")), Err(Gap::Missing));
+        // A comment in the table sets nothing.
+        assert_eq!(check(&manifest("[lints]\n# clippy = { unwrap_used = \"allow\" }\nworkspace = true # [lints.clippy]\n")), Ok(()));
         let basic = "[package]\ndescription = \"\"\"\n[lints]\nworkspace = true\n\"\"\"\n";
         assert_eq!(check(basic), Err(Gap::Missing));
         let literal = "[package]\ndescription = '''\n[lints]\nworkspace = true\n'''\n";
@@ -276,14 +278,38 @@ mod tests {
         // the closing three belong to it.
         let inner = "[package]\ndescription = \"\"\"a \\\"\"\" \"\" b\n[lints]\nworkspace = true\n\"\"\"\"\"\n";
         assert_eq!(check(inner), Err(Gap::Missing));
-        // A line-ending backslash keeps the string open on the next line.
+        // A line-ending backslash keeps the string open on the next line, and the lines after it
+        // are counted.
         let continued = "[package]\ndescription = \"\"\"a \\\n[lints]\nworkspace = true\n\"\"\"\n";
         assert_eq!(check(continued), Err(Gap::Missing));
+        assert_eq!(check(&format!("{continued}[lints]\nworkspace = false\n")), Err(Gap::Other { line: 7 }));
         // After the string closes, the table counts again; a `#` inside a string is no comment.
         let after = "[package]\ndescription = '''x\n''' # [lints]\nname = \"a # b\"\n[lints]\nworkspace = true\n";
         assert_eq!(check(after), Ok(()));
         // An empty string closes at once.
         assert_eq!(check("[package]\nname = \"\"\n[lints]\nworkspace = true\n"), Ok(()));
+    }
+
+    /// The reader takes comments off and keeps strings, whose quotes and escapes it reads as TOML
+    /// does.
+    #[test]
+    fn the_reader_takes_comments_off_and_keeps_strings() {
+        let first = |text: &str| code_lines(text).into_iter().next().flatten();
+        for (text, code) in [
+            (r#"name = "a # b" # c"#, r#"name = "a # b" "#),
+            (r#"name = "" # c"#, r#"name = "" "#),
+            (r#"name = 'a \' # c"#, r#"name = 'a \' "#),
+            (r#"name = "a \" # b" # c"#, r#"name = "a \" # b" "#),
+            // Up to two quotes before the closing three belong to the string.
+            (r#"name = """a"""" # c"#, r#"name = """a"""" "#),
+            (r#"name = """a""""" # c"#, r#"name = """a""""" "#),
+            (r#"name = '''a'''' # c"#, r#"name = '''a'''' "#),
+            (r#"name = '''a''''' # c"#, r#"name = '''a''''' "#),
+        ] {
+            assert_eq!(first(text).as_deref(), Some(code), "{text}");
+        }
+        let lines = code_lines("a = \"\"\"\nb\n\"\"\" # c\nd # e");
+        assert_eq!(lines, vec![Some("a = \"\"\"".to_string()), None, None, Some("d ".to_string())]);
     }
 
     /// The refusal says what to add and why.
