@@ -2,6 +2,7 @@
 //! than adding a parallel one (AR-699): one match is selected with nothing changed and no undo
 //! step, several ask for a choice with nothing changed, none adds one; a stale choice is refused
 //! naming the current candidates; matching goes by identities in order, never by names.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{EngineError, Options, Reason, Session};
