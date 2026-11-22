@@ -169,8 +169,10 @@ pub(crate) struct Tree {
     pub cut: bool,
 }
 
-/// A group of the tree: its diagram kind ("" for those the shell doesn't know), its name and
-/// whether its diagrams answer to the typed filter (not when the filter names the group).
+/// A group of the tree: its diagram kind, its name and whether its diagrams answer to the typed
+/// filter (not when the filter names the group). Every diagram has its group: the shell knows
+/// every kind the notations know, and a model holding a diagram of any other kind is refused when
+/// it is read (AR-547), so no group is kept for unknown kinds (AR-554).
 struct Group {
     kind: &'static str,
     label: String,
@@ -180,9 +182,8 @@ struct Group {
 impl Group {
     /// Whether a diagram of `kind` shows in the group, `named` saying whether its name holds the
     /// typed filter; asked only for a diagram of the group's kind in a group the filter narrows.
-    fn shows(&self, known: &[&str], kind: &str, named: impl FnOnce() -> bool) -> bool {
-        let ours = if self.kind.is_empty() { !known.contains(&kind) } else { kind == self.kind };
-        ours && (!self.filtered || named())
+    fn shows(&self, kind: &str, named: impl FnOnce() -> bool) -> bool {
+        kind == self.kind && (!self.filtered || named())
     }
 }
 
@@ -197,7 +198,7 @@ struct Tally {
 
 /// Counts the diagrams under `owner` that show in each group, noting each folder's counts in
 /// `t`; every member visited is taken from its budget.
-fn tally(store: &Store, owner: Obj, prop: archforge_mof::PropId, groups: &[Group], known: &[&str], depth: u8, t: &mut Tally) -> Vec<usize> {
+fn tally(store: &Store, owner: Obj, prop: archforge_mof::PropId, groups: &[Group], depth: u8, t: &mut Tally) -> Vec<usize> {
     let mut here = vec![0; groups.len()];
     if depth >= MAX_DEPTH {
         t.cut = true;
@@ -211,7 +212,7 @@ fn tally(store: &Store, owner: Obj, prop: archforge_mof::PropId, groups: &[Group
         t.left -= 1;
         match store.class_of(m).ok() {
             Some(c) if c == archforge_core::FOLDER => {
-                let held = tally(store, m, archforge_core::folder::MEMBER, groups, known, depth.saturating_add(1), t);
+                let held = tally(store, m, archforge_core::folder::MEMBER, groups, depth.saturating_add(1), t);
                 for (i, n) in held.into_iter().enumerate().filter(|(_, n)| *n > 0) {
                     t.folders.insert((m, i), n);
                     here[i] += n;
@@ -220,7 +221,7 @@ fn tally(store: &Store, owner: Obj, prop: archforge_mof::PropId, groups: &[Group
             Some(c) if c == DIAGRAM => {
                 let (kind, mut named) = (kind_word(store, m), None);
                 for (i, g) in groups.iter().enumerate() {
-                    here[i] += usize::from(g.shows(known, &kind, || *named.get_or_insert_with(|| t.typed.in_any(&[&diagram_name(store, m)]))));
+                    here[i] += usize::from(g.shows(&kind, || *named.get_or_insert_with(|| t.typed.in_any(&[&diagram_name(store, m)]))));
                 }
             }
             _ => {}
@@ -230,11 +231,11 @@ fn tally(store: &Store, owner: Obj, prop: archforge_mof::PropId, groups: &[Group
 }
 
 /// The tree's rows: a group for each kind the shell knows, in the order of their names, holding
-/// that kind's diagrams in the folders the model keeps them in, in the model's order; then the
-/// diagrams of kinds the shell doesn't know, when there are any. Grouping is the explorer's alone:
-/// the model keeps each diagram once, where it was. A filter shows the diagrams whose name holds
-/// it (whatever its capitals and accents), or every diagram of a group whose name holds it, with
-/// their folders and groups, all open; without one every known kind's group shows, empty or not.
+/// that kind's diagrams in the folders the model keeps them in, in the model's order. Grouping is
+/// the explorer's alone: the model keeps each diagram once, where it was. A filter shows the
+/// diagrams whose name holds it (whatever its capitals and accents), or every diagram of a group
+/// whose name holds it, with their folders and groups, all open; without one every group shows,
+/// empty or not.
 pub(crate) fn rows(store: &Store, state: &State, kinds: &[&dyn crate::kinds::DiagramKind]) -> Tree {
     rows_within(store, state, kinds, MAX_VISITS)
 }
@@ -248,18 +249,16 @@ pub(crate) fn rows_within(store: &Store, state: &State, kinds: &[&dyn crate::kin
     let Some(model) = archforge_core::skills::model_of(store) else { return tree };
     let mut groups: Vec<Group> = kinds.iter().map(|k| Group { kind: k.kind(), label: k.group_word(), filtered: false }).collect();
     groups.sort_by_key(|g| g.label.to_lowercase());
-    let known: Vec<&'static str> = groups.iter().map(|g| g.kind).collect();
-    groups.push(Group { kind: "", label: tr("Other diagrams"), filtered: false });
     for g in &mut groups {
         g.filtered = !typed.in_any(&[&g.label]);
     }
     let mut t = Tally { folders: HashMap::new(), left: visits, cut: false, typed };
-    let counts = tally(store, model, archforge_core::model::MEMBER, &groups, &known, 0, &mut t);
+    let counts = tally(store, model, archforge_core::model::MEMBER, &groups, 0, &mut t);
     tree.cut = t.cut;
     let mut left = visits;
     for (i, g) in groups.iter().enumerate() {
         let count = counts[i];
-        if count == 0 && (g.kind.is_empty() || open) {
+        if count == 0 && open {
             continue;
         }
         if tree.rows.len() >= MAX_ROWS {
@@ -278,7 +277,7 @@ pub(crate) fn rows_within(store: &Store, state: &State, kinds: &[&dyn crate::kin
             count,
         });
         if expanded {
-            let walk = Walk { store, state, open, group: i, g, known: &known, folders: &t.folders, typed: &t.typed };
+            let walk = Walk { store, state, open, group: i, g, folders: &t.folders, typed: &t.typed };
             if walk.walk(model, archforge_core::model::MEMBER, 1, &mut tree.rows, &mut left) {
                 tree.cut = true;
                 break;
@@ -296,7 +295,6 @@ struct Walk<'a> {
     open: bool,
     group: usize,
     g: &'a Group,
-    known: &'a [&'static str],
     folders: &'a HashMap<(Obj, usize), usize>,
     typed: &'a Typed,
 }
@@ -327,7 +325,7 @@ impl Walk<'_> {
                 }
                 Some(c) if c == DIAGRAM => {
                     let label = diagram_name(self.store, m);
-                    if self.g.shows(self.known, &kind_word(self.store, m), || self.typed.in_any(&[&label])) {
+                    if self.g.shows(&kind_word(self.store, m), || self.typed.in_any(&[&label])) {
                         out.push(Row { id, obj: m, depth, kind: Kind::Diagram, label, expandable: false, expanded: false, count: 0 });
                     }
                 }
@@ -578,22 +576,17 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     let _ = ui.put(inner, edit).accessible_name(tr("Filter diagrams…"));
 }
 
-/// The key a group's controls carry: its diagram kind, or "other".
-fn group_key(kind: &str) -> &str {
-    if kind.is_empty() { "other" } else { kind }
-}
-
 /// The automation id of the `+` of the group of diagrams of `kind`.
 pub(crate) fn add_id(kind: &str) -> String {
-    format!("workspace.diagrams.group.{}.add", group_key(kind))
+    format!("workspace.diagrams.group.{kind}.add")
 }
 
 /// The automation id of a row's own control.
 pub(crate) fn row_id(row: &Row) -> String {
     match row.kind {
-        Kind::Group(kind) => format!("workspace.diagrams.group.{}", group_key(kind)),
+        Kind::Group(kind) => format!("workspace.diagrams.group.{kind}"),
         // A folder may show in two groups: each row its own control.
-        Kind::Folder(kind) => format!("workspace.diagrams.group.{}.folder.{}", group_key(kind), row.id),
+        Kind::Folder(kind) => format!("workspace.diagrams.group.{kind}.folder.{}", row.id),
         Kind::Diagram => format!("workspace.diagrams.row.{}", row.id),
     }
 }
@@ -829,14 +822,17 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
     }
 }
 
-/// The dialog's frame of `size`, centred in `window`, with its title and the step under it.
-fn dialog_frame(paint: &egui::Painter, p: &Palette, window: Rect, size: Vec2, title: &str, step: &str) -> Rect {
+/// The dialog's frame of `size`, centred in `window`, with its title and the step under it. The
+/// title is read out as the dialog's heading, found where it is painted.
+fn dialog_frame(ui: &egui::Ui, paint: &egui::Painter, p: &Palette, window: Rect, size: Vec2, title: &str, step: &str) -> Rect {
     let dialog = Rect::from_center_size(window.center(), size);
     ux::shadow(paint, dialog, 10.0, p.shadow);
     paint.rect_filled(dialog, 10.0, p.surface);
     paint.rect_stroke(dialog, 10.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
     let width = Some((size.x - 40.0).max(0.0));
-    ux::text(paint, dialog.min + vec2(20.0, 20.0), title, types::CARD_TITLE, p.text, width);
+    let drawn = ux::text(paint, dialog.min + vec2(20.0, 20.0), title, types::CARD_TITLE, p.text, width);
+    ui.interact(drawn, widgets::egui_id("workspace.new-diagram.title"), Sense::hover())
+        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Heading, true, title));
     ux::text(paint, dialog.min + vec2(20.0, 46.0), step, types::SMALL, p.text_secondary, width);
     dialog
 }
@@ -881,8 +877,15 @@ fn kind_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui::Pa
     let count = kinds.len().max(1) as f32;
     let card_w = if stacked { width - 40.0 } else { (width - 40.0 - 16.0 * (count - 1.0)) / count };
     let cards_h = if stacked { count * CARD + (count - 1.0) * 16.0 } else { CARD };
-    let dialog =
-        dialog_frame(paint, p, window, vec2(width, 76.0 + cards_h + 72.0), &tr("New diagram"), &tr("Step 1 of 2 · Choose what the diagram shows"));
+    let dialog = dialog_frame(
+        ui,
+        paint,
+        p,
+        window,
+        vec2(width, 76.0 + cards_h + 72.0),
+        &tr("New diagram"),
+        &tr("Step 1 of 2 · Choose what the diagram shows"),
+    );
     let mut pick: Option<(&'static str, bool)> = None;
     for (i, kind) in kinds.iter().enumerate() {
         let offset = i as f32 * if stacked { CARD + 16.0 } else { card_w + 16.0 };
@@ -999,7 +1002,7 @@ fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui:
     let refused = shell.diagrams.new.as_ref().and_then(|e| e.refused.clone());
     let width = 440.0_f32.min((window.width() - 32.0).max(240.0));
     let size = vec2(width, 242.0 + if refused.is_some() { 36.0 } else { 0.0 });
-    let dialog = dialog_frame(paint, p, window, size, &kind.new_word(), &tr("Step 2 of 2 · Name it and say what it is of"));
+    let dialog = dialog_frame(ui, paint, p, window, size, &kind.new_word(), &tr("Step 2 of 2 · Name it and say what it is of"));
     let at = |x: f32, y: f32| dialog.min + vec2(x, y);
     let inner_w = width - 40.0;
     // The elements the diagram may be of, read once.

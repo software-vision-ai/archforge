@@ -9963,6 +9963,25 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     assert_eq!(selected_name(&h), "Billing");
 }
 
+/// Where the first text painted as `words` stands on the screen.
+fn painted_at(h: &Harness<'static, Shell>, words: &str) -> Option<egui::Rect> {
+    /// Where `s`, or the first shape it holds, paints `words`.
+    fn walk(s: &egui::Shape, words: &str) -> Option<egui::Rect> {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == words => Some(egui::Rect::from_min_size(t.pos, t.galley.size())),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, words)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, words))
+}
+
+/// The names of the headings a screen reader finds on the screen, in tree order.
+fn headings(h: &Harness<'static, Shell>) -> Vec<String> {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    h.query_all_by_role(egui::accesskit::Role::Heading).filter_map(|n| n.accesskit_node().label()).collect()
+}
+
 /// The Diagrams explorer's rows: each one's depth, name and count.
 fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
     let st = h.state().session.as_ref().unwrap().doc();
@@ -9975,9 +9994,28 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
         let at = rect_of(&h, "workspace.explorers.diagrams").center();
         click(&mut h, at);
-        // Every kind the shell knows has its group, by name, empty or not, with its +.
+        // Every kind the shell knows has its group, by name, empty or not, with its +: UML
+        // structure diagrams after ER diagrams (AR-554).
         let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 0), row(0, "ER diagrams", 0)]);
+        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 0)]);
+        let found = painted(&h);
+        assert_eq!(found.iter().filter(|t| *t == "UML structure diagrams").count(), 1, "{theme:?}: {found:?}");
+        let (er, structure) =
+            (rect_of(&h, "workspace.diagrams.group.er"), rect_of(&h, &format!("workspace.diagrams.group.{}", archforge_uml::STRUCTURE_DIAGRAM)));
+        assert!(er.bottom() <= structure.top(), "{theme:?}: ER diagrams above");
+        // By their names, not by the order the shell lists the kinds in.
+        {
+            let reversed: Vec<&dyn crate::kinds::DiagramKind> = h.state().kinds.iter().rev().copied().collect();
+            let st = h.state().session.as_ref().unwrap().doc();
+            let labels: Vec<String> = crate::diagrams::rows(st, &h.state().diagrams, &reversed).rows.into_iter().map(|r| r.label).collect();
+            assert_eq!(labels, ["ER diagrams", "UML structure diagrams"], "{theme:?}");
+        }
+        // The groups are every kind a project can hold, so no diagram is left without one.
+        let mut shown: Vec<&str> = h.state().kinds.iter().map(|k| k.kind()).collect();
+        let mut held = archforge_notations::kinds();
+        shown.sort_unstable();
+        held.sort_unstable();
+        assert_eq!(shown, held);
         let found = ids(&h);
         for id in [
             "workspace.diagrams.group.uml.structure",
@@ -10014,7 +10052,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         h.run();
         assert_eq!(
             diagram_rows(&h),
-            vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0), row(0, "ER diagrams", 1), row(1, "Shop", 0)]
+            vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]
         );
         // Grouping is the explorer's alone: the model keeps each diagram once, where it was.
         {
@@ -10050,7 +10088,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         // A group folds and opens with a click.
         let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
         click(&mut h, at);
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(0, "ER diagrams", 1), row(1, "Shop", 0)]);
+        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2)]);
         assert!(!ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{orders}")));
         let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
         click(&mut h, at);
@@ -10058,10 +10096,10 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         // The filter narrows the diagrams, or shows a whole group named by it; groups with no match go.
         h.state_mut().diagrams.filter = "ord".into();
         h.run();
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Orders", 0)]);
-        h.state_mut().diagrams.filter = "class".into();
+        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Orders", 0)]);
+        h.state_mut().diagrams.filter = "structure".into();
         h.run();
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
+        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
         h.state_mut().diagrams.filter = "zzz".into();
         h.run();
         assert!(diagram_rows(&h).is_empty());
@@ -10266,7 +10304,14 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
     assert_eq!(
         diagram_rows(&h),
-        vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0), row(0, "ER diagrams", 1), row(1, "Views", 1), row(2, "Shop", 0)]
+        vec![
+            row(0, "ER diagrams", 1),
+            row(1, "Views", 1),
+            row(2, "Shop", 0),
+            row(0, "UML structure diagrams", 1),
+            row(1, "Views", 1),
+            row(2, "Sales", 0)
+        ]
     );
     // The folder's row in each group is a control of its own.
     let folder = {
@@ -10281,13 +10326,16 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     }
     // Folded shut, the folder hides its diagrams; typing a group's name opens it again.
     h.state_mut().diagrams.collapsed.insert(folder);
-    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(0, "ER diagrams", 1), row(1, "Views", 1)]);
-    h.state_mut().diagrams.filter = "class".into();
-    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
+    assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Views", 1), row(0, "UML structure diagrams", 1), row(1, "Views", 1)]);
+    h.state_mut().diagrams.filter = "structure".into();
+    assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
 }
 
+/// New diagram's two steps, in light and dark: the cards, their names and the title read out
+/// (AR-554), the arrow keys, Back, Cancel, a refused name and a group's `+`.
 #[test]
 fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_typed() {
+    use egui_kittest::kittest::{NodeT, Queryable};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
         let elements = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().alive().count();
@@ -10302,6 +10350,18 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(er.width() >= 240.0, "{theme:?}: room for the card to read");
         assert!(painted(&h).iter().any(|t| t == "Step 1 of 2 · Choose what the diagram shows"));
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
+        // The UML structure diagram's card: its name and what it shows painted, its name read out
+        // as the choice's; the dialog's title read out as its heading (AR-554).
+        let found = painted(&h);
+        let said = "Classes, packages and the relationships between them.";
+        assert!(found.iter().any(|t| t == "UML structure diagram") && found.iter().any(|t| t == said), "{theme:?}: {found:?}");
+        assert_eq!(h.get_by_label("UML structure diagram").accesskit_node().role(), egui::accesskit::Role::RadioButton, "{theme:?}");
+        assert_eq!(headings(&h), ["New diagram"], "{theme:?}");
+        // Found where it is painted: over the painted title, above the cards, from their left edge.
+        let title = h.get_by_role_and_label(egui::accesskit::Role::Heading, "New diagram").accesskit_node().bounding_box().expect("bounds");
+        let shown = painted_at(&h, "New diagram").expect("the title painted").center();
+        assert!(title.contains(egui::accesskit::Point::new(shown.x.into(), shown.y.into())), "{theme:?}: {title:?} over {shown:?}");
+        assert!((title.x0 as f32 - er.left()).abs() < 0.5 && title.y1 as f32 <= er.top(), "{theme:?}: {title:?}");
         // The arrow keys move the choice; the name the dialog gave follows the kind.
         key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
@@ -10320,7 +10380,8 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(step(&h), Some(crate::diagrams::Step::Details));
         let found = painted(&h);
-        assert!(found.iter().any(|t| t == "New class diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
+        assert!(found.iter().any(|t| t == "New UML structure diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
+        assert_eq!(headings(&h), ["New UML structure diagram"], "{theme:?}: the title read out");
         // A name typed survives Back and another kind; an empty name is refused, and Back clears it.
         h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
         h.run();
@@ -10356,7 +10417,8 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(h.state().diagrams.new.is_none());
         let at = rect_of(&h, "workspace.explorers.diagrams").center();
         click(&mut h, at);
-        assert_eq!(diagram_rows(&h)[..2], [(0, "Class diagrams".to_string(), 1), (1, "Domain".to_string(), 0)]);
+        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+        assert_eq!(diagram_rows(&h), [row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 1), row(1, "Domain", 0)]);
         assert!(h.state().canvas.active.is_some(), "it opens at once");
         // A group's + has chosen the kind: the dialog opens on the details, Back before them.
         let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
@@ -16479,7 +16541,7 @@ fn class_diagram_shown(h: &Harness<'static, Shell>) -> (String, Vec<String>) {
 #[test]
 fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_a_class_named_in_place() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    // 1. The tab strip's + opens New diagram; 2. the Class diagram card, Continue; 3. Create.
+    // 1. The tab strip's + opens New diagram; 2. the UML structure diagram card, Continue; 3. Create.
     let at = rect_of(&h, "workspace.tabs.add").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
