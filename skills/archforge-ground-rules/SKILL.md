@@ -17,10 +17,13 @@ The rules a change cannot break. `AGENTS.md` lists them in one line each.
 - The code is MIT OR Apache-2.0. A dependency passes `cargo deny check` (`deny.toml`): permissive
   licences only, and git sources only from craft-libs. Say in the change which dependency you add
   and why.
-- The shared crates come from craft-libs and the interface's fonts from craft-fonts, both at the
-  newest commit of their main branch. Never pin a revision, tag or version of either: the gate's
-  first step moves `Cargo.lock` to the newest craft-libs commit. To work on craft-libs beside
-  Archforge, use the commented patch in `.cargo/config.toml` and never commit it uncommented.
+- The shared crates come from craft-libs and the interface's fonts from craft-fonts, both
+  following their main branch. Never pin a revision, tag or version of either: `cargo xtask bump`
+  moves `Cargo.lock` to the newest craft-libs commit, in a pull request of its own, and the gate
+  never moves it. To work on craft-libs beside Archforge, use the commented patch in
+  `.cargo/config.toml` and never commit it uncommented. The patch changes `Cargo.lock`, so while it
+  is on `cargo xtask` refuses (it builds with `--locked`): run verbs with
+  `cargo run -p xtask -- <verb>`, and put `Cargo.lock` back when the patch is off again.
 
 ## Assets
 - Every file under `assets/` has an `[[asset]]` row in `ATTRIBUTION.toml` with its author, source,

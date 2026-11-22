@@ -1,0 +1,91 @@
+# Gate: `cargo xtask ci`, the repository's whole gate, on every pull request into main and on every
+# push to main, so a change merges on a green run GitHub made, not on a run on someone's machine.
+#
+# The run is the gate a contributor runs (CONTRIBUTING.md): format, lint, test, assets, skills,
+# layers, portable, generated and deny, all with the committed Cargo.lock (`--locked`), so a
+# manifest changed without its lock fails here as it does on a contributor's machine. Two of its
+# inputs come from outside the repository, as on a contributor's machine: the interface's fonts
+# from craft-fonts beside the checkout, and Dolt for the storage tests. OMG's UML files are not
+# here, so the generated step checks our own metamodels and skips UML's, as it does wherever
+# ARCHFORGE_SPECS_DIR is unset.
+#
+# Rust is the version rust-toolchain.toml names, which rustup reads wherever cargo runs in the
+# checkout, here as on a contributor's machine and in the release jobs. Dolt and cargo-deny are the
+# versions the gate runs with on the maintainer's machine, each downloaded at a fixed version and
+# checked against its checksum. A pull request from a fork runs with a read-only token and no
+# secrets.
+name: Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to a pull request replaces the run of the push before it. Every other run has a
+  # group of its own, so each push to main is checked (within one group GitHub also drops a queued
+  # run when a newer one arrives, whatever cancel-in-progress says), and a rerun of an older run
+  # never cancels the run of the pull request's current commit.
+  group: gate-${{ github.event_name == 'pull_request' && github.run_attempt == '1' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  DOLT_VERSION: "2.7.5"
+  DOLT_SHA256: ab4f57f6031da5123d4edb9fa43676d5fe50cd08d099cdf3e0ae632bf378dbba
+  DENY_VERSION: "0.20.2"
+  DENY_SHA256: 9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
+
+jobs:
+  gate:
+    name: cargo xtask ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The interface's fonts, from craft-fonts beside the checkout
+        run: git clone --depth 1 https://github.com/storytold/craft-fonts ../craft-fonts
+      - name: The window system's development packages and a software Vulkan driver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev \
+            libxrandr-dev libxi-dev libxcursor-dev libgl1-mesa-dev mesa-vulkan-drivers libvulkan1
+      - name: Rust at the version rust-toolchain.toml names, with what the file lists
+        # With no toolchain named, rustup installs the checkout's own: the version, the lints, the
+        # formatter and the web target the portable step builds for.
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+          rustc --version
+      - name: Dolt, for the storage tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/dolt" "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/dolt.tar.gz" "https://github.com/dolthub/dolt/releases/download/v$DOLT_VERSION/dolt-linux-amd64.tar.gz"
+          echo "$DOLT_SHA256  $RUNNER_TEMP/dolt.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/dolt.tar.gz" -C "$RUNNER_TEMP/dolt"
+          install -m 755 "$RUNNER_TEMP/dolt/dolt-linux-amd64/bin/dolt" "$HOME/.local/bin/dolt"
+          echo "$HOME/.local/bin" >>"$GITHUB_PATH"
+          "$HOME/.local/bin/dolt" version
+      - name: cargo-deny, for the licence and source check
+        run: |
+          mkdir -p "$RUNNER_TEMP/deny" "$HOME/.local/bin"
+          name="cargo-deny-$DENY_VERSION-x86_64-unknown-linux-musl"
+          curl -fsSL -o "$RUNNER_TEMP/deny.tar.gz" "https://github.com/EmbarkStudios/cargo-deny/releases/download/$DENY_VERSION/$name.tar.gz"
+          echo "$DENY_SHA256  $RUNNER_TEMP/deny.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/deny.tar.gz" -C "$RUNNER_TEMP/deny"
+          install -m 755 "$RUNNER_TEMP/deny/$name/cargo-deny" "$HOME/.local/bin/cargo-deny"
+          "$HOME/.local/bin/cargo-deny" --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main's runs write the cache, so a pull request cannot fill it for the others.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: cargo xtask ci
+        run: cargo xtask ci

@@ -653,6 +653,7 @@ str		Rename branch	Zweig umbenennen
 str		The conversations and versions on this branch are not affected.	Die Unterhaltungen und Versionen dieses Zweigs bleiben unverändert.
 str		The project changed before the branch was renamed, so its name stayed.	Das Projekt hat sich geändert, bevor der Zweig umbenannt wurde, daher blieb sein Name.
 str		Couldn't rename the branch: {why}	Der Zweig konnte nicht umbenannt werden: {why}
+str		Another program is using this branch. Close that program, then try again.	Ein anderes Programm verwendet diesen Zweig. Schließen Sie dieses Programm und versuchen Sie es dann noch einmal.
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge konnte nicht feststellen, ob der Zweig in {name} umbenannt wurde. Benennen Sie ihn noch einmal in {name} um, um es herauszufinden.
 str		Delete…	Löschen…
 str		Delete {branch}?	{branch} löschen?

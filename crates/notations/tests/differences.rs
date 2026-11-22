@@ -1,12 +1,14 @@
 //! Two states of a project classified and named, built with the real commands.
 
+use archforge_engine::EngineError;
 use archforge_mof::rows::{self, Cell, Rows};
 use archforge_mof::{ClassId, DataKind, PropId, Store, TypeRef, Uuid, Value};
 use archforge_notations::differences::{
     Apart, Area, CardField, CardList, ChangeKind, ClassifyError, DiagramSide, DiagramSides, Difference, ElementCard, ElementSides, ListKind, Named,
     Placing, classified, diagram_sides, element_sides,
 };
-use archforge_notations::{Session, new_project_session, storage, universe};
+use archforge_notations::{Session, new_project_session, session_from_rows, storage, universe};
+use archforge_uml::defaults::{DefaultDiagram, resolve};
 use serde_json::{Value as Json, json};
 
 /// Ids that never repeat within a test.
@@ -90,7 +92,7 @@ fn the_area_comes_from_the_table_and_never_from_a_name() {
     let (mut s, shop, customer, _) = project();
     let before = state(&s);
     let lookalike = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "diagram_node" }));
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "customer" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "customer" }));
     let node = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0 }));
     let found = differences(&before, &state(&s));
     assert_eq!(about(&found, &lookalike).area, Area::Model);
@@ -142,7 +144,7 @@ fn an_owner_is_changed_only_by_what_its_list_really_did() {
 #[test]
 fn the_same_repair_on_both_sides_shows_no_false_layout_change() {
     let (mut s, shop, customer, _) = project();
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop }));
     let node = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0, "width": 100, "height": 40 }));
     let before = state(&s);
     let stored = before.clone();
@@ -653,7 +655,7 @@ fn a_binding_is_listed_on_the_bound_element_and_the_template() {
 fn a_card_shows_each_side_as_an_opening_repairs_it() {
     use archforge_diagram::node::HEIGHT;
     let (mut s, shop, customer, _) = project();
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop }));
     let node = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0, "width": 100, "height": 40 }));
     let before = state(&s);
     run(&mut s, "diagram.resize", json!({ "node": node, "width": 100, "height": 200 }));
@@ -829,6 +831,66 @@ fn a_default_diagram_binding_has_element_sides() {
     assert_eq!(rows_of(&seen, ListKind::Ownership), [(said("Commerce"), None)]);
 }
 
+/// The default the package `package` opens to in the project `rows` hold, read back as a session
+/// whose rows are those: (its binding's id, its diagram's).
+fn default_in(rows: &Rows, package: &str) -> (String, String) {
+    let back = session_from_rows(rows, ids()).unwrap();
+    assert!(state(&back) == *rows, "the rows read back as they were");
+    let (st, package) = (back.doc(), back.doc().by_uuid(uuid(package)).unwrap());
+    let id = |o| st.uuid(o).unwrap().to_string();
+    let bindings = archforge_diagram::defaults::bindings_of(st, package);
+    let (Ok(DefaultDiagram::Bound(diagram)), [binding]) = (resolve(st, package), &bindings[..]) else { panic!("one sound binding") };
+    (id(*binding), id(diagram))
+}
+
+/// A default replaced as it is removed, by another of its package's diagrams or a new one (AR-658):
+/// the project read back from its rows after the step and after its Undo opens to the replacement
+/// and to the old default, under the one binding; Redo gives the rows of the step again. Compared,
+/// the binding changed, worded package → replacement, the old default removed and a new one added.
+/// A version from before, looked at, keeps the old binding and changes nothing.
+#[test]
+fn a_replaced_default_reads_back_compares_and_stays_in_an_earlier_version() {
+    for create in [false, true] {
+        let mut s = new_project_session("Commerce", ids()).unwrap();
+        let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+        let mut diagram =
+            |name: &str| run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": name }));
+        let (overview, detail) = (diagram("Sales overview"), diagram("Sales detail"));
+        let (before, at) = (state(&s), s.token());
+        let read = json!({ "history": at.history, "revision": at.revision });
+        let form = if create { json!({ "create_replacement": { "name": "Sales map" } }) } else { json!({ "replacement_diagram": detail }) };
+        let mut p = json!({ "diagram": overview, "expected_revision": read });
+        p.as_object_mut().unwrap().extend(form.as_object().unwrap().clone());
+        let answer = s.execute("diagram.remove", &p).unwrap().value;
+        let (binding, replacement) = (answer["binding"].as_str().unwrap().to_string(), answer["replacement"].as_str().unwrap().to_string());
+        let after = state(&s);
+        assert_eq!(default_in(&after, &sales), (binding.clone(), replacement.clone()), "{form}");
+        let found = differences(&before, &after);
+        let named = if create { "Sales map" } else { "Sales detail" };
+        let (kept, gone) = (about(&found, &binding), about(&found, &overview));
+        assert_eq!((told(kept), kept.area), ((ChangeKind::Changed, Some(&*format!("Sales → {named}")), vec!["Commerce"]), Area::Model), "{form}");
+        assert_eq!((told(gone).0, told(gone).1, gone.area), (ChangeKind::Removed, Some("Sales overview"), Area::Diagram), "{form}");
+        let added = found.iter().filter(|d| d.kind == ChangeKind::Added && d.class == archforge_diagram::DIAGRAM).map(|d| d.id.to_string());
+        assert_eq!(added.collect::<Vec<_>>(), if create { vec![replacement.clone()] } else { vec![] }, "{form}: {found:?}");
+        assert_eq!(found.iter().filter(|d| d.area == Area::Model).count(), 1, "{form}: the model changed by the binding alone");
+        s.undo().unwrap();
+        let undone = state(&s);
+        assert!(undone == before, "{form}: one undo step");
+        assert_eq!(default_in(&undone, &sales), (binding.clone(), overview.clone()), "{form}");
+        s.redo().unwrap();
+        assert!(state(&s) == after, "{form}: redo makes the same ids again");
+        let mut earlier = session_from_rows(&before, ids()).unwrap();
+        earlier.set_read_only(true).unwrap();
+        let get = earlier.execute("uml.package.default.get", &json!({ "package": sales })).unwrap().value;
+        assert_eq!((&get["binding"], &get["diagram"]), (&json!(binding), &json!(overview)), "{form}: the old binding");
+        let own = earlier.token();
+        p["expected_revision"] = json!({ "history": own.history, "revision": own.revision });
+        assert!(matches!(earlier.execute("diagram.remove", &p), Err(EngineError::ReadOnly)), "{form}: on the version's own revision");
+        assert!(state(&earlier) == before, "{form}: the version as it was");
+        assert_eq!((earlier.token(), earlier.can_undo(), earlier.can_redo()), (own, false, false), "{form}: and its history");
+    }
+}
+
 /// A project with a diagram of its schema, the tables customer and invoice placed on it.
 struct Placed {
     s: Session,
@@ -844,7 +906,7 @@ struct Placed {
 fn placed() -> Placed {
     let (mut s, shop, customer, _) = project();
     let invoice = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "invoice" }));
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Billing" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Billing" }));
     let first = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0 }));
     let second = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": invoice, "x": 400, "y": 0 }));
     Placed { s, shop, customer, invoice, diagram, first, second }
@@ -909,7 +971,7 @@ fn boxes_are_marked_by_their_own_change_and_by_what_they_show() {
     assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Changed), None), "moved, and left alone");
 
     let Placed { mut s, shop, customer, diagram, .. } = placed();
-    let other = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Other" }));
+    let other = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Other" }));
     let elsewhere = run(&mut s, "diagram.place", json!({ "diagram": other, "element": customer, "x": 0, "y": 0 }));
     let before = state(&s);
     run(&mut s, "diagram.move", json!({ "nodes": [elsewhere], "dx": 40, "dy": 40 }));
@@ -953,7 +1015,7 @@ fn a_member_on_one_side_marks_the_box_that_lists_it() {
 #[test]
 fn a_box_moved_between_diagrams_is_removed_from_one_and_added_to_the_other() {
     let Placed { mut s, shop, diagram, first, second, .. } = placed();
-    let other = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Other" }));
+    let other = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Other" }));
     let before = state(&s);
     let mut after = before.clone();
     let (from, to, moved) = (Uuid::parse(&diagram).unwrap(), Uuid::parse(&other).unwrap(), Uuid::parse(&second).unwrap());
@@ -983,7 +1045,7 @@ fn only_what_a_box_lists_marks_it() {
     let (mut s, shop, order, _) = uml_project();
     let item = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Item" }));
     let pay = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "parameters": [{ "name": "sum" }] }));
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": shop, "name": "Orders" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": shop, "name": "Orders" }));
     let card = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 0, "y": 0 }));
     let before = state(&s);
     run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": item }));

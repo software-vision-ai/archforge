@@ -112,7 +112,7 @@ fn rich_session() -> Session {
         "er.relationship.add",
         json!({ "from": customer, "to": contact, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
     );
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Shop" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" }));
     let c = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 120 }));
     let o = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 140 }));
     run(&mut s, "diagram.connect", json!({ "diagram": diagram, "element": places, "source": c, "target": o }));

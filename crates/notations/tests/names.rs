@@ -110,11 +110,11 @@ fn elements_of_different_kinds_share_a_name_through_every_command() {
     run(&mut s, "uml.constraint.add", json!({ "context": order, "name": "advance", "expression": "total >= 0" }));
     run(&mut s, "uml.constraint.add", json!({ "context": order, "name": "Advance", "expression": "true" }));
     // Diagrams named alike: by hand, and the own diagrams of two packages of one name in different parents.
-    run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": sales, "name": "Main" }));
-    run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": sales, "name": "main" }));
-    run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": line, "name": "Line" }));
+    run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Main" }));
+    run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "main" }));
+    run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": line, "name": "Line" }));
     let other_line = run(&mut s, "uml.package.add", json!({ "parent": elsewhere, "name": "Line" }));
-    run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": other_line, "name": "Line" }));
+    run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": other_line, "name": "Line" }));
     reopens(s.doc()).unwrap();
 }
 
@@ -337,7 +337,14 @@ fn a_project_saved_with_names_the_old_check_refused_opens_and_one_kind_named_twi
     put(&mut st, sales, package::PACKAGED_ELEMENT, PACKAGE, "order");
     let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
     for name in ["Main", "MAIN"] {
-        archforge_diagram::commands::new_diagram(&mut st, "uml.structure", name, Some(sales), Some((model, archforge_core::model::MEMBER))).unwrap();
+        archforge_diagram::commands::new_diagram(
+            &mut st,
+            archforge_uml::STRUCTURE_DIAGRAM,
+            name,
+            Some(sales),
+            Some((model, archforge_core::model::MEMBER)),
+        )
+        .unwrap();
     }
     assert!(st.first_problem().is_some(), "the check as it was refuses it");
     reopens(&st).unwrap();

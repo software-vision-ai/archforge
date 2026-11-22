@@ -64,6 +64,7 @@ pub const PARTS: &[Part] = &[
         name_kind: |c| if c == archforge_diagram::DIAGRAM { None } else { ONE_KIND },
     },
     Part {
+        // not a diagram kind: the part's name, which is its metamodel's
         name: "er",
         metamodel: archforge_er::metamodel,
         index: archforge_er::INDEX,

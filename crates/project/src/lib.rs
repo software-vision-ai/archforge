@@ -21,6 +21,7 @@ mod description;
 mod error;
 mod model;
 mod saving;
+mod sessions;
 mod time;
 mod versions;
 
@@ -35,6 +36,8 @@ pub use branch_name::{BRANCH_NAME_CHARS, BranchNameProblem, SafeBranch, UnsafeBr
 pub use branches::{
     BranchCreated, BranchCreationError, Branches, CreationStep, DeleteBranchError, ListedBranch, MAX_BRANCHES, RenameBranchError, StoredBranch,
 };
+#[cfg(feature = "testing")]
+pub use branches::{ClosedSession, OutsideSession, OwnSession};
 pub use chat::{
     Anchor, AnchorRole, CHAT_AUTHOR, CHAT_TABLES, ChangeKind, ChangeRecord, ChangeState, ChangedElement, Chat, ChatSummary, Conversation, Deleted,
     Listed, Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Rerun, Role, ToolCall, ToolStatus,
@@ -94,6 +97,8 @@ impl Hooks {
 #[derive(Debug)]
 pub struct Project {
     server: Server,
+    /// Every connection to the server, known by the project so a rename can let go of its branch.
+    sessions: sessions::Sessions,
     path: PathBuf,
     settings: Settings,
     /// The state of each change link of this session's turns, now and at the last save, for Don't
@@ -108,10 +113,12 @@ pub struct Project {
 }
 
 impl Project {
-    /// A project open on `server`, on the branch every project opens on.
-    fn assembled(server: Server, path: PathBuf, settings: Settings) -> Project {
+    /// A project open on `server`, whose connections are `sessions`, on the branch every project
+    /// opens on.
+    fn assembled(server: Server, sessions: sessions::Sessions, path: PathBuf, settings: Settings) -> Project {
         Project {
             server,
+            sessions,
             path,
             settings,
             changes: Default::default(),
@@ -161,7 +168,10 @@ impl Project {
         let mut server = None;
         match build(dolt, opts, &target, name, created_by, now, hooks, &mut server) {
             Ok(settings) => match (std::fs::remove_file(target.join(MARKER)), server) {
-                (Ok(()), Some(server)) => Ok(Project::assembled(server, target, settings)),
+                (Ok(()), Some(server)) => {
+                    let sessions = sessions::Sessions::new(server.connector());
+                    Ok(Project::assembled(server, sessions, target, settings))
+                }
                 (Err(e), server) => Err(undo(server, &made, Error::io("cannot remove the marker from", &target, e))),
                 (Ok(()), None) => Err(undo(None, &made, Error::Damaged { path: target.clone(), why: "no server ran".into() })),
             },
@@ -192,8 +202,9 @@ impl Project {
         private(&path)?;
         own_dot_dolt(&path)?;
         let server = Server::start(dolt, &path, opts).map_err(Error::Server)?;
-        match checked_settings(&server, &path, &SafeBranch::default()) {
-            Ok(settings) => Ok(Project::assembled(server, path, settings)),
+        let sessions = sessions::Sessions::new(server.connector());
+        match checked_settings(&sessions, &path, &SafeBranch::default()) {
+            Ok(settings) => Ok(Project::assembled(server, sessions, path, settings)),
             Err(e) => {
                 if let Err(stop) = server.stop() {
                     log::warn!("the server of the refused project {} did not stop: {stop}", path.display());
@@ -414,7 +425,7 @@ fn build(
     c.query_drop(format!("CALL DOLT_COMMIT('-Am', 'Create the project', '--author', '{AUTHOR}')")).map_err(sql("cannot commit the project"))?;
     hooks.cancelled()?;
     drop(c);
-    let settings = read_settings(s, target, &model::database_name(&SafeBranch::default()))?;
+    let settings = read_settings(&sessions::Sessions::new(s.connector()), target, &model::database_name(&SafeBranch::default()))?;
     if settings.name != name {
         return Err(Error::Damaged { path: target.to_path_buf(), why: "the name read back differs".into() });
     }
@@ -422,21 +433,21 @@ fn build(
 }
 
 /// The settings of `branch`, once they are readable and it runs no scripts: what an opening checks.
-pub(crate) fn checked_settings(server: &Server, path: &Path, branch: &SafeBranch) -> Result<Settings, Error> {
-    checked_database(server, path, &model::database_name(branch))
+pub(crate) fn checked_settings(sessions: &sessions::Sessions, path: &Path, branch: &SafeBranch) -> Result<Settings, Error> {
+    checked_database(sessions, path, &model::database_name(branch))
 }
 
 /// [`checked_settings`] of a database by its name: a branch, or a commit, which is only looked at.
-pub(crate) fn checked_database(server: &Server, path: &Path, database: &str) -> Result<Settings, Error> {
-    read_settings(server, path, database).and_then(|settings| unscripted(server, path, database, settings))
+pub(crate) fn checked_database(sessions: &sessions::Sessions, path: &Path, database: &str) -> Result<Settings, Error> {
+    read_settings(sessions, path, database).and_then(|settings| unscripted(sessions, path, database, settings))
 }
 
 /// The settings, read with a cap on rows, keys and values; anything that does not read cleanly is
 /// a damaged project, never a panic.
-fn read_settings(server: &Server, path: &Path, database: &str) -> Result<Settings, Error> {
+fn read_settings(sessions: &sessions::Sessions, path: &Path, database: &str) -> Result<Settings, Error> {
     let damaged = |why: String| Error::Damaged { path: path.to_path_buf(), why };
-    let mut c = server.connect().map_err(Error::Server)?;
-    c.query_drop(format!("USE `{database}`")).map_err(|e| damaged(format!("its {database} database cannot be used: {e}")))?;
+    let mut c = sessions.open()?;
+    c.use_database(database).map_err(|e| damaged(format!("its {database} database cannot be used: {e}")))?;
     let kind: Option<mysql::Row> = c
         .query_first("SELECT table_type FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'settings'")
         .map_err(|e| damaged(format!("its tables cannot be listed: {e}")))?;
@@ -484,9 +495,9 @@ fn readable(format: u32, supported: u32) -> Result<(), Error> {
 
 /// Refuses a project whose database holds triggers, stored procedures or events: Archforge's own
 /// writes would set them off, and they could change what it stores or what Save commits.
-fn unscripted(server: &Server, path: &Path, database: &str, settings: Settings) -> Result<Settings, Error> {
-    let mut c = server.connect().map_err(Error::Server)?;
-    c.query_drop(format!("USE `{database}`")).map_err(|e| Error::Sql { what: "cannot use the project database", source: e })?;
+fn unscripted(sessions: &sessions::Sessions, path: &Path, database: &str, settings: Settings) -> Result<Settings, Error> {
+    let mut c = sessions.open()?;
+    c.use_database(database).map_err(|e| Error::Sql { what: "cannot use the project database", source: e })?;
     for (what, table, column) in
         [("triggers", "triggers", "trigger_schema"), ("stored procedures", "routines", "routine_schema"), ("events", "events", "event_schema")]
     {

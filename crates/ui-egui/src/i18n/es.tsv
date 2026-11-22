@@ -653,6 +653,7 @@ str		Rename branch	Cambiar nombre de la rama
 str		The conversations and versions on this branch are not affected.	Las conversaciones y versiones de esta rama no cambian.
 str		The project changed before the branch was renamed, so its name stayed.	El proyecto cambió antes de cambiar el nombre de la rama, así que conservó su nombre.
 str		Couldn't rename the branch: {why}	No se pudo cambiar el nombre de la rama: {why}
+str		Another program is using this branch. Close that program, then try again.	Otro programa está usando esta rama. Cierra ese programa e inténtalo de nuevo.
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge no pudo saber si la rama pasó a llamarse {name}. Vuelve a llamarla {name} para averiguarlo.
 str		Delete…	Eliminar…
 str		Delete {branch}?	¿Eliminar {branch}?
