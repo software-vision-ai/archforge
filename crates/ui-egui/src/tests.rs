@@ -16175,7 +16175,7 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
     h.run();
     assert_eq!(look(&h, aobj).fill, crate::canvas::colour("#A0C4FF"));
     // Read against the code's own bytes, not through the parser the canvas uses.
-    let own = |fill: crate::ux::Colour| [fill.r(), fill.g(), fill.b()] == [0xA0, 0xC4, 0xFF];
+    let own = |fill: crate::ux::Colour| [fill.r(), fill.g(), fill.b(), fill.a()] == [0xA0, 0xC4, 0xFF, 0xFF];
     let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if own(crate::ux::drawn(r.fill))));
     assert!(filled, "the card is filled in its own colour");
 }

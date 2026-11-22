@@ -174,6 +174,11 @@ impl Colour {
     pub fn b(self) -> u8 {
         self.0.b()
     }
+
+    /// Its opacity, 0 (clear) to 255 (opaque).
+    pub fn a(self) -> u8 {
+        self.0.a()
+    }
 }
 
 /// The design's colours by role, one set per appearance, Light and Dark.
