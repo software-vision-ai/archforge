@@ -224,11 +224,11 @@ mod tests {
     }
 
     /// A macro's input and an attribute's arguments are read as tokens and fail closed: a watched
-    /// name followed by a `{ .. }` group is a finding, at any depth; one followed by anything else,
-    /// a string, and another name are not.
+    /// name followed by a `{ .. }` group is a finding, at any depth; one followed by anything else
+    /// (another group, a path, an arm's `=>`), a string, and another name are not.
     #[test]
     fn macro_input_and_attribute_arguments_are_read_as_tokens() {
-        let source = "#[case(egui::FontId { size: 1.0, family })]\n#[cfg_attr(test, case((Hsva { h, s, v, a })))]\n#[doc = text!(FontId { size })]\nfn f() {\n    let v = vec![FontId { size, family }];\n    m!((x, [HsvaGamma { h, s, v, a }]));\n    m!(FontId [size] FontId (size) FontId::new(1.0, f) \"FontId { }\" Font { });\n}\n";
+        let source = "#[case(egui::FontId { size: 1.0, family })]\n#[cfg_attr(test, case((Hsva { h, s, v, a })))]\n#[doc = text!(FontId { size })]\nfn f() {\n    let v = vec![FontId { size, family }];\n    m!((x, [HsvaGamma { h, s, v, a }]));\n    m!(FontId [size] FontId (size) FontId::new(1.0, f) \"FontId { }\" Font { } FontId => { 1 });\n}\n";
         let found = findings(source);
         let lines: Vec<&str> = found.iter().map(|f| f.split(", ").next().unwrap_or_default()).collect();
         let expected = ["line 1: FontId { .. }", "line 2: Hsva { .. }", "line 3: FontId { .. }", "line 5: FontId { .. }", "line 6: HsvaGamma { .. }"];
