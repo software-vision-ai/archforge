@@ -215,12 +215,15 @@ fn scan_within(
             out.push(over_file(&file));
             continue;
         }
-        if size > budget {
+        // A read takes one byte past its limit, to see a file grown past it since it was
+        // measured; that byte comes out of the total too, so the reads together never pass
+        // `max_total`, and once nothing is left no file is read at all.
+        if size >= budget {
             out.push(over_total(&file));
             continue;
         }
-        // The file may have grown since it was measured: what is read counts, kept or not.
-        let limit = max_file.min(budget);
+        // What is read counts, kept or not.
+        let limit = max_file.min(budget.saturating_sub(1));
         let bytes = read_capped(&file, limit)?;
         let taken = bytes.len() as u64;
         read += taken;
@@ -267,6 +270,10 @@ mod tests {
             "{found:?}"
         );
         assert!(found[0].contains("ux::types") && found[1].contains("ux::from_hsv"), "{found:?}");
+        // A literal inside a larger expression is found as well (CodeRabbit on #573).
+        let or = findings("fn f() {\n    let bits = use_font(egui::FontId { size, family }) | 1;\n}\n", &rules());
+        assert_eq!(or.len(), 1, "{or:?}");
+        assert!(or[0].starts_with("line 2: FontId named outside ux"), "{or:?}");
     }
 
     /// Only the watched names themselves are found: another type's struct expression or pattern,
@@ -507,23 +514,34 @@ mod tests {
         let (found, read) = scan_within(&s.path, &rules(), 100, 150, size).unwrap();
         assert_eq!(found, [format!("crates/a/one.rs: {more}"), format!("crates/a/two.rs: {more}")]);
         assert_eq!(read, 0, "a source known to be too big is never read");
-        // a.rs and d.rs say they are small (as a file still being written may) and are not.
+        // a.rs and d.rs say they are small (as a file still being written may) and are not; e.rs
+        // and f.rs say they are empty, and grew once the total was spent.
         let s = crate::util::Scratch::new("ux-caps-read").unwrap();
         std::fs::create_dir(s.path.join("apps")).unwrap();
         s.file("crates/a/a.rs", &big).unwrap();
         s.file("crates/a/b.rs", &format!("//{}\n", "b".repeat(57))).unwrap();
         s.file("crates/a/c.rs", "fn c(){FontId{size:1.0,family};}\n").unwrap();
         s.file("crates/a/d.rs", &"x".repeat(40)).unwrap();
-        let lying = |p: &Path| if p.ends_with("a.rs") || p.ends_with("d.rs") { Ok(5) } else { size(p) };
+        s.file("crates/a/e.rs", &"x".repeat(10)).unwrap();
+        s.file("crates/a/f.rs", &"x".repeat(10)).unwrap();
+        let lying = |p: &Path| match p.file_name().and_then(|n| n.to_str()) {
+            Some("a.rs" | "d.rs") => Ok(5),
+            Some("e.rs" | "f.rs") => Ok(0),
+            _ => size(p),
+        };
         let (found, read) = scan_within(&s.path, &rules(), 100, 150, lying).unwrap();
-        assert_eq!(found.len(), 4, "{found:?}");
+        assert_eq!(found.len(), 6, "{found:?}");
         assert_eq!(found[0], format!("crates/a/a.rs: {more}"));
-        // a.rs took 101 bytes of the 150, so b.rs (60) is past the total; c.rs (33) still fits.
+        // a.rs took 101 bytes of the 150; 49 are left, one of them for the byte past a read's
+        // limit, so b.rs (60) is past the total and c.rs (33) is read.
         assert_eq!(found[1], format!("crates/a/b.rs: {past}"));
         assert!(found[2].starts_with("crates/a/c.rs line 1: FontId named outside ux"), "{found:?}");
-        // 16 bytes are left for d.rs, which holds 40: 17 are read and put aside.
+        // 16 bytes are left for d.rs, which holds 40: 16 are read (15 and the byte past) and put aside.
         assert_eq!(found[3], format!("crates/a/d.rs: {past}"));
-        assert_eq!(read, 101 + 33 + 17);
+        // Nothing is left, so e.rs and f.rs are not read at all (CodeRabbit on #573).
+        assert_eq!(found[4], format!("crates/a/e.rs: {past}"));
+        assert_eq!(found[5], format!("crates/a/f.rs: {past}"));
+        assert_eq!(read, 150, "the reads together take the whole total and not a byte more");
     }
 
     /// `ux` is left out by its path, where its fonts are made, and the same literal anywhere else
