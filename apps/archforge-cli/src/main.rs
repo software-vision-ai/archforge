@@ -538,6 +538,7 @@ mod tests {
         let all = infos().unwrap();
         let ids: Vec<&str> = all.iter().map(|c| c["id"].as_str().unwrap()).collect();
         let mut scopes = Vec::new();
+        let kinds = archforge_notations::kinds();
         for (compact, read_only) in [(false, false), (true, false), (false, true), (true, true)] {
             let catalog = archforge_mcp::Catalog::new(&all, compact).read_only(read_only);
             let list = catalog.list();
@@ -554,8 +555,8 @@ mod tests {
                 if word.contains('_') {
                     assert!(tools.contains(&word), "compact {compact}: {word} is not a listed tool");
                 } else if word.contains('.') {
-                    // A command id, or the kind diagram.add takes for a class diagram.
-                    assert!(ids.contains(&word) || word == "uml.structure", "compact {compact}: {word} is not a command");
+                    // A command id, or a diagram kind diagram.add takes, such as the class diagram's.
+                    assert!(ids.contains(&word) || kinds.contains(&word), "compact {compact}: {word} is not a command");
                 }
             }
             // Literals are built (AR-122), data types (AR-123), primitive types (AR-124) and

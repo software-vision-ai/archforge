@@ -22,7 +22,8 @@ fn uml_sized(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
     h.state_mut().in_window_menu = true;
     let s = h.state_mut().session.as_mut().unwrap();
     let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
-    let d = s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Shop" })).unwrap().value;
+    let d =
+        s.execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Shop" })).unwrap().value;
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap());
     h.run();
     h

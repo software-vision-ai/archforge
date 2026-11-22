@@ -635,6 +635,7 @@ fn a_refused_branch_says_why_and_the_dialog_stays() {
             h.run_steps(3);
             assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && painted_has(&h, words), "{theme:?}: {words}");
             assert!(host.switches.lock().unwrap().is_empty(), "{theme:?}: {words}");
+            // not a diagram kind: two letters typed into the branch's name
             h.event(egui::Event::Text("er".into()));
             h.run_steps(2);
             assert!(!painted_has(&h, words), "{theme:?}: {words}: a new name ends it");

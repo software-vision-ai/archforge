@@ -263,6 +263,7 @@ dependencies = [
  "archforge-project",
  "archforge-secrets",
  "archforge-ui-egui",
+ "archforge-uml",
  "craft-atomic",
  "craft-dialogs",
  "eframe",
@@ -5382,8 +5383,10 @@ dependencies = [
  "archforge-mof",
  "craft-atomic",
  "png",
+ "proc-macro2",
  "quick-xml",
  "serde_json",
+ "syn 2.0.119",
 ]
 
 [[package]]

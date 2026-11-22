@@ -201,7 +201,8 @@ fn drawn(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let schema = s.doc().uuid(schema).unwrap().to_string();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
     s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap();
-    let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap().value);
+    let d =
+        id(s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap().value);
     let table = id(s
         .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": customer, "x": 0, "y": 0, "width": 240, "height": 72 }))
         .unwrap()
@@ -379,7 +380,10 @@ fn command_a_on_the_canvas_selects_what_the_diagram_draws() {
         let s = h.state_mut().session.as_mut().unwrap();
         let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();
-        let empty = s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Empty" })).unwrap().value["id"]
+        let empty = s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Empty" }))
+            .unwrap()
+            .value["id"]
             .as_str()
             .unwrap()
             .to_string();

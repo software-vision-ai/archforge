@@ -1323,7 +1323,7 @@ fn sample_column_selected(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let schema = run(session, "er.schema.add", json!({ "name": "dbo" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": "er", "element": schema, "name": "dbo" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "dbo" }))?;
     let company = run(session, "er.entity.add", json!({ "schema": schema, "name": "Company" }))?;
     let id = run(session, "er.attribute.add", json!({ "entity": company, "name": "id", "type": "UUID", "primary_key": true }))?;
     run(
@@ -1886,7 +1886,7 @@ fn sample_diagrams(shell: &mut Shell) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let schema = run(session, "er.schema.add", json!({ "name": "Shop" }))?;
-    run(session, "diagram.add", json!({ "kind": "er", "element": schema, "name": "Shop schema" }))?;
+    run(session, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }))?;
     let sales = run(session, "uml.package.add", json!({ "name": "Sales" }))?;
     let orders = run(session, "uml.package.add", json!({ "name": "Orders", "parent": sales }))?;
     run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }))?;
@@ -2919,7 +2919,7 @@ fn sample_diagram(shell: &mut Shell, filled: bool) -> Result<(), String> {
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
     let schema = run(session, "er.schema.add", json!({ "name": "Shop schema" }))?;
-    let diagram = run(session, "diagram.add", json!({ "kind": "er", "element": schema, "name": "Shop schema" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }))?;
     let mut select = diagram.clone();
     if filled {
         let customer = run(session, "er.entity.add", json!({ "schema": schema, "name": "Customer" }))?;

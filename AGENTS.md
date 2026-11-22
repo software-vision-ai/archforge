@@ -50,6 +50,11 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 - A hang is a crash. Every loop driven by untrusted data has a budget or a seen-set.
 - Writes are atomic: a temporary file in the same directory, synchronised, then renamed over the
   target.
+- A diagram kind is written out once, as the constant of the crate that defines it
+  (`archforge_er::DIAGRAM_KIND`, `archforge_uml::STRUCTURE_DIAGRAM`), and named through it
+  everywhere else; the gate's `kinds` step (`xtask/src/kind_literals.rs`) refuses it written out.
+  A new kind gets its row in `xtask/diagram-kinds.tsv`, which a notations test holds to the kinds
+  registered.
 - The user interface never touches the file system or the operating system itself: the host
   injects `Services`. Only `crates/ui-egui` and the application may use the toolkit.
 - The interface draws through `ux`: no literal colour, font or icon outside it, and every control
