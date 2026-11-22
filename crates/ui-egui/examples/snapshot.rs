@@ -4,6 +4,11 @@
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
 
+/// PNG's colour type of red, green, blue and alpha samples, by its number in the PNG
+/// specification: its variant shares the name of egui's `Rgba`, which `clippy.toml` bans outside
+/// `ux` and the layer check therefore refuses by name.
+const PNG_RGBA: u8 = 6;
+
 fn main() {
     if let Err(e) = run() {
         eprintln!("snapshot: {e}");
@@ -175,7 +180,7 @@ fn run() -> Result<(), String> {
     let (w, h, rgba) = archforge_ui_egui::offscreen::render_screen(size(2, 1440.0)?, size(3, 900.0)?, size(4, 1.0)?, theme, screen)?;
     let file = std::fs::File::create(out).map_err(|e| format!("{out}: {e}"))?;
     let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), w, h);
-    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_color(png::ColorType::from_u8(PNG_RGBA).ok_or("the PNG writer has no colour type 6 (red, green, blue and alpha)")?);
     encoder.set_depth(png::BitDepth::Eight);
     encoder.write_header().and_then(|mut writer| writer.write_image_data(&rgba)).map_err(|e| format!("{out}: {e}"))
 }

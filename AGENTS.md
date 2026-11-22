@@ -61,9 +61,9 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   injects `Services`. Only `crates/ui-egui` and the application may use the toolkit.
 - The interface draws through `ux`: no literal colour, font or icon outside it, and every control
   has an automation id. The compiler holds it: `clippy.toml` bans egui's colour and font types
-  outside `ux`, the one place that makes them, and the gate's ux check refuses the names of those
-  whose fields are public (`FontId`, `Hsva`, `HsvaGamma`) in any token there, macros included,
-  since the ban does not see a struct literal (`xtask/src/ux_literals.rs`).
+  outside `ux`, the one place that makes them, and the gate's ux check refuses every type that file
+  bans by name in any token there, macros included, since the ban does not see a struct literal or
+  a variant's path (`xtask/src/ux_literals.rs`).
 - Every string the user sees goes through the catalogues, with a row in every one.
 - Behaviour, icons and wording are our own: never copy another product's.
 - The Rust version is the one `rust-toolchain.toml` pins. A lint added by a newer release is fixed

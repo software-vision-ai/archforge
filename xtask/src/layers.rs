@@ -4,9 +4,8 @@
 //! remainder through `TABLE`, walks normal, build and development edges between workspace crates,
 //! checks toolkit crates against their minimum layer, refuses process and network crates as the
 //! shell's dependencies, scans the shell's sources for process and network code (`shell_io`) and
-//! every source for egui's public-field font and colour types named outside `ux` (`ux_literals`),
-//! reports every violation and prints the table. Applications under `apps/` and the task runner
-//! are exempt.
+//! every source for the types `clippy.toml` bans named outside `ux` (`ux_literals`), reports
+//! every violation and prints the table. Applications under `apps/` and the task runner are exempt.
 
 use std::collections::BTreeMap;
 

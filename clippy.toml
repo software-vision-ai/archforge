@@ -6,9 +6,9 @@ allow-indexing-slicing-in-tests = true
 # The interface draws through `ux` (AGENTS.md): a colour or a font is made there alone, under one
 # module-level allow. egui's colour and font types are banned everywhere else, so naming one (its
 # constants, a renamed import, an `impl` for it) fails the lint; the constructors are listed too, so
-# each says what to use. A type ban does not see a struct expression (`FontId { .. }`), so the gate's
-# ux check (xtask/src/ux_literals.rs) refuses the names of the types with public fields in any
-# token outside ux, macros included.
+# each says what to use. A type ban does not see a struct expression (`FontId { .. }`) or a variant's
+# path, so the gate's ux check (xtask/src/ux_literals.rs) reads `disallowed-types` below and refuses
+# each type's name, with its reason, in any token outside ux, macros included.
 disallowed-methods = [
     { path = "egui::Color32::from_rgb", reason = "a colour is the design's: take a role of ux::Palette or a named ux colour (ux::CLEAR, ux::UNTINTED, ux::MARK), or ux::data_colour for a colour the document holds" },
     { path = "egui::Color32::from_rgb_additive", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },

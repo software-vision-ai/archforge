@@ -24,8 +24,8 @@ syn = { version = "2.0.119", default-features = false, features = ["full", "pars
 # Line and column of each literal and item, for the findings and the comment marks; the ux check
 # (ux_literals.rs) reads its sources as these tokens.
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
-# Reads each member's manifest for the lints check (cargo xtask ci): a TOML parser, so a value never
-# reads as a table. Already in the lockfile through egui_kittest, at this version; only its parser, no
+# Reads each member's manifest for the lints check (cargo xtask ci), and clippy.toml's banned types
+# for the ux check: a TOML parser, so a value never reads as a table. Already in the lockfile through egui_kittest, at this version; only its parser, no
 # serde or writer. MIT OR Apache-2.0; never a dependency of the application.
 toml = { version = "1.1.8", default-features = false, features = ["parse"] }
 
