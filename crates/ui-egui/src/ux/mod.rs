@@ -160,16 +160,6 @@ impl Colour {
         Self(self.0.gamma_multiply(k))
     }
 
-    /// The colour with its opacity (and its premultiplied channels) times `k`, in linear space.
-    pub fn linear_multiply(self, k: f32) -> Self {
-        Self(self.0.linear_multiply(k))
-    }
-
-    /// Its opacity, 0 (clear) to 255 (opaque).
-    pub fn a(self) -> u8 {
-        self.0.a()
-    }
-
     /// Its red, 0 to 255, premultiplied by its opacity.
     pub fn r(self) -> u8 {
         self.0.r()
@@ -183,12 +173,6 @@ impl Colour {
     /// Its blue, 0 to 255, premultiplied by its opacity.
     pub fn b(self) -> u8 {
         self.0.b()
-    }
-
-    /// Its red, green, blue and opacity, each 0 to 255, not premultiplied: as a colour code writes
-    /// them.
-    pub fn to_srgba_unmultiplied(self) -> [u8; 4] {
-        self.0.to_srgba_unmultiplied()
     }
 }
 
