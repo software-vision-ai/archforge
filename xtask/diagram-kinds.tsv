@@ -1,0 +1,7 @@
+# The diagram kinds the notations register, one per line, tab-separated: the kind's word, the
+# constant that holds it (the path to use everywhere else), and the file that defines it, the
+# constant's crate root. `cargo xtask kinds` refuses each word written out anywhere but that
+# constant's own value, and the notations' test `the_gates_table_of_kinds_lists_every_registered_kind`
+# fails when a notation registers a kind this table does not list (AR-770).
+er	archforge_er::DIAGRAM_KIND	crates/er/src/lib.rs
+uml.structure	archforge_uml::STRUCTURE_DIAGRAM	crates/uml/src/lib.rs

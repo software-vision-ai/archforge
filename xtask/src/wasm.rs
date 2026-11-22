@@ -24,9 +24,11 @@ pub fn portable_crates() -> Vec<String> {
         .collect()
 }
 
+/// Checks the portable crates for the web target, with `--locked` like every gate step that
+/// resolves dependencies.
 pub fn run() -> Result<(), String> {
     let mut cmd = util::cargo();
-    cmd.args(["check", "--target", TARGET]);
+    cmd.args(["check", "--locked", "--target", TARGET]);
     for c in portable_crates() {
         cmd.args(["-p", &c]);
     }

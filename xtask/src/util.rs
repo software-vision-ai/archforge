@@ -97,6 +97,105 @@ pub fn walk(dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(out)
 }
 
+/// Every regular file under `dir`, sorted, as paths under `dir`, for a check that must read every
+/// file in its scope. Unlike [`walk`], nothing in scope is passed over: a folder that cannot be
+/// opened, a listing that fails part way and an entry whose kind cannot be read are each an error
+/// naming its path. A folder whose name `skip` lists is left out before it is opened, so one that
+/// cannot be opened is no error. A symbolic link is skipped and never followed, so a link cycle
+/// cannot make the walk endless, and so is any other entry that is neither a folder nor a regular
+/// file.
+pub fn walk_strict(dir: &Path, skip: &[&str]) -> Result<Vec<PathBuf>, String> {
+    walk_strict_with(dir, skip, |d| std::fs::read_dir(d), std::fs::DirEntry::file_type)
+}
+
+/// [`walk_strict`] with the folder listing (`open`) and an entry's kind (`kind_of`) given, so a test
+/// can make either fail on a filesystem that never would.
+fn walk_strict_with(
+    dir: &Path,
+    skip: &[&str],
+    open: impl Fn(&Path) -> std::io::Result<std::fs::ReadDir>,
+    kind_of: impl Fn(&std::fs::DirEntry) -> std::io::Result<std::fs::FileType>,
+) -> Result<Vec<PathBuf>, String> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let entries = open(&d).map_err(|e| format!("{}: this folder cannot be opened, so nothing under it is checked: {e}", d.display()))?;
+        for e in entries {
+            let e = e.map_err(|e| format!("{}: the listing stopped part way: {e}", d.display()))?;
+            let p = e.path();
+            let kind = kind_of(&e).map_err(|e| format!("{}: what this entry is cannot be read, so it is not checked: {e}", p.display()))?;
+            if kind.is_dir() {
+                if !skip.iter().any(|s| e.file_name() == *s) {
+                    stack.push(p);
+                }
+            } else if kind.is_file() {
+                out.push(p);
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// A new, empty folder of a test's own under the temp dir, removed with everything in it when
+/// dropped, a panic included; folders it locked are opened again first, so they can be removed.
+#[cfg(test)]
+pub struct Scratch {
+    pub path: PathBuf,
+    locked: std::cell::RefCell<Vec<PathBuf>>,
+}
+
+#[cfg(test)]
+impl Scratch {
+    /// Creates the folder, named with `name`, the process id, the time and an attempt; never adopts
+    /// one that already exists.
+    pub fn new(name: &str) -> Result<Scratch, String> {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(0);
+        for attempt in 0..16u32 {
+            let path = std::env::temp_dir().join(format!("archforge-xtask-{name}-{}-{nanos}-{attempt}", std::process::id()));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Ok(Scratch { path, locked: Default::default() }),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(format!("{}: {e}", path.display())),
+            }
+        }
+        Err(format!("no free temporary folder for {name}"))
+    }
+
+    /// Writes `text` to `rel` under the folder, making the folders on the way.
+    pub fn file(&self, rel: &str, text: &str) -> std::io::Result<()> {
+        let path = self.path.join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, text)
+    }
+
+    /// Takes every permission from the folder `rel`, so this user cannot open it; false when it
+    /// still opens (as root, say), where a test of an unreadable folder shows nothing.
+    #[cfg(unix)]
+    pub fn lock(&self, rel: &str) -> std::io::Result<bool> {
+        use std::os::unix::fs::PermissionsExt;
+        let path = self.path.join(rel);
+        self.locked.borrow_mut().push(path.clone());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000))?;
+        Ok(std::fs::read_dir(&path).is_err())
+    }
+}
+
+#[cfg(test)]
+impl Drop for Scratch {
+    /// Opens the locked folders again and removes the whole folder.
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        for path in self.locked.borrow().iter() {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755));
+        }
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,5 +207,63 @@ mod tests {
         assert_eq!(t[1].name, "t");
         assert_eq!(t.iter().filter(|x| x.array && x.name == "row").count(), 2);
         assert!(toml("nonsense").is_err());
+    }
+
+    /// A tree of two folders deep with a file at each level: `x.rs`, `a/y.rs`, `a/b/z.rs`.
+    fn tree(name: &str) -> Scratch {
+        let s = Scratch::new(name).unwrap();
+        for rel in ["x.rs", "a/y.rs", "a/b/z.rs"] {
+            s.file(rel, "").unwrap();
+        }
+        s
+    }
+
+    /// A folder in scope that cannot be opened stops the strict walk with an error naming it, never
+    /// a list of the files found elsewhere (CodeRabbit on #572).
+    #[test]
+    fn a_folder_the_strict_walk_cannot_open_is_an_error_naming_it() {
+        let s = tree("unopened");
+        let locked = s.path.join("a").join("b");
+        let open = |d: &Path| if d == locked { Err(std::io::Error::other("refused here")) } else { std::fs::read_dir(d) };
+        let walked = walk_strict_with(&s.path, &[], open, std::fs::DirEntry::file_type);
+        assert_eq!(walked, Err(format!("{}: this folder cannot be opened, so nothing under it is checked: refused here", locked.display())));
+        assert_eq!(walk_strict(&s.path, &[]), Ok(vec![s.path.join("a/b/z.rs"), s.path.join("a/y.rs"), s.path.join("x.rs")]));
+    }
+
+    /// An entry whose kind cannot be read stops the strict walk with an error naming it, never a
+    /// silent skip (CodeRabbit on #572).
+    #[test]
+    fn an_entry_whose_kind_the_strict_walk_cannot_read_is_an_error_naming_it() {
+        let s = tree("unknown-kind");
+        let kind_of = |e: &std::fs::DirEntry| if e.file_name() == "y.rs" { Err(std::io::Error::other("no kind")) } else { e.file_type() };
+        let walked = walk_strict_with(&s.path, &[], |d| std::fs::read_dir(d), kind_of);
+        assert_eq!(walked, Err(format!("{}: what this entry is cannot be read, so it is not checked: no kind", s.path.join("a/y.rs").display())));
+    }
+
+    /// A skipped folder is left out before it is opened, so one that cannot be opened is no error;
+    /// only a folder of that name is skipped.
+    #[test]
+    fn a_folder_the_strict_walk_skips_is_never_opened() {
+        let s = tree("skipped");
+        s.file("a/b.rs", "").unwrap();
+        let open = |d: &Path| if d.ends_with("b") { Err(std::io::Error::other("refused here")) } else { std::fs::read_dir(d) };
+        assert_eq!(
+            walk_strict_with(&s.path, &["b"], open, std::fs::DirEntry::file_type),
+            Ok(vec![s.path.join("a/b.rs"), s.path.join("a/y.rs"), s.path.join("x.rs")])
+        );
+        assert!(walk_strict_with(&s.path, &["c"], open, std::fs::DirEntry::file_type).is_err(), "the folder is opened when not skipped");
+    }
+
+    /// A symbolic link, to a file, to a folder or to nothing, is skipped and never followed.
+    #[cfg(unix)]
+    #[test]
+    fn the_strict_walk_skips_links() {
+        let s = tree("links");
+        let outside = Scratch::new("links-outside").unwrap();
+        outside.file("far.rs", "").unwrap();
+        for (target, link) in [(s.path.join("x.rs"), "to-file.rs"), (outside.path.clone(), "to-folder"), (s.path.join("gone"), "dangling.rs")] {
+            std::os::unix::fs::symlink(target, s.path.join("a").join(link)).unwrap();
+        }
+        assert_eq!(walk_strict(&s.path, &[]), Ok(vec![s.path.join("a/b/z.rs"), s.path.join("a/y.rs"), s.path.join("x.rs")]));
     }
 }

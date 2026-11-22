@@ -1,5 +1,7 @@
 [alias]
-xtask = "run -p xtask --"
+# `--locked`: building the task runner never rewrites Cargo.lock, so the gate (`cargo xtask ci`)
+# leaves it as it found it and fails when a manifest changed without its lock.
+xtask = "run --locked -p xtask --"
 
 # For separate build directories, set CARGO_TARGET_DIR.
 
@@ -9,6 +11,9 @@ xtask = "run -p xtask --"
 [env]
 CRAFT_FONTS_DIR = { value = "../craft-fonts", relative = true }
 
-# Optional, never committed: work on the shared crates from a sibling checkout.
+# Optional, never committed: work on the shared crates from a sibling checkout. The patch changes
+# Cargo.lock, so `cargo xtask`, which builds with `--locked`, refuses while it is on: run a verb
+# with `cargo run -p xtask -- <verb>` then, and put Cargo.lock back (`git checkout -- Cargo.lock`)
+# when the patch is commented again.
 # [patch."https://github.com/storytold/craft-libs"]
 # craft-atomic = { path = "../craft-libs/crates/atomic" }

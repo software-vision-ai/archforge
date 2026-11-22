@@ -12,10 +12,13 @@ cargo xtask ci                            # the gate: every check, in order
 cargo xtask shot dark                     # an offscreen screenshot and a small copy to read
 ```
 
-- The gate is `cargo xtask ci`. Its first step moves the craft-libs crates to the newest commit of
-  their main branch, so a change is always checked against the latest shared crates; never pin a
-  revision of craft-libs or craft-fonts. Run targeted checks such as `cargo test -p <crate>` while
-  working and the gate before proposing a change; a change is proposed only from a green gate.
+- The gate is `cargo xtask ci`. It never changes `Cargo.lock`: the task runner's build and every
+  cargo command of the gate that resolves dependencies run with `--locked`, so a manifest changed
+  without its lock fails the gate. craft-libs moves only through `cargo xtask bump`, which moves
+  its crates to the newest commit of its main branch and nothing else, in a pull request of its
+  own (`CONTRIBUTING.md`); never pin a revision of craft-libs or craft-fonts. Run targeted checks
+  such as `cargo test -p <crate>` while working and the gate before proposing a change; a change
+  is proposed only from a green gate.
 - Look at every change to the user interface in a screenshot (`cargo xtask shot`, `light` or
   `dark`), not only in the tests.
 - A change to a flow a user sees updates the user manual's chapter for it (`docs/manual/`) in the
@@ -47,13 +50,19 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 - A hang is a crash. Every loop driven by untrusted data has a budget or a seen-set.
 - Writes are atomic: a temporary file in the same directory, synchronised, then renamed over the
   target.
+- A diagram kind is written out once, as the constant of the crate that defines it
+  (`archforge_er::DIAGRAM_KIND`, `archforge_uml::STRUCTURE_DIAGRAM`), and named through it
+  everywhere else; the gate's `kinds` step (`xtask/src/kind_literals.rs`) refuses it written out.
+  A new kind gets its row in `xtask/diagram-kinds.tsv`, which a notations test holds to the kinds
+  registered.
 - The user interface never touches the file system or the operating system itself: the host
   injects `Services`. Only `crates/ui-egui` and the application may use the toolkit.
 - The interface draws through `ux`: no literal colour, font or icon outside it, and every control
   has an automation id.
 - Every string the user sees goes through the catalogues, with a row in every one.
 - Behaviour, icons and wording are our own: never copy another product's.
-- A lint added by a toolchain release is fixed in code at once, never by pinning the toolchain.
+- The Rust version is the one `rust-toolchain.toml` pins. A lint added by a newer release is fixed
+  in code in the change that raises it, never by allowing the lint or by holding the version back.
 - Hot files (the translation catalogues in `crates/ui-egui/src/i18n/`, `xtask/src/layers.rs`,
   `ATTRIBUTION.toml`) are edited surgically, with new rows placed beside related entries and never
   appended at the end of the file.

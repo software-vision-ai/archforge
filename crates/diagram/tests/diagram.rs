@@ -288,7 +288,7 @@ fn refusals_name_their_key_and_change_nothing() {
     }
     let before = (picture(s.doc()), s.view().clone(), s.counter());
     let refused: Vec<(&str, Json)> = vec![
-        ("diagram.add", json!({ "kind": "uml.structure" })),
+        ("diagram.add", json!({ "kind": "other.kind" })),
         ("diagram.add", json!({ "kind": "Toy Class" })),
         ("diagram.add", json!({ "kind": "toy.class", "element": a })),
         ("diagram.add", json!({ "kind": "toy.class", "name": " spaced" })),
@@ -421,8 +421,8 @@ fn every_place_text_route_and_kind_refusal_carries_its_reason_typed() {
         let known = known.iter().map(|k| k.to_string()).collect();
         Reason::NotOneOf(Box::new(archforge_engine::NotOneOf { what, word: word.into(), known }))
     };
-    let unknown = not_one_of(archforge_engine::WordPlace::DiagramKind, "uml.structure", &["toy.class"]);
-    check(&mut s, "diagram.add", json!({ "kind": "uml.structure" }), "kind", unknown, "\"uml.structure\" is not one of toy.class");
+    let unknown = not_one_of(archforge_engine::WordPlace::DiagramKind, "other.kind", &["toy.class"]);
+    check(&mut s, "diagram.add", json!({ "kind": "other.kind" }), "kind", unknown, "\"other.kind\" is not one of toy.class");
     check(&mut s, "diagram.place", place(d, &c, json!({ "kind": "Port" })), "kind", Reason::NotAPlainWord, plain);
     let label = |kind: &str| json!({ "edge": sm.edge, "kind": kind });
     check(&mut s, "diagram.label", label("Name"), "kind", Reason::NotAPlainWord, plain);
@@ -725,7 +725,7 @@ fn the_rules_report_what_the_commands_never_make() {
     assert!(st.validate_all().is_empty() || !found.is_empty());
     assert_eq!(diagram_of(&st, e), Some(d));
     assert_eq!(diagram_of(&st, loose), None);
-    assert_eq!(rules::kind_problem("er"), None);
+    assert_eq!(rules::kind_problem("toy.class"), None);
     assert!(rules::kind_problem(&"a".repeat(65)).is_some());
     assert_eq!(rules::colour_problem("#A1b2C3"), None);
     assert!(rules::colour_problem("#a1b2c3d").is_some() && rules::colour_problem("a1b2c3").is_some());

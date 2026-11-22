@@ -22,6 +22,7 @@ use crate::VersionReader;
 use crate::branch_name::SafeBranch;
 use crate::chat::{head, is_chat_table, is_commit};
 use crate::saving::{AfterFailure, Author, SaveFailure, Saved, after_failed_commit, reply_lost};
+use crate::sessions::{Session, Sessions};
 use crate::{DATABASE, Error, Project};
 
 /// The most rows a table of the model may hold when read back: the store's own limit.
@@ -194,10 +195,10 @@ pub(crate) fn sql(what: &'static str) -> impl Fn(mysql::Error) -> Error {
     move |source| Error::Sql { what, source }
 }
 
-/// A connection through `connector`, using `branch` of the project's database.
-pub(crate) fn database_connection(connector: &archforge_dolt::Connector, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
-    let mut c = connector.connect().map_err(Error::Server)?;
-    c.query_drop(format!("USE `{}`", database_name(branch))).map_err(sql("cannot use the project database"))?;
+/// A session of `sessions`, using `branch` of the project's database.
+pub(crate) fn database_connection(sessions: &Sessions, branch: &SafeBranch) -> Result<Session, Error> {
+    let mut c = sessions.open()?;
+    c.use_database(&database_name(branch)).map_err(sql("cannot use the project database"))?;
     Ok(c)
 }
 
@@ -208,16 +209,16 @@ pub(crate) fn database_name(branch: &SafeBranch) -> String {
 
 impl Project {
     /// A connection to this project's server, using its database.
-    pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
+    pub(crate) fn model_connection(&self) -> Result<Session, Error> {
         self.connection_to(&self.current_branch())
     }
 
     /// A connection to `branch` of this project, whichever branch is current by then.
-    pub(crate) fn connection_to(&self, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
+    pub(crate) fn connection_to(&self, branch: &SafeBranch) -> Result<Session, Error> {
         if self.branch_is_unclear() {
             return Err(Error::BranchUnclear { path: self.path().to_path_buf() });
         }
-        database_connection(&self.server().connector(), branch)
+        database_connection(&self.sessions, branch)
     }
 }
 
@@ -229,7 +230,7 @@ impl VersionReader {
     /// when the server has no such branch, deleted or renamed since it was listed). A
     /// commit never changes, so what is read over the connection is one consistent state however
     /// many statements the reading takes and whatever is written meanwhile.
-    fn revision_connection(&self, branch: &SafeBranch, commit: &str) -> Result<mysql::Conn, Error> {
+    fn revision_connection(&self, branch: &SafeBranch, commit: &str) -> Result<Session, Error> {
         let refused = || Error::NotAVersion { commit: commit.chars().take(40).collect() };
         if !is_commit(commit) {
             return Err(refused());
@@ -252,7 +253,7 @@ impl VersionReader {
         if base.and_then(|r| r.get_opt::<String, usize>(0)).and_then(Result::ok).as_deref() != Some(commit) {
             return Err(refused());
         }
-        c.query_drop(format!("USE `{DATABASE}/{commit}`")).map_err(sql("cannot open the version"))?;
+        c.use_database(&format!("{DATABASE}/{commit}")).map_err(sql("cannot open the version"))?;
         Ok(c)
     }
 
@@ -280,7 +281,7 @@ impl Project {
     }
 
     /// [`Project::prepare_model`] over `c`, which is given back for the read that follows.
-    pub(crate) fn prepare_on(&self, mut c: mysql::Conn, schema: &ModelSchema) -> Result<mysql::Conn, Error> {
+    pub(crate) fn prepare_on(&self, mut c: Session, schema: &ModelSchema) -> Result<Session, Error> {
         match self.version_reader().held_fingerprint(&mut c)? {
             Some(f) if f != schema.fingerprint => {
                 // Made by an earlier Archforge, as its fingerprint says: the columns added since come
@@ -330,9 +331,17 @@ impl Project {
     /// model's fingerprint and upgrade), and builds its model, all over connections of their own.
     /// The current branch and every connection to it stay as they were, whatever the outcome.
     pub fn check_branch(&self, branch: &SafeBranch, schema: &ModelSchema) -> Result<Rows, Error> {
-        crate::checked_settings(self.server(), self.path(), branch)?;
+        self.check_branch_settings(branch)?;
         let mut c = self.prepare_on(self.connection_to(branch)?, schema)?;
         self.version_reader().read_rows(&mut c, schema, None)
+    }
+
+    /// What [`Project::check_branch`] checks first on `branch`, writing nothing: that it is there and
+    /// its database usable, that its settings read cleanly, and that it holds no triggers,
+    /// procedures or events. A host runs it before reading what else decides whether the branch may
+    /// be written.
+    pub fn check_branch_settings(&self, branch: &SafeBranch) -> Result<(), Error> {
+        crate::checked_settings(&self.sessions, self.path(), branch).map(|_| ())
     }
 
     /// The kinds of the diagrams `branch` holds that are not among `known`, each once and in byte
@@ -410,7 +419,7 @@ impl Project {
 
     /// Replaces the model's rows with `rows`, all of them or none.
     pub fn write_model(&self, schema: &ModelSchema, rows: &Rows) -> Result<(), Error> {
-        self.write_model_on(&mut self.model_connection()?, schema, rows)
+        self.write_model_on(&mut *self.model_connection()?, schema, rows)
     }
 
     /// [`Project::write_model`] over `c`, so to the branch `c` is on.
@@ -486,7 +495,7 @@ impl Project {
     /// within the budgets of rows per table and of cells and bytes for the whole model, past which it
     /// is [`Error::ModelTooLarge`].
     pub fn read_model(&self, schema: &ModelSchema) -> Result<Rows, Error> {
-        self.version_reader().read_rows(&mut self.model_connection()?, schema, None)
+        self.version_reader().read_rows(&mut *self.model_connection()?, schema, None)
     }
 
     /// [`VersionReader::read_model_at`], on this project.

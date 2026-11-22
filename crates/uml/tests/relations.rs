@@ -70,7 +70,7 @@ fn snapshot(s: &S) -> String {
 /// A package with classes `names`, on a class diagram that shows the first `shown` of them.
 fn classes(s: &mut S, names: &[&str], shown: usize) -> (String, String, Vec<String>, Vec<String>) {
     let pkg = run(s, "uml.package.add", json!({ "name": "sales" }));
-    let d = run(s, "diagram.add", json!({ "kind": "uml.structure", "element": pkg, "name": "sales" }));
+    let d = run(s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "sales" }));
     let mut ids = Vec::new();
     let mut nodes = Vec::new();
     for (i, n) in names.iter().enumerate() {
