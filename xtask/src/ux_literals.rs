@@ -329,8 +329,11 @@ mod tests {
         s.file("clippy.toml", "disallowed-types = [\"egui::Color32\"]\n").unwrap();
         assert_eq!(rules_of(&s.path, 37).map(|b| b.len()), Ok(1), "the file's 37 bytes fit a cap of 37");
         assert_eq!(rules_of(&s.path, 36), Err("clippy.toml: more than 36 bytes, so the banned types are not read".to_string()));
-        std::fs::write(s.path.join("clippy.toml"), [0xff, 0xfe]).unwrap();
-        assert!(rules_of(&s.path, 37).is_err_and(|e| e.starts_with("clippy.toml: ")), "no text");
+        // TOML apart from one byte that is no UTF-8, inside a string a lossy reading would accept.
+        let mut bytes = b"disallowed-types = [{ path = \"egui::Color32\", reason = \"".to_vec();
+        bytes.extend([0xff, b'"', b' ', b'}', b']', b'\n']);
+        std::fs::write(s.path.join("clippy.toml"), &bytes).unwrap();
+        assert!(rules_of(&s.path, 100).is_err_and(|e| e.starts_with("clippy.toml: ")), "no text");
     }
 
     /// A source that is not Rust is a finding, so nothing passes unread.
