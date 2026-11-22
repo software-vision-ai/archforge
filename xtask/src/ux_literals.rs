@@ -12,10 +12,17 @@
 //! pattern (`let FontId { size, family } = …`) takes a font apart and is no literal, and a return
 //! type (`-> &egui::FontId {`) is a type. A macro's tokens are read as expressions or statements
 //! when they parse as such, and otherwise token by token; a `macro_rules!` matcher is never read,
-//! its transcribers are, and `matches!` takes a pattern only when it is the standard library's. A
-//! finding's line is its line in the file. `ux` itself ([`UX`]) is exempt.
+//! its transcribers are, and `matches!` takes a pattern only when it is the standard library's.
+//! None of these exemptions holds in the input of a macro the scan does not know, which may match
+//! those tokens and emit them as code. A finding's line is its line in the file. `ux` itself
+//! ([`UX`]) is exempt.
+//!
+//! The walk is strict ([`util::walk_strict_all`]): `crates` and `apps` are judged by their own
+//! kind, never through a link; a folder that cannot be opened stops the check; a link or an entry
+//! that is no plain file is a finding, never followed or read; and a source over a byte cap, its
+//! own or the total's, is a finding, known from its size before it is read.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use proc_macro2::{Delimiter, Spacing, TokenStream, TokenTree};
 use syn::ext::IdentExt;
@@ -23,6 +30,8 @@ use syn::parse::{ParseStream, Parser};
 use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
 use syn::{Expr, Ident, Token, Type};
+
+use crate::util;
 
 /// The `ux` module, from the repository's root: where colours and fonts are made.
 pub const UX: [&str; 4] = ["crates", "ui-egui", "src", "ux"];
@@ -93,7 +102,8 @@ struct Scan {
     /// of [`PATTERN_MACROS`] among them is not the standard library's.
     shadowed: Vec<String>,
     /// Whether the scan is inside the input of a macro it does not know, which may match a
-    /// `stringify!` there as tokens and never call it, so [`UNEVALUATED`] spares nothing.
+    /// `stringify!`, a `matches!` or a `macro_rules!` there as tokens and emit them as code, so
+    /// [`UNEVALUATED`], [`PATTERN_MACROS`] and a matcher spare nothing.
     opaque: bool,
 }
 
@@ -400,19 +410,22 @@ impl<'ast> Visit<'ast> for Scan {
         self.visit_expr(&e.right);
     }
 
-    /// A macro's tokens: `matches!` and its asserting forms take an expression and a pattern
-    /// ([`PATTERN_MACROS`]); `stringify!` makes a string of them unread ([`UNEVALUATED`]), unless
-    /// it stands in another macro's input ([`Scan::opaque`]); the others are read by
-    /// [`Scan::macro_body`] as opaque input.
+    /// A macro's tokens: a `macro_rules!` definition leaves its matchers unread
+    /// ([`Scan::macro_rules`]); `matches!` and its asserting forms take an expression and a pattern
+    /// ([`PATTERN_MACROS`]); `stringify!` makes a string of them unread ([`UNEVALUATED`]). None of
+    /// these is granted in another macro's input ([`Scan::opaque`]), which may match the tokens
+    /// and emit them as code: there they are read like any other tokens. The others are read by
+    /// [`Scan::macro_body`], as opaque input unless the macro is a standard one that evaluates its
+    /// input as code ([`EVALUATING`]).
     fn visit_macro(&mut self, m: &'ast syn::Macro) {
         visit::visit_macro(self, m);
         if m.path.is_ident("macro_rules") {
-            return self.macro_rules(&m.tokens);
+            return if self.opaque { self.tokens(m.tokens.clone()) } else { self.macro_rules(&m.tokens) };
         }
         if !self.opaque && std_macro(&m.path, &UNEVALUATED, &self.shadowed) {
             return;
         }
-        let takes_pattern = std_macro(&m.path, &PATTERN_MACROS, &self.shadowed);
+        let takes_pattern = !self.opaque && std_macro(&m.path, &PATTERN_MACROS, &self.shadowed);
         match takes_pattern.then(|| m.parse_body_with(pattern_args).ok()).flatten() {
             Some((value, pattern, guard, rest)) => {
                 self.visit_expr(&value);
@@ -420,7 +433,9 @@ impl<'ast> Visit<'ast> for Scan {
                 guard.iter().chain(rest.iter()).for_each(|e| self.visit_expr(e));
             }
             None => {
-                let outer = std::mem::replace(&mut self.opaque, true);
+                let evaluates = std_macro(&m.path, &EVALUATING, &self.shadowed);
+                let outer = self.opaque;
+                self.opaque = outer || !evaluates;
                 self.macro_body(&m.tokens);
                 self.opaque = outer;
             }
@@ -470,6 +485,32 @@ fn qualified_constant(trees: &[TokenTree], i: usize) -> Option<String> {
 /// only.)
 const UNEVALUATED: [&str; 1] = ["stringify"];
 
+/// The standard library's macros that read their input as expressions and evaluate them where
+/// they are called, so a `matches!` or a `stringify!` among them is a real call: `assert!(matches!(
+/// font, FontId { size, family }))`.
+const EVALUATING: [&str; 20] = [
+    "assert",
+    "assert_eq",
+    "assert_ne",
+    "debug_assert",
+    "debug_assert_eq",
+    "debug_assert_ne",
+    "dbg",
+    "eprint",
+    "eprintln",
+    "format",
+    "format_args",
+    "panic",
+    "print",
+    "println",
+    "todo",
+    "unimplemented",
+    "unreachable",
+    "vec",
+    "write",
+    "writeln",
+];
+
 /// Macros whose second argument is a pattern, with an optional guard: `matches!(font, FontId {
 /// size, family } if size > 1.0)`, and the asserting forms, which may add a message.
 const PATTERN_MACROS: [&str; 3] = ["matches", "assert_matches", "debug_assert_matches"];
@@ -512,40 +553,83 @@ pub fn findings(source: &str) -> Vec<String> {
     scan.found.into_iter().map(|(line, what)| format!("line {line}: {what}")).collect()
 }
 
-/// Every `.rs` file under `dir`, sorted, leaving out `skip`: the walk of the shell's process scan
-/// (`shell_io.rs`), with `ux` left out.
-fn sources(dir: &Path, skip: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut out = Vec::new();
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        for entry in std::fs::read_dir(&d).map_err(|e| format!("{}: {e}", d.display()))? {
-            let path = entry.map_err(|e| format!("{}: {e}", d.display()))?.path();
-            if path.is_dir() {
-                if path != skip {
-                    stack.push(path);
-                }
-            } else if path.extension().is_some_and(|x| x == "rs") {
-                out.push(path);
-            }
-        }
-    }
-    out.sort();
-    Ok(out)
+/// The most bytes the scan reads of one source.
+const MAX_FILE: u64 = 16 << 20;
+
+/// The most bytes the scan reads of all the sources together.
+const MAX_TOTAL: u64 = 256 << 20;
+
+/// The text of `file`, read up to one byte past `limit`, so a file that holds more than `limit`
+/// shows it by its length.
+fn read_capped(file: &Path, limit: u64) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    std::fs::File::open(file)
+        .and_then(|f| f.take(limit.saturating_add(1)).read_to_end(&mut bytes))
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    Ok(bytes)
 }
 
 /// The colours and fonts made outside ux in every source under `root`'s crates and applications,
-/// each named with its file from `root`.
+/// each named with its file from `root`. What this check cannot read safely is a finding too: a
+/// root (`crates`, `apps`) that is a link or no folder, a link or an entry that is no plain file
+/// under them, a source over [`MAX_FILE`] bytes, and one past [`MAX_TOTAL`] in all. A root that is
+/// missing or cannot be read, and a folder under one that cannot be opened ([`util::walk_strict`]),
+/// stop the check with their paths, so no part of the scope passes unread.
 pub fn scan(root: &Path) -> Result<Vec<String>, String> {
+    scan_within(root, MAX_FILE, MAX_TOTAL, |p| std::fs::symlink_metadata(p).map(|m| m.len())).map(|(found, _)| found)
+}
+
+/// [`scan`] with its caps given, and a source's size in bytes from `size_of`, so a test can give
+/// one that grows after it was measured; also how many bytes were read in all.
+fn scan_within(root: &Path, max_file: u64, max_total: u64, size_of: impl Fn(&Path) -> std::io::Result<u64>) -> Result<(Vec<String>, u64), String> {
     let ux = UX.iter().fold(root.to_path_buf(), |p, part| p.join(part));
-    let mut out = Vec::new();
-    for dir in SCANNED.iter().map(|d| root.join(d)).filter(|d| d.is_dir()) {
-        for file in sources(&dir, &ux)? {
-            let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
-            let rel = file.strip_prefix(root).unwrap_or(&file).display().to_string();
-            out.extend(findings(&text).into_iter().map(|f| format!("{rel} {f}")));
+    let rel = |p: &Path| p.strip_prefix(root).unwrap_or(p).display().to_string();
+    let (mut out, mut files) = (Vec::new(), Vec::new());
+    for dir in SCANNED.iter().map(|d| root.join(d)) {
+        // Judged by its own kind: `is_dir` would follow a link, and take a dangling or unreadable
+        // root for an absent one.
+        let kind = std::fs::symlink_metadata(&dir)
+            .map_err(|e| format!("{}: cannot be read, so nothing under it is checked: {e}", dir.display()))?
+            .file_type();
+        if kind.is_symlink() {
+            out.push(format!("{}: a link, which this check does not follow", rel(&dir)));
+        } else if !kind.is_dir() {
+            out.push(format!("{}: no folder, so this check reads nothing there", rel(&dir)));
+        } else {
+            // `ux` is left out by its path, not by a folder name another crate might use too.
+            let walked = util::walk_strict_all(&dir, &[])?;
+            out.extend(walked.passed_over.iter().map(|p| format!("{}: a link or no plain file, which this check neither follows nor reads", rel(p))));
+            files.extend(walked.files.into_iter().filter(|p| !p.starts_with(&ux) && p.extension().is_some_and(|x| x == "rs")));
         }
     }
-    Ok(out)
+    let (mut budget, mut read) = (max_total, 0u64);
+    let over_file = |p: &Path| format!("{}: more than {max_file} bytes, so this check does not read it", rel(p));
+    let over_total = |p: &Path| format!("{}: past the {max_total} bytes this check reads in all, so it is not read", rel(p));
+    for file in files {
+        let size = size_of(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+        if size > max_file {
+            out.push(over_file(&file));
+            continue;
+        }
+        if size > budget {
+            out.push(over_total(&file));
+            continue;
+        }
+        // The file may have grown since it was measured: what is read counts, kept or not.
+        let limit = max_file.min(budget);
+        let bytes = read_capped(&file, limit)?;
+        let taken = bytes.len() as u64;
+        read += taken;
+        budget = budget.saturating_sub(taken);
+        if taken > limit {
+            out.push(if limit < max_file { over_total(&file) } else { over_file(&file) });
+            continue;
+        }
+        let text = String::from_utf8(bytes).map_err(|e| format!("{}: {e}", file.display()))?;
+        out.extend(findings(&text).into_iter().map(|f| format!("{} {f}", rel(&file))));
+    }
+    Ok((out, read))
 }
 
 #[cfg(test)]
@@ -865,6 +949,127 @@ mod tests {
             })
             .collect();
         assert_eq!(misread, Vec::<String>::new());
+    }
+
+    /// In a macro's input that the scan does not know, which may match the tokens and emit them as
+    /// code, a `macro_rules!` matcher and a `matches!` pattern are read like any other tokens
+    /// (CodeRabbit on #573). A real `macro_rules!` keeps its matchers unread, a nested definition
+    /// in its transcriber too, and the standard library's `matches!` keeps its pattern where it is
+    /// called, in the code or in a standard macro that evaluates its input (`assert!`).
+    #[test]
+    fn opaque_input_reads_matchers_and_patterns_as_tokens() {
+        let found = [
+            "macro_rules! extract { (macro_rules! inner { ($e:expr) => {} }) => { $e }; }\nfn f() {\n    let _ = extract!( macro_rules! inner { (egui::Color32::RED) => {} } );\n}",
+            "macro_rules! evaluate { (matches!($v:expr, $font:expr)) => { $font }; }\nfn font(size: f32, family: egui::FontFamily) -> egui::FontId {\n    evaluate!(matches!((), egui::FontId { size, family }))\n}",
+            "fn f() {\n    check!(matches!(font, egui::FontId { size, family }));\n}",
+            "macro_rules! assert { ($e:expr) => { $e }; }\nfn f() {\n    assert!(matches!((), FontId { size, family }));\n}",
+            "fn f() {\n    keep!(std::matches!((), FontId { size, family }));\n}",
+        ];
+        let none = [
+            "macro_rules! accepts { (egui::Color32::RED) => {} }",
+            "macro_rules! outer { () => { macro_rules! inner { (Color32::RED) => {} } }; }",
+            "fn f() {\n    assert_eq!(matches!(font, egui::FontId { size, family }), true);\n}",
+            "fn f() {\n    debug_assert!(std::matches!(font, egui::FontId { size, family }), \"{}\", 1);\n}",
+            "fn f() -> String {\n    format!(\"{}\", matches!(font, egui::FontId { size, family }))\n}",
+        ];
+        // Every case is checked before the test fails, so a failure names all the misread ones.
+        let misread: Vec<String> = found
+            .iter()
+            .map(|s| (s, 1))
+            .chain(none.iter().map(|s| (s, 0)))
+            .filter_map(|(source, n)| {
+                let got = findings(source);
+                (got.len() != n).then(|| format!("{source} gave {got:?}"))
+            })
+            .collect();
+        assert_eq!(misread, Vec::<String>::new());
+    }
+
+    /// `crates` and `apps` are judged by their own kind, never through a link: a linked root, a
+    /// dangling one and a file are findings, and a root that is missing or cannot be read stops
+    /// the scan with its path (CodeRabbit on #573).
+    #[cfg(unix)]
+    #[test]
+    fn scan_roots_are_judged_by_their_own_kind() {
+        let s = crate::util::Scratch::new("ux-roots").unwrap();
+        let outside = crate::util::Scratch::new("ux-roots-outside").unwrap();
+        outside.file("a/src/lib.rs", "const C: egui::Color32 = egui::Color32::RED;\n").unwrap();
+        std::os::unix::fs::symlink(&outside.path, s.path.join("crates")).unwrap();
+        std::os::unix::fs::symlink(s.path.join("gone"), s.path.join("apps")).unwrap();
+        assert_eq!(
+            scan(&s.path),
+            Ok(vec!["crates: a link, which this check does not follow".to_string(), "apps: a link, which this check does not follow".to_string()])
+        );
+        let s = crate::util::Scratch::new("ux-roots-file").unwrap();
+        s.file("crates/a/src/lib.rs", "fn f() {}\n").unwrap();
+        s.file("apps", "").unwrap();
+        assert_eq!(scan(&s.path), Ok(vec!["apps: no folder, so this check reads nothing there".to_string()]));
+        let s = crate::util::Scratch::new("ux-roots-missing").unwrap();
+        s.file("crates/a/src/lib.rs", "fn f() {}\n").unwrap();
+        let missing = scan(&s.path);
+        assert!(missing.as_ref().is_err_and(|e| e.starts_with(&format!("{}: ", s.path.join("apps").display()))), "{missing:?}");
+        let s = crate::util::Scratch::new("ux-roots-locked").unwrap();
+        s.file("r/crates/a/src/lib.rs", "fn f() {}\n").unwrap();
+        s.file("r/apps/b/src/main.rs", "fn main() {}\n").unwrap();
+        if s.lock("r").unwrap() {
+            let locked = scan(&s.path.join("r"));
+            let crates = s.path.join("r").join("crates");
+            assert!(locked.as_ref().is_err_and(|e| e.starts_with(&format!("{}: ", crates.display()))), "{locked:?}");
+        }
+    }
+
+    /// Under the roots, a link, to a file or a folder, and an entry that is no plain file (a pipe,
+    /// whose reading could block) are findings, never followed or read.
+    #[cfg(unix)]
+    #[test]
+    fn links_and_pipes_under_the_roots_are_findings_and_never_followed() {
+        let s = crate::util::Scratch::new("ux-links").unwrap();
+        s.file("crates/a/src/lib.rs", "fn f() {}\n").unwrap();
+        s.file("apps/b/src/main.rs", "fn main() {}\n").unwrap();
+        let outside = crate::util::Scratch::new("ux-links-outside").unwrap();
+        outside.file("far.rs", "const E: Color32 = Color32::RED;\n").unwrap();
+        let src = s.path.join("crates").join("a").join("src");
+        std::os::unix::fs::symlink(outside.path.join("far.rs"), src.join("linked.rs")).unwrap();
+        std::os::unix::fs::symlink(&outside.path, src.join("folder")).unwrap();
+        let made = std::process::Command::new("mkfifo").arg(src.join("pipe.rs")).status().unwrap();
+        assert!(made.success(), "mkfifo");
+        let passed = "a link or no plain file, which this check neither follows nor reads";
+        assert_eq!(scan(&s.path), Ok(["folder", "linked.rs", "pipe.rs"].iter().map(|n| format!("crates/a/src/{n}: {passed}")).collect::<Vec<_>>()));
+    }
+
+    /// A source known from its size to be over a cap is never read: over the cap of one file, or
+    /// past what is left of the total. Every byte read counts against the total, those of a file
+    /// that grew past its cap and was put aside too (CodeRabbit on #573).
+    #[test]
+    fn the_byte_caps_reject_by_size_and_count_every_byte_read() {
+        let more = "more than 100 bytes, so this check does not read it";
+        let past = "past the 150 bytes this check reads in all, so it is not read";
+        let s = crate::util::Scratch::new("ux-caps").unwrap();
+        std::fs::create_dir(s.path.join("apps")).unwrap();
+        let big = "x".repeat(200);
+        s.file("crates/a/one.rs", &big).unwrap();
+        s.file("crates/a/two.rs", &big).unwrap();
+        let size = |p: &Path| std::fs::symlink_metadata(p).map(|m| m.len());
+        let (found, read) = scan_within(&s.path, 100, 150, size).unwrap();
+        assert_eq!(found, [format!("crates/a/one.rs: {more}"), format!("crates/a/two.rs: {more}")]);
+        assert_eq!(read, 0, "a source known to be too big is never read");
+        // a.rs and d.rs say they are small (as a file still being written may) and are not.
+        let s = crate::util::Scratch::new("ux-caps-read").unwrap();
+        std::fs::create_dir(s.path.join("apps")).unwrap();
+        s.file("crates/a/a.rs", &big).unwrap();
+        s.file("crates/a/b.rs", &format!("//{}\n", "b".repeat(57))).unwrap();
+        s.file("crates/a/c.rs", "const C: Color32 = Color32::RED;\n").unwrap();
+        s.file("crates/a/d.rs", &"x".repeat(40)).unwrap();
+        let lying = |p: &Path| if p.ends_with("a.rs") || p.ends_with("d.rs") { Ok(5) } else { size(p) };
+        let (found, read) = scan_within(&s.path, 100, 150, lying).unwrap();
+        assert_eq!(found.len(), 4, "{found:?}");
+        assert_eq!(found[0], format!("crates/a/a.rs: {more}"));
+        // a.rs took 101 bytes of the 150, so b.rs (60) is past the total; c.rs (33) still fits.
+        assert_eq!(found[1], format!("crates/a/b.rs: {past}"));
+        assert!(found[2].starts_with("crates/a/c.rs line 1: Color32::RED, a colour constant"), "{found:?}");
+        // 16 bytes are left for d.rs, which holds 40: 17 are read and put aside.
+        assert_eq!(found[3], format!("crates/a/d.rs: {past}"));
+        assert_eq!(read, 101 + 33 + 17);
     }
 
     /// The repository as it stands makes no colour or font outside ux, and ux itself is left out.

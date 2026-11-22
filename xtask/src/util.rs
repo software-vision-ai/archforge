@@ -103,20 +103,34 @@ pub fn walk(dir: &Path) -> Result<Vec<PathBuf>, String> {
 /// naming its path. A folder whose name `skip` lists is left out before it is opened, so one that
 /// cannot be opened is no error. A symbolic link is skipped and never followed, so a link cycle
 /// cannot make the walk endless, and so is any other entry that is neither a folder nor a regular
-/// file.
+/// file; [`walk_strict_all`] names them.
 pub fn walk_strict(dir: &Path, skip: &[&str]) -> Result<Vec<PathBuf>, String> {
+    walk_strict_all(dir, skip).map(|walked| walked.files)
+}
+
+/// What a strict walk finds: the regular files, and the entries it leaves alone (a symbolic link,
+/// or anything else neither a folder nor a regular file), each sorted.
+#[derive(Debug, Default, PartialEq)]
+pub struct Walked {
+    pub files: Vec<PathBuf>,
+    pub passed_over: Vec<PathBuf>,
+}
+
+/// [`walk_strict`], naming the entries it passes over as well, for a check that refuses them: a
+/// link is never followed and no other entry is opened.
+pub fn walk_strict_all(dir: &Path, skip: &[&str]) -> Result<Walked, String> {
     walk_strict_with(dir, skip, |d| std::fs::read_dir(d), std::fs::DirEntry::file_type)
 }
 
-/// [`walk_strict`] with the folder listing (`open`) and an entry's kind (`kind_of`) given, so a test
-/// can make either fail on a filesystem that never would.
+/// [`walk_strict_all`] with the folder listing (`open`) and an entry's kind (`kind_of`) given, so a
+/// test can make either fail on a filesystem that never would.
 fn walk_strict_with(
     dir: &Path,
     skip: &[&str],
     open: impl Fn(&Path) -> std::io::Result<std::fs::ReadDir>,
     kind_of: impl Fn(&std::fs::DirEntry) -> std::io::Result<std::fs::FileType>,
-) -> Result<Vec<PathBuf>, String> {
-    let mut out = Vec::new();
+) -> Result<Walked, String> {
+    let mut out = Walked::default();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
         let entries = open(&d).map_err(|e| format!("{}: this folder cannot be opened, so nothing under it is checked: {e}", d.display()))?;
@@ -129,11 +143,14 @@ fn walk_strict_with(
                     stack.push(p);
                 }
             } else if kind.is_file() {
-                out.push(p);
+                out.files.push(p);
+            } else {
+                out.passed_over.push(p);
             }
         }
     }
-    out.sort();
+    out.files.sort();
+    out.passed_over.sort();
     Ok(out)
 }
 
@@ -225,7 +242,7 @@ mod tests {
         let s = tree("unopened");
         let locked = s.path.join("a").join("b");
         let open = |d: &Path| if d == locked { Err(std::io::Error::other("refused here")) } else { std::fs::read_dir(d) };
-        let walked = walk_strict_with(&s.path, &[], open, std::fs::DirEntry::file_type);
+        let walked = walk_strict_with(&s.path, &[], open, std::fs::DirEntry::file_type).map(|w| w.files);
         assert_eq!(walked, Err(format!("{}: this folder cannot be opened, so nothing under it is checked: refused here", locked.display())));
         assert_eq!(walk_strict(&s.path, &[]), Ok(vec![s.path.join("a/b/z.rs"), s.path.join("a/y.rs"), s.path.join("x.rs")]));
     }
@@ -236,7 +253,7 @@ mod tests {
     fn an_entry_whose_kind_the_strict_walk_cannot_read_is_an_error_naming_it() {
         let s = tree("unknown-kind");
         let kind_of = |e: &std::fs::DirEntry| if e.file_name() == "y.rs" { Err(std::io::Error::other("no kind")) } else { e.file_type() };
-        let walked = walk_strict_with(&s.path, &[], |d| std::fs::read_dir(d), kind_of);
+        let walked = walk_strict_with(&s.path, &[], |d| std::fs::read_dir(d), kind_of).map(|w| w.files);
         assert_eq!(walked, Err(format!("{}: what this entry is cannot be read, so it is not checked: no kind", s.path.join("a/y.rs").display())));
     }
 
@@ -248,13 +265,14 @@ mod tests {
         s.file("a/b.rs", "").unwrap();
         let open = |d: &Path| if d.ends_with("b") { Err(std::io::Error::other("refused here")) } else { std::fs::read_dir(d) };
         assert_eq!(
-            walk_strict_with(&s.path, &["b"], open, std::fs::DirEntry::file_type),
+            walk_strict_with(&s.path, &["b"], open, std::fs::DirEntry::file_type).map(|w| w.files),
             Ok(vec![s.path.join("a/b.rs"), s.path.join("a/y.rs"), s.path.join("x.rs")])
         );
         assert!(walk_strict_with(&s.path, &["c"], open, std::fs::DirEntry::file_type).is_err(), "the folder is opened when not skipped");
     }
 
-    /// A symbolic link, to a file, to a folder or to nothing, is skipped and never followed.
+    /// A symbolic link, to a file, to a folder or to nothing, is skipped and never followed;
+    /// [`walk_strict_all`] names each.
     #[cfg(unix)]
     #[test]
     fn the_strict_walk_skips_links() {
@@ -264,6 +282,9 @@ mod tests {
         for (target, link) in [(s.path.join("x.rs"), "to-file.rs"), (outside.path.clone(), "to-folder"), (s.path.join("gone"), "dangling.rs")] {
             std::os::unix::fs::symlink(target, s.path.join("a").join(link)).unwrap();
         }
-        assert_eq!(walk_strict(&s.path, &[]), Ok(vec![s.path.join("a/b/z.rs"), s.path.join("a/y.rs"), s.path.join("x.rs")]));
+        let files = vec![s.path.join("a/b/z.rs"), s.path.join("a/y.rs"), s.path.join("x.rs")];
+        assert_eq!(walk_strict(&s.path, &[]), Ok(files.clone()));
+        let passed_over = ["dangling.rs", "to-file.rs", "to-folder"].map(|n| s.path.join("a").join(n)).to_vec();
+        assert_eq!(walk_strict_all(&s.path, &[]), Ok(Walked { files, passed_over }));
     }
 }
