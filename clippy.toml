@@ -3,9 +3,11 @@ allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
 
-# The interface draws through `ux` (AGENTS.md): a colour or a font is made there alone, which calls
-# these under a scoped allow. Colour constants (`Color32::RED`) and `FontId { .. }` are no methods;
-# the gate's ux scan (xtask/src/ux_literals.rs) refuses those.
+# The interface draws through `ux` (AGENTS.md): a colour or a font is made there alone, under one
+# module-level allow. egui's colour and font types are banned everywhere else, so naming one (its
+# constants, a renamed import, an `impl` for it) fails the lint; the constructors are listed too, so
+# each says what to use. One form no type ban sees, a struct expression (`FontId { .. }`), is the
+# gate's ux check's (xtask/src/ux_literals.rs).
 disallowed-methods = [
     { path = "egui::Color32::from_rgb", reason = "a colour is the design's: take a role of ux::Palette or a named ux colour (ux::CLEAR, ux::UNTINTED, ux::MARK), or ux::data_colour for a colour the document holds" },
     { path = "egui::Color32::from_rgb_additive", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },
@@ -22,6 +24,8 @@ disallowed-methods = [
     { path = "egui::FontId::monospace", reason = "a font is the design's: take a style of ux::types and its .code()" },
 ]
 disallowed-types = [
+    { path = "egui::Color32", reason = "a colour is the design's: take a ux::Colour, a role of ux::Palette or a named ux colour (ux::CLEAR, ux::UNTINTED, ux::MARK), and hand it to egui with .into()" },
+    { path = "egui::FontId", reason = "a font is the design's: take a style of ux::types, its .font() or its .code()" },
     { path = "egui::ecolor::Hsva", reason = "a colour is the design's: the own-colour swatch's hues are ux::swatch_hue" },
     { path = "egui::ecolor::HsvaGamma", reason = "a colour is the design's: the colour picker goes through ux::from_hsv and ux::to_hsv" },
     { path = "egui::Rgba", reason = "a colour is the design's: take a role of ux::Palette, or add a named colour to ux" },
