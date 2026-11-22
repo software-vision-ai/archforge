@@ -1,9 +1,8 @@
 //! The lints check (AR-775): every workspace member takes the workspace's lints.
 //!
 //! The never-crash deny list (`AGENTS.md`) lives in `[workspace.lints.clippy]` of the root
-//! `Cargo.toml`, and reaches a crate only when its own manifest says so. A member without it would
-//! pass the lint step with `unwrap()` in its production code, so the lint step runs this check
-//! first.
+//! `Cargo.toml`, and reaches a crate only when its own manifest says so. Without it, clippy passes
+//! `unwrap()` in a member's production code, so the lint step runs this check before clippy.
 //!
 //! The members come from `cargo metadata`, as in the layer check. Each manifest must hold the table
 //! `[lints]` with `workspace = true` and nothing else in it, the form every member uses; anything
@@ -173,7 +172,8 @@ fn push(lines: &mut [Option<String>], s: &str) {
 
 /// The refusal for the manifest at `path` (relative to the workspace root).
 fn refusal(path: &Path, gap: &Gap) -> String {
-    let why = "the workspace lints hold the never-crash deny list (AGENTS.md), and a crate without them passes the lint step with `unwrap()` in its production code";
+    let why =
+        "the workspace lints hold the never-crash deny list (AGENTS.md), and without them clippy passes `unwrap()` in a crate's production code";
     match gap {
         Gap::Missing => format!("{}: takes none of the workspace's lints; add {WANTED}: {why}", path.display()),
         Gap::Other { line } => {
@@ -233,12 +233,14 @@ mod tests {
         format!("[package]\nname = \"m\"\nedition.workspace = true\n\n[dependencies]\nlog.workspace = true\n{rest}")
     }
 
+    /// The table, with comments and any spacing around its key, is what a member holds.
     #[test]
     fn a_member_with_the_table_takes_the_workspaces_lints() {
         assert_eq!(check(&manifest("\n[lints]\nworkspace = true\n")), Ok(()));
         assert_eq!(check(&manifest("[lints] # the workspace's\n  workspace=true   # all of them\n\n[features]\n")), Ok(()));
     }
 
+    /// No lints, or a `lints` key of another table, is no table.
     #[test]
     fn a_member_without_the_table_is_refused() {
         assert_eq!(check(&manifest("")), Err(Gap::Missing));

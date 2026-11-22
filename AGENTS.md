@@ -35,8 +35,9 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   expecting on fallible values, explicit panics, unreachable markers, the todo and unimplemented
   macros. The workspace lints (`[workspace.lints.clippy]` in `Cargo.toml`) deny them, every
   member takes them with `[lints] workspace = true`, and the gate's lint step refuses a member
-  without that table. `#[test]` and `#[cfg(test)]` code may use them (`clippy.toml`); an
-  integration test whose helpers do allows only those lints, at its top, with the reason.
+  without that table. `#[test]` and `#[cfg(test)]` code may unwrap, expect and panic
+  (`clippy.toml`); an integration test whose helpers do allows only those lints, at its top, with
+  the reason.
 - A size declared in input is never trusted for preallocation. Total bytes are capped, not only
   item counts.
 - Every input-derived integer uses checked, saturating or fallible arithmetic and conversion. It is
