@@ -4,6 +4,7 @@
 //! and a package is dashed with an open arrow at its supplier, whichever end is the package; every
 //! step is undone and redone exactly; and the agent's commands, `diagram.add` among them, leave the
 //! store the Package and classifier tools' undo steps leave.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::figure::{EndMark, Text, Tone};
 use archforge_diagram::{Notation, ProjectView, diagram, edge, node};
