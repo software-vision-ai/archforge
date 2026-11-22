@@ -496,9 +496,6 @@ pub enum Reason {
     /// replace first; with [`BindingFault::WrongOwner`], it is another element's diagram, which the
     /// binding names unsoundly, so a diagram of the package's own has to be chosen first (AR-578).
     DefaultDiagramOf { package: Box<str>, fault: Option<BindingFault> },
-    /// A package stays while it is the client or the supplier of a dependency that stays, which has
-    /// to be removed first (AR-696); boxed, so the error stays small.
-    DependencyEnd(Box<DependencyOf>),
     /// Another relationship of the same kind joins the same two elements in the same direction
     /// already, as a dependency moved onto the client and supplier of another would; the two are
     /// never merged into one. `dependency` is that other one, by its name, or its id when it has
@@ -786,19 +783,6 @@ pub struct InUse {
     /// The uses by stereotype: its name, the names of the elements it is applied to while a refusal
     /// names them (two at most, none when it counts them), and how many applications in all.
     pub uses: Vec<(String, Vec<String>, usize)>,
-}
-
-/// What a [`Reason::DependencyEnd`] names; boxed in the reason, so the error stays small.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DependencyOf {
-    /// The package, by its name, or its id when it has none.
-    pub package: String,
-    /// The end the package is: [`End::Source`] for the client, [`End::Target`] for the supplier.
-    pub end: End,
-    /// The dependency's other end, by its name, or its id when it has none.
-    pub other: String,
-    /// The dependency's id, which removes it.
-    pub dependency: String,
 }
 
 /// What a [`Reason::TypeInUse`] names; boxed in the reason, so the error stays small.

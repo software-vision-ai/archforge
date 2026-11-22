@@ -25,8 +25,8 @@ pub use cmd::{
     expected_revision_if_given,
 };
 pub use error::{
-    Accepted, BindingFault, CommandError, DefaultKind, DependencyOf, End, EngineError, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty,
-    NotOneOf, Parameter, Reason, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
+    Accepted, BindingFault, CommandError, DefaultKind, End, EngineError, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty, NotOneOf,
+    Parameter, Reason, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
 };
 pub use params::{ParamDoc, Params, parse_params};
 pub use session::{Batch, Dropped, GroupEnd, JournalEntry, MAX_GROUPS, Options, Outcome, Session, history_start, seed_histories};

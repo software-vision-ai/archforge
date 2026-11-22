@@ -654,35 +654,39 @@ fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
     store.list(pkg, package::PACKAGED_ELEMENT).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|o| store.is_alive(*o)).collect()
 }
 
-/// The dependency `d`'s first live end under `prop`, its client or its supplier.
-fn dependency_end(store: &Store, d: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
-    store.list(d, prop).ok()?.iter().filter_map(Value::as_ref).find(|o| store.is_alive(*o))
+/// The relationships of one of `kinds`, or of a kind specializing one, that refer to any of
+/// `packages` through a stored reference, each once, in the order the packages are given (AR-698):
+/// a dependency or a usage whose client or supplier one of them is, say. What a package merely
+/// holds is not among them: the package refers to it through a composite property, and nothing it
+/// stores refers back to the package. Removing packages takes these along (AR-698); AR-592 and
+/// AR-611 call it with their own kinds.
+pub(crate) fn incident_to_packages(store: &Store, packages: &[Obj], kinds: &[ClassId]) -> Vec<Obj> {
+    let of_kind = |c: ClassId| kinds.iter().any(|k| store.universe().conforms(c, archforge_mof::TypeRef::Class(*k)));
+    let (mut out, mut seen) = (Vec::new(), std::collections::BTreeSet::new());
+    for (r, _) in packages.iter().flat_map(|p| store.referrers(*p)) {
+        if store.is_alive(r) && store.class_of(r).is_ok_and(of_kind) && seen.insert(r) {
+            out.push(r);
+        }
+    }
+    out
 }
 
-/// Why removing `objs` would leave an ordinary dependency that stays without its client or its
-/// supplier, when a package that goes (named in `objs`, or among what `goes` with one directly in
-/// the Model) is either: refused, naming the package, the dependency's id and its other end, so
-/// the dependency is removed first (AR-696). Until AR-698 removes such dependencies with the
-/// package, a nested package's own dependencies, which it would hand up, are refused too.
-fn dependency_problem(store: &Store, objs: &[Obj], goes: &std::collections::BTreeSet<Obj>) -> Option<CommandError> {
-    let packages: std::collections::BTreeSet<Obj> =
-        goes.iter().chain(objs).copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
-    let stays = |d: Obj| store.is_alive(d) && store.class_of(d).ok() == Some(crate::DEPENDENCY) && !goes.contains(&d) && !objs.contains(&d);
-    let at = |d: Obj, prop, p: Obj| store.list(d, prop).is_ok_and(|l| l.contains(&Value::Ref(p)));
-    let (pkg, d) = packages
+/// The dependencies that go when `objs` are removed (AR-698): each whose client or supplier is a
+/// package among them, or one that something among them other than a nested package takes along,
+/// a package with no parent say ([`incident_to_packages`]), each once, those at a package named
+/// first. Worked out on the model as it is, so the checks before anything goes know them: the
+/// stereotype applications on them go with them and strand no use.
+pub fn dependencies_going(store: &Store, objs: &[Obj]) -> Vec<Obj> {
+    let package = |o: Obj| store.is_alive(o) && store.class_of(o).ok() == Some(PACKAGE);
+    // A nested package hands what it holds up; anything else takes it along.
+    let taken: std::collections::BTreeSet<Obj> = objs
         .iter()
-        .flat_map(|p| store.referrers(*p).into_iter().map(move |(d, _)| (*p, d)))
-        .find(|(p, d)| stays(*d) && (at(*d, crate::dependency::CLIENT, *p) || at(*d, crate::dependency::SUPPLIER, *p)))?;
-    let (end, other, role, link) = if at(d, crate::dependency::CLIENT, pkg) {
-        (archforge_engine::End::Source, crate::dependency::SUPPLIER, "client", "on")
-    } else {
-        (archforge_engine::End::Target, crate::dependency::CLIENT, "supplier", "from")
-    };
-    let other = dependency_end(store, d, other).map(|o| crate::applications::name_or_id(store, o)).unwrap_or_default();
-    let (package, dependency) = (crate::applications::name_or_id(store, pkg), uuid_of(store, d).unwrap_or_default());
-    let message = format!("{package} is the {role} of the dependency {dependency} {link} {other}, which stays; remove that dependency first");
-    let of = archforge_engine::DependencyOf { package, end, other, dependency };
-    Some(refuse("ids", message).because(Reason::DependencyEnd(Box::new(of))))
+        .copied()
+        .filter(|o| store.is_alive(*o) && !(package(*o) && package_of(store, *o).is_some()))
+        .flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default())
+        .collect();
+    let packages: Vec<Obj> = objs.iter().chain(&taken).copied().filter(|o| package(*o)).collect();
+    incident_to_packages(store, &packages, &[crate::DEPENDENCY])
 }
 
 /// Every classifier inside a package, at any depth, those nested in its classifiers among them
@@ -791,7 +795,10 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// element that would take along a diagram another element's binding names, unsoundly, is refused
 /// typed as [`Reason::DefaultDiagramOf`], unless that element goes too; the bindings of all that
 /// goes go before any diagram, in whatever order the elements are named (AR-578). A classifier takes the relationships that touch it along,
-/// and an association class among them takes its own ([`going_with`]); a member's type that goes is
+/// and an association class among them takes its own ([`going_with`]); a package that goes, named or
+/// taken along, takes the dependencies whose client or supplier it is, with their stereotype
+/// applications, never moving such an end onto another element, while a nested package hands up
+/// those it holds whose ends both stay (AR-698, [`incident_to_packages`]); a member's type that goes is
 /// dropped from what had it, and so is a default that is a literal that goes (AR-126), as the
 /// property's own type would be. An element a constraint names leaves the constraint's elements, and
 /// a constraint left naming none goes too, in the same step (AR-133,
@@ -838,6 +845,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     if let Some(refused) = crate::templates::removals_problem(store, &params) {
         return Err(refused);
     }
+    // The dependencies at the packages that go go too (AR-698), so the uses on them strand nothing.
+    let incident = dependencies_going(store, objs);
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
         if let Some(why) = crate::templates::parameter_element_problem(store, *o) {
@@ -854,7 +863,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
         }
         // A profile, a stereotype or a property in use, a package whose applications its contents
         // need, and UML's own metaclasses stay, the uses named (AR-134).
-        if let Some(refused) = crate::profiles::removal_problem(store, *o) {
+        if let Some(refused) = crate::profiles::removal_problem_with(store, *o, &incident) {
             return Err(refused);
         }
         if !removable.contains(&class) || end {
@@ -901,12 +910,14 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     // that stays names it, and so does what it is of.
     let nested = |o: Obj| store.class_of(o).ok() == Some(PACKAGE) && package_of(store, o).is_some();
     let roots = objs.iter().copied().filter(|o| store.is_alive(*o) && !nested(*o)).chain(with.iter().copied());
-    let doomed: std::collections::BTreeSet<Obj> = roots.flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default()).collect();
+    let mut doomed: std::collections::BTreeSet<Obj> = roots.flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default()).collect();
+    // A dependency whose client or supplier is a package that goes goes with it in the same step,
+    // never moved onto another end (AR-698): a package named, or one a package with no parent takes
+    // along. A nested package's own dependencies whose ends both stay are handed up with the rest.
+    // Each goes as a root does, its diagrams among what the bindings are checked against.
+    doomed.extend(incident.iter().flat_map(|d| archforge_diagram::within(store, *d).unwrap_or_default()));
     let plan: std::collections::BTreeSet<Obj> = doomed.iter().copied().chain(objs.iter().copied().filter(|o| nested(*o))).collect();
     if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, doomed.iter().copied(), "ids", |b| plan.contains(&b)) {
-        return Err(refused);
-    }
-    if let Some(refused) = dependency_problem(store, objs, &doomed) {
         return Err(refused);
     }
     let going: Vec<Obj> = with.into_iter().chain(objs.iter().copied()).collect();
@@ -915,13 +926,17 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     }
     // A literal a stereotype's value names stays while the element carrying that value stays
     // (AR-135): the value would go with it unseen.
-    let going: Vec<Obj> = gone_classes.iter().chain(&gone_generalizations).copied().chain(going_with(store, &classes)).collect();
+    let going: Vec<Obj> =
+        gone_classes.iter().chain(&gone_generalizations).copied().chain(going_with(store, &classes)).chain(incident.iter().copied()).collect();
     if let Some(refused) = crate::applications::literal_refusal(store, "ids", |o| goes_by(store, objs, &going, o)) {
         return Err(refused);
     }
-    // A classifier's nested classifiers go with it (AR-132), named among what goes so their
-    // relationships, constraints and sets are worked out as theirs.
-    let mut objs: Vec<Obj> = objs.to_vec();
+    // The dependencies at a package that goes are named first among what goes, so they go before
+    // their ends, those named in the call too, with their constraints and stereotype applications
+    // (AR-698); a classifier's nested classifiers go with it (AR-132), named among what goes so
+    // their relationships, constraints and sets are worked out as theirs.
+    let first: std::collections::BTreeSet<Obj> = incident.iter().copied().collect();
+    let mut objs: Vec<Obj> = incident.into_iter().chain(objs.iter().copied().filter(|o| !first.contains(o))).collect();
     let nested: Vec<Obj> = objs
         .iter()
         .filter(|o| store.is_alive(**o) && store.class_of(**o).is_ok_and(crate::is_classifier))
