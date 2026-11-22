@@ -4,7 +4,6 @@
 //! Each frame `logic` takes in the installed fonts and applies the appearance; `ui` draws Home,
 //! the start screen, and the New project dialog over it while it is open. The shell never touches the file system or the operating system: the host
 //! supplies `Services`.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod actions;
 pub mod ai_agents;
@@ -747,6 +746,8 @@ pub enum BranchRefused {
     NotCleanedUp,
     /// The project moved, closed or reopened after this was asked for: nothing was tried.
     Moved,
+    /// Another program is connected to the project on the branch, so it was left as it was.
+    InUse,
     /// Whether it happened could not be told; asking again settles it.
     Unclear(String),
     /// It was refused or failed; `why` is the host's own technical text.
@@ -760,6 +761,7 @@ impl std::fmt::Display for BranchRefused {
             BranchRefused::Taken => f.write_str("a branch of that name exists"),
             BranchRefused::NotCleanedUp => f.write_str("the last new branch is not cleaned up yet"),
             BranchRefused::Moved => f.write_str("the project moved or closed after this was asked for"),
+            BranchRefused::InUse => f.write_str("another program is using the branch"),
             BranchRefused::Unclear(why) => write!(f, "whether it happened cannot be told: {why}"),
             BranchRefused::Failed(why) => f.write_str(why),
         }

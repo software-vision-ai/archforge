@@ -168,8 +168,8 @@ fn card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, window: Rect, c: &Confirm
         paint.rect_filled(Rect::from_min_size(pos2(left, top), vec2(inner, block)), 8.0, tint);
     }
     let text_top = top + inset + head.size().y + 10.0;
-    paint.galley(pos2(left + inset, top + inset), head, ink);
-    paint.galley(pos2(left + inset, text_top), text, body_ink);
+    paint.galley(pos2(left + inset, top + inset), head, ink.into());
+    paint.galley(pos2(left + inset, text_top), text, body_ink.into());
     let buttons: Vec<(&str, String, Option<bool>, Look)> = if c.failure.is_some() {
         vec![("switch-ask.close", tr("Close"), None, Look::Primary)]
     } else {

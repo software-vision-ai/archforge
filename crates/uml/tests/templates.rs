@@ -5,6 +5,7 @@
 //! the kind; a parameter a binding substitutes kept, its kind and constraint kept fitting the
 //! binding; the parameter's classifier kept out of the model's own; the signature box on two
 //! diagrams; saved as rows and read back identical; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;

@@ -253,14 +253,14 @@ fn in_use_box(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     let card = Rect::from_min_size(pos2(left, y), vec2(width, text.size().y + 20.0));
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
-    paint.galley(pos2(left + 32.0, y + 10.0), text, p.text);
+    paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
     crate::widgets::record_visible(ui, &mut shell.registry, &format!("{ID}.refusal"), "text", card);
     y = card.bottom() + 12.0;
     let label = tr("Show the binding");
     let g = ux::galley(&paint, &label, types::UI, p.text, None);
     let b = Rect::from_min_size(pos2(left, y), vec2((g.size().x + 24.0).min(width), FIELD));
     paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text);
+    paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text.into());
     if control(shell, ui, &format!("{ID}.showBinding"), "button", b, true).accessible_name(label).clicked()
         && let Some(binding) = u.binding
     {
@@ -273,7 +273,7 @@ fn in_use_box(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     let said = format!("{} {renaming}", tr("Show the binding selects it, on the canvas and in Properties."));
     let g = ux::galley_rows(&paint, &said, types::CAPTION, p.text_muted, Some(width), 5);
     let h = g.size().y;
-    paint.galley(pos2(left, y), g, p.text_muted);
+    paint.galley(pos2(left, y), g, p.text_muted.into());
     y + h
 }
 
@@ -283,7 +283,7 @@ fn refusal_box(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, w
     let r = Rect::from_min_size(at, vec2(width.max(0.0), g.size().y + 20.0));
     paint.rect_filled(r, 6.0, p.danger_tint);
     ux::icon_in(paint, Rect::from_min_size(r.min + vec2(10.0, 11.0), Vec2::splat(14.0)), &icons::ISSUE, p.danger);
-    paint.galley(r.min + vec2(32.0, 10.0), g, p.text);
+    paint.galley(r.min + vec2(32.0, 10.0), g, p.text.into());
     r.height()
 }
 
@@ -339,7 +339,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     } else if let Some(said) = shell.session.as_ref().map(|s| help(s.doc(), &edit)) {
         let g = ux::galley_rows(&paint, &said, types::CAPTION, p.text_secondary, Some(inner), 5);
         let h = g.size().y;
-        paint.galley(at(0.0, cy - 4.0), g, p.text_secondary);
+        paint.galley(at(0.0, cy - 4.0), g, p.text_secondary.into());
         cy += h + 8.0;
     }
     let (mut remove, mut up, mut down) = (false, false, false);
@@ -355,7 +355,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     if let Some(why) = edit.refused.as_ref().filter(|_| edit.refused_at.is_none()) {
         let g = ux::galley_rows(&paint, why, types::CAPTION, p.amber, Some(inner), 4);
         let h = g.size().y;
-        paint.galley(at(0.0, cy - 4.0), g, p.amber);
+        paint.galley(at(0.0, cy - 4.0), g, p.amber.into());
         cy += h + 8.0;
     }
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
@@ -502,7 +502,7 @@ fn kind_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &st
             }
             if !live {
                 let g = ux::galley(&paint, &tr("not yet"), types::CAPTION, p.text_muted, None);
-                paint.galley(pos2(r.right() - 10.0 - g.size().x, r.center().y - g.size().y / 2.0), g, p.text_muted);
+                paint.galley(pos2(r.right() - 10.0 - g.size().x, r.center().y - g.size().y / 2.0), g, p.text_muted.into());
             }
             if live && (resp.clicked() || (enter && reached == Some(i))) {
                 picked = Some(kind);

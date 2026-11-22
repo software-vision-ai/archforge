@@ -3,7 +3,6 @@
 //! Start-up order: arguments (an unknown option exits 2 before any I/O), `--version` (prints
 //! without logging), the logger, the panic hook, the settings directory, preferences, then the
 //! window, retried with the fallback graphics choice when the first one cannot start.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 #[cfg(test)]
@@ -399,7 +398,7 @@ mod tests {
         let order = id(tool("er_entity_add", json!({ "schema": schema, "name": "Order" })));
         tool("er_attribute_add", json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
         let places = id(tool("er_relationship_add", json!({ "from": customer, "to": order, "name": "places", "create_foreign_key": true })));
-        let diagram = id(tool("diagram_add", json!({ "kind": "er", "element": schema, "name": "Shop" })));
+        let diagram = id(tool("diagram_add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })));
         let c = id(tool("diagram_place", json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 })));
         let o = id(tool("diagram_place", json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 166 })));
         tool("diagram_connect", json!({ "diagram": diagram, "element": places, "source": c, "target": o })).unwrap();

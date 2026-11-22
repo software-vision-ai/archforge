@@ -1,6 +1,7 @@
 //! ER diagrams through the ER session: the diagram commands with the ER policy, refusals that
 //! change nothing, the cascades from the model into the diagrams, the open diagram in the view, the
 //! grid, the sweep, and seeded random sequences over model and diagram commands together.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_core::{MODEL, model};
 use archforge_diagram::{DIAGRAM, DiagramView, EDGE, Grid, Hit, LABEL, NODE, Rect};
@@ -64,7 +65,7 @@ fn sample(s: &mut Session) -> Sample {
         "er.relationship.add",
         json!({ "from": customer, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more", "name": "places" }),
     );
-    let diagram = run(s, "diagram.add", json!({ "kind": "er", "element": schema, "name": "shop" }));
+    let diagram = run(s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "shop" }));
     let customer_node = run(s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100 }));
     let order_node = run(s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 500, "y": 100 }));
     let edge = run(s, "diagram.connect", json!({ "diagram": diagram, "element": places, "source": customer_node, "target": order_node }));
@@ -111,13 +112,14 @@ fn round_trip(s: &mut Session, cmd: &str, p: &Json) {
     assert_eq!(picture(s.doc()), after, "redo of {cmd}");
 }
 
+/// An ER diagram is of a schema, shows its entities and connects them by relationships.
 #[test]
 fn the_er_policy_is_what_the_spec_says() {
-    let v = archforge_diagram::ProjectView::new(ALONE);
-    assert_eq!(v.kinds(), ["er"]);
-    assert!(v.is_of("er", SCHEMA) && !v.is_of("er", ENTITY));
-    assert!(v.shows("er", ENTITY) && !v.shows("er", ATTRIBUTE) && !v.shows("er", SCHEMA));
-    assert!(v.connects("er", RELATIONSHIP) && !v.connects("er", ENTITY));
+    let (v, er) = (archforge_diagram::ProjectView::new(ALONE), archforge_er::DIAGRAM_KIND);
+    assert_eq!(v.kinds(), [er]);
+    assert!(v.is_of(er, SCHEMA) && !v.is_of(er, ENTITY));
+    assert!(v.shows(er, ENTITY) && !v.shows(er, ATTRIBUTE) && !v.shows(er, SCHEMA));
+    assert!(v.connects(er, RELATIONSHIP) && !v.connects(er, ENTITY));
     assert_eq!(v.text_slots(RELATIONSHIP), ["name", "from_end", "to_end", "from_role", "to_role"]);
     assert!(v.text_slots(ENTITY).is_empty());
     assert_eq!(v.default_size(ENTITY), ENTITY_SIZE);
@@ -168,7 +170,7 @@ fn every_diagram_command_round_trips_on_the_er_session() {
     run(&mut s, "view.open-diagram", json!({ "diagram": sm.diagram }));
     assert_eq!(s.view().open_diagram, Some(obj(s.doc(), &sm.diagram)));
     let got = s.execute("diagram.get", &json!({ "diagram": sm.diagram })).unwrap().value;
-    assert_eq!(got["kind"], "er");
+    assert_eq!(got["kind"], archforge_er::DIAGRAM_KIND);
     assert_eq!(got["element"], sm.schema);
     assert_eq!(got["edges"].as_array().unwrap().len(), 1, "the anchor; `contains` from connect-all went with Product's node");
 }
@@ -182,9 +184,9 @@ fn refusals_follow_the_er_policy_and_change_nothing() {
     let elsewhere = run(&mut s, "er.entity.add", json!({ "schema": other, "name": "Elsewhere" }));
     let before = (picture(s.doc()), s.view().clone(), s.counter());
     let refused: Vec<(&str, Json)> = vec![
-        ("diagram.add", json!({ "kind": "uml.structure", "element": sm.schema })),
-        ("diagram.add", json!({ "kind": "er", "element": sm.customer })),
-        ("diagram.add", json!({ "kind": "er" })),
+        ("diagram.add", json!({ "kind": "other.kind", "element": sm.schema })),
+        ("diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": sm.customer })),
+        ("diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND })),
         ("diagram.place", json!({ "diagram": sm.diagram, "element": key, "x": 0, "y": 0 })),
         ("diagram.place", json!({ "diagram": sm.diagram, "element": sm.schema, "x": 0, "y": 0 })),
         ("diagram.place", json!({ "diagram": sm.diagram, "element": sm.customer, "x": 0, "y": 0 })),
@@ -254,7 +256,7 @@ fn without_a_model_root_no_diagram_can_be_added() {
     SchemaObj::set_name(&mut st, schema, Some("loose")).unwrap();
     let id = st.uuid(schema).unwrap().to_string();
     let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
-    let e = s.execute("diagram.add", &json!({ "kind": "er", "element": id })).unwrap_err();
+    let e = s.execute("diagram.add", &json!({ "kind": archforge_er::DIAGRAM_KIND, "element": id })).unwrap_err();
     assert!(e.to_string().contains("no model root"), "{e}");
     assert_eq!(s.doc().live(), 1, "nothing was created");
 }
@@ -326,7 +328,7 @@ fn random_call(rng: &mut Rng, s: &Session) -> (&'static str, Json) {
         ),
         3 => ("er.entity.remove", json!({ "entity": rng.pick(&entities) })),
         4 => ("er.relationship.remove", json!({ "relationship": rng.pick(&relationships) })),
-        5 if diagrams.len() < 2 => ("diagram.add", json!({ "kind": "er", "element": rng.pick(&schemas) })),
+        5 if diagrams.len() < 2 => ("diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": rng.pick(&schemas) })),
         5..=7 => ("diagram.place", json!({ "diagram": rng.pick(&diagrams), "element": rng.pick(&entities), "x": rng.coord(), "y": rng.coord() })),
         8 => (
             "diagram.connect",

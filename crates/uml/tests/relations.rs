@@ -2,6 +2,7 @@
 //! generalizations, dependencies between packages and classifiers and interface realizations
 //! drawn, wrong ends refused with nothing changed, relationships reconnected with their drawn lines following, and removed with the
 //! classes they touch; each one undo step; realizations saved as rows and read back; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
@@ -70,7 +71,7 @@ fn snapshot(s: &S) -> String {
 /// A package with classes `names`, on a class diagram that shows the first `shown` of them.
 fn classes(s: &mut S, names: &[&str], shown: usize) -> (String, String, Vec<String>, Vec<String>) {
     let pkg = run(s, "uml.package.add", json!({ "name": "sales" }));
-    let d = run(s, "diagram.add", json!({ "kind": "uml.structure", "element": pkg, "name": "sales" }));
+    let d = run(s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "sales" }));
     let mut ids = Vec::new();
     let mut nodes = Vec::new();
     for (i, n) in names.iter().enumerate() {

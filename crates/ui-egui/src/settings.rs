@@ -10,7 +10,8 @@
 //! the close button and Escape close it. A choice takes effect as it is made. It is modal: Tab stays
 //! in it, and the window behind takes no keys while it is open.
 
-use egui::{Color32, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Pos2, Rect, Response, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use ux::Colour;
 
 use crate::i18n::tr;
 use crate::ux::{self, Palette, icons, types};
@@ -126,7 +127,7 @@ pub(crate) fn button(
         paint.rect_stroke(r, 6.0, Stroke::new(1.0, edge), StrokeKind::Inside);
     }
     let g = ux::galley(&paint, label, types::UI, ink, None);
-    paint.galley(pos2(r.left() + 10.0, r.center().y - g.size().y / 2.0), g, ink);
+    paint.galley(pos2(r.left() + 10.0, r.center().y - g.size().y / 2.0), g, ink.into());
     focus_ring(&paint, p, r, 6.0, &resp);
     (r, resp)
 }
@@ -205,15 +206,15 @@ pub(crate) fn badge(paint: &egui::Painter, p: &Palette, y: f32, left: Option<f32
     let r = Rect::from_min_size(pos2(x, y), vec2(w, 20.0));
     paint.rect_filled(r, 10.0, tint);
     paint.circle_filled(pos2(r.left() + 11.0, r.center().y), 3.0, ink);
-    paint.galley(pos2(r.left() + 20.0, r.center().y - g.size().y / 2.0), g, ink);
+    paint.galley(pos2(r.left() + 20.0, r.center().y - g.size().y / 2.0), g, ink.into());
     r
 }
 
 /// Text wrapped at `width` into at most `rows` lines at `at`: gives its height.
-pub(crate) fn wrapped(paint: &egui::Painter, at: Pos2, width: f32, text: &str, ty: ux::Type, color: Color32, rows: usize) -> f32 {
+pub(crate) fn wrapped(paint: &egui::Painter, at: Pos2, width: f32, text: &str, ty: ux::Type, color: Colour, rows: usize) -> f32 {
     let g = ux::galley_rows(paint, text, ty, color, Some(width.max(0.0)), rows);
     let h = g.size().y;
-    paint.galley(at, g, color);
+    paint.galley(at, g, color.into());
     h
 }
 
@@ -244,7 +245,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         let size = vec2(WIDTH.min(window.width() - 2.0 * EDGE).max(0.0), (HEADER + body + FOOTER).min(window.height() - 2.0 * EDGE).max(0.0));
         let frame = Rect::from_center_size(window.center(), size);
         let paint = ui.painter().clone();
-        paint.add(egui::epaint::Shadow { offset: [0, 16], blur: 48, spread: 0, color: p.shadow }.as_shape(frame, 16.0));
+        paint.add(egui::epaint::Shadow { offset: [0, 16], blur: 48, spread: 0, color: p.shadow.into() }.as_shape(frame, 16.0));
         paint.rect_filled(frame, 16.0, p.surface);
         paint.rect_stroke(frame, 16.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
         let _ = ui.interact(frame, ui.scope_id().with("settings.frame"), Sense::CLICK);
@@ -331,7 +332,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         let resp = control(shell, ui, "settings.done", "button", done, true);
         let _ = resp.clone().accessible_name(tr("Done"));
         paint.rect_filled(done, 6.0, if resp.hovered() { p.accent_fill.gamma_multiply(0.9) } else { p.accent_fill });
-        paint.galley(done.center() - g.size() / 2.0, g, p.on_accent);
+        paint.galley(done.center() - g.size() / 2.0, g, p.on_accent.into());
         focus_ring(&paint, &p, done, 6.0, &resp);
         close |= resp.clicked();
     });
@@ -364,7 +365,7 @@ fn profile(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, dialog: &mut Dialo
     let edit = egui::TextEdit::singleline(&mut shell.state.user_name)
         .id(widgets::egui_id("settings.name"))
         .font(font)
-        .text_color(p.text)
+        .text_color(p.text.into())
         .hint_text(hint)
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
@@ -385,7 +386,7 @@ fn profile(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, dialog: &mut Dialo
     let avatar = Rect::from_center_size(pos2(field.right() + 24.0, field.center().y), Vec2::splat(28.0));
     paint.rect_filled(avatar, 14.0, p.accent_tint);
     let g = ux::galley(&paint, &avatar_initials(shell), types::CAPTION, p.accent, None);
-    paint.galley(avatar.center() - g.size() / 2.0, g, p.accent);
+    paint.galley(avatar.center() - g.size() / 2.0, g, p.accent.into());
     field.bottom() + 24.0 - top
 }
 

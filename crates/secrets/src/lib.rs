@@ -9,7 +9,6 @@
 //!
 //! Every call on [`KeyringStore`] may block while the system answers, and on macOS may show the
 //! system's own access prompt, so callers run them away from the interface thread.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 use std::borrow::Cow;
 use std::fmt;

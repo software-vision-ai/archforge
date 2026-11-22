@@ -4,6 +4,7 @@
 //! data type, primitive type, association class, attribute, operation or association below
 //! its subject, is inherited down the package tree and replaced by a deeper one of its name; each
 //! skill.add one undo step.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_core::skills::{EffectiveSkill, effective_skills, skills};
 use archforge_diagram::ProjectView;

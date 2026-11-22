@@ -790,7 +790,7 @@ fn drag_ghost(shell: &Shell, ui: &egui::Ui, p: &Palette, rows: &[Row]) {
     paint.rect_filled(chip, 6.0, p.surface);
     paint.rect_stroke(chip, 6.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     ux::icon_in(&paint, Rect::from_min_size(chip.min + vec2(10.0, 7.0), Vec2::splat(14.0)), row.icon, p.accent);
-    paint.galley(chip.min + vec2(30.0, (28.0 - g.size().y) / 2.0), g, p.text);
+    paint.galley(chip.min + vec2(30.0, (28.0 - g.size().y) / 2.0), g, p.text.into());
 }
 
 /// The filter field: a real text field narrowing the tree as it is typed.
@@ -806,7 +806,7 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .hint_text(egui::RichText::new(tr("Filter models…")).color(p.text_secondary).font(types::SMALL.font()))
         .char_limit(MAX_NAME)
         .desired_width(inner.width());
@@ -920,7 +920,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::UI.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .char_limit(MAX_NAME)
         .desired_width(inner.width());
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
@@ -1094,7 +1094,7 @@ fn menu_rows(
         }
         let detail = ux::galley(&paint, &item.detail, types::CAPTION, p.text_muted, Some(m.width() / 2.0));
         let dw = detail.size().x;
-        paint.galley(pos2(row.right() - 10.0 - dw, row.center().y - detail.size().y / 2.0), detail, p.text_muted);
+        paint.galley(pos2(row.right() - 10.0 - dw, row.center().y - detail.size().y / 2.0), detail, p.text_muted.into());
         ux::text_mid(&paint, x, row.center().y, &item.label, types::SMALL, ink, Some((row.right() - 18.0 - dw - x).max(0.0)));
         if item.live && resp.clicked() {
             clicked = Some(i);
@@ -1451,7 +1451,7 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
         let g = ux::galley(paint, &label, types::SMALL, ink, None);
         let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, dialog.bottom() - 48.0), pos2(x, dialog.bottom() - 20.0));
         paint.rect_filled(b, 6.0, if primary { p.danger } else { p.field });
-        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
+        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink.into());
         if control(shell, ui, id, "button", b, true).clicked() {
             shell.explorer.delete = None;
             if primary {

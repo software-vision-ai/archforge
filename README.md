@@ -97,10 +97,12 @@ Report security problems as [Security](SECURITY.md) describes, not in a public i
 cargo run -p archforge
 ```
 
-You need stable Rust 1.95 or later (the `rust-version` in `Cargo.toml`). On Linux, install the
-development packages for xkbcommon, Wayland, X11, Xrandr, Xi and Mesa GL first. The shared
-crates come from [craft-libs](https://github.com/storytold/craft-libs), by the ArtCraft team, always
-at its latest main.
+You need Rust from [rustup](https://rustup.rs): the first cargo command in the checkout installs the
+version `rust-toolchain.toml` names, the one the gate runs, whatever your default toolchain is (a
+cargo from a package manager ignores that file). On Linux, install the development packages for
+xkbcommon, Wayland, X11, Xrandr, Xi and Mesa GL first. The shared crates come from
+[craft-libs](https://github.com/storytold/craft-libs), by the ArtCraft team, following its main
+branch: `cargo xtask bump` moves `Cargo.lock` to its newest commit, in a pull request of its own.
 
 The interface is drawn in Inter. The build embeds it from a checkout of
 [craft-fonts](https://github.com/storytold/craft-fonts) next to this one (`CRAFT_FONTS_DIR` in
@@ -116,11 +118,10 @@ git clone https://github.com/storytold/craft-fonts ../craft-fonts
 cargo xtask ci
 ```
 
-first moves craft-libs to the newest commit of its main branch (in `Cargo.lock`), then runs every
-check the repository has, in order, and stops at the first failure: formatting, lints, tests, the
-asset attribution, the agent skills in `skills/` against the files they name, the crate layering, a
-build for `wasm32-unknown-unknown` and cargo-deny. It needs that target
-(`rustup target add wasm32-unknown-unknown`) and cargo-deny 0.20.2
+runs every check the repository has, in order, and stops at the first failure: formatting, lints,
+tests, the asset attribution, the agent skills in `skills/` against the files they name, the crate
+layering, a build for `wasm32-unknown-unknown` and cargo-deny. It needs that target, which
+`rust-toolchain.toml` lists so rustup installs it with the version, and cargo-deny 0.20.2
 (`cargo install --locked cargo-deny@0.20.2`), which fetches the RustSec advisory database, so the
 gate needs the network. The project database's tests need dolt 2.6 or later within major version 2 on
 the PATH, or its absolute path in `ARCHFORGE_DOLT`. `cargo xtask shot` renders the window offscreen to

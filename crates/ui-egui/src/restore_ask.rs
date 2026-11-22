@@ -185,7 +185,7 @@ fn card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, window: Rect, c: &Confirm
     ux::text(&paint, pos2(left, frame.top() + 20.0), &tr("Restore this version?"), types::DIALOG_TITLE, p.text, Some(inner));
     let mut y = frame.top() + 50.0;
     let h = line.size().y;
-    paint.galley(pos2(left, y), line, p.text);
+    paint.galley(pos2(left, y), line, p.text.into());
     y += h + 8.0;
     if c.failure.is_some() {
         paint.rect_filled(Rect::from_min_size(pos2(left, y), vec2(inner, text)), 8.0, p.danger_tint);
@@ -193,7 +193,7 @@ fn card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, window: Rect, c: &Confirm
     }
     for (g, ink) in blocks {
         let h = g.size().y;
-        paint.galley(pos2(left + inset, y), g, ink);
+        paint.galley(pos2(left + inset, y), g, ink.into());
         y += h + 6.0;
     }
     let words = (c.failure.is_none() || c.retry).then(|| if c.failure.is_some() { tr("Retry") } else { tr("Restore") });

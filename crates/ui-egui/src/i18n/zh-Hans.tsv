@@ -383,9 +383,9 @@ str		Step 1 of 2 · Choose what the diagram shows	第 1 步，共 2 步 · 选�
 str		Step 2 of 2 · Name it and say what it is of	第 2 步，共 2 步 · 为图命名并指定其对象
 str		Diagram name	图名称
 str		New ER diagram	新建ER图
-str		New class diagram	新建类图
+str		New UML structure diagram	新建UML结构图
 str		Tables, their columns and keys, and the relationships between them.	表及其列和键，以及表之间的关系。
-str		Classes with their attributes and operations, and the lines between them.	类及其属性和操作，以及它们之间的连线。
+str		Classes, packages and the relationships between them.	类、包以及它们之间的关系。
 str		Customer	客户
 str		Order	订单
 str		Create	创建
@@ -653,6 +653,7 @@ str		Rename branch	重命名分支
 str		The conversations and versions on this branch are not affected.	此分支上的对话和版本不受影响。
 str		The project changed before the branch was renamed, so its name stayed.	在重命名分支之前项目已更改，因此其名称保持不变。
 str		Couldn't rename the branch: {why}	无法重命名分支：{why}
+str		Another program is using this branch. Close that program, then try again.	另一个程序正在使用此分支。请关闭该程序，然后重试。
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge 无法确定分支是否已重命名为 {name}。请再次重命名为 {name} 以确认。
 str		Delete…	删除…
 str		Delete {branch}?	删除 {branch}？
@@ -779,8 +780,6 @@ str		The package's default diagram is not a class diagram. Choose one of its cla
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	该包的默认图属于另一个元素。请选择它自己的一个类图作为默认图。
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	此图是 {package} 的默认图。请先选择另一个类图作为 {package} 的默认图。
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} 将另一个元素的图作为其默认图，因此该图会保留。请先选择 {package} 自己的一个类图。
-str		The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.	来自 {client} 的依赖 {dependency} 依赖于 {package}，因此 {package} 保留。请先移除该依赖。
-str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} 通过依赖 {dependency} 依赖于 {supplier}，因此 {package} 保留。请先移除该依赖。
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	此连接已存在：依赖 {dependency}。请选择现有的关系。
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	所选的关系未连接这两个元素，或已不再连接。请在连接它们的关系中重新选择。未做任何更改。
 str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	所选的关系未连接这两个元素，或已不再连接，目前也没有任何关系连接它们。未做任何更改。
@@ -974,7 +973,6 @@ str		Skills	技能
 str		Filter models…	筛选模型…
 str		Filter diagrams…	筛选图…
 str		No diagrams yet	还没有图
-str		Other diagrams	其他图
 str		Select	选择
 str		Pan	平移
 str		Entity	实体
@@ -1365,8 +1363,8 @@ str		«primitive»	«primitive»
 str		Association class	关联类
 str		Classifier	分类器
 str		Classifier kinds	分类器类型
-str		Class diagram	类图
-str		Class diagrams	类图
+str		UML structure diagram	UML结构图
+str		UML structure diagrams	UML结构图
 str		Class · model, in every diagram	类 · 模型，在每个图中
 str		Interface · model, in every diagram	接口 · 模型，在每个图中
 str		Enumeration · model, in every diagram	枚举 · 模型，在每个图中

@@ -273,7 +273,7 @@ fn pane(
     let Some(on_it) = drawn.as_ref() else {
         paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         let g = ux::galley(&paint, &words, types::UI, p.text_muted, Some((card.width() - 48.0).max(0.0)));
-        paint.galley(card.center() - g.size() / 2.0, g, p.text_muted);
+        paint.galley(card.center() - g.size() / 2.0, g, p.text_muted.into());
         return;
     };
     let body = body_of(card);
@@ -390,7 +390,7 @@ fn label(
     clip.painter().rect_filled(area, 4.0, tint);
     clip.painter().rect_stroke(area, 4.0, Stroke::new(1.0, ink), StrokeKind::Inside);
     focus_ring(clip.painter(), p, area, 4.0, &resp);
-    clip.painter().galley(area.center() - g.size() / 2.0, g, ink);
+    clip.painter().galley(area.center() - g.size() / 2.0, g, ink.into());
     if resp.clicked() {
         *go = row;
     }

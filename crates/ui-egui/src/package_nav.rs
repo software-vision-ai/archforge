@@ -505,7 +505,7 @@ fn path_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, here: Obj, n
             crate::widgets::record_visible(ui, &mut shell.registry, &format!("workspace.canvas.path.{i}"), "text", b.intersect(bar));
         }
         let ink = if last { p.text } else { p.accent };
-        clip.galley(pos2(b.left() + 10.0, b.center().y - g.size().y / 2.0), g, ink);
+        clip.galley(pos2(b.left() + 10.0, b.center().y - g.size().y / 2.0), g, ink.into());
         x = b.right();
         if !last {
             chevron(x, b.center().y);
@@ -548,7 +548,7 @@ fn open_control(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj, 
         paint.rect_stroke(b.expand(2.0), 8.0, Stroke::new(2.0, p.focus), StrokeKind::Outside);
     }
     ux::icon_in(&paint, Rect::from_center_size(pos2(b.left() + 14.0, b.center().y), Vec2::splat(10.0)), &icons::OPEN_IN, p.on_accent);
-    paint.galley(pos2(b.left() + 24.0, b.center().y - g.size().y / 2.0), g, p.on_accent);
+    paint.galley(pos2(b.left() + 24.0, b.center().y - g.size().y / 2.0), g, p.on_accent.into());
     if resp.clicked() {
         enter(shell, package, now);
     }

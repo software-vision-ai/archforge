@@ -5,7 +5,6 @@
 //! Exit codes (BP-CS-6): 0 success, also for `--help`, `--version` and an output pipe closed after
 //! the work; 1 a failure the application or a command reported; 2 a usage error; 3 no application
 //! to reach (not running with `--control <port>`, or its token unreadable or not the current one).
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -538,6 +537,7 @@ mod tests {
         let all = infos().unwrap();
         let ids: Vec<&str> = all.iter().map(|c| c["id"].as_str().unwrap()).collect();
         let mut scopes = Vec::new();
+        let kinds = archforge_notations::kinds();
         for (compact, read_only) in [(false, false), (true, false), (false, true), (true, true)] {
             let catalog = archforge_mcp::Catalog::new(&all, compact).read_only(read_only);
             let list = catalog.list();
@@ -554,8 +554,8 @@ mod tests {
                 if word.contains('_') {
                     assert!(tools.contains(&word), "compact {compact}: {word} is not a listed tool");
                 } else if word.contains('.') {
-                    // A command id, or the kind diagram.add takes for a class diagram.
-                    assert!(ids.contains(&word) || word == "uml.structure", "compact {compact}: {word} is not a command");
+                    // A command id, or a diagram kind diagram.add takes, such as the class diagram's.
+                    assert!(ids.contains(&word) || kinds.contains(&word), "compact {compact}: {word} is not a command");
                 }
             }
             // Literals are built (AR-122), data types (AR-123), primitive types (AR-124) and

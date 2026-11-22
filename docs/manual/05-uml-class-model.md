@@ -1,9 +1,9 @@
 # A first UML class model
 
 Archforge models a software system. A model has several aspects: the previous chapter drew one,
-the system's database. This chapter draws another, the classes of its code, on a UML class
-diagram. A class diagram shows the things the software keeps track of, what each one knows and
-does, and how they are connected.
+the system's database. This chapter draws another, the classes of its code, on a UML structure
+diagram. A UML structure diagram shows the things the software keeps track of, what each one knows
+and does, the packages that hold them, and how they are connected.
 
 You build one small example from start to end: a shop's customers, the orders they place, an
 order's status and its total in money. Each step adds one kind of element. It says what the
@@ -16,8 +16,9 @@ Use the project you made in [Getting started](02-getting-started.md). The tables
 This chapter has four parts. You need only the first to make a useful model:
 
 - **A walkthrough in twelve steps**, after [the tools you will use](#the-tools-you-will-use): from
-  [a first class diagram](#1-make-a-class-diagram) to [a rule](#12-state-a-rule-constraints), then
-  [the result](#the-result) and [which element you need](#which-element-do-i-need).
+  [a first UML structure diagram](#1-make-a-uml-structure-diagram) to [a
+  rule](#12-state-a-rule-constraints), then [the result](#the-result) and [which element you
+  need](#which-element-do-i-need).
 - **[Organise the model in packages](#organise-the-model-in-packages)**, for a model that grows.
 - **[Going further](#going-further)**: short sections for more precise models, such as finding an
   item by a key, templates and your own stereotypes. Each stands on its own; read the ones you
@@ -28,12 +29,13 @@ This chapter has four parts. You need only the first to make a useful model:
 
 You make and change a class model in four places. Each step below says which one to use.
 
-- **The classifier tool** sits in the toolbar at the bottom of a class diagram, after **Select**
-  (the arrow) and **Pan** (the hand). It places a new card on the canvas. Its small chevron opens
-  the kinds menu: **Class**, **Interface**, **Enumeration**, **Data type** and **Primitive type**.
-  UML calls all of these *classifiers*. The tool shows the icon of the kind it places (for a
-  class, a small card with lines across it), and its tooltip names that kind. Archforge keeps the
-  kind you choose until you choose another; when you start Archforge again, it is **Class**.
+- **The classifier tool** sits in the toolbar at the bottom of a UML structure diagram, after
+  **Select** (the arrow) and **Pan** (the hand). It places a new card on the canvas. Its small
+  chevron opens the kinds menu: **Class**, **Interface**, **Enumeration**, **Data type** and
+  **Primitive type**. UML calls all of these *classifiers*. The tool shows the icon of the kind it
+  places (for a class, a small card with lines across it), and its tooltip names that kind.
+  Archforge keeps the kind you choose until you choose another; when you start Archforge again, it
+  is **Class**.
 - **The Relationship tool** sits after the **Package** tool (the folder), and shows the line it
   draws. It draws a line from one card to another. Its chevron opens a menu of kinds of line.
 - **Models**, in the left column, lists the model as a tree: its packages, the cards in them, and
@@ -52,21 +54,21 @@ After it places a card or draws a line, a tool hands back to **Select**.
 Keys are written for macOS, with Windows and Linux in brackets: ⌘↩ (Ctrl Enter) means the
 Command key and Return on a Mac, and the Control key and Enter elsewhere.
 
-## 1. Make a class diagram
+## 1. Make a UML structure diagram
 
 1. Choose the **+** at the start of the centre's tab strip. The **New diagram** dialog opens on
    its first step, a card for each kind of diagram.
-2. Choose the **Class diagram** card, then **Continue**. The second step asks for a **Name** and
-   a **Package**.
+2. Choose the **UML structure diagram** card, then **Continue**. The second step, **New UML
+   structure diagram**, asks for a **Name** and a **Package**.
 3. In **Name**, type *Commerce*.
 4. Leave **Package** as it is. It shows your project's name: this is the *root package*.
 5. Choose **Create**.
 
 An empty diagram opens in a tab named *Commerce*. The path bar at the canvas's top left shows the
-package the diagram belongs to: your project's name. In **Models**, the top row has the same
-name. That row is the root package: every class model has exactly one, and it holds everything
-that you don't put in a package of your own. Archforge makes it with your first class diagram, so
-you never set it up. **Properties** calls it *Model · the project's root*.
+package the diagram belongs to: your project's name. In **Models**, the top row has the same name.
+That row is the root package: every class model has exactly one, and it holds everything that you
+don't put in a package of your own. Archforge makes it with your first UML structure diagram, so you
+never set it up. **Properties** calls it *Model · the project's root*.
 
 What you make in this chapter is part of the *model*: it exists once, whichever diagrams show it.
 That is why **Properties** describes a class as *Class · model, in every diagram*: a change there
@@ -489,13 +491,13 @@ model is easier to read when each area of the system has its own package, such a
 
 ### Packages on a diagram, and the diagram inside each
 
-A package can sit on a class diagram beside classes, drawn as a card with a tab, like a folder.
-The tab holds the package's name and is as wide as the name needs, up to the card's width; a
-longer name ends in "…", and pointing at the tab shows it whole. Every package on a diagram leads
-to a class diagram of its own, and the card shows that diagram in small: its classes and packages
-where they sit there, and the lines between them. When you change that diagram, the card follows.
-A package whose diagram has nothing on it says *Empty diagram*. Zoomed out below 50 %, the card
-shows the package's name in its middle instead, as every card does.
+A package can sit on a UML structure diagram beside classes, drawn as a card with a tab, like a
+folder. The tab holds the package's name and is as wide as the name needs, up to the card's width; a
+longer name ends in "…", and pointing at the tab shows it whole. Every package on a diagram leads to
+a UML structure diagram of its own, and the card shows that diagram in small: its classes and
+packages where they sit there, and the lines between them. When you change that diagram, the card
+follows. A package whose diagram has nothing on it says *Empty diagram*. Zoomed out below 50 %, the
+card shows the package's name in its middle instead, as every card does.
 
 Under each package's card a line says where the package lives: *Owner:* and the packages from your
 project's root down to the one that holds it, such as *Owner: Commerce platform › Operations*. A
@@ -514,19 +516,19 @@ card where nothing lies over it to select the package.
 - **Add one** with the **Package** tool of the toolbar: click where it goes and type its name. The
   package goes into the diagram's package, and its own diagram, named like it, is made with it.
   Both are one step you can undo.
-- **Show one from anywhere.** Drag any package's row from **Models** onto a class diagram, whichever
-  package holds it, and its card lands where you let go. The package stays where it is in Models;
-  the line under its card names its owner. It gets its own diagram if it has none yet, in the same
-  step you can undo. A diagram shows a package once: dropping it again says it is already on this
-  diagram. Removing the card from the diagram leaves the package in Models.
-- **Go in.** Select the package and choose **Open** on its card, or press ⌘↓ (Ctrl+↓). Or zoom in
-  on it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or the + key after
-  clicking on empty canvas. Once the package covers most of the view, its diagram opens. However you go in,
-  the package's diagram opens at 100 %, what it shows centred. It is the package's default
-  diagram: at first the first class diagram made for it, until a different one is chosen as its
-  default (for now, by an agent with `uml.package.default.set`). Going in never makes a diagram: a package with no
-  class diagram yet, or whose default diagram can't be read, stays closed, and a note under the
-  path bar says why. A double click still renames the package, as it does a class.
+- **Show one from anywhere.** Drag any package's row from **Models** onto a UML structure diagram,
+  whichever package holds it, and its card lands where you let go. The package stays where it is in
+  Models; the line under its card names its owner. It gets its own diagram if it has none yet, in
+  the same step you can undo. A diagram shows a package once: dropping it again says it is already
+  on this diagram. Removing the card from the diagram leaves the package in Models.
+- **Go in.** Select the package and choose **Open** on its card, or press ⌘↓ (Ctrl+↓). Or zoom in on
+  it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or the + key after clicking on
+  empty canvas. Once the package covers most of the view, its diagram opens. However you go in, the
+  package's diagram opens at 100 %, what it shows centred. It is the package's default diagram: at
+  first the first UML structure diagram made for it, until a different one is chosen as its default
+  (for now, by an agent with `uml.package.default.set`). Going in never makes a diagram: a package
+  with no UML structure diagram yet, or whose default diagram can't be read, stays closed, and a
+  note under the path bar says why. A double click still renames the package, as it does a class.
 - **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
   least zoom, 10 %. Reach 10 % and the diagram you went in from opens again, even when that
   diagram belongs to another branch of your model, as you left it, provided it has a card of the
@@ -558,7 +560,7 @@ One gesture makes one switch: after a switch, keep zooming and you stay where yo
 then zoom again to go on. Renaming a package renames its diagram too, as long as the diagram
 still carries the package's name.
 
-<!-- picture: workspace-packages light | A class diagram of the root package: Customer and two packages, Sales selected with its Open and its own diagram in small, Billing's diagram empty -->
+<!-- picture: workspace-packages light | A UML structure diagram of the root package: Customer and two packages, Sales selected with its Open and its own diagram in small, Billing's diagram empty -->
 
 <!-- picture: workspace-inside-package dark | Inside Sales: its classes, its own package Payments, and the path bar back to the root -->
 
@@ -566,18 +568,18 @@ still carries the package's name.
 
 ### Move an element into a package
 
-Drag a classifier's row in **Models** onto a package's row to move it there, or pick the package
-as its **Owner** in **Properties** (see [Nested classifiers](#nested-classifiers)). A classifier of
-another package on a diagram is drawn dimmed, its package named above its name. Removing a
-package hands what it holds up to the package around it, in the end the root package, which
-itself stays. Its class diagrams go up too, as more diagrams of the package around it, whose
-default diagram stays. When packages around it are removed at the same time, its class diagrams
-go to the first package above all of them that stays, even past a package that is only moved
-up. When the package that would take them has no diagram yet, or no valid default diagram, the
-package is kept and the message names that package: create a class diagram for it, which
-becomes its default when it has none at all, or choose one of its class diagrams as its default
-(for now, by an agent with `uml.package.default.set`). When its default names a diagram that is
-gone or another package's and it has no class diagram of its own, do both: create the class
+Drag a classifier's row in **Models** onto a package's row to move it there, or pick the package as
+its **Owner** in **Properties** (see [Nested classifiers](#nested-classifiers)). A classifier of
+another package on a diagram is drawn dimmed, its package named above its name. Removing a package
+hands what it holds up to the package around it, in the end the root package, which itself stays.
+Its UML structure diagrams go up too, as more diagrams of the package around it, whose default
+diagram stays. When packages around it are removed at the same time, its UML structure diagrams go
+to the first package above all of them that stays, even past a package that is only moved up. When
+the package that would take them has no diagram yet, or no valid default diagram, the package is
+kept and the message names that package: create a UML structure diagram for it, which becomes its
+default when it has none at all, or choose one of its UML structure diagrams as its default (for
+now, by an agent with `uml.package.default.set`). When its default names a diagram that is gone or
+another package's and it has no UML structure diagram of its own, do both: create the UML structure
 diagram first, then choose it as the default.
 
 ### Move a package
@@ -711,9 +713,10 @@ which catalog. Lines between pairs of classes cannot say which catalog recommend
 to whom. An association that joins three or more classes at once is an *n-ary association*. It is
 drawn as a diamond with a leg to each class.
 
-Start with a new class diagram, so the legs have room.
+Start with a new UML structure diagram, so the legs have room.
 
-1. Make a class diagram named *Recommendations*, as in [step 1](#1-make-a-class-diagram).
+1. Make a UML structure diagram named *Recommendations*, as in [step
+   1](#1-make-a-uml-structure-diagram).
 2. Drag *Customer*'s row from **Models** onto the canvas, towards the top left.
 3. Drag *Product*'s row onto the canvas, towards the top right.
 4. Choose the classifier tool (its tooltip says **Class**) and click below the two cards.
@@ -763,9 +766,9 @@ kind of payment. It does not say whether the kinds cover every payment, or wheth
 be two kinds at once. A *generalization set* groups the generalizations to one class and says
 both.
 
-Start with a new class diagram for payments.
+Start with a new UML structure diagram for payments.
 
-1. Make a class diagram named *Payments*, as in [step 1](#1-make-a-class-diagram).
+1. Make a UML structure diagram named *Payments*, as in [step 1](#1-make-a-uml-structure-diagram).
 2. With the classifier tool on **Class**, click near the top and add the class *Payment*.
 3. With *Payment* selected, press ⌘↩ (Ctrl Enter), type *amount*, press Tab, type *Money*, and
    press Enter. Press Escape.
@@ -912,9 +915,9 @@ type *Key*. The blanks are its *template parameters*.
 Defining the template, with its blanks, is one task. Using it for orders, with the blanks filled
 in, is another: [binding it](#fill-in-a-template-binding-it), in the next section.
 
-Start with a new class diagram.
+Start with a new UML structure diagram.
 
-1. Make a class diagram named *Storage*, as in [step 1](#1-make-a-class-diagram).
+1. Make a UML structure diagram named *Storage*, as in [step 1](#1-make-a-uml-structure-diagram).
 2. With the classifier tool on **Class**, click on the canvas and add the class *Repository*.
 3. With *Repository* selected, choose **+** beside **Template parameters · 0** in **Properties**.
    The parameter's editor opens.
@@ -1630,7 +1633,8 @@ extend are UML model elements of their own, saved with the model, not labels or 
   Commerce: «Entity» on Order and Customer, «Id» on 2 elements, «Reference» on places. Remove
   those first.* **Show the 5 uses** selects them. Renaming a profile or a stereotype keeps every
   use. Deleting a package refuses the same way when its elements would lose the profile that
-  reaches them, and when it would take along a profile that is in use.
+  reaches them, and when it would take along a profile that is in use. Stereotypes on a
+  dependency deleted with the package go with it and do not count.
 - **Deleting a used element** itself, such as *Order*, asks first, from **Models** too, and the
   dialog names the stereotype applications that go with it and with what it takes along: *3
   stereotype applications go with it: «Entity» on Order, «Id» on id,
@@ -1680,10 +1684,10 @@ stereotypes. A stereotype and its values are model data, saved with the model.
   line's stereotypes sit above its name: *«Reference»*. An n-ary association's sit above its
   diamond's name, and an end's at the middle of its leg. **Models** shows them, muted, after the
   element's name.
-- **Show stereotype values on this diagram**, under the section while a class diagram is open,
-  lists the values set on each card in a compartment per stereotype, *«Entity»* then *table =
-  "orders"*; a property left to its default is not listed. Each diagram keeps its own choice.
-  Turned on, cards that would hide a value grow, in the same step.
+- **Show stereotype values on this diagram**, under the section while a UML structure diagram is
+  open, lists the values set on each card in a compartment per stereotype, *«Entity»* then *table =
+  "orders"*; a property left to its default is not listed. Each diagram keeps its own choice. Turned
+  on, cards that would hide a value grow, in the same step.
 - **Nothing is lost unseen.** While a value is set, the stereotype's property is not deleted, given
   another type, or given a multiplicity the value breaks, and a literal a value names is not
   deleted: each is refused, saying which value to change first.
@@ -1713,9 +1717,10 @@ the model; **Delete from the model…** (⇧⌫) asks first, then deletes it eve
   goes with it.
 - Deleting an association class takes its ends, attributes and operations with it. Removing a
   class at either end takes the association class along.
-- A package that a dependency starts at or depends on is not deleted while that dependency
-  stays: Archforge names the dependency and its other end, and you delete the dependency first.
-  For now this holds for both ends; a later version deletes such dependencies with the package.
+- Deleting a package deletes the dependencies that start at it or depend on it, and those of
+  every package it deletes with it, in the same step; their lines go from every diagram. A
+  dependency a package inside another only holds, between elements that stay, moves up with the
+  rest of what it holds.
 - An association class's row in **Models** can be dragged onto a diagram to place its card; where
   the diagram shows both its classes, its line comes too. A diagram may also show the line
   without the card: the line then carries the name at its middle, and Delete on it takes it only

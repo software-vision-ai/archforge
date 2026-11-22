@@ -713,7 +713,7 @@ fn an_open_editor_stops_every_way_of_leaving() {
 #[test]
 fn leaving_closes_a_colour_picker_and_a_refusal_keeps_it() {
     use crate::appearance::{Group, Picker};
-    let picker = || Some(Picker::new(Group::Fill, egui::Color32::RED));
+    let picker = || Some(Picker::new(Group::Fill, crate::ux::data_colour(0xFF, 0x00, 0x00)));
     in_both(|mut h, _| {
         let earlier = rows_now(&h);
         h.state_mut().panels.picker = picker();
@@ -1078,9 +1078,9 @@ fn refused_over_a_diagram(h: &mut Harness<'static, Shell>, host: &SavingHost) ->
 /// The centres of the amber dots the last frame painted within `area`.
 fn amber_dots(h: &Harness<'static, Shell>, area: egui::Rect) -> Vec<egui::Pos2> {
     /// Adds the centre of every circle filled `amber` under `s` to `out`.
-    fn walk(s: &egui::Shape, amber: egui::Color32, out: &mut Vec<egui::Pos2>) {
+    fn walk(s: &egui::Shape, amber: crate::ux::Colour, out: &mut Vec<egui::Pos2>) {
         match s {
-            egui::Shape::Circle(c) if c.fill == amber => out.push(c.center),
+            egui::Shape::Circle(c) if crate::ux::drawn(c.fill) == amber => out.push(c.center),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, amber, out)),
             _ => {}
         }
@@ -1093,11 +1093,11 @@ fn amber_dots(h: &Harness<'static, Shell>, area: egui::Rect) -> Vec<egui::Pos2> 
 }
 
 /// The colour the last frame painted `words` in.
-fn ink_of(h: &Harness<'static, Shell>, words: &str) -> Option<egui::Color32> {
+fn ink_of(h: &Harness<'static, Shell>, words: &str) -> Option<crate::ux::Colour> {
     /// The colour of the first text under `s` that reads `words`, if any does.
-    fn walk(s: &egui::Shape, words: &str) -> Option<egui::Color32> {
+    fn walk(s: &egui::Shape, words: &str) -> Option<crate::ux::Colour> {
         match s {
-            egui::Shape::Text(t) if t.galley.text() == words => Some(t.galley.job.sections[0].format.color),
+            egui::Shape::Text(t) if t.galley.text() == words => Some(crate::ux::drawn(t.galley.job.sections[0].format.color)),
             egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, words)),
             _ => None,
         }
@@ -1255,7 +1255,9 @@ fn what_is_said_after_a_refused_step_stays_the_caption() {
 /// Adds a diagram named `name` of a schema of its own, and gives its id.
 fn add_diagram(h: &mut Harness<'static, Shell>, name: &str) -> archforge_mof::Uuid {
     let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": name })).unwrap()["id"].clone();
-    let made = crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": name })).unwrap();
+    let made =
+        crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": name }))
+            .unwrap();
     made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap()
 }
 
@@ -1683,9 +1685,9 @@ fn versions_clock_at(h: &Harness<'static, Shell>, centre: egui::Pos2) -> bool {
 fn icon_dot(h: &Harness<'static, Shell>, chip: egui::Rect) -> bool {
     let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
     /// Whether a 3-point circle of `fill` is drawn at `at` under `s`.
-    fn walk(s: &egui::Shape, at: egui::Pos2, fill: egui::Color32) -> bool {
+    fn walk(s: &egui::Shape, at: egui::Pos2, fill: crate::ux::Colour) -> bool {
         match s {
-            egui::Shape::Circle(c) => c.center.distance(at) < 0.5 && c.fill == fill && (c.radius - 3.0).abs() < 0.01,
+            egui::Shape::Circle(c) => c.center.distance(at) < 0.5 && crate::ux::drawn(c.fill) == fill && (c.radius - 3.0).abs() < 0.01,
             egui::Shape::Vec(v) => v.iter().any(|s| walk(s, at, fill)),
             _ => false,
         }

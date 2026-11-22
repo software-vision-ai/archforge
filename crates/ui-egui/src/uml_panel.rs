@@ -277,7 +277,7 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         let paint = ui.painter().clone();
         let g = ux::galley_rows(&paint, &help, types::CAPTION, p.text_muted, Some(width.max(0.0)), 4);
         let tall = g.size().y;
-        paint.galley(pos2(r.left() + PAD, y), g, p.text_muted);
+        paint.galley(pos2(r.left() + PAD, y), g, p.text_muted.into());
         y += tall + 14.0;
     }
     // An interface is abstract by what it is: it has no Abstract of its own.
@@ -361,7 +361,7 @@ fn final_check(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     let paint = ui.painter().clone();
     let said = ux::galley_rows(&paint, &explained, types::CAPTION, p.text_muted, Some((width - 24.0).max(0.0)), 3);
     let tall = said.size().y;
-    paint.galley(pos2(left + 24.0, y + 22.0), said, p.text_muted);
+    paint.galley(pos2(left + 24.0, y + 22.0), said, p.text_muted.into());
     y += 22.0 + tall + 12.0;
     if on != was {
         if on && !below.is_empty() {
@@ -384,7 +384,7 @@ fn final_check(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         let card = Rect::from_min_size(pos2(left, y), vec2(width, text.size().y + 20.0));
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
-        paint.galley(pos2(left + 32.0, y + 10.0), text, p.text);
+        paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
         crate::widgets::record_visible(ui, &mut shell.registry, &format!("{FINAL_ID}.refusal"), "text", card);
         y = card.bottom() + 12.0;
         // A button that selects their generalizations, for Delete to remove them.
@@ -393,7 +393,7 @@ fn final_check(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         let g = ux::galley(&paint, &label, types::UI, p.text, None);
         let b = Rect::from_min_size(pos2(left, y), vec2((g.size().x + 24.0).min(width), FIELD));
         paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-        paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text);
+        paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text.into());
         if control(shell, ui, &format!("{FINAL_ID}.select"), "button", b, true).accessible_name(label).clicked() {
             let ids: Vec<String> = below.iter().map(|(g, _)| g.to_string()).collect();
             shell.panels.final_refused = None;
@@ -462,14 +462,14 @@ pub(crate) fn explained_check(
     let paint = ui.painter().clone();
     let said = ux::galley_rows(&paint, explained, types::CAPTION, p.text_muted, Some((width - 24.0).max(0.0)), 3);
     let tall = said.size().y;
-    paint.galley(pos2(at.x + 24.0, at.y + 22.0), said, p.text_muted);
+    paint.galley(pos2(at.x + 24.0, at.y + 22.0), said, p.text_muted.into());
     let mut y = at.y + 22.0 + tall + 12.0;
     if let Some(why) = refused {
         let text = ux::galley_rows(&paint, why, types::SMALL, p.text, Some((width - 42.0).max(0.0)), 8);
         let card = Rect::from_min_size(pos2(at.x, y), vec2(width, text.size().y + 20.0));
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(at.x + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
-        paint.galley(pos2(at.x + 32.0, y + 10.0), text, p.text);
+        paint.galley(pos2(at.x + 32.0, y + 10.0), text, p.text.into());
         crate::widgets::record_visible(ui, &mut shell.registry, &format!("{id}.refusal"), "text", card);
         y = card.bottom() + 12.0;
     }
@@ -855,7 +855,7 @@ fn bare_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect, id
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .char_limit(limit)
         .hint_text(egui::RichText::new(label).color(p.text_muted).font(types::SMALL.font()))
         .desired_width(inner.width());
@@ -1172,7 +1172,7 @@ fn refusal_under(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32,
         (Some(why), Some(field)) if fields.contains(&field) => {
             let said = ux::galley_rows(paint, why, types::CAPTION, p.amber, Some(width), 4);
             let height = said.size().y;
-            paint.galley(at - vec2(0.0, 4.0), said, p.amber);
+            paint.galley(at - vec2(0.0, 4.0), said, p.amber.into());
             at.y + height + 6.0
         }
         _ => at.y,
@@ -1275,7 +1275,7 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
         if empty {
             let g = ux::galley_rows(&paint, &text, types::CAPTION, p.text_muted, Some(half), 2);
             said = said.max(g.size().y);
-            paint.galley(pos2(x, y), g, p.text_muted);
+            paint.galley(pos2(x, y), g, p.text_muted.into());
         }
     }
     if said > 0.0 {

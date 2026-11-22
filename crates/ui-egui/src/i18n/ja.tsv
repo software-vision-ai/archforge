@@ -383,9 +383,9 @@ str		Step 1 of 2 · Choose what the diagram shows	ステップ 1/2 · 図の種�
 str		Step 2 of 2 · Name it and say what it is of	ステップ 2/2 · 名前と対象を指定
 str		Diagram name	図の名前
 str		New ER diagram	新しいER図
-str		New class diagram	新しいクラス図
+str		New UML structure diagram	新しいUML構造図
 str		Tables, their columns and keys, and the relationships between them.	テーブルとその列やキー、そしてテーブル間のリレーションシップ。
-str		Classes with their attributes and operations, and the lines between them.	属性と操作を持つクラスと、その間の線。
+str		Classes, packages and the relationships between them.	クラス、パッケージ、およびそれらの間の関係。
 str		Customer	顧客
 str		Order	注文
 str		Create	作成
@@ -653,6 +653,7 @@ str		Rename branch	ブランチの名前を変更
 str		The conversations and versions on this branch are not affected.	このブランチの会話とバージョンには影響しません。
 str		The project changed before the branch was renamed, so its name stayed.	名前を変更する前にプロジェクトが変わったため、ブランチの名前はそのままです。
 str		Couldn't rename the branch: {why}	ブランチの名前を変更できませんでした: {why}
+str		Another program is using this branch. Close that program, then try again.	別のプログラムがこのブランチを使用しています。そのプログラムを閉じてから、もう一度お試しください。
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	ブランチの名前が {name} に変更されたかどうか Archforge では判断できませんでした。確かめるには、もう一度 {name} に変更してください。
 str		Delete…	削除…
 str		Delete {branch}?	{branch} を削除しますか？
@@ -779,8 +780,6 @@ str		The package's default diagram is not a class diagram. Choose one of its cla
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	このパッケージの既定の図は別の要素のものです。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	この図は {package} の既定の図です。先に別のクラス図を {package} の既定の図として選んでください。
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} は別の要素の図を既定の図にしているため、その図は残ります。先に {package} 自身のクラス図のいずれかを選んでください。
-str		The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.	{client} からの依存 {dependency} が {package} に依存しているため、{package} は残ります。先にその依存を外してください。
-str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} は依存 {dependency} によって {supplier} に依存しているため、{package} は残ります。先にその依存を外してください。
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	この接続はすでに存在します（依存 {dependency}）。既存のリレーションシップを選択してください。
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	選択したリレーションシップはこの 2 つの要素を結んでいないか、もう結んでいません。結んでいるものの中からもう一度選択してください。何も変更されていません。
 str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	選択したリレーションシップはこの 2 つの要素を結んでいないか、もう結んでおらず、現在結んでいるものはありません。何も変更されていません。
@@ -974,7 +973,6 @@ str		Skills	スキル
 str		Filter models…	モデルを絞り込む…
 str		Filter diagrams…	図を絞り込む…
 str		No diagrams yet	図はまだありません
-str		Other diagrams	その他の図
 str		Select	選択
 str		Pan	パン
 str		Entity	エンティティ
@@ -1365,8 +1363,8 @@ str		«primitive»	«primitive»
 str		Association class	関連クラス
 str		Classifier	分類子
 str		Classifier kinds	分類子の種類
-str		Class diagram	クラス図
-str		Class diagrams	クラス図
+str		UML structure diagram	UML構造図
+str		UML structure diagrams	UML構造図
 str		Class · model, in every diagram	クラス · モデル、すべての図に
 str		Interface · model, in every diagram	インターフェース · モデル、すべての図に
 str		Enumeration · model, in every diagram	列挙 · モデル、すべての図に

@@ -608,10 +608,17 @@ pub fn profile_uses(store: &Store, profile: Obj) -> Uses {
 /// elements inside `package` that no other package around them applies it to. An application
 /// tracing to no element is never counted here: no scope holds it.
 pub fn unapply_uses(store: &Store, package: Obj, profile: Obj) -> Uses {
+    stranded(store, package, profile, &[])
+}
+
+/// The uses unapplying `profile` from `package` would strand ([`unapply_uses`]), but for those on
+/// an element among `going`, or inside one, which go with it.
+fn stranded(store: &Store, package: Obj, profile: Obj, going: &[Obj]) -> Uses {
     uses_where(store, &stereotypes(store, profile), |a| {
         a.element.is_some_and(|e| {
             let around = scopes(store, e);
-            around.contains(&package) && !around.iter().any(|p| *p != package && applied(store, *p).iter().any(|(_, x)| *x == profile))
+            let goes = going.iter().any(|g| *g == e || store.contains(*g, e));
+            !goes && around.contains(&package) && !around.iter().any(|p| *p != package && applied(store, *p).iter().any(|(_, x)| *x == profile))
         })
     })
 }
@@ -642,11 +649,13 @@ pub fn moving_uses(store: &Store, moved: Obj, to: Obj) -> Uses {
 }
 
 /// The uses removing `package` would strand: applications on elements it hands up to its parent
-/// whose profile only it applies there.
-pub fn removal_uses(store: &Store, package: Obj) -> Uses {
+/// whose profile only it applies there. Those on an element among `going`, or inside one, go with
+/// it and strand nothing: a dependency at a package that goes, say ([`crate::commands::dependencies_going`],
+/// AR-698).
+pub fn removal_uses(store: &Store, package: Obj, going: &[Obj]) -> Uses {
     let mut uses = Uses::default();
     for (_, profile) in applied(store, package) {
-        uses.merge(unapply_uses(store, package, profile));
+        uses.merge(stranded(store, package, profile, going));
     }
     uses
 }
@@ -712,10 +721,18 @@ pub fn stranding(store: &Store, key: &str, moved: Obj, uses: &Uses) -> CommandEr
     in_use(store, key, Used::MovedAway(name_of(store, moved)), uses)
 }
 
-/// Why `objs` may not be removed for their uses, when that is so: a profile or a stereotype whose
-/// stereotypes are applied, a stereotype property whose values are set, a package whose profile
-/// applications its contents need; and the library and its metaclasses, which are UML's own.
+/// Why `o` may not be removed on its own for its uses, when that is so, as Models says before it
+/// asks: [`removal_problem_with`] with what goes with `o` alone
+/// ([`crate::commands::dependencies_going`]).
 pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
+    removal_problem_with(store, o, &crate::commands::dependencies_going(store, &[o]))
+}
+
+/// Why `o` may not be removed for its uses, when that is so: a profile or a stereotype whose
+/// stereotypes are applied, a stereotype property whose values are set, a package whose profile
+/// applications its contents need, but for those on an element among `going`, or inside one, which
+/// go with it (AR-698); and the library and its metaclasses, which are UML's own.
+pub fn removal_problem_with(store: &Store, o: Obj, going: &[Obj]) -> Option<CommandError> {
     if let Some(refused) = library_refusal(store, "ids", o) {
         return Some(refused);
     }
@@ -734,7 +751,7 @@ pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
                     }
                 }
             }
-            let uses = removal_uses(store, o);
+            let uses = removal_uses(store, o, going);
             if uses.is_empty() {
                 return None;
             }

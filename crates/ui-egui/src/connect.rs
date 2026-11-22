@@ -130,8 +130,8 @@ pub(crate) fn sample_line(
     centre: Pos2,
     from: Option<Cardinality>,
     to: Option<Cardinality>,
-    ink: egui::Color32,
-    fill: egui::Color32,
+    ink: ux::Colour,
+    fill: ux::Colour,
 ) {
     let z = 0.7;
     let (a, b) = (centre - vec2(18.0, 0.0), centre + vec2(18.0, 0.0));
@@ -143,15 +143,7 @@ pub(crate) fn sample_line(
 
 /// The relationship tool's icon: a line with the ends the tool draws, at the size the popover's
 /// samples show them, across its double-width button, over `fill`.
-pub(crate) fn tool_line(
-    paint: &egui::Painter,
-    p: &Palette,
-    centre: Pos2,
-    from: Cardinality,
-    to: Cardinality,
-    ink: egui::Color32,
-    fill: egui::Color32,
-) {
+pub(crate) fn tool_line(paint: &egui::Painter, p: &Palette, centre: Pos2, from: Cardinality, to: Cardinality, ink: ux::Colour, fill: ux::Colour) {
     let z = 0.7;
     let (a, b) = (centre - vec2(24.0, 0.0), centre + vec2(24.0, 0.0));
     let stroke = Stroke::new(1.2, ink);
@@ -174,7 +166,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     ux::text(&paint, at(16.0, 14.0), &tr("Cardinality").to_uppercase(), types::EYEBROW, p.text_secondary, Some(160.0));
     let readout = format!("{} — {}", cardinality_text(kind.from), cardinality_text(kind.to));
     let g = ux::galley(&paint, &readout, types::SMALL, p.text, None);
-    paint.galley(pos2(m.right() - 16.0 - g.size().x, m.top() + 14.0), g, p.text);
+    paint.galley(pos2(m.right() - 16.0 - g.size().x, m.top() + 14.0), g, p.text.into());
     let mut next = kind;
     // Three rows of four choices.
     let rows: [(&str, f32); 3] = [("Presets", 50.0), ("Start", 118.0), ("End", 186.0)];
@@ -386,7 +378,7 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
             .frame(egui::Frame::NONE)
             .margin(egui::Margin::ZERO)
             .font(types::SMALL.font())
-            .text_color(p.text)
+            .text_color(p.text.into())
             .char_limit(archforge_er::rules::MAX_NAME)
             .desired_width(inner.width());
         let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
@@ -401,7 +393,7 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
             break;
         }
         paint.rect_filled(b, 6.0, p.field);
-        paint.galley(b.min + vec2(8.0, 4.0), g, p.text);
+        paint.galley(b.min + vec2(8.0, 4.0), g, p.text.into());
         cx = b.right() + 8.0;
     }
     if let Some(refused) = &offer.refused {
@@ -415,7 +407,7 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
         let g = ux::galley(&paint, &label, types::SMALL, ink, None);
         let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, m.bottom() - 44.0), pos2(x, m.bottom() - 16.0));
         paint.rect_filled(b, 6.0, if primary { p.accent_fill } else { p.field });
-        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
+        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink.into());
         if control(shell, ui, id, "button", b, true).clicked() {
             action = Some(primary);
         }
@@ -554,8 +546,8 @@ pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.text);
     let b = Rect::from_min_size(pos2(m.right() - 8.0 - undo_w, m.center().y - 14.0), vec2(undo_w, 28.0));
-    paint.galley(pos2(m.left() + 16.0, m.center().y - text.size().y / 2.0), text, p.surface);
-    paint.galley(b.min + vec2(8.0, (b.height() - undo.size().y) / 2.0), undo, p.accent_tint);
+    paint.galley(pos2(m.left() + 16.0, m.center().y - text.size().y / 2.0), text, p.surface.into());
+    paint.galley(b.min + vec2(8.0, (b.height() - undo.size().y) / 2.0), undo, p.accent_tint.into());
     widgets::record_visible(ui, &mut shell.registry, "workspace.toast", "toast", m);
     if control(shell, ui, "workspace.toast.undo", "button", b, true).clicked() {
         shell.canvas.toast = None;
@@ -577,7 +569,7 @@ pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, con
         ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(10.0)), &icons::PLUS, p.key_foreign);
     } else {
         let g = ux::galley(&paint, "!", types::CAPTION, p.key_foreign, None);
-        paint.galley(b.center() - g.size() / 2.0, g, p.key_foreign);
+        paint.galley(b.center() - g.size() / 2.0, g, p.key_foreign.into());
     }
     let hint = if many_to_many { tr("Many to many · add a mapping table") } else { texts.join("\n") };
     // Live for its hover; only a many-to-many badge acts on a click.

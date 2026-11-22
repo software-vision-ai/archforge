@@ -22,7 +22,6 @@
 //! [`REVOKED`] and closes them, and its queued requests see their liveness go false; closing a
 //! server (dropping it) revokes every token it granted, so a connection authenticated before the
 //! close is never served after it.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 #[cfg(unix)]
 use std::io::Read;
@@ -427,7 +426,7 @@ impl Shared {
             }
         }
         if let Some((path, file)) = &gone.file {
-            remove_token_file(path, *file);
+            remove_token_file(path, *file, &gone.token);
         }
     }
 }
@@ -747,7 +746,7 @@ fn create_token_file(path: &Path, token: &str) -> Result<FileId, Created> {
         Err(e) => {
             // Made by this call, so it is ours to remove.
             if let Ok(m) = f.metadata() {
-                remove_token_file(path, FileId { dev: m.dev(), ino: m.ino() });
+                remove_same_file(path, FileId { dev: m.dev(), ino: m.ino() });
             }
             Err(Created::Failed(format!("the token file {} could not be written: {e}", path.display())))
         }
@@ -760,10 +759,47 @@ fn create_token_file(_path: &Path, _token: &str) -> Result<FileId, Created> {
     Err(Created::Failed(NOT_HERE.to_string()))
 }
 
-/// Removes the token file at `path` only while that name still holds the file `id` names; anything
-/// else there (another start's file, a link, a folder) is left and the fact logged.
+/// Removes the token file at `path` only while that name still holds the file `id` names and that
+/// file still holds `token`; anything else there (another start's file, a link, a folder) is left
+/// and the fact logged. The identity alone cannot tell: Linux gives a removed file's inode number
+/// to the next file made, so a token file another start put under the same name can carry the
+/// very same device and inode, but never the same token.
 #[cfg(unix)]
-pub fn remove_token_file(path: &Path, id: FileId) {
+pub fn remove_token_file(path: &Path, id: FileId, token: &str) {
+    match holds_token(path, id, token) {
+        Ok(true) => remove_same_file(path, id),
+        Ok(false) => log::warn!("{} is no longer the token file written there, so it is left alone", path.display()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => log::warn!("the token file {} could not be checked, so it is left alone: {e}", path.display()),
+    }
+}
+
+/// Nothing to remove on this platform: no token file is made.
+#[cfg(not(unix))]
+pub fn remove_token_file(_path: &Path, _id: FileId, _token: &str) {}
+
+/// Whether `path`, opened without following a link or waiting on a pipe, is the regular file `id`
+/// names and holds `token` (compared in constant time) as it was written.
+#[cfg(unix)]
+fn holds_token(path: &Path, id: FileId, token: &str) -> std::io::Result<bool> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let flags = rustix::fs::OFlags::NOFOLLOW | rustix::fs::OFlags::NONBLOCK;
+    let flags = i32::try_from(flags.bits()).map_err(|_| std::io::Error::other("the token file's open flags do not fit"))?;
+    let f = std::fs::OpenOptions::new().read(true).custom_flags(flags).open(path)?;
+    let m = f.metadata()?;
+    if !m.file_type().is_file() || m.dev() != id.dev || m.ino() != id.ino {
+        return Ok(false);
+    }
+    let mut text = Vec::new();
+    f.take((TOKEN_LEN + 2) as u64).read_to_end(&mut text)?;
+    let held = text.strip_suffix(b"\n").unwrap_or(&text);
+    Ok(std::str::from_utf8(held).is_ok_and(|held| same_token(held, token)))
+}
+
+/// Removes `path` only while that name still holds the regular file `id` names. Alone it serves a
+/// file this start has just made and could not write, which holds no token yet.
+#[cfg(unix)]
+fn remove_same_file(path: &Path, id: FileId) {
     use std::os::unix::fs::MetadataExt;
     match std::fs::symlink_metadata(path) {
         Ok(m) if m.file_type().is_file() && m.dev() == id.dev && m.ino() == id.ino => {
@@ -776,10 +812,6 @@ pub fn remove_token_file(path: &Path, id: FileId) {
         Err(e) => log::warn!("the token file {} could not be checked: {e}", path.display()),
     }
 }
-
-/// Nothing to remove on this platform: no token file is made.
-#[cfg(not(unix))]
-pub fn remove_token_file(_path: &Path, _id: FileId) {}
 
 /// Makes sure no one else can write to the settings folder, where the token file could otherwise
 /// be swapped or removed: a folder of ours that others may write to (made under a umask of 002,

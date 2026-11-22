@@ -2,7 +2,6 @@
 //! enumerations and the five primitive types, generated from OMG's UML.xmi by `cargo xtask
 //! generate uml`. Nothing here is written by hand except this file: the generated code under
 //! `generated/` is what the XMI gives, checked by the gate.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 /// The parameter lines `uml.attribute.add` takes for a new attribute's modifiers.
 macro_rules! modifier_lines {

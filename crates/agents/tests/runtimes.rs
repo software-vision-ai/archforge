@@ -1,6 +1,7 @@
 //! The runtimes found, checked, run and supervised, against fake runtimes: small shell scripts
 //! that answer `--version` as the real programs do and then behave as each test needs.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::collections::BTreeSet;
 use std::ffi::OsString;

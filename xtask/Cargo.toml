@@ -17,6 +17,16 @@ archforge-mof.workspace = true
 png.workspace = true
 # Writes the contact sheets of cargo xtask screens atomically; already a workspace dependency.
 craft-atomic.workspace = true
+# Parses the sources for the diagram-kind check (cargo xtask kinds): literals cooked as the
+# language reads them, modules and test items as they are. Both already in the lockfile through the
+# desktop stack's derive macros, at these versions; never a dependency of the application.
+syn = { version = "2.0.119", default-features = false, features = ["full", "parsing", "printing", "visit"] }
+# Line and column of each literal and item, for the findings and the comment marks.
+proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
+# Reads each member's manifest for the lints check (cargo xtask ci): a TOML parser, so a value never
+# reads as a table. Already in the lockfile through egui_kittest, at this version; only its parser, no
+# serde or writer. MIT OR Apache-2.0; never a dependency of the application.
+toml = { version = "1.1.8", default-features = false, features = ["parse"] }
 
 [dev-dependencies]
 archforge-mof = { workspace = true, features = ["testing"] }

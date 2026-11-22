@@ -318,7 +318,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, held: &Side,
             }
             let shown = ux::text_mid(clip.painter(), at.left() + 10.0, at.center().y, &name, types::SMALL, p.text, Some(LIST * 0.45));
             let g = ux::galley(clip.painter(), &beside, types::CAPTION, p.text_secondary, Some((at.right() - 26.0 - shown.right()).max(0.0)));
-            clip.painter().galley(pos2(at.right() - 14.0 - g.size().x, at.center().y - g.size().y / 2.0), g, p.text_secondary);
+            clip.painter().galley(pos2(at.right() - 14.0 - g.size().x, at.center().y - g.size().y / 2.0), g, p.text_secondary.into());
             if resp.clicked() {
                 picked = Some(n);
             }
@@ -349,7 +349,7 @@ fn cut_note(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let words = crate::i18n::fmt(&tr("Only the first {n} branches are listed."), &[("n", &listed.len().to_string())]);
     let g = ux::galley(ui.painter(), &words, types::CAPTION, p.text_muted, Some(r.width()));
     let at = pos2(r.right() - g.size().x.min(r.width()), r.center().y - g.size().y / 2.0);
-    ui.painter().galley(at, g, p.text_muted);
+    ui.painter().galley(at, g, p.text_muted.into());
     let _ = control(shell, ui, &format!("{LIST_ID}.cut"), "status", r, false).on_hover_text(&words).accessible_name(words.as_str());
 }
 

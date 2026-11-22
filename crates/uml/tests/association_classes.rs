@@ -5,6 +5,7 @@
 //! enumeration, a data type or a primitive type with the id and the accepted kinds; removed with
 //! its ends and members, or with a class it joins; saved as rows and read back identical; the
 //! sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
@@ -101,7 +102,7 @@ fn gone(s: &S, id: &str) -> bool {
 /// classes: the package, the diagram, the classifiers' ids in that order and the classes' nodes.
 fn shop(s: &mut S) -> (String, String, Vec<String>, Vec<String>) {
     let pkg = run(s, "uml.package.add", json!({ "name": "Shop" }));
-    let d = run(s, "diagram.add", json!({ "kind": "uml.structure", "element": pkg, "name": "Shop" }));
+    let d = run(s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Shop" }));
     let mut ids = Vec::new();
     let mut nodes = Vec::new();
     for (i, name) in ["Customer", "Product", "Store"].into_iter().enumerate() {

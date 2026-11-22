@@ -141,6 +141,7 @@ fn words(refused: &BranchRefused, renaming: Option<&str>) -> String {
     match (refused, renaming.is_some()) {
         (BranchRefused::Taken, _) => tr("That name is already in use."),
         (BranchRefused::NotCleanedUp, _) => tr("The last new branch is not cleaned up yet. Opening the project again removes it."),
+        (BranchRefused::InUse, _) => tr("Another program is using this branch. Close that program, then try again."),
         (BranchRefused::Moved, false) => tr("The project changed before the branch was made, so none was made."),
         (BranchRefused::Moved, true) => tr("The project changed before the branch was renamed, so its name stayed."),
         (BranchRefused::Unclear(_), false) => tr("Archforge could not tell whether the branch was made. Look at Branches before trying again."),
@@ -359,7 +360,7 @@ fn card(
     let mut y = frame.top() + 46.0;
     for (g, ink, gap) in lines {
         let h = g.size().y;
-        paint.galley(pos2(left, y), g, ink);
+        paint.galley(pos2(left, y), g, ink.into());
         y += h + gap;
     }
     let field = "branch-ask.name";
@@ -368,7 +369,7 @@ fn card(
     y += 49.0;
     let at = Rect::from_min_size(pos2(left, y), hint.size());
     let _ = control(shell, ui, "branch-ask.hint", "status", at, false).accessible_name(said);
-    paint.galley(at.min, hint, ink);
+    paint.galley(at.min, hint, ink.into());
     // Of the text as typed this frame, so Create never makes a name the field no longer shows; a
     // rename to the name the branch has is no rename.
     let live = (!n.waiting).then(|| name(&n.text).ok()).flatten().filter(|to| n.renaming.as_ref() != Some(to));
@@ -447,14 +448,14 @@ fn doomed_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, window: Rect, n: &
         if i == 1 {
             let _ = control(shell, ui, "branch-ask.counts", "status", at, false).accessible_name(counts.as_str());
         }
-        paint.galley(at.min, g, ink);
+        paint.galley(at.min, g, ink.into());
         y = at.bottom() + gap;
     }
     let block = Rect::from_min_size(pos2(left, y), vec2(inner, tint));
     paint.rect_filled(block, 8.0, p.danger_tint);
     ux::icon_in(&paint, Rect::from_center_size(pos2(left + 20.0, y + 18.0), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
     let _ = control(shell, ui, "branch-ask.notice", "status", block, false).accessible_name(notice.as_str());
-    paint.galley(pos2(left + 34.0, y + 10.0), warn, p.danger);
+    paint.galley(pos2(left + 34.0, y + 10.0), warn, p.danger.into());
     let top = frame.bottom() - 48.0;
     let width_of = |text: &str| (ux::galley(&paint, text, types::UI, p.text, None).size().x + 20.0).ceil();
     let act = tr("Delete branch");

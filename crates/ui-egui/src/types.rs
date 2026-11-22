@@ -342,7 +342,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                     .frame(egui::Frame::NONE)
                     .margin(egui::Margin::ZERO)
                     .font(types::SMALL.font())
-                    .text_color(p.text)
+                    .text_color(p.text.into())
                     .char_limit(archforge_er::rules::MAX_TEXT)
                     .desired_width(field.width())
                     .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field)));
@@ -387,7 +387,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                     .frame(egui::Frame::NONE)
                     .margin(egui::Margin::ZERO)
                     .font(types::SMALL.font())
-                    .text_color(p.text)
+                    .text_color(p.text.into())
                     .char_limit(archforge_er::rules::MAX_NAME)
                     .desired_width(field.width())
                     .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field)));

@@ -1,6 +1,7 @@
 //! A project's model as rows of the generated tables and back: a model with every
 //! element kind, its diagram and a skill comes back from its rows identical, object for object and
 //! value for value; damaged rows are refused and leave the store as it was.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::collections::BTreeMap;
 
@@ -112,7 +113,7 @@ fn rich_session() -> Session {
         "er.relationship.add",
         json!({ "from": customer, "to": contact, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
     );
-    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Shop" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" }));
     let c = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 120 }));
     let o = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 140 }));
     run(&mut s, "diagram.connect", json!({ "diagram": diagram, "element": places, "source": c, "target": o }));

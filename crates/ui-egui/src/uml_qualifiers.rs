@@ -132,7 +132,7 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     if let Some(note) = note {
         let g = ux::galley_rows(&paint, &note, types::CAPTION, p.text_secondary, Some(width), 3);
         let h = g.size().y;
-        paint.galley(pos2(r.left() + PAD, y), g, p.text_secondary);
+        paint.galley(pos2(r.left() + PAD, y), g, p.text_secondary.into());
         y += h + 8.0;
     }
     let editing = |shell: &Shell| shell.panels.qualifier.as_ref().filter(|e| e.association == a_id && e.end == i).map(|e| e.target);
@@ -171,7 +171,7 @@ fn refusal_box(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, w
     let r = Rect::from_min_size(at, vec2(width.max(0.0), g.size().y + 20.0));
     paint.rect_filled(r, 6.0, p.danger_tint);
     ux::icon_in(paint, Rect::from_min_size(r.min + vec2(10.0, 11.0), Vec2::splat(14.0)), &icons::ISSUE, p.danger);
-    paint.galley(r.min + vec2(32.0, 10.0), g, p.text);
+    paint.galley(r.min + vec2(32.0, 10.0), g, p.text.into());
     r.height()
 }
 
@@ -246,7 +246,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     } else if let Some(said) = shell.session.as_ref().and_then(|s| picks(s.doc(), &edit)) {
         let g = ux::galley_rows(&paint, &said, types::CAPTION, p.text_secondary, Some(inner), 4);
         let h = g.size().y;
-        paint.galley(at(0.0, cy - 4.0), g, p.text_secondary);
+        paint.galley(at(0.0, cy - 4.0), g, p.text_secondary.into());
         cy += h + 8.0;
     }
     let (mut remove, mut up, mut down) = (false, false, false);
@@ -262,7 +262,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     if let Some(why) = edit.refused.as_ref().filter(|_| edit.refused_at.is_none()) {
         let g = ux::galley_rows(&paint, why, types::CAPTION, p.amber, Some(inner), 4);
         let h = g.size().y;
-        paint.galley(at(0.0, cy - 4.0), g, p.amber);
+        paint.galley(at(0.0, cy - 4.0), g, p.amber.into());
         cy += h + 8.0;
     }
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));

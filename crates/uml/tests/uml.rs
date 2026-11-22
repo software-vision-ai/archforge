@@ -1,6 +1,7 @@
 //! The generated UML metamodel over the MOF core: the universe builds, the counts are OMG's, a
 //! class with a typed attribute behaves as UML says through the store, and the generic machinery
 //! (derived unions, opposites, destroy, undo) holds on the real metaclasses.
+#![allow(clippy::unwrap_used, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_engine::{CommandError, Ctx, Document, Options, Params, Registry, Session, View, always, cmd};
 use archforge_mof::{Obj, Store, Uuid, Value};

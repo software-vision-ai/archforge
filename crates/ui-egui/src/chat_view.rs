@@ -221,10 +221,10 @@ fn empty(shell: &mut Shell, ui: &egui::Ui, p: &Palette, body: Rect, acts: &mut V
     let top = (body.top() + (body.height() * 0.3).min((body.height() - height).max(16.0))).round();
     ux::icon_in(&paint, Rect::from_min_size(pos2(body.center().x - 11.0, top), Vec2::splat(22.0)), &icons::CHAT, p.text_secondary);
     let mut y = top + 32.0;
-    paint.galley(pos2(body.center().x - title.size().x / 2.0, y), title.clone(), p.text);
+    paint.galley(pos2(body.center().x - title.size().x / 2.0, y), title.clone(), p.text.into());
     y += title.size().y + 10.0;
     // Centred lines are placed by their middle.
-    paint.galley(pos2(body.center().x, y), lines.clone(), p.text_secondary);
+    paint.galley(pos2(body.center().x, y), lines.clone(), p.text_secondary.into());
     y += lines.size().y + 10.0;
     let label = tr("Configure agent");
     let w = ux::galley(&paint, &label, types::UI, p.text, None).size().x + 20.0;
@@ -235,10 +235,10 @@ fn empty(shell: &mut Shell, ui: &egui::Ui, p: &Palette, body: Rect, acts: &mut V
 }
 
 /// `text` laid out centred in `width`.
-fn centred(paint: &egui::Painter, text: &str, ty: ux::Type, color: egui::Color32, width: f32) -> std::sync::Arc<egui::Galley> {
+fn centred(paint: &egui::Painter, text: &str, ty: ux::Type, color: ux::Colour, width: f32) -> std::sync::Arc<egui::Galley> {
     let mut job = egui::text::LayoutJob::single_section(
         text.to_string(),
-        egui::text::TextFormat { font_id: ty.font(), color, line_height: Some(ty.line), ..Default::default() },
+        egui::text::TextFormat { font_id: ty.font(), color: color.into(), line_height: Some(ty.line), ..Default::default() },
     );
     job.wrap.max_width = width;
     job.halign = egui::Align::Center;
@@ -271,14 +271,14 @@ fn conversation(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, p
     );
     let notice_y = composer_rect.top() - 8.0 - notice_g.size().y.max(15.0);
     ux::icon_in(&paint, Rect::from_min_size(pos2(left, notice_y), Vec2::splat(14.0)), &icons::READ, p.text_secondary);
-    paint.galley(pos2(left + 20.0, notice_y), notice_g, p.text_muted);
+    paint.galley(pos2(left + 20.0, notice_y), notice_g, p.text_muted.into());
     let chips_bottom = notice_y - 8.0;
     let mut top_of_foot = chip_rows(shell, ui, p, left, width, chips_bottom, chat, acts);
     let refusal = panel.notice.clone().or_else(|| chat.save_error.clone());
     if let Some(why) = refusal {
         let g = ux::galley_rows(&paint, &why, types::SMALL, p.danger, Some(width), 4);
         top_of_foot -= g.size().y + 8.0;
-        paint.galley(pos2(left, top_of_foot), g, p.danger);
+        paint.galley(pos2(left, top_of_foot), g, p.danger.into());
     }
     // The timeline above, scrolled.
     let area = Rect::from_min_max(pos2(body.left(), body.top() + 16.0), pos2(body.right(), (top_of_foot - 16.0).max(body.top() + 16.0)));
@@ -414,7 +414,7 @@ fn composer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, panel: &
     let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
         let mut job = egui::text::LayoutJob::single_section(
             buf.as_str().to_string(),
-            egui::text::TextFormat { font_id: types::UI.font(), color: ink, line_height: Some(types::UI.line), ..Default::default() },
+            egui::text::TextFormat { font_id: types::UI.font(), color: ink.into(), line_height: Some(types::UI.line), ..Default::default() },
         );
         job.wrap.max_width = wrap;
         ui.fonts_mut(|f| f.layout_job(job))
@@ -426,7 +426,7 @@ fn composer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, panel: &
             .frame(egui::Frame::NONE)
             .margin(egui::Margin::ZERO)
             .font(types::UI.font())
-            .text_color(p.text)
+            .text_color(p.text.into())
             .interactive(!viewing)
             .hint_text(egui::RichText::new(hint).color(p.text_muted).font(types::UI.font()))
             .desired_rows(MIN_LINES)
@@ -452,7 +452,7 @@ fn composer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, panel: &
         paint.rect_filled(badge, 6.0, p.page);
     }
     ux::icon_in(&paint, Rect::from_min_size(pos2(badge.left() + 4.0, badge.center().y - 8.0), Vec2::splat(16.0)), &icons::AGENT, p.text);
-    paint.galley(pos2(badge.left() + 25.0, badge.center().y - label_g.size().y / 2.0), label_g, p.text_secondary);
+    paint.galley(pos2(badge.left() + 25.0, badge.center().y - label_g.size().y / 2.0), label_g, p.text_secondary.into());
     ux::icon_mid(&paint, pos2(badge.right() - 12.0, badge.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
     crate::settings::focus_ring(&paint, p, badge, 6.0, &resp);
     if resp.clicked() && !busy {
@@ -608,7 +608,7 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
             let g = ux::galley_rows(&paint, &turn.question, types::UI, p.text, Some(width - 20.0), 400);
             let bubble = Rect::from_min_size(pos2(left, y), vec2(width, g.size().y + 16.0));
             paint.rect_filled(bubble, 10.0, p.accent_tint);
-            paint.galley(pos2(left + 10.0, y + 8.0), g, p.text);
+            paint.galley(pos2(left + 10.0, y + 8.0), g, p.text.into());
             y += bubble.height() + TURN_GAP;
         }
         y += ux::text(&paint, pos2(left, y), speaker, types::CAPTION_STRONG, p.text_muted, Some(width)).height();
@@ -774,7 +774,7 @@ fn reply(
     let Some(l) = laid.as_ref() else { return 0.0 };
     // Its text is drawn only while it shows; its links are controls either way.
     if ui.clip_rect().intersects(Rect::from_min_size(at, vec2(width, l.height))) {
-        ui.painter().galley(at, ui.painter().layout_job((*l.job).clone()), p.text);
+        ui.painter().galley(at, ui.painter().layout_job((*l.job).clone()), p.text.into());
     }
     for (hit, url) in &l.links {
         let hit = hit.translate(at.to_vec2());
@@ -840,7 +840,7 @@ fn retry_line(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, ag
     ux::icon_in(paint, Rect::from_min_size(pos2(at.x, at.y + 1.0), Vec2::splat(14.0)), &icons::LOOK_AGAIN, p.amber);
     let shown = ux::galley_rows(paint, &words, types::SMALL, p.text_secondary, Some((width - 20.0).max(0.0)), 3);
     let h = shown.size().y.max(16.0);
-    paint.galley(pos2(at.x + 20.0, at.y), shown, p.text_secondary);
+    paint.galley(pos2(at.x + 20.0, at.y), shown, p.text_secondary.into());
     h
 }
 
@@ -886,7 +886,7 @@ fn changes_card(
     ux::icon_in(&paint, Rect::from_min_size(card.min + vec2(10.0, 11.0), Vec2::splat(14.0)), &icons::APPLIED, p.green);
     ux::text(&paint, card.min + vec2(30.0, 10.0), &title, types::SMALL_STRONG, p.text, Some((inner - 20.0).max(0.0)));
     let body_h = body_g.size().y;
-    paint.galley(card.min + vec2(10.0, 32.0), body_g, p.text_secondary);
+    paint.galley(card.min + vec2(10.0, 32.0), body_g, p.text_secondary.into());
     if undo {
         let (_, resp) = button(
             shell,
@@ -1028,7 +1028,7 @@ fn failure_card(
     );
     ux::text(&paint, card.min + vec2(30.0, 10.0), &title, types::SMALL_STRONG, p.text, Some((inner - 20.0).max(0.0)));
     let body_h = body_g.size().y;
-    paint.galley(card.min + vec2(10.0, 32.0), body_g, p.text_secondary);
+    paint.galley(card.min + vec2(10.0, 32.0), body_g, p.text_secondary.into());
     let mut x = card.left() + 10.0;
     let y = card.top() + 32.0 + body_h + 6.0;
     if settings {

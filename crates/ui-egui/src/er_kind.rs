@@ -109,7 +109,7 @@ impl DiagramKind for ErKind {
     }
 
     /// The relationship tool shows the ends it draws, as the cardinality popover sets them.
-    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: egui::Color32, active: bool) -> bool {
+    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
         if key != "relationship" {
             return false;
         }

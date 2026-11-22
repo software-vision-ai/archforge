@@ -5,7 +5,6 @@
 //!
 //! Generated code (one crate per metamodel) brings the typed slabs and the `Reflect` for each
 //! metaclass; this crate knows no metamodel of its own. Pure: it builds for the portable target.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod compare;
 mod id;

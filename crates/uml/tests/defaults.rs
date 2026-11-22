@@ -12,6 +12,7 @@
 //! the root among them, is refused with nothing changed; one handing up none goes (AR-673).
 //! Below a package a profile holds, read back from rows, the handoff passes the profile when it
 //! stays and judges nothing when it or that package goes (AR-745).
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
@@ -30,8 +31,9 @@ const GET: &str = "uml.package.default.get";
 /// The query entry asks for the diagram a package opens to (AR-582).
 const ENTRY: &str = "uml.package.diagram";
 
-/// An ER diagram's kind, `archforge_er::DIAGRAM_KIND`, which UML does not depend on.
-const ER_DIAGRAM: &str = "er";
+/// The kind of a diagram of another notation, as an ER diagram is: a word of no notation, since UML
+/// depends on none and `archforge_er::DIAGRAM_KIND` is out of its reach.
+const OTHER_DIAGRAM: &str = "other.kind";
 
 /// An empty store of the core, the diagrams and UML.
 fn bare() -> Store {
@@ -91,11 +93,11 @@ fn a_bound_package_resolves_to_its_target_and_one_without_diagrams_has_none_yet(
     let detail = diagram(&mut st, model, 0x12, STRUCTURE_DIAGRAM, sales);
     bind(&mut st, model, 0x13, sales, detail);
     let (empty, schema_only) = (add(&mut st, model, PACKAGE, 0x20), add(&mut st, model, PACKAGE, 0x30));
-    diagram(&mut st, model, 0x31, ER_DIAGRAM, schema_only);
+    diagram(&mut st, model, 0x31, OTHER_DIAGRAM, schema_only);
     assert!(st.validate_all().is_empty(), "{:?}", st.validate_all());
     assert_eq!(resolve(&st, sales), Ok(DefaultDiagram::Bound(detail)), "not the first-found {first:?}");
     assert_eq!(resolve(&st, empty), Ok(DefaultDiagram::NoDiagramYet));
-    assert_eq!(resolve(&st, schema_only), Ok(DefaultDiagram::NoDiagramYet), "an ER diagram is no structure diagram");
+    assert_eq!(resolve(&st, schema_only), Ok(DefaultDiagram::NoDiagramYet), "a diagram of another kind is no structure diagram");
     assert_eq!(problems(&st), []);
 }
 
@@ -115,13 +117,13 @@ fn a_package_with_no_binding_or_two_is_missing_or_duplicate() {
     assert_eq!(resolve(&st, sales), Err(BindingProblem::Duplicate(vec![earlier, later])));
 }
 
-/// A binding naming an ER diagram is of the wrong kind, and one naming another package's
-/// structure diagram of the wrong owner.
+/// A binding naming a diagram of another notation is of the wrong kind, and one naming another
+/// package's structure diagram of the wrong owner.
 #[test]
 fn a_target_of_another_kind_or_another_package_is_refused() {
     let (mut st, model) = store();
     let (sales, billing) = (add(&mut st, model, PACKAGE, 0x10), add(&mut st, model, PACKAGE, 0x20));
-    let schema = diagram(&mut st, model, 0x11, ER_DIAGRAM, sales);
+    let schema = diagram(&mut st, model, 0x11, OTHER_DIAGRAM, sales);
     let theirs = diagram(&mut st, model, 0x21, STRUCTURE_DIAGRAM, billing);
     let binding = bind(&mut st, model, 0x12, sales, schema);
     assert_eq!(resolve(&st, sales), Err(BindingProblem::WrongKind { binding, diagram: schema }));
@@ -271,7 +273,7 @@ fn the_command_answers_every_state_of_a_default_and_changes_nothing() {
         bind(&mut st, model, n, twice, both);
     }
     let schema_bound = add(&mut st, model, PACKAGE, 0x60);
-    let schema = diagram(&mut st, model, 0x61, ER_DIAGRAM, schema_bound);
+    let schema = diagram(&mut st, model, 0x61, OTHER_DIAGRAM, schema_bound);
     bind(&mut st, model, 0x62, schema_bound, schema);
     let foreign = add(&mut st, model, PACKAGE, 0x70);
     bind(&mut st, model, 0x72, foreign, detail);
@@ -547,7 +549,7 @@ fn a_replacement_that_cannot_take_the_defaults_place_is_refused_with_nothing_cha
     let (mut st, model, sales, ..) = bound_sales();
     let billing = add(&mut st, model, PACKAGE, 0x20);
     diagram(&mut st, model, 0x21, STRUCTURE_DIAGRAM, billing);
-    diagram(&mut st, model, 0x22, ER_DIAGRAM, sales);
+    diagram(&mut st, model, 0x22, OTHER_DIAGRAM, sales);
     let mut s = over(st);
     let (at, token) = (s.token(), token(&s));
     let stale = Revision { revision: at.revision + 1, ..at };
@@ -747,7 +749,7 @@ fn choosing_a_default_of_a_package_with_several_keeps_one_binding() {
 #[test]
 fn a_default_that_is_not_the_packages_own_class_diagram_is_refused() {
     let (mut st, model, sales, ..) = unbound_sales();
-    let schema = diagram(&mut st, model, 0x13, ER_DIAGRAM, sales);
+    let schema = diagram(&mut st, model, 0x13, OTHER_DIAGRAM, sales);
     DiagramObj::set_name(&mut st, schema, Some("Schema")).unwrap();
     let billing = add(&mut st, model, PACKAGE, 0x20);
     st.set(billing, archforge_uml::named_element::NAME, Value::str("Billing")).unwrap();
@@ -891,7 +893,7 @@ fn a_handoff_into_a_parent_with_no_sound_default_is_refused_and_changes_nothing(
         bind(&mut st, model, 0x32, archive, handed);
         let billing = add(&mut st, model, PACKAGE, 0x40);
         let theirs = diagram(&mut st, model, 0x41, STRUCTURE_DIAGRAM, billing);
-        let kind = if fault == Some(WrongKind) { ER_DIAGRAM } else { STRUCTURE_DIAGRAM };
+        let kind = if fault == Some(WrongKind) { OTHER_DIAGRAM } else { STRUCTURE_DIAGRAM };
         let own = diagram(&mut st, model, 0x11, kind, sales);
         let target = if fault == Some(WrongOwner) { theirs } else { own };
         let bindings: &[u8] = match fault {
@@ -944,9 +946,10 @@ fn a_package_under_a_root_with_no_default_goes_once_the_root_has_one() {
 }
 
 /// A package handing up no structure diagram goes whatever its parent's default: under a parent
-/// with no diagram yet, and with only an ER diagram under one whose default is Missing, left so.
-/// Removed with its parent, a package's diagram goes to the first package above that stays, judged
-/// by that one's default: refused alone, it goes with its parent into a bound grandparent (AR-673).
+/// with no diagram yet, and with only a diagram of another notation under one whose default is
+/// Missing, left so. Removed with its parent, a package's diagram goes to the first package above
+/// that stays, judged by that one's default: refused alone, it goes with its parent into a bound
+/// grandparent (AR-673).
 #[test]
 fn a_handoff_of_no_class_diagram_goes_and_one_past_a_parent_going_too_is_judged_above() {
     let (mut st, model) = store();
@@ -955,7 +958,7 @@ fn a_handoff_of_no_class_diagram_goes_and_one_past_a_parent_going_too_is_judged_
     let billing = add(&mut st, model, PACKAGE, 0x30);
     diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, billing);
     let schema_only = nested(&mut st, billing, 0x40, "Schema");
-    diagram(&mut st, model, 0x41, ER_DIAGRAM, schema_only);
+    diagram(&mut st, model, 0x41, OTHER_DIAGRAM, schema_only);
     let shop = add(&mut st, model, PACKAGE, 0x50);
     let shop_default = diagram(&mut st, model, 0x51, STRUCTURE_DIAGRAM, shop);
     bind(&mut st, model, 0x52, shop, shop_default);

@@ -5,7 +5,8 @@ members = ["crates/*", "apps/*", "xtask"]
 [workspace.package]
 version = "0.14.0"
 edition = "2024"
-rust-version = "1.95"
+# The version rust-toolchain.toml pins, the one the gate builds with; the two change together.
+rust-version = "1.96.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/software-vision-ai/archforge"
 
@@ -85,9 +86,9 @@ zeroize = "1"
 # already in the lockfile, Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT.
 rustix = { version = "1", default-features = false, features = ["std", "process", "fs"] }
 
-# Shared crates from craft-libs (the ArtCraft team, MIT OR Apache-2.0), always at its latest main:
-# the gate's first step moves Cargo.lock to the newest commit. It is the only git source
-# `deny.toml` allows.
+# Shared crates from craft-libs (the ArtCraft team, MIT OR Apache-2.0), following its main branch:
+# `cargo xtask bump` moves Cargo.lock to its newest commit, in a pull request of its own; the gate
+# never does. It is the only git source `deny.toml` allows.
 craft-atomic = { git = "https://github.com/storytold/craft-libs", branch = "main" }
 craft-mcp-server = { git = "https://github.com/storytold/craft-libs", branch = "main" }
 # The folder pickers, queued in the frame and shown at its end, answered on a later frame: a
@@ -105,8 +106,16 @@ icu_properties = "2.3"
 unsafe_code = "forbid" # "deny" only when one isolated crate exists
 
 [workspace.lints.clippy]
+# Never crash (AGENTS.md): none of the panicking shortcuts in production code. Every member takes
+# these through `[lints] workspace = true`, which the gate's lint step checks; clippy.toml lets
+# `#[test]` and `#[cfg(test)]` code unwrap, expect and panic.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
 dbg_macro = "warn"
-todo = "warn"
 too_many_arguments = "allow"
 type_complexity = "allow"
 needless_range_loop = "allow"

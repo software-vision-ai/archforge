@@ -4,6 +4,7 @@
 //! of its own; each undone and redone exactly, the rows read back the same, an earlier version read
 //! from its rows untouched, the package's removal taking every appearance in one step, and an
 //! agent's commands giving the store the interface's give (AR-572).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::{ProjectView, Rect, diagram, edge, point};
 use archforge_engine::{EngineError, Options, Session};

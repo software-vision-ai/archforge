@@ -3,7 +3,6 @@
 //! ([`NOTATIONS`]), and a project is made from the lists, so one store, one database, one view and
 //! one command table hold ER and UML side by side. The shell, the host and the agent's tools make
 //! projects here and name no notation for it. Pure: builds for the portable target.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod differences;
 mod labels;
@@ -64,6 +63,7 @@ pub const PARTS: &[Part] = &[
         name_kind: |c| if c == archforge_diagram::DIAGRAM { None } else { ONE_KIND },
     },
     Part {
+        // not a diagram kind: the part's name, which is its metamodel's
         name: "er",
         metamodel: archforge_er::metamodel,
         index: archforge_er::INDEX,

@@ -443,7 +443,7 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, items: &[Dif
     for (label, area, n) in groups.iter().filter(|g| g.2 > 0) {
         ux::text(clip.painter(), pos2(left, y), &label.to_uppercase(), types::EYEBROW_SMALL, p.text_secondary, None);
         let g = ux::galley(clip.painter(), &n.to_string(), types::EYEBROW_SMALL, p.text_muted, None);
-        clip.painter().galley(pos2(r.right() - MARGIN - g.size().x, y), g, p.text_muted);
+        clip.painter().galley(pos2(r.right() - MARGIN - g.size().x, y), g, p.text_muted.into());
         y += HEADING;
         for d in items.iter().filter(|d| d.area == *area) {
             let card = Rect::from_min_size(pos2(left, y), vec2(width, CARD));

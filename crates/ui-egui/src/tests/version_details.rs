@@ -315,7 +315,7 @@ fn details_list_what_changed_since_the_version_before() {
         s.execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
         let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();
-        s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap();
+        s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" })).unwrap();
         add_schema(h, "shop");
         let with = rows_now(h);
         list_still(h);
@@ -1471,7 +1471,7 @@ fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
         let shop = edit(&mut h, "er.schema.add", serde_json::json!({ "name": "shop" }));
         let entity = |h: &mut _, name: &str| edit(h, "er.entity.add", serde_json::json!({ "schema": shop, "name": name }));
         let (a, b, c, d) = (entity(&mut h, "kept"), entity(&mut h, "renamed"), entity(&mut h, "gone"), entity(&mut h, "fresh"));
-        let diagram = edit(&mut h, "diagram.add", serde_json::json!({ "kind": "er", "element": shop, "name": "Billing" }));
+        let diagram = edit(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Billing" }));
         let place = |h: &mut _, e: &str, x: i32, y: i32| {
             edit(h, "diagram.place", serde_json::json!({ "diagram": diagram, "element": e, "x": x, "y": y, "width": 200, "height": 120 }))
         };
@@ -1572,8 +1572,14 @@ fn each_side_of_a_diagram_marks_what_differs_on_it() {
         assert!(outlined("after", fresh, ChangeKind::Added) && outlined("after", nested, ChangeKind::Added));
         assert!(outlined("before", gone, ChangeKind::Removed) && outlined("before", renamed, ChangeKind::Changed));
         assert!(!outlined("after", kept, ChangeKind::Added) && !outlined("after", kept, ChangeKind::Changed));
-        let added = egui::epaint::ColorMode::Solid(ink(ChangeKind::Added));
-        assert!(shape_painted(h, &|s| matches!(s, egui::Shape::Path(l) if l.stroke.width == 2.0 && l.stroke.color == added)), "the line");
+        let added = ink(ChangeKind::Added);
+        assert!(
+            shape_painted(
+                h,
+                &|s| matches!(s, egui::Shape::Path(l) if l.stroke.width == 2.0 && matches!(l.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == added))
+            ),
+            "the line"
+        );
         let mark = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.change-view.after.mark.{id}"));
         let (put, boxed) = (mark(h, fresh), rect_of(h, &format!("workspace.change-view.after.node.{fresh}")));
         assert!((put.left() - boxed.left()).abs() < 0.01 && put.bottom() < boxed.top(), "above its box, from its left: {put:?} {boxed:?}");
@@ -1725,7 +1731,7 @@ fn a_diagrams_model_and_layout_changes_are_said_apart() {
 #[test]
 fn a_side_the_diagram_is_not_on_says_so() {
     diagram_compared(|h, [shop, diagram, ..]| {
-        edit(h, "diagram.add", serde_json::json!({ "kind": "er", "element": shop, "name": "Extra" }));
+        edit(h, "diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Extra" }));
         list_still(h);
         open_change(h, "Extra");
         assert_eq!(h.query_all_by_label("Before, Nothing here yet").count(), 1);
@@ -2216,7 +2222,7 @@ fn what_is_found_is_grouped_by_area() {
             Uuid::parse(s.execute(id, &params).unwrap().value["id"].as_str().unwrap()).unwrap()
         };
         let alpha = made("er.schema.add", serde_json::json!({ "name": "alpha" }));
-        let diagram = made("diagram.add", serde_json::json!({ "kind": "er", "element": alpha.to_string(), "name": "Billing" }));
+        let diagram = made("diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": alpha.to_string(), "name": "Billing" }));
         let omega = made("er.schema.add", serde_json::json!({ "name": "omega" }));
         assert!(alpha < diagram && diagram < omega, "the diagram's id lies between the schemas'");
         answer(host, "c3", Ok(before));
@@ -2907,7 +2913,7 @@ fn colours(h: &Harness<'static, Shell>) -> &'static crate::ux::Palette {
 }
 
 /// Whether a rectangle exactly over the control `id` is filled with `fill`.
-fn filled(h: &Harness<'static, Shell>, id: &str, fill: egui::Color32) -> bool {
+fn filled(h: &Harness<'static, Shell>, id: &str, fill: crate::ux::Colour) -> bool {
     rect_shapes(h).iter().any(|(r, f, _)| *r == rect_of(h, id) && *f == fill)
 }
 

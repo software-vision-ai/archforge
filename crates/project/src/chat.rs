@@ -888,7 +888,7 @@ impl Project {
     }
 
     /// A connection to a project that holds the conversations' tables; `missing` when it holds none.
-    fn chat_connection(&self, missing: impl FnOnce() -> Error) -> Result<mysql::Conn, Error> {
+    fn chat_connection(&self, missing: impl FnOnce() -> Error) -> Result<crate::sessions::Session, Error> {
         let mut c = self.model_connection()?;
         if !self.chats_held(&mut c)? {
             return Err(missing());

@@ -2,6 +2,7 @@
 //! again, it comes back identical; the unsaved state follows the writes and the saves; a project
 //! made for other tables is refused. Needs dolt 2.6 or later, as the project tests do.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -116,7 +117,7 @@ fn model() -> Session {
         json!({ "from": customer, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
     );
     run(&mut s, "er.enum.add", json!({ "schema": shop, "name": "state", "literals": ["open", "paid"] }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Shop" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": customer, "x": 10.5, "y": 20, "width": 240, "height": 120 }));
     run(
         &mut s,
@@ -510,7 +511,7 @@ fn a_project_of_an_earlier_archforge_gets_the_columns_and_tables_added_since() {
 fn the_diagram_kinds_outside_the_known_ones_are_read_raw_on_every_shape() {
     let env = Env::new("kinds");
     let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Kinds", "test", &timestamp(1_761_670_800)).unwrap();
-    let (main, known) = (SafeBranch::default(), ["er", "uml.structure"]);
+    let (main, known) = (SafeBranch::default(), [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]);
     assert_eq!(project.unknown_diagram_kinds(&main, &known).unwrap(), Vec::<String>::new(), "no diagram table");
     let mut c = working(&project);
     c.query_drop("CREATE TABLE diagram_diagram (id INT NOT NULL PRIMARY KEY, kind MEDIUMTEXT COLLATE utf8mb4_0900_ai_ci NULL, name MEDIUMTEXT NULL)")
@@ -525,7 +526,7 @@ fn the_diagram_kinds_outside_the_known_ones_are_read_raw_on_every_shape() {
     }
     // Known kinds that none of the diagrams has leave every row read to the unknown ones.
     let most = project.unknown_diagram_kinds(&main, &["absent.a", "absent.b"]).unwrap();
-    assert_eq!((most.len(), &most[..4]), (MOST_UNKNOWN_KINDS, &["".to_string(), "ER".into(), "er".into(), "k00".into()][..]));
+    assert_eq!((most.len(), &most[..4]), (MOST_UNKNOWN_KINDS, &["".to_string(), "ER".into(), archforge_er::DIAGRAM_KIND.into(), "k00".into()][..]));
     // A kind longer than any text a model holds is refused, as the model's reading refuses it, unless
     // kinds outside the known ones are read, before it or after it: those refuse the branch anyway.
     c.query_drop("INSERT INTO diagram_diagram (id, kind) VALUES (200, REPEAT('y', 262141))").unwrap();
@@ -718,7 +719,7 @@ fn stereotype_applications_and_their_values_are_saved_and_opened_again() {
     for (property, values) in [("table", json!(["orders"])), ("fetch", json!(["lazy"])), ("tags", json!(["a", "b"]))] {
         run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": property, "values": values }));
     }
-    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "name": "Sales", "element": sales }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "name": "Sales", "element": sales }));
     run(&mut s, "uml.stereotype.show-values", json!({ "diagram": d, "show": true }));
     assert_eq!(schema.fingerprint(), CURRENT, "no table changed");
     let back = save_and_reopen(&env, &schema, &path, s.doc(), "Applications").expect("a project with stereotype applications opens");

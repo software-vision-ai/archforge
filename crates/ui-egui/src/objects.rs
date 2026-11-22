@@ -336,7 +336,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
                         .id(widgets::egui_id(id))
                         .frame(egui::Frame::NONE)
                         .font(types::SMALL.font())
-                        .text_color(p.text)
+                        .text_color(p.text.into())
                         .char_limit(archforge_er::rules::MAX_QUERY)
                         .desired_width(field.width())
                         .desired_rows(5)

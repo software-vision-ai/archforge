@@ -4,6 +4,7 @@
 //! changing nothing; a set emptied by a deletion going in the same step, and a removed set keeping
 //! its generalizations; its label placed on two diagrams; saved as rows and read back identical; the
 //! sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;

@@ -383,9 +383,9 @@ str		Step 1 of 2 · Choose what the diagram shows	Schritt 1 von 2 · Wählen Sie
 str		Step 2 of 2 · Name it and say what it is of	Schritt 2 von 2 · Benennen Sie es und legen Sie fest, wovon es ist
 str		Diagram name	Diagrammname
 str		New ER diagram	Neues ER-Diagramm
-str		New class diagram	Neues Klassendiagramm
+str		New UML structure diagram	Neues UML-Strukturdiagramm
 str		Tables, their columns and keys, and the relationships between them.	Tabellen mit ihren Spalten und Schlüsseln und den Beziehungen zwischen ihnen.
-str		Classes with their attributes and operations, and the lines between them.	Klassen mit ihren Attributen und Operationen und den Linien zwischen ihnen.
+str		Classes, packages and the relationships between them.	Klassen, Pakete und die Beziehungen zwischen ihnen.
 str		Customer	Kunde
 str		Order	Bestellung
 str		Create	Erstellen
@@ -653,6 +653,7 @@ str		Rename branch	Zweig umbenennen
 str		The conversations and versions on this branch are not affected.	Die Unterhaltungen und Versionen dieses Zweigs bleiben unverändert.
 str		The project changed before the branch was renamed, so its name stayed.	Das Projekt hat sich geändert, bevor der Zweig umbenannt wurde, daher blieb sein Name.
 str		Couldn't rename the branch: {why}	Der Zweig konnte nicht umbenannt werden: {why}
+str		Another program is using this branch. Close that program, then try again.	Ein anderes Programm verwendet diesen Zweig. Schließen Sie dieses Programm und versuchen Sie es dann noch einmal.
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge konnte nicht feststellen, ob der Zweig in {name} umbenannt wurde. Benennen Sie ihn noch einmal in {name} um, um es herauszufinden.
 str		Delete…	Löschen…
 str		Delete {branch}?	{branch} löschen?
@@ -779,8 +780,6 @@ str		The package's default diagram is not a class diagram. Choose one of its cla
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Das Standarddiagramm des Pakets gehört zu einem anderen Element. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Dieses Diagramm ist das Standarddiagramm von {package}. Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von {package}.
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. Wählen Sie zuerst eines seiner eigenen Klassendiagramme.
-str		The dependency {dependency} from {client} depends on {package}, so {package} stays. Remove that dependency first.	Die Abhängigkeit {dependency} von {client} hängt von {package} ab, daher bleibt {package}. Entfernen Sie zuerst diese Abhängigkeit.
-str		{package} depends on {supplier} through the dependency {dependency}, so {package} stays. Remove that dependency first.	{package} hängt über die Abhängigkeit {dependency} von {supplier} ab, daher bleibt {package}. Entfernen Sie zuerst diese Abhängigkeit.
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	Diese Verbindung besteht bereits: die Abhängigkeit {dependency}. Wählen Sie die bestehende Beziehung aus.
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr. Wählen Sie erneut unter denen, die sie verbinden. Es wurde nichts geändert.
 str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr, und keine andere tut es jetzt. Es wurde nichts geändert.
@@ -974,7 +973,6 @@ str		Skills	Skills
 str		Filter models…	Modelle filtern…
 str		Filter diagrams…	Diagramme filtern…
 str		No diagrams yet	Noch keine Diagramme
-str		Other diagrams	Andere Diagramme
 str		Select	Auswählen
 str		Pan	Verschieben
 str		Entity	Entität
@@ -1365,8 +1363,8 @@ str		«primitive»	«primitive»
 str		Association class	Assoziationsklasse
 str		Classifier	Klassifikator
 str		Classifier kinds	Klassifikatorarten
-str		Class diagram	Klassendiagramm
-str		Class diagrams	Klassendiagramme
+str		UML structure diagram	UML-Strukturdiagramm
+str		UML structure diagrams	UML-Strukturdiagramme
 str		Class · model, in every diagram	Klasse · Modell, in jedem Diagramm
 str		Interface · model, in every diagram	Schnittstelle · Modell, in jedem Diagramm
 str		Enumeration · model, in every diagram	Aufzählung · Modell, in jedem Diagramm

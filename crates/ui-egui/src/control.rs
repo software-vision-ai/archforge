@@ -589,6 +589,7 @@ mod tests {
         let before = revision(&shell);
         for (method, params) in [
             ("document.inspect", json!({})),
+            // not a diagram kind: the commands whose ids hold er
             ("engine.commands", json!({ "filter": "er" })),
             ("engine.execute", json!({ "command": "er.schema.list" })),
             ("engine.batch", json!({ "steps": [{ "command": "er.schema.list" }, { "command": "er.schema.list" }] })),

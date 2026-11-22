@@ -1508,7 +1508,7 @@ fn a_version_shows_read_only_and_going_back_restores_the_work() {
     let (diagram, shop) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let shop = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
-        let d = s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": shop, "name": "Till" })).unwrap().value;
+        let d = s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Till" })).unwrap().value;
         (archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap(), shop)
     };
     crate::canvas::open(h.state_mut(), diagram);
@@ -2619,7 +2619,10 @@ fn a_repair_made_while_building_is_unsaved_and_written_but_row_order_is_not_one(
         s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT", "primary_key": true })).unwrap();
         s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "code", "type": "BIGINT" })).unwrap();
         if !reordered {
-            let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": shop, "name": "Shop" })).unwrap().value);
+            let diagram = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" }))
+                .unwrap()
+                .value);
             s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 }))
                 .unwrap();
         }
@@ -3174,7 +3177,10 @@ fn a_table_box_saved_too_short_for_its_columns_opens_grown_without_an_undo_step(
         for name in ["employee_id", "employee_id_2"] {
             s.execute("er.attribute.add", &serde_json::json!({ "entity": account, "name": name, "type": "UUID" })).unwrap();
         }
-        let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap().value);
+        let d = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" }))
+            .unwrap()
+            .value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": account, "x": 0, "y": 0, "width": 240, "height": 72 })).unwrap();
         h.run_steps(2);
         host.written.lock().unwrap().pop().unwrap().1
@@ -3311,7 +3317,7 @@ fn work_and_unsupported() -> (Harness<'static, Shell>, std::sync::Arc<SavingHost
     let (mut h, host) = saving_harness(Some(commerce()), None);
     let s = h.state_mut().session.as_mut().unwrap();
     let till = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
-    s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": till, "name": "Till" })).unwrap();
+    s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": till, "name": "Till" })).unwrap();
     h.run_steps(2);
     let mut rows = (*rows_now(&h)).clone();
     let (tables, _) = archforge_notations::storage();
@@ -4789,11 +4795,11 @@ fn a_letter_cut_from_its_label_is_not_underlined() {
     let h = harness(ThemeKind::Light);
     let mut out = h.ctx.run_ui(egui::RawInput::default(), |ui| {
         let (paint, at) = (ui.painter(), egui::pos2(0.0, 0.0));
-        let text = crate::ux::galley(paint, "Generate every diagram", crate::ux::types::SMALL, egui::Color32::BLACK, Some(60.0));
+        let text = crate::ux::galley(paint, "Generate every diagram", crate::ux::types::SMALL, crate::ux::LIGHT.text, Some(60.0));
         let glyphs: Vec<char> = text.rows.iter().flat_map(|r| r.glyphs.iter().map(|g| g.chr)).collect();
         assert_eq!(glyphs.last(), Some(&'…'), "cut: {glyphs:?}");
         for index in [glyphs.len() - 1, glyphs.len() + 3, 0] {
-            crate::ux::underline_char(paint, at, &text, index, crate::ux::types::SMALL, egui::Color32::BLACK);
+            crate::ux::underline_char(paint, at, &text, index, crate::ux::types::SMALL, crate::ux::LIGHT.text);
         }
     });
     out.textures_delta.clear();
@@ -7409,13 +7415,6 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let none_yet = "Vertrieb hat noch kein Diagramm, das die Diagramme dieses Pakets aufnehmen kann. Erstellen Sie zuerst eines dafür. Es wurde nichts geändert.";
         let invalid = "Vertrieb hat kein gültiges Standarddiagramm, das die Diagramme dieses Pakets aufnehmen kann. Wählen Sie zuerst sein Standarddiagramm. Es wurde nichts geändert.";
         assert_eq!([up(None), up(Some(Missing)), up(Some(WrongOwner))], [none_yet, invalid, invalid], "{theme:?}");
-        // A package a dependency that stays depends on, or starts at, is kept (AR-696).
-        use archforge_engine::End::{Source, Target};
-        let of = |end| archforge_engine::DependencyOf { package: "Buchhaltung".into(), end, other: "Auftrag".into(), dependency: "d-7".into() };
-        let said = |end| crate::panels::said(&archforge_engine::Reason::DependencyEnd(Box::new(of(end))));
-        let to = "Die Abhängigkeit d-7 von Auftrag hängt von Buchhaltung ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
-        let from = "Buchhaltung hängt über die Abhängigkeit d-7 von Auftrag ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
-        assert_eq!([said(Target), said(Source)], [Some(to.into()), Some(from.into())], "{theme:?}");
         // A dependency moved onto the client and supplier another has (AR-697).
         let exists = "Diese Verbindung besteht bereits: die Abhängigkeit zahlt. Wählen Sie die bestehende Beziehung aus.";
         let repeated = archforge_engine::Reason::ConnectionExists { dependency: "zahlt".into() };
@@ -7576,7 +7575,11 @@ fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused("direction", json!(" ")), none, "{theme:?}");
         // A word after more spaces than the typed word keeps is no blank.
         assert_eq!(refused("direction", json!(format!("{}up", " ".repeat(40)))), up, "{theme:?}");
-        let diagram = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "x".into(), known: vec!["er".into()] };
+        let diagram = archforge_engine::NotOneOf {
+            what: archforge_engine::WordPlace::DiagramKind,
+            word: "x".into(),
+            known: vec![archforge_er::DIAGRAM_KIND.into()],
+        };
         assert_eq!(crate::er_said::said(&archforge_engine::Reason::NotOneOf(Box::new(diagram))), None, "{theme:?}");
         h.run();
     }
@@ -8426,7 +8429,11 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
         h.run();
         let id = |v: Result<serde_json::Value, String>| v.unwrap()["id"].as_str().unwrap().to_string();
         let schema = id(crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Shop" })));
-        let diagram = id(crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })));
+        let diagram = id(crate::panels::run(
+            h.state_mut(),
+            "diagram.add",
+            serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" }),
+        ));
         h.run();
         let max = archforge_er::rules::MAX_NAME;
         let too_long = crate::i18n::fmt(&crate::i18n::tr("It can't be longer than {max} characters."), &[("max", &max.to_string())]);
@@ -8742,7 +8749,7 @@ fn the_explorers_filters_ignore_capitals_and_accents() {
         for name in ["Bestellungen prüfen", "Straße"] {
             let s = h.state_mut().session.as_mut().unwrap();
             let schema = s.execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap().value["id"].as_str().unwrap().to_string();
-            s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": name })).unwrap();
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": name })).unwrap();
         }
         let models = |h: &Harness<'static, Shell>| {
             let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
@@ -8935,7 +8942,7 @@ fn many_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
     for n in 0..60 {
         let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": format!("s{n:02}") })).unwrap()["id"].clone();
-        let made = serde_json::json!({ "kind": "er", "element": schema, "name": format!("d{n:02}") });
+        let made = serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": format!("d{n:02}") });
         crate::panels::run(h.state_mut(), "diagram.add", made).unwrap();
     }
     h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
@@ -9482,7 +9489,10 @@ fn diagram_harness() -> (Harness<'static, Shell>, String, String) {
             .execute("er.relationship.add", &serde_json::json!({ "from": customer, "to": order, "name": "places", "create_foreign_key": true }))
             .unwrap()
             .value);
-        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap().value);
+        let diagram = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }))
+            .unwrap()
+            .value);
         let c = id(s
             .execute(
                 "diagram.place",
@@ -9642,7 +9652,15 @@ fn a_new_diagram_refused_by_its_schema_says_why_in_plain_words() {
         h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap();
         h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
         let step = crate::diagrams::Step::Details;
-        let new = crate::diagrams::NewDiagram { step, name: "Shop".into(), kind: "er", schema: None, menu: None, refused: None, opened: false };
+        let new = crate::diagrams::NewDiagram {
+            step,
+            name: "Shop".into(),
+            kind: archforge_er::DIAGRAM_KIND,
+            schema: None,
+            menu: None,
+            refused: None,
+            opened: false,
+        };
         h.state_mut().diagrams.new = Some(new);
         h.run();
         let at = rect_of(&h, "workspace.new-diagram.create").center();
@@ -9955,6 +9973,25 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     assert_eq!(selected_name(&h), "Billing");
 }
 
+/// Where the first text painted as `words` stands on the screen.
+fn painted_at(h: &Harness<'static, Shell>, words: &str) -> Option<egui::Rect> {
+    /// Where `s`, or the first shape it holds, paints `words`.
+    fn walk(s: &egui::Shape, words: &str) -> Option<egui::Rect> {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == words => Some(egui::Rect::from_min_size(t.pos, t.galley.size())),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, words)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, words))
+}
+
+/// The names of the headings a screen reader finds on the screen, in tree order.
+fn headings(h: &Harness<'static, Shell>) -> Vec<String> {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    h.query_all_by_role(egui::accesskit::Role::Heading).filter_map(|n| n.accesskit_node().label()).collect()
+}
+
 /// The Diagrams explorer's rows: each one's depth, name and count.
 fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
     let st = h.state().session.as_ref().unwrap().doc();
@@ -9967,9 +10004,28 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
         let at = rect_of(&h, "workspace.explorers.diagrams").center();
         click(&mut h, at);
-        // Every kind the shell knows has its group, by name, empty or not, with its +.
+        // Every kind the shell knows has its group, by name, empty or not, with its +: UML
+        // structure diagrams after ER diagrams (AR-554).
         let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 0), row(0, "ER diagrams", 0)]);
+        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 0)]);
+        let found = painted(&h);
+        assert_eq!(found.iter().filter(|t| *t == "UML structure diagrams").count(), 1, "{theme:?}: {found:?}");
+        let (er, structure) =
+            (rect_of(&h, "workspace.diagrams.group.er"), rect_of(&h, &format!("workspace.diagrams.group.{}", archforge_uml::STRUCTURE_DIAGRAM)));
+        assert!(er.bottom() <= structure.top(), "{theme:?}: ER diagrams above");
+        // By their names, not by the order the shell lists the kinds in.
+        {
+            let reversed: Vec<&dyn crate::kinds::DiagramKind> = h.state().kinds.iter().rev().copied().collect();
+            let st = h.state().session.as_ref().unwrap().doc();
+            let labels: Vec<String> = crate::diagrams::rows(st, &h.state().diagrams, &reversed).rows.into_iter().map(|r| r.label).collect();
+            assert_eq!(labels, ["ER diagrams", "UML structure diagrams"], "{theme:?}");
+        }
+        // The groups are every kind a project can hold, so no diagram is left without one.
+        let mut shown: Vec<&str> = h.state().kinds.iter().map(|k| k.kind()).collect();
+        let mut held = archforge_notations::kinds();
+        shown.sort_unstable();
+        held.sort_unstable();
+        assert_eq!(shown, held);
         let found = ids(&h);
         for id in [
             "workspace.diagrams.group.uml.structure",
@@ -9986,7 +10042,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         h.state_mut().diagrams.new = None;
         let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
         click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some("er"));
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_er::DIAGRAM_KIND));
         h.state_mut().diagrams.new = None;
         // A diagram of a nested package and one of a schema land in their groups at once.
         let (orders_package, orders) = {
@@ -9995,10 +10051,10 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
             let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let orders_package = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales })).unwrap().value);
-            s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap();
-            s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": sales, "name": "Sales" })).unwrap();
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap();
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" })).unwrap();
             let orders = id(s
-                .execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": orders_package, "name": "Orders" }))
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": orders_package, "name": "Orders" }))
                 .unwrap()
                 .value);
             (orders_package, orders)
@@ -10006,7 +10062,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         h.run();
         assert_eq!(
             diagram_rows(&h),
-            vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0), row(0, "ER diagrams", 1), row(1, "Shop", 0)]
+            vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]
         );
         // Grouping is the explorer's alone: the model keeps each diagram once, where it was.
         {
@@ -10042,7 +10098,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         // A group folds and opens with a click.
         let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
         click(&mut h, at);
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(0, "ER diagrams", 1), row(1, "Shop", 0)]);
+        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2)]);
         assert!(!ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{orders}")));
         let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
         click(&mut h, at);
@@ -10050,10 +10106,10 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         // The filter narrows the diagrams, or shows a whole group named by it; groups with no match go.
         h.state_mut().diagrams.filter = "ord".into();
         h.run();
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Orders", 0)]);
-        h.state_mut().diagrams.filter = "class".into();
+        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Orders", 0)]);
+        h.state_mut().diagrams.filter = "structure".into();
         h.run();
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
+        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
         h.state_mut().diagrams.filter = "zzz".into();
         h.run();
         assert!(diagram_rows(&h).is_empty());
@@ -10076,7 +10132,10 @@ fn deletable_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, [archforge_
         let place = serde_json::json!({ "diagram": details.to_string(), "element": order.to_string(), "x": 0, "y": 0, "width": 240, "height": 72 });
         s.execute("diagram.place", &place).unwrap();
         let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-        let shop = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema.to_string(), "name": "Shop" })).unwrap().value);
+        let shop = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema.to_string(), "name": "Shop" }))
+            .unwrap()
+            .value);
         [order, default, details, shop]
     };
     crate::canvas::open(h.state_mut(), made[1]);
@@ -10237,7 +10296,7 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
         st.set(schema, archforge_er::named_element::NAME, Value::str("Shop")).unwrap();
         st.push(model, archforge_core::model::MEMBER, Value::Ref(schema)).unwrap();
         let e = st.create(archforge_diagram::DIAGRAM).unwrap();
-        st.set(e, archforge_diagram::diagram::KIND, Value::str("er")).unwrap();
+        st.set(e, archforge_diagram::diagram::KIND, Value::str(archforge_er::DIAGRAM_KIND)).unwrap();
         st.set(e, archforge_diagram::diagram::NAME, Value::str("Shop")).unwrap();
         st.set(e, archforge_diagram::diagram::ELEMENT, Value::Ref(schema)).unwrap();
         st.push(folder, archforge_core::folder::MEMBER, Value::Ref(e)).unwrap();
@@ -10255,7 +10314,14 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
     assert_eq!(
         diagram_rows(&h),
-        vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0), row(0, "ER diagrams", 1), row(1, "Views", 1), row(2, "Shop", 0)]
+        vec![
+            row(0, "ER diagrams", 1),
+            row(1, "Views", 1),
+            row(2, "Shop", 0),
+            row(0, "UML structure diagrams", 1),
+            row(1, "Views", 1),
+            row(2, "Sales", 0)
+        ]
     );
     // The folder's row in each group is a control of its own.
     let folder = {
@@ -10270,13 +10336,16 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     }
     // Folded shut, the folder hides its diagrams; typing a group's name opens it again.
     h.state_mut().diagrams.collapsed.insert(folder);
-    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(0, "ER diagrams", 1), row(1, "Views", 1)]);
-    h.state_mut().diagrams.filter = "class".into();
-    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
+    assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Views", 1), row(0, "UML structure diagrams", 1), row(1, "Views", 1)]);
+    h.state_mut().diagrams.filter = "structure".into();
+    assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
 }
 
+/// New diagram's two steps, in light and dark: the cards, their names and the title read out
+/// (AR-554), the arrow keys, Back, Cancel, a refused name and a group's `+`.
 #[test]
 fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_typed() {
+    use egui_kittest::kittest::{NodeT, Queryable};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
         let elements = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().alive().count();
@@ -10290,12 +10359,24 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(er.right() < class.left() && (er.top() - class.top()).abs() < 0.5, "{theme:?}: side by side");
         assert!(er.width() >= 240.0, "{theme:?}: room for the card to read");
         assert!(painted(&h).iter().any(|t| t == "Step 1 of 2 · Choose what the diagram shows"));
-        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, "er");
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
+        // The UML structure diagram's card: its name and what it shows painted, its name read out
+        // as the choice's; the dialog's title read out as its heading (AR-554).
+        let found = painted(&h);
+        let said = "Classes, packages and the relationships between them.";
+        assert!(found.iter().any(|t| t == "UML structure diagram") && found.iter().any(|t| t == said), "{theme:?}: {found:?}");
+        assert_eq!(h.get_by_label("UML structure diagram").accesskit_node().role(), egui::accesskit::Role::RadioButton, "{theme:?}");
+        assert_eq!(headings(&h), ["New diagram"], "{theme:?}");
+        // Found where it is painted: over the painted title, above the cards, from their left edge.
+        let title = h.get_by_role_and_label(egui::accesskit::Role::Heading, "New diagram").accesskit_node().bounding_box().expect("bounds");
+        let shown = painted_at(&h, "New diagram").expect("the title painted").center();
+        assert!(title.contains(egui::accesskit::Point::new(shown.x.into(), shown.y.into())), "{theme:?}: {title:?} over {shown:?}");
+        assert!((title.x0 as f32 - er.left()).abs() < 0.5 && title.y1 as f32 <= er.top(), "{theme:?}: {title:?}");
         // The arrow keys move the choice; the name the dialog gave follows the kind.
         key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
         key(&mut h, egui::Key::ArrowLeft, egui::Modifiers::NONE);
-        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, "er");
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
         // Cancel makes nothing.
         let at = rect_of(&h, "workspace.new-diagram.cancel").center();
         click(&mut h, at);
@@ -10309,7 +10390,8 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(step(&h), Some(crate::diagrams::Step::Details));
         let found = painted(&h);
-        assert!(found.iter().any(|t| t == "New class diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
+        assert!(found.iter().any(|t| t == "New UML structure diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
+        assert_eq!(headings(&h), ["New UML structure diagram"], "{theme:?}: the title read out");
         // A name typed survives Back and another kind; an empty name is refused, and Back clears it.
         h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
         h.run();
@@ -10320,7 +10402,7 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         click(&mut h, at);
         let at = rect_of(&h, "workspace.new-diagram.continue").center();
         click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.kind, n.name.as_str())), Some(("er", "Domain")));
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.kind, n.name.as_str())), Some((archforge_er::DIAGRAM_KIND, "Domain")));
         h.state_mut().diagrams.new.as_mut().unwrap().name = "  ".into();
         let at = rect_of(&h, "workspace.new-diagram.create").center();
         click(&mut h, at);
@@ -10345,12 +10427,13 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(h.state().diagrams.new.is_none());
         let at = rect_of(&h, "workspace.explorers.diagrams").center();
         click(&mut h, at);
-        assert_eq!(diagram_rows(&h)[..2], [(0, "Class diagrams".to_string(), 1), (1, "Domain".to_string(), 0)]);
+        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+        assert_eq!(diagram_rows(&h), [row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 1), row(1, "Domain", 0)]);
         assert!(h.state().canvas.active.is_some(), "it opens at once");
         // A group's + has chosen the kind: the dialog opens on the details, Back before them.
         let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
         click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.step, n.kind)), Some((crate::diagrams::Step::Details, "er")));
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.step, n.kind)), Some((crate::diagrams::Step::Details, archforge_er::DIAGRAM_KIND)));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert!(h.state().diagrams.new.is_none());
     }
@@ -10433,7 +10516,10 @@ fn the_package_tool_makes_the_package_its_diagram_and_its_default_as_one_undo_st
         let top = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
-            let d = s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Top" })).unwrap().value;
+            let d = s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Top" }))
+                .unwrap()
+                .value;
             archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
         };
         crate::canvas::open(h.state_mut(), top);
@@ -10589,7 +10675,10 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
             let s = h.state_mut().session.as_mut().unwrap();
             let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
             let d = s
-                .execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Commerce platform" }))
+                .execute(
+                    "diagram.add",
+                    &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Commerce platform" }),
+                )
                 .unwrap()
                 .value;
             archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
@@ -10809,7 +10898,10 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let (top, sales, billing, sales_card, billing_card) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-            let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Top" })).unwrap().value);
+            let top = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Top" }))
+                .unwrap()
+                .value);
             let mut made = Vec::new();
             for (name, x) in [("Sales", 80), ("Billing", 520)] {
                 let p = id(s.execute("uml.package.add", &serde_json::json!({ "name": name })).unwrap().value);
@@ -10829,7 +10921,10 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let (overview, sales_card2) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
-            let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Overview" })).unwrap().value);
+            let d = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Overview" }))
+                .unwrap()
+                .value);
             let at = serde_json::json!({ "diagram": d.to_string(), "element": sales.to_string(), "x": 80, "y": 120, "width": 240, "height": 148 });
             (d, id(s.execute("diagram.place", &at).unwrap().value))
         };
@@ -10849,9 +10944,9 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let ringed = |h: &Harness<'static, Shell>, target: egui::Rect| {
             /// Whether `s`, or a shape it holds, is a rectangle round `target` stroked in `accent`
             /// at least 2 points wide.
-            fn walk(s: &egui::Shape, accent: egui::Color32, target: egui::Rect) -> bool {
+            fn walk(s: &egui::Shape, accent: crate::ux::Colour, target: egui::Rect) -> bool {
                 match s {
-                    egui::Shape::Rect(r) => r.stroke.color == accent && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
+                    egui::Shape::Rect(r) => crate::ux::drawn(r.stroke.color) == accent && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
                     egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent, target)),
                     _ => false,
                 }
@@ -11101,10 +11196,14 @@ fn the_path_bar_opens_the_parents_default_not_the_diagram_it_was_entered_from() 
         let (first, second, sales) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-            let first =
-                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "First" })).unwrap().value);
-            let second =
-                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Second" })).unwrap().value);
+            let first = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "First" }))
+                .unwrap()
+                .value);
+            let second = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Second" }))
+                .unwrap()
+                .value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let p =
                 serde_json::json!({ "diagram": second.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
@@ -11140,7 +11239,7 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
             let add = |s: &mut archforge_notations::Session, name: &str| {
-                let p = serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": name });
+                let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": name });
                 id(s.execute("diagram.add", &p).unwrap().value)
             };
             let (first, second) = (add(s, "First"), add(s, "Second"));
@@ -11266,7 +11365,10 @@ fn shift_delete_on_a_selected_package_card_asks_to_delete_the_package() {
     let (top, sales) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-        let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Top" })).unwrap().value);
+        let top = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Top" }))
+            .unwrap()
+            .value);
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         s.execute(
             "diagram.place",
@@ -11295,13 +11397,13 @@ fn package_preview_harness(
         let s = h.state_mut().session.as_mut().unwrap();
         let mut run = |c: &str, p: serde_json::Value| id(s.execute(c, &p).unwrap().value);
         let root = run("uml.model.root", serde_json::json!({}));
-        let top = run("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" }));
+        let top = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }));
         let sales = run("uml.package.add", serde_json::json!({ "name": "Sales" }));
         let card = run(
             "diagram.place",
             serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
         );
-        let own = run("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": sales.to_string(), "name": "Sales" }));
+        let own = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales" }));
         let order = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "Order" }));
         let line = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "OrderLine" }));
         run("uml.association.add", serde_json::json!({ "from": order.to_string(), "to": line.to_string() }));
@@ -11844,8 +11946,10 @@ fn a_class_over_a_package_card_keeps_a_package_dropped_on_it_where_it_was() {
     let (top, sales, sales_card, class_card) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
-        let top =
-            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" })).unwrap().value);
+        let top = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }))
+            .unwrap()
+            .value);
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
         let place = |s: &mut archforge_notations::Session, e: archforge_mof::Uuid, x: i32| {
@@ -11902,8 +12006,10 @@ fn a_package_let_go_outside_the_canvas_stays_where_it_was() {
     let (top, sales, sales_card) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
-        let top =
-            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" })).unwrap().value);
+        let top = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }))
+            .unwrap()
+            .value);
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
         let sales_card = id(s
@@ -11946,7 +12052,7 @@ fn zooming_out_to_ten_percent_climbs_one_level_per_gesture_each_at_a_hundred_and
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
             let top = id(s
-                .execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" }))
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }))
                 .unwrap()
                 .value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
@@ -12264,7 +12370,10 @@ fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::U
     let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
     let s = h.state_mut().session.as_mut().unwrap();
     let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-    let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "First" })).unwrap().value);
+    let first = id(s
+        .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "First" }))
+        .unwrap()
+        .value);
     let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
     let p = serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
     s.execute("diagram.place", &p).unwrap();
@@ -12374,8 +12483,10 @@ fn a_landing_pending_for_one_tab_never_places_another() {
             let support = {
                 let s = h.state_mut().session.as_mut().unwrap();
                 let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-                let d =
-                    id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Support" })).unwrap().value);
+                let d = id(s
+                    .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Support" }))
+                    .unwrap()
+                    .value);
                 for (name, x) in [("Ticket", 0), ("Agent", 4000)] {
                     let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": name })).unwrap().value);
                     let p = serde_json::json!({ "diagram": d.to_string(), "element": c.to_string(), "x": x, "y": 0, "width": 200, "height": 120 });
@@ -12446,7 +12557,9 @@ fn a_pending_fit_or_restored_view_stays_on_its_tab_across_switches_in_one_frame(
             let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
             let [overview, support] = ["Overview", "Support"].map(|name| {
                 let s = h.state_mut().session.as_mut().unwrap();
-                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": name })).unwrap().value)
+                id(s.execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": name }))
+                    .unwrap()
+                    .value)
             });
             let s = h.state_mut().session.as_mut().unwrap();
             for (name, x) in [("Ticket", 0), ("Agent", 4000)] {
@@ -12976,7 +13089,10 @@ fn two_tables_harness() -> (Harness<'static, Shell>, String, String) {
         let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
         let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap().value);
         s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
-        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap().value);
+        let diagram = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }))
+            .unwrap()
+            .value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 }))
             .unwrap();
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 166 }))
@@ -14541,11 +14657,12 @@ static SKETCHED: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotati
 
 /// Every text the last frame painted.
 /// The colours the text `label` is laid out in, where it is painted inside `within`.
-fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<egui::Color32> {
-    fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<egui::Color32>) {
+fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<crate::ux::Colour> {
+    /// Collects the colours of every text `label` painted inside `within` under `s`.
+    fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<crate::ux::Colour>) {
         match s {
             egui::Shape::Text(t) if t.galley.text() == label && within.contains(t.pos) => {
-                out.extend(t.galley.job.sections.iter().map(|section| section.format.color));
+                out.extend(t.galley.job.sections.iter().map(|section| crate::ux::drawn(section.format.color)));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, label, within, out)),
             _ => {}
@@ -16129,7 +16246,9 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
     h.state_mut().session.as_mut().unwrap().execute("diagram.style", &serde_json::json!({ "ids": [a], "fill": "#A0C4FF" })).unwrap();
     h.run();
     assert_eq!(look(&h, aobj).fill, crate::canvas::colour("#A0C4FF"));
-    let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if Some(r.fill) == crate::canvas::colour("#A0C4FF")));
+    // Read against the code's own bytes, not through the parser the canvas uses.
+    let own = |fill: crate::ux::Colour| [fill.r(), fill.g(), fill.b(), fill.a()] == [0xA0, 0xC4, 0xFF, 0xFF];
+    let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if own(crate::ux::drawn(r.fill))));
     assert!(filled, "the card is filled in its own colour");
 }
 
@@ -16435,7 +16554,7 @@ fn class_diagram_shown(h: &Harness<'static, Shell>) -> (String, Vec<String>) {
 #[test]
 fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_a_class_named_in_place() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    // 1. The tab strip's + opens New diagram; 2. the Class diagram card, Continue; 3. Create.
+    // 1. The tab strip's + opens New diagram; 2. the UML structure diagram card, Continue; 3. Create.
     let at = rect_of(&h, "workspace.tabs.add").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
@@ -16552,7 +16671,7 @@ fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes
         out["result"]["id"].as_str().unwrap_or_default().to_string()
     };
     let pkg = call("uml.package.add", serde_json::json!({ "name": "Billing" }));
-    let d = call("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg, "name": "Billing" }));
+    let d = call("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Billing" }));
     let invoice = call("uml.class.add", serde_json::json!({ "package": pkg, "name": "Invoice" }));
     call("diagram.place", serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 }));
     let st = h.state().session.as_ref().unwrap().doc();
@@ -16575,9 +16694,10 @@ fn read_class_diagram(name: &str) -> (Harness<'static, Shell>, archforge_mof::Ob
 /// Whether the last frame painted a path in the accent colour.
 fn painted_accent(h: &Harness<'static, Shell>) -> bool {
     let accent = crate::ux::palette(false).accent;
-    fn walk(s: &egui::Shape, accent: egui::Color32) -> bool {
+    /// Whether `s`, or a shape it holds, is a path stroked in `accent`.
+    fn walk(s: &egui::Shape, accent: crate::ux::Colour) -> bool {
         match s {
-            egui::Shape::Path(p) => p.stroke.color == egui::epaint::ColorMode::Solid(accent),
+            egui::Shape::Path(p) => matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == accent),
             egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent)),
             _ => false,
         }
@@ -16835,7 +16955,9 @@ fn nested_orders(theme: ThemeKind) -> (Harness<'static, Shell>, archforge_mof::U
     };
     let fulfilment = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Fulfilment" })).unwrap();
     let orders = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Orders", "parent": fulfilment.to_string() })).unwrap();
-    let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": orders.to_string(), "name": "Orders" })).unwrap();
+    let d =
+        run(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": orders.to_string(), "name": "Orders" }))
+            .unwrap();
     let money = run(&mut h, "uml.data-type.add", serde_json::json!({ "package": orders.to_string(), "name": "Money" })).unwrap();
     let order = run(&mut h, "uml.class.add", serde_json::json!({ "package": orders.to_string(), "name": "Order" })).unwrap();
     run(&mut h, "uml.attribute.add", serde_json::json!({ "class": order.to_string(), "name": "number", "type": "Integer" }));
@@ -16872,10 +16994,11 @@ fn text_boxes(h: &Harness<'static, Shell>) -> Vec<(String, egui::Rect)> {
 }
 
 /// Every rectangle the last frame painted, with its fill and its stroke's colour.
-fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, egui::Color32, egui::Color32)> {
-    fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, egui::Color32, egui::Color32)>) {
+fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)> {
+    /// Collects every rectangle under `s` with its fill and its stroke's colour.
+    fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)>) {
         match s {
-            egui::Shape::Rect(r) => out.push((r.rect, r.fill, r.stroke.color)),
+            egui::Shape::Rect(r) => out.push((r.rect, crate::ux::drawn(r.fill), crate::ux::drawn(r.stroke.color))),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
         }
@@ -17050,11 +17173,12 @@ fn a_class_cards_compartments_are_padded_so_no_row_sits_on_a_dividing_line() {
 
 /// Every level line segment the last frame painted: its left and right ends, its height, its
 /// thickness and its colour.
-fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, egui::Color32)> {
-    fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, egui::Color32)>) {
+fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, crate::ux::Colour)> {
+    /// Collects every level line segment under `s`.
+    fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, crate::ux::Colour)>) {
         match s {
             egui::Shape::LineSegment { points: [a, b], stroke } if (a.y - b.y).abs() < 0.01 => {
-                out.push((a.x.min(b.x), a.x.max(b.x), a.y, stroke.width, stroke.color));
+                out.push((a.x.min(b.x), a.x.max(b.x), a.y, stroke.width, crate::ux::drawn(stroke.color)));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
@@ -17193,7 +17317,12 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
             out.value["id"].as_str().map(|i| archforge_mof::Uuid::parse(i).unwrap())
         };
         let pkg = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Billing" })).unwrap();
-        let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": "Billing" })).unwrap();
+        let d = run(
+            &mut h,
+            "diagram.add",
+            serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg.to_string(), "name": "Billing" }),
+        )
+        .unwrap();
         crate::canvas::open(h.state_mut(), d);
         let class = run(&mut h, "uml.class.add", serde_json::json!({ "package": pkg.to_string(), "name": "ReviewInvoice" })).unwrap();
         let node =
@@ -17206,7 +17335,9 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         // The same class on two more diagrams: wider and short, and already tall.
         let mut others = Vec::new();
         for (name, width, tall) in [("Wide", 300, 150), ("Tall", 260, 400)] {
-            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": name })).unwrap();
+            let other =
+                run(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg.to_string(), "name": name }))
+                    .unwrap();
             let n = run(
                 &mut h,
                 "diagram.place",
@@ -17324,14 +17455,16 @@ fn members_a_tool_adds_grow_the_class_card_in_the_same_undo_step() {
             archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
         };
         let pkg = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Sales" }));
-        let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": "Sales" }));
+        let d =
+            run(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg.to_string(), "name": "Sales" }));
         crate::canvas::open(h.state_mut(), d);
         let class = run(&mut h, "uml.class.add", serde_json::json!({ "package": pkg.to_string(), "name": "Customer" }));
         let node = run(&mut h, "diagram.place", serde_json::json!({ "diagram": d.to_string(), "element": class.to_string(), "x": 200, "y": 200 }));
         // The same class on two more diagrams: made wider and short by hand, and already tall.
         let mut others = Vec::new();
         for (name, width, tall) in [("Wide", 360, 150), ("Tall", 260, 600)] {
-            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": name }));
+            let other =
+                run(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg.to_string(), "name": name }));
             let place =
                 serde_json::json!({ "diagram": other.to_string(), "element": class.to_string(), "x": 0, "y": 0, "width": width, "height": tall });
             others.push(run(&mut h, "diagram.place", place));
@@ -18543,7 +18676,7 @@ mod chat_keys {
     /// Whether the transcript's focus ring is painted, in the focus colour just inside its edge.
     fn ringed(h: &Harness<'static, Shell>) -> bool {
         let (focus, area) = (crate::ux::palette(h.state().state.theme.is_dark()).focus, h.state().chat_panel.area.unwrap());
-        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if r.stroke.color == focus && r.rect == area.shrink(2.0));
+        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if crate::ux::drawn(r.stroke.color) == focus && r.rect == area.shrink(2.0));
         h.output().shapes.iter().any(|c| ring(&c.shape))
     }
 
@@ -20869,7 +21002,8 @@ fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() 
     let er = {
         let s = h.state_mut().session.as_mut().unwrap();
         let schema = s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value["id"].as_str().unwrap().to_string();
-        let d = s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap().value;
+        let d =
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap().value;
         archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
     };
     crate::canvas::open(h.state_mut(), er);
@@ -21119,16 +21253,18 @@ fn related(h: &mut Harness<'static, Shell>, name: &str) -> Vec<serde_json::Value
     s.execute("uml.relationship.list", &serde_json::json!({ "class": id })).unwrap().value["relationships"].as_array().unwrap().clone()
 }
 
+/// How many edges the open diagram holds.
 fn edge_count(h: &Harness<'static, Shell>) -> usize {
     let st = h.state().session.as_ref().unwrap().doc();
     st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap().len()
 }
 
 /// The boxes of the icons the last frame painted in `color`: each a mesh tinted that colour.
-fn icon_boxes(h: &Harness<'static, Shell>, color: egui::Color32) -> Vec<egui::Rect> {
-    fn walk(s: &egui::Shape, color: egui::Color32, out: &mut Vec<egui::Rect>) {
+fn icon_boxes(h: &Harness<'static, Shell>, color: crate::ux::Colour) -> Vec<egui::Rect> {
+    /// Collects the box of every mesh under `s` tinted `color` throughout.
+    fn walk(s: &egui::Shape, color: crate::ux::Colour, out: &mut Vec<egui::Rect>) {
         match s {
-            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| v.color == color) => {
+            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| crate::ux::drawn(v.color) == color) => {
                 out.push(egui::Rect::from_points(&m.vertices.iter().map(|v| v.pos).collect::<Vec<_>>()));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, color, out)),
@@ -21668,7 +21804,10 @@ fn a_menu_left_open_on_a_class_diagram_closes_on_an_er_tab_and_the_arrows_nudge_
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
         let pkg = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
-        let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": pkg, "name": "Billing" })).unwrap().value);
+        let d = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Billing" }))
+            .unwrap()
+            .value);
         let invoice = id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "Invoice" })).unwrap().value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 })).unwrap();
         archforge_mof::Uuid::parse(&d).unwrap()
@@ -25325,7 +25464,7 @@ fn deleting_a_table_shown_on_two_diagrams_from_models_says_two() {
             let bare = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Bare" }));
             id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Unplaced" }));
             for name in ["Shop schema", "Customers"] {
-                let d = id("diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": name }));
+                let d = id("diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": name }));
                 for (table, x) in [(&customer, 100), (&bare, 500)] {
                     id("diagram.place", serde_json::json!({ "diagram": d, "element": table, "x": x, "y": 100, "width": 240, "height": 166 }));
                 }
@@ -26484,11 +26623,11 @@ fn points(h: &mut Harness<'static, Shell>, id: &str) -> bool {
 }
 
 /// The fill and stroke colours of the rectangles the last frame painted exactly over `id`.
-fn painted_over(h: &Harness<'static, Shell>, id: &str) -> Vec<(egui::Color32, egui::Color32)> {
+fn painted_over(h: &Harness<'static, Shell>, id: &str) -> Vec<(crate::ux::Colour, crate::ux::Colour)> {
     /// Collects every rectangle over `r` under `s`.
-    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(egui::Color32, egui::Color32)>) {
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(crate::ux::Colour, crate::ux::Colour)>) {
         match s {
-            egui::Shape::Rect(x) if x.rect == r => out.push((x.fill, x.stroke.color)),
+            egui::Shape::Rect(x) if x.rect == r => out.push((crate::ux::drawn(x.fill), crate::ux::drawn(x.stroke.color))),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
             _ => {}
         }
@@ -27133,13 +27272,14 @@ fn enter_in_homes_search_runs_the_row_last_shown_while_it_is_still_listed() {
 }
 
 /// The colour the last frame painted `text` in, the first time it painted it whole.
-fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<egui::Color32> {
+fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<crate::ux::Colour> {
     /// The colour of `text` under `s`, if `s` paints it.
-    fn walk(s: &egui::Shape, text: &str) -> Option<egui::Color32> {
+    fn walk(s: &egui::Shape, text: &str) -> Option<crate::ux::Colour> {
         match s {
             egui::Shape::Text(t) if t.galley.job.text == text => {
                 let colour = t.galley.job.sections.first().map_or(t.fallback_color, |s| s.format.color);
-                Some(t.override_text_color.unwrap_or(if colour == egui::Color32::PLACEHOLDER { t.fallback_color } else { colour }))
+                let laid_out = if crate::ux::drawn(colour) == crate::ux::PLACEHOLDER_INK { t.fallback_color } else { colour };
+                Some(crate::ux::drawn(t.override_text_color.unwrap_or(laid_out)))
             }
             egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, text)),
             _ => None,
@@ -27149,12 +27289,12 @@ fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<egui::Color32>
 }
 
 /// The tints of the meshes the last frame painted inside `id`: its icons, drawn as textures.
-fn icons_in(h: &Harness<'static, Shell>, id: &str) -> Vec<egui::Color32> {
+fn icons_in(h: &Harness<'static, Shell>, id: &str) -> Vec<crate::ux::Colour> {
     /// Collects the tint of every mesh inside `r` under `s`.
-    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<egui::Color32>) {
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<crate::ux::Colour>) {
         match s {
             egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| r.contains(v.pos)) => {
-                out.extend(m.vertices.first().map(|v| v.color))
+                out.extend(m.vertices.first().map(|v| crate::ux::drawn(v.color)))
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
             _ => {}
@@ -29003,11 +29143,11 @@ fn chat_workspace(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<
 }
 
 /// The fill colours of the filled circles drawn in the last frame.
-fn painted_dots(h: &Harness<'static, Shell>) -> Vec<egui::Color32> {
+fn painted_dots(h: &Harness<'static, Shell>) -> Vec<crate::ux::Colour> {
     /// Collects the fill of every filled circle under `s`.
-    fn walk(s: &egui::Shape, out: &mut Vec<egui::Color32>) {
+    fn walk(s: &egui::Shape, out: &mut Vec<crate::ux::Colour>) {
         match s {
-            egui::Shape::Circle(c) => out.push(c.fill),
+            egui::Shape::Circle(c) => out.push(crate::ux::drawn(c.fill)),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
         }
