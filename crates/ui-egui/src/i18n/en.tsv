@@ -652,6 +652,7 @@ str		Rename branch	Rename branch
 str		The conversations and versions on this branch are not affected.	The conversations and versions on this branch are not affected.
 str		The project changed before the branch was renamed, so its name stayed.	The project changed before the branch was renamed, so its name stayed.
 str		Couldn't rename the branch: {why}	Couldn't rename the branch: {why}
+str		Another program is using this branch. Close that program, then try again.	Another program is using this branch. Close that program, then try again.
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.
 str		Delete…	Delete…
 str		Delete {branch}?	Delete {branch}?

@@ -1508,7 +1508,7 @@ fn a_version_shows_read_only_and_going_back_restores_the_work() {
     let (diagram, shop) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let shop = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
-        let d = s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": shop, "name": "Till" })).unwrap().value;
+        let d = s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Till" })).unwrap().value;
         (archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap(), shop)
     };
     crate::canvas::open(h.state_mut(), diagram);
@@ -2619,7 +2619,10 @@ fn a_repair_made_while_building_is_unsaved_and_written_but_row_order_is_not_one(
         s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT", "primary_key": true })).unwrap();
         s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "code", "type": "BIGINT" })).unwrap();
         if !reordered {
-            let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": shop, "name": "Shop" })).unwrap().value);
+            let diagram = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" }))
+                .unwrap()
+                .value);
             s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 }))
                 .unwrap();
         }
@@ -3174,7 +3177,10 @@ fn a_table_box_saved_too_short_for_its_columns_opens_grown_without_an_undo_step(
         for name in ["employee_id", "employee_id_2"] {
             s.execute("er.attribute.add", &serde_json::json!({ "entity": account, "name": name, "type": "UUID" })).unwrap();
         }
-        let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap().value);
+        let d = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" }))
+            .unwrap()
+            .value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": account, "x": 0, "y": 0, "width": 240, "height": 72 })).unwrap();
         h.run_steps(2);
         host.written.lock().unwrap().pop().unwrap().1
@@ -3311,7 +3317,7 @@ fn work_and_unsupported() -> (Harness<'static, Shell>, std::sync::Arc<SavingHost
     let (mut h, host) = saving_harness(Some(commerce()), None);
     let s = h.state_mut().session.as_mut().unwrap();
     let till = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
-    s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": till, "name": "Till" })).unwrap();
+    s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": till, "name": "Till" })).unwrap();
     h.run_steps(2);
     let mut rows = (*rows_now(&h)).clone();
     let (tables, _) = archforge_notations::storage();
@@ -7559,7 +7565,11 @@ fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused("direction", json!(" ")), none, "{theme:?}");
         // A word after more spaces than the typed word keeps is no blank.
         assert_eq!(refused("direction", json!(format!("{}up", " ".repeat(40)))), up, "{theme:?}");
-        let diagram = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "x".into(), known: vec!["er".into()] };
+        let diagram = archforge_engine::NotOneOf {
+            what: archforge_engine::WordPlace::DiagramKind,
+            word: "x".into(),
+            known: vec![archforge_er::DIAGRAM_KIND.into()],
+        };
         assert_eq!(crate::er_said::said(&archforge_engine::Reason::NotOneOf(Box::new(diagram))), None, "{theme:?}");
         h.run();
     }
@@ -8409,7 +8419,11 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
         h.run();
         let id = |v: Result<serde_json::Value, String>| v.unwrap()["id"].as_str().unwrap().to_string();
         let schema = id(crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Shop" })));
-        let diagram = id(crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })));
+        let diagram = id(crate::panels::run(
+            h.state_mut(),
+            "diagram.add",
+            serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" }),
+        ));
         h.run();
         let max = archforge_er::rules::MAX_NAME;
         let too_long = crate::i18n::fmt(&crate::i18n::tr("It can't be longer than {max} characters."), &[("max", &max.to_string())]);
@@ -8725,7 +8739,7 @@ fn the_explorers_filters_ignore_capitals_and_accents() {
         for name in ["Bestellungen prüfen", "Straße"] {
             let s = h.state_mut().session.as_mut().unwrap();
             let schema = s.execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap().value["id"].as_str().unwrap().to_string();
-            s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": name })).unwrap();
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": name })).unwrap();
         }
         let models = |h: &Harness<'static, Shell>| {
             let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
@@ -8918,7 +8932,7 @@ fn many_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
     for n in 0..60 {
         let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": format!("s{n:02}") })).unwrap()["id"].clone();
-        let made = serde_json::json!({ "kind": "er", "element": schema, "name": format!("d{n:02}") });
+        let made = serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": format!("d{n:02}") });
         crate::panels::run(h.state_mut(), "diagram.add", made).unwrap();
     }
     h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
@@ -9465,7 +9479,10 @@ fn diagram_harness() -> (Harness<'static, Shell>, String, String) {
             .execute("er.relationship.add", &serde_json::json!({ "from": customer, "to": order, "name": "places", "create_foreign_key": true }))
             .unwrap()
             .value);
-        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap().value);
+        let diagram = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }))
+            .unwrap()
+            .value);
         let c = id(s
             .execute(
                 "diagram.place",
@@ -9625,7 +9642,15 @@ fn a_new_diagram_refused_by_its_schema_says_why_in_plain_words() {
         h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap();
         h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
         let step = crate::diagrams::Step::Details;
-        let new = crate::diagrams::NewDiagram { step, name: "Shop".into(), kind: "er", schema: None, menu: None, refused: None, opened: false };
+        let new = crate::diagrams::NewDiagram {
+            step,
+            name: "Shop".into(),
+            kind: archforge_er::DIAGRAM_KIND,
+            schema: None,
+            menu: None,
+            refused: None,
+            opened: false,
+        };
         h.state_mut().diagrams.new = Some(new);
         h.run();
         let at = rect_of(&h, "workspace.new-diagram.create").center();
@@ -9969,7 +9994,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         h.state_mut().diagrams.new = None;
         let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
         click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some("er"));
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_er::DIAGRAM_KIND));
         h.state_mut().diagrams.new = None;
         // A diagram of a nested package and one of a schema land in their groups at once.
         let (orders_package, orders) = {
@@ -9978,10 +10003,10 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
             let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let orders_package = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales })).unwrap().value);
-            s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap();
-            s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": sales, "name": "Sales" })).unwrap();
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap();
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" })).unwrap();
             let orders = id(s
-                .execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": orders_package, "name": "Orders" }))
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": orders_package, "name": "Orders" }))
                 .unwrap()
                 .value);
             (orders_package, orders)
@@ -10059,7 +10084,10 @@ fn deletable_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, [archforge_
         let place = serde_json::json!({ "diagram": details.to_string(), "element": order.to_string(), "x": 0, "y": 0, "width": 240, "height": 72 });
         s.execute("diagram.place", &place).unwrap();
         let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-        let shop = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema.to_string(), "name": "Shop" })).unwrap().value);
+        let shop = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema.to_string(), "name": "Shop" }))
+            .unwrap()
+            .value);
         [order, default, details, shop]
     };
     crate::canvas::open(h.state_mut(), made[1]);
@@ -10220,7 +10248,7 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
         st.set(schema, archforge_er::named_element::NAME, Value::str("Shop")).unwrap();
         st.push(model, archforge_core::model::MEMBER, Value::Ref(schema)).unwrap();
         let e = st.create(archforge_diagram::DIAGRAM).unwrap();
-        st.set(e, archforge_diagram::diagram::KIND, Value::str("er")).unwrap();
+        st.set(e, archforge_diagram::diagram::KIND, Value::str(archforge_er::DIAGRAM_KIND)).unwrap();
         st.set(e, archforge_diagram::diagram::NAME, Value::str("Shop")).unwrap();
         st.set(e, archforge_diagram::diagram::ELEMENT, Value::Ref(schema)).unwrap();
         st.push(folder, archforge_core::folder::MEMBER, Value::Ref(e)).unwrap();
@@ -10273,12 +10301,12 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(er.right() < class.left() && (er.top() - class.top()).abs() < 0.5, "{theme:?}: side by side");
         assert!(er.width() >= 240.0, "{theme:?}: room for the card to read");
         assert!(painted(&h).iter().any(|t| t == "Step 1 of 2 · Choose what the diagram shows"));
-        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, "er");
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
         // The arrow keys move the choice; the name the dialog gave follows the kind.
         key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
         key(&mut h, egui::Key::ArrowLeft, egui::Modifiers::NONE);
-        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, "er");
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
         // Cancel makes nothing.
         let at = rect_of(&h, "workspace.new-diagram.cancel").center();
         click(&mut h, at);
@@ -10303,7 +10331,7 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         click(&mut h, at);
         let at = rect_of(&h, "workspace.new-diagram.continue").center();
         click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.kind, n.name.as_str())), Some(("er", "Domain")));
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.kind, n.name.as_str())), Some((archforge_er::DIAGRAM_KIND, "Domain")));
         h.state_mut().diagrams.new.as_mut().unwrap().name = "  ".into();
         let at = rect_of(&h, "workspace.new-diagram.create").center();
         click(&mut h, at);
@@ -10333,7 +10361,7 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         // A group's + has chosen the kind: the dialog opens on the details, Back before them.
         let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
         click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.step, n.kind)), Some((crate::diagrams::Step::Details, "er")));
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.step, n.kind)), Some((crate::diagrams::Step::Details, archforge_er::DIAGRAM_KIND)));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert!(h.state().diagrams.new.is_none());
     }
@@ -10416,7 +10444,10 @@ fn the_package_tool_makes_the_package_its_diagram_and_its_default_as_one_undo_st
         let top = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
-            let d = s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Top" })).unwrap().value;
+            let d = s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Top" }))
+                .unwrap()
+                .value;
             archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
         };
         crate::canvas::open(h.state_mut(), top);
@@ -10572,7 +10603,10 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
             let s = h.state_mut().session.as_mut().unwrap();
             let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
             let d = s
-                .execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Commerce platform" }))
+                .execute(
+                    "diagram.add",
+                    &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Commerce platform" }),
+                )
                 .unwrap()
                 .value;
             archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
@@ -10792,7 +10826,10 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let (top, sales, billing, sales_card, billing_card) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-            let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Top" })).unwrap().value);
+            let top = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Top" }))
+                .unwrap()
+                .value);
             let mut made = Vec::new();
             for (name, x) in [("Sales", 80), ("Billing", 520)] {
                 let p = id(s.execute("uml.package.add", &serde_json::json!({ "name": name })).unwrap().value);
@@ -10812,7 +10849,10 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let (overview, sales_card2) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
-            let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Overview" })).unwrap().value);
+            let d = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Overview" }))
+                .unwrap()
+                .value);
             let at = serde_json::json!({ "diagram": d.to_string(), "element": sales.to_string(), "x": 80, "y": 120, "width": 240, "height": 148 });
             (d, id(s.execute("diagram.place", &at).unwrap().value))
         };
@@ -11084,10 +11124,14 @@ fn the_path_bar_opens_the_parents_default_not_the_diagram_it_was_entered_from() 
         let (first, second, sales) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-            let first =
-                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "First" })).unwrap().value);
-            let second =
-                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Second" })).unwrap().value);
+            let first = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "First" }))
+                .unwrap()
+                .value);
+            let second = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Second" }))
+                .unwrap()
+                .value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let p =
                 serde_json::json!({ "diagram": second.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
@@ -11123,7 +11167,7 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
             let add = |s: &mut archforge_notations::Session, name: &str| {
-                let p = serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": name });
+                let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": name });
                 id(s.execute("diagram.add", &p).unwrap().value)
             };
             let (first, second) = (add(s, "First"), add(s, "Second"));
@@ -11249,7 +11293,10 @@ fn shift_delete_on_a_selected_package_card_asks_to_delete_the_package() {
     let (top, sales) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-        let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Top" })).unwrap().value);
+        let top = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Top" }))
+            .unwrap()
+            .value);
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         s.execute(
             "diagram.place",
@@ -11278,13 +11325,13 @@ fn package_preview_harness(
         let s = h.state_mut().session.as_mut().unwrap();
         let mut run = |c: &str, p: serde_json::Value| id(s.execute(c, &p).unwrap().value);
         let root = run("uml.model.root", serde_json::json!({}));
-        let top = run("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" }));
+        let top = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }));
         let sales = run("uml.package.add", serde_json::json!({ "name": "Sales" }));
         let card = run(
             "diagram.place",
             serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
         );
-        let own = run("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": sales.to_string(), "name": "Sales" }));
+        let own = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales" }));
         let order = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "Order" }));
         let line = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "OrderLine" }));
         run("uml.association.add", serde_json::json!({ "from": order.to_string(), "to": line.to_string() }));
@@ -11827,8 +11874,10 @@ fn a_class_over_a_package_card_keeps_a_package_dropped_on_it_where_it_was() {
     let (top, sales, sales_card, class_card) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
-        let top =
-            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" })).unwrap().value);
+        let top = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }))
+            .unwrap()
+            .value);
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
         let place = |s: &mut archforge_notations::Session, e: archforge_mof::Uuid, x: i32| {
@@ -11885,8 +11934,10 @@ fn a_package_let_go_outside_the_canvas_stays_where_it_was() {
     let (top, sales, sales_card) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
-        let top =
-            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" })).unwrap().value);
+        let top = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }))
+            .unwrap()
+            .value);
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
         let sales_card = id(s
@@ -11929,7 +11980,7 @@ fn zooming_out_to_ten_percent_climbs_one_level_per_gesture_each_at_a_hundred_and
             let s = h.state_mut().session.as_mut().unwrap();
             let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
             let top = id(s
-                .execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root.to_string(), "name": "Top" }))
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }))
                 .unwrap()
                 .value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
@@ -12247,7 +12298,10 @@ fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::U
     let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
     let s = h.state_mut().session.as_mut().unwrap();
     let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-    let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "First" })).unwrap().value);
+    let first = id(s
+        .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "First" }))
+        .unwrap()
+        .value);
     let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
     let p = serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
     s.execute("diagram.place", &p).unwrap();
@@ -12357,8 +12411,10 @@ fn a_landing_pending_for_one_tab_never_places_another() {
             let support = {
                 let s = h.state_mut().session.as_mut().unwrap();
                 let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-                let d =
-                    id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": "Support" })).unwrap().value);
+                let d = id(s
+                    .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Support" }))
+                    .unwrap()
+                    .value);
                 for (name, x) in [("Ticket", 0), ("Agent", 4000)] {
                     let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": name })).unwrap().value);
                     let p = serde_json::json!({ "diagram": d.to_string(), "element": c.to_string(), "x": x, "y": 0, "width": 200, "height": 120 });
@@ -12429,7 +12485,9 @@ fn a_pending_fit_or_restored_view_stays_on_its_tab_across_switches_in_one_frame(
             let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
             let [overview, support] = ["Overview", "Support"].map(|name| {
                 let s = h.state_mut().session.as_mut().unwrap();
-                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": root, "name": name })).unwrap().value)
+                id(s.execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": name }))
+                    .unwrap()
+                    .value)
             });
             let s = h.state_mut().session.as_mut().unwrap();
             for (name, x) in [("Ticket", 0), ("Agent", 4000)] {
@@ -12959,7 +13017,10 @@ fn two_tables_harness() -> (Harness<'static, Shell>, String, String) {
         let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
         let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap().value);
         s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
-        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap().value);
+        let diagram = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }))
+            .unwrap()
+            .value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 }))
             .unwrap();
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 166 }))
@@ -16535,7 +16596,7 @@ fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes
         out["result"]["id"].as_str().unwrap_or_default().to_string()
     };
     let pkg = call("uml.package.add", serde_json::json!({ "name": "Billing" }));
-    let d = call("diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg, "name": "Billing" }));
+    let d = call("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Billing" }));
     let invoice = call("uml.class.add", serde_json::json!({ "package": pkg, "name": "Invoice" }));
     call("diagram.place", serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 }));
     let st = h.state().session.as_ref().unwrap().doc();
@@ -16818,7 +16879,9 @@ fn nested_orders(theme: ThemeKind) -> (Harness<'static, Shell>, archforge_mof::U
     };
     let fulfilment = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Fulfilment" })).unwrap();
     let orders = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Orders", "parent": fulfilment.to_string() })).unwrap();
-    let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": orders.to_string(), "name": "Orders" })).unwrap();
+    let d =
+        run(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": orders.to_string(), "name": "Orders" }))
+            .unwrap();
     let money = run(&mut h, "uml.data-type.add", serde_json::json!({ "package": orders.to_string(), "name": "Money" })).unwrap();
     let order = run(&mut h, "uml.class.add", serde_json::json!({ "package": orders.to_string(), "name": "Order" })).unwrap();
     run(&mut h, "uml.attribute.add", serde_json::json!({ "class": order.to_string(), "name": "number", "type": "Integer" }));
@@ -17176,7 +17239,12 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
             out.value["id"].as_str().map(|i| archforge_mof::Uuid::parse(i).unwrap())
         };
         let pkg = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Billing" })).unwrap();
-        let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": "Billing" })).unwrap();
+        let d = run(
+            &mut h,
+            "diagram.add",
+            serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg.to_string(), "name": "Billing" }),
+        )
+        .unwrap();
         crate::canvas::open(h.state_mut(), d);
         let class = run(&mut h, "uml.class.add", serde_json::json!({ "package": pkg.to_string(), "name": "ReviewInvoice" })).unwrap();
         let node =
@@ -17189,7 +17257,9 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         // The same class on two more diagrams: wider and short, and already tall.
         let mut others = Vec::new();
         for (name, width, tall) in [("Wide", 300, 150), ("Tall", 260, 400)] {
-            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": name })).unwrap();
+            let other =
+                run(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg.to_string(), "name": name }))
+                    .unwrap();
             let n = run(
                 &mut h,
                 "diagram.place",
@@ -17307,14 +17377,16 @@ fn members_a_tool_adds_grow_the_class_card_in_the_same_undo_step() {
             archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
         };
         let pkg = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Sales" }));
-        let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": "Sales" }));
+        let d =
+            run(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg.to_string(), "name": "Sales" }));
         crate::canvas::open(h.state_mut(), d);
         let class = run(&mut h, "uml.class.add", serde_json::json!({ "package": pkg.to_string(), "name": "Customer" }));
         let node = run(&mut h, "diagram.place", serde_json::json!({ "diagram": d.to_string(), "element": class.to_string(), "x": 200, "y": 200 }));
         // The same class on two more diagrams: made wider and short by hand, and already tall.
         let mut others = Vec::new();
         for (name, width, tall) in [("Wide", 360, 150), ("Tall", 260, 600)] {
-            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.structure", "element": pkg.to_string(), "name": name }));
+            let other =
+                run(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg.to_string(), "name": name }));
             let place =
                 serde_json::json!({ "diagram": other.to_string(), "element": class.to_string(), "x": 0, "y": 0, "width": width, "height": tall });
             others.push(run(&mut h, "diagram.place", place));
@@ -20852,7 +20924,8 @@ fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() 
     let er = {
         let s = h.state_mut().session.as_mut().unwrap();
         let schema = s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value["id"].as_str().unwrap().to_string();
-        let d = s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap().value;
+        let d =
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap().value;
         archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
     };
     crate::canvas::open(h.state_mut(), er);
@@ -21651,7 +21724,10 @@ fn a_menu_left_open_on_a_class_diagram_closes_on_an_er_tab_and_the_arrows_nudge_
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
         let pkg = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
-        let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.structure", "element": pkg, "name": "Billing" })).unwrap().value);
+        let d = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Billing" }))
+            .unwrap()
+            .value);
         let invoice = id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "Invoice" })).unwrap().value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 })).unwrap();
         archforge_mof::Uuid::parse(&d).unwrap()
@@ -25226,7 +25302,7 @@ fn deleting_a_table_shown_on_two_diagrams_from_models_says_two() {
             let bare = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Bare" }));
             id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Unplaced" }));
             for name in ["Shop schema", "Customers"] {
-                let d = id("diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": name }));
+                let d = id("diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": name }));
                 for (table, x) in [(&customer, 100), (&bare, 500)] {
                     id("diagram.place", serde_json::json!({ "diagram": d, "element": table, "x": x, "y": 100, "width": 240, "height": 166 }));
                 }

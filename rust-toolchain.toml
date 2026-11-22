@@ -1,0 +1,12 @@
+# The one Rust version of this repository. rustup reads this file wherever cargo runs in the
+# checkout, so the gate on a contributor's machine, the Gate workflow and every release job build
+# with the same compiler, whatever the machine's default toolchain is. Raising the version is a
+# change to `channel` here, with `rust-version` in Cargo.toml set to the same number (cargo does not
+# read this file) and the lints the new release adds fixed in code, all in one commit.
+[toolchain]
+channel = "1.96.1"
+# The formatter and the lints for the gate's format and lint steps, and the web target its portable
+# step builds for; rustup installs them with the version.
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

@@ -653,6 +653,7 @@ str		Rename branch	重命名分支
 str		The conversations and versions on this branch are not affected.	此分支上的对话和版本不受影响。
 str		The project changed before the branch was renamed, so its name stayed.	在重命名分支之前项目已更改，因此其名称保持不变。
 str		Couldn't rename the branch: {why}	无法重命名分支：{why}
+str		Another program is using this branch. Close that program, then try again.	另一个程序正在使用此分支。请关闭该程序，然后重试。
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge 无法确定分支是否已重命名为 {name}。请再次重命名为 {name} 以确认。
 str		Delete…	删除…
 str		Delete {branch}?	删除 {branch}？

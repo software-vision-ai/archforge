@@ -195,7 +195,7 @@ mod tests {
         let order = id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Order" })).unwrap().value);
         id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Customer_order" })).unwrap().value);
         s.execute("er.attribute.add", &json!({ "entity": order, "name": "order_id", "type": "BIGINT" })).unwrap();
-        s.execute("diagram.add", &json!({ "kind": "er", "element": schema, "name": "Orders" })).unwrap();
+        s.execute("diagram.add", &json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Orders" })).unwrap();
         let index = index(crate::kinds::KINDS, crate::notation_ui::UIS, s.doc());
         let (diagrams, elements) = hits(&index, "order");
         assert_eq!(diagrams.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(), ["Orders"]);

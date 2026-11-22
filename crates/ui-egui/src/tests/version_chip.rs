@@ -1255,7 +1255,9 @@ fn what_is_said_after_a_refused_step_stays_the_caption() {
 /// Adds a diagram named `name` of a schema of its own, and gives its id.
 fn add_diagram(h: &mut Harness<'static, Shell>, name: &str) -> archforge_mof::Uuid {
     let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": name })).unwrap()["id"].clone();
-    let made = crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": name })).unwrap();
+    let made =
+        crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": name }))
+            .unwrap();
     made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap()
 }
 

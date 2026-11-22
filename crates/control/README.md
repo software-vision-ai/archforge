@@ -19,7 +19,7 @@ token closes the connection without a word.
 | `token_path` | `pub fn token_path(settings: &Path, port: u16) -> PathBuf` (`control-<port>.token`, the person's own access) |
 | `mint_token`, `same_token` | 256 bits from the OS as 64 hex characters; a comparison in constant time |
 | `write_token`, `read_token` | exclusive creation with mode 0600, giving the file's `FileId`; trusted only as a regular file of the effective user with no group or other bits, re-checked on the open handle (CS-8); Unix only, elsewhere `NOT_HERE` |
-| `FileId`, `remove_token_file` | a token file's device and inode; the file is removed only while its name still holds that very file, anything else there is left and logged |
+| `FileId`, `remove_token_file` | a token file's device and inode; the file is removed only while its name still holds that very file, opened without following a link, and the file still holds the grant's token (compared in constant time): Linux gives a removed file's inode number to the next file made, so another start's file can carry the same identity but never the same token; anything else there is left and logged |
 | `read_line` | `pub fn read_line(r: &mut impl BufRead, max: usize) -> io::Result<Option<Vec<u8>>>` |
 | `Server::start` | `pub fn start(port: u16, settings: &Path, handler: Handler) -> Result<Server, String>`: the person's own access (`--control`), one `Role::Full` token in `control-<port>.token` (an earlier start's file of ours under that fixed name is replaced, as before; a granted file never is); the settings folder must be yours (others' write bits are removed); a first line has 5 s and 1 MiB, later lines 30 s each |
 | `Server::open`, `Server::grant`, `Server::grants`, `Grant`, `Bound` | Chat's agent access: an opening on a free loopback port with no token; `grant(Role, Option<Bound>)` mints a token into a new file `control-<port>-<16 hex>.token`, created exclusively (a taken name is never replaced; another is tried, up to 16), and gives a `Grant` (`path()`, `port()`, `live()`) whose drop revokes it; a `Bound { key, origin }` grant speaks only for that conversation: a request on it naming no origin takes the bound one, one naming another is refused (AR-230) |
@@ -38,7 +38,7 @@ thread is joined, a connection that has not ended within a second being shut bot
 opening has its own gate and grants, so a connection authenticated on one is never served by
 another or after its close.
 
-**Limits.** A token file is removed by name after its device and inode are checked, so a file
+**Limits.** A token file is removed by name after its device, inode and token are checked, so a file
 swapped in between the check and the removal would go; only this user can do that, as the
 settings folder is closed to others' writes. The close wakes the accepting thread with a loopback
 connection; if three tries fail (no file handle left), the thread is left, logged, and the port
