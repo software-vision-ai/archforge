@@ -1,6 +1,7 @@
 //! A project's model as rows of the generated tables and back: a model with every
 //! element kind, its diagram and a skill comes back from its rows identical, object for object and
 //! value for value; damaged rows are refused and leave the store as it was.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::collections::BTreeMap;
 

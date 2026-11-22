@@ -11,6 +11,7 @@
 //! `schema/codex-app-server-0.166.0.contract.json` is a cut of Codex's generated schema (Apache-2.0,
 //! see its `$comment` and NOTICE).
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::collections::{BTreeSet, HashMap};
 use std::os::unix::fs::PermissionsExt;

@@ -6,7 +6,6 @@
 //!
 //! The metamodel is `core.xmi`, generated into `generated/` by `cargo xtask generate core`; this
 //! file holds the rules the MOF core cannot know and the helpers that keep them.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod generated;
 pub mod skills;

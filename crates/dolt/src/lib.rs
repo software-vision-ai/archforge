@@ -6,7 +6,6 @@
 //! Host services: the application uses this crate and the interface never depends on it. Dolt
 //! embeds only into Go programs, so it runs as a separate process; everything above this crate
 //! talks SQL over the connection [`Server::connect`] gives.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod binary;
 mod config;

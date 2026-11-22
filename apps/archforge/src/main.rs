@@ -3,7 +3,6 @@
 //! Start-up order: arguments (an unknown option exits 2 before any I/O), `--version` (prints
 //! without logging), the logger, the panic hook, the settings directory, preferences, then the
 //! window, retried with the fallback graphics choice when the first one cannot start.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 //! generalizations, dependencies between packages and classifiers and interface realizations
 //! drawn, wrong ends refused with nothing changed, relationships reconnected with their drawn lines following, and removed with the
 //! classes they touch; each one undo step; realizations saved as rows and read back; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;

@@ -5,7 +5,6 @@
 //! generic commands, the cascades, the spatial index and the project's view are written here.
 //! Knows no notation: the view says what each diagram shows through [`DiagramView`], asking the
 //! [`Notation`] that owns the diagram's kind. Pure: builds for the portable target.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod arrange;
 pub mod commands;

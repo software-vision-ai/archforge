@@ -106,8 +106,16 @@ icu_properties = "2.3"
 unsafe_code = "forbid" # "deny" only when one isolated crate exists
 
 [workspace.lints.clippy]
+# Never crash (AGENTS.md): none of the panicking shortcuts in production code. Every member takes
+# these through `[lints] workspace = true`, which the gate's lint step checks; clippy.toml lets
+# `#[test]` and `#[cfg(test)]` code unwrap, expect and panic.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
 dbg_macro = "warn"
-todo = "warn"
 too_many_arguments = "allow"
 type_complexity = "allow"
 needless_range_loop = "allow"

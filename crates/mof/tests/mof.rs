@@ -2,6 +2,7 @@
 //! refusal naming its key and changing nothing, containment, opposites, subsets, derived unions,
 //! destroy with referrers, indexes exact against a rebuild, random sequences with undo back to the
 //! identical store, and the store as the engine's document.
+#![allow(clippy::unwrap_used, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_engine::{CommandError, Ctx, Document, EngineError, Facts, Options, Params, Registry, Session, View, always, cmd};
 use archforge_mof::toy::{self, *};

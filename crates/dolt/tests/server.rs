@@ -3,6 +3,7 @@
 //! program. These tests need dolt 2.6 or later; without it they fail and say how to install it.
 //! Measured on macOS; the Linux and Windows runs are still to be done.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::io::BufRead;
 use std::path::{Path, PathBuf};

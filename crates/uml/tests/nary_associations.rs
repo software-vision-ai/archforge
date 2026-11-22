@@ -4,6 +4,7 @@
 //! made binary, which turns it into a plain association with its line; its ends never
 //! aggregations; Remove from this diagram apart from Delete from the model; saved as rows and read
 //! back identical; binary associations as they were; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;

@@ -23,6 +23,10 @@ craft-atomic.workspace = true
 syn = { version = "2.0.119", default-features = false, features = ["full", "parsing", "printing", "visit"] }
 # Line and column of each literal and item, for the findings and the comment marks.
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
+# Reads each member's manifest for the lints check (cargo xtask ci): a TOML parser, so a value never
+# reads as a table. Already in the lockfile through egui_kittest, at this version; only its parser, no
+# serde or writer. MIT OR Apache-2.0; never a dependency of the application.
+toml = { version = "1.1.8", default-features = false, features = ["parse"] }
 
 [dev-dependencies]
 archforge-mof = { workspace = true, features = ["testing"] }

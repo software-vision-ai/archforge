@@ -1,6 +1,7 @@
 //! The real `archforge-cli` binary against a live control channel: the MCP server bridged to it,
 //! and one-off requests with their exit codes. The child runs with its own home folder, so it
 //! finds the token this test's server writes there.
+#![allow(clippy::unwrap_used, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};

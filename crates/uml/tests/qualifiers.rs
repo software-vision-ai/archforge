@@ -4,6 +4,7 @@
 //! built-in one or the model's own; qualifiers kept apart from attributes and roles; renaming and
 //! reconnecting the association keeping them; the line's qualifier box on two diagrams; saved as
 //! rows and read back identical; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;

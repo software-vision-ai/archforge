@@ -1,6 +1,7 @@
 //! A class's members through the engine: attributes and operations added,
 //! changed, moved, listed and removed, each one undo step; built-in types made in the Types package
 //! the first time one is used and reused after; multiplicities read or refused; the sweep.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
