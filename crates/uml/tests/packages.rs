@@ -3,13 +3,14 @@
 //! diagrams up to its parent (owner decision, for every notation), a top-level one taking them
 //! along, either taking its default-diagram bindings along (AR-577), and a class of another package
 //! drawn as an outsider; a package's card naming its owners from the root down (AR-564); a package
-//! a dependency that stays starts at or depends on kept (AR-696); each one undo step; the sweep.
+//! removed with the dependencies at it, a nested one handing up those between elements that stay
+//! (AR-698); each one undo step; the sweep.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
 use archforge_engine::testing::sweep_with;
-use archforge_engine::{End, Options, Session};
+use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, PropId, Store, Uuid, Value};
 use archforge_uml::defaults::problems;
 use archforge_uml::{ALONE, PACKAGE, STRUCTURE_DIAGRAM, registry};
@@ -308,13 +309,6 @@ fn refusal(s: &mut S, cmd: &str, p: Json) -> (Option<archforge_engine::Reason>, 
     (error.reason, error.message)
 }
 
-/// The reason a package that is the `end` of a dependency that stays is kept for, naming the
-/// dependency and its other end.
-fn kept(package: &str, end: End, other: &str, dependency: &str) -> Option<archforge_engine::Reason> {
-    let of = archforge_engine::DependencyOf { package: package.into(), end, other: other.into(), dependency: dependency.into() };
-    Some(archforge_engine::Reason::DependencyEnd(Box::new(of)))
-}
-
 /// A `class` named `name` among `owner`'s packaged elements.
 fn packaged(st: &mut Store, class: archforge_mof::ClassId, name: &str, owner: Obj) -> Obj {
     let o = st.create(class).unwrap();
@@ -333,78 +327,264 @@ fn depending(st: &mut Store, client: Obj, supplier: Obj, owner: Obj) -> Obj {
     d
 }
 
-/// A package that a dependency which stays has as client or supplier, deeper or right under the
-/// root, is kept until AR-698, the refusal naming it, the dependency and its other end; it goes
-/// once the dependency goes, or its classifier client with it, a package it holds handed up with
-/// its dependency, Undo and Redo exact (AR-696). The dependencies are made as a loaded document
-/// holds them.
-#[test]
-fn a_package_a_dependency_that_stays_starts_at_or_depends_on_is_kept_until_the_dependency_goes() {
-    let mut st = store(0);
-    st.create(archforge_core::MODEL).unwrap();
-    let root = archforge_uml::commands::ensure_root(&mut st).unwrap();
-    let [sales, billing] = ["sales", "billing"].map(|name| packaged(&mut st, PACKAGE, name, root));
-    let (ledger, audit) = (packaged(&mut st, PACKAGE, "ledger", billing), packaged(&mut st, PACKAGE, "audit", sales));
-    let order = packaged(&mut st, archforge_uml::CLASS, "Order", sales);
-    let on_ledger = depending(&mut st, order, ledger, sales);
-    let on_billing = depending(&mut st, sales, billing, sales);
-    let from_audit = depending(&mut st, audit, billing, audit);
-    let [sales, billing, ledger, audit, order, on_ledger, on_billing, from_audit] =
-        [sales, billing, ledger, audit, order, on_ledger, on_billing, from_audit].map(|o| st.uuid(o).unwrap().to_string());
-    let mut s = over(st);
-    let cases = [
-        (&ledger, "ledger", End::Target, "Order", &on_ledger),
-        (&billing, "billing", End::Target, "sales", &on_billing),
-        (&sales, "sales", End::Source, "billing", &on_billing),
-        (&audit, "audit", End::Source, "billing", &from_audit),
-    ];
-    for (package, name, end, other, d) in cases {
-        let (reason, message) = refusal(&mut s, "element.remove", json!({ "ids": [package] }));
-        assert_eq!(reason, kept(name, end, other, d));
-        let link = if end == End::Source { "on" } else { "from" };
-        assert!(message.contains(&format!("the dependency {d} {link} {other}, which stays; remove that dependency first")), "{message}");
-    }
-    run(&mut s, "element.remove", json!({ "ids": [on_billing, from_audit] }));
-    round_trip(&mut s, "element.remove", json!({ "ids": [billing] }));
-    assert!(alive(&s, &ledger) && alive(&s, &on_ledger), "ledger went up with its dependency");
-    // A dependency that goes with its classifier client lets its supplier go in the same step.
-    round_trip(&mut s, "element.remove", json!({ "ids": [order, ledger] }));
-    assert!(!alive(&s, &on_ledger) && !alive(&s, &ledger));
-    round_trip(&mut s, "element.remove", json!({ "ids": [audit] }));
-    round_trip(&mut s, "element.remove", json!({ "ids": [sales] }));
+/// The edges that show the element under `id` on any diagram.
+fn edges(s: &S, id: &str) -> usize {
+    archforge_diagram::views_of(s.doc(), obj(s, id)).1.len()
 }
 
-/// A parentless package, as a loaded document may hold, takes what it holds along, the
-/// dependencies inside it among them, so it is kept while a package it takes along is any supplier
-/// of a dependency that stays elsewhere, and goes once that dependency goes (AR-696).
+/// A nested package removed takes the dependencies at it along in the same step, never moving an
+/// end onto another element: one from it to a class and one on it from another package, with their
+/// lines; the package it handed up, removed next, takes the one on it from a class, which goes once
+/// when the class goes in the same call. A dependency the removed package holds between two
+/// elements that stay is handed up with its line, and the package's own diagram is handed up too; a
+/// constraint left naming none of what it constrained goes too. Removing a line from a diagram
+/// keeps its dependency. Counted as relationships, each one undo step that brings back the ids,
+/// the owners and the lines (AR-698).
 #[test]
-fn a_package_with_no_parent_is_kept_while_a_package_it_takes_along_is_a_dependency_s_supplier() {
-    use archforge_uml::{dependency, named_element, package};
+fn a_nested_package_removed_takes_the_dependencies_at_it_and_hands_up_those_between_survivors() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let root = root_id(&s);
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let ledger = run(&mut s, "uml.package.add", json!({ "name": "Ledger", "parent": billing }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let invoice = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Invoice" }));
+    let dependency = |s: &mut S, client: &str, supplier: &str| run(s, "uml.dependency.add", json!({ "client": client, "supplier": supplier }));
+    let on_ledger = dependency(&mut s, &order, &ledger);
+    let from_billing = dependency(&mut s, &billing, &order);
+    let on_billing = dependency(&mut s, &sales, &billing);
+    // Held by Billing, as its client is in Billing, between two classes that stay.
+    let between = dependency(&mut s, &invoice, &order);
+    let rule = run(&mut s, "uml.constraint.add", json!({ "context": order, "expression": "x", "constrained": [on_billing] }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": root, "name": "Model" }));
+    let detail = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": billing, "name": "Billing" }));
+    for (x, id) in [&sales, &billing, &ledger, &order, &invoice].into_iter().enumerate() {
+        run(&mut s, "diagram.place", json!({ "diagram": d, "element": id, "x": x * 300, "y": 0 }));
+    }
+    run(&mut s, "diagram.connect-all", json!({ "diagram": d }));
+    for r in [&on_ledger, &from_billing, &on_billing, &between] {
+        assert_eq!(edges(&s, r), 1, "{r} is drawn");
+    }
+    // A line removed from the diagram leaves its dependency in the model.
+    let line = archforge_diagram::views_of(s.doc(), obj(&s, &on_billing)).1[0];
+    let line = s.doc().uuid(line).unwrap().to_string();
+    round_trip(&mut s, "diagram.disconnect", json!({ "edge": line }));
+    assert!(alive(&s, &on_billing) && !alive(&s, &line), "only the line went");
+    s.undo().unwrap();
+    // Billing goes with the two dependencies at it, their lines and the rule on one; Ledger, Invoice,
+    // the dependency between survivors and the diagram move up, Billing's binding going.
+    let answer = removal(&mut s, &[&billing]);
+    assert_eq!(counts(&answer), (3, 1, 1, 2), "{answer}");
+    assert_eq!(count(&s, archforge_diagram::EDGE), 2, "the lines of the two that stay");
+    for gone in [&billing, &from_billing, &on_billing, &rule] {
+        assert!(!alive(&s, gone), "{gone} went");
+    }
+    for kept in [&ledger, &invoice, &between] {
+        assert_eq!(s.doc().container(obj(&s, kept)).unwrap().map(|(o, _)| o), Some(obj(&s, &root)), "{kept} is handed up to the root");
+    }
+    assert_eq!(refers(&s, &detail, archforge_diagram::diagram::ELEMENT), Some(obj(&s, &root)));
+    assert!(alive(&s, &on_ledger) && alive(&s, &order), "the dependency on Ledger stays, Ledger staying");
+    assert_eq!((edges(&s, &between), edges(&s, &on_ledger)), (1, 1), "their lines stay");
+    // Named beside Billing, a dependency at it goes once, counted once.
+    s.undo().unwrap();
+    assert_eq!(counts(&removal(&mut s, &[&billing, &from_billing])), (3, 1, 1, 2));
+    // Removed with Order, its client, the dependency on Ledger goes once, counted once beside the one
+    // between survivors that Order takes along.
+    let answer = removal(&mut s, &[&order, &ledger]);
+    assert_eq!(counts(&answer).3, 2, "{answer}");
+    assert!(!alive(&s, &on_ledger) && !alive(&s, &between));
+    s.undo().unwrap();
+    // Ledger, now under the root, goes with the dependency on it.
+    let answer = removal(&mut s, &[&ledger]);
+    assert_eq!(counts(&answer).3, 1, "{answer}");
+    assert!(!alive(&s, &on_ledger) && alive(&s, &order));
+    assert_eq!(problems(s.doc()), []);
+}
+
+/// A package with no parent, as a loaded document may hold, takes along the dependencies at it and
+/// at every package within it, wherever they are held: one on a package within from a class
+/// elsewhere, with a second supplier that stays, a usage on that package, one from a package within
+/// to that class, and one on it from another package; a dependency elsewhere between classes that
+/// stay stays. Counted, and
+/// one undo step (AR-698).
+#[test]
+fn a_package_with_no_parent_takes_the_dependencies_at_every_package_within_it_along() {
     let mut st = store(0);
     let model = st.create(archforge_core::MODEL).unwrap();
-    let [top, inner, other] = [(); 3].map(|_| st.create(PACKAGE).unwrap());
-    let [order, d, e] = [archforge_uml::CLASS, archforge_uml::DEPENDENCY, archforge_uml::DEPENDENCY].map(|c| st.create(c).unwrap());
+    let [top, other] = [(); 2].map(|_| st.create(PACKAGE).unwrap());
     for p in [top, other] {
         st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
     }
-    st.set(order, named_element::NAME, Value::Str("Order".into())).unwrap();
-    st.set(inner, named_element::NAME, Value::Str("ledger".into())).unwrap();
-    for (owner, held) in [(top, inner), (other, order), (other, d), (inner, e)] {
-        st.push(owner, package::PACKAGED_ELEMENT, Value::Ref(held)).unwrap();
-    }
-    st.push(d, dependency::CLIENT, Value::Ref(order)).unwrap();
+    let inner = packaged(&mut st, PACKAGE, "ledger", top);
+    let (order, host) = (packaged(&mut st, archforge_uml::CLASS, "Order", other), packaged(&mut st, archforge_uml::CLASS, "Host", other));
     // A second supplier past a first that stays, as a loaded document may have it.
-    st.push(d, dependency::SUPPLIER, Value::Ref(other)).unwrap();
-    st.push(d, dependency::SUPPLIER, Value::Ref(inner)).unwrap();
-    st.push(e, dependency::CLIENT, Value::Ref(inner)).unwrap();
-    st.push(e, dependency::SUPPLIER, Value::Ref(other)).unwrap();
-    let [top, d, e] = [top, d, e].map(|o| st.uuid(o).unwrap().to_string());
+    let on_inner = depending(&mut st, order, other, other);
+    st.push(on_inner, archforge_uml::dependency::SUPPLIER, Value::Ref(inner)).unwrap();
+    let from_inner = depending(&mut st, inner, order, inner);
+    let on_top = depending(&mut st, other, top, other);
+    let stays = depending(&mut st, order, host, other);
+    // A usage is a dependency too.
+    let used = st.create(archforge_uml::USAGE).unwrap();
+    st.push(other, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(used)).unwrap();
+    st.push(used, archforge_uml::dependency::CLIENT, Value::Ref(host)).unwrap();
+    st.push(used, archforge_uml::dependency::SUPPLIER, Value::Ref(inner)).unwrap();
+    let [top, on_inner, from_inner, on_top, stays, order, used] =
+        [top, on_inner, from_inner, on_top, stays, order, used].map(|o| st.uuid(o).unwrap().to_string());
     let mut s = over(st);
-    let (reason, _) = refusal(&mut s, "element.remove", json!({ "ids": [top] }));
-    assert_eq!(reason, kept("ledger", End::Target, "Order", &d));
-    run(&mut s, "element.remove", json!({ "ids": [d] }));
-    round_trip(&mut s, "element.remove", json!({ "ids": [top] }));
-    assert!(!alive(&s, &e), "the dependency inside went along with its client");
+    let answer = removal(&mut s, &[&top]);
+    assert_eq!(counts(&answer), (0, 0, 0, 4), "{answer}");
+    for gone in [&on_inner, &from_inner, &on_top, &used] {
+        assert!(!alive(&s, gone), "{gone} went");
+    }
+    assert!(alive(&s, &stays) && alive(&s, &order), "the classes elsewhere and their dependency stay");
+}
+
+/// A diagram of a dependency at a package that goes, as a loaded document may hold one, goes with
+/// the dependency: while Sales, which stays, has that diagram as its default, removing Billing at
+/// the dependency's other end is refused typed with nothing changed, as removing the dependency is.
+/// With Sales bound to a diagram of its own instead, Billing goes with the dependency and its
+/// diagram, Sales's binding staying; with Billing's own binding on that diagram, the binding goes
+/// with Billing. Each one undo step (AR-698).
+#[test]
+fn a_binding_that_stays_on_a_diagram_of_a_dependency_at_a_package_keeps_the_package() {
+    use archforge_engine::{BindingFault, Reason};
+    let mut st = store(0);
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let root = archforge_uml::commands::ensure_root(&mut st).unwrap();
+    let [sales, billing] = ["Sales", "Billing"].map(|name| packaged(&mut st, PACKAGE, name, root));
+    let d = depending(&mut st, sales, billing, sales);
+    let diagram = st.create(DIAGRAM).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(diagram)).unwrap();
+    DiagramObj::set_kind(&mut st, diagram, Some(STRUCTURE_DIAGRAM)).unwrap();
+    DiagramObj::set_element(&mut st, diagram, Some(d)).unwrap();
+    let own = st.create(DIAGRAM).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(own)).unwrap();
+    DiagramObj::set_kind(&mut st, own, Some(STRUCTURE_DIAGRAM)).unwrap();
+    DiagramObj::set_element(&mut st, own, Some(sales)).unwrap();
+    let binding = bind(&mut st, 0x60, sales, diagram);
+    let [billing, d, diagram, own] = [billing, d, diagram, own].map(|o| st.uuid(o).unwrap().to_string());
+    let mut s = over(st);
+    let kept = Some(Reason::DefaultDiagramOf { package: "Sales".into(), fault: Some(BindingFault::WrongOwner) });
+    for ids in [json!([d]), json!([billing])] {
+        assert_eq!(refusal(&mut s, "element.remove", json!({ "ids": ids })).0, kept, "{ids}");
+    }
+    let mut st = reread(&s);
+    let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let (b, target) = (at(&st, &binding), at(&st, &own));
+    st.set(b, DEFAULT_DIAGRAM, Value::Ref(target)).unwrap();
+    let mut s = over(st);
+    assert_eq!(counts(&removal(&mut s, &[&billing])).3, 1);
+    assert!(!alive(&s, &d) && !alive(&s, &diagram), "the dependency went with its diagram");
+    assert_eq!(refers(&s, &binding, DEFAULT_DIAGRAM), Some(obj(&s, &own)), "Sales keeps its own default");
+    // Billing's own binding on that diagram goes with Billing, so it keeps nothing.
+    s.undo().unwrap();
+    let mut st = reread(&s);
+    let (b, owner, target) = (at(&st, &binding), at(&st, &billing), at(&st, &diagram));
+    st.set(b, OWNER_ELEMENT, Value::Ref(owner)).unwrap();
+    st.set(b, DEFAULT_DIAGRAM, Value::Ref(target)).unwrap();
+    let mut s = over(st);
+    assert_eq!(counts(&removal(&mut s, &[&billing])), (0, 0, 1, 1));
+    assert!([&billing, &d, &diagram, &binding].iter().all(|id| !alive(&s, id)), "Billing, its binding, the dependency and its diagram went");
+}
+
+/// A dependency at a package that goes takes its stereotype application along, as a loaded document
+/// may hold one, and the literal a value there names may go in the same call, the dependency
+/// carrying it going too (AR-698).
+#[test]
+fn a_dependency_at_a_package_that_goes_takes_its_stereotype_application_along() {
+    let mut s = session();
+    let commerce = run(&mut s, "uml.package.add", json!({ "name": "Commerce" }));
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": commerce, "name": "Order" }));
+    let level = run(&mut s, "uml.enumeration.add", json!({ "package": billing, "name": "Level" }));
+    run(&mut s, "uml.literal.add", json!({ "enumeration": level, "name": "high" }));
+    let tracing = run(&mut s, "uml.profile.add", json!({ "name": "Tracing" }));
+    let trace = run(&mut s, "uml.stereotype.add", json!({ "profile": tracing, "name": "Trace", "extends": ["Class"] }));
+    run(&mut s, "uml.attribute.add", json!({ "class": trace, "name": "level", "type": level }));
+    run(&mut s, "uml.profile.apply", json!({ "package": commerce, "profile": tracing }));
+    let d = run(&mut s, "uml.dependency.add", json!({ "client": commerce, "supplier": billing }));
+    let application = run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": trace }));
+    run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": trace, "property": "level", "values": ["high"] }));
+    // The application's link moved onto the dependency, as a document made elsewhere may have it.
+    let mut st = reread(&s);
+    let at = |id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let (instance, dependency) = (at(&application), at(&d));
+    let link = st.referrers(instance).into_iter().find(|(_, p)| *p == archforge_core::link::SOURCE).unwrap().0;
+    st.set(link, archforge_core::link::TARGET, Value::Ref(dependency)).unwrap();
+    let mut s = over(st);
+    let gone = |s: &S| !alive(s, &d) && !alive(s, &application) && count(s, archforge_core::LINK) == 0 && alive(s, &order);
+    assert_eq!(counts(&removal(&mut s, &[&billing])).3, 1);
+    assert!(gone(&s), "the dependency went, its application and the application's link with it");
+    s.undo().unwrap();
+    // The literal its value names may go in the same call, the dependency carrying it going too.
+    round_trip(&mut s, "element.remove", json!({ "ids": [level, billing] }));
+    assert!(gone(&s));
+    assert_eq!(problems(s.doc()), []);
+}
+
+/// A nested package goes when only what goes with it uses the profile it applies: the stereotype
+/// applications on a dependency at it, or on the dependency's description, which it holds, are
+/// taken along with the dependency, so they strand nothing. One on a class it hands up keeps it,
+/// the refusal typed and naming that use alone, as Models says before it asks; and so does one on a
+/// dependency it hands up, until the package at the dependency's other end goes in the same call.
+/// Each one undo step (AR-698).
+#[test]
+fn a_nested_package_whose_profile_only_what_goes_with_it_uses_goes() {
+    use archforge_engine::{InUse, Reason, Used};
+    let mut s = session();
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let ledger = run(&mut s, "uml.package.add", json!({ "name": "Ledger", "parent": billing }));
+    let archive = run(&mut s, "uml.package.add", json!({ "name": "Archive" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Order" }));
+    let [entry, line, post] = ["Entry", "Line", "Post"].map(|name| run(&mut s, "uml.class.add", json!({ "package": ledger, "name": name })));
+    let tracing = run(&mut s, "uml.profile.add", json!({ "name": "Tracing" }));
+    let trace = run(&mut s, "uml.stereotype.add", json!({ "profile": tracing, "name": "Trace", "extends": ["Class"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": ledger, "profile": tracing }));
+    // Ledger holds both dependencies: it is the client of the first, Entry of the second.
+    let at_ledger = run(&mut s, "uml.dependency.add", json!({ "client": ledger, "supplier": order }));
+    let handed_up = run(&mut s, "uml.dependency.add", json!({ "client": entry, "supplier": archive }));
+    let apply = |s: &mut S, element: &str| run(s, "uml.stereotype.apply", json!({ "element": element, "stereotype": trace }));
+    let [on_dependency, on_description, on_handed_up] = [&entry, &line, &post].map(|c| apply(&mut s, c));
+    // Each application's link moved onto what it is meant for, as a document made elsewhere may
+    // have it: the dependency at Ledger, its description, and the dependency Ledger hands up.
+    let mut st = reread(&s);
+    let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let d = at(&st, &at_ledger);
+    archforge_uml::descriptions::describe_element(&mut st, d, "kept in the ledger").unwrap();
+    let description = archforge_uml::descriptions::description_comment(&st, d).unwrap();
+    for (application, target) in [(&on_dependency, d), (&on_description, description), (&on_handed_up, at(&st, &handed_up))] {
+        let instance = at(&st, application);
+        let link = st.referrers(instance).into_iter().find(|(_, p)| *p == archforge_core::link::SOURCE).unwrap().0;
+        st.set(link, archforge_core::link::TARGET, Value::Ref(target)).unwrap();
+    }
+    let mut s = over(st);
+    let ledger_obj = obj(&s, &ledger);
+    // The dependency Ledger hands up keeps it; with Archive going too, that dependency goes with it.
+    let (reason, _) = refusal(&mut s, "element.remove", json!({ "ids": [ledger] }));
+    let Some(Reason::InUse(used)) = reason.clone() else { panic!("{reason:?}") };
+    assert_eq!((used.what.clone(), used.uses.iter().map(|u| u.2).sum::<usize>()), (Used::AppliedProfiles { package: "Ledger".into() }, 1));
+    assert_eq!(archforge_uml::profiles::removal_problem(s.doc(), ledger_obj).and_then(|e| e.reason), reason, "as Models says it");
+    let answer = removal(&mut s, &[&ledger, &archive]);
+    // The two dependencies and Ledger's profile application, a relationship too.
+    assert_eq!(counts(&answer).3, 3, "{answer}");
+    assert!([&at_ledger, &handed_up, &on_dependency, &on_description, &on_handed_up].iter().all(|id| !alive(&s, id)));
+    s.undo().unwrap();
+    // With that dependency gone first, Ledger goes alone, its own dependency taking the two
+    // applications along, and Models says nothing before it asks.
+    run(&mut s, "element.remove", json!({ "ids": [handed_up] }));
+    assert_eq!(archforge_uml::profiles::removal_problem(s.doc(), ledger_obj), None);
+    assert_eq!(counts(&removal(&mut s, &[&ledger])), (3, 0, 0, 2));
+    assert!([&at_ledger, &on_dependency, &on_description].iter().all(|id| !alive(&s, id)), "the dependency went with both applications");
+    assert_eq!(s.doc().container(obj(&s, &entry)).unwrap().map(|(o, _)| o), Some(obj(&s, &billing)), "Entry is handed up");
+    s.undo().unwrap();
+    // An application on Entry, which Ledger hands up, keeps it, and is the one use named.
+    apply(&mut s, &entry);
+    let said = InUse { what: Used::AppliedProfiles { package: "Ledger".into() }, uses: vec![("Trace".into(), vec!["Entry".into()], 1)] };
+    let (reason, message) = refusal(&mut s, "element.remove", json!({ "ids": [ledger] }));
+    assert_eq!(reason, Some(Reason::InUse(Box::new(said.clone()))), "{message}");
+    let before_asking = archforge_uml::profiles::removal_problem(s.doc(), ledger_obj).and_then(|e| e.reason);
+    assert_eq!(before_asking, Some(Reason::InUse(Box::new(said))));
+    assert_eq!(problems(s.doc()), []);
 }
 
 /// A package of another branch, the root, an owner of the diagram's package and that package
