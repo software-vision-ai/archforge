@@ -26,10 +26,13 @@
 //! marks.
 //!
 //! Generated code (any `generated` folder) is left out: `cargo xtask generate` writes it from the XMI
-//! and the `generated` step checks it; the word there is a metamodel's name.
+//! and the `generated` step checks it; the word there is a metamodel's name. The walk is strict
+//! ([`util::walk_strict`]): a folder in scope that cannot be opened, or an entry whose kind cannot be
+//! read, fails the check with its path, so no part of the scope passes unread; a `generated` folder
+//! is left out before it is opened, and a symbolic link is never followed.
 
 use std::collections::BTreeSet;
-use std::path::{Component, Path};
+use std::path::Path;
 
 use proc_macro2::{Delimiter, LineColumn, TokenStream, TokenTree};
 use syn::ext::IdentExt;
@@ -47,6 +50,9 @@ pub const MARK: &str = "not a diagram kind:";
 
 /// The folders, from the workspace root, whose Rust sources are scanned.
 const SCOPE: [&str; 2] = ["crates", "apps"];
+
+/// The folders left out of the scan wherever they are, never opened: generated code.
+const SKIPPED: [&str; 1] = ["generated"];
 
 /// One diagram kind of the table: its word, the constant that holds it (the path to use), and the
 /// file that defines that constant.
@@ -360,7 +366,7 @@ fn check(rel: &str, text: &str, words: &[(String, String)], exempt: &BTreeSet<Po
 }
 
 /// Every finding of the check over the workspace at `root`, each named with its file, and how many
-/// sources were read.
+/// sources were read; an error when a source or a folder in scope cannot be read.
 fn scan(root: &Path) -> Result<(Vec<String>, usize), String> {
     let kinds = table(&std::fs::read_to_string(root.join(TABLE)).map_err(|e| format!("{TABLE}: {e}"))?)?;
     let words: Vec<(String, String)> = kinds.iter().map(|k| (k.word.clone(), k.constant.clone())).collect();
@@ -378,9 +384,9 @@ fn scan(root: &Path) -> Result<(Vec<String>, usize), String> {
     }
     let mut read = 0usize;
     for dir in SCOPE {
-        for path in util::walk(&root.join(dir))? {
+        for path in util::walk_strict(&root.join(dir), &SKIPPED)? {
             let rel = path.strip_prefix(root).unwrap_or(&path).to_path_buf();
-            if rel.extension().is_none_or(|x| x != "rs") || rel.components().any(|c| c == Component::Normal("generated".as_ref())) {
+            if rel.extension().is_none_or(|x| x != "rs") {
                 continue;
             }
             let text = std::fs::read_to_string(root.join(&rel)).map_err(|e| format!("{}: {e}", rel.display()))?;
@@ -633,6 +639,45 @@ mod tests {
         let found = found("fn f( {\n\"er\"");
         assert_eq!(found.len(), 1, "{found:?}");
         assert!(found.iter().all(|f| f.starts_with("f.rs line ") && f.contains("not read as Rust")), "{found:?}");
+    }
+
+    /// A workspace with ER's kind defined, a kind written out under `apps/a/src/inner` and one in a
+    /// `generated` folder of `crates/er/src`.
+    fn workspace(name: &str) -> util::Scratch {
+        let s = util::Scratch::new(name).unwrap();
+        s.file(TABLE, "er\tarchforge_er::DIAGRAM_KIND\tcrates/er/src/lib.rs\n").unwrap();
+        s.file("crates/er/src/lib.rs", "pub const DIAGRAM_KIND: &str = \"er\";\n").unwrap();
+        s.file("crates/er/src/generated/mod.rs", "const K: &str = \"er\";\n").unwrap();
+        s.file("apps/a/src/main.rs", "fn main() {}\n").unwrap();
+        s.file("apps/a/src/inner/mod.rs", "const K: &str = \"er\";\n").unwrap();
+        s
+    }
+
+    /// The scan reaches every folder in scope and leaves `generated` out: the kind in `inner` is
+    /// found, the one in `generated` is not.
+    #[test]
+    fn the_scan_reads_every_folder_in_scope_but_generated() {
+        let s = workspace("kinds-scope");
+        let at = Path::new("apps/a/src/inner/mod.rs").display();
+        assert_eq!(scan(&s.path), Ok((vec![format!("{at} line 1: the diagram kind \"er\" is written out; use archforge_er::DIAGRAM_KIND")], 3)));
+    }
+
+    /// A folder in scope that cannot be opened fails the scan with its path, never a pass on the
+    /// sources read elsewhere; an unreadable `generated` folder is no error, as it is never opened
+    /// (CodeRabbit on #572).
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_folder_fails_the_scan_unless_it_is_left_out() {
+        let s = workspace("kinds-locked");
+        if !s.lock("crates/er/src/generated").unwrap() {
+            eprintln!("skipped: a folder without permissions still opens for this user (root?)");
+            return;
+        }
+        assert_eq!(scan(&s.path).map(|(_, read)| read), Ok(3));
+        assert!(s.lock("apps/a/src/inner").unwrap());
+        let inner = s.path.join("apps/a/src/inner");
+        let error = scan(&s.path).unwrap_err();
+        assert!(error.starts_with(&format!("{}: this folder cannot be opened, so nothing under it is checked: ", inner.display())), "{error}");
     }
 
     /// The repository as it stands writes no diagram kind out, and its table's constants hold the
