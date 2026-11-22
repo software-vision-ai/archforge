@@ -11,6 +11,7 @@ mod assets;
 mod bump;
 mod generate;
 mod ico;
+mod kind_literals;
 mod layers;
 mod manual;
 mod resize;
@@ -38,6 +39,7 @@ const USAGE: &str = "usage: cargo xtask <verb>
   skills             the skills check: the routing tables and every file, verb and skill they name
   generate [name] [--docs]  regenerate a metamodel crate's code from its XMI (all when no name)
   generated          the check that the generated code is what the XMI gives
+  kinds              the check that a diagram kind is written out only as its crate's constant
   version [x.y.z]    print or set the workspace version
   ico <out> <png>... pack PNGs into a Windows icon
   resize <in> <out> <size> [--grid]  scale a square PNG down, on the icon grid with --grid
@@ -70,6 +72,7 @@ fn steps() -> Vec<Step> {
         ("layers", Box::new(layers::run)),
         ("portable", Box::new(wasm::run)),
         ("generated", Box::new(generate::check)),
+        ("kinds", Box::new(kind_literals::run)),
     ];
     let deny = cargo_step(&["deny", "--locked", "check"]);
     s.push((
@@ -140,6 +143,7 @@ fn main() {
         Some("skills") => skills::run(),
         Some("generate") => generate::run(rest),
         Some("generated") => generate::check(),
+        Some("kinds") => kind_literals::run(),
         Some("version") => version::run(rest.first().map(String::as_str)),
         Some("ico") => ico::run(rest),
         Some("resize") => resize::run(rest),

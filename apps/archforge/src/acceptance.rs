@@ -292,6 +292,7 @@ fn add_column(h: &mut H, name: &str, ty: &str, primary_key: bool) {
 /// A user models an ER diagram through the real shell, saves, closes and reopens it unchanged.
 #[test]
 fn a_user_models_an_er_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
+    // not a diagram kind: the journey's name, which names its sandbox
     let (mut h, _sandbox) = start("er");
 
     // 1. A new project from Home.

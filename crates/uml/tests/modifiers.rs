@@ -116,7 +116,7 @@ fn read(s: &mut S, class: &str, id: &str) -> Json {
 /// and Status.
 fn shop(s: &mut S) -> (String, String, String, String, String) {
     let pkg = run(s, "uml.package.add", json!({ "name": "Shop" }));
-    let d = run(s, "diagram.add", json!({ "kind": "uml.structure", "element": pkg, "name": "Shop" }));
+    let d = run(s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Shop" }));
     let item = run(s, "uml.class.add", json!({ "package": pkg, "name": "Item" }));
     let order = run(s, "uml.class.add", json!({ "package": pkg, "name": "Order" }));
     run(s, "uml.generalization.add", json!({ "specific": order, "general": item }));
@@ -208,7 +208,7 @@ fn a_static_member_is_underlined_on_its_card() {
     use archforge_diagram::figure::Row;
     let mut s = session();
     let (pkg, d, item, order, status) = shop(&mut s);
-    let other = run(&mut s, "diagram.add", json!({ "kind": "uml.structure", "element": pkg, "name": "Other" }));
+    let other = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Other" }));
     let marks = |r: Row| (r.slanted, r.underlined);
     // A static attribute and a plain one; a static operation, a static abstract one, an abstract one.
     let count = round_trip(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer", "static": true }));
