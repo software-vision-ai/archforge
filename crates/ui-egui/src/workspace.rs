@@ -108,9 +108,11 @@ fn room(w: f32) -> Option<f32> {
     Some(w.max(0.0))
 }
 
+/// Draws the workspace of the open project over the whole window, on the page colour of the
+/// shell's appearance.
 pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let p = *ux::palette(shell.state.theme.is_dark());
-    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(p.page)).show(ui, |ui| {
+    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(p.page.into())).show(ui, |ui| {
         let full = ui.max_rect();
         if !ux::ready(ui.ctx()) {
             ui.ctx().request_repaint();
@@ -240,7 +242,7 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
         ux::icon_mid(&paint, home.center(), &icons::HOME, home_ink);
     } else {
         ux::icon_mid(&paint, pos2(home.left() + 16.0, mid), &icons::HOME, home_ink);
-        paint.galley(pos2(home.left() + 30.0, mid - home_label.size().y / 2.0), home_label, if home_on { p.accent } else { p.text });
+        paint.galley(pos2(home.left() + 30.0, mid - home_label.size().y / 2.0), home_label, if home_on { p.accent.into() } else { p.text.into() });
     }
     if home_resp.clicked() && !home_on {
         click = Some(TabClick::Home);
@@ -292,7 +294,7 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
         ux::icon_mid(&paint, pos2(chip.left() + 17.0, mid), &icons::FOLDER, icon_ink);
         if named {
             let g = ux::galley(&paint, name, if *on { types::UI_STRONG } else { types::UI }, ink, Some(room));
-            paint.galley(pos2(chip.left() + 32.0, mid - g.size().y / 2.0), g, ink);
+            paint.galley(pos2(chip.left() + 32.0, mid - g.size().y / 2.0), g, ink.into());
         }
         ux::icon_mid(&paint, close.center(), &icons::CLOSE, icon_ink);
         if close_resp.clicked() {
@@ -407,7 +409,7 @@ fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> Rect {
     let text_end = restore_in_banner(shell, ui, p, beside);
     ux::text_mid(paint, band.left() + 36.0, band.center().y, &words, types::UI, p.accent, room(text_end - band.left() - 48.0));
     paint.rect_filled(button, 6.0, p.accent_fill);
-    paint.galley(button.center() - g.size() / 2.0, g, p.on_accent);
+    paint.galley(button.center() - g.size() / 2.0, g, p.on_accent.into());
     if control(shell, ui, "workspace.banner.back", "button", button, true).accessible_name(&back).clicked() {
         shell.back_to_current_work();
     }
@@ -503,7 +505,7 @@ fn read_only_badge(ui: &egui::Ui, p: &Palette, r: Rect) {
     let pill = Rect::from_min_size(pos2(r.right() - 48.0 - g.size().x - 34.0, r.top() + 10.0), vec2(g.size().x + 34.0, 24.0));
     paint.rect_filled(pill, 12.0, p.accent_tint);
     ux::icon_in(paint, Rect::from_center_size(pos2(pill.left() + 16.0, pill.center().y), Vec2::splat(12.0)), &icons::LOCK, p.accent);
-    paint.galley(pos2(pill.left() + 26.0, pill.center().y - g.size().y / 2.0), g, p.accent);
+    paint.galley(pos2(pill.left() + 26.0, pill.center().y - g.size().y / 2.0), g, p.accent.into());
 }
 
 /// Chat's agent access in the status bar (the design's "Agent" item), its right edge at `right`:
@@ -524,7 +526,7 @@ fn agent_status(shell: &mut Shell, ui: &egui::Ui, p: &Palette, bar: Rect, right:
     }
     crate::settings::focus_ring(paint, p, r, 6.0, &resp);
     paint.circle_filled(pos2(r.left() + 11.0, r.center().y), 3.0, dot);
-    paint.galley(pos2(r.left() + 23.0, r.center().y - g.size().y / 2.0), g, p.text_secondary);
+    paint.galley(pos2(r.left() + 23.0, r.center().y - g.size().y / 2.0), g, p.text_secondary.into());
     if resp.clicked() {
         crate::settings::open_at(shell, crate::settings::Section::Agents);
     }
@@ -589,7 +591,7 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     if let Some(location) = shell.location() {
         let g = ux::galley(paint, &location, types::CAPTION, p.text_secondary, room(r.width() / 2.0 - 60.0));
         right -= g.size().x;
-        paint.galley(pos2(right, y), g, p.text_secondary);
+        paint.galley(pos2(right, y), g, p.text_secondary.into());
         right -= 8.0;
     }
     if shell.services.agents.is_some() {

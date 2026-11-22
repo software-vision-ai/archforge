@@ -14,6 +14,12 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
 - Colours come from the palette, `ux::palette(dark)` (`crates/ui-egui/src/ux/mod.rs`): `LIGHT` and
   `DARK`, one field per role. No literal colour outside that file; a new role is a new field in
   both appearances.
+- A colour is a `ux::Colour`: its value is private, so only `ux` makes one (a palette role, a
+  named colour such as `ux::CLEAR`, or `ux::data_colour` for a colour the document holds). A
+  screen passes it on as `ux::Colour`. egui takes it where it takes `impl Into<Color32>`; where
+  an egui call or field wants its own colour type (`Painter::galley`, `TextFormat`, the theme's
+  `Visuals`), the colour gets `.into()` right there. A test reading a frame back compares what
+  was painted, as `ux::drawn(..)`, with the palette's values or with a colour's own bytes.
 - Text uses the design's styles, `ux::types::*`, drawn with `ux::text`, `ux::galley` or
   `ux::galley_rows`, which place a line box's top-left corner as the design does. No raw `FontId`
   in a screen. A screen checks `ux::ready` before its first text.

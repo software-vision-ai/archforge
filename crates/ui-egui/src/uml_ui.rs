@@ -241,7 +241,7 @@ impl DiagramKind for UmlKind {
     }
 
     /// The classifier tool shows the kind it places, the Relationship tool the kind it draws.
-    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: egui::Color32, active: bool) -> bool {
+    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
         match key {
             crate::uml_classifier::TOOL => crate::uml_classifier::tool_face(shell, paint, b, ink),
             "relationship" => crate::uml_relate::tool_face(shell, paint, p, b, ink, active),
@@ -966,7 +966,7 @@ impl NotationUi for UmlUi {
             let said = tr("A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.");
             let paint = ui.painter();
             let g = crate::ux::galley_rows(paint, &said, crate::ux::types::CAPTION, p.text_muted, Some(width), 6);
-            paint.galley(egui::pos2(r.left() + crate::panels::PAD, y), g, p.text_muted);
+            paint.galley(egui::pos2(r.left() + crate::panels::PAD, y), g, p.text_muted.into());
             return;
         }
         match class(store, o) {

@@ -387,7 +387,7 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
     let key_at = pos2(field.right() - 14.0 - key.size().x, mid - key.size().y / 2.0);
     let text = Rect::from_min_max(pos2(field.left() + 32.0, field.top()), pos2((key_at.x - 8.0).max(field.left() + 32.0), field.bottom()));
     if !open_now {
-        paint.galley(key_at, key, p.text_muted);
+        paint.galley(key_at, key, p.text_muted.into());
         ux::text_mid(&paint, text.left(), mid, placeholder, types::UI, p.text_secondary, Some(text.width()));
         if control(shell, ui, &id, "field", field, true).clicked() {
             open(shell, ui.ctx());
@@ -456,7 +456,7 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::UI.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .hint_text(egui::RichText::new(placeholder).color(p.text_secondary).font(types::UI.font()))
         .char_limit(MAX_QUERY)
         .desired_width(inner.width());
@@ -519,7 +519,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, groups: &[(S
                 if !hit.detail.is_empty() {
                     let room = (row.right() - 12.0 - (name.right() + 12.0)).max(0.0);
                     let g = ux::galley(&paint, &hit.detail, types::CAPTION, p.text_secondary, Some(room));
-                    paint.galley(pos2(row.right() - 12.0 - g.size().x, row.center().y - g.size().y / 2.0), g, p.text_secondary);
+                    paint.galley(pos2(row.right() - 12.0 - g.size().x, row.center().y - g.size().y / 2.0), g, p.text_secondary.into());
                 }
                 if resp.clicked() {
                     picked = Some(hit.target.clone());

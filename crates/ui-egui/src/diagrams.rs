@@ -530,7 +530,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         // Two rows from the foot, so a reason such as why a default stays reads whole (AR-644).
         let g = ux::galley_rows(&paint, &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)), 2);
         let area = Rect::from_min_size(pos2(r.left() + 16.0, r.bottom() - 12.0 - g.size().y), g.size());
-        paint.galley(area.min, g, p.amber);
+        paint.galley(area.min, g, p.amber.into());
         widgets::announce(ui, &mut shell.registry, "workspace.diagrams.notice", area, &notice);
     }
 }
@@ -569,7 +569,7 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .hint_text(egui::RichText::new(tr("Filter diagrams…")).color(p.text_secondary).font(types::SMALL.font()))
         .char_limit(MAX_NAME)
         .desired_width(inner.width());
@@ -783,7 +783,7 @@ fn row_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
         }
         let detail = ux::galley(&paint, key, types::CAPTION, p2.text_muted, None);
         let dw = detail.size().x;
-        paint.galley(pos2(row.right() - 10.0 - dw, row.center().y - detail.size().y / 2.0), detail, p2.text_muted);
+        paint.galley(pos2(row.right() - 10.0 - dw, row.center().y - detail.size().y / 2.0), detail, p2.text_muted.into());
         let ink = if why.is_none() { p2.danger } else { p2.text_muted };
         ux::text_mid(&paint, row.left() + 10.0, row.center().y, &label, types::SMALL, ink, Some((row.width() - 28.0 - dw).max(0.0)));
         why.is_none() && resp.clicked()
@@ -848,7 +848,7 @@ fn buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter,
         let g = ux::galley(paint, label, types::SMALL, ink, None);
         let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, dialog.bottom() - 48.0), pos2(x, dialog.bottom() - 20.0));
         paint.rect_filled(b, 6.0, if *primary { p.accent_fill } else { p.field });
-        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
+        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink.into());
         let resp = control(shell, ui, id, "button", b, true);
         if resp.has_focus() {
             paint.rect_stroke(b.expand(2.0), 8.0, Stroke::new(2.0, p.focus), StrokeKind::Outside);
@@ -910,7 +910,7 @@ fn kind_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui::Pa
         let room = Some((card.width() - 32.0).max(0.0));
         ux::text(paint, card.min + vec2(16.0, 124.0), &kind.word(), types::UI_STRONG, p.text, room);
         let g = ux::galley_rows(paint, &kind.description(), types::CAPTION, p.text_secondary, room, 3);
-        paint.galley(card.min + vec2(16.0, 148.0), g, p.text_secondary);
+        paint.galley(card.min + vec2(16.0, 148.0), g, p.text_secondary.into());
         if selected {
             let mark = pos2(card.right() - 21.0, card.top() + 27.0);
             paint.circle_filled(mark, 9.0, p.accent_fill);
@@ -1028,7 +1028,7 @@ fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui:
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .hint_text(egui::RichText::new(tr("Diagram name")).color(p.text_muted).font(types::SMALL.font()))
         .char_limit(MAX_NAME)
         .desired_width(inner.width());

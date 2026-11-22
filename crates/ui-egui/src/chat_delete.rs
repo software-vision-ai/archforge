@@ -714,7 +714,7 @@ pub(crate) fn row_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) -> Option<
             let ink = if why.is_none() { p2.text } else { p2.text_muted };
             let detail = ux::galley(&paint, key, types::CAPTION, p2.text_secondary, None);
             let dw = detail.size().x;
-            paint.galley(pos2(row.right() - 10.0 - dw, row.center().y - detail.size().y / 2.0), detail, p2.text_secondary);
+            paint.galley(pos2(row.right() - 10.0 - dw, row.center().y - detail.size().y / 2.0), detail, p2.text_secondary.into());
             ux::text_mid(&paint, row.left() + 10.0, row.center().y, &label, types::SMALL, ink, Some((row.width() - 28.0 - dw).max(0.0)));
             if why.is_none() && resp.clicked() {
                 clicked = Some(i);
@@ -766,12 +766,12 @@ pub(crate) fn dialog(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette) {
         widgets::record_visible(ui, &mut shell.registry, "workspace.chat.delete", "dialog", dialog);
         let mut y = dialog.top() + 20.0;
         let th = title.size().y;
-        paint.galley(pos2(dialog.left() + 20.0, y), title, p.text);
+        paint.galley(pos2(dialog.left() + 20.0, y), title, p.text.into());
         y += th + 14.0;
         for (i, g) in lines.into_iter().enumerate() {
             let h = g.size().y;
             let ink = if i == 0 { p.text } else { p.text_secondary };
-            paint.galley(pos2(dialog.left() + 20.0, y), g, ink);
+            paint.galley(pos2(dialog.left() + 20.0, y), g, ink.into());
             y += h + 6.0;
         }
         // Delete at the right, Cancel before it.
@@ -838,12 +838,12 @@ pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         paint.rect_filled(m, 8.0, p2.text);
         widgets::record_visible(ui, &mut shell.registry, "workspace.chat.toast", "toast", m);
         let th = text.size().y;
-        paint.galley(pos2(m.left() + 14.0, m.center().y - th / 2.0), text, p2.surface);
+        paint.galley(pos2(m.left() + 14.0, m.center().y - th / 2.0), text, p2.surface.into());
         let b = Rect::from_min_size(pos2(m.right() - 14.0 - undo_w - 6.0, m.center().y - 12.0), vec2(undo_w + 12.0, 24.0));
         let resp = control(shell, ui, "workspace.chat.toast.undo", "button", b, true);
         let _ = resp.clone().accessible_name(tr("Undo"));
         let uh = label.size().y;
-        paint.galley(pos2(b.left() + 6.0, b.center().y - uh / 2.0), label, p2.border_hover);
+        paint.galley(pos2(b.left() + 6.0, b.center().y - uh / 2.0), label, p2.border_hover.into());
         focus_ring(&paint, &p2, b, 6.0, &resp);
         let held = resp.has_focus() || ui.rect_contains_pointer(m);
         (resp.clicked(), held)

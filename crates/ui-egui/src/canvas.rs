@@ -402,28 +402,28 @@ pub(crate) fn refs(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Ob
 /// each none when the diagram's look holds.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub(crate) struct Look {
-    pub fill: Option<egui::Color32>,
-    pub stroke: Option<egui::Color32>,
-    pub text: Option<egui::Color32>,
+    pub fill: Option<ux::Colour>,
+    pub stroke: Option<ux::Colour>,
+    pub text: Option<ux::Colour>,
     /// The border's or the line's width; none for the diagram's.
     pub width: Option<f32>,
 }
 
 /// A colour `#rrggbb` as drawn, or none for anything else.
-pub(crate) fn colour(hex: &str) -> Option<egui::Color32> {
+pub(crate) fn colour(hex: &str) -> Option<ux::Colour> {
     let h = hex.strip_prefix('#').filter(|h| h.len() == 6 && h.is_ascii())?;
     let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
-    Some(egui::Color32::from_rgb(byte(0)?, byte(2)?, byte(4)?))
+    Some(crate::ux::data_colour(byte(0)?, byte(2)?, byte(4)?))
 }
 
 /// A colour as `#rrggbb`.
-pub(crate) fn hex(c: egui::Color32) -> String {
+pub(crate) fn hex(c: ux::Colour) -> String {
     format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b())
 }
 
 /// The palette whose text reads on `fill`: Light's dark text on a light fill, Dark's light text on
 /// a dark one, so a node's own fill never hides its words.
-pub(crate) fn ink_for(fill: egui::Color32) -> &'static Palette {
+pub(crate) fn ink_for(fill: ux::Colour) -> &'static Palette {
     let luma = 0.2126 * fill.r() as f32 + 0.7152 * fill.g() as f32 + 0.0722 * fill.b() as f32;
     ux::palette(luma < 140.0)
 }
@@ -569,7 +569,7 @@ pub(crate) fn notice(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, wi
     let Some(notice) = shell.canvas.notice.clone() else { return 0.0 };
     let g = ux::galley_rows(ui.painter(), &notice, types::CAPTION, p.amber, Some(width), 8);
     let area = Rect::from_min_size(at, g.size());
-    ui.painter().galley(at, g, p.amber);
+    ui.painter().galley(at, g, p.amber.into());
     widgets::announce(ui, &mut shell.registry, "workspace.canvas.notice", area, &notice);
     area.height()
 }
@@ -595,7 +595,7 @@ fn refused_toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.rect_filled(card, 8.0, p.surface);
     let at = pos2(card.left() + REFUSED_TOAST_TEXT, card.center().y - text.size().y / 2.0);
     paint.circle_filled(pos2(card.left() + 17.0, at.y + types::SMALL.line / 2.0), 3.0, p.amber);
-    paint.galley(at, text, p.text);
+    paint.galley(at, text, p.text.into());
     widgets::announce(ui, &mut shell.registry, "workspace.canvas.notice", card, &words);
 }
 
@@ -648,7 +648,7 @@ fn tab_strip(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         }
         let ink = if is_active { p.text } else { p.text_secondary };
         ux::icon_in(&paint, Rect::from_min_size(pos2(tab.left() + 11.0, tab.top() + 9.0), Vec2::splat(15.0)), icon, p.text_secondary);
-        paint.galley(pos2(tab.left() + 34.0, tab.top() + (TAB_HEIGHT - g.size().y) / 2.0), g, ink);
+        paint.galley(pos2(tab.left() + 34.0, tab.top() + (TAB_HEIGHT - g.size().y) / 2.0), g, ink.into());
         let close = Rect::from_center_size(pos2(tab.right() - 15.0, tab.center().y), Vec2::splat(16.0));
         let close_resp = control(shell, &clip, &format!("{tab_id}.close"), "button", close, true).on_hover_text(tr("Close"));
         ux::icon_in(
@@ -1107,7 +1107,7 @@ fn draw_node(
         }
         Some(_) if let Some(card) = card => {
             // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
-            let dim = |c: egui::Color32| if card.elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
+            let dim = |c: ux::Colour| if card.elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
             // The node's own look on this diagram, where it has one.
             let look = look_of(store, n, node::STYLE);
             // Its own fill brings the text that reads on it, unless it has its own text colour too.
@@ -1155,7 +1155,7 @@ fn draw_node(
                     p.entity,
                 );
                 if z >= DETAIL_ZOOM && !renaming {
-                    paint.galley(tab.min + vec2(PACKAGE_TAB_PAD * z, (tab.height() - name.size().y) / 2.0), name, p.text);
+                    paint.galley(tab.min + vec2(PACKAGE_TAB_PAD * z, (tab.height() - name.size().y) / 2.0), name, p.text.into());
                 }
                 if let Some(id) = id {
                     widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.tab"), "tab", tab);
@@ -1193,7 +1193,7 @@ fn draw_node(
                     let room = room.map(|w| (w - braces.as_ref().map_or(0.0, |b| b.size().x + gap)).max(0.0));
                     let at = name(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &card.name, types::SECTION.scaled(z), p.text, room);
                     if let Some(b) = braces {
-                        inner.galley(pos2(at.right() + gap, at.top() + 9.0 * z), b, p.text_secondary);
+                        inner.galley(pos2(at.right() + gap, at.top() + 9.0 * z), b, p.text_secondary.into());
                     }
                 }
                 let line_y = rect.top() + ENTITY_HEADER * z;
@@ -1203,7 +1203,7 @@ fn draw_node(
                 draw_rows(&inner, p, &card, rect, z, key_status, room);
             } else {
                 let g = ux::galley(&inner, &card.name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), p.text, room);
-                inner.galley(rect.center() - g.size() / 2.0, g, p.text);
+                inner.galley(rect.center() - g.size() / 2.0, g, p.text.into());
             }
         }
         Some(e) => {
@@ -1231,7 +1231,7 @@ fn draw_node(
                 let ink = look.text.unwrap_or_else(|| look.fill.map_or(p.text, |f| ink_for(f).text));
                 let text = string(store, n, node::TEXT);
                 let g = ux::galley_rows(&inner, &text, types::UI.scaled(z), ink, Some((rect.width() - 24.0 * z).max(0.0)), 8);
-                inner.galley(rect.min + vec2(12.0, 10.0) * z, g, ink);
+                inner.galley(rect.min + vec2(12.0, 10.0) * z, g, ink.into());
             }
         }
     }
@@ -1276,7 +1276,7 @@ fn draw_constraint(paint: &egui::Painter, inner: &egui::Painter, d: &Drawing<'_>
     let room = Some((rect.width() - 24.0 * z - fold).max(0.0));
     if z < DETAIL_ZOOM {
         let g = ux::galley(inner, &card.name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), text_ink, room);
-        inner.galley(rect.center() - g.size() / 2.0, g, text_ink);
+        inner.galley(rect.center() - g.size() / 2.0, g, text_ink.into());
         return;
     }
     let eyebrow = eyebrow_case(&say(&card.eyebrow));
@@ -1428,7 +1428,7 @@ const PREVIEW_MOST: f32 = 0.5;
 /// The tab over the top left of the package card at `rect` (AR-113): as wide as `name` and its
 /// padding, never narrower than [`PACKAGE_TAB_MIN`] nor wider than the card, with the name laid out to
 /// fit it (cut with an ellipsis where the card is narrower than the name), and whether it was cut.
-pub(crate) fn package_tab(paint: &egui::Painter, rect: Rect, name: &str, z: f32, ink: egui::Color32) -> (Rect, std::sync::Arc<egui::Galley>, bool) {
+pub(crate) fn package_tab(paint: &egui::Painter, rect: Rect, name: &str, z: f32, ink: ux::Colour) -> (Rect, std::sync::Arc<egui::Galley>, bool) {
     let ty = types::SMALL_STRONG.scaled(z);
     let pad = PACKAGE_TAB_PAD * z;
     let whole = ux::galley(paint, name, ty, ink, None);
@@ -1447,7 +1447,7 @@ const PATH_BADGE_GAP: f32 = 6.0;
 /// caption style and the canvas's secondary ink: its words say what it is, never its colour alone.
 /// It is as wide as the card at most: its first owners fold into `…` so the nearest stay, and the
 /// nearest alone is cut at its end ([`ux::cut_front`]).
-fn path_badge(paint: &egui::Painter, card: Rect, owners: &[String], z: f32, ink: egui::Color32, node: Uuid) -> PathBadge {
+fn path_badge(paint: &egui::Painter, card: Rect, owners: &[String], z: f32, ink: ux::Colour, node: Uuid) -> PathBadge {
     let ty = types::CAPTION.scaled(z);
     let template = tr("Owner: {path}");
     let say = |path: &str| fmt(&template, &[("path", path)]);
@@ -1570,7 +1570,7 @@ fn draw_preview(paint: &egui::Painter, d: &Drawing<'_>, package: Obj, rect: Rect
     let shown = led.get(&package).and_then(|g| preview(d.store, d.notations, *g, area.shrink(PREVIEW_INSET * z)));
     let Some(shown) = shown else {
         let g = ux::galley(paint, &tr("Empty diagram"), types::CAPTION.scaled(z), p.text_muted, Some(area.width()));
-        paint.galley(area.center() - g.size() / 2.0, g, p.text_muted);
+        paint.galley(area.center() - g.size() / 2.0, g, p.text_muted.into());
         return area;
     };
     let clip = paint.with_clip_rect(area.intersect(paint.clip_rect()));
@@ -1615,7 +1615,7 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
     if matches!(c.look, MiniLook::Note | MiniLook::Tabbed | MiniLook::Constraint) {
         return;
     }
-    let bar = |y: f32, w: f32, h: f32, colour: egui::Color32| {
+    let bar = |y: f32, w: f32, h: f32, colour: ux::Colour| {
         if y + h <= r.bottom() - 1.0 {
             paint.rect_filled(Rect::from_min_size(pos2(r.left() + ENTITY_INSET * s, y), vec2((r.width() * w).max(1.0), h.max(1.0))), 1.0, colour);
         }
@@ -1889,7 +1889,7 @@ pub(crate) fn mark_outline(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> Vec<
 /// Draws a line's triangle, diamond or open arrow at `tip`, coming from `back`, a hollow one filled
 /// with `bg`, at its [`mark_outline`].
 #[allow(clippy::too_many_arguments, reason = "a mark is drawn at its end, in its stroke and over what it is drawn on")]
-pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: egui::Color32) {
+pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: ux::Colour) {
     let outline = mark_outline(mark, tip, back, z);
     match (mark, outline.as_slice()) {
         (EndMark::Triangle | EndMark::HollowDiamond, [_, ..]) => {
@@ -2002,7 +2002,7 @@ fn draw_edge(
         {
             let text = note.iter().map(say).collect::<Vec<_>>().join(" · ");
             let gal = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
-            paint.galley(base + vec2(10.0 * z, -gal.size().y / 2.0) - dir * 14.0 * z, gal, p.text_secondary);
+            paint.galley(base + vec2(10.0 * z, -gal.size().y / 2.0) - dir * 14.0 * z, gal, p.text_secondary.into());
         }
     }
     let mut badge = None;
@@ -2045,7 +2045,7 @@ fn draw_edge(
         };
         let i = k;
         let rect = Rect::from_center_size(centre, g.size());
-        paint.galley(rect.min, g, p.text_secondary);
+        paint.galley(rect.min, g, p.text_secondary.into());
         d.ends.borrow_mut().push(EndText { edge: edge_id, end: i, rect: rect.expand(3.0), anchor: at });
     }
     // The roles near their ends: above a level line, left of an upright one, so neither sits on
@@ -2063,7 +2063,7 @@ fn draw_edge(
         } else {
             near - vec2(g.size().x / 2.0, g.size().y + 8.0 * z)
         };
-        paint.galley(at, g, p.text_secondary);
+        paint.galley(at, g, p.text_secondary.into());
     }
     if line.styled {
         for l in refs(store, e, edge::LABEL) {
@@ -2099,7 +2099,7 @@ fn draw_edge(
             if kind == "name" {
                 name_at = Some(Rect::from_min_size(at + offset, g.size()));
             }
-            paint.galley(at + offset, g, p.text_secondary);
+            paint.galley(at + offset, g, p.text_secondary.into());
         }
         if selected {
             // A square at each end, but where the end's round handle moved past its mark: the
@@ -2138,7 +2138,7 @@ fn keyword_text(paint: &egui::Painter, d: &Drawing<'_>, keyword: &str, points: &
         }
     };
     let rect = Rect::from_min_size(at, g.size());
-    paint.galley(at, g, p.text_secondary);
+    paint.galley(at, g, p.text_secondary.into());
     rect
 }
 
@@ -2212,7 +2212,7 @@ fn signature_box(paint: &egui::Painter, p: &Palette, rows: &[String], card: Rect
     let mut y = rect.top() + 4.0 * z;
     for g in galleys {
         let h = g.size().y;
-        paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text);
+        paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text.into());
         y += h;
     }
     Some(rect)
@@ -2225,7 +2225,7 @@ fn draw_qualifier_box(paint: &egui::Painter, p: &Palette, rect: Rect, rows: Vec<
     let mut y = rect.top() + 4.0 * z;
     for g in rows {
         let h = g.size().y;
-        paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text);
+        paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text.into());
         y += h;
     }
 }
@@ -2282,7 +2282,7 @@ fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos
     let offset = if upright { vec2(8.0 * z, -g.size().y / 2.0) } else { vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z) };
     let at = along(points, 0.5) + offset;
     let rect = Rect::from_min_size(at, g.size());
-    paint.galley(at, g, p.text_secondary);
+    paint.galley(at, g, p.text_secondary.into());
     Some(rect)
 }
 
@@ -2646,9 +2646,9 @@ fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut widgets::Reg
         let mut x = label.left() + pad.x;
         let y = label.center().y;
         let name_w = name_g.size().x;
-        paint.galley(pos2(x, y - name_g.size().y / 2.0), name_g, name_ink);
+        paint.galley(pos2(x, y - name_g.size().y / 2.0), name_g, name_ink.into());
         x += name_w + gap;
-        paint.galley(pos2(x, y - braces_g.size().y / 2.0), braces_g, braces_ink);
+        paint.galley(pos2(x, y - braces_g.size().y / 2.0), braces_g, braces_ink.into());
         let Some(id) = id else { continue };
         widgets::record_visible(ui, registry, &format!("workspace.canvas.generalizationSet.{id}"), "label", label);
         widgets::record_visible(
@@ -2748,7 +2748,7 @@ pub(crate) fn end_glyph_on(
     stroke: Stroke,
     z: f32,
     with_text: bool,
-    fill: egui::Color32,
+    fill: ux::Colour,
 ) {
     let (many, zero, text) = match mark {
         EndMark::ExactlyOne => (false, false, "1"),
@@ -2784,7 +2784,7 @@ pub(crate) fn end_glyph_on(
     }
     let g = ux::galley(paint, text, types::SMALL.scaled(z), p.text_secondary, None);
     let at = end + d * 26.0 * z + vec2(0.0, 6.0 * z);
-    paint.galley(at - vec2(g.size().x / 2.0, 0.0), g, p.text_secondary);
+    paint.galley(at - vec2(g.size().x / 2.0, 0.0), g, p.text_secondary.into());
 }
 
 /// The minimap: the whole diagram small, the viewport over it, and the zoom control.
@@ -2833,7 +2833,7 @@ fn minimap(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, bounds: Optio
     }
     if bounds.is_none() {
         let g = ux::galley(&paint, &tr("Empty diagram"), types::SMALL, p.text_muted, Some(inner.width()));
-        boxed.galley(bx.center() - g.size() / 2.0, g, p.text_muted);
+        boxed.galley(bx.center() - g.size() / 2.0, g, p.text_muted.into());
     }
     let vp = Rect::from_min_max(map(viewport.min), map(viewport.max));
     boxed.rect_stroke(vp, 2.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
@@ -2882,7 +2882,7 @@ fn minimap(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, bounds: Optio
     ux::icon_in(&paint, Rect::from_center_size(minus.center(), vec2(8.0, 1.0)), &icons::MINUS, p.text_secondary);
     let percent = fmt(&tr("{n} %"), &[("n", &format!("{}", (shell.canvas.zoom * 100.0).round() as i32))]);
     let g = ux::galley(&paint, &percent, types::SMALL, p.text, None);
-    paint.galley(pos2(m.right() - 48.0 - g.size().x / 2.0, m.top() + 142.0 - g.size().y / 2.0), g, p.text);
+    paint.galley(pos2(m.right() - 48.0 - g.size().x / 2.0, m.top() + 142.0 - g.size().y / 2.0), g, p.text.into());
     let centre = r.size() / 2.0;
     if control(shell, ui, "workspace.zoom.in", "button", plus, true).on_hover_text(tr("Zoom in")).clicked() {
         zoom_by(&mut shell.canvas, ZOOM_STEP, centre);

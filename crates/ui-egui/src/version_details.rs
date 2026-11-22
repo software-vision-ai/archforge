@@ -250,7 +250,7 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     let mut y = r.top() + BAND + 24.0 + (said - types::CAPTION.line).max(0.0);
     let g = ux::galley_rows(ui.painter(), &title, types::PAGE_TITLE, p.text, Some(width), 3);
     let height = g.size().y;
-    ui.painter().galley(pos2(left, y), g, p.text);
+    ui.painter().galley(pos2(left, y), g, p.text.into());
     y += height + 10.0;
     ux::text(ui.painter(), pos2(left, y), &meta, types::SMALL, p.text_secondary, Some(width));
     y += 32.0;
@@ -347,7 +347,7 @@ pub(crate) fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect,
     let resp = control(shell, ui, id, "button", at, true).on_hover_text(tr("Close"));
     let _ = resp.clone().accessible_name(format!("{name}, {}", tr("Close")));
     focus_ring(&paint, p, at, 3.0, &resp);
-    paint.galley(at.min, g, p.text_secondary);
+    paint.galley(at.min, g, p.text_secondary.into());
     ux::icon_mid(&paint, pos2(at.right() + 18.0, mid), &icons::CHEVRON_RIGHT, p.text_secondary);
     let end = ux::text_mid(&paint, at.right() + 37.0, mid, place, types::UI, p.text, Some((r.width() / 3.0).max(0.0))).right();
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), r.top() + BAND - 1.0), vec2(r.width(), 1.0)), 0.0, p.border);
@@ -376,7 +376,7 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     ux::text(ui.painter(), pos2(left, y), &tr("Changed items").to_uppercase(), types::EYEBROW, p.text_secondary, None);
     if let Some(Ok(items)) = &found {
         let g = ux::galley(ui.painter(), &trn("{n} changed item", "{n} changed items", items.len() as u64), types::CAPTION, p.text_secondary, None);
-        ui.painter().galley(pos2(r.right() - MARGIN - g.size().x, y), g, p.text_secondary);
+        ui.painter().galley(pos2(r.right() - MARGIN - g.size().x, y), g, p.text_secondary.into());
     }
     let top = y + 25.0;
     if let Some(Err(why)) = &found {
@@ -501,7 +501,7 @@ fn previous(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, cloc
             let resp = control(shell, ui, "workspace.version-details.previous", "link", at, true);
             let _ = resp.clone().accessible_name(&words);
             focus_ring(ui.painter(), p, at, 3.0, &resp);
-            ui.painter().galley(at.min, g, p.accent);
+            ui.painter().galley(at.min, g, p.accent.into());
             if resp.clicked() {
                 open(shell, before);
             }

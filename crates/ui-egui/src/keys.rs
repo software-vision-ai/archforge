@@ -120,7 +120,7 @@ pub(crate) fn keys_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         let br = Rect::from_min_size(row.min + vec2(2.0, 6.0), vec2(26.0, 16.0));
         paint.rect_filled(br, 4.0, tint);
         let g = ux::galley(&paint, b, types::TINY, ink, None);
-        paint.galley(br.center() - g.size() / 2.0, g, ink);
+        paint.galley(br.center() - g.size() / 2.0, g, ink.into());
         let label = if key.name.is_empty() { if key.primary { tr("Primary key") } else { tr("Unique") } } else { key.name.clone() };
         let columns = key.columns.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>().join(", ");
         ux::text(&paint, row.min + vec2(38.0, 4.0), &label, types::UI, p.text, Some((width - 70.0).max(0.0)));

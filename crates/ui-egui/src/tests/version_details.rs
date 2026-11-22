@@ -1572,8 +1572,14 @@ fn each_side_of_a_diagram_marks_what_differs_on_it() {
         assert!(outlined("after", fresh, ChangeKind::Added) && outlined("after", nested, ChangeKind::Added));
         assert!(outlined("before", gone, ChangeKind::Removed) && outlined("before", renamed, ChangeKind::Changed));
         assert!(!outlined("after", kept, ChangeKind::Added) && !outlined("after", kept, ChangeKind::Changed));
-        let added = egui::epaint::ColorMode::Solid(ink(ChangeKind::Added));
-        assert!(shape_painted(h, &|s| matches!(s, egui::Shape::Path(l) if l.stroke.width == 2.0 && l.stroke.color == added)), "the line");
+        let added = ink(ChangeKind::Added);
+        assert!(
+            shape_painted(
+                h,
+                &|s| matches!(s, egui::Shape::Path(l) if l.stroke.width == 2.0 && matches!(l.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == added))
+            ),
+            "the line"
+        );
         let mark = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.change-view.after.mark.{id}"));
         let (put, boxed) = (mark(h, fresh), rect_of(h, &format!("workspace.change-view.after.node.{fresh}")));
         assert!((put.left() - boxed.left()).abs() < 0.01 && put.bottom() < boxed.top(), "above its box, from its left: {put:?} {boxed:?}");
@@ -2907,7 +2913,7 @@ fn colours(h: &Harness<'static, Shell>) -> &'static crate::ux::Palette {
 }
 
 /// Whether a rectangle exactly over the control `id` is filled with `fill`.
-fn filled(h: &Harness<'static, Shell>, id: &str, fill: egui::Color32) -> bool {
+fn filled(h: &Harness<'static, Shell>, id: &str, fill: crate::ux::Colour) -> bool {
     rect_shapes(h).iter().any(|(r, f, _)| *r == rect_of(h, id) && *f == fill)
 }
 

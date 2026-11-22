@@ -1062,7 +1062,7 @@ pub(crate) fn edit_field(
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .char_limit(limit)
         .event_filter(filter)
         .desired_width(inner.width());
@@ -1263,7 +1263,7 @@ pub(crate) fn editable_select(
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .char_limit(c.limit)
         .hint_text(egui::RichText::new(c.placeholder).color(p.text_muted).font(types::SMALL.font()))
         .event_filter(filter)
@@ -1714,8 +1714,8 @@ pub(crate) fn icon_button(
     at: egui::Pos2,
     id: &str,
     icon: &ux::Icon,
-    ink: egui::Color32,
-    fill: Option<egui::Color32>,
+    ink: ux::Colour,
+    fill: Option<ux::Colour>,
     hint: &str,
 ) -> bool {
     let paint = ui.painter();
@@ -1738,7 +1738,7 @@ pub(crate) fn ghost_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: eg
     let g = ux::galley(paint, label, types::UI, p.text, None);
     let b = Rect::from_min_size(at, vec2(6.0 + 14.0 + 7.0 + g.size().x + 8.0, 24.0));
     ux::icon_in(paint, Rect::from_min_size(b.min + vec2(6.0, 5.0), Vec2::splat(14.0)), icon, p.text);
-    paint.galley(b.min + vec2(27.0, 2.5), g, p.text);
+    paint.galley(b.min + vec2(27.0, 2.5), g, p.text.into());
     let resp = control(shell, ui, id, "button", b, true);
     if resp.hovered() {
         paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
@@ -2049,7 +2049,7 @@ pub(crate) fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
             let br = Rect::from_center_size(pos2(row.left() + 37.0, mid), vec2(26.0, 16.0));
             paint.rect_filled(br, 4.0, tint);
             let g = ux::galley(&paint, b, types::TINY, ink, None);
-            paint.galley(br.center() - g.size() / 2.0, g, ink);
+            paint.galley(br.center() - g.size() / 2.0, g, ink.into());
         }
         let name = ux::text_mid(&paint, row.left() + 58.0, mid, &col.name, types::UI, p.text, Some((width - 58.0 - 40.0).max(0.0)));
         let mut after = name.right() + 8.0;
@@ -2295,12 +2295,12 @@ fn collapse_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y:
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), 12.0 + text_h + 12.0 + 24.0 + 12.0));
     paint.rect_filled(card, 8.0, p.accent_tint);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    paint.galley(card.min + vec2(12.0, 12.0), g, p.text);
+    paint.galley(card.min + vec2(12.0, 12.0), g, p.text.into());
     let label = tr("Collapse into a relationship");
     let g = ux::galley(&paint, &label, types::UI, p.text, None);
     let button = Rect::from_min_size(card.min + vec2(12.0, 12.0 + text_h + 12.0), vec2(6.0 + 14.0 + 7.0 + g.size().x + 8.0, 24.0));
     ux::icon_in(&paint, Rect::from_min_size(button.min + vec2(6.0, 5.0), Vec2::splat(14.0)), &icons::MERGE_LINE, p.text);
-    paint.galley(button.min + vec2(27.0, 2.5), g, p.text);
+    paint.galley(button.min + vec2(27.0, 2.5), g, p.text.into());
     let resp = control(shell, ui, "workspace.properties.collapse", "button", button, true);
     if resp.hovered() {
         paint.rect_stroke(button, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
@@ -2934,7 +2934,7 @@ fn skill_row(shell: &mut Shell, ui: &egui::Ui, paint: &egui::Painter, p: &Palett
     let detail = ux::galley(paint, &row.detail, types::CAPTION, p.text_muted, Some((width / 2.0).max(0.0)));
     let name_room = (width - 34.0 - detail.size().x - 16.0 - bin_w).max(0.0);
     ux::text(paint, rect.min + vec2(34.0, 6.5), &row.name, types::SMALL, p.text, Some(name_room));
-    paint.galley(pos2(rect.right() - 8.0 - bin_w - detail.size().x, rect.top() + 8.0), detail, p.text_muted);
+    paint.galley(pos2(rect.right() - 8.0 - bin_w - detail.size().x, rect.top() + 8.0), detail, p.text_muted.into());
     if row.own && hovered {
         let ink = if bin_resp.as_ref().is_some_and(|b| b.hovered()) { p.danger } else { p.text_secondary };
         ux::icon_in(paint, Rect::from_center_size(bin.center(), Vec2::splat(14.0)), &icons::TRASH, ink);

@@ -1076,7 +1076,7 @@ fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: 
         .id(id)
         .frame(egui::Frame::NONE)
         .font(types::UI.scaled(z).font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .char_limit(archforge_diagram::rules::MAX_TEXT)
         .desired_width(field.width().max(0.0));
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field.shrink(4.0 * z))));
@@ -1945,7 +1945,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
         .id(id)
         .frame(egui::Frame::NONE)
         .font(font.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .char_limit(MAX_NAME)
         .desired_width(inner.width());
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
@@ -2034,7 +2034,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
         ux::text(&paint, row.min + vec2(10.0, 7.5), &tr(label), types::SMALL, ink, Some(MENU_WIDTH - 70.0));
         if !shortcut.is_empty() {
             let g = ux::galley(&paint, shortcut, types::CAPTION, p.text_muted, None);
-            paint.galley(pos2(row.right() - 10.0 - g.size().x, row.top() + 8.0), g, p.text_muted);
+            paint.galley(pos2(row.right() - 10.0 - g.size().x, row.top() + 8.0), g, p.text_muted.into());
         }
         if resp.clicked() && *live {
             picked = Some(*key);

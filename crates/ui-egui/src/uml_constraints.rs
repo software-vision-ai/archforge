@@ -216,7 +216,7 @@ fn expression_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui:
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .char_limit(MAX_EXPRESSION)
         .hint_text(egui::RichText::new(tr("Describe the rule…")).color(p.text_muted).font(types::SMALL.font()))
         .desired_width(inner.width())
@@ -256,7 +256,7 @@ fn chips(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f
         let chip = Rect::from_min_size(pos2(x, y + 2.0), vec2(w, 23.0));
         paint.rect_filled(chip, 6.0, p.field);
         let text_y = chip.center().y - g.size().y / 2.0;
-        paint.galley(pos2(chip.left() + 8.0, text_y), g, p.text);
+        paint.galley(pos2(chip.left() + 8.0, text_y), g, p.text.into());
         widgets::record_visible(ui, &mut shell.registry, &format!("workspace.properties.constraint.element.{i}"), "chip", chip);
         if removable {
             let b = Rect::from_center_size(pos2(chip.right() - 11.0, chip.center().y), Vec2::splat(16.0));
@@ -331,7 +331,7 @@ fn refusal_box(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, w
     let r = Rect::from_min_size(at, vec2(width.max(0.0), g.size().y + 20.0));
     paint.rect_filled(r, 6.0, p.danger.gamma_multiply(0.1));
     ux::icon_in(paint, Rect::from_min_size(r.min + vec2(10.0, 11.0), Vec2::splat(14.0)), &icons::ISSUE, p.danger);
-    paint.galley(r.min + vec2(32.0, 10.0), g, p.text);
+    paint.galley(r.min + vec2(32.0, 10.0), g, p.text.into());
     r.height()
 }
 
@@ -418,7 +418,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         6,
     );
     let said_height = said.size().y;
-    paint.galley(at(0.0, cy), said, p.text_secondary);
+    paint.galley(at(0.0, cy), said, p.text_secondary.into());
     cy += said_height + 10.0;
     if diagram.is_some() {
         let g = ux::galley_rows(
@@ -430,7 +430,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             6,
         );
         let h = g.size().y;
-        paint.galley(at(0.0, cy), g, p.text_muted);
+        paint.galley(at(0.0, cy), g, p.text_muted.into());
         cy += h + 12.0;
     }
     let (mut remove, mut up, mut down) = (false, false, false);

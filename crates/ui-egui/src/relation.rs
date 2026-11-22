@@ -344,7 +344,7 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         let tag = Rect::from_min_size(pos2(title.right() + 8.0, y + 19.0), vec2(26.0, 16.0));
         paint.rect_filled(tag, 4.0, p.amber_tint);
         let g = ux::galley(&paint, "FK1", types::TINY, p.amber, None);
-        paint.galley(tag.center() - g.size() / 2.0, g, p.amber);
+        paint.galley(tag.center() - g.size() / 2.0, g, p.amber.into());
     }
     let on = rel.fk.is_some();
     let sw = Rect::from_min_size(pos2(r.right() - PAD - 36.0, y + 17.0), vec2(36.0, 20.0));
@@ -390,7 +390,7 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         let tag = Rect::from_min_size(pos2(r.left() + PAD, y + 6.0), vec2(22.0, 16.0));
         paint.rect_filled(tag, 4.0, p.amber_tint);
         let g = ux::galley(&paint, "PK", types::TINY, p.amber, None);
-        paint.galley(tag.center() - g.size() / 2.0, g, p.amber);
+        paint.galley(tag.center() - g.size() / 2.0, g, p.amber.into());
         ux::text(&paint, pos2(tag.right() + 6.0, y + 5.0), parent_col, types::SMALL, p.text, Some((half - 34.0).max(0.0)));
         let field = Rect::from_min_size(pos2(r.left() + PAD + half + 8.0, y), vec2(half, FIELD));
         paint.rect_filled(field, 6.0, p.field);
@@ -549,7 +549,7 @@ fn parent_without_key(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y:
     let text =
         fmt(&tr("{parent} has no primary key yet, so there is nothing in {child} to point at."), &[("parent", parent_name), ("child", child_name)]);
     let g = ux::galley_rows(&paint, &text, types::SMALL, p.text, Some((width - 24.0).max(0.0)), 2);
-    paint.galley(card.min + vec2(12.0, 10.0), g, p.text);
+    paint.galley(card.min + vec2(12.0, 10.0), g, p.text.into());
     let mut ry = card.top() + 54.0;
     for (key, icon, label) in [("add-id", &icons::PLUS, "Add id column"), ("choose-keys", &icons::LIST, "Choose key columns")] {
         let row = Rect::from_min_size(pos2(card.left() + 8.0, ry), vec2((width - 16.0).max(0.0), 28.0));
@@ -722,7 +722,7 @@ fn menu_body(
         if item.on {
             ux::icon_mid(&paint, pos2(row.right() - 16.0, row.center().y), &icons::TICK, p.accent);
         }
-        paint.galley(pos2(row.right() - 10.0 - tick - detail.size().x, row.top() + 9.0), detail, p.text_muted);
+        paint.galley(pos2(row.right() - 10.0 - tick - detail.size().x, row.top() + 9.0), detail, p.text_muted.into());
         if resp.clicked() && item.enabled {
             picked = Some(i);
         }

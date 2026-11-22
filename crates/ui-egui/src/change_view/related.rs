@@ -95,7 +95,7 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &U
             into_view(shell, clip.ctx(), line, view);
         }
         focus_ring(&paint, p, link, 3.0, &resp);
-        paint.galley(link.min, g, p.accent);
+        paint.galley(link.min, g, p.accent.into());
         if resp.clicked() {
             super::open(shell, row);
         }

@@ -238,7 +238,7 @@ fn refusal_box(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, width: f
     let card = Rect::from_min_size(at, vec2(width.max(0.0), g.size().y + 20.0));
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(paint, Rect::from_min_size(card.min + vec2(10.0, 11.5), Vec2::splat(14.0)), &icons::WARNING, p.danger);
-    paint.galley(card.min + vec2(32.0, 10.0), g, p.text);
+    paint.galley(card.min + vec2(32.0, 10.0), g, p.text.into());
     crate::widgets::record_visible(ui, &mut shell.registry, &format!("{ID}.refusal"), "text", card);
     card.height()
 }
@@ -350,7 +350,7 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
             let pill = Rect::from_min_size(pos2(field.right() - 28.0 - tag_w, field.center().y - 9.0), vec2(tag_w, 18.0));
             paint.rect_filled(pill, 4.0, p.surface);
             paint.rect_stroke(pill, 4.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-            paint.galley(pos2(pill.left() + 6.0, pill.center().y - t.size().y / 2.0), t, p.text_secondary);
+            paint.galley(pos2(pill.left() + 6.0, pill.center().y - t.size().y / 2.0), t, p.text_secondary.into());
         }
         ux::icon_mid(&paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
         let id = format!("{ID}.substitution.{k}.argument");
@@ -485,7 +485,7 @@ fn draft_foot(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     let paint = ui.painter();
     let g = ux::galley_rows(paint, &help, types::CAPTION, p.text_muted, Some(width), 8);
     let h = g.size().y;
-    paint.galley(pos2(left, y), g, p.text_muted);
+    paint.galley(pos2(left, y), g, p.text_muted.into());
     y += h;
     let escape = shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape));
     if cancel.clicked() || escape {
@@ -599,7 +599,7 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y
     let said = format!("{} {}", tr(SELECTOR_HELP), tr(LINE_HELP));
     let paint = ui.painter();
     let g = ux::galley_rows(paint, &said, types::CAPTION, p.text_muted, Some(width), 10);
-    paint.galley(pos2(r.left() + PAD, below + 4.0), g, p.text_muted);
+    paint.galley(pos2(r.left() + PAD, below + 4.0), g, p.text_muted.into());
 }
 
 /// The kind line of a binding's Properties: `Binding · OrderRepository binds Repository · model, in

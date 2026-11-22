@@ -19,7 +19,8 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
 use archforge_names::Problem;
-use egui::{Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use ux::Colour;
 
 use crate::i18n::{fmt, tr};
 use crate::ux::{self, Palette, icons, types};
@@ -232,7 +233,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         let size = vec2(WIDTH.min(window.width() - 2.0 * EDGE).max(0.0), HEIGHT.min(window.height() - 2.0 * EDGE).max(0.0));
         let frame = Rect::from_center_size(window.center(), size);
         let paint = ui.painter();
-        paint.add(egui::epaint::Shadow { offset: [0, 16], blur: 48, spread: 0, color: p.shadow }.as_shape(frame, 16.0));
+        paint.add(egui::epaint::Shadow { offset: [0, 16], blur: 48, spread: 0, color: p.shadow.into() }.as_shape(frame, 16.0));
         paint.rect_filled(frame, 16.0, p.surface);
         paint.rect_stroke(frame, 16.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
         // The dialog's own area takes its clicks, so none reaches the veil.
@@ -319,7 +320,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     let edit = egui::TextEdit::singleline(&mut dialog.name)
         .id(widgets::egui_id("new-project.name"))
         .font(font)
-        .text_color(p.text)
+        .text_color(p.text.into())
         .hint_text(hint)
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
@@ -376,7 +377,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     paint.rect_filled(change, 6.0, if live && resp.hovered() { p.border } else { p.page });
     let ink = if live { p.text } else { p.text_muted };
     let g = ux::galley(&paint, &tr("Change…"), types::UI_STRONG, ink, Some(change.width() - 8.0));
-    paint.galley(change.center() - g.size() / 2.0, g, ink);
+    paint.galley(change.center() - g.size() / 2.0, g, ink.into());
     if live && resp.clicked() {
         change_folder(shell);
     }
@@ -404,7 +405,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
                 let link = ux::galley(&paint, &tr("Install Dolt"), types::SMALL, p.accent, None);
                 let r = Rect::from_min_size(pos2(said.right() + 8.0, said.top()), link.size());
                 let resp = control(shell, ui, "new-project.install-dolt", "link", r, true);
-                paint.galley(r.min, link, p.accent);
+                paint.galley(r.min, link, p.accent.into());
                 if resp.hovered() {
                     paint.hline(r.x_range(), r.bottom(), Stroke::new(1.0, p.accent));
                 }
@@ -427,7 +428,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         Some(inner),
         2,
     );
-    paint.galley(at(DIAGRAMS_LINE), line, p.text_secondary);
+    paint.galley(at(DIAGRAMS_LINE), line, p.text_secondary.into());
     // What every project holds.
     ux::text(&paint, at(PARTS), &tr("In every project"), types::UI_STRONG, p.text, Some(inner));
     let parts = [
@@ -447,7 +448,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         ux::text(&paint, r.min + vec2(56.0, 14.0), title, types::UI_STRONG, p.text, Some((w - 70.0).max(0.0)));
         let rows = if three { 3 } else { 1 };
         let g = ux::galley_rows(&paint, body, types::SMALL, p.text_secondary, Some((w - 70.0).max(0.0)), rows);
-        paint.galley(r.min + vec2(56.0, 36.0), g, p.text_secondary);
+        paint.galley(r.min + vec2(56.0, 36.0), g, p.text_secondary.into());
     }
     if three { PARTS_TOP + h } else { PARTS_TOP + 3.0 * h + 2.0 * GAP }
 }
@@ -482,9 +483,10 @@ fn footer(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, dialog: &m
     !waiting && cancelled.clicked()
 }
 
-fn centred(paint: &egui::Painter, r: Rect, label: &str, color: Color32) {
+/// Draws `label` in the strong interface style and `color`, centred in `r` and cut to its width.
+fn centred(paint: &egui::Painter, r: Rect, label: &str, color: Colour) {
     let g = ux::galley(paint, label, types::UI_STRONG, color, Some(r.width() - 8.0));
-    paint.galley(r.center() - g.size() / 2.0, g, color);
+    paint.galley(r.center() - g.size() / 2.0, g, color.into());
 }
 
 #[cfg(test)]

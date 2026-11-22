@@ -11,10 +11,10 @@
 use std::ops::Range;
 
 use egui::text::{LayoutJob, TextFormat};
-use egui::{Color32, FontFamily, FontId};
+use egui::{FontFamily, FontId};
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag};
 
-use crate::ux::{Palette, types};
+use crate::ux::{Colour, Palette, types};
 
 /// How one byte of the source is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -251,7 +251,7 @@ fn format(look: Look, p: &Palette) -> TextFormat {
     } else {
         FontId::new(size, types::BODY.font().family)
     };
-    let color: Color32 = if look.dim {
+    let color: Colour = if look.dim {
         p.text_muted
     } else if look.code {
         p.purple
@@ -262,7 +262,7 @@ fn format(look: Look, p: &Palette) -> TextFormat {
     } else {
         p.text
     };
-    TextFormat { font_id: font, color, italics: look.italic && !look.code, line_height: Some(line), ..TextFormat::default() }
+    TextFormat { font_id: font, color: color.into(), italics: look.italic && !look.code, line_height: Some(line), ..TextFormat::default() }
 }
 
 /// The styled source of `text`, wrapped at `wrap` points; plain when it is over the budget.
