@@ -483,6 +483,7 @@ fn footer(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, dialog: &m
     !waiting && cancelled.clicked()
 }
 
+/// Draws `label` in the strong interface style and `color`, centred in `r` and cut to its width.
 fn centred(paint: &egui::Painter, r: Rect, label: &str, color: Colour) {
     let g = ux::galley(paint, label, types::UI_STRONG, color, Some(r.width() - 8.0));
     paint.galley(r.center() - g.size() / 2.0, g, color.into());

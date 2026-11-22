@@ -14586,6 +14586,7 @@ static SKETCHED: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotati
 /// Every text the last frame painted.
 /// The colours the text `label` is laid out in, where it is painted inside `within`.
 fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<crate::ux::Colour> {
+    /// Collects the colours of every text `label` painted inside `within` under `s`.
     fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<crate::ux::Colour>) {
         match s {
             egui::Shape::Text(t) if t.galley.text() == label && within.contains(t.pos) => {
@@ -16623,6 +16624,7 @@ fn read_class_diagram(name: &str) -> (Harness<'static, Shell>, archforge_mof::Ob
 /// Whether the last frame painted a path in the accent colour.
 fn painted_accent(h: &Harness<'static, Shell>) -> bool {
     let accent = crate::ux::palette(false).accent;
+    /// Whether `s`, or a shape it holds, is a path stroked in `accent`.
     fn walk(s: &egui::Shape, accent: crate::ux::Colour) -> bool {
         match s {
             egui::Shape::Path(p) => matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == accent),
@@ -16923,6 +16925,7 @@ fn text_boxes(h: &Harness<'static, Shell>) -> Vec<(String, egui::Rect)> {
 
 /// Every rectangle the last frame painted, with its fill and its stroke's colour.
 fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)> {
+    /// Collects every rectangle under `s` with its fill and its stroke's colour.
     fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)>) {
         match s {
             egui::Shape::Rect(r) => out.push((r.rect, crate::ux::drawn(r.fill), crate::ux::drawn(r.stroke.color))),
@@ -17101,6 +17104,7 @@ fn a_class_cards_compartments_are_padded_so_no_row_sits_on_a_dividing_line() {
 /// Every level line segment the last frame painted: its left and right ends, its height, its
 /// thickness and its colour.
 fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, crate::ux::Colour)> {
+    /// Collects every level line segment under `s`.
     fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, crate::ux::Colour)>) {
         match s {
             egui::Shape::LineSegment { points: [a, b], stroke } if (a.y - b.y).abs() < 0.01 => {
@@ -21179,6 +21183,7 @@ fn related(h: &mut Harness<'static, Shell>, name: &str) -> Vec<serde_json::Value
     s.execute("uml.relationship.list", &serde_json::json!({ "class": id })).unwrap().value["relationships"].as_array().unwrap().clone()
 }
 
+/// How many edges the open diagram holds.
 fn edge_count(h: &Harness<'static, Shell>) -> usize {
     let st = h.state().session.as_ref().unwrap().doc();
     st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap().len()
@@ -21186,6 +21191,7 @@ fn edge_count(h: &Harness<'static, Shell>) -> usize {
 
 /// The boxes of the icons the last frame painted in `color`: each a mesh tinted that colour.
 fn icon_boxes(h: &Harness<'static, Shell>, color: crate::ux::Colour) -> Vec<egui::Rect> {
+    /// Collects the box of every mesh under `s` tinted `color` throughout.
     fn walk(s: &egui::Shape, color: crate::ux::Colour, out: &mut Vec<egui::Rect>) {
         match s {
             egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| crate::ux::drawn(v.color) == color) => {

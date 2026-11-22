@@ -254,6 +254,7 @@ pub struct Palette {
     pub key_foreign: Colour,
 }
 
+/// The opaque colour of the code `0xRRGGBB`.
 const fn rgb(hex: u32) -> Colour {
     Colour(Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8))
 }
@@ -556,6 +557,8 @@ fn underline(
 const UNDERLINE_WEIGHT: f32 = 0.075;
 const UNDERLINE_DROP: f32 = 0.15;
 
+/// Lays `text` out in `ty` and `color`, slanted when `italics`, wrapped at `width` into at most
+/// `rows` lines (at least one), the last cut with an ellipsis.
 fn laid_out(
     painter: &egui::Painter,
     text: &str,

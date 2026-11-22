@@ -70,6 +70,7 @@ enum Hue {
 }
 
 impl Hue {
+    /// The hue's colour for text and icons in palette `p`.
     fn ink(self, p: &Palette) -> Colour {
         match self {
             Hue::Blue => p.accent,
@@ -78,6 +79,8 @@ impl Hue {
             Hue::Amber => p.amber,
         }
     }
+
+    /// The hue's light tint in palette `p`: the tile behind its icon or picture.
     fn tint(self, p: &Palette) -> Colour {
         match self {
             Hue::Blue => p.accent_tint,
@@ -131,6 +134,7 @@ pub(crate) fn start_texts() -> impl Iterator<Item = &'static str> {
     STARTS.iter().flat_map(|(_, title, line, link, _, _)| [*title, *line, *link])
 }
 
+/// Draws Home over the whole window, on the page colour of the shell's appearance.
 pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let p = *ux::palette(shell.state.theme.is_dark());
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(p.page.into())).show(ui, |ui| {

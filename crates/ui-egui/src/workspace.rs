@@ -108,6 +108,8 @@ fn room(w: f32) -> Option<f32> {
     Some(w.max(0.0))
 }
 
+/// Draws the workspace of the open project over the whole window, on the page colour of the
+/// shell's appearance.
 pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let p = *ux::palette(shell.state.theme.is_dark());
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(p.page.into())).show(ui, |ui| {
