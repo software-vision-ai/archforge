@@ -12,6 +12,7 @@
 //! the root among them, is refused with nothing changed; one handing up none goes (AR-673).
 //! Below a package a profile holds, read back from rows, the handoff passes the profile when it
 //! stays and judges nothing when it or that package goes (AR-745).
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};

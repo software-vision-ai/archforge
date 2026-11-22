@@ -5,6 +5,7 @@
 //! and changes nothing; a type its default does not fit is refused, naming the default; the card's
 //! and the line's notation, a static member's row underlined (AR-136); a literal that goes takes its
 //! defaults along; saved as rows and read back identical; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;

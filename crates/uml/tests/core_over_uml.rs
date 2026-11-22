@@ -2,6 +2,7 @@
 //! tags on elements of two notations, trace links between UML classes, destroy with links and undo,
 //! the core's rules, and the sweep. These tests live here, with the notation, because a dependency
 //! only ever points down a layer: the core (5) cannot test over UML (6).
+#![allow(clippy::unwrap_used, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_core::*;
 use archforge_engine::{CommandError, Ctx, Document, Options, Params, Registry, Session, View, always, cmd};

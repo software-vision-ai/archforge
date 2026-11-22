@@ -1,4 +1,5 @@
 //! The engine against a toy notation: a list of named items, and a view that selects one.
+#![allow(clippy::unwrap_used, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::sync::Arc;
 

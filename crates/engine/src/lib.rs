@@ -10,7 +10,6 @@
 //! builds a `Registry` from them. A document that is cheaper to copy than to record wraps itself in
 //! [`Snapshotted`]. The engine builds for the portable target: no file system, process, clock or
 //! environment.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod cmd;
 mod error;
@@ -25,8 +24,8 @@ pub use cmd::{
     expected_revision_if_given,
 };
 pub use error::{
-    Accepted, BindingFault, CommandError, DefaultKind, DependencyOf, End, EngineError, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty,
-    NotOneOf, Parameter, Reason, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
+    Accepted, BindingFault, CommandError, DefaultKind, End, EngineError, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty, NotOneOf,
+    Parameter, Reason, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
 };
 pub use params::{ParamDoc, Params, parse_params};
 pub use session::{Batch, Dropped, GroupEnd, JournalEntry, MAX_GROUPS, Options, Outcome, Session, history_start, seed_histories};

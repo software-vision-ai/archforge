@@ -8,9 +8,11 @@ description: "Use when writing or reviewing non-test Rust in Archforge, reading 
 People will trust Archforge with their models. This outranks feature work.
 
 ## In non-test code
-- No `unwrap()`, `expect()`, `panic!`, `unreachable!`, `todo!` or `unimplemented!`. Every crate root
-  (each `lib.rs` and each binary's `main.rs`) carries the `#![deny(...)]` line `AGENTS.md` gives, and
-  the gate's lint step runs clippy with `-D warnings`. A new crate copies that line.
+- No `unwrap()`, `expect()`, `panic!`, `unreachable!`, `todo!` or `unimplemented!`. The root
+  `Cargo.toml`'s `[workspace.lints.clippy]` denies them, and every member takes those lints with
+  `[lints] workspace = true` and nothing else under `lints`. The gate's lint step checks that table
+  in every member's manifest (`xtask/src/lints.rs`), then runs clippy with `-D warnings`. A new
+  crate adds the table; tests and helpers under `tests/` follow `AGENTS.md`.
 - Errors are `Result` with a message that names the offending value and the accepted choices, passed
   up with `?`. An unfinished feature says "not available yet"; it never panics.
 - Input-derived numbers are hostile: `get()` rather than `[i]`, checked or saturating arithmetic,

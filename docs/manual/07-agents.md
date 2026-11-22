@@ -679,11 +679,11 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   changes nothing, as are UML's own library and metaclasses, a template parameter's own
   classifier and a package outside the model. An element cannot depend on itself, while a cycle
   of dependencies is allowed. Two ends, no dependency on itself and both ends in one model are
-  Archforge's own rules, not UML's. `element_remove` refuses a package, or a package taken along
-  with another, while a dependency that stays has it as its client or its supplier, naming the
-  package, the dependency's id and its other end; remove that dependency first with
-  `element_remove` and its id. For now this holds for both ends; a later version removes such
-  dependencies with the package instead. `uml_relationship_reconnect` moves either end of a
+  Archforge's own rules, not UML's. `element_remove` of a package removes, in the same step,
+  every dependency whose client or supplier is that package or a package it takes along, with its
+  lines, never moving that end onto another element; `relationships` counts them. A dependency a
+  removed nested package holds between two elements that stay is handed up with the rest, and
+  `diagram_disconnect` on a dependency's line keeps the dependency. `uml_relationship_reconnect` moves either end of a
   dependency onto another package or classifier of the model, in a project of packages alone too;
   an association's or a generalization's end still moves onto a classifier only. Moving the source
   moves the dependency to its new client's package in the same step; a new target leaves its owner as it
@@ -790,7 +790,8 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   showed already kept, as the window's Open profile diagram does. Unapplying,
   deleting, dropping an extension, moving a stereotype or moving what a use sits in is refused
   while elements use the stereotypes, the uses named; deleting a used element with
-  `element_remove` removes its applications with it. `uml_profile_list`, `uml_stereotype_get`,
+  `element_remove` removes its applications with it, and the applications on a dependency a
+  removed package takes along go with it and count as no use. `uml_profile_list`, `uml_stereotype_get`,
   `uml_package_profiles`, `uml_profile_uses` and `uml_metaclass_list` read them; a profile or a
   stereotype is removed with `element_remove`.
 - **Stereotypes applied**: `uml_stereotype_apply` applies a stereotype to an element (a classifier,

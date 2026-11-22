@@ -5,7 +5,6 @@
 //! command it runs that resolves dependencies takes `--locked`, as the `xtask` alias does, so a
 //! manifest changed without its lock fails the gate. `cargo xtask bump` alone moves the shared
 //! crates to the newest commit of their main branch.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod assets;
 mod bump;
@@ -13,6 +12,7 @@ mod generate;
 mod ico;
 mod kind_literals;
 mod layers;
+mod lints;
 mod manual;
 mod resize;
 mod screens;
@@ -61,10 +61,19 @@ fn cargo_step(args: &'static [&'static str]) -> Box<dyn Fn() -> Result<(), Strin
 
 /// The gate's steps in order. Each cargo command that resolves dependencies takes `--locked`, so
 /// none of them writes `Cargo.lock`; `cargo fmt` reads no lock file.
+///
+/// The lint step first checks that every member takes the workspace's lints (`lints`), where the
+/// never-crash deny list lives: clippy's verdict says nothing about a crate without them.
 fn steps() -> Vec<Step> {
     let mut s: Vec<Step> = vec![
         ("format", cargo_step(&["fmt", "--all", "--", "--check"])),
-        ("lint", cargo_step(&["clippy", "--locked", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"])),
+        (
+            "lint",
+            Box::new(|| {
+                lints::run()
+                    .and_then(|()| cargo_step(&["clippy", "--locked", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"])())
+            }),
+        ),
         ("test", cargo_step(&["test", "--locked", "--workspace"])),
         ("assets", Box::new(|| assets::run(true))),
         ("skills", Box::new(skills::run)),

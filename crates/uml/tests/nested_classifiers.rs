@@ -4,6 +4,7 @@
 //! reason, changing nothing; an owner deleted with what it nests, their relationships and views,
 //! in one step; the ⊕ tie and the qualified name on a diagram; saved as rows and read back
 //! identical; a model of package members alone unchanged; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::{Notation, ProjectView};
 use archforge_engine::testing::sweep_with;

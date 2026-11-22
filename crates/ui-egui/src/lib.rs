@@ -4,7 +4,6 @@
 //! Each frame `logic` takes in the installed fonts and applies the appearance; `ui` draws Home,
 //! the start screen, and the New project dialog over it while it is open. The shell never touches the file system or the operating system: the host
 //! supplies `Services`.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod actions;
 pub mod ai_agents;

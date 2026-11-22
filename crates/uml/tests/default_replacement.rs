@@ -4,6 +4,7 @@
 //! and an agent's command give the same answer, the same ids and the same store, each one undo step
 //! undone and redone exactly; removing a whole package, top-level or nested, never makes a
 //! replacement.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::collections::{BTreeMap, BTreeSet};
 

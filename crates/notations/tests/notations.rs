@@ -1,6 +1,7 @@
 //! The project composed from its notations: every notation's metamodel, slabs and tables in one
 //! store, a model of two notations rebuilt from its rows, and a second notation's diagrams,
 //! removals and descriptions routed to it through the one project view.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::{Notation, ProjectView};
 use archforge_engine::testing::sweep_with;

@@ -2,6 +2,7 @@
 //! again, it comes back identical; the unsaved state follows the writes and the saves; a project
 //! made for other tables is refused. Needs dolt 2.6 or later, as the project tests do.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

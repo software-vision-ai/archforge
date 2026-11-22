@@ -7413,13 +7413,6 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let none_yet = "Vertrieb hat noch kein Diagramm, das die Diagramme dieses Pakets aufnehmen kann. Erstellen Sie zuerst eines dafür. Es wurde nichts geändert.";
         let invalid = "Vertrieb hat kein gültiges Standarddiagramm, das die Diagramme dieses Pakets aufnehmen kann. Wählen Sie zuerst sein Standarddiagramm. Es wurde nichts geändert.";
         assert_eq!([up(None), up(Some(Missing)), up(Some(WrongOwner))], [none_yet, invalid, invalid], "{theme:?}");
-        // A package a dependency that stays depends on, or starts at, is kept (AR-696).
-        use archforge_engine::End::{Source, Target};
-        let of = |end| archforge_engine::DependencyOf { package: "Buchhaltung".into(), end, other: "Auftrag".into(), dependency: "d-7".into() };
-        let said = |end| crate::panels::said(&archforge_engine::Reason::DependencyEnd(Box::new(of(end))));
-        let to = "Die Abhängigkeit d-7 von Auftrag hängt von Buchhaltung ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
-        let from = "Buchhaltung hängt über die Abhängigkeit d-7 von Auftrag ab, daher bleibt Buchhaltung. Entfernen Sie zuerst diese Abhängigkeit.";
-        assert_eq!([said(Target), said(Source)], [Some(to.into()), Some(from.into())], "{theme:?}");
         // A dependency moved onto the client and supplier another has (AR-697).
         let exists = "Diese Verbindung besteht bereits: die Abhängigkeit zahlt. Wählen Sie die bestehende Beziehung aus.";
         let repeated = archforge_engine::Reason::ConnectionExists { dependency: "zahlt".into() };
