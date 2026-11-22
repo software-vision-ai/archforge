@@ -130,13 +130,18 @@ fn read_capped(file: &Path, limit: u64) -> Result<Vec<u8>, String> {
 /// missing or cannot be read, and a folder under one that cannot be opened ([`util::walk_strict`]),
 /// stop the check with their paths, so no part of the scope passes unread.
 pub fn scan(root: &Path) -> Result<Vec<String>, String> {
-    let rules = read_capped(&root.join("clippy.toml"), MAX_FILE)?;
-    if rules.len() as u64 > MAX_FILE {
-        return Err(format!("clippy.toml: more than {MAX_FILE} bytes, so the banned types are not read"));
-    }
-    let rules = String::from_utf8(rules).map_err(|e| format!("clippy.toml: {e}"))?;
-    let banned = banned(&rules)?;
+    let banned = rules_of(root, MAX_FILE)?;
     scan_within(root, &banned, MAX_FILE, MAX_TOTAL, |p| std::fs::symlink_metadata(p).map(|m| m.len())).map(|(found, _)| found)
+}
+
+/// The types `root`'s `clippy.toml` bans ([`banned`]), the file read up to `cap` bytes: a larger
+/// one, one that cannot be read and one that is no text stop the check.
+fn rules_of(root: &Path, cap: u64) -> Result<Vec<Banned>, String> {
+    let bytes = read_capped(&root.join("clippy.toml"), cap)?;
+    if bytes.len() as u64 > cap {
+        return Err(format!("clippy.toml: more than {cap} bytes, so the banned types are not read"));
+    }
+    banned(&String::from_utf8(bytes).map_err(|e| format!("clippy.toml: {e}"))?)
 }
 
 /// [`scan`] with the banned types and its caps given, and a source's size in bytes from `size_of`, so a test can give
@@ -297,8 +302,8 @@ mod tests {
         assert_eq!(scan(&s.path), Ok(vec!["crates/a/src/lib.rs line 1: Galley named outside ux: a laid-out text is ux's".to_string()]));
     }
 
-    /// A `clippy.toml` that is missing, no TOML, bans no type or holds an entry without a path
-    /// stops the check: it never runs knowing fewer names than the lint bans.
+    /// A `clippy.toml` that is missing, too large, no text or no TOML, bans no type or holds an
+    /// entry without a path stops the check: it never runs knowing fewer names than the lint bans.
     #[test]
     fn a_clippy_toml_that_names_no_banned_type_stops_the_check() {
         let s = crate::util::Scratch::new("ux-no-rules").unwrap();
@@ -315,11 +320,17 @@ mod tests {
             "disallowed-types = [{ path = 3 }]\n",
             "disallowed-types = [\"egui::\"]\n",
             "disallowed-types = [7]\n",
+            "disallowed-types = [\"egui::Color32\", { reason = \"r\" }]\n",
         ] {
             s.file("clippy.toml", text).unwrap();
             let refused = scan(&s.path);
             assert!(refused.as_ref().is_err_and(|e| e.starts_with("clippy.toml: ")), "{text:?}: {refused:?}");
         }
+        s.file("clippy.toml", "disallowed-types = [\"egui::Color32\"]\n").unwrap();
+        assert_eq!(rules_of(&s.path, 37).map(|b| b.len()), Ok(1), "the file's 37 bytes fit a cap of 37");
+        assert_eq!(rules_of(&s.path, 36), Err("clippy.toml: more than 36 bytes, so the banned types are not read".to_string()));
+        std::fs::write(s.path.join("clippy.toml"), [0xff, 0xfe]).unwrap();
+        assert!(rules_of(&s.path, 37).is_err_and(|e| e.starts_with("clippy.toml: ")), "no text");
     }
 
     /// A source that is not Rust is a finding, so nothing passes unread.
