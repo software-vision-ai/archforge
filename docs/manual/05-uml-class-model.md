@@ -1623,7 +1623,8 @@ extend are UML model elements of their own, saved with the model, not labels or 
   Commerce: «Entity» on Order and Customer, «Id» on 2 elements, «Reference» on places. Remove
   those first.* **Show the 5 uses** selects them. Renaming a profile or a stereotype keeps every
   use. Deleting a package refuses the same way when its elements would lose the profile that
-  reaches them, and when it would take along a profile that is in use.
+  reaches them, and when it would take along a profile that is in use. Stereotypes on a
+  dependency deleted with the package go with it and do not count.
 - **Deleting a used element** itself, such as *Order*, asks first, from **Models** too, and the
   dialog names the stereotype applications that go with it and with what it takes along: *3
   stereotype applications go with it: «Entity» on Order, «Id» on id,
@@ -1706,9 +1707,10 @@ the model; **Delete from the model…** (⇧⌫) asks first, then deletes it eve
   goes with it.
 - Deleting an association class takes its ends, attributes and operations with it. Removing a
   class at either end takes the association class along.
-- A package that a dependency starts at or depends on is not deleted while that dependency
-  stays: Archforge names the dependency and its other end, and you delete the dependency first.
-  For now this holds for both ends; a later version deletes such dependencies with the package.
+- Deleting a package deletes the dependencies that start at it or depend on it, and those of
+  every package it deletes with it, in the same step; their lines go from every diagram. A
+  dependency a package inside another only holds, between elements that stay, moves up with the
+  rest of what it holds.
 - An association class's row in **Models** can be dragged onto a diagram to place its card; where
   the diagram shows both its classes, its line comes too. A diagram may also show the line
   without the card: the line then carries the name at its middle, and Delete on it takes it only
