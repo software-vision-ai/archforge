@@ -235,7 +235,7 @@ fn empty(shell: &mut Shell, ui: &egui::Ui, p: &Palette, body: Rect, acts: &mut V
 }
 
 /// `text` laid out centred in `width`.
-fn centred(paint: &egui::Painter, text: &str, ty: ux::Type, color: crate::ux::Colour, width: f32) -> std::sync::Arc<egui::Galley> {
+fn centred(paint: &egui::Painter, text: &str, ty: ux::Type, color: ux::Colour, width: f32) -> std::sync::Arc<egui::Galley> {
     let mut job = egui::text::LayoutJob::single_section(
         text.to_string(),
         egui::text::TextFormat { font_id: ty.font(), color: color.into(), line_height: Some(ty.line), ..Default::default() },

@@ -402,28 +402,28 @@ pub(crate) fn refs(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Ob
 /// each none when the diagram's look holds.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub(crate) struct Look {
-    pub fill: Option<crate::ux::Colour>,
-    pub stroke: Option<crate::ux::Colour>,
-    pub text: Option<crate::ux::Colour>,
+    pub fill: Option<ux::Colour>,
+    pub stroke: Option<ux::Colour>,
+    pub text: Option<ux::Colour>,
     /// The border's or the line's width; none for the diagram's.
     pub width: Option<f32>,
 }
 
 /// A colour `#rrggbb` as drawn, or none for anything else.
-pub(crate) fn colour(hex: &str) -> Option<crate::ux::Colour> {
+pub(crate) fn colour(hex: &str) -> Option<ux::Colour> {
     let h = hex.strip_prefix('#').filter(|h| h.len() == 6 && h.is_ascii())?;
     let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
     Some(crate::ux::data_colour(byte(0)?, byte(2)?, byte(4)?))
 }
 
 /// A colour as `#rrggbb`.
-pub(crate) fn hex(c: crate::ux::Colour) -> String {
+pub(crate) fn hex(c: ux::Colour) -> String {
     format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b())
 }
 
 /// The palette whose text reads on `fill`: Light's dark text on a light fill, Dark's light text on
 /// a dark one, so a node's own fill never hides its words.
-pub(crate) fn ink_for(fill: crate::ux::Colour) -> &'static Palette {
+pub(crate) fn ink_for(fill: ux::Colour) -> &'static Palette {
     let luma = 0.2126 * fill.r() as f32 + 0.7152 * fill.g() as f32 + 0.0722 * fill.b() as f32;
     ux::palette(luma < 140.0)
 }
@@ -1107,7 +1107,7 @@ fn draw_node(
         }
         Some(_) if let Some(card) = card => {
             // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
-            let dim = |c: crate::ux::Colour| if card.elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
+            let dim = |c: ux::Colour| if card.elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
             // The node's own look on this diagram, where it has one.
             let look = look_of(store, n, node::STYLE);
             // Its own fill brings the text that reads on it, unless it has its own text colour too.
@@ -1428,13 +1428,7 @@ const PREVIEW_MOST: f32 = 0.5;
 /// The tab over the top left of the package card at `rect` (AR-113): as wide as `name` and its
 /// padding, never narrower than [`PACKAGE_TAB_MIN`] nor wider than the card, with the name laid out to
 /// fit it (cut with an ellipsis where the card is narrower than the name), and whether it was cut.
-pub(crate) fn package_tab(
-    paint: &egui::Painter,
-    rect: Rect,
-    name: &str,
-    z: f32,
-    ink: crate::ux::Colour,
-) -> (Rect, std::sync::Arc<egui::Galley>, bool) {
+pub(crate) fn package_tab(paint: &egui::Painter, rect: Rect, name: &str, z: f32, ink: ux::Colour) -> (Rect, std::sync::Arc<egui::Galley>, bool) {
     let ty = types::SMALL_STRONG.scaled(z);
     let pad = PACKAGE_TAB_PAD * z;
     let whole = ux::galley(paint, name, ty, ink, None);
@@ -1453,7 +1447,7 @@ const PATH_BADGE_GAP: f32 = 6.0;
 /// caption style and the canvas's secondary ink: its words say what it is, never its colour alone.
 /// It is as wide as the card at most: its first owners fold into `…` so the nearest stay, and the
 /// nearest alone is cut at its end ([`ux::cut_front`]).
-fn path_badge(paint: &egui::Painter, card: Rect, owners: &[String], z: f32, ink: crate::ux::Colour, node: Uuid) -> PathBadge {
+fn path_badge(paint: &egui::Painter, card: Rect, owners: &[String], z: f32, ink: ux::Colour, node: Uuid) -> PathBadge {
     let ty = types::CAPTION.scaled(z);
     let template = tr("Owner: {path}");
     let say = |path: &str| fmt(&template, &[("path", path)]);
@@ -1621,7 +1615,7 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
     if matches!(c.look, MiniLook::Note | MiniLook::Tabbed | MiniLook::Constraint) {
         return;
     }
-    let bar = |y: f32, w: f32, h: f32, colour: crate::ux::Colour| {
+    let bar = |y: f32, w: f32, h: f32, colour: ux::Colour| {
         if y + h <= r.bottom() - 1.0 {
             paint.rect_filled(Rect::from_min_size(pos2(r.left() + ENTITY_INSET * s, y), vec2((r.width() * w).max(1.0), h.max(1.0))), 1.0, colour);
         }
@@ -1895,7 +1889,7 @@ pub(crate) fn mark_outline(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> Vec<
 /// Draws a line's triangle, diamond or open arrow at `tip`, coming from `back`, a hollow one filled
 /// with `bg`, at its [`mark_outline`].
 #[allow(clippy::too_many_arguments, reason = "a mark is drawn at its end, in its stroke and over what it is drawn on")]
-pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: crate::ux::Colour) {
+pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: ux::Colour) {
     let outline = mark_outline(mark, tip, back, z);
     match (mark, outline.as_slice()) {
         (EndMark::Triangle | EndMark::HollowDiamond, [_, ..]) => {
@@ -2754,7 +2748,7 @@ pub(crate) fn end_glyph_on(
     stroke: Stroke,
     z: f32,
     with_text: bool,
-    fill: crate::ux::Colour,
+    fill: ux::Colour,
 ) {
     let (many, zero, text) = match mark {
         EndMark::ExactlyOne => (false, false, "1"),

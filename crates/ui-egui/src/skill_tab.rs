@@ -674,7 +674,7 @@ fn write(shell: &mut Shell, ui: &egui::Ui, child: &mut egui::Ui, p: &Palette, pa
 }
 
 /// A toolbar button's mark: a letter in the look it gives, or an icon.
-fn glyph(paint: &egui::Painter, b: Rect, f: Format, ink: crate::ux::Colour) {
+fn glyph(paint: &egui::Painter, b: Rect, f: Format, ink: ux::Colour) {
     let letter = |text: &str, strong: bool, italic: bool| {
         let ty = if strong { types::UI_STRONG } else { types::UI };
         let mut job = egui::text::LayoutJob::default();

@@ -12,9 +12,9 @@
 
 use std::sync::Arc;
 
-use crate::ux::Colour;
 use egui::text_edit::TextEditState;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
+use ux::Colour;
 
 use crate::Shell;
 use crate::actions::{

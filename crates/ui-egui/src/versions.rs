@@ -8,10 +8,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-use crate::ux::Colour;
 use archforge_mof::rows::Rows;
 use archforge_notations::differences::{Area, ChangeKind, Difference};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use ux::Colour;
 
 use crate::chat_words::{Clock, date_and_time, seconds_of};
 use crate::explorer::{TreeScroll, scroll_tree};

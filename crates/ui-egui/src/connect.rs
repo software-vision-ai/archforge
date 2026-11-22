@@ -130,8 +130,8 @@ pub(crate) fn sample_line(
     centre: Pos2,
     from: Option<Cardinality>,
     to: Option<Cardinality>,
-    ink: crate::ux::Colour,
-    fill: crate::ux::Colour,
+    ink: ux::Colour,
+    fill: ux::Colour,
 ) {
     let z = 0.7;
     let (a, b) = (centre - vec2(18.0, 0.0), centre + vec2(18.0, 0.0));
@@ -143,15 +143,7 @@ pub(crate) fn sample_line(
 
 /// The relationship tool's icon: a line with the ends the tool draws, at the size the popover's
 /// samples show them, across its double-width button, over `fill`.
-pub(crate) fn tool_line(
-    paint: &egui::Painter,
-    p: &Palette,
-    centre: Pos2,
-    from: Cardinality,
-    to: Cardinality,
-    ink: crate::ux::Colour,
-    fill: crate::ux::Colour,
-) {
+pub(crate) fn tool_line(paint: &egui::Painter, p: &Palette, centre: Pos2, from: Cardinality, to: Cardinality, ink: ux::Colour, fill: ux::Colour) {
     let z = 0.7;
     let (a, b) = (centre - vec2(24.0, 0.0), centre + vec2(24.0, 0.0));
     let stroke = Stroke::new(1.2, ink);

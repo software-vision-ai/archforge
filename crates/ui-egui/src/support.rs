@@ -9,8 +9,8 @@
 //! dialog never opens by itself. Done, the close button and Escape close it; the open project
 //! stays as it was.
 
-use crate::ux::Colour;
 use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use ux::Colour;
 
 use crate::i18n::tr;
 use crate::ux::{self, icons, types};

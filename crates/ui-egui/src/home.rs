@@ -12,8 +12,8 @@
 //! changes it. The New project card opens its dialog. Controls whose screens are not built yet
 //! are drawn as designed, do nothing when clicked and say so on hover.
 
-use crate::ux::Colour;
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use ux::Colour;
 
 use crate::i18n::tr;
 use crate::state::{RecentSort, RecentView};

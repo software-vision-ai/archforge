@@ -334,7 +334,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
 
 /// The ink of a draft row's ⋯, one for every kind of member: an attribute's, an operation's and a
 /// literal's rows read alike.
-pub(crate) fn details_ink(p: &Palette) -> crate::ux::Colour {
+pub(crate) fn details_ink(p: &Palette) -> ux::Colour {
     p.text_secondary
 }
 

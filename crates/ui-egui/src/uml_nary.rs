@@ -342,7 +342,7 @@ fn leg_points(diamond: Rect, card: Rect) -> Vec<Pos2> {
 }
 
 /// A hollow diamond filling `rect`, over `fill`.
-fn diamond_shape(paint: &egui::Painter, rect: Rect, fill: crate::ux::Colour, stroke: Stroke) {
+fn diamond_shape(paint: &egui::Painter, rect: Rect, fill: ux::Colour, stroke: Stroke) {
     let points = vec![rect.left_center(), rect.center_top(), rect.right_center(), rect.center_bottom()];
     paint.add(egui::Shape::convex_polygon(points, fill, stroke));
 }

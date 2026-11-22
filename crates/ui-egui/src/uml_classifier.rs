@@ -208,7 +208,7 @@ impl Classifier {
 }
 
 /// The tool's face: the icon of the kind it places.
-pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, b: Rect, ink: crate::ux::Colour) {
+pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, b: Rect, ink: ux::Colour) {
     ux::icon_in(paint, b, shell.canvas.uml_classifier.tool_icon(), ink);
 }
 

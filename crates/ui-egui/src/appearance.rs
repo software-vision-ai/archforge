@@ -9,11 +9,11 @@
 //! angles can go around the tables in the way. With nothing selected the panel sets the diagram's
 //! routing (owner decisions).
 
-use crate::ux::Colour;
 use archforge_diagram::{DIAGRAM, NODE, ProjectView, diagram, edge, node, style};
 use archforge_mof::{Obj, Store, Value};
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
+use ux::Colour;
 
 use crate::canvas::{Look, colour, hex, look_of};
 use crate::home::control;

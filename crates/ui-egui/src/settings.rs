@@ -10,8 +10,8 @@
 //! the close button and Escape close it. A choice takes effect as it is made. It is modal: Tab stays
 //! in it, and the window behind takes no keys while it is open.
 
-use crate::ux::Colour;
 use egui::{Pos2, Rect, Response, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use ux::Colour;
 
 use crate::i18n::tr;
 use crate::ux::{self, Palette, icons, types};

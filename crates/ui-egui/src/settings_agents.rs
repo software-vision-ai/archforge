@@ -842,7 +842,7 @@ fn codex_sign_in(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut P
 }
 
 /// A row that starts with the person icon, its text centred on the row's line.
-fn person_row(paint: &egui::Painter, p: &Palette, x: f32, y: f32, text: &str, ink: crate::ux::Colour, room: f32) {
+fn person_row(paint: &egui::Painter, p: &Palette, x: f32, y: f32, text: &str, ink: ux::Colour, room: f32) {
     ux::icon_in(paint, Rect::from_center_size(pos2(x + 8.0, y + 14.0), Vec2::splat(16.0)), &icons::PERSON, p.text_secondary);
     ux::text_mid(paint, x + 24.0, y + 14.0, text, types::UI, ink, Some(room.max(0.0)));
 }

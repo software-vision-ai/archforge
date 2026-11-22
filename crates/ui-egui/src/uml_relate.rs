@@ -162,7 +162,7 @@ impl Relate {
 }
 
 /// A short line with the kind's marks between `a` and `b`, over `fill`.
-fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: crate::ux::Colour, fill: crate::ux::Colour) {
+fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: ux::Colour, fill: ux::Colour) {
     let ([start, end], dashed) = kind.look();
     let stroke = Stroke::new(1.2, ink);
     let z = 0.7;
@@ -209,7 +209,7 @@ fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: crate::ux:
 }
 
 /// The Relationship tool's face: the kind it draws, across its double-width button.
-pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, p: &Palette, b: Rect, ink: crate::ux::Colour, active: bool) {
+pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, p: &Palette, b: Rect, ink: ux::Colour, active: bool) {
     let fill = if active { p.accent_tint } else { p.surface };
     sample(paint, b.center() - vec2(24.0, 0.0), b.center() + vec2(24.0, 0.0), shell.canvas.uml_relation, ink, fill);
 }

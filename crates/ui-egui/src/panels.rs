@@ -1714,8 +1714,8 @@ pub(crate) fn icon_button(
     at: egui::Pos2,
     id: &str,
     icon: &ux::Icon,
-    ink: crate::ux::Colour,
-    fill: Option<crate::ux::Colour>,
+    ink: ux::Colour,
+    fill: Option<ux::Colour>,
     hint: &str,
 ) -> bool {
     let paint = ui.painter();

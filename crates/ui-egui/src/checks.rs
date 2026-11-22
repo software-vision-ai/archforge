@@ -99,7 +99,7 @@ pub(crate) fn checks_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
 }
 
 /// A two-letter badge at `at`.
-pub(crate) fn badge(paint: &egui::Painter, at: egui::Pos2, text: &str, tint: crate::ux::Colour, ink: crate::ux::Colour) {
+pub(crate) fn badge(paint: &egui::Painter, at: egui::Pos2, text: &str, tint: ux::Colour, ink: ux::Colour) {
     let br = Rect::from_min_size(at, vec2(26.0, 16.0));
     paint.rect_filled(br, 4.0, tint);
     let g = ux::galley(paint, text, types::TINY, ink, None);

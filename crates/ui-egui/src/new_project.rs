@@ -18,9 +18,9 @@
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
-use crate::ux::Colour;
 use archforge_names::Problem;
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use ux::Colour;
 
 use crate::i18n::{fmt, tr};
 use crate::ux::{self, Palette, icons, types};
