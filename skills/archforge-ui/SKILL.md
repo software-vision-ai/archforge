@@ -26,10 +26,12 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   screen checks `ux::ready` before its first text.
 - The compiler holds both rules. `clippy.toml` bans egui's colour and font types (`Color32`,
   `FontId`, `Hsva`, `HsvaGamma`, `Rgba`, `HexColor`) and their constructors outside `ux`: naming
-  one there, its constants, a renamed import or an `impl` for it, fails the lint step. The one
-  form a type ban does not see, a struct literal such as `FontId { .. }`, is refused by the
-  layer check (`xtask/src/ux_literals.rs`), in macro input and attribute arguments too. Each
-  refusal names the ux item to use; `ux` is the defining place, under one module-level allow.
+  one there, its constants, a renamed import or an `impl` for it, fails the lint step. A type ban
+  does not see a struct literal (`FontId { .. }`), so the layer check (`xtask/src/ux_literals.rs`)
+  refuses the types with public fields (`FontId`, `Hsva`, `HsvaGamma`) by name in every token
+  outside `ux`, in macro input, `macro_rules!` transcribers and attribute arguments too; strings
+  and comments are not read. Each refusal names the ux item to use; `ux` is the defining place,
+  under one module-level allow.
 - Icons are strokes in `crates/ui-egui/src/ux/icons.rs`, drawn with `ux::icon` or `ux::icon_in` at
   the design's stroke weight.
 - `crates/ui-egui/src/theme.rs` gives the toolkit's own visuals (tooltips, scroll bars) the same
