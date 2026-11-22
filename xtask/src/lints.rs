@@ -4,18 +4,19 @@
 //! `Cargo.toml`, and reaches a crate only when its own manifest says so. Without it, clippy passes
 //! `unwrap()` in a member's production code, so the lint step runs this check before clippy.
 //!
-//! The members come from `cargo metadata`, as in the layer check. Each manifest must hold the table
-//! `[lints]` with `workspace = true` and nothing else in it, the form every member uses; anything
-//! else that sets lints (`workspace = false`, a `[lints.clippy]` table, a `lints` key in the
-//! manifest's top-level table) is refused, and so is a manifest with no lints at all. The check
-//! reads only what decides this, exactly: TOML's comments and strings, multi-line ones included, so
-//! a `[lints]` inside a string or after a `#` never counts. Another spelling cargo would read the
-//! same way (`lints.workspace = true`, `lints = { workspace = true }`) is refused and named, never
-//! guessed at.
+//! The members come from `cargo metadata`, as in the layer check. Each manifest is read with a TOML
+//! parser (the `toml` crate), and its `lints` must be exactly `{ workspace = true }`: the table
+//! `[lints]` with `workspace = true` and nothing else in it, however it is written (`lints.workspace
+//! = true` and `lints = { workspace = true }` are the same table). Anything else under `lints`
+//! (`workspace = false`, an empty table, a `[lints.clippy]` table) is refused at the line of the key
+//! that sets it, and so is a manifest with no `lints` at all. A manifest that does not parse is
+//! refused with the parser's reason, never passed.
 
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+use toml::de::{DeTable, DeValue};
 
 use crate::util;
 
@@ -27,147 +28,38 @@ const WANTED: &str = "the table `[lints]` with `workspace = true`";
 pub enum Gap {
     /// Nothing in the manifest sets lints.
     Missing,
-    /// The manifest sets lints, but not as [`WANTED`] alone; the line (from 1) where it does.
+    /// The manifest sets lints, but not as [`WANTED`] alone; the line (from 1) of the key that does.
     Other { line: usize },
+    /// The manifest is not TOML the parser reads: its reason, and the line (from 1) where it applies
+    /// when it names one.
+    Unreadable { line: Option<usize>, reason: String },
 }
 
-/// Whether the manifest `text` takes the workspace's lints, as [`WANTED`] and nothing else that
-/// sets lints.
+/// Whether the manifest `text` takes the workspace's lints: its `lints` is exactly
+/// `{ workspace = true }`.
 pub fn check(text: &str) -> Result<(), Gap> {
-    // The table the line is in: `None` before the first header, the manifest's top-level table.
-    let mut table: Option<String> = None;
-    // The line of the `[lints]` header.
-    let mut header = None;
+    let line = |span: Range<usize>| line_at(text, span.start);
+    let document = DeTable::parse(text).map_err(|e| Gap::Unreadable { line: e.span().map(line), reason: e.message().to_string() })?;
+    let Some((key, lints)) = document.get_ref().iter().find(|(k, _)| k.get_ref() == "lints") else {
+        return Err(Gap::Missing);
+    };
+    let DeValue::Table(table) = lints.get_ref() else {
+        return Err(Gap::Other { line: line(key.span()) });
+    };
     let mut inherits = false;
-    for (n, code) in code_lines(text).into_iter().enumerate() {
-        let line = n + 1;
-        let Some(code) = code else { continue };
-        let code = code.trim();
-        if code.is_empty() {
-            continue;
-        }
-        if code.starts_with('[') {
-            let name = key(code.trim_start_matches('[').trim_end_matches(']'));
-            if code == "[lints]" && header.is_none() {
-                header = Some(line);
-            } else if is_lints(&name) {
-                return Err(Gap::Other { line });
-            }
-            table = Some(name);
-            continue;
-        }
-        let in_lints = table.as_deref() == Some("lints");
-        if in_lints && !inherits && code.split_whitespace().collect::<String>() == "workspace=true" {
+    for (k, v) in table.iter() {
+        if k.get_ref() == "workspace" && matches!(v.get_ref(), DeValue::Boolean(true)) {
             inherits = true;
-        } else if in_lints || (table.is_none() && is_lints(&key(code.split('=').next().unwrap_or_default()))) {
-            return Err(Gap::Other { line });
+        } else {
+            return Err(Gap::Other { line: line(k.span()) });
         }
     }
-    match header {
-        Some(_) if inherits => Ok(()),
-        Some(line) => Err(Gap::Other { line }),
-        None => Err(Gap::Missing),
-    }
+    if inherits { Ok(()) } else { Err(Gap::Other { line: line(key.span()) }) }
 }
 
-/// A dotted key with its whitespace and quotes taken out: `"lints" . clippy` reads `lints.clippy`.
-fn key(text: &str) -> String {
-    text.chars().filter(|c| !c.is_whitespace() && *c != '"' && *c != '\'').collect()
-}
-
-/// Whether a key names the manifest's lints or a part of them.
-fn is_lints(key: &str) -> bool {
-    key == "lints" || key.starts_with("lints.")
-}
-
-/// Where the reader is in TOML's lexical structure.
-#[derive(Clone, Copy, PartialEq)]
-enum Lex {
-    Code,
-    Comment,
-    Basic,
-    Literal,
-    MultiBasic,
-    MultiLiteral,
-}
-
-/// Each line of `text` with its comment taken off, or `None` for a line that starts inside a
-/// multi-line string. Strings that start on a line are kept in it, so a quoted key still reads.
-fn code_lines(text: &str) -> Vec<Option<String>> {
-    let mut lines = vec![Some(String::new())];
-    let mut state = Lex::Code;
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\n' {
-            state = match state {
-                Lex::MultiBasic | Lex::MultiLiteral => state,
-                _ => Lex::Code,
-            };
-            lines.push((state == Lex::Code).then(String::new));
-            continue;
-        }
-        let quote = match state {
-            Lex::Code | Lex::Comment => None,
-            Lex::Basic | Lex::MultiBasic => Some('"'),
-            Lex::Literal | Lex::MultiLiteral => Some('\''),
-        };
-        match state {
-            Lex::Code if c == '#' => state = Lex::Comment,
-            Lex::Code if c == '"' || c == '\'' => {
-                let run = 1 + eat(&mut chars, c, 2);
-                state = match (run, c) {
-                    // An empty string: it opens and closes.
-                    (2, _) => Lex::Code,
-                    (1, '"') => Lex::Basic,
-                    (1, _) => Lex::Literal,
-                    (_, '"') => Lex::MultiBasic,
-                    _ => Lex::MultiLiteral,
-                };
-                push(&mut lines, &c.to_string().repeat(run));
-                continue;
-            }
-            Lex::Basic | Lex::MultiBasic if c == '\\' => {
-                push(&mut lines, "\\");
-                // The escaped character, unless it ends the line: a line-ending backslash in a
-                // multi-line string still ends the line.
-                if let Some(next) = chars.next_if(|n| *n != '\n') {
-                    push(&mut lines, &next.to_string());
-                }
-                continue;
-            }
-            Lex::Basic | Lex::Literal if Some(c) == quote => state = Lex::Code,
-            Lex::MultiBasic | Lex::MultiLiteral if Some(c) == quote => {
-                // Three quotes close it; up to two more before them belong to the string.
-                let run = 1 + eat(&mut chars, c, 4);
-                if run >= 3 {
-                    state = Lex::Code;
-                }
-                push(&mut lines, &c.to_string().repeat(run));
-                continue;
-            }
-            _ => {}
-        }
-        if state != Lex::Comment {
-            push(&mut lines, &c.to_string());
-        }
-    }
-    lines
-}
-
-/// Takes up to `most` more of `c` from the front of `chars`; how many it took.
-fn eat(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, c: char, most: usize) -> usize {
-    let mut took = 0;
-    while took < most && chars.next_if_eq(&c).is_some() {
-        took += 1;
-    }
-    took
-}
-
-/// Adds `s` to the last line, when that line is read at all.
-fn push(lines: &mut [Option<String>], s: &str) {
-    if let Some(Some(line)) = lines.last_mut() {
-        line.push_str(s);
-    }
+/// The line (from 1) of byte `offset` in `text`.
+fn line_at(text: &str, offset: usize) -> usize {
+    text.bytes().take(offset).filter(|b| *b == b'\n').count() + 1
 }
 
 /// The refusal for the manifest at `path` (relative to the workspace root).
@@ -178,6 +70,10 @@ fn refusal(path: &Path, gap: &Gap) -> String {
         Gap::Missing => format!("{}: takes none of the workspace's lints; add {WANTED}: {why}", path.display()),
         Gap::Other { line } => {
             format!("{}:{line}: sets lints other than by {WANTED} alone; write that table, with nothing else under `lints`: {why}", path.display())
+        }
+        Gap::Unreadable { line, reason } => {
+            let at = line.map(|l| format!(":{l}")).unwrap_or_default();
+            format!("{}{at}: cannot be read as TOML, so whether it takes the workspace's lints is unknown: {reason}", path.display())
         }
     }
 }
@@ -256,14 +152,47 @@ mod tests {
         assert_eq!(check(&manifest("[lints]\nworkspace = true\nclippy = { unwrap_used = \"allow\" }\n")), Err(Gap::Other { line: 9 }));
         assert_eq!(check(&manifest("[lints]\nworkspace = true\n[lints.clippy]\nunwrap_used = \"allow\"\n")), Err(Gap::Other { line: 9 }));
         assert_eq!(check(&manifest("[lints.rust]\nunsafe_code = \"allow\"\n")), Err(Gap::Other { line: 7 }));
+        assert_eq!(check(&manifest("[lints]\nworkspaces = true\n")), Err(Gap::Other { line: 8 }));
     }
 
-    /// Another spelling of the same table is named, not guessed at.
+    /// A value that looks like a header (an array of arrays across lines) is a value, not a table
+    /// (CodeRabbit on #577); a real `[lints.clippy]` table is still refused.
     #[test]
-    fn another_spelling_of_the_table_is_refused() {
-        assert_eq!(check("lints.workspace = true\n[package]\nname = \"m\"\n"), Err(Gap::Other { line: 1 }));
-        assert_eq!(check("\"lints\" = { workspace = true }\n[package]\n"), Err(Gap::Other { line: 1 }));
-        assert_eq!(check(&manifest("[ \"lints\" ]\nworkspace = true\n")), Err(Gap::Other { line: 7 }));
+    fn an_array_element_is_no_table_header() {
+        let groups = "[package.metadata]\ngroups = [\n  [\"lints\"],\n  [ 'lints.clippy' ]\n]\n";
+        assert_eq!(check(&manifest(&format!("[lints]\nworkspace = true\n{groups}"))), Ok(()));
+        assert_eq!(check(&manifest(&format!("{groups}[lints]\nworkspace = true\n"))), Ok(()));
+        assert_eq!(
+            check(&manifest(&format!("[lints]\nworkspace = true\n{groups}[lints.clippy]\nunwrap_used = \"allow\"\n"))),
+            Err(Gap::Other { line: 14 })
+        );
+    }
+
+    /// The same table written another way is the same table; a `lints` that is no table, or a
+    /// `workspace` that is not the boolean `true`, is refused at its key.
+    #[test]
+    fn another_spelling_of_the_table_is_the_same_table() {
+        assert_eq!(check("lints.workspace = true\n[package]\nname = \"m\"\n"), Ok(()));
+        assert_eq!(check("\"lints\" = { workspace = true }\n[package]\n"), Ok(()));
+        assert_eq!(check(&manifest("[ \"lints\" ]\n'workspace' = true\n")), Ok(()));
+        assert_eq!(check("[package]\nname = \"m\"\n\n[lints]\nworkspace = \"true\"\n"), Err(Gap::Other { line: 5 }));
+        assert_eq!(check("lints = { workspace = false }\n"), Err(Gap::Other { line: 1 }));
+        assert_eq!(check("[package]\nlints = true\n"), Err(Gap::Missing), "a key of another table");
+        assert_eq!(check("lints = true\n"), Err(Gap::Other { line: 1 }));
+    }
+
+    /// A manifest the parser cannot read is refused with its reason and line, never passed.
+    #[test]
+    fn a_manifest_that_does_not_parse_is_refused_with_the_reason() {
+        let Err(Gap::Unreadable { line, reason }) = check("[package]\nname = \"m\"\n[lints\nworkspace = true\n") else {
+            panic!("an unclosed header parses");
+        };
+        assert_eq!(line, Some(3));
+        assert!(!reason.is_empty());
+        let shown = refusal(Path::new("crates/new/Cargo.toml"), &Gap::Unreadable { line: Some(3), reason: "the reason".into() });
+        assert_eq!(shown, "crates/new/Cargo.toml:3: cannot be read as TOML, so whether it takes the workspace's lints is unknown: the reason");
+        let shown = refusal(Path::new("crates/new/Cargo.toml"), &Gap::Unreadable { line: None, reason: "the reason".into() });
+        assert!(shown.starts_with("crates/new/Cargo.toml: cannot be read"), "{shown}");
     }
 
     /// A `[lints]` in a comment or a string, multi-line ones included, is no table.
@@ -276,8 +205,7 @@ mod tests {
         assert_eq!(check(basic), Err(Gap::Missing));
         let literal = "[package]\ndescription = '''\n[lints]\nworkspace = true\n'''\n";
         assert_eq!(check(literal), Err(Gap::Missing));
-        // A quote or an escaped quote inside does not close the string; two extra quotes before
-        // the closing three belong to it.
+        // A quote or an escaped quote inside does not close the string.
         let inner = "[package]\ndescription = \"\"\"a \\\"\"\" \"\" b\n[lints]\nworkspace = true\n\"\"\"\"\"\n";
         assert_eq!(check(inner), Err(Gap::Missing));
         // A line-ending backslash keeps the string open on the next line, and the lines after it
@@ -290,28 +218,6 @@ mod tests {
         assert_eq!(check(after), Ok(()));
         // An empty string closes at once.
         assert_eq!(check("[package]\nname = \"\"\n[lints]\nworkspace = true\n"), Ok(()));
-    }
-
-    /// The reader takes comments off and keeps strings, whose quotes and escapes it reads as TOML
-    /// does.
-    #[test]
-    fn the_reader_takes_comments_off_and_keeps_strings() {
-        let first = |text: &str| code_lines(text).into_iter().next().flatten();
-        for (text, code) in [
-            (r#"name = "a # b" # c"#, r#"name = "a # b" "#),
-            (r#"name = "" # c"#, r#"name = "" "#),
-            (r#"name = 'a \' # c"#, r#"name = 'a \' "#),
-            (r#"name = "a \" # b" # c"#, r#"name = "a \" # b" "#),
-            // Up to two quotes before the closing three belong to the string.
-            (r#"name = """a"""" # c"#, r#"name = """a"""" "#),
-            (r#"name = """a""""" # c"#, r#"name = """a""""" "#),
-            (r#"name = '''a'''' # c"#, r#"name = '''a'''' "#),
-            (r#"name = '''a''''' # c"#, r#"name = '''a''''' "#),
-        ] {
-            assert_eq!(first(text).as_deref(), Some(code), "{text}");
-        }
-        let lines = code_lines("a = \"\"\"\nb\n\"\"\" # c\nd # e");
-        assert_eq!(lines, vec![Some("a = \"\"\"".to_string()), None, None, Some("d ".to_string())]);
     }
 
     /// The refusal says what to add and why.
