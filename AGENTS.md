@@ -33,9 +33,10 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   tests. Every crash fix ships a regression test that failed before the fix.
 - Production code never fails unrecoverably. None of the panicking shortcuts is used: unwrapping or
   expecting on fallible values, explicit panics, unreachable markers, the todo and unimplemented
-  macros. Every crate root (each `lib.rs` and each binary's `main.rs`) carries
-  `#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable,
-  clippy::todo, clippy::unimplemented)]`, so integration tests, examples and benches stay exempt.
+  macros. The workspace lints (`[workspace.lints.clippy]` in `Cargo.toml`) deny them, every
+  member takes them with `[lints] workspace = true`, and the gate's lint step refuses a member
+  without that table. `#[test]` and `#[cfg(test)]` code may use them (`clippy.toml`); an
+  integration test whose helpers do allows only those lints, at its top, with the reason.
 - A size declared in input is never trusted for preallocation. Total bytes are capped, not only
   item counts.
 - Every input-derived integer uses checked, saturating or fallible arithmetic and conversion. It is
