@@ -176,9 +176,9 @@ fn several_matches_need_a_choice_and_existing_picks_one_with_nothing_changed() {
 }
 
 /// A choice under `existing` that no longer joins the client to the supplier, removed or reconnected
-/// since (its id living on), or that never did, is refused as a stale choice under `existing`, naming the ids of those
-/// that join them now, none when none does, with nothing changed; another is never picked in its
-/// place.
+/// since (its id living on), or that never did, is refused as a stale choice under `existing`,
+/// naming the ids of those that join them now, none when none does, with nothing changed; another
+/// is never picked in its place.
 #[test]
 fn a_stale_choice_is_refused_naming_the_current_candidates_with_nothing_changed() {
     let mut s = session();

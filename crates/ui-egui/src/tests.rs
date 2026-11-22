@@ -7419,7 +7419,7 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let exists = "Diese Verbindung besteht bereits: die Abhängigkeit zahlt. Wählen Sie die bestehende Beziehung aus.";
         let repeated = archforge_engine::Reason::ConnectionExists { dependency: "zahlt".into() };
         assert_eq!(crate::panels::said(&repeated), Some(exists.to_string()), "{theme:?}");
-        // A relationship chosen to reuse that does not join the two, or was removed or reconnected since: with none left, or some to choose among (AR-699).
+        // A relationship chosen to reuse that does not join the two (any more): none left, or some to choose among (AR-699).
         let stale = "Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr. \
                      Wählen Sie erneut unter denen, die sie verbinden. Es wurde nichts geändert.";
         let none_left = "Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr, und keine andere tut es jetzt. \

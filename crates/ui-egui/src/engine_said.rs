@@ -72,8 +72,7 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 /// given both as another diagram and as a new one, or a new one's name that is no text (AR-641), or
 /// a relationship moved onto the ends another of its kind has (AR-697), or a relationship chosen
 /// to reuse that does not join the two elements, or was removed or reconnected since (AR-699); none
-/// for another reason,
-/// or for a kind of element the catalogues don't name.
+/// for another reason or for a kind of element the catalogues don't name.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
     Some(match reason {
