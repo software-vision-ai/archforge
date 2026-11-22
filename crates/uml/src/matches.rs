@@ -7,8 +7,9 @@
 //! ordinary dependency, though its ends are the same. Reusing a repeat is this product's rule, not
 //! UML's, which allows parallel relationships.
 //!
-//! The matching is shared by every kind a gesture can draw again: a dependency's here, and the
-//! package import's and merge's as their commands arrive, each candidate with its own `detail`.
+//! A dependency is the only kind matched so far. The matching is written to be shared: the package
+//! import and merge (AR-602, AR-611) are to add their kinds here, each candidate with its own
+//! `detail`.
 
 use archforge_engine::CommandError;
 use archforge_mof::{Obj, Store, Value};
@@ -50,7 +51,8 @@ impl Kind {
     }
 
     /// What else tells a candidate of this kind apart, beside its name and ends: nothing for a
-    /// dependency.
+    /// dependency, so the store and the relationship go unread until a kind with more to tell is
+    /// added.
     fn detail(self, _store: &Store, _r: Obj) -> Map<String, Json> {
         match self {
             Kind::Dependency => Map::new(),
