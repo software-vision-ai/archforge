@@ -54,6 +54,7 @@ use archforge_mof::{Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
 use crate::commands::{a_what, classifier_of, fail, id_of, name_of, refuse, set_name, text, uuid_of, what};
+use crate::matches::{Kind, candidate_json, existing_matches};
 use crate::{
     ASSOCIATION, ASSOCIATION_CLASS, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PACKAGE,
     PRIMITIVE_TYPE, PROPERTY, association, behaviored_classifier, classifier, dependency, generalization, interface_realization, package, property,
@@ -719,17 +720,6 @@ fn rehome(store: &mut Store, d: Obj, owner: Obj) -> Result<(), CommandError> {
     store.push(owner, package::PACKAGED_ELEMENT, Value::Ref(d)).map_err(fail).map(|_| ())
 }
 
-/// A dependency that joins `client` alone to `supplier` alone: one of exactly that kind, as a
-/// realization or a usage is a relationship of its own, and of those two ends, as one of several
-/// clients or suppliers joins no single pair (AR-697).
-fn dependency_between(store: &Store, client: Obj, supplier: Obj) -> Option<Obj> {
-    store.referrers(client).into_iter().map(|(d, _)| d).find(|d| {
-        store.class_of(*d).ok() == Some(DEPENDENCY)
-            && list(store, *d, dependency::CLIENT) == [client]
-            && list(store, *d, dependency::SUPPLIER) == [supplier]
-    })
-}
-
 /// Moves the dependencies whose only client is the classifier `c`, or one it nests, to the package
 /// that owns their dependencies now that `c` has moved, as a new client does (AR-696).
 pub(crate) fn follow_client(store: &mut Store, c: Obj) -> Result<(), CommandError> {
@@ -752,6 +742,14 @@ pub(crate) fn follow_client(store: &mut Store, c: Obj) -> Result<(), CommandErro
 /// `uml.dependency.add`: a client depends on a supplier, each a package or a classifier, never on
 /// itself (Archforge's rule, not UML's); a package client owns the dependency, a classifier
 /// client's home package does otherwise.
+///
+/// A dependency that joins the client to the supplier already is reused rather than repeated
+/// (AR-699), as Archforge's rule, not UML's: one is selected, changing nothing in the model and
+/// leaving no undo step; several make the caller choose one, under `existing`, with nothing
+/// changed. A choice that no longer joins the two is refused, naming those that do. A dependency
+/// reused keeps its name and description. Every result has `id`, null only while a choice is
+/// needed, its `outcome` and its `candidates`: every dependency that joins the two while a choice
+/// is needed, the one selected after a selection, none after one is added.
 fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     let client = dependency_end(ctx.doc, p, "client", End::Source)?;
     let supplier = dependency_end(ctx.doc, p, "supplier", End::Target)?;
@@ -762,13 +760,56 @@ fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     }
     let name = text(p, "name");
     check_name(name)?;
+    let found = existing_matches(ctx.doc, Kind::Dependency, client, supplier);
+    // A choice is checked before any candidate is written out, so a stale one costs no result; a
+    // reply lists every candidate only while a choice is needed, a selection only the one selected.
+    let reused = match p.str("existing") {
+        Some(chosen) => Some(chosen_match(ctx.doc, &found, chosen, (client, supplier))?),
+        None => found.first().copied().filter(|_| found.len() == 1),
+    };
+    let candidate = |d: &Obj| candidate_json(ctx.doc, Kind::Dependency, *d, ["client", "supplier"]);
+    if let Some(d) = reused {
+        let chosen = candidate(&d)?;
+        ctx.view.selection = vec![d];
+        return Ok(json!({ "id": uuid_of(ctx.doc, d)?, "outcome": "selected", "candidates": [chosen] }));
+    }
+    if !found.is_empty() {
+        let candidates = found.iter().map(candidate).collect::<Result<Vec<Json>, _>>()?;
+        return Ok(json!({ "id": Json::Null, "outcome": "choiceRequired", "candidates": candidates }));
+    }
     let d = ctx.doc.create(DEPENDENCY).map_err(fail)?;
     set_name(ctx.doc, d, name)?;
     ctx.doc.push(owner, package::PACKAGED_ELEMENT, Value::Ref(d)).map_err(fail)?;
     ctx.doc.push(d, dependency::CLIENT, Value::Ref(client)).map_err(fail)?;
     ctx.doc.push(d, dependency::SUPPLIER, Value::Ref(supplier)).map_err(fail)?;
     ctx.view.selection = vec![d];
-    Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
+    Ok(json!({ "id": uuid_of(ctx.doc, d)?, "outcome": "created", "candidates": [] }))
+}
+
+/// The most candidates a stale choice's sentence names; its reason holds them all.
+const NAMED_CHOICES: usize = 12;
+
+/// The dependency `chosen` names among `found`, those that join the pair `ends` now; one that is
+/// gone, was reconnected or never joined them is refused as a stale choice under `existing`,
+/// naming the current ones, so the caller chooses again rather than another being picked (AR-699).
+fn chosen_match(store: &Store, found: &[Obj], chosen: &str, (client, supplier): (Obj, Obj)) -> Result<Obj, CommandError> {
+    let picked = archforge_mof::Uuid::parse(chosen).and_then(|u| store.by_uuid(u));
+    if let Some(d) = picked.filter(|d| found.contains(d)) {
+        return Ok(d);
+    }
+    let ids = found.iter().map(|d| uuid_of(store, *d)).collect::<Result<Vec<String>, CommandError>>()?;
+    // A damaged or old document may hold any number of them: the sentence names the first few.
+    let more = ids.len().saturating_sub(NAMED_CHOICES);
+    let tail = if more > 0 { format!(" and {more} more") } else { String::new() };
+    let named = ids.iter().take(NAMED_CHOICES).cloned().collect::<Vec<_>>().join(", ");
+    let now = if ids.is_empty() { "none does now".to_string() } else { format!("those that do now: {named}{tail}") };
+    let message = format!(
+        "{} is no dependency from {} to {}; {now}",
+        crate::commands::short(chosen),
+        crate::applications::name_or_id(store, client),
+        crate::applications::name_or_id(store, supplier)
+    );
+    Err(refuse("existing", message).because(Reason::StaleChoice { candidates: ids.into_iter().map(String::into_boxed_str).collect() }))
 }
 
 /// Why a classifier may not realize another: what a realization from anything but a class (an
@@ -1260,7 +1301,7 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         // as Archforge's rule, not UML's; checked once the ends themselves are sound, so a client in
         // no package is said as that (AR-697).
         if (cl, su) != (client, supplier)
-            && let Some(other) = dependency_between(ctx.doc, cl, su)
+            && let Some(&other) = existing_matches(ctx.doc, Kind::Dependency, cl, su).first()
         {
             let message = format!(
                 "{} depends on {} through the dependency {} already; select that one instead",
@@ -1444,7 +1485,8 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             concat!(
                 "client: string; the id of the package, class, interface, enumeration, data type, primitive type or association class that depends; a package owns the dependency, a classifier's package does otherwise\n",
                 "supplier: string; the id of the package, class, interface, enumeration, data type, primitive type or association class it depends on, never the client itself\n",
-                "name: string = \"\"; the dependency's name, or nothing"
+                "name: string = \"\"; the dependency's name, or nothing; a dependency reused keeps its own\n",
+                "existing: string?; the id of the dependency to reuse among the candidates a call gave, one that joins the client to the supplier; refused when it no longer does (removed or reconnected since), naming the ones that do; left out or null, a single dependency that joins them already is reused, several give outcome choiceRequired, with nothing changed, and none adds one"
             ),
             has_dependency_ends,
             dependency_add

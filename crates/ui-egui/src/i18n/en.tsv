@@ -780,6 +780,9 @@ str		The package's default diagram belongs to another element. Choose one of its
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	This connection already exists: the dependency {dependency}. Select the existing relationship.
+str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.
+str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.
+str		Several dependencies already join these two elements in this direction, so none was added.	Several dependencies already join these two elements in this direction, so none was added.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Choose either an existing diagram or a new one as the replacement, not both.
 str		A name has to be text.	A name has to be text.

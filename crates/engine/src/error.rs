@@ -501,6 +501,11 @@ pub enum Reason {
     /// never merged into one. `dependency` is that other one, by its name, or its id when it has
     /// none, as it may have no line on the diagram in view (AR-697).
     ConnectionExists { dependency: Box<str> },
+    /// The relationship chosen to reuse does not join the two elements a new one would: it was
+    /// removed or reconnected since the choice was offered, or it never did; `candidates` are the
+    /// ids of those that join them now, to choose again among, none when none does. Another is
+    /// never picked in its place (AR-699).
+    StaleChoice { candidates: Box<[Box<str>]> },
     /// The class diagram `diagram` is not one of `package`'s own (each its name, or its id when it
     /// has none), so it cannot be that package's default diagram (AR-580).
     NotOwnDiagram { diagram: Box<str>, package: Box<str> },

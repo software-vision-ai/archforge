@@ -14,7 +14,8 @@
 //! cannot move up to a parent with no diagram yet or no valid default (AR-673).
 //!
 //! A relationship moved onto two elements another of its kind joins already is said here too
-//! (AR-697).
+//! (AR-697), as is a relationship chosen to reuse that does not join its two elements, or no longer
+//! does (AR-699).
 
 use archforge_engine::{BindingFault, EngineError, Reason};
 
@@ -69,8 +70,9 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 /// (AR-582), and a default diagram's replacement that is the diagram removed, is no other diagram
 /// of the same kind of its package, or is named for a diagram that is no default (AR-640), or is
 /// given both as another diagram and as a new one, or a new one's name that is no text (AR-641), or
-/// a relationship moved onto the ends another of its kind has (AR-697); none for another reason,
-/// or for a kind of element the catalogues don't name.
+/// a relationship moved onto the ends another of its kind has (AR-697), or a relationship chosen
+/// to reuse that does not join the two elements, or was removed or reconnected since (AR-699); none
+/// for another reason or for a kind of element the catalogues don't name.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
     Some(match reason {
@@ -117,6 +119,12 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
         ),
         Reason::ConnectionExists { dependency } => {
             fmt(&tr("This connection already exists: the dependency {dependency}. Select the existing relationship."), &[("dependency", dependency)])
+        }
+        Reason::StaleChoice { candidates } if candidates.is_empty() => {
+            tr("The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.")
+        }
+        Reason::StaleChoice { .. } => {
+            tr("The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.")
         }
         Reason::ReplacementIsRemoved => tr("A diagram cannot replace itself as it is removed. Choose another diagram as the replacement."),
         Reason::OneReplacement => tr("Choose either an existing diagram or a new one as the replacement, not both."),
