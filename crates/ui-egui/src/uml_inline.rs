@@ -250,7 +250,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
             .frame(egui::Frame::NONE)
             .margin(egui::Margin::ZERO)
             .font(font.font())
-            .text_color(p.text)
+            .text_color(p.text.into())
             .hint_text(egui::RichText::new(hint.clone()).color(p.text_muted))
             .char_limit(limit)
             // Tab stays in the row: it moves between its two fields, read before they are shown.
@@ -287,7 +287,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
         let g = ux::galley(&paint, &refused, types::CAPTION, p.danger, Some(row.width().max(0.0) - 8.0));
         let back = Rect::from_min_size(pos2(row.left(), row.bottom() + 2.0), g.size() + vec2(8.0, 4.0));
         paint.rect_filled(back, 4.0, p.surface);
-        paint.galley(back.min + vec2(4.0, 2.0), g, p.danger);
+        paint.galley(back.min + vec2(4.0, 2.0), g, p.danger.into());
     }
     // The type menu, under the type field: a pick sets the type and gives the field the keyboard.
     let mut picked = false;
@@ -334,7 +334,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
 
 /// The ink of a draft row's ⋯, one for every kind of member: an attribute's, an operation's and a
 /// literal's rows read alike.
-pub(crate) fn details_ink(p: &Palette) -> egui::Color32 {
+pub(crate) fn details_ink(p: &Palette) -> crate::ux::Colour {
     p.text_secondary
 }
 

@@ -651,7 +651,7 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .hint_text(egui::RichText::new(words.clone()).color(p.text_secondary).font(types::SMALL.font()))
         .char_limit(256)
         .desired_width(inner.width());
@@ -747,7 +747,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
             let name = ux::text_mid(clip.painter(), at.left() + 10.0, at.center().y, label, types::UI, p.text, Some(WIDTH * 0.45));
             let room = (at.right() - 10.0 - (name.right() + 12.0)).max(0.0);
             let g = ux::galley(clip.painter(), detail, types::CAPTION, p.text_secondary, Some(room));
-            clip.painter().galley(pos2(at.right() - 10.0 - g.size().x, at.center().y - g.size().y / 2.0), g, p.text_secondary);
+            clip.painter().galley(pos2(at.right() - 10.0 - g.size().x, at.center().y - g.size().y / 2.0), g, p.text_secondary.into());
             if resp.clicked() {
                 picked = Some(row.clone());
             }

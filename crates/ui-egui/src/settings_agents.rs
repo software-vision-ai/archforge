@@ -360,7 +360,7 @@ fn unavailable(ui: &egui::Ui, p: &Palette, system: Option<System>, left: f32, to
     paint.rect_filled(r, 10.0, p.page);
     ux::icon_in(&paint, Rect::from_min_size(pos2(r.left() + 16.0, r.top() + 18.0), Vec2::splat(14.0)), &icons::TERMINAL, p.text_secondary);
     ux::text(&paint, pos2(r.left() + 42.0, r.top() + 14.0), &title, types::BODY, p.text, Some(width - 58.0));
-    paint.galley(pos2(r.left() + 42.0, r.top() + 38.0), g, p.text_secondary);
+    paint.galley(pos2(r.left() + 42.0, r.top() + 38.0), g, p.text_secondary.into());
     r.bottom() + 28.0 - top
 }
 
@@ -378,8 +378,8 @@ fn no_store(ui: &egui::Ui, p: &Palette, why: &str, left: f32, y: f32, width: f32
     ux::text(&paint, pos2(r.left() + 30.0, r.top() + 12.0), &tr("No secure store on this system"), types::UI, p.text, Some(width - 40.0));
     let body_y = r.top() + 34.0;
     let gh = g.size().y;
-    paint.galley(pos2(r.left() + 10.0, body_y), g, p.text_secondary);
-    paint.galley(pos2(r.left() + 10.0, body_y + gh + 6.0), w, p.text_muted);
+    paint.galley(pos2(r.left() + 10.0, body_y), g, p.text_secondary.into());
+    paint.galley(pos2(r.left() + 10.0, body_y + gh + 6.0), w, p.text_muted.into());
     r.bottom()
 }
 
@@ -631,7 +631,7 @@ fn key_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut Page,
         let edit = egui::TextEdit::singleline(&mut page.drafts[i])
             .id(widgets::egui_id(&id))
             .font(font)
-            .text_color(p.text)
+            .text_color(p.text.into())
             .hint_text(hint)
             .password(true)
             .frame(egui::Frame::NONE)
@@ -828,7 +828,7 @@ fn codex_sign_in(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut P
         let r = Rect::from_min_size(pos2(x, y + 2.0), g.size());
         let resp = control(shell, ui, "settings.agents.codex.device-code", "link", r, true);
         let _ = resp.clone().accessible_name(&label);
-        paint.galley(r.min, g, p.accent);
+        paint.galley(r.min, g, p.accent.into());
         if resp.hovered() {
             paint.hline(r.x_range(), r.bottom(), Stroke::new(1.0, p.accent));
         }
@@ -842,7 +842,7 @@ fn codex_sign_in(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut P
 }
 
 /// A row that starts with the person icon, its text centred on the row's line.
-fn person_row(paint: &egui::Painter, p: &Palette, x: f32, y: f32, text: &str, ink: egui::Color32, room: f32) {
+fn person_row(paint: &egui::Painter, p: &Palette, x: f32, y: f32, text: &str, ink: crate::ux::Colour, room: f32) {
     ux::icon_in(paint, Rect::from_center_size(pos2(x + 8.0, y + 14.0), Vec2::splat(16.0)), &icons::PERSON, p.text_secondary);
     ux::text_mid(paint, x + 24.0, y + 14.0, text, types::UI, ink, Some(room.max(0.0)));
 }
@@ -929,7 +929,7 @@ fn sign_in_address(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, x: f32, mi
     let edit = egui::TextEdit::singleline(&mut text)
         .id(widgets::egui_id(id))
         .font(font)
-        .text_color(p.text)
+        .text_color(p.text.into())
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .desired_width(width);
@@ -1109,7 +1109,7 @@ pub(crate) fn segmented(
             p.text_secondary
         };
         let g = ux::galley(&paint, label, types::UI, ink, None);
-        paint.galley(r.center() - g.size() / 2.0, g, ink);
+        paint.galley(r.center() - g.size() / 2.0, g, ink.into());
         focus_ring(&paint, p, r, 5.0, &resp);
         if on && resp.clicked() && i != chosen {
             clicked = Some(i);

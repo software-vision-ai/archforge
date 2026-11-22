@@ -115,70 +115,147 @@ fn decode_png(bytes: &[u8]) -> Result<egui::ColorImage, String> {
 
 use egui::{Color32, FontFamily, FontId, Pos2, Rect, Stroke, Vec2};
 
+/// A colour of the interface: a role of the [`Palette`], a named colour of this module
+/// ([`CLEAR`], [`MARK`], …), or a colour the document holds ([`data_colour`]). Its value is private,
+/// so only `ux` makes one; the rest of the interface takes them from here and hands them to egui,
+/// which takes them wherever it takes its own colour (`impl Into<Color32>`, or `.into()`).
+///
+/// ```
+/// // A colour of the design reaches egui as the colour it is.
+/// let text: egui::Color32 = archforge_ui_egui::ux::LIGHT.text.into();
+/// assert_eq!(text, egui::Color32::from_rgb(0x1B, 0x2B, 0x3C));
+/// ```
+///
+/// ```compile_fail
+/// // Outside `ux` no colour is made from values: its value is private.
+/// let red = archforge_ui_egui::ux::Colour(egui::Color32::RED);
+/// ```
+///
+/// ```compile_fail
+/// // Nor from one of egui's colours.
+/// let red: archforge_ui_egui::ux::Colour = egui::Color32::RED.into();
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Colour(Color32);
+
+impl From<Colour> for Color32 {
+    /// The colour as egui draws it.
+    fn from(c: Colour) -> Self {
+        c.0
+    }
+}
+
+/// The colour egui drew, as a colour of the interface: for a test that reads a frame back and
+/// compares what it painted with the design's colours. Test builds only, so the interface itself
+/// never makes a colour from egui's.
+#[cfg(test)]
+pub(crate) fn drawn(c: Color32) -> Colour {
+    Colour(c)
+}
+
+impl Colour {
+    /// The colour with its opacity (and its premultiplied channels) times `k`, in gamma space: a
+    /// dimmed or faded form of it.
+    pub fn gamma_multiply(self, k: f32) -> Self {
+        Self(self.0.gamma_multiply(k))
+    }
+
+    /// The colour with its opacity (and its premultiplied channels) times `k`, in linear space.
+    pub fn linear_multiply(self, k: f32) -> Self {
+        Self(self.0.linear_multiply(k))
+    }
+
+    /// Its opacity, 0 (clear) to 255 (opaque).
+    pub fn a(self) -> u8 {
+        self.0.a()
+    }
+
+    /// Its red, 0 to 255, premultiplied by its opacity.
+    pub fn r(self) -> u8 {
+        self.0.r()
+    }
+
+    /// Its green, 0 to 255, premultiplied by its opacity.
+    pub fn g(self) -> u8 {
+        self.0.g()
+    }
+
+    /// Its blue, 0 to 255, premultiplied by its opacity.
+    pub fn b(self) -> u8 {
+        self.0.b()
+    }
+
+    /// Its red, green, blue and opacity, each 0 to 255, not premultiplied: as a colour code writes
+    /// them.
+    pub fn to_srgba_unmultiplied(self) -> [u8; 4] {
+        self.0.to_srgba_unmultiplied()
+    }
+}
+
 /// The design's colours by role, one set per appearance, Light and Dark.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Palette {
     /// The page behind cards and panels; the search field.
-    pub page: Color32,
+    pub page: Colour,
     /// The bar, cards, buttons and fields.
-    pub surface: Color32,
+    pub surface: Colour,
     /// The title strip that is the macOS title bar.
-    pub title_strip: Color32,
+    pub title_strip: Colour,
     /// Dividers and the borders of cards, buttons and fields.
-    pub border: Color32,
+    pub border: Colour,
     /// A card's border under the pointer.
-    pub border_hover: Color32,
+    pub border_hover: Colour,
     /// A scrolled panel's thumb.
-    pub scroll_thumb: Color32,
-    pub text: Color32,
-    pub text_secondary: Color32,
-    pub text_muted: Color32,
+    pub scroll_thumb: Colour,
+    pub text: Colour,
+    pub text_secondary: Colour,
+    pub text_muted: Colour,
     /// The brand blue for text and icons.
-    pub accent: Color32,
+    pub accent: Colour,
     /// The brand blue's tint: the avatar and icon tiles.
-    pub accent_tint: Color32,
+    pub accent_tint: Colour,
     /// The primary button's and the brand mark's fill.
-    pub accent_fill: Color32,
+    pub accent_fill: Colour,
     /// Text and icons on the accent fill.
-    pub on_accent: Color32,
+    pub on_accent: Colour,
     /// The app icon's tile blue, for the wordmark's Forge: the tile's own colour in Light, a
     /// lighter one in Dark so it reads on the dark bar.
-    pub brand: Color32,
-    pub green: Color32,
-    pub green_tint: Color32,
-    pub purple: Color32,
-    pub purple_tint: Color32,
-    pub amber: Color32,
-    pub amber_tint: Color32,
+    pub brand: Colour,
+    pub green: Colour,
+    pub green_tint: Colour,
+    pub purple: Colour,
+    pub purple_tint: Colour,
+    pub amber: Colour,
+    pub amber_tint: Colour,
     /// The veil over the window behind a dialog.
-    pub scrim: Color32,
+    pub scrim: Colour,
     /// A dialog's shadow.
-    pub shadow: Color32,
+    pub shadow: Colour,
     /// The ring of a field that has the keyboard.
-    pub focus: Color32,
+    pub focus: Colour,
     /// A dialog's edge: none in Light, where its shadow sets it off, a hairline in Dark.
-    pub dialog_edge: Color32,
+    pub dialog_edge: Colour,
     /// The canvas behind a diagram, a shade off the surface.
-    pub canvas: Color32,
+    pub canvas: Colour,
     /// A filled field in a panel.
-    pub field: Color32,
+    pub field: Colour,
     /// A destructive button.
-    pub danger: Color32,
+    pub danger: Colour,
     /// The danger colour's tint: behind a refusal said in a panel.
-    pub danger_tint: Color32,
+    pub danger_tint: Colour,
     /// A switch's track while it is off.
-    pub control_off: Color32,
+    pub control_off: Colour,
     /// An entity node on the canvas: its fill, its edge, its eyebrow and key badges, its header line.
-    pub entity: Color32,
-    pub entity_edge: Color32,
-    pub entity_ink: Color32,
-    pub entity_line: Color32,
+    pub entity: Colour,
+    pub entity_edge: Colour,
+    pub entity_ink: Colour,
+    pub entity_line: Colour,
     /// The foreign-key dot of the key status toggle.
-    pub key_foreign: Color32,
+    pub key_foreign: Colour,
 }
 
-const fn rgb(hex: u32) -> Color32 {
-    Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
+const fn rgb(hex: u32) -> Colour {
+    Colour(Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8))
 }
 
 pub const LIGHT: Palette = Palette {
@@ -203,10 +280,10 @@ pub const LIGHT: Palette = Palette {
     amber: rgb(0xA47420),
     amber_tint: rgb(0xFBF3E4),
     // #172844 at 40 %, #152B3A at 20 %, premultiplied.
-    scrim: Color32::from_rgba_premultiplied(9, 16, 27, 102),
-    shadow: Color32::from_rgba_premultiplied(4, 9, 12, 51),
+    scrim: Colour(Color32::from_rgba_premultiplied(9, 16, 27, 102)),
+    shadow: Colour(Color32::from_rgba_premultiplied(4, 9, 12, 51)),
     focus: rgb(0x7999EF),
-    dialog_edge: Color32::TRANSPARENT,
+    dialog_edge: CLEAR,
     canvas: rgb(0xFBFCFE),
     field: rgb(0xF2F4F7),
     danger: rgb(0xC0392B),
@@ -241,8 +318,8 @@ pub const DARK: Palette = Palette {
     amber: rgb(0xE2AE55),
     amber_tint: rgb(0x362B16),
     // Black at 55 % and at 50 %.
-    scrim: Color32::from_rgba_premultiplied(0, 0, 0, 140),
-    shadow: Color32::from_rgba_premultiplied(0, 0, 0, 128),
+    scrim: Colour(Color32::from_rgba_premultiplied(0, 0, 0, 140)),
+    shadow: Colour(Color32::from_rgba_premultiplied(0, 0, 0, 128)),
     focus: rgb(0x5B7EE8),
     dialog_edge: rgb(0x2A3441),
     canvas: rgb(0x151B23),
@@ -260,6 +337,46 @@ pub const DARK: Palette = Palette {
 /// The palette of an appearance.
 pub fn palette(dark: bool) -> &'static Palette {
     if dark { &DARK } else { &LIGHT }
+}
+
+/// No paint: a background or an edge that is not drawn.
+pub const CLEAR: Colour = Colour(Color32::TRANSPARENT);
+
+/// The tint that draws a picture in its own colours.
+pub const UNTINTED: Colour = Colour(Color32::WHITE);
+
+/// The colour of text laid out to be measured, or to be drawn in the colour given when it is
+/// painted.
+pub const PLACEHOLDER_INK: Colour = Colour(Color32::PLACEHOLDER);
+
+/// The ring that marks the chosen point on the colour picker's field and hue bar: white in both
+/// appearances, so it shows on every colour, with a thin dark edge ([`MARK_EDGE`]).
+pub const MARK: Colour = Colour(Color32::WHITE);
+
+/// The thin dark edge round the picker's [`MARK`]: black at 35 %.
+pub const MARK_EDGE: Colour = Colour(Color32::from_black_alpha(90));
+
+/// A colour the document holds (a node's own fill, line or text, chosen in the Appearance panel),
+/// not one of the design's: the one way a colour read from data is made.
+pub fn data_colour(r: u8, g: u8, b: u8) -> Colour {
+    Colour(Color32::from_rgb(r, g, b))
+}
+
+/// The colour picker's colour of hue, saturation and brightness, each from 0 to 1, as the picker
+/// shows them (in gamma space), fully opaque.
+pub fn from_hsv(h: f32, s: f32, v: f32) -> Colour {
+    Colour(egui::ecolor::HsvaGamma { h, s, v, a: 1.0 }.into())
+}
+
+/// `c` as the colour picker's hue, saturation and brightness ([`from_hsv`]).
+pub fn to_hsv(c: Colour) -> [f32; 3] {
+    let hsv = egui::ecolor::HsvaGamma::from(c.0);
+    [hsv.h, hsv.s, hsv.v]
+}
+
+/// The own-colour swatch's colour at `t` (0 to 1) round its disc: every hue, a little soft.
+pub fn swatch_hue(t: f32) -> Colour {
+    Colour(egui::ecolor::Hsva::new(t, 0.75, 0.95, 1.0).into())
 }
 
 /// A text style of the design: Inter at a size, in a line of a height, regular or semibold, with
@@ -369,18 +486,18 @@ pub fn ready(ctx: &egui::Context) -> bool {
 }
 
 /// Lays `text` out in `ty`, on one line, cut with an ellipsis at `width` when given.
-pub fn galley(painter: &egui::Painter, text: &str, ty: Type, color: Color32, width: Option<f32>) -> std::sync::Arc<egui::Galley> {
+pub fn galley(painter: &egui::Painter, text: &str, ty: Type, color: Colour, width: Option<f32>) -> std::sync::Arc<egui::Galley> {
     galley_rows(painter, text, ty, color, width, 1)
 }
 
 /// Lays `text` out in `ty`, wrapped at `width` into at most `rows` lines, the last cut with an
 /// ellipsis.
-pub fn galley_rows(painter: &egui::Painter, text: &str, ty: Type, color: Color32, width: Option<f32>, rows: usize) -> std::sync::Arc<egui::Galley> {
+pub fn galley_rows(painter: &egui::Painter, text: &str, ty: Type, color: Colour, width: Option<f32>, rows: usize) -> std::sync::Arc<egui::Galley> {
     laid_out(painter, text, ty, color, width, rows, false)
 }
 
 /// [`text`], slanted (an abstract class's name).
-pub fn text_slanted(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Color32, width: Option<f32>) -> Rect {
+pub fn text_slanted(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Colour, width: Option<f32>) -> Rect {
     text_marked(painter, at, text, ty, color, width, Marks { slanted: true, underlined: false })
 }
 
@@ -395,7 +512,7 @@ pub struct Marks {
 /// [`text`] with its `marks`. The underline runs under the glyphs drawn, from the first to the end
 /// of the last (the ellipsis of a cut text too), a little under their baseline, in the text's
 /// colour and as thick as the text is large, so it reads in either appearance and at every zoom.
-pub fn text_marked(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Color32, width: Option<f32>, marks: Marks) -> Rect {
+pub fn text_marked(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Colour, width: Option<f32>, marks: Marks) -> Rect {
     let g = laid_out(painter, text, ty, color, width, 1, marks.slanted);
     let rect = Rect::from_min_size(at, g.size());
     if marks.underlined {
@@ -404,13 +521,13 @@ pub fn text_marked(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, colo
             underline(painter, at, row, first, last, ty, color);
         }
     }
-    painter.galley(at, g, color);
+    painter.galley(at, g, color.into());
     rect
 }
 
 /// Underlines the character at `index` of `g`, laid out to be drawn from `at`, as [`text_marked`]
 /// underlines a text: a menu's access letter. Nothing when `g` was cut before that character.
-pub fn underline_char(painter: &egui::Painter, at: Pos2, g: &egui::Galley, index: usize, ty: Type, color: Color32) {
+pub fn underline_char(painter: &egui::Painter, at: Pos2, g: &egui::Galley, index: usize, ty: Type, color: Colour) {
     let mut glyphs = g.rows.iter().flat_map(|row| row.glyphs.iter().map(move |glyph| (row, glyph)));
     // A cut text holds the glyphs before the cut and then its ellipsis.
     if let Some((row, glyph)) = glyphs.nth(index).filter(|(_, glyph)| glyph.chr != '…') {
@@ -426,7 +543,7 @@ fn underline(
     first: &egui::epaint::text::Glyph,
     last: &egui::epaint::text::Glyph,
     ty: Type,
-    color: Color32,
+    color: Colour,
 ) {
     let (left, right) = (at.x + row.pos.x + first.pos.x, at.x + row.pos.x + last.max_x());
     let thickness = (ty.size * UNDERLINE_WEIGHT).max(1.0);
@@ -443,7 +560,7 @@ fn laid_out(
     painter: &egui::Painter,
     text: &str,
     ty: Type,
-    color: Color32,
+    color: Colour,
     width: Option<f32>,
     rows: usize,
     italics: bool,
@@ -452,7 +569,7 @@ fn laid_out(
         text.to_owned(),
         egui::TextFormat {
             font_id: ty.font(),
-            color,
+            color: color.into(),
             extra_letter_spacing: ty.spacing,
             line_height: Some(ty.line),
             valign: egui::Align::Center,
@@ -471,10 +588,10 @@ fn laid_out(
 
 /// Draws `text` with its line box's top-left corner at `at`, as the design places its text, and
 /// gives the box it took.
-pub fn text(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Color32, width: Option<f32>) -> Rect {
+pub fn text(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Colour, width: Option<f32>) -> Rect {
     let g = galley(painter, text, ty, color, width);
     let rect = Rect::from_min_size(at, g.size());
-    painter.galley(at, g, color);
+    painter.galley(at, g, color.into());
     rect
 }
 
@@ -517,34 +634,39 @@ pub(crate) fn overlay<R>(ui: &egui::Ui, id: egui::Id, r: Rect, add: impl FnOnce(
 
 /// A floating surface's soft shadow (menus, popovers, the toolbar, the minimap, dialogs), drawn
 /// before the surface: blurred and offset down, never a solid ring.
-pub fn shadow(painter: &egui::Painter, rect: Rect, radius: f32, color: Color32) {
-    let shape = egui::epaint::Shadow { offset: [0, 4], blur: 16, spread: 0, color: color.gamma_multiply(0.7) }
+pub fn shadow(painter: &egui::Painter, rect: Rect, radius: f32, color: Colour) {
+    let shape = egui::epaint::Shadow { offset: [0, 4], blur: 16, spread: 0, color: color.gamma_multiply(0.7).into() }
         .as_shape(rect, egui::CornerRadius::same(radius.round().clamp(0.0, 255.0) as u8));
     painter.add(shape);
 }
 
 /// Draws `text` in the monospace face at `size`, starting at `x` and centred on the line `y`: a
 /// command to type or a code to enter, set apart from the interface's words. Cut at `width`.
-pub fn code_mid(painter: &egui::Painter, x: f32, y: f32, text: &str, size: f32, color: Color32, width: Option<f32>) -> Rect {
+pub fn code_mid(painter: &egui::Painter, x: f32, y: f32, text: &str, size: f32, color: Colour, width: Option<f32>) -> Rect {
     let mut job = egui::text::LayoutJob::single_section(
         text.to_owned(),
-        egui::TextFormat { font_id: FontId::new(size, FontFamily::Monospace), color, valign: egui::Align::Center, ..Default::default() },
+        egui::TextFormat {
+            font_id: FontId::new(size, FontFamily::Monospace),
+            color: color.into(),
+            valign: egui::Align::Center,
+            ..Default::default()
+        },
     );
     job.wrap =
         egui::text::TextWrapping { max_width: width.unwrap_or(f32::INFINITY), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
     let g = painter.layout_job(job);
     let at = Pos2::new(x, y - g.size().y / 2.0);
     let rect = Rect::from_min_size(at, g.size());
-    painter.galley(at, g, color);
+    painter.galley(at, g, color.into());
     rect
 }
 
 /// Draws `text` starting at `x`, centred on the line `y`, as every row centres its content.
-pub fn text_mid(painter: &egui::Painter, x: f32, y: f32, text: &str, ty: Type, color: Color32, width: Option<f32>) -> Rect {
+pub fn text_mid(painter: &egui::Painter, x: f32, y: f32, text: &str, ty: Type, color: Colour, width: Option<f32>) -> Rect {
     let g = galley(painter, text, ty, color, width);
     let at = Pos2::new(x, y - g.size().y / 2.0);
     let rect = Rect::from_min_size(at, g.size());
-    painter.galley(at, g, color);
+    painter.galley(at, g, color.into());
     rect
 }
 
@@ -579,7 +701,7 @@ pub fn text_mid_front<S: AsRef<str>>(
     parts: &[S],
     sep: &str,
     ty: Type,
-    color: Color32,
+    color: Colour,
     width: f32,
 ) -> (Rect, bool) {
     let fits = |t: &str| galley(painter, t, ty, color, None).size().x <= width;
@@ -589,7 +711,7 @@ pub fn text_mid_front<S: AsRef<str>>(
 
 /// Draws `icon` centred in a coloured tile: its longer side half the tile's, the interface's
 /// stroke weight.
-pub fn icon_in_tile(painter: &egui::Painter, tile: Rect, icon: &Icon, color: Color32) {
+pub fn icon_in_tile(painter: &egui::Painter, tile: Rect, icon: &Icon, color: Colour) {
     let side = (tile.width().min(tile.height()) / 2.0).round();
     let k = side / icon.size[0].max(icon.size[1]).max(f32::EPSILON);
     let size = Vec2::new(icon.size[0], icon.size[1]) * k;
@@ -597,7 +719,7 @@ pub fn icon_in_tile(painter: &egui::Painter, tile: Rect, icon: &Icon, color: Col
 }
 
 /// Draws `icon` centred on `centre` at its role's size.
-pub fn icon_mid(painter: &egui::Painter, centre: Pos2, icon: &Icon, color: Color32) {
+pub fn icon_mid(painter: &egui::Painter, centre: Pos2, icon: &Icon, color: Colour) {
     icon_in(painter, Rect::from_center_size(centre, Vec2::new(icon.size[0], icon.size[1])), icon, color);
 }
 
@@ -620,12 +742,12 @@ pub struct Icon {
 /// Draws `icon` with its box's top-left corner at `at`, `width` wide (its height in proportion),
 /// in `color`, with the design's stroke weight whatever the size. The round ends and joins are
 /// discs at every end point, so a stroke of no length draws a dot.
-pub fn icon(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, color: Color32) {
+pub fn icon(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, color: Colour) {
     icon_weighted(painter, at, icon, width, icon.stroke, color);
 }
 
 /// [`icon`] with a stroke weight of its own, where the design gives an instance one.
-pub fn icon_weighted(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, weight: f32, color: Color32) {
+pub fn icon_weighted(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, weight: f32, color: Colour) {
     // An interface icon is drawn at its role's size, centred where the caller put its box, with
     // one stroke weight, so no screen draws one larger or heavier than another (chrome 15-17,
     // rows and fields 13-15, small actions 10-14, chevrons 8).
@@ -708,10 +830,10 @@ fn standard_size(icon: &Icon) -> Option<f32> {
 
 /// [`icon_weighted`] at exactly the size and weight given: the canvas's zoomed glyphs and
 /// illustrations.
-pub fn icon_exact(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, weight: f32, color: Color32) {
+pub fn icon_exact(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, weight: f32, color: Colour) {
     let scale = if icon.size[0] > 0.0 { width / icon.size[0] } else { 1.0 };
     // Crisp at the screen's pixels as a mask; only an icon too large for one draws as strokes.
-    if raster::draw(painter, at, icon, scale, weight, color) {
+    if raster::draw(painter, at, icon, scale, weight, color.into()) {
         return;
     }
     let stroke = Stroke::new(weight, color);
@@ -733,7 +855,7 @@ pub fn icon_exact(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, we
 }
 
 /// Draws `icon` at its design size centred in `rect`.
-pub fn icon_in(painter: &egui::Painter, rect: Rect, icon_: &Icon, color: Color32) {
+pub fn icon_in(painter: &egui::Painter, rect: Rect, icon_: &Icon, color: Colour) {
     let size = Vec2::new(icon_.size[0], icon_.size[1]);
     icon(painter, rect.center() - size / 2.0, icon_, icon_.size[0], color);
 }

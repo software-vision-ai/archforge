@@ -199,7 +199,7 @@ fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, window: Rect) -> bool
     let mut y = frame.top() + 46.0;
     for (g, ink, gap) in [(intro, p.text_secondary, 8.0), (said, p.text, 14.0)].into_iter().skip(usize::from(warned.is_some())) {
         let h = g.size().y;
-        paint.galley(pos2(left, y), g, ink);
+        paint.galley(pos2(left, y), g, ink.into());
         y += h + gap;
     }
     let field = "workspace.versions.dialog.description";
@@ -214,7 +214,7 @@ fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, window: Rect) -> bool
         if error.is_none() {
             ux::icon_in(&paint, Rect::from_center_size(pos2(area.left() + 17.0, area.center().y), Vec2::splat(14.0)), &icons::WARNING, ink);
         }
-        paint.galley(pos2(area.left() + if error.is_some() { 12.0 } else { 32.0 }, area.top() + 10.0), g, ink);
+        paint.galley(pos2(area.left() + if error.is_some() { 12.0 } else { 32.0 }, area.top() + 10.0), g, ink.into());
     }
     if let Some(d) = shell.versions.dialog.as_mut() {
         (d.text, d.focused) = (text, !enter);

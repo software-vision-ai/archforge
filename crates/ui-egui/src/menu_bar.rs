@@ -12,8 +12,9 @@
 
 use std::sync::Arc;
 
+use crate::ux::Colour;
 use egui::text_edit::TextEditState;
-use egui::{Color32, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
+use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
 use crate::actions::{
@@ -463,7 +464,7 @@ fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) 
     let keys = actions::keys(id).map(chord).unwrap_or_default();
     let detail = ux::galley(paint, &keys, types::CAPTION, p.text_secondary, None);
     let width = detail.size().x;
-    paint.galley(pos2(row.right() - 10.0 - width, row.center().y - detail.size().y / 2.0), detail, p.text_secondary);
+    paint.galley(pos2(row.right() - 10.0 - width, row.center().y - detail.size().y / 2.0), detail, p.text_secondary.into());
     let ink = if live { p.text } else { p.text_muted };
     let text = lettered(paint, &label, id, ink, Some((row.width() - 28.0 - width).max(0.0)));
     paint_lettered(paint, pos2(row.left() + 10.0, row.center().y - text.0.size().y / 2.0), text, ink, cued(shell, ui.ctx()));
@@ -500,17 +501,17 @@ fn marked(label: &str, key: &str) -> (String, Option<usize>) {
 }
 
 /// `label` laid out in the bar's text, as `marked` gives it, with where its letter is.
-fn lettered(paint: &egui::Painter, label: &str, key: &str, ink: Color32, width: Option<f32>) -> (Arc<egui::Galley>, Option<usize>) {
+fn lettered(paint: &egui::Painter, label: &str, key: &str, ink: Colour, width: Option<f32>) -> (Arc<egui::Galley>, Option<usize>) {
     let (text, at) = marked(label, key);
     (ux::galley(paint, &text, types::SMALL, ink, width), at)
 }
 
 /// Draws a text of `lettered` from `top_left`, its letter underlined while `cued`.
-fn paint_lettered(paint: &egui::Painter, top_left: egui::Pos2, (text, at): (Arc<egui::Galley>, Option<usize>), ink: Color32, cued: bool) {
+fn paint_lettered(paint: &egui::Painter, top_left: egui::Pos2, (text, at): (Arc<egui::Galley>, Option<usize>), ink: Colour, cued: bool) {
     if let Some(at) = at.filter(|_| cued) {
         ux::underline_char(paint, top_left, &text, at, types::SMALL, ink);
     }
-    paint.galley(top_left, text, ink);
+    paint.galley(top_left, text, ink.into());
 }
 
 /// Whether the letters show: while Alt alone is held, or the keys walk an open menu, as on Windows.

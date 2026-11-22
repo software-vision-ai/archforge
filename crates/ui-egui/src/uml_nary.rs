@@ -342,7 +342,7 @@ fn leg_points(diamond: Rect, card: Rect) -> Vec<Pos2> {
 }
 
 /// A hollow diamond filling `rect`, over `fill`.
-fn diamond_shape(paint: &egui::Painter, rect: Rect, fill: egui::Color32, stroke: Stroke) {
+fn diamond_shape(paint: &egui::Painter, rect: Rect, fill: crate::ux::Colour, stroke: Stroke) {
     let points = vec![rect.left_center(), rect.center_top(), rect.right_center(), rect.center_bottom()];
     paint.add(egui::Shape::convex_polygon(points, fill, stroke));
 }
@@ -368,12 +368,12 @@ pub(crate) fn draw_diamond(
     if !name.is_empty() {
         let g = ux::galley(paint, name, types::SMALL.scaled(z), text_ink, None);
         top -= g.size().y;
-        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top), g, text_ink);
+        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top), g, text_ink.into());
     }
     // Its stereotypes above its name, `«Reference»`, as a line's are (AR-135).
     if let Some(k) = keyword {
         let g = ux::galley(paint, k, types::CAPTION.scaled(z), text_ink, None);
-        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top - g.size().y - 1.0 * z), g, text_ink);
+        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top - g.size().y - 1.0 * z), g, text_ink.into());
     }
 }
 
@@ -462,8 +462,8 @@ fn draw_draft(shell: &Shell, paint: &egui::Painter, p: &Palette, view: View, d: 
             let x = |w: f32| if before.x > end.x { end.x + 2.0 * gap } else { end.x - 2.0 * gap - w };
             (pos2(x(role_size.x), end.y - gap - role_size.y), pos2(x(many_size.x), end.y + gap))
         };
-        paint.galley(role_at, role_g, p.text_secondary);
-        paint.galley(many_at, many_g, p.text_secondary);
+        paint.galley(role_at, role_g, p.text_secondary.into());
+        paint.galley(many_at, many_g, p.text_secondary.into());
     }
     diamond_shape(paint, diamond, p.canvas, stroke);
     if let Some(at) = pointer.filter(|at| !diamond.contains(*at)) {
@@ -564,9 +564,9 @@ pub(crate) fn hint_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, b
     ux::shadow(&paint, bar, 8.0, p.shadow);
     paint.rect_filled(bar, 8.0, p.text);
     let main_w = main_g.size().x;
-    paint.galley(pos2(bar.left() + 12.0, bar.center().y - main_g.size().y / 2.0), main_g, p.surface);
+    paint.galley(pos2(bar.left() + 12.0, bar.center().y - main_g.size().y / 2.0), main_g, p.surface.into());
     if let Some(g) = keys_g {
-        paint.galley(pos2(bar.left() + 12.0 + main_w + 10.0, bar.center().y - g.size().y / 2.0), g, p.text_muted);
+        paint.galley(pos2(bar.left() + 12.0 + main_w + 10.0, bar.center().y - g.size().y / 2.0), g, p.text_muted.into());
     }
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.gestureHint", "status", bar);
 }
@@ -686,7 +686,7 @@ fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, at: Pos2, a: Uui
         let g = ux::galley(&paint, detail, types::CAPTION, p.text_muted, Some(MENU_WIDTH / 2.0));
         let ink = if *danger { p.danger } else { p.text };
         ux::text(&paint, row.min + vec2(10.0, 7.5), label, types::SMALL, ink, Some((row.width() - 24.0 - g.size().x).max(0.0)));
-        paint.galley(pos2(row.right() - 10.0 - g.size().x, row.top() + 8.0), g, p.text_muted);
+        paint.galley(pos2(row.right() - 10.0 - g.size().x, row.top() + 8.0), g, p.text_muted.into());
         if resp.clicked() {
             picked = Some(*key);
         }
@@ -762,7 +762,7 @@ pub(crate) fn draft_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect,
     };
     let g = ux::galley_rows(&paint, &next, types::UI, p.text_muted, Some((width - 10.0).max(0.0)), 2);
     let h = g.size().y;
-    paint.galley(pos2(left + 10.0, at + 9.0), g, p.text_muted);
+    paint.galley(pos2(left + 10.0, at + 9.0), g, p.text_muted.into());
     at += h + 26.0;
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), at), vec2(r.width(), 1.0)), 0.0, p.border);
     at += 24.0;
@@ -773,7 +773,7 @@ pub(crate) fn draft_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect,
     ] {
         let g = ux::galley_rows(&paint, &said, types::CAPTION, p.text_secondary, Some(width), 6);
         let h = g.size().y;
-        paint.galley(pos2(left, at), g, p.text_secondary);
+        paint.galley(pos2(left, at), g, p.text_secondary.into());
         at += h + 10.0;
     }
     true
@@ -904,7 +904,7 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     let g = ux::galley_rows(&paint, &said, types::CAPTION, p.text_secondary, Some(width), 6);
     let h = g.size().y;
     let note = Rect::from_min_size(pos2(left, y + 26.0), vec2(width, h));
-    paint.galley(note.min, g, p.text_secondary);
+    paint.galley(note.min, g, p.text_secondary.into());
     widgets::record_visible(ui, &mut shell.registry, "workspace.properties.association.note", "text", note);
 }
 
@@ -914,7 +914,7 @@ fn refusal_box(paint: &egui::Painter, p: &Palette, at: Pos2, width: f32, why: &s
     let r = Rect::from_min_size(at, vec2(width.max(0.0), g.size().y + 20.0));
     paint.rect_filled(r, 6.0, p.danger_tint);
     ux::icon_in(paint, Rect::from_min_size(r.min + vec2(10.0, 11.0), Vec2::splat(14.0)), &icons::ISSUE, p.danger);
-    paint.galley(r.min + vec2(32.0, 10.0), g, p.text);
+    paint.galley(r.min + vec2(32.0, 10.0), g, p.text.into());
     r.height()
 }
 
@@ -999,7 +999,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         tr("Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.");
     let g = ux::galley_rows(&paint, &note, types::CAPTION, p.text_secondary, Some(inner), 5);
     let h = g.size().y;
-    paint.galley(at(0.0, cy), g, p.text_secondary);
+    paint.galley(at(0.0, cy), g, p.text_secondary.into());
     cy += h + 12.0;
     let remove = icon_button(shell, ui, p, at(0.0, cy), &format!("{key}.remove"), &icons::TRASH, p.danger, None, "Remove");
     let cancel =
@@ -1009,7 +1009,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     if let Some((None, why)) = &edit.refused {
         let g = ux::galley_rows(&paint, why, types::CAPTION, p.amber, Some(inner), 4);
         let h = g.size().y;
-        paint.galley(at(0.0, cy - 4.0), g, p.amber);
+        paint.galley(at(0.0, cy - 4.0), g, p.amber.into());
         cy += h + 8.0;
     }
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
@@ -1168,7 +1168,7 @@ fn ask_remove(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, a:
     );
     let g = ux::galley_rows(&paint, &why, types::SMALL, p.text_secondary, Some(inner), 6);
     let h = g.size().y;
-    paint.galley(pos2(left + 14.0, cy), g, p.text_secondary);
+    paint.galley(pos2(left + 14.0, cy), g, p.text_secondary.into());
     cy += h + 12.0;
     // The two buttons, Keep 3 ends quiet and focused, Make it binary primary, side by side.
     let keep_label = tr("Keep 3 ends");
@@ -1179,9 +1179,9 @@ fn ask_remove(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, a:
     let binary = Rect::from_min_size(pos2(keep.right() + 8.0, cy), vec2(binary_g.size().x + 24.0, FIELD));
     paint.rect_filled(keep, 6.0, p.surface);
     paint.rect_stroke(keep, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    paint.galley(keep.center() - keep_g.size() / 2.0, keep_g, p.text);
+    paint.galley(keep.center() - keep_g.size() / 2.0, keep_g, p.text.into());
     paint.rect_filled(binary, 6.0, p.accent_fill);
-    paint.galley(binary.center() - binary_g.size() / 2.0, binary_g, p.on_accent);
+    paint.galley(binary.center() - binary_g.size() / 2.0, binary_g, p.on_accent.into());
     let keep_id = "workspace.properties.association.ends.removeConfirm.keep";
     let binary_id = "workspace.properties.association.ends.removeConfirm.binary";
     let keep_resp = control(shell, ui, keep_id, "button", keep, true).accessible_name(keep_label.as_str());
@@ -1207,7 +1207,7 @@ fn ask_remove(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, a:
     };
     let g = ux::galley_rows(&paint, &after, types::CAPTION, p.text_secondary, Some(width), 6);
     let h = g.size().y;
-    paint.galley(pos2(left, card.bottom() + 12.0), g, p.text_secondary);
+    paint.galley(pos2(left, card.bottom() + 12.0), g, p.text_secondary.into());
     let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
     if keep_resp.clicked() || escape {
         shell.panels.nary_remove = None;

@@ -162,7 +162,7 @@ impl Relate {
 }
 
 /// A short line with the kind's marks between `a` and `b`, over `fill`.
-fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: egui::Color32, fill: egui::Color32) {
+fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: crate::ux::Colour, fill: crate::ux::Colour) {
     let ([start, end], dashed) = kind.look();
     let stroke = Stroke::new(1.2, ink);
     let z = 0.7;
@@ -195,7 +195,7 @@ fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: egui::Colo
     if kind == Relate::TemplateBinding {
         let g = ux::galley(paint, &tr("«bind»"), types::TINY, ink, None);
         let middle = a + (b - a) / 2.0;
-        paint.galley(pos2(middle.x - g.size().x / 2.0, middle.y - g.size().y - 1.0), g, ink);
+        paint.galley(pos2(middle.x - g.size().x / 2.0, middle.y - g.size().y - 1.0), g, ink.into());
     }
     // An n-ary association (AR-128): a small hollow diamond at the line's middle with a short leg
     // down from it, the third end.
@@ -209,7 +209,7 @@ fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: egui::Colo
 }
 
 /// The Relationship tool's face: the kind it draws, across its double-width button.
-pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, p: &Palette, b: Rect, ink: egui::Color32, active: bool) {
+pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, p: &Palette, b: Rect, ink: crate::ux::Colour, active: bool) {
     let fill = if active { p.accent_tint } else { p.surface };
     sample(paint, b.center() - vec2(24.0, 0.0), b.center() + vec2(24.0, 0.0), shell.canvas.uml_relation, ink, fill);
 }
@@ -969,7 +969,7 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     // Wrapped, so the realization's longer hint reads whole in a narrow panel.
     let said = ux::galley_rows(&paint, &hint, types::CAPTION, p.text_muted, Some(width), 3);
     let height = said.size().y;
-    paint.galley(pos2(r.left() + PAD, y), said, p.text_muted);
+    paint.galley(pos2(r.left() + PAD, y), said, p.text_muted.into());
     y += (height + 12.0).max(28.0);
     // Its stereotypes, an association's, an association class's or a generalization's, or its
     // selected member's (AR-135, F3).
@@ -1123,13 +1123,13 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             let paint = ui.painter().clone();
             let said = ux::galley_rows(&paint, why, types::CAPTION, p.danger, Some(width), 4);
             let height = said.size().y;
-            paint.galley(pos2(r.left() + PAD, y - 2.0), said, p.danger);
+            paint.galley(pos2(r.left() + PAD, y - 2.0), said, p.danger.into());
             y += (height + 26.0).max(42.0);
         } else if let Some(note) = &per_value {
             let paint = ui.painter().clone();
             let said = ux::galley_rows(&paint, note, types::CAPTION, p.text_muted, Some(width), 3);
             let height = said.size().y;
-            paint.galley(pos2(r.left() + PAD, y - 4.0), said, p.text_muted);
+            paint.galley(pos2(r.left() + PAD, y - 4.0), said, p.text_muted.into());
             y += height + 8.0;
         }
         // The whole's end, where the diamond sits, is never navigable: it shows no Navigable.
@@ -1302,7 +1302,7 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             Some((field, why)) if fields.contains(field) => {
                 let said = ux::galley_rows(paint, why, types::CAPTION, p.danger, Some(width), 4);
                 let height = said.size().y;
-                paint.galley(pos2(left, y - 4.0), said, p.danger);
+                paint.galley(pos2(left, y - 4.0), said, p.danger.into());
                 y + height + 6.0
             }
             _ => y,
@@ -1364,7 +1364,7 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         if empty {
             let g = ux::galley_rows(&paint, &text, types::CAPTION, p.text_muted, Some(half), 2);
             said = said.max(g.size().y);
-            paint.galley(pos2(x, y), g, p.text_muted);
+            paint.galley(pos2(x, y), g, p.text_muted.into());
         }
     }
     if said > 0.0 {

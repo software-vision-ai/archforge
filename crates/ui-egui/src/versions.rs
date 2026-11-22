@@ -8,9 +8,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
+use crate::ux::Colour;
 use archforge_mof::rows::Rows;
 use archforge_notations::differences::{Area, ChangeKind, Difference};
-use egui::{Color32, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use crate::chat_words::{Clock, date_and_time, seconds_of};
 use crate::explorer::{TreeScroll, scroll_tree};
@@ -433,7 +434,7 @@ fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, sectio
     ux::text(paint, pos2(r.left() + 38.0, row.center().y - 9.5), label, types::UI, p.text, Some((r.width() - beside).max(0.0)));
     if let Some(n) = count {
         let g = ux::galley(paint, &n, types::CAPTION, p.text_muted, None);
-        paint.galley(pos2(r.right() - 16.0 - g.size().x, row.center().y - g.size().y / 2.0), g, p.text_muted);
+        paint.galley(pos2(r.right() - 16.0 - g.size().x, row.center().y - g.size().y / 2.0), g, p.text_muted.into());
     }
     resp.clicked() && open.is_some()
 }
@@ -536,7 +537,7 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     }
     let note = Rect::from_min_size(pos2(r.left() + 20.0, y + above + rows - offset + 4.0), g.size());
     let _ = control(shell, &clip, "workspace.versions.branches.note", "status", note, false).accessible_name(words.as_str());
-    clip.painter().galley(note.min, g, p.text_muted);
+    clip.painter().galley(note.min, g, p.text_muted.into());
     tree.bottom() + 8.0
 }
 
@@ -642,7 +643,7 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     if let Some(date) = &date {
         let g = ux::galley(paint, date, types::CAPTION, p.text_muted, None);
         right -= g.size().x;
-        paint.galley(pos2(right, mid - g.size().y / 2.0), g, p.text_muted);
+        paint.galley(pos2(right, mid - g.size().y / 2.0), g, p.text_muted.into());
         right -= 10.0;
     }
     if unsaved {
@@ -737,7 +738,7 @@ fn working(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     if r.bottom() - next - h - 21.0 < UNDER_CHANGES {
         return next;
     }
-    ui.painter().galley(pos2(r.left() + 20.0, next), g, p.text_secondary);
+    ui.painter().galley(pos2(r.left() + 20.0, next), g, p.text_secondary.into());
     next + h + 21.0
 }
 
@@ -790,7 +791,7 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     for (label, group) in groups.iter().filter(|(_, g)| !g.is_empty()) {
         ux::text(clip.painter(), pos2(r.left() + 20.0, at), &label.to_uppercase(), types::EYEBROW, p.text_secondary, None);
         let g = ux::galley(clip.painter(), &group.len().to_string(), types::CAPTION, p.text_muted, None);
-        clip.painter().galley(pos2(r.right() - 16.0 - g.size().x, at), g, p.text_muted);
+        clip.painter().galley(pos2(r.right() - 16.0 - g.size().x, at), g, p.text_muted.into());
         at += GROUP;
         for d in group {
             let area = Rect::from_min_max(pos2(r.left() + 8.0, at), pos2(r.right() - 8.0, at + CHANGE));
@@ -821,7 +822,7 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .hint_text(hint)
         .char_limit(256)
         .desired_width(inner.width());
@@ -829,7 +830,7 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
 }
 
 /// What a change is called, and its ink and tint.
-pub(crate) fn kind_look(kind: ChangeKind, p: &Palette) -> (String, Color32, Color32) {
+pub(crate) fn kind_look(kind: ChangeKind, p: &Palette) -> (String, Colour, Colour) {
     match kind {
         ChangeKind::Added => (tr("Added"), p.green, p.green_tint),
         ChangeKind::Changed => (tr("Changed"), p.accent, p.accent_tint),
@@ -880,7 +881,7 @@ pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Re
     let mark = Rect::from_center_size(pos2(area.right() - 20.0, area.center().y), Vec2::splat(20.0));
     paint.rect_filled(mark, 5.0, if selected { p.surface } else { tint });
     let g = ux::galley(paint, &letter, types::CAPTION_STRONG, ink, None);
-    paint.galley(mark.center() - g.size() / 2.0, g, ink);
+    paint.galley(mark.center() - g.size() / 2.0, g, ink.into());
 }
 
 /// History from `y`: its header, the banner of a failed read, and the bars, the words or the rows.
@@ -1144,7 +1145,7 @@ fn row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (r, y): (Rect, f32), v: &V
     ux::text(paint, pos2(area.left() + 10.0, y + 7.0), &title, types::UI, ink, Some(room));
     let g = ux::galley(paint, &meta, types::CAPTION, p.text_muted, Some(room));
     let after = pos2(area.left() + 10.0 + g.size().x, y + 25.0);
-    paint.galley(pos2(area.left() + 10.0, y + 25.0), g, p.text_muted);
+    paint.galley(pos2(area.left() + 10.0, y + 25.0), g, p.text_muted.into());
     let Some(why) = why else { return };
     ux::icon_in(paint, Rect::from_center_size(pos2(area.right() - 18.0, area.center().y), Vec2::splat(14.0)), &icons::WARNING, p.text_secondary);
     let Some(why) = why else { return };
@@ -1157,7 +1158,7 @@ fn row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (r, y): (Rect, f32), v: &V
         resp.show_tooltip_text(&why);
     }
     focus_ring(ui.painter(), p, hit, 3.0, &resp);
-    ui.painter().galley(hit.min, g, p.text_secondary);
+    ui.painter().galley(hit.min, g, p.text_secondary.into());
 }
 
 /// What the rail's entry says: its name, and how many changes there are when there are any.
@@ -1179,6 +1180,6 @@ pub(crate) fn rail_badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, button: 
     let g = ux::galley(paint, &text, types::CAPTION_STRONG, p.on_accent, None);
     let badge = Rect::from_center_size(pos2(button.right() - 8.0, button.top() + 6.0), vec2((g.size().x + 8.0).max(16.0), 16.0));
     paint.rect_filled(badge, 8.0, p.accent_fill);
-    paint.galley(badge.center() - g.size() / 2.0, g, p.on_accent);
+    paint.galley(badge.center() - g.size() / 2.0, g, p.on_accent.into());
     crate::widgets::record_visible(ui, &mut shell.registry, "workspace.explorers.source-control.badge", "badge", badge);
 }

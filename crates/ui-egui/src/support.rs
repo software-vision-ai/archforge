@@ -9,7 +9,8 @@
 //! dialog never opens by itself. Done, the close button and Escape close it; the open project
 //! stays as it was.
 
-use egui::{Color32, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use crate::ux::Colour;
+use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use crate::i18n::tr;
 use crate::ux::{self, icons, types};
@@ -98,7 +99,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         let size = vec2(WIDTH.min(window.width() - 2.0 * EDGE).max(0.0), HEIGHT.min(window.height() - 2.0 * EDGE).max(0.0));
         let frame = Rect::from_center_size(window.center(), size);
         let paint = ui.painter().clone();
-        paint.add(egui::epaint::Shadow { offset: [0, 16], blur: 48, spread: 0, color: p.shadow }.as_shape(frame, 16.0));
+        paint.add(egui::epaint::Shadow { offset: [0, 16], blur: 48, spread: 0, color: p.shadow.into() }.as_shape(frame, 16.0));
         paint.rect_filled(frame, 16.0, p.surface);
         paint.rect_stroke(frame, 16.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
         let _ = ui.interact(frame, ui.scope_id().with("about.frame"), Sense::CLICK);
@@ -139,7 +140,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                 Some(inner),
                 2,
             );
-            paint.galley(bt(PAD, 132.0), why, p.text_secondary);
+            paint.galley(bt(PAD, 132.0), why, p.text_secondary.into());
             let rows = [
                 ("github-sponsors", tr("GitHub Sponsors"), tr("One-time or monthly, on GitHub"), approved(destinations.github_sponsors.as_deref(), GITHUB_SPONSORS)),
                 ("ko-fi", tr("Ko-fi"), tr("A one-time tip, on Ko-fi"), approved(destinations.ko_fi.as_deref(), KO_FI)),
@@ -160,7 +161,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                 ux::text(&paint, row.min + vec2(16.0, 34.0), &how, types::SMALL, p.text_secondary, left_room);
                 let (state, ink) = if live { (tr("Opens in your browser"), p.accent) } else { (tr("Not set up yet"), p.text_muted) };
                 let g = ux::galley(&paint, &state, types::SMALL, ink, Some(state_w));
-                paint.galley(pos2(row.right() - 16.0 - g.size().x, row.center().y - g.size().y / 2.0), g, ink);
+                paint.galley(pos2(row.right() - 16.0 - g.size().x, row.center().y - g.size().y / 2.0), g, ink.into());
                 if live && resp.clicked() {
                     open_url = url.map(str::to_string);
                 }
@@ -173,7 +174,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                 Some(inner),
                 2,
             );
-            paint.galley(bt(PAD, 332.0), note, p.text_muted);
+            paint.galley(bt(PAD, 332.0), note, p.text_muted.into());
         });
         // Done, at the footer's right.
         paint.rect_filled(Rect::from_min_size(pos2(frame.left(), frame.bottom() - 84.0), vec2(frame.width(), 1.0)), 0.0, p.border);
@@ -191,9 +192,9 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     }
 }
 
-fn centred(paint: &egui::Painter, r: Rect, label: &str, color: Color32) {
+fn centred(paint: &egui::Painter, r: Rect, label: &str, color: Colour) {
     let g = ux::galley(paint, label, types::UI_STRONG, color, Some(r.width() - 8.0));
-    paint.galley(r.center() - g.size() / 2.0, g, color);
+    paint.galley(r.center() - g.size() / 2.0, g, color.into());
 }
 
 #[cfg(test)]

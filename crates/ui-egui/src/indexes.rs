@@ -241,7 +241,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                     .frame(egui::Frame::NONE)
                     .margin(egui::Margin::ZERO)
                     .font(types::SMALL.font())
-                    .text_color(p.text)
+                    .text_color(p.text.into())
                     .hint_text(tr("An expression"))
                     .char_limit(archforge_er::rules::MAX_TEXT)
                     .desired_width(field.width())

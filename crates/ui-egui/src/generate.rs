@@ -223,7 +223,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                         .id(widgets::egui_id("generate.dialect"))
                         .frame(egui::Frame::NONE)
                         .font(types::SMALL.font())
-                        .text_color(p.text)
+                        .text_color(p.text.into())
                         .char_limit(MAX_DIALECT)
                         .desired_width(field.width() - 24.0);
                     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field.shrink2(vec2(12.0, 9.0)))));
@@ -254,7 +254,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                     let boxed = Rect::from_min_size(pos2(left, y + 26.0), vec2(inner, request.size().y + 24.0));
                     paint.rect_filled(boxed, 8.0, p.field);
                     widgets::record_visible(ui, &mut shell.registry, "generate.request", "text", boxed);
-                    paint.galley(boxed.min + vec2(12.0, 12.0), request, p.text_secondary);
+                    paint.galley(boxed.min + vec2(12.0, 12.0), request, p.text_secondary.into());
                     y = boxed.bottom() + 16.0;
                 }
                 // The status line: what the request needs, or what became of it.
@@ -270,7 +270,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                     (tr("Agent access is off: start Archforge with --control <port> so an agent can read this context."), p.text_secondary)
                 };
                 let g_status = ux::galley_rows(&paint, &status, types::SMALL, ink, Some(inner), 3);
-                paint.galley(pos2(left, y), g_status, ink);
+                paint.galley(pos2(left, y), g_status, ink.into());
             },
         );
         // Close, and Copy request while there is one.

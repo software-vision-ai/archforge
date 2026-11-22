@@ -78,7 +78,7 @@ pub(crate) trait DiagramKind: Sync {
     }
     /// Draws a tool's face itself; false draws its icon.
     #[allow(clippy::too_many_arguments, reason = "a face is drawn from the tool, its button, its ink and its state")]
-    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: egui::Color32, active: bool) -> bool {
+    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
         let _ = (shell, paint, p, key, b, ink, active);
         false
     }

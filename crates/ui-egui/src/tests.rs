@@ -4795,11 +4795,11 @@ fn a_letter_cut_from_its_label_is_not_underlined() {
     let h = harness(ThemeKind::Light);
     let mut out = h.ctx.run_ui(egui::RawInput::default(), |ui| {
         let (paint, at) = (ui.painter(), egui::pos2(0.0, 0.0));
-        let text = crate::ux::galley(paint, "Generate every diagram", crate::ux::types::SMALL, egui::Color32::BLACK, Some(60.0));
+        let text = crate::ux::galley(paint, "Generate every diagram", crate::ux::types::SMALL, crate::ux::LIGHT.text, Some(60.0));
         let glyphs: Vec<char> = text.rows.iter().flat_map(|r| r.glyphs.iter().map(|g| g.chr)).collect();
         assert_eq!(glyphs.last(), Some(&'…'), "cut: {glyphs:?}");
         for index in [glyphs.len() - 1, glyphs.len() + 3, 0] {
-            crate::ux::underline_char(paint, at, &text, index, crate::ux::types::SMALL, egui::Color32::BLACK);
+            crate::ux::underline_char(paint, at, &text, index, crate::ux::types::SMALL, crate::ux::LIGHT.text);
         }
     });
     out.textures_delta.clear();
@@ -10872,9 +10872,9 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let ringed = |h: &Harness<'static, Shell>, target: egui::Rect| {
             /// Whether `s`, or a shape it holds, is a rectangle round `target` stroked in `accent`
             /// at least 2 points wide.
-            fn walk(s: &egui::Shape, accent: egui::Color32, target: egui::Rect) -> bool {
+            fn walk(s: &egui::Shape, accent: crate::ux::Colour, target: egui::Rect) -> bool {
                 match s {
-                    egui::Shape::Rect(r) => r.stroke.color == accent && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
+                    egui::Shape::Rect(r) => crate::ux::drawn(r.stroke.color) == accent && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
                     egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent, target)),
                     _ => false,
                 }
@@ -14585,11 +14585,11 @@ static SKETCHED: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotati
 
 /// Every text the last frame painted.
 /// The colours the text `label` is laid out in, where it is painted inside `within`.
-fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<egui::Color32> {
-    fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<egui::Color32>) {
+fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<crate::ux::Colour> {
+    fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<crate::ux::Colour>) {
         match s {
             egui::Shape::Text(t) if t.galley.text() == label && within.contains(t.pos) => {
-                out.extend(t.galley.job.sections.iter().map(|section| section.format.color));
+                out.extend(t.galley.job.sections.iter().map(|section| crate::ux::drawn(section.format.color)));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, label, within, out)),
             _ => {}
@@ -16173,7 +16173,11 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
     h.state_mut().session.as_mut().unwrap().execute("diagram.style", &serde_json::json!({ "ids": [a], "fill": "#A0C4FF" })).unwrap();
     h.run();
     assert_eq!(look(&h, aobj).fill, crate::canvas::colour("#A0C4FF"));
-    let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if Some(r.fill) == crate::canvas::colour("#A0C4FF")));
+    let filled = h
+        .output()
+        .shapes
+        .iter()
+        .any(|c| matches!(&c.shape, egui::Shape::Rect(r) if Some(crate::ux::drawn(r.fill)) == crate::canvas::colour("#A0C4FF")));
     assert!(filled, "the card is filled in its own colour");
 }
 
@@ -16619,9 +16623,9 @@ fn read_class_diagram(name: &str) -> (Harness<'static, Shell>, archforge_mof::Ob
 /// Whether the last frame painted a path in the accent colour.
 fn painted_accent(h: &Harness<'static, Shell>) -> bool {
     let accent = crate::ux::palette(false).accent;
-    fn walk(s: &egui::Shape, accent: egui::Color32) -> bool {
+    fn walk(s: &egui::Shape, accent: crate::ux::Colour) -> bool {
         match s {
-            egui::Shape::Path(p) => p.stroke.color == egui::epaint::ColorMode::Solid(accent),
+            egui::Shape::Path(p) => matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == accent),
             egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent)),
             _ => false,
         }
@@ -16918,10 +16922,10 @@ fn text_boxes(h: &Harness<'static, Shell>) -> Vec<(String, egui::Rect)> {
 }
 
 /// Every rectangle the last frame painted, with its fill and its stroke's colour.
-fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, egui::Color32, egui::Color32)> {
-    fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, egui::Color32, egui::Color32)>) {
+fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)> {
+    fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)>) {
         match s {
-            egui::Shape::Rect(r) => out.push((r.rect, r.fill, r.stroke.color)),
+            egui::Shape::Rect(r) => out.push((r.rect, crate::ux::drawn(r.fill), crate::ux::drawn(r.stroke.color))),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
         }
@@ -17096,11 +17100,11 @@ fn a_class_cards_compartments_are_padded_so_no_row_sits_on_a_dividing_line() {
 
 /// Every level line segment the last frame painted: its left and right ends, its height, its
 /// thickness and its colour.
-fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, egui::Color32)> {
-    fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, egui::Color32)>) {
+fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, crate::ux::Colour)> {
+    fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, crate::ux::Colour)>) {
         match s {
             egui::Shape::LineSegment { points: [a, b], stroke } if (a.y - b.y).abs() < 0.01 => {
-                out.push((a.x.min(b.x), a.x.max(b.x), a.y, stroke.width, stroke.color));
+                out.push((a.x.min(b.x), a.x.max(b.x), a.y, stroke.width, crate::ux::drawn(stroke.color)));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
@@ -18598,7 +18602,7 @@ mod chat_keys {
     /// Whether the transcript's focus ring is painted, in the focus colour just inside its edge.
     fn ringed(h: &Harness<'static, Shell>) -> bool {
         let (focus, area) = (crate::ux::palette(h.state().state.theme.is_dark()).focus, h.state().chat_panel.area.unwrap());
-        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if r.stroke.color == focus && r.rect == area.shrink(2.0));
+        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if crate::ux::drawn(r.stroke.color) == focus && r.rect == area.shrink(2.0));
         h.output().shapes.iter().any(|c| ring(&c.shape))
     }
 
@@ -21181,10 +21185,10 @@ fn edge_count(h: &Harness<'static, Shell>) -> usize {
 }
 
 /// The boxes of the icons the last frame painted in `color`: each a mesh tinted that colour.
-fn icon_boxes(h: &Harness<'static, Shell>, color: egui::Color32) -> Vec<egui::Rect> {
-    fn walk(s: &egui::Shape, color: egui::Color32, out: &mut Vec<egui::Rect>) {
+fn icon_boxes(h: &Harness<'static, Shell>, color: crate::ux::Colour) -> Vec<egui::Rect> {
+    fn walk(s: &egui::Shape, color: crate::ux::Colour, out: &mut Vec<egui::Rect>) {
         match s {
-            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| v.color == color) => {
+            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| crate::ux::drawn(v.color) == color) => {
                 out.push(egui::Rect::from_points(&m.vertices.iter().map(|v| v.pos).collect::<Vec<_>>()));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, color, out)),
@@ -26461,11 +26465,11 @@ fn points(h: &mut Harness<'static, Shell>, id: &str) -> bool {
 }
 
 /// The fill and stroke colours of the rectangles the last frame painted exactly over `id`.
-fn painted_over(h: &Harness<'static, Shell>, id: &str) -> Vec<(egui::Color32, egui::Color32)> {
+fn painted_over(h: &Harness<'static, Shell>, id: &str) -> Vec<(crate::ux::Colour, crate::ux::Colour)> {
     /// Collects every rectangle over `r` under `s`.
-    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(egui::Color32, egui::Color32)>) {
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(crate::ux::Colour, crate::ux::Colour)>) {
         match s {
-            egui::Shape::Rect(x) if x.rect == r => out.push((x.fill, x.stroke.color)),
+            egui::Shape::Rect(x) if x.rect == r => out.push((crate::ux::drawn(x.fill), crate::ux::drawn(x.stroke.color))),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
             _ => {}
         }
@@ -27110,13 +27114,14 @@ fn enter_in_homes_search_runs_the_row_last_shown_while_it_is_still_listed() {
 }
 
 /// The colour the last frame painted `text` in, the first time it painted it whole.
-fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<egui::Color32> {
+fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<crate::ux::Colour> {
     /// The colour of `text` under `s`, if `s` paints it.
-    fn walk(s: &egui::Shape, text: &str) -> Option<egui::Color32> {
+    fn walk(s: &egui::Shape, text: &str) -> Option<crate::ux::Colour> {
         match s {
             egui::Shape::Text(t) if t.galley.job.text == text => {
                 let colour = t.galley.job.sections.first().map_or(t.fallback_color, |s| s.format.color);
-                Some(t.override_text_color.unwrap_or(if colour == egui::Color32::PLACEHOLDER { t.fallback_color } else { colour }))
+                let laid_out = if crate::ux::drawn(colour) == crate::ux::PLACEHOLDER_INK { t.fallback_color } else { colour };
+                Some(crate::ux::drawn(t.override_text_color.unwrap_or(laid_out)))
             }
             egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, text)),
             _ => None,
@@ -27126,12 +27131,12 @@ fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<egui::Color32>
 }
 
 /// The tints of the meshes the last frame painted inside `id`: its icons, drawn as textures.
-fn icons_in(h: &Harness<'static, Shell>, id: &str) -> Vec<egui::Color32> {
+fn icons_in(h: &Harness<'static, Shell>, id: &str) -> Vec<crate::ux::Colour> {
     /// Collects the tint of every mesh inside `r` under `s`.
-    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<egui::Color32>) {
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<crate::ux::Colour>) {
         match s {
             egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| r.contains(v.pos)) => {
-                out.extend(m.vertices.first().map(|v| v.color))
+                out.extend(m.vertices.first().map(|v| crate::ux::drawn(v.color)))
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
             _ => {}
@@ -28980,11 +28985,11 @@ fn chat_workspace(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<
 }
 
 /// The fill colours of the filled circles drawn in the last frame.
-fn painted_dots(h: &Harness<'static, Shell>) -> Vec<egui::Color32> {
+fn painted_dots(h: &Harness<'static, Shell>) -> Vec<crate::ux::Colour> {
     /// Collects the fill of every filled circle under `s`.
-    fn walk(s: &egui::Shape, out: &mut Vec<egui::Color32>) {
+    fn walk(s: &egui::Shape, out: &mut Vec<crate::ux::Colour>) {
         match s {
-            egui::Shape::Circle(c) => out.push(c.fill),
+            egui::Shape::Circle(c) => out.push(crate::ux::drawn(c.fill)),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
         }

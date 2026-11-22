@@ -1371,7 +1371,7 @@ fn sample_appearance(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     shell.state.show_panel(crate::state::Panel::Appearance);
     if screen == Screen::WorkspaceAppearancePicker {
-        let c = egui::Color32::from_rgb(0xC2, 0x5E, 0x0A);
+        let c = crate::canvas::colour("#C25E0A").ok_or_else(|| "the sample colour is no colour code".to_string())?;
         shell.panels.picker = Some(crate::appearance::Picker::new(crate::appearance::Group::Fill, c));
     }
     Ok(())

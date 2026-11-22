@@ -212,7 +212,7 @@ fn body(
     let mut y = dialog.top() + 58.0;
     for g in wrapped {
         let h = g.size().y;
-        paint.galley(pos2(dialog.left() + 20.0, y), g, p.text_secondary);
+        paint.galley(pos2(dialog.left() + 20.0, y), g, p.text_secondary.into());
         y += h + 6.0;
     }
     // Buttons from the right: the primary last on the right, Don't save apart on the left.
@@ -241,7 +241,7 @@ fn body(
             p.field
         };
         paint.rect_filled(b, 6.0, fill);
-        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
+        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink.into());
         if control(shell, ui, id, "button", b, true).clicked() {
             picked = Some(*answer);
         }

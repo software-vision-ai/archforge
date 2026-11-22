@@ -144,7 +144,7 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, area: Rect, 
     paint.rect_stroke(area, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let x = area.left() + INSET;
     ux::text_mid(&paint, x, area.top() + HEAD_MID, &words.head, types::LEAD_STRONG, p.text, Some((area.width() - 2.0 * INSET).max(0.0)));
-    paint.galley(pos2(x, area.top() + BODY_AT), body, p.text_secondary);
+    paint.galley(pos2(x, area.top() + BODY_AT), body, p.text_secondary.into());
 }
 
 #[cfg(test)]
