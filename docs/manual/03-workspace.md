@@ -79,9 +79,9 @@ text field, where ⌘K stays the field's own, and while the window is too narrow
 **Model** holds what the diagram tools make. Choosing a row picks that tool on the canvas's toolbar,
 as a click on the tool does: click the canvas to place the element, or drag between two elements to
 draw the relationship. **Note** and **Link note** are always listed; the rest follow the open
-diagram: **Entity** and **Relationship** on an ER diagram; on a class diagram the kinds of the
-classifier tool, **Package**, and every kind of the Relationship tool. While no diagram shows, or
-the diagram can't be changed, the rows are greyed out.
+diagram: **Entity** and **Relationship** on an ER diagram; on a UML structure diagram the kinds of
+the classifier tool, **Package**, and every kind of the Relationship tool. While no diagram shows,
+or the diagram can't be changed, the rows are greyed out.
 
 **Versions** holds **Save version…** (⇧⌘S, `Ctrl+Shift+S`), **History…** (⇧⌘H), which opens the list
 of versions, **Compare…**, **New branch…**, **Switch branch…** (⇧⌘B), **Older version** (⌥⌘←, `Ctrl+Alt+←`), **Newer version** (⌥⌘→, `Ctrl+Alt+→`) and
@@ -95,18 +95,19 @@ branch. While the project is busy, saving or switching branch, every row waits.
 The **+** of the tab strip, or of **Diagrams**, opens **New diagram** in two steps.
 
 1. **What the diagram shows.** A card for each kind of diagram Archforge makes: **ER diagram**
-   (tables, their columns and keys, and their relationships) and **Class diagram** (classes with
-   their attributes and operations, and the lines between them). Choose a card, with a click or
+   (tables, their columns and keys, and their relationships) and **UML structure diagram**
+   (classes, packages and the relationships between them). Choose a card, with a click or
    the arrow keys, and **Continue** (or press Enter, or double-click the card). Other kinds get
    their card once Archforge supports them.
 
-   <!-- picture: workspace-new-diagram-kind light | New diagram's first step: an ER diagram card and a Class diagram card, Class diagram chosen -->
+   <!-- picture: workspace-new-diagram-kind light | New diagram's first step: an ER diagram card and a UML structure diagram card, UML structure diagram chosen -->
 
 2. **Its name and what it is of.** The diagram's name, and the schema or package it shows: the
-   one selected, else the first there is, else a new one named like the diagram (for a class
-   diagram, the project's root package). **Create** makes the diagram and opens it in its tab.
+   one selected, else the first there is, else a new one named like the diagram (for a UML
+   structure diagram, the project's root package). Its title names the kind, such as **New UML
+   structure diagram**. **Create** makes the diagram and opens it in its tab.
 
-   <!-- picture: workspace-new-diagram-details light | New diagram's second step for a class diagram: its name and the Package it is of -->
+   <!-- picture: workspace-new-diagram-details light | New diagram's second step for a UML structure diagram: its name and the Package it is of -->
 
 **Back** returns to the cards with what you typed kept; choosing another kind there gives it that
 kind's schema or package. **Cancel**, or Escape, closes the dialog and makes nothing: nothing is
@@ -115,16 +116,17 @@ the second step.
 
 ## Diagrams and Models
 
-**Diagrams** lists the project's diagrams, grouped by kind: **Class diagrams** and **ER diagrams**,
-each with how many it holds. Choose a diagram to open it in its tab; a group's arrow folds it, and
-its **+** makes a new diagram of that kind. A class diagram of a nested package sits in Class
-diagrams like any other: hold the pointer over it to see where its package is, and the foot of the
-explorer says the same for the open diagram (for example *Commerce platform / Sales / Orders*). The
-filter field narrows the list to the diagrams whose name holds what you type, or to a whole group
-when you type its name. Grouping only arranges the list: each diagram stays where it is in the
-model. Other kinds of diagram get their own group once Archforge supports them.
+**Diagrams** lists the project's diagrams, grouped by kind: **ER diagrams** and **UML structure
+diagrams**, each with how many it holds. Choose a diagram to open it in its tab; a group's arrow
+folds it, and its **+** makes a new diagram of that kind. A UML structure diagram of a nested
+package sits in UML structure diagrams like any other: hold the pointer over it to see where its
+package is, and the foot of the explorer says the same for the open diagram (for example *Commerce
+platform / Sales / Orders*). The filter field narrows the list to the diagrams whose name holds what
+you type, or to a whole group when you type its name. Grouping only arranges the list: each diagram
+stays where it is in the model. Other kinds of diagram get their own group once Archforge supports
+them.
 
-<!-- picture: workspace-diagrams light | The Diagrams explorer: class diagrams and ER diagrams in their groups, a nested package's diagram open -->
+<!-- picture: workspace-diagrams light | The Diagrams explorer: ER diagrams and UML structure diagrams in their groups, a nested package's diagram open -->
 
 To delete a diagram, right-click its row in **Diagrams** and choose **Delete diagram**, or press
 Delete or Backspace while its row has the keyboard (the menu key or ⇧F10 opens the same menu). The

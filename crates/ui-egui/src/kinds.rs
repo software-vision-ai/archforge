@@ -48,7 +48,7 @@ pub(crate) trait DiagramKind: Sync {
     fn group_word(&self) -> String;
     /// What its diagrams show, in a sentence: the New diagram dialog's card for it.
     fn description(&self) -> String;
-    /// The New diagram dialog's title once it is chosen ("New class diagram").
+    /// The New diagram dialog's title once it is chosen ("New UML structure diagram").
     fn new_word(&self) -> String;
     /// A small picture of one of its diagrams in `r`, for its card in the New diagram dialog.
     fn sketch(&self, paint: &egui::Painter, p: &Palette, r: Rect) {
@@ -114,7 +114,7 @@ pub(crate) trait DiagramKind: Sync {
         self.takes_part(store, element)
     }
     /// Whether an element that takes no part in the gestures still renames in place with a double
-    /// click on its card (a package on a class diagram).
+    /// click on its card (a package on a UML structure diagram).
     fn renames_in_place(&self, store: &Store, element: Obj) -> bool {
         let _ = (store, element);
         false

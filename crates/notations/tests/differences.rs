@@ -1225,3 +1225,118 @@ fn a_later_placement_is_a_diagram_change_kept_apart_from_the_move() {
     assert_eq!(apart(&on_billing.apart), (vec![], vec![("Orders", Placing::Placed, false)], false), "the move isn't drawn");
     assert_eq!(drawn(&start, &placed, &sales_d).marks, Default::default());
 }
+
+/// A fresh project's mixed structure diagram (AR-556): Sales holding a package Orders and a class
+/// Order that depends on it, and, from `diagram` on, Sales's structure diagram showing both, the
+/// dependency drawn between them.
+struct Mixed {
+    s: Session,
+    orders: String,
+    order: String,
+    dependency: String,
+    diagram: String,
+    package_box: String,
+    class_box: String,
+    line: String,
+}
+
+/// The model of [`Mixed`] and its rows, then the diagram drawn on it.
+fn mixed() -> (Rows, Mixed) {
+    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let dependency = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": orders }));
+    let model = state(&s);
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let package_box = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": orders, "x": 400, "y": 40 }));
+    let class_box = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 40, "y": 40 }));
+    let line = run(&mut s, "diagram.connect", json!({ "diagram": diagram, "element": dependency, "source": class_box, "target": package_box }));
+    (model, Mixed { s, orders, order, dependency, diagram, package_box, class_box, line })
+}
+
+/// Drawn on a fresh project's model, the mixed diagram is compared in the diagrams' area: the
+/// diagram, its look, its package box, its class box and its line each one item added there, and in
+/// the model's area only the package's default-diagram binding the first diagram brings. The
+/// diagram's own comparison places both boxes and the line and finds no element of the model
+/// changed.
+#[test]
+fn a_mixed_structure_diagram_is_compared_in_the_diagram_area() {
+    let (model, Mixed { s, orders, order, dependency, diagram, package_box, class_box, line }) = mixed();
+    let drawn_rows = state(&s);
+    let found = differences(&model, &drawn_rows);
+    let in_diagrams: Vec<(String, Area, ChangeKind)> = areas(&found).into_iter().filter(|(_, area, _)| *area == Area::Diagram).collect();
+    let st = s.doc();
+    let look = st.uuid(st.get(st.by_uuid(uuid(&diagram)).unwrap(), archforge_diagram::diagram::STYLE).unwrap().as_ref().unwrap()).unwrap();
+    // Listed by id, so in the order they were made.
+    let expected = [&diagram, &look.to_string(), &package_box, &class_box, &line].map(|id| (id.clone(), Area::Diagram, ChangeKind::Added));
+    assert_eq!(in_diagrams, expected, "the diagram, its look, its two boxes and its line, added");
+    let in_model: Vec<(ClassId, Area, ChangeKind)> = found.iter().filter(|d| d.area != Area::Diagram).map(|d| (d.class, d.area, d.kind)).collect();
+    assert_eq!(in_model, [(archforge_diagram::DEFAULT_DIAGRAM_BINDING, Area::Model, ChangeKind::Added)], "no element changed");
+    assert!(!found.iter().any(|d| [&orders, &order, &dependency].contains(&&d.id.to_string())), "{found:?}");
+    let seen = drawn(&model, &drawn_rows, &package_box);
+    assert_eq!((seen.id.to_string(), seen.name.as_deref()), (diagram.clone(), Some("Sales")));
+    assert!(seen.before.is_none() && seen.after.is_some());
+    assert_eq!(seen.apart.diagram, Some(ChangeKind::Added));
+    let mut layout = apart(&seen.apart).1;
+    layout.sort_by_key(|l| l.0);
+    assert_eq!(layout, [("Order", Placing::Placed, false), ("Order → Orders", Placing::Placed, true), ("Orders", Placing::Placed, false)]);
+    assert!(seen.apart.model.is_empty(), "the model it draws is as it was");
+    assert_eq!([&package_box, &class_box, &line].map(|id| mark(&seen, id)), [Some(ChangeKind::Added); 3]);
+}
+
+/// A revision of the mixed diagram opened as its own session, before the project goes on and after,
+/// stays as it was saved while it does (its class renamed, its package box taken off with the line
+/// to it, its class box moved); changing that revision changes nothing in the project, whose own
+/// history still steps back to it; and compared with the project, each side holds its own state,
+/// Orders and the dependency on it on both.
+#[test]
+fn a_historical_revision_of_a_mixed_diagram_stays_isolated_from_the_project() {
+    let (_, Mixed { mut s, orders, order, dependency, diagram, package_box, class_box, line }) = mixed();
+    let then = state(&s);
+    let mut revision = archforge_notations::session_from_rows(&then, ids()).unwrap();
+    assert_eq!(state(&revision), then, "the revision as it was saved");
+    run(&mut s, "uml.class.rename", json!({ "class": order, "name": "Purchase" }));
+    run(&mut s, "diagram.unplace", json!({ "nodes": [package_box] }));
+    let joined = |s: &Session| archforge_uml::figures::ends(s.doc(), s.doc().by_uuid(uuid(&dependency))?);
+    let (client, supplier) = (s.doc().by_uuid(uuid(&order)).unwrap(), s.doc().by_uuid(uuid(&orders)).unwrap());
+    assert_eq!(joined(&s), Some((client, supplier)), "taken off the diagram, Orders and the dependency on it stay in the model");
+    assert!(s.doc().by_uuid(uuid(&line)).is_none_or(|e| !s.doc().is_alive(e)), "the line to its box is gone");
+    run(&mut s, "diagram.move", json!({ "nodes": [class_box], "dx": 40, "dy": 0 }));
+    let now = state(&s);
+    assert_eq!(state(&revision), then, "the project's changes changed nothing in the revision");
+    let reopened = archforge_notations::session_from_rows(&then, ids()).unwrap();
+    assert_eq!(state(&reopened), then, "opened again, the revision as it was saved");
+    assert_eq!(state(&s), now, "opening it changed nothing in the project");
+    run(&mut revision, "diagram.move", json!({ "nodes": [class_box], "dx": 0, "dy": 80 }));
+    assert_ne!(state(&revision), then);
+    assert_eq!(state(&s), now, "changing the revision changed nothing in the project");
+    let seen = drawn(&then, &now, &diagram);
+    let name_on = |side: &DiagramSide| archforge_core::name_of(&side.store, side.store.by_uuid(uuid(&order)).unwrap());
+    let boxes_on = |side: &DiagramSide| side.store.list(side.diagram, archforge_diagram::diagram::NODE).unwrap().len();
+    let at_on = |side: &DiagramSide| {
+        let n = side.store.by_uuid(uuid(&class_box)).unwrap();
+        [archforge_diagram::node::X, archforge_diagram::node::Y].map(|p| side.store.get(n, p).unwrap())
+    };
+    let line_on =
+        |side: &DiagramSide| side.store.by_uuid(uuid(&line)).and_then(|e| archforge_diagram::diagram_of(&side.store, e)) == Some(side.diagram);
+    let (was, is) = (seen.before.as_ref().unwrap(), seen.after.as_ref().unwrap());
+    let [x40, x80] = [Value::Real(40.0), Value::Real(80.0)];
+    assert_eq!((at_on(was), at_on(is)), ([x40.clone(), x40.clone()], [x80, x40]), "the class box where each side has it");
+    assert_eq!((name_on(was), boxes_on(was), line_on(was)), ("Order".to_string(), 2, true), "the revision's side");
+    assert_eq!((name_on(is), boxes_on(is), line_on(is)), ("Purchase".to_string(), 1, false), "the project's side");
+    let joined_on = |side: &DiagramSide| {
+        let at = |id: &str| side.store.by_uuid(uuid(id));
+        Some((archforge_uml::figures::ends(&side.store, at(&dependency)?), at(&order)?, at(&orders)?))
+    };
+    for side in [was, is] {
+        let (ends, client, supplier) = joined_on(side).expect("Orders and the dependency on each side");
+        assert_eq!(ends, Some((client, supplier)), "the dependency still from Order to Orders");
+    }
+    let marks = [&package_box, &class_box, &line].map(|id| mark(&seen, id));
+    assert_eq!(marks, [Some(ChangeKind::Removed), Some(ChangeKind::Changed), Some(ChangeKind::Removed)], "the line went with the package's box");
+    for _ in 0..3 {
+        s.undo().unwrap();
+    }
+    assert_eq!(state(&s), then, "the project's history steps back to the revision");
+}

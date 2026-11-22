@@ -1,4 +1,4 @@
-//! What UML brings to the shell: the class diagram's tools and gestures (the
+//! What UML brings to the shell: the UML structure diagram's tools and gestures (the
 //! classifier tool places a class, an interface, an enumeration, a data type or a primitive type
 //! named in place, its card renames in place), and its packages and classifiers in the Models tree,
 //! the search and Properties. An enumeration's literals are typed on its card and edited in
@@ -69,7 +69,7 @@ fn constraint_context(store: &Store, o: Obj) -> Option<Obj> {
     archforge_uml::constraints::is_constraint(store, o).then(|| archforge_uml::constraints::context_of(store, o)).flatten()
 }
 
-/// The class diagram in the shell.
+/// The UML structure diagram in the shell.
 pub(crate) struct UmlKind;
 
 const TOOLS: &[KindTool] = &[
@@ -102,20 +102,24 @@ impl DiagramKind for UmlKind {
         TOOLS
     }
 
+    /// Its card's name in the New diagram dialog: "UML structure diagram".
     fn word(&self) -> String {
-        tr("Class diagram")
+        tr("UML structure diagram")
     }
 
+    /// Its group's name in the Diagrams explorer: "UML structure diagrams".
     fn group_word(&self) -> String {
-        tr("Class diagrams")
+        tr("UML structure diagrams")
     }
 
+    /// Its card's sentence: what a UML structure diagram holds.
     fn description(&self) -> String {
-        tr("Classes with their attributes and operations, and the lines between them.")
+        tr("Classes, packages and the relationships between them.")
     }
 
+    /// The New diagram dialog's title once it is chosen: "New UML structure diagram".
     fn new_word(&self) -> String {
-        tr("New class diagram")
+        tr("New UML structure diagram")
     }
 
     /// Two class cards joined by an association: Order with its compartments, and Customer.
@@ -150,8 +154,9 @@ impl DiagramKind for UmlKind {
         tr("New package")
     }
 
-    /// Before the model has its root package, a new class diagram goes into the root, named after
-    /// the project and made on Create (owner, 2026-11-04); after, "New package" makes a package in it.
+    /// Before the model has its root package, a new UML structure diagram goes into the root, named
+    /// after the project and made on Create (owner, 2026-11-04); after, "New package" makes a
+    /// package in it.
     fn new_owner_in(&self, store: &Store) -> String {
         if archforge_uml::commands::root_package(store).is_some() {
             return self.new_owner();
@@ -171,8 +176,8 @@ impl DiagramKind for UmlKind {
         if class(store, selected) == Some(archforge_uml::PACKAGE) { Some(selected) } else { package_of(store, selected) }
     }
 
-    /// A package named `name` for a new class diagram to be of, or the root package while the model
-    /// has none yet. A refusal comes back in plain words ([`crate::panels::refusal`]).
+    /// A package named `name` for a new UML structure diagram to be of, or the root package while
+    /// the model has none yet. A refusal comes back in plain words ([`crate::panels::refusal`]).
     fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String> {
         let has_root = shell.session.as_ref().is_some_and(|s| archforge_uml::commands::root_package(s.doc()).is_some());
         let made = if has_root {
@@ -183,7 +188,7 @@ impl DiagramKind for UmlKind {
         made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
-    /// A classifier takes part in the class diagram's gestures.
+    /// A classifier takes part in the UML structure diagram's gestures.
     fn takes_part(&self, store: &Store, element: Obj) -> bool {
         classifier(store, element)
     }
@@ -307,7 +312,7 @@ impl DiagramKind for UmlKind {
             || archforge_uml::nary::is_nary(store, element)
     }
 
-    /// A package on a class diagram renames in place with a double click, as a class does.
+    /// A package on a UML structure diagram renames in place with a double click, as a class does.
     fn renames_in_place(&self, store: &Store, element: Obj) -> bool {
         class(store, element) == Some(archforge_uml::PACKAGE)
     }
@@ -470,8 +475,8 @@ fn place_package(shell: &mut Shell, d: Obj, x: f64, y: f64) {
     }
 }
 
-/// A package dragged from Models onto a class diagram, wherever the model owns it: another branch,
-/// the root or the diagram's own package (AR-569). It is placed where it was let go, keeping its
+/// A package dragged from Models onto a UML structure diagram, wherever the model owns it: another
+/// branch, the root or the diagram's own package (AR-569). It is placed where it was let go, keeping its
 /// owner, and, when it has no structure diagram yet, given one named like it by `diagram.add`, its
 /// default from the start, as one undo step (AR-581). One the diagram shows already is said so and
 /// left; one the diagram may not show, as on a profile's, is refused with the reason.
