@@ -179,7 +179,7 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         let g = ux::galley(ui.painter(), &words, types::SMALL, p.text_secondary, Some((r.right() - MARGIN - crumb_end - 16.0).max(0.0)));
         let at = Rect::from_min_size(pos2(r.right() - MARGIN - g.size().x, r.top() + 34.0 - g.size().y / 2.0), g.size());
         let _ = control(shell, ui, "workspace.change-view.compared", "status", at, false).on_hover_text(&words).accessible_name(&words);
-        ui.painter().galley(at.min, g, p.text_secondary);
+        ui.painter().galley(at.min, g, p.text_secondary.into());
     }
     let (left, width) = (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0));
     let said = crate::canvas::notice(shell, ui, p, pos2(left, r.top() + BAND + 6.0), width);
@@ -246,11 +246,11 @@ fn title(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (r, y): (Rect, f32), (na
     let pill = look.as_ref().map(|(what, ink, _)| ux::galley(&paint, what, types::CAPTION, *ink, None));
     let g = ux::galley_rows(&paint, name, types::PAGE_TITLE, p.text, Some((width - pill.as_ref().map_or(0.0, |g| g.size().x + 52.0)).max(0.0)), 3);
     let (end, height) = (left + g.size().x, g.size().y);
-    paint.galley(pos2(left, y), g, p.text);
+    paint.galley(pos2(left, y), g, p.text.into());
     if let (Some((_, ink, tint)), Some(g)) = (&look, pill) {
         let area = Rect::from_min_size(pos2(end + 30.0, y + 3.0), vec2(g.size().x + 22.0, 24.0));
         paint.rect_filled(area, 12.0, *tint);
-        paint.galley(area.center() - g.size() / 2.0, g, *ink);
+        paint.galley(area.center() - g.size() / 2.0, g, (*ink).into());
     }
     let shown = ux::text(&paint, pos2(left, y + height + 13.0), path, types::SMALL, p.text_secondary, Some(width));
     let whole = look.map_or_else(|| format!("{name}, {path}"), |(what, _, _)| format!("{name}, {path}, {what}"));

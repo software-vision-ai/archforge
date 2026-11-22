@@ -383,9 +383,9 @@ str		Step 1 of 2 · Choose what the diagram shows	第 1 步，共 2 步 · 选�
 str		Step 2 of 2 · Name it and say what it is of	第 2 步，共 2 步 · 为图命名并指定其对象
 str		Diagram name	图名称
 str		New ER diagram	新建ER图
-str		New class diagram	新建类图
+str		New UML structure diagram	新建UML结构图
 str		Tables, their columns and keys, and the relationships between them.	表及其列和键，以及表之间的关系。
-str		Classes with their attributes and operations, and the lines between them.	类及其属性和操作，以及它们之间的连线。
+str		Classes, packages and the relationships between them.	类、包以及它们之间的关系。
 str		Customer	客户
 str		Order	订单
 str		Create	创建
@@ -970,7 +970,6 @@ str		Skills	技能
 str		Filter models…	筛选模型…
 str		Filter diagrams…	筛选图…
 str		No diagrams yet	还没有图
-str		Other diagrams	其他图
 str		Select	选择
 str		Pan	平移
 str		Entity	实体
@@ -1361,8 +1360,8 @@ str		«primitive»	«primitive»
 str		Association class	关联类
 str		Classifier	分类器
 str		Classifier kinds	分类器类型
-str		Class diagram	类图
-str		Class diagrams	类图
+str		UML structure diagram	UML结构图
+str		UML structure diagrams	UML结构图
 str		Class · model, in every diagram	类 · 模型，在每个图中
 str		Interface · model, in every diagram	接口 · 模型，在每个图中
 str		Enumeration · model, in every diagram	枚举 · 模型，在每个图中

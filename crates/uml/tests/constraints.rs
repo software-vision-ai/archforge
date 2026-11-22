@@ -5,6 +5,7 @@
 //! it from the constraint in the same step, and a constraint left naming nothing goes with it;
 //! shown as braces on one diagram and as a linked note on another, its content shared; saved as
 //! rows and read back identical; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_diagram::figure::Tone;

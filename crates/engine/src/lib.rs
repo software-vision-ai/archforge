@@ -10,7 +10,6 @@
 //! builds a `Registry` from them. A document that is cheaper to copy than to record wraps itself in
 //! [`Snapshotted`]. The engine builds for the portable target: no file system, process, clock or
 //! environment.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod cmd;
 mod error;

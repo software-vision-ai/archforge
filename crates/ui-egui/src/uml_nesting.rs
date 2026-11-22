@@ -305,7 +305,7 @@ fn owner_menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Rect, rows:
         let tick = if row.current { 22.0 } else { 0.0 };
         let detail_g = ux::galley(&clipped, detail, types::CAPTION, p.text_muted, Some(m.width() / 2.0));
         let dw = detail_g.size().x;
-        clipped.galley(pos2(r.right() - 10.0 - tick - dw, r.center().y - detail_g.size().y / 2.0), detail_g, p.text_muted);
+        clipped.galley(pos2(r.right() - 10.0 - tick - dw, r.center().y - detail_g.size().y / 2.0), detail_g, p.text_muted.into());
         if row.current {
             ux::icon_mid(&clipped, pos2(r.right() - 18.0, r.center().y), &icons::TICK, p.accent);
         }
@@ -372,7 +372,7 @@ pub(crate) fn nested_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         let none = fmt(&tr("None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds."), &[("name", &own)]);
         let g = ux::galley_rows(&paint, &none, types::CAPTION, p.text_muted, Some(width), 3);
         let tall = g.size().y;
-        paint.galley(pos2(r.left() + PAD, y + 4.0), g, p.text_muted);
+        paint.galley(pos2(r.left() + PAD, y + 4.0), g, p.text_muted.into());
         y += tall + 14.0;
     }
     let chosen = crate::panels::selected_id(shell);

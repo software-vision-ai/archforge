@@ -1,6 +1,7 @@
 //! Names in one owner, as UML has them (owner decision, AR-208): elements of different kinds may
 //! share a name, two of one kind may not, whatever the case. What a command lets through, the
 //! project's check as it opens lets through too, and what the check refuses no command makes.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_mof::{NameKind, Obj, Store, Uuid, Value, rows};
 use archforge_notations::{Session, name_kind, new_project_session, session_from_rows, storage, store, universe};

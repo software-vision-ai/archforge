@@ -12,7 +12,8 @@
 //! changes it. The New project card opens its dialog. Controls whose screens are not built yet
 //! are drawn as designed, do nothing when clicked and say so on hover.
 
-use egui::{Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use ux::Colour;
 
 use crate::i18n::tr;
 use crate::state::{RecentSort, RecentView};
@@ -69,7 +70,8 @@ enum Hue {
 }
 
 impl Hue {
-    fn ink(self, p: &Palette) -> Color32 {
+    /// The hue's colour for text and icons in palette `p`.
+    fn ink(self, p: &Palette) -> Colour {
         match self {
             Hue::Blue => p.accent,
             Hue::Green => p.green,
@@ -77,7 +79,9 @@ impl Hue {
             Hue::Amber => p.amber,
         }
     }
-    fn tint(self, p: &Palette) -> Color32 {
+
+    /// The hue's light tint in palette `p`: the tile behind its icon or picture.
+    fn tint(self, p: &Palette) -> Colour {
         match self {
             Hue::Blue => p.accent_tint,
             Hue::Green => p.green_tint,
@@ -130,9 +134,10 @@ pub(crate) fn start_texts() -> impl Iterator<Item = &'static str> {
     STARTS.iter().flat_map(|(_, title, line, link, _, _)| [*title, *line, *link])
 }
 
+/// Draws Home over the whole window, on the page colour of the shell's appearance.
 pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let p = *ux::palette(shell.state.theme.is_dark());
-    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(p.page)).show(ui, |ui| {
+    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(p.page.into())).show(ui, |ui| {
         let full = ui.max_rect();
         // The design's faces are installed at the end of the first frame; until then the page is
         // drawn bare, as text in a family egui does not have yet would stop the program.
@@ -267,7 +272,7 @@ pub(crate) fn brand(paint: &egui::Painter, p: &Palette, r: Rect) -> Rect {
     let side = (mark.width() * paint.ctx().pixels_per_point()).round().max(1.0) as usize;
     match ux::app_icon(paint.ctx(), side) {
         Some(icon) => {
-            paint.image(icon.id(), mark, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ux::UNTINTED);
+            paint.image(icon.id(), mark, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ux::UNTINTED.into());
         }
         None => {
             paint.rect_filled(mark, 6.0, p.accent_fill);
@@ -305,7 +310,7 @@ pub(crate) fn bar_tail(
         let resp = control(shell, ui, &format!("{prefix}.account"), "button", avatar, true).on_hover_text(tr("Settings"));
         paint.rect_filled(avatar, 14.0, if resp.hovered() { p.accent_tint.gamma_multiply(0.85) } else { p.accent_tint });
         let g = ux::galley(paint, &crate::settings::avatar_initials(shell), types::CAPTION_STRONG, p.accent, None);
-        paint.galley(avatar.center() - g.size() / 2.0, g, p.accent);
+        paint.galley(avatar.center() - g.size() / 2.0, g, p.accent.into());
         if resp.clicked() {
             crate::settings::open(shell);
         }
@@ -343,7 +348,7 @@ pub(crate) fn bar_tail(
         let key_at = pos2(field.right() - 14.0 - key.size().x, mid - key.size().y / 2.0);
         let room = (key_at.x - 8.0 - (field.left() + 32.0)).max(0.0);
         ux::text_mid(paint, field.left() + 32.0, mid, placeholder, types::UI, p.text_secondary, Some(room));
-        paint.galley(key_at, key, p.text_muted);
+        paint.galley(key_at, key, p.text_muted.into());
         control(shell, ui, &format!("{prefix}.search"), search_kind, field, false);
     }
 }
@@ -395,7 +400,7 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     };
     if let Some(line) = line {
         let g = ux::galley_rows(&paint, &line, types::CAPTION, p.danger, Some(inner.clamp(0.0, 480.0)), 2);
-        paint.galley(pos2(right - g.size().x, origin.y + 81.0), g, p.danger);
+        paint.galley(pos2(right - g.size().x, origin.y + 81.0), g, p.danger.into());
     }
     let mut y = 175.0;
     // Without a Dolt there are no projects: that comes first, in the banner's place.
@@ -483,7 +488,7 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     if sort_resp.hovered() || sort_open {
         paint.rect_filled(sort, 8.0, p.surface);
     }
-    paint.galley(sort_at, sort_label, p.text_secondary);
+    paint.galley(sort_at, sort_label, p.text_secondary.into());
     ux::icon(&paint, chevron.min + vec2(4.0, 6.0), &icons::CHEVRON_DOWN, 8.0, p.text_secondary);
     if sort_resp.clicked() {
         shell.panels.menu = if sort_open { None } else { Some(crate::panels::Menu::RecentSort) };
@@ -556,7 +561,7 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     let help = ux::galley(&paint, &tr("Help & shortcuts"), types::TINY, p.text_secondary, None);
     let help_at = pos2(right - help.size().x, origin.y + rule + 10.0);
     let help_rect = Rect::from_min_size(help_at, help.size());
-    paint.galley(help_at, help, p.text_secondary);
+    paint.galley(help_at, help, p.text_secondary.into());
     control(shell, ui, "home.footer.help", "link", help_rect.expand(4.0), false);
     rule + 31.0
 }
@@ -591,7 +596,7 @@ fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter, 
             ux::icon(paint, pos2(x, b.top() + 11.0), &icons::CHAT, 18.0, p.text);
             x += 18.0 + BUTTON_GAP;
         }
-        paint.galley(pos2(x, b.top() + 10.5), label, p.text);
+        paint.galley(pos2(x, b.top() + 10.5), label, p.text.into());
         control(shell, ui, &format!("home.banner.{id}"), "button", b, false);
     }
     let close = Rect::from_min_size(pos2(r.right() - 34.0, r.top() + 20.0), Vec2::splat(14.0));
@@ -641,7 +646,7 @@ fn dolt_notice(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Pain
             ux::icon(paint, pos2(x + 1.0, b.center().y - 4.0), &icons::LINK, 16.0, ink);
             x += 18.0 + BUTTON_GAP;
         }
-        paint.galley(pos2(x, b.top() + 10.5), label, ink);
+        paint.galley(pos2(x, b.top() + 10.5), label, ink.into());
         if live && resp.clicked() {
             if link {
                 ui.ctx().open_url(egui::OpenUrl::new_tab(DOLT_INSTALL));
@@ -677,7 +682,7 @@ fn start_card(
     ux::icon_in_tile(paint, tile, icon, hue.ink(p));
     ux::text(paint, r.min + vec2(70.0, 25.5), &tr(title), types::CARD_TITLE, p.text, Some(r.width() - 90.0));
     let g = ux::galley_rows(paint, &tr(line), types::BODY, p.text_secondary, Some(r.width() - 40.0), 2);
-    paint.galley(r.min + vec2(20.0, 76.0), g, p.text_secondary);
+    paint.galley(r.min + vec2(20.0, 76.0), g, p.text_secondary.into());
     ux::text(paint, r.min + vec2(20.0, 131.0), &tr(link), types::UI_STRONG, hue.ink(p), Some(r.width() - 76.0));
     ux::icon(paint, pos2(r.right() - 36.0, r.top() + 132.5), &icons::ARROW, 16.0, hue.ink(p));
 }

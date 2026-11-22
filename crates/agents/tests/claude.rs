@@ -11,6 +11,7 @@
 //! removed); `doc-*` were written from the documentation and start with a `note` line saying so;
 //! `synthetic-hostile-lines.jsonl` holds made-up lines every parser must survive.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};

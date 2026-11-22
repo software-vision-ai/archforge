@@ -4,6 +4,7 @@
 //! subjects and a classifier's use cases) come back identical, in their order; so does a list whose
 //! superset's opposite is kept in step (an activity's partitions, in its groups, each in the
 //! activity).
+#![allow(clippy::unwrap_used, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_mof::rows;
 use archforge_mof::{CompositeSlabs, Store, Uuid, Value};

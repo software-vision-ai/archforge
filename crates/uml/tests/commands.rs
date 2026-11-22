@@ -2,6 +2,7 @@
 //! packages and classes added, renamed, listed and refused by key; a class diagram of a package
 //! showing its own classes; removing a package takes its classes and their views; every command
 //! undoes and redoes; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::{DiagramView, ProjectView};
 use archforge_engine::testing::sweep_with;

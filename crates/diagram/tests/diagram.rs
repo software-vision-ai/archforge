@@ -2,6 +2,7 @@
 //! whose diagrams show classes as nodes and generalizations as edges: every command's round trip,
 //! refusals that change nothing, the cascades, the grid, the rules over hand-made data, the sweep,
 //! and seeded random sequences.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::sync::Arc;
 

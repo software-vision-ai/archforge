@@ -2,6 +2,7 @@
 //! `ps` rewrites on macOS (AR-443). Needs dolt 2.6 or later, like the server tests.
 //! Measured on macOS; the Linux run is still to be done.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

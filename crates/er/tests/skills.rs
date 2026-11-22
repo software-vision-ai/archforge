@@ -2,6 +2,7 @@
 //! undo, refusals that change nothing, what applies to an element over four levels of the
 //! hierarchy, kinds and type patterns, overrides by name, trigger filtering, and the cascade when
 //! a subject goes.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_core::skills::{EffectiveSkill, effective_skills, skills, skills_on};
 use archforge_core::{MODEL, SkillTrigger};

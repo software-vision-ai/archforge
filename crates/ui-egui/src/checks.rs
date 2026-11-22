@@ -99,11 +99,11 @@ pub(crate) fn checks_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
 }
 
 /// A two-letter badge at `at`.
-pub(crate) fn badge(paint: &egui::Painter, at: egui::Pos2, text: &str, tint: egui::Color32, ink: egui::Color32) {
+pub(crate) fn badge(paint: &egui::Painter, at: egui::Pos2, text: &str, tint: ux::Colour, ink: ux::Colour) {
     let br = Rect::from_min_size(at, vec2(26.0, 16.0));
     paint.rect_filled(br, 4.0, tint);
     let g = ux::galley(paint, text, types::TINY, ink, None);
-    paint.galley(br.center() - g.size() / 2.0, g, ink);
+    paint.galley(br.center() - g.size() / 2.0, g, ink.into());
 }
 
 /// A label over a filled multiline field of `height`; gives whether it has the keyboard.
@@ -128,7 +128,7 @@ pub(crate) fn text_area(
         .id(widgets::egui_id(id))
         .frame(egui::Frame::NONE)
         .font(types::SMALL.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .char_limit(archforge_er::rules::MAX_TEXT)
         .desired_width(inner.width())
         .desired_rows(2)

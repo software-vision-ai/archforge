@@ -5,6 +5,7 @@
 //! drawn as an outsider; a package's card naming its owners from the root down (AR-564); a package
 //! removed with the dependencies at it, a nested one handing up those between elements that stay
 //! (AR-698); each one undo step; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};

@@ -23,7 +23,6 @@
 //! [`archforge_secrets::Secret`], reach the child only through its environment, and are scrubbed
 //! from the error stream's tail. The runtimes are available on macOS and Linux; elsewhere every
 //! call answers [`AgentError::NotAvailable`].
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 use std::fmt;
 

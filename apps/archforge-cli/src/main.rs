@@ -5,7 +5,6 @@
 //! Exit codes (BP-CS-6): 0 success, also for `--help`, `--version` and an output pipe closed after
 //! the work; 1 a failure the application or a command reported; 2 a usage error; 3 no application
 //! to reach (not running with `--control <port>`, or its token unreadable or not the current one).
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 use std::io::Write;
 use std::path::{Path, PathBuf};

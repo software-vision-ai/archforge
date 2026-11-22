@@ -391,7 +391,7 @@ fn pick_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &s
             let tick = if row.ticked { 22.0 } else { 0.0 };
             let detail = ux::galley(&clipped, &row.detail, types::CAPTION, p.text_muted, Some(m.width() / 2.0));
             let dw = detail.size().x;
-            clipped.galley(pos2(r.right() - 10.0 - tick - dw, r.center().y - detail.size().y / 2.0), detail, p.text_muted);
+            clipped.galley(pos2(r.right() - 10.0 - tick - dw, r.center().y - detail.size().y / 2.0), detail, p.text_muted.into());
             if row.ticked {
                 ux::icon_mid(&clipped, pos2(r.right() - 18.0, r.center().y), &icons::TICK, p.accent);
             }
@@ -415,7 +415,7 @@ fn help(ui: &egui::Ui, p: &Palette, left: f32, y: f32, width: f32, text: &str) -
     let paint = ui.painter();
     let g = ux::galley_rows(paint, text, types::CAPTION, p.text_muted, Some(width.max(0.0)), 6);
     let tall = g.size().y;
-    paint.galley(pos2(left, y), g, p.text_muted);
+    paint.galley(pos2(left, y), g, p.text_muted.into());
     y + tall + 14.0
 }
 
@@ -456,7 +456,7 @@ fn refusal(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y: f32, wid
     let card = Rect::from_min_size(pos2(left, y), vec2(width, text.size().y + 20.0));
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
-    paint.galley(pos2(left + 32.0, y + 10.0), text, p.text);
+    paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
     crate::widgets::record_visible(ui, &mut shell.registry, USES_ID, "text", card);
     let mut y = card.bottom() + 12.0;
     if !r.uses.is_empty() {
@@ -465,7 +465,7 @@ fn refusal(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y: f32, wid
         let g = ux::galley(&paint, &label, types::UI, p.text, None);
         let b = Rect::from_min_size(pos2(left, y), vec2((g.size().x + 24.0).min(width), FIELD));
         paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-        paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text);
+        paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text.into());
         if control(shell, ui, &format!("{USES_ID}.show"), "button", b, true).accessible_name(label).clicked() {
             let ids: Vec<String> = r.uses.iter().map(Uuid::to_string).collect();
             shell.panels.profile_refused = None;

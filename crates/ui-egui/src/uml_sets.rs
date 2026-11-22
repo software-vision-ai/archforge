@@ -373,7 +373,7 @@ pub(crate) fn line_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, 
         };
         let detail = ux::galley(&paint, &item.detail, types::CAPTION, p.text_muted, Some(MENU_WIDTH / 2.0));
         ux::text(&paint, row.min + vec2(10.0, 7.5), &item.label, types::SMALL, ink, Some((row.width() - 24.0 - detail.size().x).max(0.0)));
-        paint.galley(pos2(row.right() - 10.0 - detail.size().x, row.top() + 8.0), detail, p.text_muted);
+        paint.galley(pos2(row.right() - 10.0 - detail.size().x, row.top() + 8.0), detail, p.text_muted.into());
         if item.live && resp.clicked() {
             picked = Some(item.act);
         }
@@ -386,7 +386,7 @@ pub(crate) fn line_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, 
         let card = Rect::from_min_size(pos2(m.left(), m.bottom() + 8.0), vec2(MENU_WIDTH, text.size().y + 20.0));
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(card.left() + 10.0, card.top() + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
-        paint.galley(pos2(card.left() + 32.0, card.top() + 10.0), text, p.text);
+        paint.galley(pos2(card.left() + 32.0, card.top() + 10.0), text, p.text.into());
         crate::widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.contextMenu.generalizationSet.reason", "text", card);
         area = area.union(card);
     }
@@ -502,7 +502,7 @@ fn segmented(
             paint.rect_stroke(b, 5.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         }
         let ink = if on { p.text } else { p.text_secondary };
-        paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, ink);
+        paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, ink.into());
         if resp.clicked() && !on {
             out = Some(i == 0);
         }
@@ -530,7 +530,7 @@ fn help(ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, text: &str) -> f32 {
     let paint = ui.painter();
     let g = ux::galley_rows(paint, text, types::CAPTION, p.text_muted, Some(width), 6);
     let h = g.size().y;
-    paint.galley(at, g, p.text_muted);
+    paint.galley(at, g, p.text_muted.into());
     at.y + h
 }
 
@@ -744,7 +744,7 @@ pub(crate) fn generalization_section(shell: &mut Shell, ui: &egui::Ui, p: &Palet
         let card = Rect::from_min_size(pos2(left, y), vec2(width, text.size().y + 20.0));
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
-        paint.galley(pos2(left + 32.0, y + 10.0), text, p.text);
+        paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
         crate::widgets::record_visible(ui, &mut shell.registry, "workspace.properties.generalization.sets.refusal", "text", card);
         y = card.bottom() + 12.0;
     }
@@ -801,7 +801,7 @@ pub(crate) fn selection_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         let g = ux::galley(&paint, label, types::UI, if live { p.text } else { p.text_muted }, None);
         let b = Rect::from_min_size(at, vec2((g.size().x + 24.0).min(width), FIELD));
         paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-        paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, if live { p.text } else { p.text_muted });
+        paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, if live { p.text.into() } else { p.text_muted.into() });
         let resp = if live {
             control(shell, ui, id, "button", b, true)
         } else {
@@ -837,7 +837,7 @@ pub(crate) fn selection_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         let card = Rect::from_min_size(pos2(left, y), vec2(width, text.size().y + 20.0));
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
-        paint.galley(pos2(left + 32.0, y + 10.0), text, p.text);
+        paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
         crate::widgets::record_visible(ui, &mut shell.registry, "workspace.properties.selection.generalizationSet.reason", "text", card);
         y = card.bottom() + 12.0;
     }

@@ -275,7 +275,7 @@ fn header(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32, width: f
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::SECTION.font())
-        .text_color(p.text)
+        .text_color(p.text.into())
         .char_limit(archforge_core::skills::MAX_NAME)
         .hint_text(tr("Skill name"))
         .desired_width(inner.width())
@@ -402,7 +402,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, id: Uuid
         if let Some(lead) = markdown::header_value(&full, "description").filter(|d| !d.is_empty()) {
             let g = ux::galley_rows(&paint, &lead, types::BODY, p.text_secondary, Some(page.width()), 3);
             let h = g.size().y;
-            paint.galley(page.min, g, p.text_secondary);
+            paint.galley(page.min, g, p.text_secondary.into());
             page.min.y += h + 12.0;
             child = ui.new_child(egui::UiBuilder::new().max_rect(page).id_salt(("workspace.skill.page", id)));
             child.set_clip_rect(page.intersect(r));
@@ -452,12 +452,12 @@ fn preview_style(style: &mut egui::Style, p: &Palette) {
     style.text_styles.insert(TextStyle::Monospace, types::BODY.code());
     style.spacing.item_spacing = vec2(8.0, 8.0);
     let v = &mut style.visuals;
-    v.widgets.noninteractive.fg_stroke.color = p.text_secondary;
-    v.widgets.active.fg_stroke.color = p.text;
-    v.weak_text_color = Some(p.text_muted);
-    v.hyperlink_color = p.accent;
-    v.code_bg_color = p.page;
-    v.widgets.noninteractive.bg_stroke.color = p.border;
+    v.widgets.noninteractive.fg_stroke.color = p.text_secondary.into();
+    v.widgets.active.fg_stroke.color = p.text.into();
+    v.weak_text_color = Some(p.text_muted.into());
+    v.hyperlink_color = p.accent.into();
+    v.code_bg_color = p.page.into();
+    v.widgets.noninteractive.bg_stroke.color = p.border.into();
     // A link's target shows on hover, whatever its words say.
     style.url_in_tooltip = true;
 }
@@ -523,7 +523,12 @@ pub(crate) fn link_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, page: Rec
     let site_g = ux::galley(paint, &site, types::UI_STRONG, p.text, Some(inner));
     let mut job = egui::text::LayoutJob::single_section(
         url.to_string(),
-        egui::text::TextFormat { font_id: types::SMALL.font(), color: p.text_secondary, line_height: Some(types::SMALL.line), ..Default::default() },
+        egui::text::TextFormat {
+            font_id: types::SMALL.font(),
+            color: p.text_secondary.into(),
+            line_height: Some(types::SMALL.line),
+            ..Default::default()
+        },
     );
     job.wrap = egui::text::TextWrapping { max_width: inner, max_rows: 3, break_anywhere: true, overflow_character: Some('…') };
     let url_g = paint.layout_job(job);
@@ -538,9 +543,9 @@ pub(crate) fn link_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, page: Rec
         ux::text(&paint, card.min + vec2(16.0, 16.0), &tr("Open this link?"), types::BODY_STRONG, p.text, Some(inner));
         let mut y = card.top() + 40.0;
         let h = site_g.size().y;
-        paint.galley(pos2(card.left() + 16.0, y), site_g, p.text);
+        paint.galley(pos2(card.left() + 16.0, y), site_g, p.text.into());
         y += h + 4.0;
-        paint.galley(pos2(card.left() + 16.0, y), url_g, p.text_secondary);
+        paint.galley(pos2(card.left() + 16.0, y), url_g, p.text_secondary.into());
         let y = card.bottom() - 16.0 - crate::panels::FIELD;
         let cancel = crate::panels::icon_button(
             shell,
@@ -669,13 +674,13 @@ fn write(shell: &mut Shell, ui: &egui::Ui, child: &mut egui::Ui, p: &Palette, pa
 }
 
 /// A toolbar button's mark: a letter in the look it gives, or an icon.
-fn glyph(paint: &egui::Painter, b: Rect, f: Format, ink: egui::Color32) {
+fn glyph(paint: &egui::Painter, b: Rect, f: Format, ink: ux::Colour) {
     let letter = |text: &str, strong: bool, italic: bool| {
         let ty = if strong { types::UI_STRONG } else { types::UI };
         let mut job = egui::text::LayoutJob::default();
-        job.append(text, 0.0, egui::text::TextFormat { font_id: ty.font(), color: ink, italics: italic, ..Default::default() });
+        job.append(text, 0.0, egui::text::TextFormat { font_id: ty.font(), color: ink.into(), italics: italic, ..Default::default() });
         let g = paint.layout_job(job);
-        paint.galley(b.center() - g.size() / 2.0, g, ink);
+        paint.galley(b.center() - g.size() / 2.0, g, ink.into());
     };
     match f {
         Format::Bold => letter("B", true, false),

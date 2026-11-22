@@ -382,9 +382,9 @@ str		Step 1 of 2 · Choose what the diagram shows	Step 1 of 2 · Choose what the
 str		Step 2 of 2 · Name it and say what it is of	Step 2 of 2 · Name it and say what it is of
 str		Diagram name	Diagram name
 str		New ER diagram	New ER diagram
-str		New class diagram	New class diagram
+str		New UML structure diagram	New UML structure diagram
 str		Tables, their columns and keys, and the relationships between them.	Tables, their columns and keys, and the relationships between them.
-str		Classes with their attributes and operations, and the lines between them.	Classes with their attributes and operations, and the lines between them.
+str		Classes, packages and the relationships between them.	Classes, packages and the relationships between them.
 str		Customer	Customer
 str		Order	Order
 str		Create	Create
@@ -969,7 +969,6 @@ str		Skills	Skills
 str		Filter models…	Filter models…
 str		Filter diagrams…	Filter diagrams…
 str		No diagrams yet	No diagrams yet
-str		Other diagrams	Other diagrams
 str		Select	Select
 str		Pan	Pan
 str		Entity	Entity
@@ -1360,8 +1359,8 @@ str		«primitive»	«primitive»
 str		Association class	Association class
 str		Classifier	Classifier
 str		Classifier kinds	Classifier kinds
-str		Class diagram	Class diagram
-str		Class diagrams	Class diagrams
+str		UML structure diagram	UML structure diagram
+str		UML structure diagrams	UML structure diagrams
 str		Class · model, in every diagram	Class · model, in every diagram
 str		Interface · model, in every diagram	Interface · model, in every diagram
 str		Enumeration · model, in every diagram	Enumeration · model, in every diagram

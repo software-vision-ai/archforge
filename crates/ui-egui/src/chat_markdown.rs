@@ -10,11 +10,11 @@
 
 use std::ops::Range;
 
+use egui::Stroke;
 use egui::text::{LayoutJob, TextFormat};
-use egui::{Color32, Stroke};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
-use crate::ux::{self, Palette, types};
+use crate::ux::{self, Colour, Palette, types};
 
 /// The deepest nesting rendered: quotes, lists and spans inside one another.
 const MAX_DEPTH: usize = 32;
@@ -65,7 +65,7 @@ fn format(look: Look, p: &Palette) -> TextFormat {
     } else {
         types::UI.font()
     };
-    let color: Color32 = if look.link {
+    let color: Colour = if look.link {
         p.accent
     } else if look.quote || look.muted {
         p.text_secondary
@@ -74,9 +74,9 @@ fn format(look: Look, p: &Palette) -> TextFormat {
     };
     TextFormat {
         font_id: font,
-        color,
+        color: color.into(),
         italics: look.italic && !look.code,
-        background: if look.code { p.field } else { ux::CLEAR },
+        background: if look.code { p.field.into() } else { ux::CLEAR.into() },
         underline: if look.link { Stroke::new(1.0, p.accent) } else { Stroke::NONE },
         line_height: Some(types::UI.line),
         ..TextFormat::default()
@@ -88,7 +88,7 @@ fn gap(job: &mut LayoutJob, p: &Palette) {
     job.append(
         "\n",
         0.0,
-        TextFormat { font_id: types::CHAT_GAP.font(), line_height: Some(types::CHAT_GAP.line), color: p.text, ..TextFormat::default() },
+        TextFormat { font_id: types::CHAT_GAP.font(), line_height: Some(types::CHAT_GAP.line), color: p.text.into(), ..TextFormat::default() },
     );
 }
 

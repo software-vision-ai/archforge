@@ -5387,6 +5387,7 @@ dependencies = [
  "quick-xml",
  "serde_json",
  "syn 2.0.119",
+ "toml",
 ]
 
 [[package]]

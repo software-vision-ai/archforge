@@ -101,7 +101,7 @@ fn card(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (b
         paint.rect_filled(body, 8.0, p.field);
         paint.rect_stroke(body, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         let g = ux::galley(&paint, &words, types::UI, p.text_muted, Some((body.width() - 2.0 * INSET).max(0.0)));
-        paint.galley(body.center() - g.size() / 2.0, g, p.text_muted);
+        paint.galley(body.center() - g.size() / 2.0, g, p.text_muted.into());
         return;
     };
     let _ = control(shell, clip, &format!("workspace.change-view.{side}"), "status", body, false).accessible_name(format!("{eyebrow}, {head}"));

@@ -9963,6 +9963,25 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     assert_eq!(selected_name(&h), "Billing");
 }
 
+/// Where the first text painted as `words` stands on the screen.
+fn painted_at(h: &Harness<'static, Shell>, words: &str) -> Option<egui::Rect> {
+    /// Where `s`, or the first shape it holds, paints `words`.
+    fn walk(s: &egui::Shape, words: &str) -> Option<egui::Rect> {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == words => Some(egui::Rect::from_min_size(t.pos, t.galley.size())),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, words)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, words))
+}
+
+/// The names of the headings a screen reader finds on the screen, in tree order.
+fn headings(h: &Harness<'static, Shell>) -> Vec<String> {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    h.query_all_by_role(egui::accesskit::Role::Heading).filter_map(|n| n.accesskit_node().label()).collect()
+}
+
 /// The Diagrams explorer's rows: each one's depth, name and count.
 fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
     let st = h.state().session.as_ref().unwrap().doc();
@@ -9975,9 +9994,28 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
         let at = rect_of(&h, "workspace.explorers.diagrams").center();
         click(&mut h, at);
-        // Every kind the shell knows has its group, by name, empty or not, with its +.
+        // Every kind the shell knows has its group, by name, empty or not, with its +: UML
+        // structure diagrams after ER diagrams (AR-554).
         let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 0), row(0, "ER diagrams", 0)]);
+        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 0)]);
+        let found = painted(&h);
+        assert_eq!(found.iter().filter(|t| *t == "UML structure diagrams").count(), 1, "{theme:?}: {found:?}");
+        let (er, structure) =
+            (rect_of(&h, "workspace.diagrams.group.er"), rect_of(&h, &format!("workspace.diagrams.group.{}", archforge_uml::STRUCTURE_DIAGRAM)));
+        assert!(er.bottom() <= structure.top(), "{theme:?}: ER diagrams above");
+        // By their names, not by the order the shell lists the kinds in.
+        {
+            let reversed: Vec<&dyn crate::kinds::DiagramKind> = h.state().kinds.iter().rev().copied().collect();
+            let st = h.state().session.as_ref().unwrap().doc();
+            let labels: Vec<String> = crate::diagrams::rows(st, &h.state().diagrams, &reversed).rows.into_iter().map(|r| r.label).collect();
+            assert_eq!(labels, ["ER diagrams", "UML structure diagrams"], "{theme:?}");
+        }
+        // The groups are every kind a project can hold, so no diagram is left without one.
+        let mut shown: Vec<&str> = h.state().kinds.iter().map(|k| k.kind()).collect();
+        let mut held = archforge_notations::kinds();
+        shown.sort_unstable();
+        held.sort_unstable();
+        assert_eq!(shown, held);
         let found = ids(&h);
         for id in [
             "workspace.diagrams.group.uml.structure",
@@ -10014,7 +10052,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         h.run();
         assert_eq!(
             diagram_rows(&h),
-            vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0), row(0, "ER diagrams", 1), row(1, "Shop", 0)]
+            vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]
         );
         // Grouping is the explorer's alone: the model keeps each diagram once, where it was.
         {
@@ -10050,7 +10088,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         // A group folds and opens with a click.
         let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
         click(&mut h, at);
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(0, "ER diagrams", 1), row(1, "Shop", 0)]);
+        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2)]);
         assert!(!ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{orders}")));
         let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
         click(&mut h, at);
@@ -10058,10 +10096,10 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         // The filter narrows the diagrams, or shows a whole group named by it; groups with no match go.
         h.state_mut().diagrams.filter = "ord".into();
         h.run();
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Orders", 0)]);
-        h.state_mut().diagrams.filter = "class".into();
+        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Orders", 0)]);
+        h.state_mut().diagrams.filter = "structure".into();
         h.run();
-        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
+        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
         h.state_mut().diagrams.filter = "zzz".into();
         h.run();
         assert!(diagram_rows(&h).is_empty());
@@ -10266,7 +10304,14 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
     assert_eq!(
         diagram_rows(&h),
-        vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0), row(0, "ER diagrams", 1), row(1, "Views", 1), row(2, "Shop", 0)]
+        vec![
+            row(0, "ER diagrams", 1),
+            row(1, "Views", 1),
+            row(2, "Shop", 0),
+            row(0, "UML structure diagrams", 1),
+            row(1, "Views", 1),
+            row(2, "Sales", 0)
+        ]
     );
     // The folder's row in each group is a control of its own.
     let folder = {
@@ -10281,13 +10326,16 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     }
     // Folded shut, the folder hides its diagrams; typing a group's name opens it again.
     h.state_mut().diagrams.collapsed.insert(folder);
-    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(0, "ER diagrams", 1), row(1, "Views", 1)]);
-    h.state_mut().diagrams.filter = "class".into();
-    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
+    assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Views", 1), row(0, "UML structure diagrams", 1), row(1, "Views", 1)]);
+    h.state_mut().diagrams.filter = "structure".into();
+    assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
 }
 
+/// New diagram's two steps, in light and dark: the cards, their names and the title read out
+/// (AR-554), the arrow keys, Back, Cancel, a refused name and a group's `+`.
 #[test]
 fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_typed() {
+    use egui_kittest::kittest::{NodeT, Queryable};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
         let elements = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().alive().count();
@@ -10302,6 +10350,18 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(er.width() >= 240.0, "{theme:?}: room for the card to read");
         assert!(painted(&h).iter().any(|t| t == "Step 1 of 2 · Choose what the diagram shows"));
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
+        // The UML structure diagram's card: its name and what it shows painted, its name read out
+        // as the choice's; the dialog's title read out as its heading (AR-554).
+        let found = painted(&h);
+        let said = "Classes, packages and the relationships between them.";
+        assert!(found.iter().any(|t| t == "UML structure diagram") && found.iter().any(|t| t == said), "{theme:?}: {found:?}");
+        assert_eq!(h.get_by_label("UML structure diagram").accesskit_node().role(), egui::accesskit::Role::RadioButton, "{theme:?}");
+        assert_eq!(headings(&h), ["New diagram"], "{theme:?}");
+        // Found where it is painted: over the painted title, above the cards, from their left edge.
+        let title = h.get_by_role_and_label(egui::accesskit::Role::Heading, "New diagram").accesskit_node().bounding_box().expect("bounds");
+        let shown = painted_at(&h, "New diagram").expect("the title painted").center();
+        assert!(title.contains(egui::accesskit::Point::new(shown.x.into(), shown.y.into())), "{theme:?}: {title:?} over {shown:?}");
+        assert!((title.x0 as f32 - er.left()).abs() < 0.5 && title.y1 as f32 <= er.top(), "{theme:?}: {title:?}");
         // The arrow keys move the choice; the name the dialog gave follows the kind.
         key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
         assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
@@ -10320,7 +10380,8 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(step(&h), Some(crate::diagrams::Step::Details));
         let found = painted(&h);
-        assert!(found.iter().any(|t| t == "New class diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
+        assert!(found.iter().any(|t| t == "New UML structure diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
+        assert_eq!(headings(&h), ["New UML structure diagram"], "{theme:?}: the title read out");
         // A name typed survives Back and another kind; an empty name is refused, and Back clears it.
         h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
         h.run();
@@ -10356,7 +10417,8 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         assert!(h.state().diagrams.new.is_none());
         let at = rect_of(&h, "workspace.explorers.diagrams").center();
         click(&mut h, at);
-        assert_eq!(diagram_rows(&h)[..2], [(0, "Class diagrams".to_string(), 1), (1, "Domain".to_string(), 0)]);
+        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+        assert_eq!(diagram_rows(&h), [row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 1), row(1, "Domain", 0)]);
         assert!(h.state().canvas.active.is_some(), "it opens at once");
         // A group's + has chosen the kind: the dialog opens on the details, Back before them.
         let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
@@ -10872,9 +10934,9 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
         let ringed = |h: &Harness<'static, Shell>, target: egui::Rect| {
             /// Whether `s`, or a shape it holds, is a rectangle round `target` stroked in `accent`
             /// at least 2 points wide.
-            fn walk(s: &egui::Shape, accent: egui::Color32, target: egui::Rect) -> bool {
+            fn walk(s: &egui::Shape, accent: crate::ux::Colour, target: egui::Rect) -> bool {
                 match s {
-                    egui::Shape::Rect(r) => r.stroke.color == accent && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
+                    egui::Shape::Rect(r) => crate::ux::drawn(r.stroke.color) == accent && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
                     egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent, target)),
                     _ => false,
                 }
@@ -14585,11 +14647,12 @@ static SKETCHED: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotati
 
 /// Every text the last frame painted.
 /// The colours the text `label` is laid out in, where it is painted inside `within`.
-fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<egui::Color32> {
-    fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<egui::Color32>) {
+fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<crate::ux::Colour> {
+    /// Collects the colours of every text `label` painted inside `within` under `s`.
+    fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<crate::ux::Colour>) {
         match s {
             egui::Shape::Text(t) if t.galley.text() == label && within.contains(t.pos) => {
-                out.extend(t.galley.job.sections.iter().map(|section| section.format.color));
+                out.extend(t.galley.job.sections.iter().map(|section| crate::ux::drawn(section.format.color)));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, label, within, out)),
             _ => {}
@@ -16173,7 +16236,9 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
     h.state_mut().session.as_mut().unwrap().execute("diagram.style", &serde_json::json!({ "ids": [a], "fill": "#A0C4FF" })).unwrap();
     h.run();
     assert_eq!(look(&h, aobj).fill, crate::canvas::colour("#A0C4FF"));
-    let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if Some(r.fill) == crate::canvas::colour("#A0C4FF")));
+    // Read against the code's own bytes, not through the parser the canvas uses.
+    let own = |fill: crate::ux::Colour| [fill.r(), fill.g(), fill.b(), fill.a()] == [0xA0, 0xC4, 0xFF, 0xFF];
+    let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if own(crate::ux::drawn(r.fill))));
     assert!(filled, "the card is filled in its own colour");
 }
 
@@ -16479,7 +16544,7 @@ fn class_diagram_shown(h: &Harness<'static, Shell>) -> (String, Vec<String>) {
 #[test]
 fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_a_class_named_in_place() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    // 1. The tab strip's + opens New diagram; 2. the Class diagram card, Continue; 3. Create.
+    // 1. The tab strip's + opens New diagram; 2. the UML structure diagram card, Continue; 3. Create.
     let at = rect_of(&h, "workspace.tabs.add").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
@@ -16619,9 +16684,10 @@ fn read_class_diagram(name: &str) -> (Harness<'static, Shell>, archforge_mof::Ob
 /// Whether the last frame painted a path in the accent colour.
 fn painted_accent(h: &Harness<'static, Shell>) -> bool {
     let accent = crate::ux::palette(false).accent;
-    fn walk(s: &egui::Shape, accent: egui::Color32) -> bool {
+    /// Whether `s`, or a shape it holds, is a path stroked in `accent`.
+    fn walk(s: &egui::Shape, accent: crate::ux::Colour) -> bool {
         match s {
-            egui::Shape::Path(p) => p.stroke.color == egui::epaint::ColorMode::Solid(accent),
+            egui::Shape::Path(p) => matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == accent),
             egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent)),
             _ => false,
         }
@@ -16918,10 +16984,11 @@ fn text_boxes(h: &Harness<'static, Shell>) -> Vec<(String, egui::Rect)> {
 }
 
 /// Every rectangle the last frame painted, with its fill and its stroke's colour.
-fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, egui::Color32, egui::Color32)> {
-    fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, egui::Color32, egui::Color32)>) {
+fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)> {
+    /// Collects every rectangle under `s` with its fill and its stroke's colour.
+    fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)>) {
         match s {
-            egui::Shape::Rect(r) => out.push((r.rect, r.fill, r.stroke.color)),
+            egui::Shape::Rect(r) => out.push((r.rect, crate::ux::drawn(r.fill), crate::ux::drawn(r.stroke.color))),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
         }
@@ -17096,11 +17163,12 @@ fn a_class_cards_compartments_are_padded_so_no_row_sits_on_a_dividing_line() {
 
 /// Every level line segment the last frame painted: its left and right ends, its height, its
 /// thickness and its colour.
-fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, egui::Color32)> {
-    fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, egui::Color32)>) {
+fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, crate::ux::Colour)> {
+    /// Collects every level line segment under `s`.
+    fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, crate::ux::Colour)>) {
         match s {
             egui::Shape::LineSegment { points: [a, b], stroke } if (a.y - b.y).abs() < 0.01 => {
-                out.push((a.x.min(b.x), a.x.max(b.x), a.y, stroke.width, stroke.color));
+                out.push((a.x.min(b.x), a.x.max(b.x), a.y, stroke.width, crate::ux::drawn(stroke.color)));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
@@ -18284,9 +18352,9 @@ fn a_reply_keeps_its_faces_and_sizes() {
         };
         let words = format("Name");
         assert_eq!((words.font_id.size, words.font_id.family, words.line_height), (13.0, crate::ux::regular(), Some(19.0)));
-        assert_eq!(words.background.to_array(), [0; 4], "words have no background");
+        assert_eq!(crate::ux::drawn(words.background), crate::ux::CLEAR, "words have no background");
         let code = format("snake_case");
-        assert_eq!((code.font_id.size, code.font_id.family, code.background), (12.0, egui::FontFamily::Monospace, p.field));
+        assert_eq!((code.font_id.size, code.font_id.family, crate::ux::drawn(code.background)), (12.0, egui::FontFamily::Monospace, p.field));
         let gaps: Vec<_> = r.job.sections.iter().filter(|s| s.format.font_id.size < 12.0).map(|s| s.format.clone()).collect();
         assert_eq!(gaps.len(), 1, "one gap between the two blocks");
         assert_eq!((gaps[0].font_id.size, gaps[0].font_id.family.clone(), gaps[0].line_height), (6.0, crate::ux::regular(), Some(7.0)));
@@ -18621,7 +18689,7 @@ mod chat_keys {
     /// Whether the transcript's focus ring is painted, in the focus colour just inside its edge.
     fn ringed(h: &Harness<'static, Shell>) -> bool {
         let (focus, area) = (crate::ux::palette(h.state().state.theme.is_dark()).focus, h.state().chat_panel.area.unwrap());
-        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if r.stroke.color == focus && r.rect == area.shrink(2.0));
+        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if crate::ux::drawn(r.stroke.color) == focus && r.rect == area.shrink(2.0));
         h.output().shapes.iter().any(|c| ring(&c.shape))
     }
 
@@ -21198,16 +21266,18 @@ fn related(h: &mut Harness<'static, Shell>, name: &str) -> Vec<serde_json::Value
     s.execute("uml.relationship.list", &serde_json::json!({ "class": id })).unwrap().value["relationships"].as_array().unwrap().clone()
 }
 
+/// How many edges the open diagram holds.
 fn edge_count(h: &Harness<'static, Shell>) -> usize {
     let st = h.state().session.as_ref().unwrap().doc();
     st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap().len()
 }
 
 /// The boxes of the icons the last frame painted in `color`: each a mesh tinted that colour.
-fn icon_boxes(h: &Harness<'static, Shell>, color: egui::Color32) -> Vec<egui::Rect> {
-    fn walk(s: &egui::Shape, color: egui::Color32, out: &mut Vec<egui::Rect>) {
+fn icon_boxes(h: &Harness<'static, Shell>, color: crate::ux::Colour) -> Vec<egui::Rect> {
+    /// Collects the box of every mesh under `s` tinted `color` throughout.
+    fn walk(s: &egui::Shape, color: crate::ux::Colour, out: &mut Vec<egui::Rect>) {
         match s {
-            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| v.color == color) => {
+            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| crate::ux::drawn(v.color) == color) => {
                 out.push(egui::Rect::from_points(&m.vertices.iter().map(|v| v.pos).collect::<Vec<_>>()));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, color, out)),
@@ -26484,11 +26554,11 @@ fn points(h: &mut Harness<'static, Shell>, id: &str) -> bool {
 }
 
 /// The fill and stroke colours of the rectangles the last frame painted exactly over `id`.
-fn painted_over(h: &Harness<'static, Shell>, id: &str) -> Vec<(egui::Color32, egui::Color32)> {
+fn painted_over(h: &Harness<'static, Shell>, id: &str) -> Vec<(crate::ux::Colour, crate::ux::Colour)> {
     /// Collects every rectangle over `r` under `s`.
-    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(egui::Color32, egui::Color32)>) {
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(crate::ux::Colour, crate::ux::Colour)>) {
         match s {
-            egui::Shape::Rect(x) if x.rect == r => out.push((x.fill, x.stroke.color)),
+            egui::Shape::Rect(x) if x.rect == r => out.push((crate::ux::drawn(x.fill), crate::ux::drawn(x.stroke.color))),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
             _ => {}
         }
@@ -27133,13 +27203,14 @@ fn enter_in_homes_search_runs_the_row_last_shown_while_it_is_still_listed() {
 }
 
 /// The colour the last frame painted `text` in, the first time it painted it whole.
-fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<egui::Color32> {
+fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<crate::ux::Colour> {
     /// The colour of `text` under `s`, if `s` paints it.
-    fn walk(s: &egui::Shape, text: &str) -> Option<egui::Color32> {
+    fn walk(s: &egui::Shape, text: &str) -> Option<crate::ux::Colour> {
         match s {
             egui::Shape::Text(t) if t.galley.job.text == text => {
                 let colour = t.galley.job.sections.first().map_or(t.fallback_color, |s| s.format.color);
-                Some(t.override_text_color.unwrap_or(if colour == crate::ux::PLACEHOLDER_INK { t.fallback_color } else { colour }))
+                let laid_out = if crate::ux::drawn(colour) == crate::ux::PLACEHOLDER_INK { t.fallback_color } else { colour };
+                Some(crate::ux::drawn(t.override_text_color.unwrap_or(laid_out)))
             }
             egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, text)),
             _ => None,
@@ -27149,12 +27220,12 @@ fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<egui::Color32>
 }
 
 /// The tints of the meshes the last frame painted inside `id`: its icons, drawn as textures.
-fn icons_in(h: &Harness<'static, Shell>, id: &str) -> Vec<egui::Color32> {
+fn icons_in(h: &Harness<'static, Shell>, id: &str) -> Vec<crate::ux::Colour> {
     /// Collects the tint of every mesh inside `r` under `s`.
-    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<egui::Color32>) {
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<crate::ux::Colour>) {
         match s {
             egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| r.contains(v.pos)) => {
-                out.extend(m.vertices.first().map(|v| v.color))
+                out.extend(m.vertices.first().map(|v| crate::ux::drawn(v.color)))
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
             _ => {}
@@ -29003,11 +29074,11 @@ fn chat_workspace(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<
 }
 
 /// The fill colours of the filled circles drawn in the last frame.
-fn painted_dots(h: &Harness<'static, Shell>) -> Vec<egui::Color32> {
+fn painted_dots(h: &Harness<'static, Shell>) -> Vec<crate::ux::Colour> {
     /// Collects the fill of every filled circle under `s`.
-    fn walk(s: &egui::Shape, out: &mut Vec<egui::Color32>) {
+    fn walk(s: &egui::Shape, out: &mut Vec<crate::ux::Colour>) {
         match s {
-            egui::Shape::Circle(c) => out.push(c.fill),
+            egui::Shape::Circle(c) => out.push(crate::ux::drawn(c.fill)),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
         }
