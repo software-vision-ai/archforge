@@ -228,10 +228,11 @@ mod tests {
     /// a string, and another name are not.
     #[test]
     fn macro_input_and_attribute_arguments_are_read_as_tokens() {
-        let source = "#[case(egui::FontId { size: 1.0, family })]\n#[cfg_attr(test, case((Hsva { h, s, v, a })))]\nfn f() {\n    let v = vec![FontId { size, family }];\n    m!((x, [HsvaGamma { h, s, v, a }]));\n    m!(FontId [size] FontId (size) FontId::new(1.0, f) \"FontId { }\" Font { });\n}\n";
+        let source = "#[case(egui::FontId { size: 1.0, family })]\n#[cfg_attr(test, case((Hsva { h, s, v, a })))]\n#[doc = text!(FontId { size })]\nfn f() {\n    let v = vec![FontId { size, family }];\n    m!((x, [HsvaGamma { h, s, v, a }]));\n    m!(FontId [size] FontId (size) FontId::new(1.0, f) \"FontId { }\" Font { });\n}\n";
         let found = findings(source);
         let lines: Vec<&str> = found.iter().map(|f| f.split(", ").next().unwrap_or_default()).collect();
-        assert_eq!(lines, ["line 1: FontId { .. }", "line 2: Hsva { .. }", "line 4: FontId { .. }", "line 5: HsvaGamma { .. }"], "{found:?}");
+        let expected = ["line 1: FontId { .. }", "line 2: Hsva { .. }", "line 3: FontId { .. }", "line 5: FontId { .. }", "line 6: HsvaGamma { .. }"];
+        assert_eq!(lines, expected, "{found:?}");
     }
 
     /// A source that is not Rust is a finding, so nothing passes unread.
