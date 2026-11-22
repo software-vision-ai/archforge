@@ -7,6 +7,7 @@
 //! the sweep. Then the applications themselves (AR-135): applied and unapplied, the picker's
 //! filter, values read by type and multiplicity, defaults apart from values set, the notation on
 //! cards, members and lines, each diagram's choice to show values, and nothing lost unseen.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::{Notation, ProjectView};
 use archforge_engine::testing::sweep_with;

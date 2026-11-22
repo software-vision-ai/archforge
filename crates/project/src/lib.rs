@@ -11,7 +11,6 @@
 //! leave there, and its settings are read with a cap on every value. A creation that did not finish
 //! keeps a marker file, so it reads as unfinished, never as damaged, and is never removed for the
 //! user. Host services, layer 9: the interface never depends on this crate.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod branch_name;
 mod branches;

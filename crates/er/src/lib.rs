@@ -4,7 +4,6 @@
 //! is a member of the project's Model (the shared core); comments on ER elements are the core's;
 //! its diagrams are the diagram metamodel's, with the ER policy in [`ErNotation`]. Pure: builds for
 //! the portable target.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod commands;
 pub mod figures;

@@ -1,4 +1,5 @@
 //! Two states of a project classified and named, built with the real commands.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_engine::EngineError;
 use archforge_mof::rows::{self, Cell, Rows};

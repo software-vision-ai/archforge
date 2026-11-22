@@ -1,7 +1,6 @@
 //! The rules for a name that becomes a file name, such as a project's: one set, used by the
 //! interface to explain a name as it is typed and by the host to refuse one, so the two never
 //! disagree. Pure: no file system, no toolkit.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 /// A project folder's extension.
 pub const EXTENSION: &str = "archforge";

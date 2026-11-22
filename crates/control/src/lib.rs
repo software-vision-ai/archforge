@@ -22,7 +22,6 @@
 //! [`REVOKED`] and closes them, and its queued requests see their liveness go false; closing a
 //! server (dropping it) revokes every token it granted, so a connection authenticated before the
 //! close is never served after it.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 #[cfg(unix)]
 use std::io::Read;

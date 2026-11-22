@@ -4,6 +4,7 @@
 //! save; their limits; a kept key refused; a deleted element's anchor kept; damaged chat tables
 //! refused without blocking the model. Needs dolt 2.6 or later.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

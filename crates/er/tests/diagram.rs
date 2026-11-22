@@ -1,6 +1,7 @@
 //! ER diagrams through the ER session: the diagram commands with the ER policy, refusals that
 //! change nothing, the cascades from the model into the diagrams, the open diagram in the view, the
 //! grid, the sweep, and seeded random sequences over model and diagram commands together.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_core::{MODEL, model};
 use archforge_diagram::{DIAGRAM, DiagramView, EDGE, Grid, Hit, LABEL, NODE, Rect};

@@ -4,6 +4,7 @@
 //! along, either taking its default-diagram bindings along (AR-577), and a class of another package
 //! drawn as an outsider; a package's card naming its owners from the root down (AR-564); a package
 //! a dependency that stays starts at or depends on kept (AR-696); each one undo step; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};

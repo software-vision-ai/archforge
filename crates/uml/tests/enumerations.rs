@@ -8,6 +8,7 @@
 //! whatever the case; their order is saved and read back; a card lists at most a bounded number
 //! of them and counts the rest. Some tests put literals straight in the store, as a saved project
 //! holds them, so the round trip checks the stored order rather than the order of their ids.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;

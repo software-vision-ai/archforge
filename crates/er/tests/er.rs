@@ -1,6 +1,7 @@
 //! The ER notation through the engine, on the MOF core's store with the shared core: every
 //! command's round trip, refusals that change nothing, cascades with the shared core's comments and
 //! links around a schema, the sweep, and seeded random sequences.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_core::{COMMENT, CommentObj, FOLDER, FolderObj, LinkKind, MODEL, ModelObj, comment, model};
 use archforge_engine::testing::sweep_with;

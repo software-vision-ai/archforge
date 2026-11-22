@@ -16,7 +16,6 @@
 //! With `read_only` the server offers only the tools whose `readOnlyHint` is true, and refuses a
 //! call of any other with the typed error [`READ_ONLY`] naming the tool. Both the listing and the
 //! refusal read the one hint each tool carries ([`Catalog`]'s entries), so they cannot drift apart.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod resources;
 

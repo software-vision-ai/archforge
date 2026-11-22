@@ -4,6 +4,7 @@
 //! keyword «interface»; associated and specialized with the classifier rules (an interface
 //! specializes only an interface, a class never one); offered as a type; saved as rows and read
 //! back identical; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;

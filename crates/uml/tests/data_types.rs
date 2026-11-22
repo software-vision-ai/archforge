@@ -6,6 +6,7 @@
 //! removal; specialized only by and only of data types, joined by no association, realizing
 //! nothing; the generalization rules coherent across every kind; saved as rows and read back
 //! identical; the sweep.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;

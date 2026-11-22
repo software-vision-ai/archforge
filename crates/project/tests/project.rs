@@ -3,6 +3,7 @@
 //! 2.6 or later; without it they fail and say so. Measured on macOS; Linux and Windows are still to
 //! be done.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::io::BufRead;
 use std::os::unix::fs::PermissionsExt;
