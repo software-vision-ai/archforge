@@ -679,11 +679,37 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   changes nothing, as are UML's own library and metaclasses, a template parameter's own
   classifier and a package outside the model. An element cannot depend on itself, while a cycle
   of dependencies is allowed. Two ends, no dependency on itself and both ends in one model are
-  Archforge's own rules, not UML's. `element_remove` of a package removes, in the same step,
-  every dependency whose client or supplier is that package or a package it takes along, with its
-  lines, never moving that end onto another element; `relationships` counts them. A dependency a
-  removed nested package holds between two elements that stay is handed up with the rest, and
-  `diagram_disconnect` on a dependency's line keeps the dependency. `uml_relationship_reconnect` moves either end of a
+  Archforge's own rules, not UML's. A dependency that already joins that client alone to that
+  supplier alone is reused, never repeated: this is a change from earlier versions, where a second
+  call for the same two ends added a parallel dependency. The match is by the two ends' ids in
+  that order and the kind, never by a name: the reverse direction, a realization, an import, a
+  merge and a dependency of several clients or suppliers loaded from a file are no match. Every
+  result keeps `id` and adds `outcome` and `candidates`: every dependency that joins the two when
+  a choice is needed, the one selected after a selection and none after one is added, each with
+  its `id`, `name`, `client`, `supplier` and `detail` (empty for a dependency). With none, the
+  dependency is added as before (`"outcome": "created"`). With one, that one is returned and
+  selected (`"selected"`): nothing in the model changes, no undo step is added, and its name and
+  description stay as they are, so a `name` sent is not applied, though it is still checked first,
+  as every part of the call is, and refused when it is no valid name; leaving `name` out skips
+  that check. Sending an id as `existing` makes the call reuse only: a dependency that still joins
+  the two is selected and any other choice is refused, so nothing is added; only a call with
+  `existing` left out or null may add one. Rename a reused dependency with
+  `uml_relationship_rename`. With several, nothing changes and `id` is null (`"choiceRequired"`):
+  call again with `existing` set to the id of the candidate to use. One that was removed or
+  reconnected since, or never joined the two, is refused under `existing`, naming the ids of those
+  that join them now (the sentence names the first 12 and how many more), and another is never
+  picked in its place: when it names any, send one of them as `existing`; when it names none,
+  nothing joins the two any more, so stop if the aim was only to reuse one. A call without
+  `existing` is no lookup: it lists every candidate only while several remain, and otherwise
+  reuses the one left or, with none left, adds a dependency. A reply larger than the control
+  channel's 16 MiB is replaced whole by an error saying so. Reusing a dependency rather than
+  repeating it is Archforge's rule, not UML's, which allows parallel dependencies; parallel
+  dependencies loaded from earlier versions stay as they are. `element_remove` of a package
+  removes, in the same step, every dependency whose client or supplier is that package or a
+  package it takes along, with its lines, never moving that end onto another element;
+  `relationships` counts them. A dependency a removed nested package holds between two elements
+  that stay is handed up with the rest, and `diagram_disconnect` on a dependency's line keeps the
+  dependency. `uml_relationship_reconnect` moves either end of a
   dependency onto another package or classifier of the model, in a project of packages alone too;
   an association's or a generalization's end still moves onto a classifier only. Moving the source
   moves the dependency to its new client's package in the same step; a new target leaves its owner as it
