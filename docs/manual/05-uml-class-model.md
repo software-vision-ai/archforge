@@ -1623,7 +1623,8 @@ extend are UML model elements of their own, saved with the model, not labels or 
   Commerce: «Entity» on Order and Customer, «Id» on 2 elements, «Reference» on places. Remove
   those first.* **Show the 5 uses** selects them. Renaming a profile or a stereotype keeps every
   use. Deleting a package refuses the same way when its elements would lose the profile that
-  reaches them, and when it would take along a profile that is in use.
+  reaches them, and when it would take along a profile that is in use. Stereotypes on a
+  dependency deleted with the package go with it and do not count.
 - **Deleting a used element** itself, such as *Order*, asks first, from **Models** too, and the
   dialog names the stereotype applications that go with it and with what it takes along: *3
   stereotype applications go with it: «Entity» on Order, «Id» on id,

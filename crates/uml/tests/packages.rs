@@ -521,6 +521,71 @@ fn a_dependency_at_a_package_that_goes_takes_its_stereotype_application_along() 
     assert_eq!(problems(s.doc()), []);
 }
 
+/// A nested package goes when only what goes with it uses the profile it applies: the stereotype
+/// applications on a dependency at it, or on the dependency's description, which it holds, are
+/// taken along with the dependency, so they strand nothing. One on a class it hands up keeps it,
+/// the refusal typed and naming that use alone, as Models says before it asks; and so does one on a
+/// dependency it hands up, until the package at the dependency's other end goes in the same call.
+/// Each one undo step (AR-698).
+#[test]
+fn a_nested_package_whose_profile_only_what_goes_with_it_uses_goes() {
+    use archforge_engine::{InUse, Reason, Used};
+    let mut s = session();
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let ledger = run(&mut s, "uml.package.add", json!({ "name": "Ledger", "parent": billing }));
+    let archive = run(&mut s, "uml.package.add", json!({ "name": "Archive" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Order" }));
+    let [entry, line, post] = ["Entry", "Line", "Post"].map(|name| run(&mut s, "uml.class.add", json!({ "package": ledger, "name": name })));
+    let tracing = run(&mut s, "uml.profile.add", json!({ "name": "Tracing" }));
+    let trace = run(&mut s, "uml.stereotype.add", json!({ "profile": tracing, "name": "Trace", "extends": ["Class"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": ledger, "profile": tracing }));
+    // Ledger holds both dependencies: it is the client of the first, Entry of the second.
+    let at_ledger = run(&mut s, "uml.dependency.add", json!({ "client": ledger, "supplier": order }));
+    let handed_up = run(&mut s, "uml.dependency.add", json!({ "client": entry, "supplier": archive }));
+    let apply = |s: &mut S, element: &str| run(s, "uml.stereotype.apply", json!({ "element": element, "stereotype": trace }));
+    let [on_dependency, on_description, on_handed_up] = [&entry, &line, &post].map(|c| apply(&mut s, c));
+    // Each application's link moved onto what it is meant for, as a document made elsewhere may
+    // have it: the dependency at Ledger, its description, and the dependency Ledger hands up.
+    let mut st = reread(&s);
+    let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let d = at(&st, &at_ledger);
+    archforge_uml::descriptions::describe_element(&mut st, d, "kept in the ledger").unwrap();
+    let description = archforge_uml::descriptions::description_comment(&st, d).unwrap();
+    for (application, target) in [(&on_dependency, d), (&on_description, description), (&on_handed_up, at(&st, &handed_up))] {
+        let instance = at(&st, application);
+        let link = st.referrers(instance).into_iter().find(|(_, p)| *p == archforge_core::link::SOURCE).unwrap().0;
+        st.set(link, archforge_core::link::TARGET, Value::Ref(target)).unwrap();
+    }
+    let mut s = over(st);
+    let ledger_obj = obj(&s, &ledger);
+    // The dependency Ledger hands up keeps it; with Archive going too, that dependency goes with it.
+    let (reason, _) = refusal(&mut s, "element.remove", json!({ "ids": [ledger] }));
+    let Some(Reason::InUse(used)) = reason.clone() else { panic!("{reason:?}") };
+    assert_eq!((used.what.clone(), used.uses.iter().map(|u| u.2).sum::<usize>()), (Used::AppliedProfiles { package: "Ledger".into() }, 1));
+    assert_eq!(archforge_uml::profiles::removal_problem(s.doc(), ledger_obj).and_then(|e| e.reason), reason, "as Models says it");
+    let answer = removal(&mut s, &[&ledger, &archive]);
+    // The two dependencies and Ledger's profile application, a relationship too.
+    assert_eq!(counts(&answer).3, 3, "{answer}");
+    assert!([&at_ledger, &handed_up, &on_dependency, &on_description, &on_handed_up].iter().all(|id| !alive(&s, id)));
+    s.undo().unwrap();
+    // With that dependency gone first, Ledger goes alone, its own dependency taking the two
+    // applications along, and Models says nothing before it asks.
+    run(&mut s, "element.remove", json!({ "ids": [handed_up] }));
+    assert_eq!(archforge_uml::profiles::removal_problem(s.doc(), ledger_obj), None);
+    assert_eq!(counts(&removal(&mut s, &[&ledger])), (3, 0, 0, 2));
+    assert!([&at_ledger, &on_dependency, &on_description].iter().all(|id| !alive(&s, id)), "the dependency went with both applications");
+    assert_eq!(s.doc().container(obj(&s, &entry)).unwrap().map(|(o, _)| o), Some(obj(&s, &billing)), "Entry is handed up");
+    s.undo().unwrap();
+    // An application on Entry, which Ledger hands up, keeps it, and is the one use named.
+    apply(&mut s, &entry);
+    let said = InUse { what: Used::AppliedProfiles { package: "Ledger".into() }, uses: vec![("Trace".into(), vec!["Entry".into()], 1)] };
+    let (reason, message) = refusal(&mut s, "element.remove", json!({ "ids": [ledger] }));
+    assert_eq!(reason, Some(Reason::InUse(Box::new(said.clone()))), "{message}");
+    let before_asking = archforge_uml::profiles::removal_problem(s.doc(), ledger_obj).and_then(|e| e.reason);
+    assert_eq!(before_asking, Some(Reason::InUse(Box::new(said))));
+    assert_eq!(problems(s.doc()), []);
+}
+
 /// A package of another branch, the root, an owner of the diagram's package and that package
 /// itself are each placed by id as an appearance of the package there is: no package made, its
 /// owner kept, one undo step undone and redone exactly, and the rows read back the same (AR-562).

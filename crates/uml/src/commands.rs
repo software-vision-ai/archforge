@@ -671,6 +671,24 @@ pub(crate) fn incident_to_packages(store: &Store, packages: &[Obj], kinds: &[Cla
     out
 }
 
+/// The dependencies that go when `objs` are removed (AR-698): each whose client or supplier is a
+/// package among them, or one that something among them other than a nested package takes along,
+/// a package with no parent say ([`incident_to_packages`]), each once, those at a package named
+/// first. Worked out on the model as it is, so the checks before anything goes know them: the
+/// stereotype applications on them go with them and strand no use.
+pub fn dependencies_going(store: &Store, objs: &[Obj]) -> Vec<Obj> {
+    let package = |o: Obj| store.is_alive(o) && store.class_of(o).ok() == Some(PACKAGE);
+    // A nested package hands what it holds up; anything else takes it along.
+    let taken: std::collections::BTreeSet<Obj> = objs
+        .iter()
+        .copied()
+        .filter(|o| store.is_alive(*o) && !(package(*o) && package_of(store, *o).is_some()))
+        .flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default())
+        .collect();
+    let packages: Vec<Obj> = objs.iter().chain(&taken).copied().filter(|o| package(*o)).collect();
+    incident_to_packages(store, &packages, &[crate::DEPENDENCY])
+}
+
 /// Every classifier inside a package, at any depth, those nested in its classifiers among them
 /// (AR-132).
 pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
@@ -827,6 +845,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     if let Some(refused) = crate::templates::removals_problem(store, &params) {
         return Err(refused);
     }
+    // The dependencies at the packages that go go too (AR-698), so the uses on them strand nothing.
+    let incident = dependencies_going(store, objs);
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
         if let Some(why) = crate::templates::parameter_element_problem(store, *o) {
@@ -843,7 +863,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
         }
         // A profile, a stereotype or a property in use, a package whose applications its contents
         // need, and UML's own metaclasses stay, the uses named (AR-134).
-        if let Some(refused) = crate::profiles::removal_problem(store, *o) {
+        if let Some(refused) = crate::profiles::removal_problem_with(store, *o, &incident) {
             return Err(refused);
         }
         if !removable.contains(&class) || end {
@@ -895,8 +915,6 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     // never moved onto another end (AR-698): a package named, or one a package with no parent takes
     // along. A nested package's own dependencies whose ends both stay are handed up with the rest.
     // Each goes as a root does, its diagrams among what the bindings are checked against.
-    let packages: Vec<Obj> = objs.iter().chain(&doomed).copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
-    let incident = incident_to_packages(store, &packages, &[crate::DEPENDENCY]);
     doomed.extend(incident.iter().flat_map(|d| archforge_diagram::within(store, *d).unwrap_or_default()));
     let plan: std::collections::BTreeSet<Obj> = doomed.iter().copied().chain(objs.iter().copied().filter(|o| nested(*o))).collect();
     if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, doomed.iter().copied(), "ids", |b| plan.contains(&b)) {
