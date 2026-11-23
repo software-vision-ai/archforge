@@ -14,7 +14,7 @@ use serde_json::json;
 use crate::Shell;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, trn};
-use crate::notation_ui::{Added, Entry, NotationUi, Offer, Words};
+use crate::notation_ui::{Added, Entry, NotationState, NotationUi, Offer, Words};
 use crate::panels::{FIELD, Subject};
 use crate::problems::Problem;
 use crate::ux::{Palette, icons};
@@ -545,6 +545,11 @@ impl NotationUi for ErUi {
     /// The ER rules' longest text, which a description is.
     fn description_limit(&self) -> usize {
         r::MAX_TEXT
+    }
+
+    /// Its editors closed, a new relationship's ends the first choice and no mapping offer.
+    fn new_state(&self) -> Box<dyn NotationState> {
+        Box::new(crate::er_state::ErState::default())
     }
 }
 

@@ -103,7 +103,7 @@ fn still_only_looking(h: &Harness<'static, Shell>, rows: &archforge_mof::rows::R
             && s.explorer.context.is_none()
             && s.explorer.rename.is_none()
             && s.canvas.menu.is_none()
-            && s.canvas.inline.is_none(),
+            && uml_of(s).inline.is_none(),
         "{what} opened an editor"
     );
     assert_eq!(s.canvas.tool, crate::canvas::Tool::Select, "{what} armed a tool");

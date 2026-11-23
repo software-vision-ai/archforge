@@ -16,8 +16,10 @@ use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_ROW, Tool, View};
+use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::tr;
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -726,8 +728,9 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
     if resp.clicked() || resp.drag_started() || resp.secondary_clicked() {
         shell.canvas.focused = true;
         shell.canvas.menu = None;
-        shell.canvas.line_menu = None;
-        shell.canvas.nary_menu = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            (uml.line_menu, uml.nary_menu) = (None, None);
+        }
     }
     match if shell.looking_only() && !only_looks(&action) { Action::Nothing } else { action } {
         Action::Nothing => {}
@@ -736,7 +739,9 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
         Action::NaryAddEnd(node) => crate::uml_nary::add_end(shell, node),
         Action::NaryMenu(at, a) => {
             select(shell, vec![a]);
-            shell.canvas.nary_menu = Some((at, a));
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.nary_menu = Some((at, a));
+            }
         }
         Action::Select(ids) => select(shell, ids),
         Action::Toggle(id) => {
@@ -767,7 +772,9 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
             if let Some(id) = first {
                 select(shell, vec![id]);
             }
-            shell.canvas.line_menu = Some(at);
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.line_menu = Some(at);
+            }
         }
         Action::Rename(node, entity) => open_rename(shell, node, entity),
         Action::PlaceNote(x, y) => place_note(shell, d, x, y),
@@ -1212,7 +1219,7 @@ pub(crate) fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
 pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
     use crate::connect::cardinality_word;
     shell.canvas.notice = None;
-    let kind = shell.canvas.relationship;
+    let kind = er(&shell.notation_states).map(|er| er.relationship).unwrap_or_default();
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
     let Some(schema) = crate::diagrams::schema_of(store, d) else {
@@ -1720,7 +1727,7 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     if let Some(menu) = shell.canvas.menu.clone() {
         entity_menu(shell, ui, p, r, &menu);
     }
-    if let Some(at) = shell.canvas.line_menu {
+    if let Some(at) = uml(&shell.notation_states).and_then(|uml| uml.line_menu) {
         crate::uml_sets::line_menu(shell, ui, p, r, at, d);
     }
     // An n-ary association's draft, its legs' end handles and its menu (AR-128).
@@ -2129,15 +2136,14 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
 }
 
 /// Whether something open on the canvas holds its keys: an editor, a menu or the Stereotypes
-/// picker, which takes typing, Backspace, the arrows and Enter (AR-135).
+/// picker, which takes typing, Backspace, the arrows and Enter (AR-135), or something a notation
+/// opened there ([`crate::notation_ui::NotationState::holds_keys`]).
 pub(crate) fn canvas_busy(shell: &Shell) -> bool {
     let c = &shell.canvas;
     c.rename.is_some()
-        || c.inline.is_some()
         || c.note_edit.is_some()
         || c.menu.is_some()
-        || c.line_menu.is_some()
-        || c.nary_menu.is_some()
+        || shell.notation_states.holds_keys()
         || shell.panels.menu == Some(crate::panels::Menu::StereotypePick)
 }
 
@@ -2202,7 +2208,9 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         shell.canvas.tool = Tool::Select;
         shell.canvas.gesture = None;
         shell.canvas.popover = None;
-        shell.canvas.mapping = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.mapping = None;
+        }
         return;
     }
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));

@@ -30,6 +30,7 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::tr;
 use crate::nav_route::{Route, Step};
+use crate::uml_state::uml;
 use crate::ux::{self, Palette, icons, types};
 
 /// The share of the canvas one package covers once zooming in opens it.
@@ -369,7 +370,7 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
 fn keys(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj, here: Obj, now: f64) {
     if !shell.canvas.focused
         || shell.canvas.rename.is_some()
-        || shell.canvas.inline.is_some()
+        || uml(&shell.notation_states).is_some_and(|uml| uml.inline.is_some())
         || shell.canvas.note_edit.is_some()
         || ui.memory(|m| m.focused().is_some())
     {

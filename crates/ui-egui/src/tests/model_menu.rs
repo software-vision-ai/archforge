@@ -66,11 +66,13 @@ fn the_menu_lists_only_what_the_open_diagram_offers() {
 /// Runs `id` from the kinds given, with a popover open, and gives the canvas's tool and kinds after.
 fn armed_by(h: &mut Harness<'static, Shell>, id: &str, classifier: Classifier, relate: Relate) -> (Tool, Classifier, Relate) {
     let s = h.state_mut();
-    (s.canvas.tool, s.canvas.uml_classifier, s.canvas.uml_relation) = (Tool::Select, classifier, relate);
+    s.canvas.tool = Tool::Select;
+    let uml = uml_of_mut(s);
+    (uml.classifier, uml.relation) = (classifier, relate);
     (s.canvas.popover, s.canvas.menu_focus) = (Some(KINDS), Some(0));
     run(s, id);
     assert!(s.canvas.tool == Tool::Select || (s.canvas.popover, s.canvas.menu_focus) == (None, None), "{id} closes the toolbar's popover");
-    (s.canvas.tool, s.canvas.uml_classifier, s.canvas.uml_relation)
+    (s.canvas.tool, uml_of(s).classifier, uml_of(s).relation)
 }
 
 /// Every kind of the tools' own lists has its row, which arms its tool with that kind, leaves the

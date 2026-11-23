@@ -14,6 +14,7 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx};
 use crate::notation_ui::Words;
@@ -46,13 +47,13 @@ pub struct MenuOrdinals {
     pub twins: Vec<(String, String)>,
 }
 
-/// What the panels keep between frames: the open editors and the last refusal.
+/// What the panels keep between frames: a name or description being typed, the open menu, the
+/// body's scroll and the last refusal. The notations' own editors are their own
+/// ([`crate::notation_ui::NotationState`]).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct State {
     /// A name field being typed: the element and the text so far.
     pub name: Option<NameEdit>,
-    /// The column editor, open on a column or on a column about to be added.
-    pub column: Option<ColumnEdit>,
     /// The select menu that is open.
     pub menu: Option<Menu>,
     /// How far the open menu's rows are scrolled, by the menu's id: a menu longer than the window
@@ -69,13 +70,6 @@ pub struct State {
     /// The texts and notes of twin rows whose rows changed lately, by the menu's id, with the time
     /// until which a click on one of them picks nothing (longer while the pointer is held).
     pub menu_unsure: Option<(String, Vec<(String, String)>, f64)>,
-    /// A type menu's choices as built for one state of one project (its model root and its
-    /// revision), each label with the value the commands take: the model is walked for them once
-    /// per change, not on every frame the menu is open.
-    pub type_choices: Option<TypeChoices>,
-    /// The properties a property's Subsets and Redefines offer, each list built once for one state
-    /// of the project and one shape of the property being edited, not on every frame (AR-126).
-    pub targets: Vec<crate::uml_panel::TargetChoices>,
     /// The item of an editable select's open menu the arrow keys have reached.
     pub highlight: Option<usize>,
     /// The Appearance panel's colour picker, while it is open.
@@ -84,59 +78,10 @@ pub struct State {
     /// selection, and the selection it was given under.
     pub notice: Option<String>,
     pub notice_for: Option<Uuid>,
-    /// The classifier No subclasses (final) was refused on, while something specializes it: the
-    /// refusal shows under the check box, naming those classifiers (AR-137).
-    pub final_refused: Option<Uuid>,
-    /// The classifier No redefinition (leaf) was refused on, while something redefines it: the
-    /// refusal shows under the check box, naming what does (AR-138).
-    pub leaf_refused: Option<Uuid>,
-    /// A generalization set just made: its name field takes the keyboard once (AR-129).
-    pub set_name_focus: Option<Uuid>,
-    /// A reconnection refused on a generalization in a set, said in its Properties (AR-129).
-    pub set_refused: Option<(Uuid, String)>,
-    /// An extension's or an applied profile's editor, and a change refused for its uses, said
-    /// under its section (AR-134).
-    pub profile_edit: Option<crate::uml_profiles::ProfileEdit>,
-    pub profile_refused: Option<crate::uml_profiles::ProfileRefusal>,
-    /// The Stereotypes section: a value being typed, the picker's filter and a refusal (AR-135).
-    pub stereotypes: crate::uml_stereotypes::Stereotypes,
     /// The selection the open editors belong to: selecting anything else closes them.
     pub editors_for: Option<Uuid>,
-    /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
-    /// relationship whose switch asked for a key its parent cannot give.
-    pub role: Option<crate::relation::RoleEdit>,
-    pub more_open: bool,
-    pub no_key_card: Option<Uuid>,
-    /// The key editor, open on a key or on a unique constraint about to be added (slice E4).
-    pub key: Option<crate::keys::KeyEdit>,
     /// A description being typed under the heading (slice S2).
     pub description: Option<DescriptionDraft>,
-    /// The check and index editors (slice S3).
-    pub check: Option<crate::checks::CheckEdit>,
-    pub index: Option<crate::indexes::IndexEdit>,
-    /// The domain or enum editor (slice S5).
-    pub type_edit: Option<crate::types::TypeEdit>,
-    /// The sequence or view editor (slice S7).
-    pub object_edit: Option<crate::objects::ObjectEdit>,
-    /// A class's attribute or operation editor.
-    pub member: Option<crate::uml_panel::MemberEdit>,
-    /// A classifier's or a package's constraint editor (AR-133).
-    pub constraint: Option<crate::uml_constraints::ConstraintEdit>,
-    /// An association's ends' roles and multiplicities as typed.
-    pub ends: Option<crate::uml_relate::EndsEdit>,
-    /// An association end's qualifier editor (AR-127).
-    pub qualifier: Option<crate::uml_qualifiers::QualifierEdit>,
-    /// A classifier's template parameter editor, and a removal refused while a binding uses the
-    /// parameter (AR-130).
-    pub template: Option<crate::uml_templates::TemplateEdit>,
-    pub template_in_use: Option<crate::uml_templates::InUse>,
-    /// A template binding before it is written: a new one drawn on the canvas, or another template
-    /// picked for a binding (AR-131).
-    pub binding: Option<crate::uml_bindings::BindingDraft>,
-    /// An n-ary association's end editor, and the question removing one of three ends asks
-    /// (AR-128).
-    pub nary_end: Option<crate::uml_nary::EndEdit>,
-    pub nary_remove: Option<crate::uml_nary::RemoveAsk>,
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame with the refusal each showed, the editors that just opened or were refused
@@ -155,49 +100,21 @@ pub struct State {
 /// What is left under the last control of a scrolled body, for its trailing text.
 const SCROLL_TAIL: f32 = 48.0;
 
-/// A Properties editor whose card [`reveal`] brings into view: several can be open at once, and
-/// each card answers only for its own editor.
+/// A Properties editor's card, which [`reveal`] brings into view: several can be open at once, and
+/// each card answers only for its own editor. It is named by the metamodel of the notation whose
+/// editor it is and the card's own name there, so two notations' cards never meet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Editor {
-    Column,
-    Key,
-    Check,
-    Index,
-    Type,
-    Object,
-    Member,
-    Constraint,
-    Qualifier,
-    Template,
-    Profile,
-    NaryEnd,
+pub(crate) struct Editor {
+    pub notation: u16,
+    pub card: &'static str,
 }
 
 /// Where an open editor edits: the item, or none for one being added, and the list it belongs to (a
 /// kind of member, type, object or key, or an association's end), so a move to either is new.
-type Place = (Option<Uuid>, usize);
+pub(crate) type Place = (Option<Uuid>, usize);
 
 /// An open editor: where it edits, and the refusal its card shows.
-type OpenEditor = Option<(Place, Option<String>)>;
-
-/// The editors open, by where they edit, with their refusals, to tell when one opens, moves or is
-/// refused.
-fn open_editors(s: &State) -> Vec<(Editor, OpenEditor)> {
-    vec![
-        (Editor::Column, s.column.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
-        (Editor::Key, s.key.as_ref().map(|e| ((e.target, usize::from(e.primary)), e.refused.clone()))),
-        (Editor::Check, s.check.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
-        (Editor::Index, s.index.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
-        (Editor::Type, s.type_edit.as_ref().map(|e| ((e.target, e.kind as usize), e.refused.clone()))),
-        (Editor::Object, s.object_edit.as_ref().map(|e| ((e.target, e.kind as usize), e.refused.clone()))),
-        (Editor::Member, s.member.as_ref().map(|e| ((e.target, e.kind as usize), e.refused.clone()))),
-        (Editor::Constraint, s.constraint.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
-        (Editor::Qualifier, s.qualifier.as_ref().map(|e| ((e.target, e.end), e.refused.clone()))),
-        (Editor::Template, s.template.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
-        (Editor::Profile, s.profile_edit.as_ref().map(|e| ((e.target.as_deref().and_then(Uuid::parse), 0), None))),
-        (Editor::NaryEnd, s.nary_end.as_ref().map(|e| ((Some(e.association), e.end), e.refused.as_ref().map(|(_, why)| why.clone())))),
-    ]
-}
+pub(crate) type OpenEditor = Option<(Place, Option<String>)>;
 
 /// The editors of `now` to bring into view: one opened or moved to another place since `was`, or,
 /// true beside it, one whose card shows a new refusal (AR-469). A refusal that goes or stays, and an
@@ -212,18 +129,11 @@ fn to_reveal(now: &[(Editor, OpenEditor)], was: &[(Editor, OpenEditor)]) -> Vec<
     now.iter().filter_map(reveal).collect()
 }
 
-/// Whether something being typed or an editor card is open in `s`: the fields that only show what is
-/// stored are not counted. An association's ends count while they hold something not yet written,
-/// so an open Modifiers fold stops nothing; a selection moved on has ended them
-/// ([`crate::uml_relate::finish_ends`]).
-pub(crate) fn editing(s: &State) -> bool {
-    open_editors(s).iter().any(|(_, open)| open.is_some())
-        || s.name.is_some()
-        || s.role.is_some()
-        || s.binding.is_some()
-        || s.nary_remove.is_some()
-        || s.stereotypes.value.is_some()
-        || s.ends.as_ref().is_some_and(crate::uml_relate::EndsEdit::unwritten)
+/// Whether a name is being typed in `s`, or something of a notation's `notations` is being typed
+/// or drawn or one of their editor cards is open ([`crate::notation_ui::NotationState::editing`]):
+/// the fields that only show what is stored are not counted.
+pub(crate) fn editing(s: &State, notations: &crate::notation_ui::NotationStates) -> bool {
+    s.name.is_some() || notations.editing()
 }
 
 /// Brings the card of `editor`, once drawn, into the body's view when [`to_reveal`] asks: an opened
@@ -681,48 +591,14 @@ fn children(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
     store.list(o, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|c| store.is_alive(*c)).collect()
 }
 
-/// Drops editors whose elements are gone.
+/// Drops a name or description being typed whose element is gone; the notations drop their own
+/// editors ([`crate::notation_ui::NotationState::retain_valid`]).
 pub fn retain_valid(state: &mut State, store: &Store) {
     if state.name.as_ref().is_some_and(|n| store.by_uuid(n.target).is_none()) {
         state.name = None;
     }
-    if state.column.as_ref().is_some_and(|c| store.by_uuid(c.entity).is_none() || c.target.is_some_and(|t| store.by_uuid(t).is_none())) {
-        state.column = None;
-    }
-    crate::relation::retain_valid(state, store);
-    if state.key.as_ref().is_some_and(|k| store.by_uuid(k.entity).is_none() || k.target.is_some_and(|t| store.by_uuid(t).is_none())) {
-        state.key = None;
-    }
     if state.description.as_ref().is_some_and(|d| store.by_uuid(d.target).is_none()) {
         state.description = None;
-    }
-    if state.check.as_ref().is_some_and(|c| store.by_uuid(c.entity).is_none() || c.target.is_some_and(|t| store.by_uuid(t).is_none())) {
-        state.check = None;
-    }
-    if state.index.as_ref().is_some_and(|i| store.by_uuid(i.entity).is_none() || i.target.is_some_and(|t| store.by_uuid(t).is_none())) {
-        state.index = None;
-    }
-    if state.type_edit.as_ref().is_some_and(|t| store.by_uuid(t.schema).is_none() || t.target.is_some_and(|t| store.by_uuid(t).is_none())) {
-        state.type_edit = None;
-    }
-    if state.object_edit.as_ref().is_some_and(|o| store.by_uuid(o.schema).is_none() || o.target.is_some_and(|t| store.by_uuid(t).is_none())) {
-        state.object_edit = None;
-    }
-    crate::uml_panel::retain_valid(&mut state.member, store);
-    crate::uml_constraints::retain_valid(&mut state.constraint, store);
-    crate::uml_qualifiers::retain_valid(&mut state.qualifier, store);
-    crate::uml_templates::retain_valid(&mut state.template, &mut state.template_in_use, store);
-    if state.profile_edit.as_ref().is_some_and(|e| store.by_uuid(e.owner).is_none()) {
-        state.profile_edit = None;
-    }
-    if state.profile_refused.as_ref().is_some_and(|r| store.by_uuid(r.owner).is_none()) {
-        state.profile_refused = None;
-    }
-    crate::uml_bindings::retain_valid(&mut state.binding, store);
-    crate::uml_nary::retain_valid(state, store);
-    crate::uml_stereotypes::retain_valid(&mut state.stereotypes, store);
-    if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
-        state.ends = None;
     }
 }
 
@@ -1784,7 +1660,7 @@ pub(crate) fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
     y = next - 6.0;
     let chosen = selected_id(shell);
     for col in &columns {
-        if shell.panels.column.as_ref().is_some_and(|c| c.target == Some(col.id)) {
+        if er(&shell.notation_states).and_then(|er| er.column.as_ref()).is_some_and(|c| c.target == Some(col.id)) {
             y = column_editor(shell, ui, p, r, y);
             continue;
         }
@@ -1833,7 +1709,7 @@ pub(crate) fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
         }
         y += ROW;
     }
-    if shell.panels.column.as_ref().is_some_and(|c| c.entity == entity_id && c.target.is_none()) {
+    if er(&shell.notation_states).and_then(|er| er.column.as_ref()).is_some_and(|c| c.entity == entity_id && c.target.is_none()) {
         y = column_editor(shell, ui, p, r, y);
     }
     y += 10.0;
@@ -1892,57 +1768,21 @@ pub(crate) fn edit_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, row: Re
 }
 
 /// Closes every Properties editor, as Cancel would, except one opened this frame and not yet
-/// shown: an editor belongs to the selection it was opened on.
+/// shown: an editor belongs to the selection it was opened on. Every editor is a notation's
+/// ([`crate::notation_ui::NotationState::close_editors`]).
 fn close_editors(shell: &mut Shell) {
-    let panels = &mut shell.panels;
-    if panels.column.as_ref().is_some_and(|e| !e.opened) {
-        panels.column = None;
-    }
-    if panels.key.as_ref().is_some_and(|e| !e.opened) {
-        panels.key = None;
-    }
-    if panels.check.as_ref().is_some_and(|e| !e.opened) {
-        panels.check = None;
-    }
-    if panels.index.as_ref().is_some_and(|e| !e.opened) {
-        panels.index = None;
-    }
-    if panels.type_edit.as_ref().is_some_and(|e| !e.opened) {
-        panels.type_edit = None;
-    }
-    if panels.object_edit.as_ref().is_some_and(|e| !e.opened) {
-        panels.object_edit = None;
-    }
-    if panels.member.as_ref().is_some_and(|e| !e.opened) {
-        panels.member = None;
-    }
-    panels.final_refused = None;
-    panels.leaf_refused = None;
-    panels.set_refused = None;
-    panels.profile_refused = None;
-    // A value typed and not entered closes with the editors, as a member's editor does (AR-135).
-    panels.stereotypes = crate::uml_stereotypes::Stereotypes::default();
-    if panels.profile_edit.as_ref().is_some_and(|e| !e.opened) {
-        panels.profile_edit = None;
-    }
-    if panels.constraint.as_ref().is_some_and(|e| !e.opened) {
-        panels.constraint = None;
-    }
-    if panels.qualifier.as_ref().is_some_and(|e| !e.opened) {
-        panels.qualifier = None;
-    }
-    if panels.template.as_ref().is_some_and(|e| !e.opened) {
-        panels.template = None;
-    }
-    panels.template_in_use = None;
-    // A binding's menus belong to the binding they opened on (AR-131).
-    if matches!(panels.menu, Some(Menu::BindingBound | Menu::BindingTemplate | Menu::BindingArgument(_))) {
-        panels.menu = None;
-    }
-    if panels.nary_end.as_ref().is_some_and(|e| !e.opened) {
-        panels.nary_end = None;
-    }
-    panels.nary_remove = None;
+    shell.notation_states.close_editors(&mut shell.panels.menu);
+}
+
+/// The column editor, while it is open: ER's own ([`crate::er_state::ErState::column`]), for the
+/// app's journeys, which fill it in as a person types.
+pub fn column_edit(shell: &Shell) -> Option<&ColumnEdit> {
+    er(&shell.notation_states).and_then(|er| er.column.as_ref())
+}
+
+/// The column editor, while it is open, to fill in ([`column_edit`]).
+pub fn column_edit_mut(shell: &mut Shell) -> Option<&mut ColumnEdit> {
+    er_mut(&mut shell.notation_states).and_then(|er| er.column.as_mut())
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.
@@ -2012,7 +1852,9 @@ pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>)
             }
         }
     };
-    shell.panels.column = Some(edit);
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.column = Some(edit);
+    }
     shell.panels.menu = None;
 }
 
@@ -2078,10 +1920,12 @@ fn collapse_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y:
     card.bottom() + 10.0
 }
 
+/// Draws the open column editor's card from `y` and acts on what is done in it; gives the y under
+/// it, or `y` while no column editor is open.
 fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
-    let Some(mut edit) = shell.panels.column.clone() else { return y };
+    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.column.clone()) else { return y };
     let typed = edit.domain.is_some() || edit.enum_type.is_some();
     let shape = if typed { archforge_er::rules::TypeShape::Plain } else { archforge_er::rules::type_shape(&edit.ty) };
     let computed = is_computed(edit.generation);
@@ -2108,7 +1952,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    reveal(shell, ui, Editor::Column, card);
+    reveal(shell, ui, crate::er_state::COLUMN, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -2414,9 +2258,13 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
             edit.generation = *g;
         }
     }
-    shell.panels.column = Some(edit.clone());
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.column = Some(edit.clone());
+    }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.column = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.column = None;
+        }
     } else if remove {
         if let Some(t) = edit.target {
             // What goes with the column, named for the toast.
@@ -2432,7 +2280,9 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
                 .unwrap_or_default();
             match run(shell, "er.attribute.remove", json!({ "attribute": t.to_string() })) {
                 Ok(_) => {
-                    shell.panels.column = None;
+                    if let Some(er) = er_mut(&mut shell.notation_states) {
+                        er.column = None;
+                    }
                     let text = if went.is_empty() {
                         fmt(&tr("{name} removed"), &[("name", &edit.name)])
                     } else {
@@ -2450,8 +2300,9 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     card.bottom() + 8.0
 }
 
+/// Shows `why` on the open column editor's card, which stays open with what was typed.
 fn set_column_refusal(shell: &mut Shell, why: String) {
-    if let Some(c) = shell.panels.column.as_mut() {
+    if let Some(c) = er_mut(&mut shell.notation_states).and_then(|er| er.column.as_mut()) {
         c.refused = Some(why);
     }
 }
@@ -2569,7 +2420,11 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
         }
     };
     match outcome {
-        Ok(()) => shell.panels.column = None,
+        Ok(()) => {
+            if let Some(er) = er_mut(&mut shell.notation_states) {
+                er.column = None;
+            }
+        }
         Err(e) => set_column_refusal(shell, e),
     }
 }
@@ -2798,7 +2653,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         shell.panels.scrolled_for = Some((panel, page));
         shell.panels.scroll = 0.0;
     }
-    let open = open_editors(&shell.panels);
+    let open = shell.notation_states.open_editors();
     if open != shell.panels.open_editors {
         shell.panels.reveal.extend(to_reveal(&open, &shell.panels.open_editors));
         shell.panels.open_editors = open;

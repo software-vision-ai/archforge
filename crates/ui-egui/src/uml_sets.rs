@@ -21,6 +21,7 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::panels::{FIELD, FieldOut, Menu, PAD, ROW, Subject, edit_field, menu, run, section};
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
 /// The automation ids the design gives.
@@ -136,7 +137,9 @@ pub(crate) fn create(shell: &mut Shell, gens: &[Obj], general: Obj) {
         Ok(out) => {
             shell.canvas.notice = None;
             shell.state.show_panel(crate::state::Panel::Properties);
-            shell.panels.set_name_focus = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse);
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.set_name_focus = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse);
+            }
         }
         Err(e) => shell.canvas.notice = Some(e),
     }
@@ -252,7 +255,9 @@ enum Act {
 /// reason in full on the danger tint under the menu.
 pub(crate) fn line_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, at: Pos2, d: Obj) {
     let Some(all) = selected(shell) else {
-        shell.canvas.line_menu = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.line_menu = None;
+        }
         return;
     };
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
@@ -391,11 +396,15 @@ pub(crate) fn line_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, 
         area = area.union(card);
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| area.contains(pos)));
-    if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.canvas.line_menu = None;
+    if (outside || ui.input(|i| i.key_pressed(egui::Key::Escape)))
+        && let Some(uml) = uml_mut(&mut shell.notation_states)
+    {
+        uml.line_menu = None;
     }
     let Some(act) = picked else { return };
-    shell.canvas.line_menu = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.line_menu = None;
+    }
     let gens = match &grouping {
         Grouping::Shared { gens, .. } => gens.clone(),
         Grouping::Refused { .. } => Vec::new(),
@@ -575,7 +584,7 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         members.iter().filter_map(|g| Some((*g, store.uuid(*g).ok()?, sets::generalization_name(store, *g)))).collect();
     // Name, written on Enter or leaving the field, given up on Escape, never sent empty; the name
     // field takes the keyboard when the set was just made.
-    let focus = shell.panels.set_name_focus.take() == Some(id);
+    let focus = uml_mut(&mut shell.notation_states).and_then(|uml| uml.set_name_focus.take()) == Some(id);
     let mut text = match &shell.panels.name {
         Some(n) if n.target == id => n.text.clone(),
         _ => subject.name.clone(),
@@ -738,7 +747,11 @@ pub(crate) fn generalization_section(shell: &mut Shell, ui: &egui::Ui, p: &Palet
     y += 6.0;
     y = help(ui, p, pos2(left, y), width, &tr("Membership is listed here for every set, and each set draws its own line and label on the canvas."))
         + 14.0;
-    if let Some(why) = shell.panels.set_refused.as_ref().filter(|(of, _)| *of == gid && !in_sets.is_empty()).map(|(_, w)| w.clone()) {
+    if let Some(why) = uml(&shell.notation_states)
+        .and_then(|uml| uml.set_refused.as_ref())
+        .filter(|(of, _)| *of == gid && !in_sets.is_empty())
+        .map(|(_, w)| w.clone())
+    {
         let paint = ui.painter().clone();
         let text = ux::galley_rows(&paint, &why, types::SMALL, p.text, Some((width - 42.0).max(0.0)), 8);
         let card = Rect::from_min_size(pos2(left, y), vec2(width, text.size().y + 20.0));

@@ -168,7 +168,7 @@ fn a_version_chord_in_a_field_steps_or_moves_the_caret() {
             click(&mut h, at);
             click_id(&mut h, "workspace.properties.columns.add");
             click_id(&mut h, "workspace.properties.column.name");
-            let name = |h: &Harness<'static, Shell>| h.state().panels.column.as_ref().map(|c| c.name.clone()).unwrap_or_default();
+            let name = |h: &Harness<'static, Shell>| er_of(h.state()).column.as_ref().map(|c| c.name.clone()).unwrap_or_default();
             let typed = |h: &mut Harness<'static, Shell>, text: &str| {
                 h.event(egui::Event::Text(text.into()));
                 h.run();

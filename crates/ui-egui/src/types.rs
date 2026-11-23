@@ -13,6 +13,7 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
+use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{FIELD, Menu, PAD, check, ghost_button, icon_button, menu, number, run, section, size_value, text_field};
@@ -124,7 +125,9 @@ pub fn open(shell: &mut Shell, schema: Uuid, kind: TypeKind, target: Option<Uuid
             TypeKind::Enum => edit.literals = r::literals_of(store, o),
         }
     }
-    shell.panels.type_edit = Some(edit);
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.type_edit = Some(edit);
+    }
     shell.panels.menu = None;
 }
 
@@ -152,10 +155,10 @@ pub(crate) fn types_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
         return y + 50.0;
     };
     y = next - 6.0;
-    let editing_new = shell.panels.type_edit.as_ref().is_some_and(|t| t.target.is_none() && t.schema == schema_id);
+    let editing_new = er(&shell.notation_states).and_then(|er| er.type_edit.as_ref()).is_some_and(|t| t.target.is_none() && t.schema == schema_id);
     let chosen = crate::panels::selected_id(shell);
     for row in &list {
-        if shell.panels.type_edit.as_ref().is_some_and(|t| t.target == Some(row.id)) {
+        if er(&shell.notation_states).and_then(|er| er.type_edit.as_ref()).is_some_and(|t| t.target == Some(row.id)) {
             y = editor(shell, ui, p, r, y);
             continue;
         }
@@ -199,7 +202,7 @@ pub(crate) fn types_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.type_edit.clone() else { return y };
+    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.type_edit.clone()) else { return y };
     let row = 17.0 + FIELD + 10.0;
     let shape = archforge_er::rules::type_shape(&edit.base);
     let height = match edit.kind {
@@ -209,7 +212,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::Type, card);
+    crate::panels::reveal(shell, ui, crate::er_state::TYPE, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -444,9 +447,13 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     if let Some(why) = &edit.refused {
         ux::text(&paint, at(0.0, cy + FIELD + 8.0), why, types::CAPTION, p.amber, Some(inner));
     }
-    shell.panels.type_edit = Some(edit.clone());
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.type_edit = Some(edit.clone());
+    }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.type_edit = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.type_edit = None;
+        }
     } else if remove {
         let (cmd, key) = match edit.kind {
             TypeKind::Domain => ("er.domain.remove", "domain"),
@@ -454,7 +461,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         };
         match run(shell, cmd, json!({ key: edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
             Ok(_) => {
-                shell.panels.type_edit = None;
+                if let Some(er) = er_mut(&mut shell.notation_states) {
+                    er.type_edit = None;
+                }
                 reselect(shell, edit.schema);
             }
             Err(e) => refuse(shell, e),
@@ -465,8 +474,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     card.bottom() + 8.0
 }
 
+/// Shows `why` on the open domain or enum editor's card, which stays open with what was typed.
 fn refuse(shell: &mut Shell, why: String) {
-    if let Some(t) = shell.panels.type_edit.as_mut() {
+    if let Some(t) = er_mut(&mut shell.notation_states).and_then(|er| er.type_edit.as_mut()) {
         t.refused = Some(why);
     }
 }
@@ -523,7 +533,9 @@ fn commit(shell: &mut Shell, edit: &TypeEdit) {
     };
     match run(shell, cmd, params) {
         Ok(_) => {
-            shell.panels.type_edit = None;
+            if let Some(er) = er_mut(&mut shell.notation_states) {
+                er.type_edit = None;
+            }
             shell.panels.notice = None;
             reselect(shell, edit.schema);
         }

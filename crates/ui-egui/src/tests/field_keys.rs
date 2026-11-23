@@ -21,7 +21,7 @@ fn name_field(theme: ThemeKind) -> Harness<'static, Shell> {
 
 /// The name in the column's editor.
 fn name(h: &Harness<'static, Shell>) -> String {
-    h.state().panels.column.as_ref().map(|c| c.name.clone()).unwrap_or_default()
+    er_of(h.state()).column.as_ref().map(|c| c.name.clone()).unwrap_or_default()
 }
 
 /// The name after `chord` is pressed with the cursor at the text's start or end.

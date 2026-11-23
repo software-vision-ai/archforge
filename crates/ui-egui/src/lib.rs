@@ -30,6 +30,7 @@ pub mod editing;
 mod engine_said;
 mod er_kind;
 mod er_said;
+mod er_state;
 mod er_ui;
 pub mod explorer;
 mod field_keys;
@@ -82,6 +83,7 @@ mod uml_qualifiers;
 mod uml_relate;
 mod uml_said;
 mod uml_sets;
+mod uml_state;
 mod uml_stereotypes;
 mod uml_templates;
 mod uml_ui;
@@ -653,6 +655,7 @@ pub(crate) struct Parked {
     diagrams: diagrams::State,
     canvas: canvas::State,
     panels: panels::State,
+    notation_states: notation_ui::NotationStates,
     problems: std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
     /// The project's Chat panel: its conversation, draft and history.
     pub(crate) chat_panel: chat_panel::Panel,
@@ -987,8 +990,11 @@ pub struct Shell {
     pub versions: versions::State,
     /// The centre's own state: the open tabs, the view, the tool and the toggles.
     pub canvas: canvas::State,
-    /// The right panels' own state: the open editors and the last refusal.
+    /// The right panels' own state: the open menu, the body's scroll and the last refusal.
     pub panels: panels::State,
+    /// Each notation's own state: its editors, menus, drawings and tools, one per notation of
+    /// `notation_uis`, kept with the project as the panels and the canvas are.
+    pub(crate) notation_states: notation_ui::NotationStates,
     /// The rendered Markdown pages' cache, for a skill's Preview.
     pub(crate) markdown: egui_commonmark::CommonMarkCache,
     /// The problems the rules find, by element, read once per frame while a session is open.
@@ -1071,6 +1077,7 @@ impl Shell {
             versions: versions::State::default(),
             canvas: canvas::State::default(),
             panels: panels::State::default(),
+            notation_states: notation_ui::NotationStates::new(notation_ui::UIS),
             markdown: Default::default(),
             problems: Default::default(),
             quit_requested: false,
@@ -1140,6 +1147,7 @@ impl Shell {
             self.diagrams = p.diagrams;
             self.canvas = p.canvas;
             self.panels = p.panels;
+            self.notation_states = p.notation_states;
             self.problems = p.problems;
             self.chat_panel = p.chat_panel;
             self.active = Some(i);
@@ -1491,8 +1499,7 @@ impl Shell {
         let Some(project) = self.project.take() else { return };
         self.holding.let_go(&project.path);
         // A drawing under way never outlives the project it was on (AR-128).
-        self.canvas.nary = None;
-        self.canvas.nary_menu = None;
+        self.notation_states.set_aside();
         let parked = Parked {
             project,
             session: self.session.take(),
@@ -1505,6 +1512,7 @@ impl Shell {
             diagrams: std::mem::take(&mut self.diagrams),
             canvas: std::mem::take(&mut self.canvas),
             panels: std::mem::take(&mut self.panels),
+            notation_states: std::mem::replace(&mut self.notation_states, notation_ui::NotationStates::new(self.notation_uis)),
             problems: std::mem::take(&mut self.problems),
             chat_panel: std::mem::take(&mut self.chat_panel),
         };
@@ -1536,6 +1544,7 @@ impl Shell {
         self.diagrams = diagrams::State::default();
         self.canvas = canvas::State::default();
         self.panels = panels::State::default();
+        self.notation_states = notation_ui::NotationStates::new(self.notation_uis);
         self.problems.clear();
         self.chat_panel = chat_panel::Panel::default();
     }
@@ -2196,7 +2205,7 @@ impl Shell {
             canvas::retain_valid(&mut self.canvas, session.doc());
             skill_tab::retain_valid(&mut self.canvas);
             panels::retain_valid(&mut self.panels, session.doc());
-            uml_inline::retain_valid(&mut self.canvas.inline, session.doc());
+            self.notation_states.retain_valid(session.doc(), &self.canvas);
             self.problems = problems::by_element(self.notation_uis, session.doc());
         }
         // Quitting, by the menu or the window's close button, asks about unsaved projects first;

@@ -15,10 +15,11 @@ use crate::Shell;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::kinds::{DiagramKind, KindTool, ToolUse};
-use crate::notation_ui::{Added, Entry, NotationUi, Offer, Words};
+use crate::notation_ui::{Added, Entry, NotationState, NotationUi, Offer, Words};
 use crate::panels::Subject;
 use crate::uml_classifier::Classifier;
 use crate::uml_panel::{MemberKind, member_of};
+use crate::uml_state::uml;
 use crate::ux::{Palette, icons};
 
 fn class(store: &Store, o: Obj) -> Option<archforge_mof::ClassId> {
@@ -212,7 +213,7 @@ impl DiagramKind for UmlKind {
             shell.canvas.notice = Some(tr("The diagram is of no package"));
             return;
         };
-        let kind = shell.canvas.uml_classifier;
+        let kind = uml(&shell.notation_states).map(|uml| uml.classifier).unwrap_or_default();
         let Some(name) = fresh_name(kind.stem(), classifiers(store, package).into_iter().map(|c| name(store, c)), false) else {
             shell.canvas.notice = Some(tr("No free name is left"));
             return;
@@ -254,7 +255,7 @@ impl DiagramKind for UmlKind {
     /// way a realization runs.
     fn tool_hint(&self, shell: &Shell, key: &str) -> Option<String> {
         match key {
-            crate::uml_classifier::TOOL => Some(shell.canvas.uml_classifier.word()),
+            crate::uml_classifier::TOOL => Some(uml(&shell.notation_states).map(|uml| uml.classifier).unwrap_or_default().word()),
             "relationship" => crate::uml_relate::tool_hint(shell),
             _ => None,
         }
@@ -1079,6 +1080,12 @@ impl NotationUi for UmlUi {
     /// The longest description Comment its commands write.
     fn description_limit(&self) -> usize {
         archforge_uml::descriptions::MAX_DESCRIPTION
+    }
+
+    /// Its editors and menus closed, nothing drawn, the Relationship tool at Association and the
+    /// classifier tool at Class.
+    fn new_state(&self) -> Box<dyn NotationState> {
+        Box::new(crate::uml_state::UmlState::default())
     }
 }
 

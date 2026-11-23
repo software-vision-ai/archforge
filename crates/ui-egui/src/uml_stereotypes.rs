@@ -24,6 +24,7 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::panels::{FIELD, Menu, PAD, ROW, run, section};
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
 /// The ids of the Stereotypes section (F3, F4).
@@ -258,13 +259,16 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         Heading::Member | Heading::End(_) => fmt(&tr("Stereotypes of {name} · {n}"), &[("name", &own), ("n", &n)]),
     };
     let add = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
-    let picking = shell.panels.menu == Some(Menu::StereotypePick) && shell.panels.stereotypes.menu_for == Some(element_id);
+    let picking =
+        shell.panels.menu == Some(Menu::StereotypePick) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id);
     match section(shell, ui, p, r, y, &title, Some((&add_id, "Apply stereotype"))) {
         Some(next) => y = next - 6.0,
         None => {
             shell.panels.menu = if picking { None } else { Some(Menu::StereotypePick) };
-            shell.panels.stereotypes.menu_for = Some(element_id);
-            shell.panels.stereotypes.filter.clear();
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.stereotypes.menu_for = Some(element_id);
+                uml.stereotypes.filter.clear();
+            }
             shell.panels.menu_reached = None;
             y += 44.0;
         }
@@ -275,7 +279,7 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     for (s, instance) in &applied {
         y = applied_rows(shell, ui, p, (left, width), y, &prefix, element, element_id, *s, *instance, &mut row_index);
     }
-    if let Some((_, why)) = shell.panels.stereotypes.refused.clone().filter(|(e, _)| *e == element_id) {
+    if let Some((_, why)) = uml(&shell.notation_states).and_then(|uml| uml.stereotypes.refused.clone()).filter(|(e, _)| *e == element_id) {
         y = refusal(shell, ui, p, left, y + 4.0, width, &why, &format!("{prefix}.refusal"));
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
@@ -291,7 +295,7 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     if !matches!(heading, Heading::End(_)) {
         y = show_values_check(shell, ui, p, left, y);
     }
-    if shell.panels.menu == Some(Menu::StereotypePick) && shell.panels.stereotypes.menu_for == Some(element_id) {
+    if shell.panels.menu == Some(Menu::StereotypePick) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id) {
         picker(shell, ui, p, add, &add_id, element, element_id);
     }
     y + 6.0
@@ -396,9 +400,15 @@ fn applied_rows(
         match run(shell, "uml.stereotype.unapply", json!({ "element": element_id.to_string(), "stereotype": s_id.to_string() })) {
             Ok(_) => {
                 shell.panels.notice = None;
-                shell.panels.stereotypes.refused = None;
+                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    uml.stereotypes.refused = None;
+                }
             }
-            Err(e) => shell.panels.stereotypes.refused = Some((element_id, e)),
+            Err(e) => {
+                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    uml.stereotypes.refused = Some((element_id, e));
+                }
+            }
         }
         return y + ROW;
     }
@@ -475,10 +485,12 @@ fn value_line(
             let state =
                 if set { shown.clone() } else { fmt(&tr("{value} (default)"), &[("value", if default.is_empty() { "—" } else { &default })]) };
             let menu = Menu::StereotypeValue(index);
-            let open = shell.panels.menu == Some(menu) && shell.panels.stereotypes.menu_for == Some(element_id);
+            let open = shell.panels.menu == Some(menu) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id);
             if control(shell, ui, &id, "select", field, true).accessible_name(format!("{p_name}: {state}")).clicked() {
                 shell.panels.menu = if open { None } else { Some(menu) };
-                shell.panels.stereotypes.menu_for = Some(element_id);
+                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    uml.stereotypes.menu_for = Some(element_id);
+                }
                 shell.panels.menu_reached = None;
             }
             if open {
@@ -491,7 +503,9 @@ fn value_line(
             }
         }
         None => {
-            let editing = shell.panels.stereotypes.value.clone().filter(|v| v.element == element_id && v.stereotype == s_id && v.property == p_id);
+            let editing = uml(&shell.notation_states)
+                .and_then(|uml| uml.stereotypes.value.clone())
+                .filter(|v| v.element == element_id && v.stereotype == s_id && v.property == p_id);
             let current = typed.join(", ");
             let mut text = editing.as_ref().map_or_else(|| current.clone(), |v| v.text.clone());
             let refused = editing.as_ref().and_then(|v| v.refused.clone());
@@ -535,21 +549,27 @@ fn value_line(
                     text.split(',').map(|v| v.trim().to_string()).collect()
                 };
                 if values == typed && refused.is_none() {
-                    shell.panels.stereotypes.value = None;
+                    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                        uml.stereotypes.value = None;
+                    }
                 } else {
                     write_values(shell, element_id, s_id, p_id, values, Some(text));
                 }
             } else if text != current || refused.is_some() {
                 let changed = editing.as_ref().is_none_or(|v| v.text != text);
-                shell.panels.stereotypes.value = Some(ValueEdit {
-                    element: element_id,
-                    stereotype: s_id,
-                    property: p_id,
-                    text,
-                    refused: if changed && editing.is_some() { None } else { refused.clone() },
-                });
-            } else if editing.is_some() {
-                shell.panels.stereotypes.value = None;
+                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    uml.stereotypes.value = Some(ValueEdit {
+                        element: element_id,
+                        stereotype: s_id,
+                        property: p_id,
+                        text,
+                        refused: if changed && editing.is_some() { None } else { refused.clone() },
+                    });
+                }
+            } else if editing.is_some()
+                && let Some(uml) = uml_mut(&mut shell.notation_states)
+            {
+                uml.stereotypes.value = None;
             }
             if let Some(why) = refused {
                 let g = ux::galley_rows(&paint, &why, types::CAPTION, p.danger, Some(field.width()), 4);
@@ -615,8 +635,10 @@ fn write_values(shell: &mut Shell, element: Uuid, s_id: Uuid, p_id: Uuid, values
         applications::read_values(store, property, &values).err().map(|e| value_refusal(store, property, &e))
     });
     if let Some(why) = problem {
-        shell.panels.stereotypes.value =
-            Some(ValueEdit { element, stereotype: s_id, property: p_id, text: typed.unwrap_or_else(|| values.join(", ")), refused: Some(why) });
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.stereotypes.value =
+                Some(ValueEdit { element, stereotype: s_id, property: p_id, text: typed.unwrap_or_else(|| values.join(", ")), refused: Some(why) });
+        }
         return;
     }
     let params = json!({ "element": element.to_string(), "stereotype": s_id.to_string(), "property": p_id.to_string(), "values": values });
@@ -624,17 +646,21 @@ fn write_values(shell: &mut Shell, element: Uuid, s_id: Uuid, p_id: Uuid, values
     let out = session.execute("uml.stereotype.set-value", &params);
     match out {
         Ok(_) => {
-            shell.panels.stereotypes.value = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.stereotypes.value = None;
+            }
             shell.panels.notice = None;
         }
         Err(e) => {
-            shell.panels.stereotypes.value = Some(ValueEdit {
-                element,
-                stereotype: s_id,
-                property: p_id,
-                text: typed.unwrap_or_else(|| values.join(", ")),
-                refused: Some(crate::panels::refusal(&e)),
-            });
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.stereotypes.value = Some(ValueEdit {
+                    element,
+                    stereotype: s_id,
+                    property: p_id,
+                    text: typed.unwrap_or_else(|| values.join(", ")),
+                    refused: Some(crate::panels::refusal(&e)),
+                });
+            }
         }
     }
 }
@@ -682,8 +708,10 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &
     // Typing filters the rows; Backspace takes the last character back.
     let typed: String = ui.input(|i| i.events.iter().filter_map(|e| if let egui::Event::Text(t) = e { Some(t.clone()) } else { None }).collect());
     let back = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace));
-    if !typed.is_empty() || back {
-        let f = &mut shell.panels.stereotypes.filter;
+    if (!typed.is_empty() || back)
+        && let Some(uml) = uml_mut(&mut shell.notation_states)
+    {
+        let f = &mut uml.stereotypes.filter;
         if back {
             f.pop();
         }
@@ -693,7 +721,7 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &
         shell.panels.menu_reached = None;
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    let filter = shell.panels.stereotypes.filter.clone();
+    let filter = uml(&shell.notation_states).map(|uml| uml.stereotypes.filter.clone()).unwrap_or_default();
     let rows = picks(store, element, &filter);
     let heading = fmt(&tr("Apply to {name}"), &[("name", &name(store, element))]);
     let split = rows.iter().position(|r| !r.live && !r.ticked);
@@ -815,15 +843,23 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         shell.panels.menu = None;
         shell.panels.menu_reached = None;
-        shell.panels.stereotypes.filter.clear();
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.stereotypes.filter.clear();
+        }
     }
     if let Some(s) = picked {
         match run(shell, "uml.stereotype.apply", json!({ "element": element_id.to_string(), "stereotype": s.to_string() })) {
             Ok(_) => {
                 shell.panels.notice = None;
-                shell.panels.stereotypes.refused = None;
+                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    uml.stereotypes.refused = None;
+                }
             }
-            Err(e) => shell.panels.stereotypes.refused = Some((element_id, e)),
+            Err(e) => {
+                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    uml.stereotypes.refused = Some((element_id, e));
+                }
+            }
         }
     }
 }

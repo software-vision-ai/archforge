@@ -23,6 +23,7 @@ use crate::canvas::{DETAIL_ZOOM, ENTITY_ROW, View};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::uml_panel::{MemberEdit, MemberKind};
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
@@ -119,9 +120,13 @@ pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Opt
     }
     let edit = crate::uml_panel::edit_of(Some(store), class, kind, target);
     let ty = type_text(store, &edit.ty);
-    shell.canvas.inline = Some(InlineMember { edit, ty, field: InlineField::Name, focus: true, refused: None });
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.inline = Some(InlineMember { edit, ty, field: InlineField::Name, focus: true, refused: None });
+    }
     // One draft at a time: Properties' editor closes.
-    shell.panels.member = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.member = None;
+    }
     shell.panels.menu = None;
     if let Err(e) = crate::editing::run(shell, "view.select", json!({ "ids": [class.to_string()] })) {
         shell.canvas.notice = Some(e);
@@ -132,7 +137,7 @@ pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Opt
 /// The row typed on a card, as the canvas draws it: the class, its compartment, and the row
 /// counted across the compartments (none for a new one).
 pub(crate) fn draft(shell: &Shell, store: &Store) -> Option<(Obj, usize, Option<usize>)> {
-    let inline = shell.canvas.inline.as_ref()?;
+    let inline = uml(&shell.notation_states).and_then(|uml| uml.inline.as_ref())?;
     let c = store.by_uuid(inline.edit.class)?;
     let row = match inline.edit.target {
         None => None,
@@ -179,14 +184,16 @@ fn row_place(shell: &Shell, store: &Store, view: View, c: Obj) -> Option<(Rect, 
 /// refusal under it, and the keys. A literal's row holds its name alone, from where a row's text
 /// starts to the details button.
 pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View) {
-    let Some(mut inline) = shell.canvas.inline.clone() else { return };
+    let Some(mut inline) = uml(&shell.notation_states).and_then(|uml| uml.inline.clone()) else { return };
     let place = shell.session.as_ref().and_then(|s| {
         let store = s.doc();
         let c = store.by_uuid(inline.edit.class)?;
         row_place(shell, store, view, c)
     });
     let Some((card, top)) = place else {
-        shell.canvas.inline = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.inline = None;
+        }
         return;
     };
     let z = view.zoom;
@@ -315,7 +322,9 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     let has_focus = name_resp.has_focus() || type_resp.as_ref().is_some_and(|t| t.has_focus());
     let lost = name_resp.lost_focus() || type_resp.as_ref().is_some_and(|t| t.lost_focus());
     let (enter, escape) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
-    shell.canvas.inline = Some(inline);
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.inline = Some(inline);
+    }
     // The in-window Edit menu takes a field's keyboard, by a press away, for its rows to act on it:
     // neither its leaving nor the press commits while the bar holds the field.
     let left = crate::menu_bar::ends(shell, ui.ctx(), name_eid, name_resp.lost_focus(), name_resp.has_focus())
@@ -344,7 +353,9 @@ fn type_hint_of(operation: bool) -> String {
 
 /// Drops the row; the class stays selected and the canvas takes the keys again.
 fn cancel(shell: &mut Shell) {
-    shell.canvas.inline = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.inline = None;
+    }
     shell.panels.menu = None;
     shell.canvas.focused = true;
 }
@@ -353,7 +364,7 @@ fn cancel(shell: &mut Shell) {
 /// compartment; a row without a name or a type is only dropped, and a refusal keeps the row with
 /// what was typed.
 fn commit(shell: &mut Shell, next: bool) {
-    let Some(mut inline) = shell.canvas.inline.clone() else { return };
+    let Some(mut inline) = uml(&shell.notation_states).and_then(|uml| uml.inline.clone()) else { return };
     if inline.edit.target.is_none() && inline.edit.name.trim().is_empty() && inline.ty.trim().is_empty() {
         cancel(shell);
         return;
@@ -365,7 +376,9 @@ fn commit(shell: &mut Shell, next: bool) {
             inline.refused = Some(e);
             inline.field = InlineField::Type;
             inline.focus = true;
-            shell.canvas.inline = Some(inline);
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.inline = Some(inline);
+            }
             return;
         }
     }
@@ -386,7 +399,9 @@ fn commit(shell: &mut Shell, next: bool) {
             inline.refused = Some(e);
             inline.field = InlineField::Name;
             inline.focus = true;
-            shell.canvas.inline = Some(inline);
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.inline = Some(inline);
+            }
         }
     }
 }
@@ -395,7 +410,7 @@ fn commit(shell: &mut Shell, next: bool) {
 /// type that does not resolve keeps the row, its reason under it, rather than going over as
 /// another type.
 fn to_properties(shell: &mut Shell) {
-    let Some(mut inline) = shell.canvas.inline.clone() else { return };
+    let Some(mut inline) = uml(&shell.notation_states).and_then(|uml| uml.inline.clone()) else { return };
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     match resolve(store, &inline) {
         Ok(ty) => inline.edit.ty = ty,
@@ -403,16 +418,22 @@ fn to_properties(shell: &mut Shell) {
             inline.refused = Some(e);
             inline.field = InlineField::Type;
             inline.focus = true;
-            shell.canvas.inline = Some(inline);
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.inline = Some(inline);
+            }
             return;
         }
     }
-    shell.canvas.inline = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.inline = None;
+    }
     let mut edit = inline.edit;
     edit.refused = None;
     edit.opened = true;
     shell.panels.menu = None;
-    shell.panels.member = Some(edit);
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.member = Some(edit);
+    }
     shell.state.show_panel(crate::state::Panel::Properties);
 }
 
@@ -421,7 +442,7 @@ fn to_properties(shell: &mut Shell) {
 pub(crate) fn add_buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, class: Uuid) {
     let z = shell.canvas.zoom;
     // While a row is typed on the card, its own keys add the next.
-    if z < DETAIL_ZOOM || shell.canvas.inline.as_ref().is_some_and(|i| i.edit.class == class) {
+    if z < DETAIL_ZOOM || uml(&shell.notation_states).and_then(|uml| uml.inline.as_ref()).is_some_and(|i| i.edit.class == class) {
         return;
     }
     let card = shell.session.as_ref().and_then(|s| {

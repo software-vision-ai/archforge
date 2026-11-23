@@ -13,6 +13,7 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
+use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{FIELD, Menu, PAD, check, icon_button, menu, run, section, text_field};
@@ -94,32 +95,34 @@ pub fn rows(store: &Store, e: Obj) -> Vec<IndexRow> {
 
 /// Opens the editor on an index, or on one to add to `entity`.
 pub fn open(shell: &mut Shell, entity: Uuid, target: Option<&IndexRow>) {
-    shell.panels.index = Some(match target {
-        Some(ix) => IndexEdit {
-            target: Some(ix.id),
-            entity,
-            name: ix.name.clone(),
-            unique: ix.unique,
-            columns: ix.columns.clone(),
-            where_: ix.where_.clone(),
-            method: ix.method.clone(),
-            more: !ix.where_.is_empty() || !ix.method.is_empty(),
-            refused: None,
-            opened: true,
-        },
-        None => IndexEdit {
-            target: None,
-            entity,
-            name: String::new(),
-            unique: false,
-            columns: Vec::new(),
-            where_: String::new(),
-            method: String::new(),
-            more: false,
-            refused: None,
-            opened: true,
-        },
-    });
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.index = Some(match target {
+            Some(ix) => IndexEdit {
+                target: Some(ix.id),
+                entity,
+                name: ix.name.clone(),
+                unique: ix.unique,
+                columns: ix.columns.clone(),
+                where_: ix.where_.clone(),
+                method: ix.method.clone(),
+                more: !ix.where_.is_empty() || !ix.method.is_empty(),
+                refused: None,
+                opened: true,
+            },
+            None => IndexEdit {
+                target: None,
+                entity,
+                name: String::new(),
+                unique: false,
+                columns: Vec::new(),
+                where_: String::new(),
+                method: String::new(),
+                more: false,
+                refused: None,
+                opened: true,
+            },
+        });
+    }
     shell.panels.menu = None;
 }
 
@@ -137,9 +140,9 @@ pub(crate) fn indexes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
         return y;
     };
     y = next - 6.0;
-    let editing_new = shell.panels.index.as_ref().is_some_and(|i| i.target.is_none() && i.entity == entity_id);
+    let editing_new = er(&shell.notation_states).and_then(|er| er.index.as_ref()).is_some_and(|i| i.target.is_none() && i.entity == entity_id);
     for index in &indexes {
-        if shell.panels.index.as_ref().is_some_and(|i| i.target == Some(index.id)) {
+        if er(&shell.notation_states).and_then(|er| er.index.as_ref()).is_some_and(|i| i.target == Some(index.id)) {
             y = editor(shell, ui, p, r, y);
             continue;
         }
@@ -167,7 +170,7 @@ pub(crate) fn indexes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.index.clone() else { return y };
+    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.index.clone()) else { return y };
     // The table's columns, named, for the rows and the menu.
     let all_columns: Vec<(Uuid, String, String)> = match shell.session.as_ref().and_then(|s| s.doc().by_uuid(edit.entity).map(|e| (s.doc(), e))) {
         Some((store, e)) => store
@@ -187,7 +190,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::Index, card);
+    crate::panels::reveal(shell, ui, crate::er_state::INDEX, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -394,12 +397,20 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             };
         }
     }
-    shell.panels.index = Some(edit.clone());
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.index = Some(edit.clone());
+    }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.index = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.index = None;
+        }
     } else if remove {
         match run(shell, "er.index.remove", json!({ "index": edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
-            Ok(_) => shell.panels.index = None,
+            Ok(_) => {
+                if let Some(er) = er_mut(&mut shell.notation_states) {
+                    er.index = None;
+                }
+            }
             Err(e) => refuse(shell, e),
         }
     } else if apply || name_done {
@@ -408,8 +419,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     card.bottom() + 8.0
 }
 
+/// Shows `why` on the open index editor's card, which stays open with what was typed.
 fn refuse(shell: &mut Shell, why: String) {
-    if let Some(i) = shell.panels.index.as_mut() {
+    if let Some(i) = er_mut(&mut shell.notation_states).and_then(|er| er.index.as_mut()) {
         i.refused = Some(why);
     }
 }
@@ -447,7 +459,9 @@ fn commit(shell: &mut Shell, edit: &IndexEdit) {
     };
     match run(shell, cmd, params) {
         Ok(_) => {
-            shell.panels.index = None;
+            if let Some(er) = er_mut(&mut shell.notation_states) {
+                er.index = None;
+            }
             shell.panels.notice = None;
             let entity = edit.entity.to_string();
             if let Err(e) = run(shell, "view.select", json!({ "ids": [entity] })) {

@@ -146,34 +146,21 @@ pub struct State {
     /// clears or replaces that ends the toast as well.
     pub refused_step: Option<String>,
     /// Editing (slice E1): a name typed in a node, the pointer gesture under way, the entity menu,
-    /// and whether the canvas has the keyboard.
+    /// and whether the canvas has the keyboard. What a notation types, draws and opens on the
+    /// canvas is its own ([`crate::notation_ui::NotationState`]).
     pub rename: Option<crate::editing::NodeRename>,
-    /// A class's attribute or operation typed in place on its card.
-    pub(crate) inline: Option<crate::uml_inline::InlineMember>,
     pub gesture: Option<crate::editing::Gesture>,
     pub menu: Option<crate::editing::EntityMenu>,
-    /// The context menu of selected generalization lines, open at a screen point (AR-129).
-    pub line_menu: Option<Pos2>,
-    /// An n-ary association being drawn, or a class click awaited for a new end (AR-128).
-    pub nary: Option<crate::uml_nary::Nary>,
-    /// The context menu of an n-ary association's diamond or leg, at a screen point (AR-128).
-    pub nary_menu: Option<(Pos2, Uuid)>,
     pub focused: bool,
-    /// Relationships (slice E2): the ends a new line gets, the chevron whose popover is open (the
-    /// cardinality popover, a menu of kinds), the mapping table offer and the toast with Undo.
-    pub relationship: crate::connect::RelKind,
+    /// Relationships (slice E2): the chevron whose popover is open (the cardinality popover, a menu
+    /// of kinds) and the toast with Undo; the ends a new line gets and the mapping table offer are
+    /// ER's own ([`crate::er_state::ErState`]).
     pub popover: Option<&'static str>,
     /// The row of the open popover's menu the arrow keys are on, when they have moved.
     pub(crate) menu_focus: Option<usize>,
     /// A press closed the classifier's menu of kinds: the canvas ignores that press until the
     /// button lets go, so it places, selects and drags nothing.
     pub(crate) dismissing: bool,
-    /// What a class diagram's Relationship tool draws.
-    pub uml_relation: crate::uml_relate::Relate,
-    /// What a class diagram's classifier tool places: kept while the window lives, a new window
-    /// starting at Class.
-    pub uml_classifier: crate::uml_classifier::Classifier,
-    pub mapping: Option<crate::connect::MappingOffer>,
     pub toast: Option<Toast>,
     /// A note's text being typed in place (slice E4).
     pub note_edit: Option<crate::editing::NoteEdit>,
@@ -255,20 +242,12 @@ impl Default for State {
             notice: None,
             refused_step: None,
             rename: None,
-            inline: None,
             gesture: None,
             menu: None,
-            line_menu: None,
-            nary: None,
-            nary_menu: None,
             focused: false,
-            relationship: crate::connect::RelKind::default(),
             popover: None,
             menu_focus: None,
             dismissing: false,
-            uml_relation: crate::uml_relate::Relate::default(),
-            uml_classifier: crate::uml_classifier::Classifier::default(),
-            mapping: None,
             toast: None,
             note_edit: None,
             skills: Vec::new(),
@@ -384,10 +363,6 @@ pub fn retain_valid(state: &mut State, store: &Store) {
         state.notice = None;
     }
     crate::editing::retain_valid(state, store);
-    crate::uml_nary::retain(state, store);
-    if state.mapping.as_ref().is_some_and(|m| store.by_uuid(m.relationship).is_none_or(|o| !store.is_alive(o))) {
-        state.mapping = None;
-    }
 }
 
 /// The active diagram, when the store still has it.

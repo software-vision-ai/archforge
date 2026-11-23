@@ -28,9 +28,12 @@ impl Shell {
     /// Whether an inline editor, a drawing, a drag or a dialog is open on what shows.
     fn editing(&self) -> bool {
         let (c, e) = (&self.canvas, &self.explorer);
-        let canvas =
-            c.rename.is_some() || c.inline.is_some() || c.note_edit.is_some() || c.gesture.is_some() || c.nary.is_some() || c.minimap_drag.is_some();
-        canvas || e.rename.is_some() || e.dragging.is_some() || panels::editing(&self.panels) || version_chip::dialog_open(self)
+        let canvas = c.rename.is_some() || c.note_edit.is_some() || c.gesture.is_some() || c.minimap_drag.is_some();
+        canvas
+            || e.rename.is_some()
+            || e.dragging.is_some()
+            || panels::editing(&self.panels, &self.notation_states)
+            || version_chip::dialog_open(self)
     }
 
     /// The one gate before the work shown is left. Refused, in this order and with nothing changed:

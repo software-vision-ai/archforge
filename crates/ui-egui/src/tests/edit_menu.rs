@@ -125,7 +125,7 @@ fn the_pointer_on_the_in_window_menu_reaches_the_field_it_was_opened_on() {
         let at = rect_of(&h, "workspace.properties.column.name").center();
         click(&mut h, at);
         assert!(h.ctx.text_edit_focused());
-        let name = |h: &Harness<'static, Shell>| h.state().panels.column.as_ref().unwrap().name.clone();
+        let name = |h: &Harness<'static, Shell>| er_of(h.state()).column.as_ref().unwrap().name.clone();
         let first = name(&h);
         h.event(egui::Event::Text("x".into()));
         h.run();
@@ -270,7 +270,7 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
         ("a gesture", |s| (canvas(s), s.canvas.gesture = Some(crate::editing::Gesture::Marquee { from: egui::Pos2::ZERO })).1, &[]),
         ("no project shown", |s| (canvas(s), s.active = None).1, &[]),
         ("no diagram on the canvas, the model's view still on one", |s| (canvas(s), s.canvas.active = None).1, &[]),
-        ("a line's menu open on the canvas", |s| (canvas(s), s.canvas.line_menu = Some(egui::Pos2::ZERO)).1, &[]),
+        ("a line's menu open on the canvas", |s| (canvas(s), uml_of_mut(s).line_menu = Some(egui::Pos2::ZERO)).1, &[]),
         ("the classifier's menu of kinds open", |s| (canvas(s), s.canvas.popover = Some(crate::uml_classifier::KINDS)).1, &[]),
     ];
     let select_all = Event::Key { key: Key::A, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND };
@@ -532,7 +532,7 @@ fn rows_chosen_by_the_pointer_act_on_the_fields_selection() {
             let at = rect_of(&h, id).center();
             click(&mut h, at);
         }
-        let name = |h: &Harness<'static, Shell>| h.state().panels.column.as_ref().unwrap().name.clone();
+        let name = |h: &Harness<'static, Shell>| er_of(h.state()).column.as_ref().unwrap().name.clone();
         // Selects all of the field's text by its keys, then chooses the Edit row `row` by the pointer;
         // whether the frames after it copied "Shop", and asked for the clipboard.
         let choose = |h: &mut Harness<'static, Shell>, row: &str| {
@@ -704,9 +704,9 @@ fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
                 key(&mut h, Key::Tab, Modifiers::NONE);
                 h.event(Event::Text("Draft".into()));
                 h.run();
-                stays_open(&mut h, |s| s.canvas.inline.as_ref().map(|i| i.ty.clone()), "Real", theme);
+                stays_open(&mut h, |s| uml_of(s).inline.as_ref().map(|i| i.ty.clone()), "Real", theme);
             } else {
-                stays_open(&mut h, |s| s.canvas.inline.as_ref().map(|i| i.edit.name.clone()), "Later", theme);
+                stays_open(&mut h, |s| uml_of(s).inline.as_ref().map(|i| i.edit.name.clone()), "Later", theme);
             }
         }
         let rows = member_rows(&h, catalog, false);

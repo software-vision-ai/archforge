@@ -5,7 +5,11 @@ workspace once a project is open (`workspace`: the project bar, the activity rai
 explorer over the session (`explorer`: each notation's rows, ER's schemas, tables, columns and
 skills; `+` adds what the selection's notation offers, a name is typed in place, Delete asks when
 other things go with it; `notation_ui::NotationUi` is what a notation brings to the tree, the
-search, the problems and Properties, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types, and
+search, the problems and Properties, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
+`notation_ui::NotationState` is what a notation keeps between frames for its own editors, menus,
+drawings and tools, `er_state` ER's and `uml_state` UML's, which the shell holds, parks with the
+project and asks only whether something is being edited, which editors are open, what to drop and
+what to close; and
 `uml_classifier` the class diagram's classifier tool with its menu of kinds),
 the Diagrams explorer (`diagrams`: the model's folders and diagrams, the model behind the open
 diagram, the New diagram dialog from its `+` and the tab strip's, a diagram row's menu and Delete
@@ -94,14 +98,14 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |
 | `explorer::{State, ContextMenu, add, remove_selection, rows, fresh_name, Row, Tree}` | the Models explorer's state (a row's context menu among it, AR-132) and the actions the tests and the host drive |
-| `panels::{State, draw, retain_valid, ColumnEdit, SkillEdit, Applies, Menu}` | the right panels' state and body; every change goes through `er.*` and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not) |
+| `panels::{State, draw, retain_valid, column_edit, column_edit_mut, ColumnEdit, SkillEdit, Applies, Menu}` | the right panels' state and body (the column editor itself is ER's own state, which `column_edit` reads for the app's journeys); every change goes through `er.*` and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not) |
 | `diagrams::{State, RowMenu, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows, a row's menu and the New diagram dialog |
 | `versions::State` | the Versions explorer's state: what it has read, how its sections are folded, and what the keyboard has just moved to, which its list brings into view |
 | `save_version::Dialog` | the Save version dialog: the description typed, the revision its summary is of, and how its save went |
-| `canvas::{State, Tool, Toast, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool, the toggles and the editing state; the toast with Undo at the canvas's foot; `open` shows a diagram through `view.open-diagram` |
+| `canvas::{State, Tool, Toast, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool, the toggles and the editing state (what a notation types, draws and opens there is its own state); the toast with Undo at the canvas's foot; `open` shows a diagram through `view.open-diagram` |
 | `editing::{add_entity, run_growing, content_height, fit_tables, diagrams_showing, NodeRename, Gesture, EntityMenu}` | canvas editing: a table added (and placed on an open diagram) as one step, a column command that grows the table's nodes with it, the gesture and menu state |
 | `connect::{RelKind, MappingOffer, connect, offer_mapping, has_foreign_key, remove_selected_relationship}` | relationships drawn on the canvas: the ends a new line gets, the mapping table offer |
-| `relation::{RoleEdit, retain_valid}` | a relationship's Properties state: a role being typed; the body itself is drawn by `panels` |
+| `relation::RoleEdit` | a relationship's Properties state, ER's own: a role being typed; the body itself is drawn by `panels` |
 | `keys::{KeyEdit, KeyRow, rows, open}` | a table's keys and the key editor's state |
 | `checks::{CheckEdit, CheckRow, rows, open}` | a table's check constraints and the check editor's state |
 | `indexes::{IndexEdit, IndexRow, ColumnSpec, rows, open}` | a table's indexes and the index editor's state |

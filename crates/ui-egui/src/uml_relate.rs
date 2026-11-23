@@ -30,6 +30,7 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{Combo, ComboOut, FIELD, FieldOut, Menu, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
 /// What the Relationship tool draws.
@@ -211,7 +212,14 @@ fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: ux::Colour
 /// The Relationship tool's face: the kind it draws, across its double-width button.
 pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, p: &Palette, b: Rect, ink: ux::Colour, active: bool) {
     let fill = if active { p.accent_tint } else { p.surface };
-    sample(paint, b.center() - vec2(24.0, 0.0), b.center() + vec2(24.0, 0.0), shell.canvas.uml_relation, ink, fill);
+    sample(
+        paint,
+        b.center() - vec2(24.0, 0.0),
+        b.center() + vec2(24.0, 0.0),
+        uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default(),
+        ink,
+        fill,
+    );
 }
 
 /// The height of the separator between the menu's groups of kinds: a hairline with room above and
@@ -237,7 +245,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     paint.rect_filled(m, 10.0, p.surface);
     paint.rect_stroke(m, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     ux::text(&paint, m.min + vec2(16.0, 14.0), &tr("Relationship").to_uppercase(), types::EYEBROW, p.text_secondary, Some(200.0));
-    let chosen = shell.canvas.uml_relation;
+    let chosen = uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default();
     for (i, kind) in Relate::ALL.iter().enumerate() {
         let row = Rect::from_min_size(m.min + vec2(8.0, row_top(i)), vec2(size.x - 16.0, 34.0));
         if kind.after_separator() {
@@ -268,7 +276,9 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
             ux::icon_mid(&paint, row.right_center() - vec2(16.0, 0.0), &icons::TICK, p.accent);
         }
         if resp.clicked() {
-            shell.canvas.uml_relation = *kind;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.relation = *kind;
+            }
             shell.canvas.popover = None;
         }
     }
@@ -358,13 +368,13 @@ pub(crate) fn association_refusal(kind: Relate, store: &Store, element: Obj) -> 
 
 /// Why the chosen kind starts no line at `element`, when it does not.
 pub(crate) fn start_problem(shell: &Shell, store: &Store, element: Obj) -> Option<String> {
-    kind_start_problem(shell.canvas.uml_relation, store, element)
+    kind_start_problem(uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default(), store, element)
 }
 
 /// The Relationship tool's tooltip and accessible name when the kind it draws needs its direction
 /// said: none takes the tool's own.
 pub(crate) fn tool_hint(shell: &Shell) -> Option<String> {
-    shell.canvas.uml_relation.hint().map(tr)
+    uml(&shell.notation_states).and_then(|uml| uml.relation.hint()).map(tr)
 }
 
 /// Draws the chosen kind between the classes of two nodes, its line on diagram `d` with its name
@@ -374,7 +384,7 @@ pub(crate) fn tool_hint(shell: &Shell) -> Option<String> {
 /// reuses the one that joins the two already, and several are refused rather than added to (AR-699).
 pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     shell.canvas.notice = None;
-    let kind = shell.canvas.uml_relation;
+    let kind = uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default();
     // An n-ary association is drawn by clicks, never dragged (AR-128).
     if kind == Relate::NAry {
         shell.canvas.notice = Some(tr("An n-ary association is drawn by clicking each class in turn"));
@@ -548,7 +558,7 @@ pub(crate) fn connect_class(shell: &mut Shell, d: Obj, from: (Obj, Uuid), to: (O
 /// realization an interface, the only kind a class realizes.
 pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
     shell.canvas.notice = None;
-    let kind = shell.canvas.uml_relation;
+    let kind = uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default();
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
     let Some(package) = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()) else {
@@ -700,7 +710,9 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
         && let Some(why) = crate::uml_sets::reconnect_refusal(store, r, target)
     {
         shell.canvas.notice = Some(why.clone());
-        shell.panels.set_refused = Some((element, why));
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.set_refused = Some((element, why));
+        }
         return;
     }
     // A generalization's moved end keeps the classifier rules, said in the user's words.
@@ -779,7 +791,7 @@ impl EndsEdit {
 /// see it lose the keyboard. The rest goes as Cancel: a refused role or multiplicity, Modifiers
 /// not Applied.
 pub(crate) fn finish_ends(shell: &mut Shell, subject: Option<Uuid>) {
-    let Some(edit) = shell.panels.ends.take_if(|e| Some(e.association) != subject) else { return };
+    let Some(edit) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.take_if(|e| Some(e.association) != subject)) else { return };
     let parse = archforge_uml::members::parse_multiplicity;
     for i in 0..2 {
         // What is left out keeps what the end has.
@@ -891,7 +903,9 @@ pub(crate) fn refuse_typed(shell: &mut Shell, id: Uuid, end: usize, typed: &str)
     let why = archforge_uml::members::parse_multiplicity(typed).err().ok_or("the sample reads")?;
     *edit.multiplicity.get_mut(end).ok_or("no such end")? = typed.to_string();
     *edit.refused.get_mut(end).ok_or("no such end")? = Some(multiplicity_problem(&why));
-    shell.panels.ends = Some(edit);
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.ends = Some(edit);
+    }
     Ok(())
 }
 
@@ -1010,8 +1024,10 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
     let Some(ends) = archforge_uml::figures::member_ends(store, a) else { return y };
-    if shell.panels.ends.as_ref().is_none_or(|e| e.association != id) {
-        shell.panels.ends = ends_edit(store, a, id);
+    if uml(&shell.notation_states).and_then(|uml| uml.ends.as_ref()).is_none_or(|e| e.association != id)
+        && let Some(uml) = uml_mut(&mut shell.notation_states)
+    {
+        uml.ends = ends_edit(store, a, id);
     }
     let classes = ends.map(|e| {
         store.get(e, archforge_uml::typed_element::TYPE).ok().and_then(|v| v.as_ref()).map(|t| archforge_core::name_of(store, t)).unwrap_or_default()
@@ -1021,7 +1037,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let roles = ends.map(|e| archforge_core::name_of(store, e));
     let written = ends.map(|e| archforge_uml::figures::multiplicity(store, e));
     let modifiers = ends.map(|e| EndModifiers::of(store, e));
-    let Some(mut edit) = shell.panels.ends.clone() else { return y };
+    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.ends.clone()) else { return y };
     // A change the model took elsewhere (an undo, a redo, another view) reaches the fields.
     for i in 0..2 {
         if edit.written_role[i] != roles[i] {
@@ -1192,11 +1208,13 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         y = crate::uml_qualifiers::section_of(shell, ui, p, r, y, id, i, ends[i]);
         // Its stereotypes, as an attribute's (AR-135).
         y = crate::uml_stereotypes::end_section(shell, ui, p, r, y, ends[i], i);
-        shell.panels.ends = Some(edit.clone());
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.ends = Some(edit.clone());
+        }
         match asked {
             Asked::Nothing => {}
             Asked::Cancel => {
-                if let Some(e) = shell.panels.ends.as_mut() {
+                if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
                     e.modifiers[i] = e.written_modifiers[i].clone();
                     e.modifier_refused[i] = None;
                 }
@@ -1207,7 +1225,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                 return y;
             }
         }
-        if role && let Some(e) = shell.panels.ends.as_mut() {
+        if role && let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
             e.role_tried[i] = Some(edit.role[i].trim().to_string());
         }
         // An association class's end takes no role one of its attributes is named, as they share
@@ -1236,7 +1254,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             match run(shell, "uml.association.set-end", params) {
                 Ok(_) => {
                     shell.panels.notice = None;
-                    if let Some(e) = shell.panels.ends.as_mut() {
+                    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
                         // A refused multiplicity still in its field keeps its reason while
                         // another field of the end is written.
                         if write_multiplicity {
@@ -1248,7 +1266,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                 // A multiplicity the model refuses (a composition's whole allows one at most) is
                 // said under its field; anything else at the panel's foot.
                 Err(e) if write_multiplicity => {
-                    if let Some(ends) = shell.panels.ends.as_mut() {
+                    if let Some(ends) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
                         ends.refused[i] = Some(e);
                     }
                     if ui.input(|inp| inp.key_pressed(egui::Key::Enter)) {
@@ -1461,9 +1479,12 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
 /// written.
 #[allow(clippy::too_many_arguments, reason = "the end's other fields go as the model has them")]
 fn apply_end_modifiers(shell: &mut Shell, id: Uuid, end: Obj, i: usize, role: &str, multiplicity: &str, navigable: bool, aggregation: usize) {
-    let Some(m) = shell.panels.ends.as_ref().filter(|e| e.association == id).map(|e| e.modifiers[i].clone()) else { return };
+    let Some(m) = uml(&shell.notation_states).and_then(|uml| uml.ends.as_ref()).filter(|e| e.association == id).map(|e| e.modifiers[i].clone())
+    else {
+        return;
+    };
     if let Some(why) = shell.session.as_ref().and_then(|s| end_refusal(s.doc(), end, &m)) {
-        if let Some(e) = shell.panels.ends.as_mut() {
+        if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
             e.modifier_refused[i] = Some(why);
         }
         return;
@@ -1481,7 +1502,7 @@ fn apply_end_modifiers(shell: &mut Shell, id: Uuid, end: Obj, i: usize, role: &s
         // Written, the end's Modifiers close, their summary saying what they are now.
         Ok(_) => {
             shell.panels.notice = None;
-            if let Some(e) = shell.panels.ends.as_mut() {
+            if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
                 e.modifier_refused[i] = None;
                 e.modifiers_open[i] = false;
             }

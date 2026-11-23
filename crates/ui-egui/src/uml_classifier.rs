@@ -10,6 +10,7 @@ use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::tr;
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Icon, Palette, icons, types};
 
 /// What the classifier tool places.
@@ -209,7 +210,7 @@ impl Classifier {
 
 /// The tool's face: the icon of the kind it places.
 pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, b: Rect, ink: ux::Colour) {
-    ux::icon_in(paint, b, shell.canvas.uml_classifier.tool_icon(), ink);
+    ux::icon_in(paint, b, uml(&shell.notation_states).map(|uml| uml.classifier).unwrap_or_default().tool_icon(), ink);
 }
 
 /// The menu of kinds above the classifier tool's chevron: the current kind marked; the arrow keys
@@ -225,7 +226,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     paint.rect_filled(m, 10.0, p.surface);
     paint.rect_stroke(m, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     ux::text(&paint, m.min + vec2(16.0, 14.0), &tr("Classifier").to_uppercase(), types::EYEBROW, p.text_secondary, Some(size.x - 32.0));
-    let chosen = shell.canvas.uml_classifier;
+    let chosen = uml(&shell.notation_states).map(|uml| uml.classifier).unwrap_or_default();
     let current = kinds.iter().position(|k| *k == chosen).unwrap_or(0);
     // The keys: the arrows walk the rows from the current kind, Enter picks the row they are on.
     let (down, up, enter) = ui.input_mut(|i| {
@@ -280,7 +281,9 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
         }
     }
     if let Some(kind) = picked {
-        shell.canvas.uml_classifier = kind;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.classifier = kind;
+        }
         shell.canvas.tool = crate::canvas::Tool::Place(TOOL);
         shell.canvas.popover = None;
         shell.canvas.menu_focus = None;

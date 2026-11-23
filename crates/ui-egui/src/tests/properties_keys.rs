@@ -69,13 +69,13 @@ fn tab_goes_on_past_the_fold_and_the_body_follows() {
         assert_eq!(scroll(&h), at, "{theme:?}: a control after the body moves nothing");
         tab_to(&mut h, ADD, Modifiers::SHIFT);
         key(&mut h, Key::Enter, Modifiers::NONE);
-        assert!(h.state().panels.constraint.is_some(), "{theme:?}: Enter on the + opens the editor");
+        assert!(uml_of(h.state()).constraint.is_some(), "{theme:?}: Enter on the + opens the editor");
         let (foot, body) = (rect_of(&h, APPLY), h.state().panels.body.unwrap());
         assert!(body.contains_rect(foot), "{theme:?}: the editor is brought into view, to its foot");
         tab_to(&mut h, "workspace.properties.constraint.expression", Modifiers::NONE);
         h.event(egui::Event::Text("total > 0".into()));
         h.run();
-        assert_eq!(h.state().panels.constraint.as_ref().unwrap().expression, "total > 0", "{theme:?}: typed in its expression");
+        assert_eq!(uml_of(h.state()).constraint.as_ref().unwrap().expression, "total > 0", "{theme:?}: typed in its expression");
         tab_to(&mut h, APPLY, Modifiers::NONE);
         assert!(has_id(&h, APPLY), "{theme:?}: Apply is listed where the keyboard is");
         key(&mut h, Key::Space, Modifiers::NONE);
@@ -97,7 +97,7 @@ fn attribute_editor(theme: ThemeKind, tab: bool) -> Harness<'static, Shell> {
     tab_to(&mut h, &last, Modifiers::NONE);
     h.key_down(Key::Enter);
     h.step();
-    assert!(h.state().panels.member.is_some(), "{theme:?}: Enter on the pencil opens the attribute's editor");
+    assert!(uml_of(h.state()).member.is_some(), "{theme:?}: Enter on the pencil opens the attribute's editor");
     h.key_up(Key::Enter);
     if tab {
         h.key_down(Key::Tab);

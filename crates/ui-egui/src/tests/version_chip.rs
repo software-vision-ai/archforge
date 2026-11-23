@@ -672,7 +672,7 @@ const ID: archforge_mof::Uuid = archforge_mof::Uuid([7; 16]);
 
 /// An edit left open between frames: an n-ary end armed on the canvas.
 fn draw(s: &mut Shell) {
-    s.canvas.nary = Some(crate::uml_nary::Nary::AddEnd { diagram: ID, association: ID });
+    uml_of_mut(s).nary = Some(crate::uml_nary::Nary::AddEnd { diagram: ID, association: ID });
 }
 
 /// Every way of leaving is refused for an open editor, drawing, drag or dialog, with nothing begun.
@@ -688,7 +688,7 @@ fn an_open_editor_stops_every_way_of_leaving() {
     let open: [(&str, &dyn Fn(&mut Shell)); 8] = [
         ("panel name", &|s| s.panels.name = Some(NameEdit { target: ID, text: "x".into() })),
         ("panel card", &|s| {
-            s.panels.check = Some(CheckEdit { target: None, entity: ID, name: "x".into(), expression: "1".into(), refused: None, opened: false })
+            er_of_mut(s).check = Some(CheckEdit { target: None, entity: ID, name: "x".into(), expression: "1".into(), refused: None, opened: false })
         }),
         ("canvas name", &|s| s.canvas.rename = Some(NodeRename { node: ID, entity: ID, text: "x".into(), opened: false, refused: None })),
         ("drag", &|s| s.canvas.gesture = Some(Gesture::Marquee { from: egui::Pos2::ZERO })),
@@ -777,13 +777,13 @@ fn an_end_typed_on_the_selected_association_stops_leaving() {
     ];
     in_both(|mut h, _| {
         let s = h.state_mut();
-        s.panels.ends = Some(untouched());
+        uml_of_mut(s).ends = Some(untouched());
         assert!(s.clear_to_leave(None).is_ok(), "the panel filled them in and nothing was typed");
-        s.panels.ends.as_mut().unwrap().modifiers_open = [true, true];
+        uml_of_mut(s).ends.as_mut().unwrap().modifiers_open = [true, true];
         assert!(s.clear_to_leave(None).is_ok(), "an open fold holds nothing");
         for (what, change) in typed {
-            s.panels.ends = Some(untouched());
-            change(s.panels.ends.as_mut().unwrap());
+            uml_of_mut(s).ends = Some(untouched());
+            change(uml_of_mut(s).ends.as_mut().unwrap());
             assert_eq!(s.clear_to_leave(None).err(), Some(Editing), "{what}");
         }
     });
@@ -804,9 +804,9 @@ fn a_moved_selection_ends_an_associations_draft_before_a_replacement() {
             let before = revision(&h);
             retype(&mut h, &format!("workspace.properties.end.1.{field}"), typed);
             assert_eq!(revision(&h), before, "{field}: still selected, it is only typed");
-            h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].derived = true;
+            uml_of_mut(h.state_mut()).ends.as_mut().unwrap().modifiers[1].derived = true;
             click(&mut h, away);
-            assert!(h.state().panels.ends.is_none(), "{field}");
+            assert!(uml_of(h.state()).ends.is_none(), "{field}");
         }
         let paid = select_named(&mut h, archforge_uml::ASSOCIATION, "paid by");
         let st = h.state().session.as_ref().unwrap().doc();
@@ -814,17 +814,17 @@ fn a_moved_selection_ends_an_associations_draft_before_a_replacement() {
         let model = (archforge_core::name_of(st, end), archforge_uml::figures::multiplicity(st, end), archforge_uml::modifiers::is_derived(st, end));
         assert_eq!(model, ("payer".to_string(), "2..5".to_string(), false), "what read is written, Modifiers not Applied are not");
         let before = revision(&h);
-        let ends = h.state_mut().panels.ends.as_mut().unwrap();
+        let ends = uml_of_mut(h.state_mut()).ends.as_mut().unwrap();
         (ends.multiplicity[0], ends.refused[0]) = ("3".into(), Some("refused".into()));
         ends.multiplicity[1] = "5..2".into();
         assert_eq!(h.state_mut().clear_to_leave(None).err(), Some(crate::hold::HoldRefused::Editing), "selected, it holds work");
         click(&mut h, away);
-        assert!(h.state().panels.ends.is_none() && revision(&h) == before, "a refused or unreadable value is dropped, not written");
+        assert!(uml_of(h.state()).ends.is_none() && revision(&h) == before, "a refused or unreadable value is dropped, not written");
         let read = start_replacing(&mut h, None);
         read.send(Ok(earlier)).unwrap();
         h.steps(4);
         assert!(!h.state().is_held() && h.state().session.as_ref().unwrap().doc().by_uuid(paid).is_none(), "replaced without it");
-        assert!(h.state().panels.ends.is_none() && h.state().panels.notice.is_none());
+        assert!(uml_of(h.state()).ends.is_none() && h.state().panels.notice.is_none());
     });
 }
 
@@ -855,7 +855,7 @@ fn a_refused_role_is_not_written_when_the_selection_moves_on() {
         name_end(&mut h, 0, "buyer");
         let away = rect_of(&h, "workspace.canvas").left_top() + egui::vec2(30.0, 30.0);
         click(&mut h, away);
-        assert!(h.state().panels.ends.is_none() && role(&h, paid, 1) == "payment", "never written, though nothing refuses it now");
+        assert!(uml_of(h.state()).ends.is_none() && role(&h, paid, 1) == "payment", "never written, though nothing refuses it now");
         select_named(&mut h, archforge_uml::ASSOCIATION, "paid by");
         retype(&mut h, ROLE, "payer");
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -1434,11 +1434,14 @@ fn dated_as_before(h: &Harness<'static, Shell>) {
 }
 
 /// A step takes no hold, wakes the window, and leaves the version, its date and its view until the
-/// next arrives; what was set aside stays through it.
+/// next arrives; what was set aside stays through it, the notations' own state among it.
 #[test]
 fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
+    use crate::uml_classifier::Classifier;
     in_both(|mut h, host| {
+        uml_of_mut(h.state_mut()).classifier = Classifier::Interface;
         let [b, _] = stepping(&mut h, &host);
+        assert_eq!(uml_of(h.state()).classifier, Classifier::Class, "a version shows with the notations' state of its own");
         answer_versions(&host);
         h.run_steps(3);
         step_to(&mut h, "b");
@@ -1450,6 +1453,7 @@ fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
         showing(&h, "b", (true, false));
         assert!(!h.state().is_held() && h.query_by_label("Viewing the version of 9 Nov b").is_some(), "the date comes with it");
         assert!(h.state_mut().back_to_current_work() && schema_names(&h).contains(&"c".to_string()), "the work comes back");
+        assert_eq!(uml_of(h.state()).classifier, Classifier::Interface, "the notations' state set aside comes back with it");
     });
 }
 

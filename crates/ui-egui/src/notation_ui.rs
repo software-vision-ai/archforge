@@ -2,16 +2,19 @@
 //! Models tree and what `+` adds there, its renames and what a removal takes with it, its entries
 //! in the project search, its problems, the heading and the body of Properties for its elements,
 //! its commands' refusals in the user's words, the words for the kinds of its elements, and the
-//! limits of their names and descriptions. The shells (the tree, the filter, the scroll,
-//! the search list, the sections, the fields, the editors) stay shared; each answer is about the
-//! notation's own elements, the classes of its metamodel.
+//! limits of their names and descriptions, and the state its own editors, menus and drawings keep
+//! between frames. The shells (the tree, the filter, the scroll, the search list, the sections, the
+//! fields, the editors) stay shared; each answer is about the notation's own elements, the classes
+//! of its metamodel.
+
+use std::any::Any;
 
 use archforge_mof::{ClassId, Obj, Store, Uuid};
 use egui::Rect;
 
 use crate::Shell;
 use crate::explorer::{Row, Tree};
-use crate::panels::Subject;
+use crate::panels::{Editor, Menu, OpenEditor, Subject};
 use crate::problems::Problem;
 use crate::ux::{Icon, Palette};
 
@@ -243,6 +246,98 @@ pub(crate) trait NotationUi: Sync {
     fn name_limit(&self) -> usize;
     /// The most characters its elements take in a description.
     fn description_limit(&self) -> usize;
+
+    // Its own state.
+
+    /// A fresh state for its own editors, menus and drawings, as a window or a project opened
+    /// anew starts with: nothing open, its tools at their first choice.
+    fn new_state(&self) -> Box<dyn NotationState>;
+}
+
+/// What a notation keeps between frames for its own editors, menus and drawings: the shell holds
+/// it as it holds its own, parks it with the project it belongs to, and asks it only these
+/// questions; the notation's own screens reach their state through [`NotationStates::own`].
+pub(crate) trait NotationState: Any {
+    /// Drops what the store no longer has: an editor whose element is gone, a drawing on a diagram
+    /// that is no longer the one `canvas` shows.
+    fn retain_valid(&mut self, store: &Store, canvas: &crate::canvas::State) {
+        let _ = (store, canvas);
+    }
+    /// Whether something is being typed or drawn, or an editor card is open: the fields that only
+    /// show what is stored are not counted.
+    fn editing(&self) -> bool {
+        false
+    }
+    /// Its Properties editors that are open, each by its card, with where it edits and the refusal
+    /// its card shows ([`crate::panels::reveal`]).
+    fn open_editors(&self) -> Vec<(Editor, OpenEditor)> {
+        Vec::new()
+    }
+    /// Closes its Properties editors as the selection moves on, as Cancel would, except one opened
+    /// this frame and not yet shown; a menu of the shell's one `menu` slot that belongs to what it
+    /// closes goes with it.
+    fn close_editors(&mut self, menu: &mut Option<Menu>) {
+        let _ = menu;
+    }
+    /// Whether something of its own open on the canvas holds the keys: a row typed in place or a
+    /// menu.
+    fn holds_keys(&self) -> bool {
+        false
+    }
+    /// Ends a drawing under way as the project it is on is set aside: it never outlives that
+    /// project.
+    fn set_aside(&mut self) {}
+}
+
+/// The state of each notation the shell knows, one each, in the order of the notations.
+pub(crate) struct NotationStates(Vec<Box<dyn NotationState>>);
+
+impl NotationStates {
+    /// Each notation of `uis` with a fresh state ([`NotationUi::new_state`]).
+    pub(crate) fn new(uis: &[&'static dyn NotationUi]) -> NotationStates {
+        NotationStates(uis.iter().map(|ui| ui.new_state()).collect())
+    }
+
+    /// The state of type `T`, a notation's own; none while that notation is not among the shell's.
+    pub(crate) fn own<T: NotationState>(&self) -> Option<&T> {
+        self.0.iter().find_map(|s| <dyn Any>::downcast_ref::<T>(&**s))
+    }
+
+    /// The state of type `T` to change, a notation's own; none while that notation is not among
+    /// the shell's.
+    pub(crate) fn own_mut<T: NotationState>(&mut self) -> Option<&mut T> {
+        self.0.iter_mut().find_map(|s| <dyn Any>::downcast_mut::<T>(&mut **s))
+    }
+
+    /// Drops what the store no longer has, in every notation's state.
+    pub(crate) fn retain_valid(&mut self, store: &Store, canvas: &crate::canvas::State) {
+        self.0.iter_mut().for_each(|s| s.retain_valid(store, canvas));
+    }
+
+    /// Whether any notation has something typed, drawn or an editor open.
+    pub(crate) fn editing(&self) -> bool {
+        self.0.iter().any(|s| s.editing())
+    }
+
+    /// Every notation's open Properties editors, in the order of the notations.
+    pub(crate) fn open_editors(&self) -> Vec<(Editor, OpenEditor)> {
+        self.0.iter().flat_map(|s| s.open_editors()).collect()
+    }
+
+    /// Closes every notation's Properties editors as the selection moves on.
+    pub(crate) fn close_editors(&mut self, menu: &mut Option<Menu>) {
+        self.0.iter_mut().for_each(|s| s.close_editors(menu));
+    }
+
+    /// Whether something of any notation's open on the canvas holds the keys.
+    pub(crate) fn holds_keys(&self) -> bool {
+        self.0.iter().any(|s| s.holds_keys())
+    }
+
+    /// Ends every notation's drawing under way, as the project is set aside.
+    pub(crate) fn set_aside(&mut self) {
+        self.0.iter_mut().for_each(|s| s.set_aside());
+    }
 }
 
 /// The notations the shell knows.

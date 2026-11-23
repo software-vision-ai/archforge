@@ -8,6 +8,7 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
+use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{FIELD, PAD, icon_button, run, section, text_field};
@@ -51,10 +52,12 @@ pub fn rows(store: &Store, e: Obj) -> Vec<CheckRow> {
 
 /// Opens the editor on a check, or on one to add to `entity`.
 pub fn open(shell: &mut Shell, entity: Uuid, target: Option<&CheckRow>) {
-    shell.panels.check = Some(match target {
-        Some(c) => CheckEdit { target: Some(c.id), entity, name: c.name.clone(), expression: c.expression.clone(), refused: None, opened: true },
-        None => CheckEdit { target: None, entity, name: String::new(), expression: String::new(), refused: None, opened: true },
-    });
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.check = Some(match target {
+            Some(c) => CheckEdit { target: Some(c.id), entity, name: c.name.clone(), expression: c.expression.clone(), refused: None, opened: true },
+            None => CheckEdit { target: None, entity, name: String::new(), expression: String::new(), refused: None, opened: true },
+        });
+    }
     shell.panels.menu = None;
 }
 
@@ -72,9 +75,9 @@ pub(crate) fn checks_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         return y;
     };
     y = next - 6.0;
-    let editing_new = shell.panels.check.as_ref().is_some_and(|c| c.target.is_none() && c.entity == entity_id);
+    let editing_new = er(&shell.notation_states).and_then(|er| er.check.as_ref()).is_some_and(|c| c.target.is_none() && c.entity == entity_id);
     for check in &checks {
-        if shell.panels.check.as_ref().is_some_and(|c| c.target == Some(check.id)) {
+        if er(&shell.notation_states).and_then(|er| er.check.as_ref()).is_some_and(|c| c.target == Some(check.id)) {
             y = editor(shell, ui, p, r, y);
             continue;
         }
@@ -143,13 +146,13 @@ pub(crate) fn text_area(
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.check.clone() else { return y };
+    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.check.clone()) else { return y };
     let refused_h = if edit.refused.is_some() { 20.0 } else { 0.0 };
     let height = 12.0 + 17.0 + FIELD + 14.0 + 17.0 + 64.0 + 14.0 + FIELD + 12.0 + refused_h;
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::Check, card);
+    crate::panels::reveal(shell, ui, crate::er_state::CHECK, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -198,12 +201,20 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     if let Some(why) = &edit.refused {
         ux::text(&paint, at(0.0, cy + FIELD + 8.0), why, types::CAPTION, p.amber, Some(inner));
     }
-    shell.panels.check = Some(edit.clone());
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.check = Some(edit.clone());
+    }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.check = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.check = None;
+        }
     } else if remove {
         match run(shell, "er.check.remove", json!({ "check": edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
-            Ok(_) => shell.panels.check = None,
+            Ok(_) => {
+                if let Some(er) = er_mut(&mut shell.notation_states) {
+                    er.check = None;
+                }
+            }
             Err(e) => refuse(shell, e),
         }
     } else if apply || name_done {
@@ -212,8 +223,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     card.bottom() + 8.0
 }
 
+/// Shows `why` on the open check editor's card, which stays open with what was typed.
 fn refuse(shell: &mut Shell, why: String) {
-    if let Some(c) = shell.panels.check.as_mut() {
+    if let Some(c) = er_mut(&mut shell.notation_states).and_then(|er| er.check.as_mut()) {
         c.refused = Some(why);
     }
 }
@@ -228,7 +240,9 @@ fn commit(shell: &mut Shell, edit: &CheckEdit) {
     };
     match run(shell, cmd, params) {
         Ok(_) => {
-            shell.panels.check = None;
+            if let Some(er) = er_mut(&mut shell.notation_states) {
+                er.check = None;
+            }
             shell.panels.notice = None;
             let entity = edit.entity.to_string();
             if let Err(e) = run(shell, "view.select", json!({ "ids": [entity] })) {

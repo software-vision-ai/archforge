@@ -25,6 +25,7 @@ use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::panels::{FIELD, Menu, PAD, ROW, Subject, check, field_inner, icon_button, menu, run, section, select_field, text_field};
 use crate::uml_classifier::Classifier;
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
@@ -163,7 +164,9 @@ fn parameter_types(store: &Store, within: Option<Obj>) -> Vec<(String, String)> 
 /// Opens the editor of `kind` on `target`, or on a new member of `class`.
 pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Option<Uuid>) {
     let edit = edit_of(shell.session.as_ref().map(|s| s.doc()), class, kind, target);
-    shell.panels.member = Some(edit);
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.member = Some(edit);
+    }
     shell.panels.menu = None;
 }
 
@@ -342,7 +345,8 @@ fn final_check(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
     let explained = fmt(&tr("Nothing may specialise {name}. Shown as {final} after its name."), &[("name", &own)]);
-    let refused = (shell.panels.final_refused == Some(class_id) && !was && !below.is_empty()).then(|| final_refusal(&own, &below));
+    let refused = (uml(&shell.notation_states).and_then(|uml| uml.final_refused) == Some(class_id) && !was && !below.is_empty())
+        .then(|| final_refusal(&own, &below));
     let mut on = was;
     check(shell, ui, p, pos2(left, y), FINAL_ID, &tr("No subclasses (final)"), &mut on);
     // Its explanation describes it, and a refusal joins it; its state is said as a check box's.
@@ -366,13 +370,17 @@ fn final_check(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     if on != was {
         if on && !below.is_empty() {
             // Refused before anything is written: the box stays clear and the history untouched.
-            shell.panels.final_refused = Some(class_id);
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.final_refused = Some(class_id);
+            }
             ui.ctx().request_repaint();
         } else {
             match run(shell, "uml.classifier.set", json!({ "classifier": class_id.to_string(), "final": on })) {
                 Ok(_) => {
                     shell.panels.notice = None;
-                    shell.panels.final_refused = None;
+                    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                        uml.final_refused = None;
+                    }
                 }
                 Err(e) => shell.panels.notice = Some(e),
             }
@@ -396,7 +404,9 @@ fn final_check(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text.into());
         if control(shell, ui, &format!("{FINAL_ID}.select"), "button", b, true).accessible_name(label).clicked() {
             let ids: Vec<String> = below.iter().map(|(g, _)| g.to_string()).collect();
-            shell.panels.final_refused = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.final_refused = None;
+            }
             if let Err(e) = run(shell, "view.select", json!({ "ids": ids })) {
                 shell.panels.notice = Some(e);
             }
@@ -508,20 +518,25 @@ fn leaf_check(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32
     let was = archforge_uml::relations::is_leaf(store, class);
     let by = redefiner_names(store, class);
     let explained = fmt(&tr("A subclass could not redefine {name} where it is inherited. Shown as {leaf}."), &[("name", &name(store, class))]);
-    let refused = (shell.panels.leaf_refused == Some(class_id) && !was && !by.is_empty()).then(|| leaf_refusal(&by));
+    let refused =
+        (uml(&shell.notation_states).and_then(|uml| uml.leaf_refused) == Some(class_id) && !was && !by.is_empty()).then(|| leaf_refusal(&by));
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let (on, y) =
         explained_check(shell, ui, p, pos2(r.left() + PAD, y), width, LEAF_ID, &tr("No redefinition (leaf)"), was, &explained, refused.as_deref());
     if on != was {
         if on && !by.is_empty() {
             // Refused before anything is written: the box stays clear and the history untouched.
-            shell.panels.leaf_refused = Some(class_id);
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.leaf_refused = Some(class_id);
+            }
             ui.ctx().request_repaint();
         } else {
             match run(shell, "uml.classifier.set", json!({ "classifier": class_id.to_string(), "leaf": on })) {
                 Ok(_) => {
                     shell.panels.notice = None;
-                    shell.panels.leaf_refused = None;
+                    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                        uml.leaf_refused = None;
+                    }
                 }
                 Err(e) => shell.panels.notice = Some(e),
             }
@@ -667,7 +682,9 @@ pub(crate) fn members_section(
         return y + 50.0;
     };
     y = next - 6.0;
-    let editing = |shell: &Shell| shell.panels.member.as_ref().filter(|e| e.kind == kind && e.class == class_id).map(|e| e.target);
+    let editing = |shell: &Shell| {
+        uml(&shell.notation_states).and_then(|uml| uml.member.as_ref()).filter(|e| e.kind == kind && e.class == class_id).map(|e| e.target)
+    };
     let chosen = crate::panels::selected_id(shell);
     if rows.is_empty() && kind == MemberKind::Literal && editing(shell) != Some(None) {
         ux::text(&paint, pos2(r.left() + PAD + 10.0, y + 9.0), &tr("No literals yet"), types::UI, p.text_muted, Some(width));
@@ -786,7 +803,7 @@ pub(crate) fn choices_for_menu(shell: &mut Shell, within: Option<Uuid>) -> crate
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
     let revision = session.revision();
     let language = crate::i18n::language();
-    match shell.panels.type_choices.take() {
+    match uml_mut(&mut shell.notation_states).and_then(|uml| uml.type_choices.take()) {
         Some(kept) if kept.project == project && kept.revision == revision && kept.language == language && kept.within == within => kept,
         _ => {
             let choices = type_choices(store, within.and_then(|w| store.by_uuid(w)));
@@ -800,7 +817,9 @@ pub(crate) fn choices_for_menu(shell: &mut Shell, within: Option<Uuid>) -> crate
 
 /// Hands the type menu's choices back to the shell for the next frame.
 pub(crate) fn keep_choices(shell: &mut Shell, choices: crate::panels::TypeChoices) {
-    shell.panels.type_choices = Some(choices);
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.type_choices = Some(choices);
+    }
 }
 
 /// The menu of a type select for a member of `within`, when it is open; sets `ty` to the type
@@ -813,10 +832,8 @@ pub(crate) fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Re
     let choices = choices_for_menu(shell, within);
     // A stereotype's property is typed by a primitive type, an enumeration or a data type alone
     // (AR-134): the menu offers those.
-    let stereotype = shell
-        .panels
-        .member
-        .as_ref()
+    let stereotype = uml(&shell.notation_states)
+        .and_then(|uml| uml.member.as_ref())
         .and_then(|e| shell.session.as_ref().and_then(|s| s.doc().by_uuid(e.class).map(|c| archforge_uml::profiles::is_stereotype(s.doc(), c))))
         .unwrap_or(false);
     let offered: Vec<usize> = (0..choices.values.len())
@@ -892,7 +909,7 @@ fn visibility_word(v: &str) -> String {
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.member.clone() else { return y };
+    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.member.clone()) else { return y };
     // The card is drawn under the fields once their height is known.
     let background = paint.add(egui::Shape::Noop);
     let left = r.left() + PAD;
@@ -1053,7 +1070,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::Member, card);
+    crate::panels::reveal(shell, ui, crate::uml_state::MEMBER, card);
     // The menus last, over the card.
     if shell.panels.menu == Some(Menu::MemberVisibility)
         && !literal
@@ -1074,20 +1091,28 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     if let Some(m) = modifier_menus {
         modifier_menu_picks(shell, ui, p, m, &mut edit);
     }
-    shell.panels.member = Some(edit.clone());
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.member = Some(edit.clone());
+    }
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-        shell.panels.member = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.member = None;
+        }
     } else if remove && let Some(asked) = ask_for_applications(shell, &edit) {
         // Its stereotype applications would go with it: the delete dialog names them first, as
         // every other delete of a carrier does (AR-135).
-        shell.panels.member = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.member = None;
+        }
         shell.explorer.delete = Some(asked);
     } else if remove {
         let target = edit.target.map(|t| t.to_string()).unwrap_or_default();
         let said = crate::uml_constraints::before_removal(shell, std::slice::from_ref(&target));
         match run(shell, "element.remove", json!({ "ids": [target] })) {
             Ok(_) => {
-                shell.panels.member = None;
+                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    uml.member = None;
+                }
                 reselect(shell, edit.class);
                 crate::uml_constraints::say_dropped(shell, said, &fmt(&tr("{name} deleted"), &[("name", &edit.name)]));
             }
@@ -1419,8 +1444,10 @@ pub(crate) fn take_targets(
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
     let key = format!("{project:?}|{}|{}|{what}", session.revision(), crate::i18n::language());
-    if let Some(i) = shell.panels.targets.iter().position(|t| t.key == key) {
-        return shell.panels.targets.remove(i);
+    if let Some(kept) = uml_mut(&mut shell.notation_states).map(|uml| &mut uml.targets)
+        && let Some(i) = kept.iter().position(|t| t.key == key)
+    {
+        return kept.remove(i);
     }
     let labelled = |objs: Vec<Obj>| -> Vec<Target> {
         let mut out: Vec<Target> = objs
@@ -1452,9 +1479,10 @@ pub(crate) fn take_targets(
 /// Hands target choices back to the shell for the next frame, the oldest dropped past
 /// [`KEPT_TARGETS`].
 pub(crate) fn keep_targets(shell: &mut Shell, targets: TargetChoices) {
-    shell.panels.targets.push(targets);
-    if shell.panels.targets.len() > KEPT_TARGETS {
-        shell.panels.targets.remove(0);
+    let Some(kept) = uml_mut(&mut shell.notation_states).map(|uml| &mut uml.targets) else { return };
+    kept.push(targets);
+    if kept.len() > KEPT_TARGETS {
+        kept.remove(0);
     }
 }
 
@@ -1612,7 +1640,7 @@ pub(crate) fn target_refusal(name: &str, problem: archforge_engine::TargetRule, 
 
 /// Shows why the editor's command was refused, at the card's foot, or clears it.
 fn refuse(shell: &mut Shell, why: Option<String>) {
-    if let Some(e) = shell.panels.member.as_mut() {
+    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.member.as_mut()) {
         e.refused = why;
         e.refused_at = None;
     }
@@ -1663,7 +1691,7 @@ fn commit(shell: &mut Shell, edit: &MemberEdit) {
     });
     if let Some((field, why)) = refusal {
         refuse(shell, Some(why));
-        if let Some(e) = shell.panels.member.as_mut() {
+        if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.member.as_mut()) {
             e.refused_at = Some(field);
         }
         return;
@@ -1671,7 +1699,9 @@ fn commit(shell: &mut Shell, edit: &MemberEdit) {
     let (cmd, params) = command_of(edit);
     match write_in_sight(shell, edit, cmd, params) {
         Ok(_) => {
-            shell.panels.member = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.member = None;
+            }
             shell.panels.notice = None;
             reselect(shell, edit.class);
         }
