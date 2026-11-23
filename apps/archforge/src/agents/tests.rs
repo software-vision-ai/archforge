@@ -470,7 +470,10 @@ fn a_conversation_holds_its_own_read_only_token_until_it_ends() {
     assert!(events.iter().any(|e| matches!(e, ChatEvent::ToolFinished { ok: true, .. })), "{events:?}");
     assert!(events.iter().any(|e| matches!(e, ChatEvent::Message { text } if text.contains("Customer and Order"))), "{events:?}");
     assert_eq!(events.last(), Some(&ChatEvent::TurnEnded(TurnEnd::Completed)));
-    assert!(host.wakes.load(Ordering::SeqCst) >= wakes + events.len(), "every event woke the window");
+    // The sink wakes the window after it sent the event (`EventSink::send`), so the last event can
+    // arrive here before its wake is counted (AR-801): wait for the wakes, within [`WAIT`].
+    let woken = wakes + events.len();
+    craft_testkit::deadline::wait_until(WAIT, "every event to wake the window", || host.wakes.load(Ordering::SeqCst) >= woken);
     // Stop, with no turn running, and a second start of it: refused.
     host.agents.stop(CHAT).unwrap();
     assert_eq!(host.agents.start(claude(CHAT, "Chat 1", false)), Err(ChatRefusal::AlreadyRunning));
