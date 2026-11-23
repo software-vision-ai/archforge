@@ -960,11 +960,16 @@ fn a_click_selects_what_its_notation_says_the_figure_stands_for() {
 #[test]
 fn a_selected_qualifier_draws_its_associations_line_selected_and_nothing_else_does() {
     let f = figures();
-    let uml = answers(&f, &[f.qualifier, f.end, f.association, f.class, f.leg], |n, st, e| n.selected_with(st, e), |v, st, e| v.selected_with(st, e));
+    let uml = answers(
+        &f,
+        &[f.qualifier, f.end, f.association, f.class, f.leg],
+        |n, st, e| n.line_selected_with(st, e),
+        |v, st, e| v.line_selected_with(st, e),
+    );
     assert_eq!(uml, [Some(f.association), None, None, None, None]);
-    let er = answers(&f, &[f.entity, f.relationship], |n, st, e| n.selected_with(st, e), |v, st, e| v.selected_with(st, e));
+    let er = answers(&f, &[f.entity, f.relationship], |n, st, e| n.line_selected_with(st, e), |v, st, e| v.line_selected_with(st, e));
     assert_eq!(er, [None, None]);
-    assert_eq!(f.s.view().selected_with(f.s.doc(), f.class_node), None, "a node belongs to no notation");
+    assert_eq!(f.s.view().line_selected_with(f.s.doc(), f.class_node), None, "a node belongs to no notation");
 }
 
 /// A line keeps its end handles unless a node shows its element, by default, so for ER's

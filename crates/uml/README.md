@@ -215,7 +215,7 @@ count there too (AR-698), and the imports and merges a package takes along later
 
 **What the canvas asks of a figure** (AR-784), UML answers as a `Notation` from its own
 modules: `selects_as` an n-ary association's end as its association (`nary::association_of_end`),
-`selected_with` a qualifier's association (`qualifiers::association_of`), `line_handles` none for
+`line_selected_with` a qualifier's association (`qualifiers::association_of`), `line_handles` none for
 an n-ary leg and an association class's line beside its card, `drawn_as_card` no binary
 association, `drawn_behind` a package and `is_label` a generalization set
 (`generalization_sets::is_set`).

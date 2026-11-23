@@ -1154,7 +1154,8 @@ fn draw_node(
     }
     let renaming = id.is_some() && id == d.renaming;
     let element = element_of(store, n, node::ELEMENT);
-    let selected = selection.contains(&n) || element.is_some_and(|e| selection.contains(&e));
+    // As the gestures take it: a card draws selected with what a click on it selects, as a line does.
+    let selected = crate::editing::is_selected(store, d.notations, selection, n);
     // The card the element's notation describes, when it describes one.
     let mut card = element.and_then(|e| d.notations.of_element(store, e)?.card(store, e, d.diagram));
     // A row typed in place: its place is kept blank under the field, and a new one's card grows to
@@ -2052,7 +2053,7 @@ fn draw_edge(
     // click on it selects (an n-ary association's leg with its association, AR-128).
     let selected = selection.contains(&e)
         || selection.contains(&element)
-        || selection.iter().any(|o| d.notations.selected_with(store, *o) == Some(element))
+        || selection.iter().any(|o| d.notations.line_selected_with(store, *o) == Some(element))
         || selection.contains(&d.notations.selects_as(store, element));
     // A leg leaves its diamond where the line meets the diamond's outline, not its node's border.
     if let Some(source) = element_of(store, e, edge::SOURCE)

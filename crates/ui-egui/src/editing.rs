@@ -183,7 +183,8 @@ pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
     let mut ids: Vec<Uuid> = Vec::new();
-    let boxes = nodes_of(store, d).into_iter().flat_map(|top| archforge_diagram::node_tree(store, top)).map(|n| element_of(store, n).unwrap_or(n));
+    let boxes =
+        nodes_of(store, d).into_iter().flat_map(|top| archforge_diagram::node_tree(store, top)).map(|n| node_target(store, session.view(), n));
     let lines: Vec<Obj> = Grid::build(store, d).lines().map(|(e, _)| line_target(store, session.view(), e)).collect();
     let labels: Vec<Obj> = lines.iter().filter(|g| sets::is_generalization(store, **g)).flat_map(|g| sets::sets_of(store, *g)).collect();
     for id in boxes.chain(lines).chain(labels).filter_map(|o| uuid(store, o)) {
@@ -201,6 +202,12 @@ pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
 /// selects (a leg of an n-ary association its association, AR-128), and a note link itself.
 fn line_target(store: &Store, notations: &ProjectView, e: Obj) -> Obj {
     notations.selects_as(store, store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e))
+}
+
+/// What a click on node `n` selects: what its notation says a click on the element it shows
+/// selects ([`ProjectView::selects_as`]), and a note, which shows none, itself.
+fn node_target(store: &Store, notations: &ProjectView, n: Obj) -> Obj {
+    element_of(store, n).map_or(n, |e| notations.selects_as(store, e))
 }
 
 fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
@@ -236,33 +243,33 @@ pub fn content_height(columns: usize) -> f64 {
 }
 
 /// The nodes of the selected elements on diagram `d`, with the hit node first.
-fn selected_nodes(store: &Store, d: Obj, selection: &[Obj], hit: Obj) -> Vec<Uuid> {
+fn selected_nodes(store: &Store, notations: &ProjectView, d: Obj, selection: &[Obj], hit: Obj) -> Vec<Uuid> {
     let mut out: Vec<Uuid> = uuid(store, hit).into_iter().collect();
     for n in nodes_of(store, d) {
-        if n == hit {
-            continue;
-        }
-        if selection.contains(&n) || element_of(store, n).is_some_and(|e| selection.contains(&e)) {
+        if n != hit && is_selected(store, notations, selection, n) {
             out.extend(uuid(store, n));
         }
     }
     out
 }
 
-fn is_selected(store: &Store, selection: &[Obj], n: Obj) -> bool {
-    selection.contains(&n) || element_of(store, n).is_some_and(|e| selection.contains(&e))
+/// Whether node `n` counts as selected, as the canvas draws it and as the gestures take it: the
+/// node itself, the element it shows, or what a click on it selects ([`ProjectView::selects_as`])
+/// is in `selection`.
+pub(crate) fn is_selected(store: &Store, notations: &ProjectView, selection: &[Obj], n: Obj) -> bool {
+    selection.contains(&n) || element_of(store, n).is_some_and(|e| selection.contains(&e) || selection.contains(&notations.selects_as(store, e)))
 }
 
 /// The one selected node of `d`, when exactly one is.
-fn single_selected(store: &Store, d: Obj, selection: &[Obj]) -> Option<Obj> {
-    let mut found = nodes_of(store, d).into_iter().filter(|n| is_selected(store, selection, *n));
+fn single_selected(store: &Store, notations: &ProjectView, d: Obj, selection: &[Obj]) -> Option<Obj> {
+    let mut found = nodes_of(store, d).into_iter().filter(|n| is_selected(store, notations, selection, *n));
     let first = found.next()?;
     found.next().is_none().then_some(first)
 }
 
 /// The corner handle of the selected node under `pos`, if any.
 fn handle_at(store: &Store, notations: &ProjectView, d: Obj, selection: &[Obj], view: View, pos: Pos2) -> Option<(Obj, Corner)> {
-    let n = single_selected(store, d, selection).filter(|n| !notations.node_is_label(store, *n))?;
+    let n = single_selected(store, notations, d, selection).filter(|n| !notations.node_is_label(store, *n))?;
     let ring = view.rect(&bounds_of(store, n)).expand(4.0);
     let corners = [
         (Corner::TopLeft, ring.left_top()),
@@ -457,7 +464,7 @@ fn decide(
             }
             if resp.clicked() {
                 return match hit_node(pos) {
-                    Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
+                    Some(n) => Action::Select(uuid(store, node_target(store, notations, n)).into_iter().collect()),
                     None => Action::Nothing,
                 };
             }
@@ -479,7 +486,7 @@ fn decide(
             }
             if resp.clicked() {
                 return match hit_node(pos) {
-                    Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
+                    Some(n) => Action::Select(uuid(store, node_target(store, notations, n)).into_iter().collect()),
                     None => Action::Nothing,
                 };
             }
@@ -487,7 +494,7 @@ fn decide(
         }
         Tool::Note => match (resp.clicked(), pos) {
             (true, Some(pos)) => match hit_node(pos) {
-                Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
+                Some(n) => Action::Select(uuid(store, node_target(store, notations, n)).into_iter().collect()),
                 None => {
                     let (x, y) = view.to_canvas(pos);
                     Action::PlaceNote(x, y)
@@ -497,7 +504,7 @@ fn decide(
         },
         Tool::Place(tool) => match (resp.clicked(), pos) {
             (true, Some(pos)) => match hit_node(pos) {
-                Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
+                Some(n) => Action::Select(uuid(store, node_target(store, notations, n)).into_iter().collect()),
                 None => {
                     let (x, y) = view.to_canvas(pos);
                     Action::Place(tool, x, y)
@@ -543,12 +550,13 @@ fn decide(
                 }
                 return match hit_node(from) {
                     Some(n) => {
-                        let nodes = if is_selected(store, selection, n) {
-                            selected_nodes(store, d, selection, n)
+                        let nodes = if is_selected(store, notations, selection, n) {
+                            selected_nodes(store, notations, d, selection, n)
                         } else {
                             uuid(store, n).into_iter().collect()
                         };
-                        let select_first = if is_selected(store, selection, n) { None } else { uuid(store, element_of(store, n).unwrap_or(n)) };
+                        let select_first =
+                            if is_selected(store, notations, selection, n) { None } else { uuid(store, node_target(store, notations, n)) };
                         Action::Start(Gesture::Move { nodes, from }, select_first)
                     }
                     None => {
@@ -684,7 +692,7 @@ fn decide(
                     _ => None,
                 };
                 let target = match (on_top(shell, store, grid, card, pos), hit) {
-                    (Some(n), _) => element_of(store, n).unwrap_or(n),
+                    (Some(n), _) => node_target(store, notations, n),
                     (None, Some(Hit::Edge(e))) => line_target(store, notations, e),
                     (None, _) => d,
                 };
@@ -952,7 +960,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
             let mut ids: Vec<Uuid> = if shift { session.view().selection.iter().filter_map(|o| uuid(store, *o)).collect() } else { Vec::new() };
             for n in nodes_of(store, d) {
                 if view.rect(&bounds_of(store, n)).intersects(area)
-                    && let Some(id) = uuid(store, element_of(store, n).unwrap_or(n))
+                    && let Some(id) = uuid(store, node_target(store, session.view(), n))
                     && !ids.contains(&id)
                 {
                     ids.push(id);
@@ -1658,7 +1666,7 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
             let selection = &s.view().selection;
             let selected: Vec<(Obj, Uuid, Rect)> = nodes_of(store, d)
                 .into_iter()
-                .filter(|n| is_selected(store, selection, *n))
+                .filter(|n| is_selected(store, s.view(), selection, *n))
                 .filter_map(|n| {
                     let id = uuid(store, n)?;
                     Some((n, id, overrides.get(&id).copied().unwrap_or_else(|| view.rect(&bounds_of(store, n)))))
@@ -2201,7 +2209,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
             let selection = &s.view().selection;
             nodes_of(store, d)
                 .into_iter()
-                .filter(|n| is_selected(store, selection, *n))
+                .filter(|n| is_selected(store, s.view(), selection, *n))
                 .filter_map(|n| Some((uuid(store, n)?, part_of_node(kind, store, n).and_then(|e| uuid(store, e)))))
                 .collect()
         }

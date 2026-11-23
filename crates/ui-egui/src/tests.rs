@@ -31078,6 +31078,181 @@ fn an_n_ary_end_selected_on_its_own_shows_no_line_end_handles() {
     }
 }
 
+/// A test-only notation over UML's metamodel that draws and places as UML does, but a click on
+/// Order's figure selects Order's package. ER and UML each select what was clicked, so only a
+/// notation like this one shows that the canvas asks a node's notation what a click on it
+/// selects, and draws a card selected with it (AR-784, ADR 0005).
+struct PackageClicks;
+
+impl archforge_diagram::Notation for PackageClicks {
+    /// UML's name, as the notation it stands in for.
+    fn name(&self) -> &'static str {
+        "UML"
+    }
+    /// UML's metamodel.
+    fn metamodel(&self) -> u16 {
+        archforge_uml::INDEX
+    }
+    /// UML's diagram kinds.
+    fn kinds(&self) -> &'static [&'static str] {
+        archforge_uml::UmlNotation.kinds()
+    }
+    /// As UML answers.
+    fn needs_element(&self, kind: &str) -> bool {
+        archforge_uml::UmlNotation.needs_element(kind)
+    }
+    /// As UML answers.
+    fn is_of(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
+        archforge_uml::UmlNotation.is_of(kind, class)
+    }
+    /// As UML answers.
+    fn shows(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
+        archforge_uml::UmlNotation.shows(kind, class)
+    }
+    /// As UML answers.
+    fn may_show(&self, store: &archforge_mof::Store, diagram: archforge_mof::Obj, element: archforge_mof::Obj) -> bool {
+        archforge_uml::UmlNotation.may_show(store, diagram, element)
+    }
+    /// As UML answers.
+    fn connects(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
+        archforge_uml::UmlNotation.connects(kind, class)
+    }
+    /// As UML answers.
+    fn ends(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<(archforge_mof::Obj, archforge_mof::Obj)> {
+        archforge_uml::UmlNotation.ends(store, element)
+    }
+    /// UML's card, so the diagram draws as it does.
+    fn card(
+        &self,
+        store: &archforge_mof::Store,
+        element: archforge_mof::Obj,
+        diagram: archforge_mof::Obj,
+    ) -> Option<archforge_diagram::figure::Card> {
+        archforge_uml::UmlNotation.card(store, element, diagram)
+    }
+    /// UML's line, so the diagram draws as it does.
+    fn line(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
+        archforge_uml::UmlNotation.line(store, element)
+    }
+    /// A click on Order's figure selects Order's package; anything else selects itself.
+    fn selects_as(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> archforge_mof::Obj {
+        if store.class_of(element).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(store, element) == "Order" {
+            archforge_uml::nesting::home_package(store, element).unwrap_or(element)
+        } else {
+            element
+        }
+    }
+}
+
+/// A project of ER and [`PackageClicks`].
+static PACKAGE_CLICKS: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotation, &PackageClicks];
+
+/// The sample class diagram open in `theme`, its session over a view of [`PackageClicks`]: Order's
+/// card's node, Order's package, and Customer with its card's node.
+fn package_clicks_sample(theme: ThemeKind) -> (Harness<'static, Shell>, String, archforge_mof::Obj, archforge_mof::Obj, archforge_mof::Obj) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let d = crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let (tables, junctions) = archforge_notations::storage();
+    let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
+    let next = std::sync::atomic::AtomicU64::new(1 << 40);
+    let ids = Box::new(move || {
+        let mut r = [0u8; 10];
+        r[2..].copy_from_slice(&next.fetch_add(1, std::sync::atomic::Ordering::Relaxed).to_be_bytes());
+        archforge_mof::Uuid::v7(1_761_670_800_000, r)
+    });
+    let mut st = archforge_notations::store(ids).unwrap();
+    archforge_mof::rows::restore(&mut st, &rows, &tables, &junctions).unwrap();
+    let view = archforge_diagram::ProjectView::new(PACKAGE_CLICKS);
+    let session = archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), st, 1, archforge_engine::Options::default(), view);
+    h.state_mut().session = Some(session);
+    crate::canvas::open(h.state_mut(), d);
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let class =
+        |name: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
+    let (order, customer) = (class("Order"), class("Customer"));
+    let node = st.uuid(archforge_diagram::views_of(st, order).2[0]).unwrap().to_string();
+    let package = archforge_uml::nesting::home_package(st, order).unwrap();
+    let customer_node = archforge_diagram::views_of(st, customer).2[0];
+    (h, node, package, customer, customer_node)
+}
+
+/// Whether the last frame stroked a rectangle in the accent colour of `theme` round the centre of
+/// `card`, as a selected card is drawn.
+fn card_ringed(h: &Harness<'static, Shell>, theme: ThemeKind, card: egui::Rect) -> bool {
+    let accent = crate::ux::palette(theme == ThemeKind::Dark).accent;
+    rect_shapes(h).iter().any(|(r, _, stroke)| *stroke == accent && r.contains(card.center()) && r.width() >= card.width() - 4.0)
+}
+
+/// What a click on a node selects is its notation's answer, on every way a node is selected (a
+/// click with Select, a drag that starts a move, Select all, a marquee, and a click with the
+/// Note, Link, classifier and Relationship tools); while that answer is selected the card draws
+/// selected, shows its resize handles and moves with the rest of the selection: through a notation
+/// whose click on Order selects its package. In light and dark.
+#[test]
+fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, node, package, customer, customer_node) = package_clicks_sample(theme);
+        let clear = |h: &mut Harness<'static, Shell>| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+            h.state_mut().canvas.tool = crate::canvas::Tool::Select;
+            h.run();
+        };
+        let at = card(&h, &node);
+        assert!(!card_ringed(&h, theme, rect_of(&h, &format!("workspace.canvas.node.{node}"))), "{theme:?}: nothing selected yet");
+        click(&mut h, at);
+        assert_eq!(selection(&h), vec![package], "{theme:?}: a click with Select");
+        h.run();
+        assert!(card_ringed(&h, theme, rect_of(&h, &format!("workspace.canvas.node.{node}"))), "{theme:?}: the card draws selected with its package");
+        // Its package selected, the card is the one selected node: its corner handle resizes it.
+        let order_node = h.state().session.as_ref().unwrap().doc().by_uuid(archforge_mof::Uuid::parse(&node).unwrap()).unwrap();
+        let bounds =
+            |h: &Harness<'static, Shell>, n: archforge_mof::Obj| archforge_diagram::grid::bounds_of(h.state().session.as_ref().unwrap().doc(), n);
+        let before = bounds(&h, order_node);
+        let corner = rect_of(&h, &format!("workspace.canvas.node.{node}")).expand(4.0).right_bottom();
+        drag(&mut h, corner, corner + egui::vec2(40.0, 30.0));
+        assert!(bounds(&h, order_node).width > before.width, "{theme:?}: resized by its handle");
+        // With Customer selected beside the package, a drag on Customer's card moves Order's too,
+        // and keeps the selection.
+        let customer_id = h.state().session.as_ref().unwrap().doc().uuid(customer).unwrap().to_string();
+        let package_id = h.state().session.as_ref().unwrap().doc().uuid(package).unwrap().to_string();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [package_id, customer_id] })).unwrap();
+        h.run();
+        let was = bounds(&h, order_node);
+        let customer_card = h.state().session.as_ref().unwrap().doc().uuid(customer_node).unwrap().to_string();
+        let at = card(&h, &customer_card);
+        drag(&mut h, at, at + egui::vec2(30.0, 20.0));
+        assert!(bounds(&h, order_node).x > was.x, "{theme:?}: Order moves with Customer");
+        assert_eq!(selection(&h), vec![package, customer], "{theme:?}: the selection kept");
+        clear(&mut h);
+        let at = card(&h, &node);
+        drag(&mut h, at, at + egui::vec2(20.0, 10.0));
+        assert_eq!(selection(&h), vec![package], "{theme:?}: a drag that moves the card");
+        clear(&mut h);
+        let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
+        crate::editing::select_all(h.state_mut(), d);
+        let order = h.state().session.as_ref().unwrap().doc().get(order_node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap();
+        assert!(selection(&h).contains(&package), "{theme:?}: Select all takes the package");
+        assert!(!selection(&h).contains(&order), "{theme:?}: and not Order");
+        clear(&mut h);
+        let r = rect_of(&h, &format!("workspace.canvas.node.{node}"));
+        drag(&mut h, r.left_top() - egui::vec2(20.0, 20.0), r.center());
+        assert_eq!(selection(&h), vec![package], "{theme:?}: a marquee over the card");
+        for tool in [
+            crate::canvas::Tool::Note,
+            crate::canvas::Tool::Link,
+            crate::canvas::Tool::Place(crate::uml_classifier::TOOL),
+            crate::canvas::Tool::Connect("relationship"),
+        ] {
+            clear(&mut h);
+            h.state_mut().canvas.tool = tool;
+            let at = card(&h, &node);
+            click(&mut h, at);
+            assert_eq!(selection(&h), vec![package], "{theme:?}: a click with {tool:?}");
+        }
+    }
+}
+
 /// An end's editor writes its role, multiplicity, navigability, ordering and uniqueness as one
 /// undo step; a role another end has, whatever the case, is refused in place, the editor open and
 /// nothing written. In light and dark.

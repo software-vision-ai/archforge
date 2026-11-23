@@ -266,8 +266,9 @@ impl Notation for UmlNotation {
         nary::association_of_end(store, element).unwrap_or(element)
     }
 
-    /// A qualifier draws its association's line selected (AR-127).
-    fn selected_with(&self, store: &Store, element: Obj) -> Option<Obj> {
+    /// A qualifier draws its association's line selected, not the card of an association class
+    /// (AR-127).
+    fn line_selected_with(&self, store: &Store, element: Obj) -> Option<Obj> {
         qualifiers::association_of(store, element).map(|(a, _)| a)
     }
 

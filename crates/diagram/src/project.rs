@@ -111,10 +111,11 @@ pub trait Notation: Send + Sync + 'static {
         let _ = store;
         element
     }
-    /// The element whose figure draws selected while `element` is selected, beside `element`'s own:
-    /// a qualifier's association, whose line it marks as a selected member marks its card
-    /// (AR-127). None by default.
-    fn selected_with(&self, store: &Store, element: Obj) -> Option<Obj> {
+    /// The element whose line draws selected while `element` is selected, beside `element`'s own
+    /// figure: a qualifier's association, the qualifier sitting in its line's box, so it marks the
+    /// line, as a selected member marks its own card (AR-127). The element's card, where it has one
+    /// too, is not marked. None by default.
+    fn line_selected_with(&self, store: &Store, element: Obj) -> Option<Obj> {
         let _ = (store, element);
         None
     }
@@ -321,10 +322,10 @@ impl ProjectView {
         self.of_element(store, element).map_or(element, |n| n.selects_as(store, element))
     }
 
-    /// The element whose figure draws selected while `element` is selected, as its notation answers
-    /// ([`Notation::selected_with`]); none when no notation holds it.
-    pub fn selected_with(&self, store: &Store, element: Obj) -> Option<Obj> {
-        self.of_element(store, element)?.selected_with(store, element)
+    /// The element whose line draws selected while `element` is selected, as its notation answers
+    /// ([`Notation::line_selected_with`]); none when no notation holds it.
+    pub fn line_selected_with(&self, store: &Store, element: Obj) -> Option<Obj> {
+        self.of_element(store, element)?.line_selected_with(store, element)
     }
 
     /// Whether a selected line of `element` shows its end handles, as its notation answers
