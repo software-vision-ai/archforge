@@ -8631,6 +8631,17 @@ fn each_notation_answers_the_words_and_limits_of_its_own_elements() {
     assert_eq!((uml.name_limit(), uml.description_limit()), (archforge_uml::commands::MAX_NAME, archforge_uml::descriptions::MAX_DESCRIPTION));
 }
 
+/// The notations the shell knows are never none (AR-785): a description field for an element no
+/// notation owns takes the most any of them takes, which is the 4096 characters every description
+/// field took before the notations said their own, never a fallback over an empty list.
+#[test]
+fn the_shell_knows_notations_and_their_longest_description_is_the_old_limit() {
+    use crate::notation_ui::UIS;
+    assert!(!UIS.is_empty());
+    assert_eq!(UIS.iter().map(|ui| ui.description_limit()).max(), Some(archforge_er::rules::MAX_TEXT));
+    assert_eq!(archforge_er::rules::MAX_TEXT, 4096);
+}
+
 /// A name of nothing but spaces is refused before it is sent, except for a diagram and for what a
 /// notation's rename command may leave unnamed: a relationship's, in ER and in UML (AR-786).
 #[test]
