@@ -31252,8 +31252,8 @@ fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
             assert_eq!(selection(&h), vec![package], "{theme:?}: a click with {tool:?}");
         }
         // With the package's own card on the diagram, the first drag on Order, unselected, moves
-        // both cards, as the selection it makes takes both in; a drag on Customer moves Customer
-        // alone.
+        // both cards, as the selection it makes takes both in, and so does the first drag on the
+        // package's card; a drag on Customer moves Customer alone.
         clear(&mut h);
         let (d_id, package_id) = {
             let st = h.state().session.as_ref().unwrap().doc();
@@ -31275,6 +31275,23 @@ fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
         assert_eq!(selection(&h), vec![package], "{theme:?}: the drag selects the package");
         assert!(bounds(&h, order_node).x > order_was.x, "{theme:?}: Order moves");
         assert!(bounds(&h, package_node).x > package_was.x, "{theme:?}: and the package's card with it, on the first drag");
+        // The other way round: the first drag on the package's card, unselected, moves Order's too,
+        // as selecting the package takes Order's card in.
+        clear(&mut h);
+        let (order_was, package_was) = (bounds(&h, order_node), bounds(&h, package_node));
+        let package_card = h.state().session.as_ref().unwrap().doc().uuid(package_node).unwrap().to_string();
+        // The package's card brought into view, its centre at the canvas's.
+        let canvas = rect_of(&h, "workspace.canvas");
+        let (zoom, pan) = (h.state().canvas.zoom, h.state().canvas.pan);
+        let centre = egui::pos2((package_was.x + package_was.width / 2.0) as f32, (package_was.y + package_was.height / 2.0) as f32);
+        h.state_mut().canvas.pan = canvas.center() - canvas.min - centre.to_vec2() * zoom;
+        h.run();
+        let at = card(&h, &package_card);
+        drag(&mut h, at, at + egui::vec2(30.0, 20.0));
+        assert_eq!(selection(&h), vec![package], "{theme:?}: the drag on the package's card selects it");
+        assert!(bounds(&h, package_node).x > package_was.x, "{theme:?}: the package's card moves");
+        assert!(bounds(&h, order_node).x > order_was.x, "{theme:?}: and Order's with it, on the first drag");
+        h.state_mut().canvas.pan = pan;
         clear(&mut h);
         let package_was = bounds(&h, package_node);
         let customer_card = h.state().session.as_ref().unwrap().doc().uuid(customer_node).unwrap().to_string();

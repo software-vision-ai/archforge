@@ -553,16 +553,12 @@ fn decide(
                         let (nodes, select_first) = if is_selected(store, notations, selection, n) {
                             (selected_nodes(store, notations, d, selection, n), None)
                         } else {
-                            // The press selects what a click on the node selects. Where that is
-                            // another element than the node's own, the drag moves every node the new
-                            // selection takes in, as the next drag would; else the node alone.
+                            // The press selects what a click on the node selects, and the drag
+                            // moves every node that selection takes in, as the next drag would:
+                            // the pressed node, and any other whose element is the target or whose
+                            // click selects it too. Where nothing else is, the node alone.
                             let target = node_target(store, notations, n);
-                            let nodes = if element_of(store, n).unwrap_or(n) == target {
-                                uuid(store, n).into_iter().collect()
-                            } else {
-                                selected_nodes(store, notations, d, &[target], n)
-                            };
-                            (nodes, uuid(store, target))
+                            (selected_nodes(store, notations, d, &[target], n), uuid(store, target))
                         };
                         Action::Start(Gesture::Move { nodes, from }, select_first)
                     }
