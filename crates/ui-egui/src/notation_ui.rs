@@ -1,9 +1,9 @@
-//! What a notation brings to the shell's explorers, search, problems and panels:
-//! its rows in the Models tree and what `+` adds there, its renames and what a
-//! removal takes with it, its entries in the project search, its problems, and the heading and the
-//! body of Properties for its elements. The shells (the tree, the filter, the scroll, the search
-//! list, the sections, the fields, the editors) stay shared; each answer is about the notation's
-//! own elements, the classes of its metamodel.
+//! What a notation brings to the shell's explorers, search, problems and panels: its rows in the
+//! Models tree and what `+` adds there, its renames and what a removal takes with it, its entries
+//! in the project search, its problems, the heading and the body of Properties for its elements,
+//! and its commands' refusals in the user's words. The shells (the tree, the filter, the scroll,
+//! the search list, the sections, the fields, the editors) stay shared; each answer is about the
+//! notation's own elements, the classes of its metamodel.
 
 use archforge_mof::{Obj, Store, Uuid};
 use egui::Rect;
@@ -191,6 +191,28 @@ pub(crate) trait NotationUi: Sync {
     /// Draws the body of Properties for `subject`, an element of its metamodel.
     #[allow(clippy::too_many_arguments, reason = "the body is drawn into the panel from its top, for its subject")]
     fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject);
+
+    // Refusals: each is said by the one notation whose commands give it; one the engine, the
+    // diagrams or both notations give is the shell's own ([`crate::panels::said`]).
+
+    /// A typed refusal only its own commands give, in the user's words; none for any other reason
+    /// or for a kind of element the catalogues don't name.
+    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
+        let _ = reason;
+        None
+    }
+    /// Why one of its own commands is not available now, in the user's words, by the reason its
+    /// availability check gives; none for any other reason.
+    fn disabled(&self, reason: &str) -> Option<String> {
+        let _ = reason;
+        None
+    }
+    /// Whether its rename command `cmd` may empty the name, which leaves the element unnamed (a
+    /// relationship's); false for any other command.
+    fn may_be_unnamed(&self, cmd: &str) -> bool {
+        let _ = cmd;
+        false
+    }
 }
 
 /// The notations the shell knows.

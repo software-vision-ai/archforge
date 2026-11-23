@@ -492,4 +492,19 @@ impl NotationUi for ErUi {
             _ => {}
         }
     }
+
+    /// ER's own refusals: those its commands alone give, in the ER editors' words.
+    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
+        crate::er_said::said(reason)
+    }
+
+    /// No schema or no table yet, for the ER commands that need one.
+    fn disabled(&self, reason: &str) -> Option<String> {
+        crate::er_said::disabled(reason)
+    }
+
+    /// A relationship may lose its name, which leaves it unnamed.
+    fn may_be_unnamed(&self, cmd: &str) -> bool {
+        cmd == "er.relationship.rename"
+    }
 }

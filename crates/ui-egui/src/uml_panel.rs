@@ -1563,11 +1563,13 @@ pub(crate) fn target_refusals(
 
 /// Why a default does not read, in the user's words: the value and the form its type takes.
 pub(crate) fn default_refusal(store: &Store, e: &archforge_uml::modifiers::DefaultError) -> String {
-    default_said(&e.reason(store)).unwrap_or_else(|| e.said(store))
+    crate::panels::said(&e.reason(store)).unwrap_or_else(|| e.said(store))
 }
 
 /// A property's default refused, typed, in the user's words: too long, not read as its type's
-/// default, or not fitting the type it would take; none for another reason.
+/// default, or not fitting the type it would take; none for another reason, and for a default that
+/// is none of an enumeration's literals, which ER's commands give too and the shell says
+/// ([`crate::panels::said`]).
 pub(crate) fn default_said(reason: &archforge_engine::Reason) -> Option<String> {
     use archforge_engine::{DefaultKind as K, Reason};
     let (value, kind) = match reason {
@@ -1584,7 +1586,7 @@ pub(crate) fn default_said(reason: &archforge_engine::Reason) -> Option<String> 
         K::Real => tr("{value} is not a number, which a Real's default is, such as 2.5."),
         K::Boolean => tr("{value} is neither true nor false, which a Boolean's default is."),
         K::UnlimitedNatural => tr("{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is."),
-        K::Literal(en) => return Some(fmt(&tr("{value} is not a literal of {enumeration}."), &[("value", value), ("enumeration", en)])),
+        K::Literal(_) => return None,
         K::Text => tr("{value} cannot be read as a default."),
     };
     Some(fmt(&said, &[("value", value)]))
