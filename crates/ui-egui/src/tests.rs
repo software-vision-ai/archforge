@@ -31187,8 +31187,9 @@ fn card_ringed(h: &Harness<'static, Shell>, theme: ThemeKind, card: egui::Rect) 
 /// What a click on a node selects is its notation's answer, on every way a node is selected (a
 /// click with Select, a drag that starts a move, Select all, a marquee, and a click with the
 /// Note, Link, classifier and Relationship tools); while that answer is selected the card draws
-/// selected, shows its resize handles and moves with the rest of the selection: through a notation
-/// whose click on Order selects its package. In light and dark.
+/// selected, shows its resize handles and moves with the rest of the selection, the first drag
+/// that makes the selection included: through a notation whose click on Order selects its package.
+/// In light and dark.
 #[test]
 fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -31250,6 +31251,36 @@ fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
             click(&mut h, at);
             assert_eq!(selection(&h), vec![package], "{theme:?}: a click with {tool:?}");
         }
+        // With the package's own card on the diagram, the first drag on Order, unselected, moves
+        // both cards, as the selection it makes takes both in; a drag on Customer moves Customer
+        // alone.
+        clear(&mut h);
+        let (d_id, package_id) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            (h.state().canvas.active.unwrap().to_string(), st.uuid(package).unwrap().to_string())
+        };
+        let placed = h
+            .state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("diagram.place", &serde_json::json!({ "diagram": d_id, "element": package_id, "x": 1400, "y": 700 }))
+            .unwrap();
+        let package_node =
+            h.state().session.as_ref().unwrap().doc().by_uuid(archforge_mof::Uuid::parse(placed.value["id"].as_str().unwrap()).unwrap()).unwrap();
+        h.run();
+        let (order_was, package_was) = (bounds(&h, order_node), bounds(&h, package_node));
+        let at = card(&h, &node);
+        drag(&mut h, at, at + egui::vec2(30.0, 20.0));
+        assert_eq!(selection(&h), vec![package], "{theme:?}: the drag selects the package");
+        assert!(bounds(&h, order_node).x > order_was.x, "{theme:?}: Order moves");
+        assert!(bounds(&h, package_node).x > package_was.x, "{theme:?}: and the package's card with it, on the first drag");
+        clear(&mut h);
+        let package_was = bounds(&h, package_node);
+        let customer_card = h.state().session.as_ref().unwrap().doc().uuid(customer_node).unwrap().to_string();
+        let at = card(&h, &customer_card);
+        drag(&mut h, at, at + egui::vec2(30.0, 20.0));
+        assert_eq!(bounds(&h, package_node).x, package_was.x, "{theme:?}: Customer's drag leaves the package's card");
     }
 }
 
