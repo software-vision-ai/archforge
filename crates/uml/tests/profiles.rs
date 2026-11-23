@@ -917,6 +917,51 @@ fn a_package_taking_a_profile_along_is_checked_for_its_uses() {
     assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
 }
 
+/// A nested package that applies a profile and carries one of its stereotypes itself is removed in
+/// one step, that application going with it, since it is on what goes and nothing is handed up with
+/// it (AR-800); one whose contents, a class or a package handed up, use the profile is still
+/// refused, naming only them.
+#[test]
+fn a_nested_package_goes_with_its_own_stereotype_applications() {
+    let mut s = session();
+    let [commerce, ..] = shop(&mut s);
+    let ledger = run(&mut s, "uml.package.add", json!({ "name": "Ledger", "parent": commerce }));
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit" }));
+    let trace = run(&mut s, "uml.stereotype.add", json!({ "profile": audit, "name": "Trace", "extends": ["Package", "Class"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": ledger, "profile": audit }));
+    let entry = run(&mut s, "uml.class.add", json!({ "package": ledger, "name": "Entry" }));
+    let drafts = run(&mut s, "uml.package.add", json!({ "name": "Drafts", "parent": ledger }));
+    // «Trace» on Ledger alone: Ledger goes, and its application with it.
+    let mut own = with_applications(&s, &[(&trace, &ledger)]);
+    one_step(&mut own, "element.remove", json!({ "ids": [ledger] }));
+    let st = own.doc();
+    assert!(st.by_uuid(Uuid::parse(&ledger).unwrap()).is_none_or(|l| !st.is_alive(l)), "Ledger went");
+    assert!(profiles::applications_of(st, obj(st, &trace)).is_empty(), "its application went with it");
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_uml::INSTANCE_SPECIFICATION)), "no application left");
+    for (handed, what) in [(&entry, "Entry"), (&drafts, "Drafts")] {
+        assert_eq!(st.container(obj(st, handed)).unwrap().map(|(p, _)| p), Some(obj(st, &commerce)), "{what} was handed up");
+    }
+    assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
+    // «Trace» on Entry too, which Ledger hands up to Commerce out of Audit's reach: refused, naming
+    // Entry alone, typed, changing nothing, a step waiting to be redone kept.
+    use archforge_engine::{EngineError, InUse, Reason, Used};
+    let mut used = with_applications(&s, &[(&trace, &ledger), (&trace, &entry)]);
+    run(&mut used, "uml.class.add", json!({ "package": commerce, "name": "Journal" }));
+    used.undo().unwrap();
+    let history = |s: &S| (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string));
+    let before = history(&used);
+    let why = refused(&mut used, "element.remove", json!({ "ids": [ledger] }));
+    assert!(why.contains("Ledger applies the profiles its elements use: «Trace» on Entry. Remove those first."), "{why}");
+    let Err(EngineError::Failed { error, .. }) = used.execute("element.remove", &json!({ "ids": [ledger] })) else { panic!("refused") };
+    let uses = vec![("Trace".to_string(), vec!["Entry".to_string()], 1)];
+    assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: Used::AppliedProfiles { package: "Ledger".to_string() }, uses }))));
+    assert_eq!(history(&used), before, "the history is as it was");
+    // «Trace» on Drafts, a package Ledger hands up as it does Entry: refused alike, naming Drafts.
+    let mut nested = with_applications(&s, &[(&trace, &ledger), (&trace, &drafts)]);
+    let why = refused(&mut nested, "element.remove", json!({ "ids": [ledger] }));
+    assert!(why.contains("Ledger applies the profiles its elements use: «Trace» on Drafts. Remove those first."), "{why}");
+}
+
 /// `uml.profile.diagram` fills the profile's diagram as the window's Open profile diagram does:
 /// every metaclass in a row, every stereotype under them and every extension line, as one step;
 /// asked again it adds only what is missing, keeping what the diagram shows where it is.
