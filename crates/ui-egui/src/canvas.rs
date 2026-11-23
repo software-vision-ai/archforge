@@ -807,7 +807,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     let pointer = resp.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.hover_pos()));
     let overrides = crate::editing::preview_rects(shell, view, pointer);
     let renaming = shell.canvas.rename.as_ref().map(|rn| rn.node).or_else(|| shell.canvas.note_edit.as_ref().map(|ne| ne.node));
-    let grid = shell.session.as_ref().map(|s| grid(s.doc(), d));
+    let grid = shell.session.as_ref().map(|s| grid(s.doc(), s.view(), d));
     let mut pending_badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)> = Vec::new();
     if let (Some(session), Some(grid)) = (shell.session.as_ref(), grid.as_ref()) {
         let store = session.doc();
@@ -824,7 +824,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
                 .filter(|at| r.contains(*at) && shell.canvas.gesture.is_none() && ui.rect_contains_pointer(r))
                 .and_then(|at| {
                     let (x, y) = view.to_canvas(at);
-                    match crate::editing::hit(store, grid, x, y) {
+                    match crate::editing::hit(store, session.view(), grid, x, y) {
                         Some(archforge_diagram::Hit::Edge(e)) => Some(e),
                         _ => None,
                     }
@@ -925,11 +925,12 @@ pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, con
     }
 }
 
-/// The index of diagram `d` as the canvas draws and hits it: packages' cards under the other
-/// figures, each group in stored order, so a class or a note placed over a package's card stays in
-/// sight and takes the press (AR-570). The store's order is untouched.
-pub(crate) fn grid(store: &Store, d: Obj) -> Grid {
-    Grid::build_with(store, d, |n| archforge_uml::figures::drawn_behind(store, n))
+/// The index of diagram `d` as the canvas draws and hits it: the nodes their notations draw behind
+/// (a package's card) under the other figures, each group in stored order, so a class or a note
+/// placed over a package's card stays in sight and takes the press (AR-570). The store's order is
+/// untouched.
+pub(crate) fn grid(store: &Store, notations: &archforge_diagram::ProjectView, d: Obj) -> Grid {
+    Grid::build_with(store, d, |n| notations.node_drawn_behind(store, n))
 }
 
 /// A diagram to draw: its store, the notations that describe it, and where it goes on screen.
@@ -1143,8 +1144,8 @@ fn draw_node(
         return None;
     }
     let z = view.zoom;
-    // A generalization set's label is drawn with its set line (AR-129), not as a card.
-    if archforge_uml::generalization_sets::is_label(store, n) {
+    // A label (a generalization set's) is drawn with its lines (AR-129), not as a card.
+    if d.notations.node_is_label(store, n) {
         return None;
     }
     let id = store.uuid(n).ok();
@@ -1608,7 +1609,7 @@ fn leads(store: &Store) -> std::collections::HashMap<Obj, Obj> {
 /// `d` scaled to fit `area`, centred, enlarged at most [`PREVIEW_MOST`]: none when it shows
 /// nothing.
 pub(crate) fn preview(store: &Store, notations: &archforge_diagram::ProjectView, d: Obj, area: Rect) -> Option<Preview> {
-    let grid = grid(store, d);
+    let grid = grid(store, notations, d);
     let all = grid.visible(archforge_diagram::Rect::new(-1.0e9, -1.0e9, 2.0e9, 2.0e9));
     let mut boxes: Vec<(Rect, MiniLook, Vec<usize>)> = Vec::new();
     for n in &all.nodes {
@@ -2046,13 +2047,13 @@ fn draw_edge(
     let line = notation.and_then(|nt| nt.line(store, element)).unwrap_or_default();
     let mut points = edge_points(d, e)?;
     let n = points.len();
-    // A selected qualifier marks its association's line, as a selected member marks its card.
-    // An n-ary association's leg draws selected with its association, the diamond and every leg
-    // being the one element (AR-128).
+    // A selected element marks the line its notation draws selected with it (a qualifier its
+    // association's, as a selected member marks its card), and a line draws selected with what a
+    // click on it selects (an n-ary association's leg with its association, AR-128).
     let selected = selection.contains(&e)
         || selection.contains(&element)
-        || selection.iter().any(|o| archforge_uml::qualifiers::association_of(store, *o).is_some_and(|(a, _)| a == element))
-        || archforge_uml::nary::association_of_end(store, element).is_some_and(|a| selection.contains(&a));
+        || selection.iter().any(|o| d.notations.selected_with(store, *o) == Some(element))
+        || selection.contains(&d.notations.selects_as(store, element));
     // A leg leaves its diamond where the line meets the diamond's outline, not its node's border.
     if let Some(source) = element_of(store, e, edge::SOURCE)
         && element_of(store, source, node::ELEMENT).is_some_and(|a| archforge_uml::nary::is_nary(store, a))

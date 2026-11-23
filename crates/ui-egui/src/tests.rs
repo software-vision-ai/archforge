@@ -22613,6 +22613,8 @@ fn a_set_label_that_draws_nothing_takes_no_press() {
             (st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), st.by_uuid(archforge_mof::Uuid::parse(&set_id).unwrap()).unwrap())
         };
         let node = sets::label_node(h.state().session.as_ref().unwrap().doc(), d, set).expect("a node holds its place");
+        let node_id = h.state().session.as_ref().unwrap().doc().uuid(node).unwrap();
+        assert!(!ids(&h).contains(&format!("workspace.canvas.node.{node_id}")), "{theme:?}: the label's node draws no card of its own");
         let bounds = |h: &Harness<'static, Shell>| archforge_diagram::grid::bounds_of(h.state().session.as_ref().unwrap().doc(), node);
         let placed = bounds(&h);
         let at = rect_of(&h, &label_id).center();
@@ -29820,6 +29822,49 @@ fn a_duplicate_qualifier_name_is_refused_in_place_and_nothing_is_written() {
     }
 }
 
+/// Whether the last frame stroked a path in the accent colour of `theme` inside `within`.
+fn accent_path_in(h: &Harness<'static, Shell>, theme: ThemeKind, within: egui::Rect) -> bool {
+    let accent = crate::ux::palette(theme == ThemeKind::Dark).accent;
+    /// Whether `s`, or a shape it holds, is a path stroked in `accent` whose points all lie in `within`.
+    fn walk(s: &egui::Shape, accent: crate::ux::Colour, within: egui::Rect) -> bool {
+        match s {
+            egui::Shape::Path(p) => {
+                matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == accent)
+                    && !p.points.is_empty()
+                    && p.points.iter().all(|at| within.contains(*at))
+            }
+            egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent, within)),
+            _ => false,
+        }
+    }
+    h.output().shapes.iter().any(|c| walk(&c.shape, accent, within))
+}
+
+/// A selected qualifier draws its association's line selected, as its notation says the line goes
+/// with it (AR-127, AR-784); with its class selected instead the line is not. In light and dark.
+#[test]
+fn a_selected_qualifier_draws_its_associations_line_selected() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = qualifiers_sample(theme);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let q = s.execute("uml.qualifier.add", &serde_json::json!({ "association": ids["contains"], "end": 0, "name": "lineNo" })).unwrap();
+        let q = q.value["id"].as_str().unwrap().to_string();
+        let edge = {
+            let st = s.doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["contains"]).unwrap()).unwrap();
+            let d = st.by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
+            let e = archforge_diagram::views_of(st, a).1.into_iter().find(|e| archforge_diagram::diagram_of(st, *e) == Some(d)).unwrap();
+            st.uuid(e).unwrap()
+        };
+        for (selected, marked) in [(&ids["Order"], false), (&q, true)] {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [selected] })).unwrap();
+            h.run();
+            let line = rect_of(&h, &format!("workspace.canvas.edge.{edge}")).expand(2.0);
+            assert_eq!(accent_path_in(&h, theme, line), marked, "{theme:?}: the line drawn selected with {selected}");
+        }
+    }
+}
+
 /// Nested classifiers (AR-132, design page 08, D1 to D4), in light and dark: a right click on
 /// Order's row in Models opens its menu, New inside Order ▸ offers the kinds and Package disabled,
 /// a pick makes one nested classifier in one undo step, named in place, `nested` after its row;
@@ -30953,6 +30998,83 @@ fn a_leg_and_the_diamond_both_select_the_n_ary_association() {
         let at = card(&h, &ids["diamond"]);
         click(&mut h, at);
         assert_eq!(selection(&h), vec![a_obj], "{theme:?}: the diamond selects it");
+    }
+}
+
+/// An n-ary association's legs draw selected with it, a click on one standing for the association
+/// (AR-128, AR-784), and a right click on a leg opens the association's menu as one on its diamond
+/// does. In light and dark.
+#[test]
+fn an_n_ary_associations_legs_draw_selected_with_it_and_a_leg_opens_its_menu() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let leg = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap();
+            let end = archforge_uml::nary::ends(st, a)[0];
+            st.uuid(archforge_diagram::views_of(st, end).1[0]).unwrap()
+        };
+        for (selected, marked) in [(&ids["customer"], false), (&ids["recommends"], true)] {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [selected] })).unwrap();
+            h.run();
+            let line = rect_of(&h, &format!("workspace.canvas.edge.{leg}")).expand(2.0);
+            assert_eq!(accent_path_in(&h, theme, line), marked, "{theme:?}: the leg drawn selected with {selected}");
+        }
+        let empty = rect_of(&h, "workspace.canvas").left_bottom() + egui::vec2(60.0, -200.0);
+        click(&mut h, empty);
+        let at = point_on_edge(&h, leg);
+        right_click(&mut h, at);
+        for key_ in ["add-end", "reconnect-end", "remove", "delete"] {
+            assert!(ids_of(&h).iter().any(|i| *i == format!("workspace.canvas.menu.{key_}")), "{theme:?}: the leg opens {key_}");
+        }
+    }
+}
+
+/// A press on a right-angled leg's segment slides it and selects the n-ary association, as a
+/// click on the leg does (AR-128, AR-784). In light and dark.
+#[test]
+fn a_right_angled_legs_segment_slid_selects_its_n_ary_association() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let (a, leg) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap();
+            (a, archforge_diagram::views_of(st, archforge_uml::nary::ends(st, a)[0]).1[0])
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let leg_id = s.doc().uuid(leg).unwrap().to_string();
+        s.execute("diagram.style", &serde_json::json!({ "ids": [leg_id], "routing": "right-angled" })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        let route = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_diagram::Grid::build(st, st.by_uuid(h.state().canvas.active.unwrap()).unwrap()).line(leg).unwrap().to_vec()
+        };
+        assert!(route.len() >= 3, "{theme:?}: a right-angled route: {route:?}");
+        let view = crate::canvas::View { origin: rect_of(&h, "workspace.canvas").min, pan: h.state().canvas.pan, zoom: h.state().canvas.zoom };
+        let middle = view.to_screen((route[1].0 + route[2].0) / 2.0, (route[1].1 + route[2].1) / 2.0);
+        let level = (route[1].1 - route[2].1).abs() < 1e-6;
+        drag(&mut h, middle, middle + if level { egui::vec2(0.0, -30.0) } else { egui::vec2(-30.0, 0.0) });
+        assert_eq!(selection(&h), vec![a], "{theme:?}: the association, not its end");
+    }
+}
+
+/// An n-ary association's end selected on its own, as `view.select` can select it from the command
+/// line or an agent, shows no handles on its leg's line: the leg moves only its class end, by the
+/// association's own leg handle (AR-128, AR-784). In light and dark.
+#[test]
+fn an_n_ary_end_selected_on_its_own_shows_no_line_end_handles() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let end = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap();
+            st.uuid(archforge_uml::nary::ends(st, a)[0]).unwrap().to_string()
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [end] })).unwrap();
+        h.run();
+        let handles: Vec<String> = ids_of(&h).into_iter().filter(|i| i.starts_with("workspace.canvas.line-end.")).collect();
+        assert!(handles.is_empty(), "{theme:?}: {handles:?}");
     }
 }
 

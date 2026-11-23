@@ -946,6 +946,27 @@ fn each_side_of_a_diagram_is_its_own_state() {
     assert!(diagram_sides(&before, &after, Uuid([7; 16]), |_| {}).unwrap().is_none(), "an unknown id");
 }
 
+/// A package's card is drawn, and hit, under a class placed over it on both sides, as the canvas
+/// draws it (AR-570): the sides ask the notations which nodes are drawn behind (AR-784).
+#[test]
+fn a_packages_card_stays_under_a_class_over_it_on_both_sides() {
+    let (mut s, ..) = project();
+    let shop = run(&mut s, "uml.package.add", json!({ "name": "shop" }));
+    let inner = run(&mut s, "uml.package.add", json!({ "name": "inner", "parent": shop }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Order" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": shop, "name": "shop" }));
+    let class = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 40, "y": 40 }));
+    // Placed after the class, so stored over it.
+    run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": inner, "x": 0, "y": 0, "width": 400, "height": 300 }));
+    let before = state(&s);
+    run(&mut s, "uml.class.rename", json!({ "class": order, "name": "Purchase" }));
+    let seen = drawn(&before, &state(&s), &diagram);
+    for side in [seen.before.as_ref().unwrap(), seen.after.as_ref().unwrap()] {
+        let class = side.store.by_uuid(Uuid::parse(&class).unwrap()).unwrap();
+        assert_eq!(side.grid.hit(100.0, 100.0), Some(archforge_diagram::Hit::Node(class)), "the class takes the press over the package");
+    }
+}
+
 /// A diagram only one side has leaves the other absent, named from the side that has it.
 #[test]
 fn a_diagram_on_one_side_has_an_absent_side() {

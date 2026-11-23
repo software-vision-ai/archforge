@@ -370,7 +370,7 @@ fn a_set_emptied_by_a_deletion_goes_in_the_same_step() {
     run(&mut s, "element.remove", json!({ "ids": [shop.card] }));
     let st = s.doc();
     assert!(!alive(&s, &lone), "the set left empty went with its member, its label too");
-    assert!(st.alive().all(|o| !sets::is_label(st, o)));
+    assert!(st.alive().all(|o| !s.view().node_is_label(st, o)), "no node holds a set's label");
     assert_eq!(sets::members(st, obj(st, &method)), vec![obj(st, &shop.bank)], "the other set keeps the rest");
     s.undo().unwrap();
     assert_eq!(picture(s.doc()), before, "one undo step brings both back");

@@ -60,11 +60,11 @@ element's id or a built-in type's name, Integer, String, Boolean, Real or Unlimi
 the package Types the first time it is used and never twice, a built-in name always meaning the one
 in Types; a multiplicity is typed, `0`, `1`, `0..1`, `*`, `1..*`,
 `2..5`, and one that does not read is a `MultiplicityError` naming why; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text, member_text,
-operation_text, multiplicity, visibility, is_static, member_ends, navigable, grow_cards, grow_node, drawn_behind, MAX_CARD_ROWS}` and
+operation_text, multiplicity, visibility, is_static, member_ends, navigable, grow_cards, grow_node, MAX_CARD_ROWS}` and
 its value formatter `figures::{visibility_mark, bounds, multiplicity_text, modifier_text, stereotypes, stereotype_keywords, row_text,
 kind_keywords, Bounds, PropertyValues, OperationValues, MAX_PARAMETERS}` (AR-669: a member's row, an end's role and text, a
 multiplicity and a classifier's stereotype keywords written from plain values, which the cards fill from the model and effective
-rendering can fill from elsewhere, so both write the same text; `applications::keywords` and `modifiers::suffix` write through it) (`drawn_behind`
+rendering can fill from elsewhere, so both write the same text; `applications::keywords` and `modifiers::suffix` write through it) (UML's `Notation::drawn_behind`
 says a package's card is drawn and hit under the diagram's other figures, AR-570; `grow_cards`
 grows a classifier's nodes to their card's height, never shrinking one and keeping its width, which every command that adds
 or edits a member does in its own step; `grow_node` grows one node so, a plain card only, which `uml.stereotype.set-value`
@@ -88,7 +88,7 @@ shown per diagram as a node of the kind `uml.constraint.braces`, nested in its e
 to its elements by `Notation::links`; removed through `element.remove`, and a constraint left naming nothing by a removal goes
 with it in the same step), `generalization_sets::{specs, is_set, is_generalization, members, sets_of, general, specific,
 general_of, sets_for, flags, braces, label, shared_general, Grouping, generalization_name, reconnect_problem, emptied_by,
-label_node, is_label, place, set_json, LABEL, MAX_MEMBERS, NO_SETS}` (AR-129: `uml.generalization-set.{add, set, place, list}`; a
+label_node, place, set_json, LABEL, MAX_MEMBERS, NO_SETS}` (AR-129: `uml.generalization-set.{add, set, place, list}`; a
 GeneralizationSet in its general classifier's package, grouping generalizations that all specialize that classifier, each
 named once and at most 256, complete or not (isCovering) and disjoint or not (isDisjoint); a generalization may be in several
 sets; a member is never reconnected (`uml.relationship.reconnect` refuses it, naming its sets); removed through
@@ -212,6 +212,13 @@ unchanged.
 handed up that are still in the model at the end, the bindings that went, and every relationship
 that went, of any kind UML's `Relationship` generalizes, so the dependencies at a package that goes
 count there too (AR-698), and the imports and merges a package takes along later.
+
+**What the canvas asks of a figure** (AR-784), UML answers as a `Notation` from its own
+modules: `selects_as` an n-ary association's end as its association (`nary::association_of_end`),
+`selected_with` a qualifier's association (`qualifiers::association_of`), `line_handles` none for
+an n-ary leg and an association class's line beside its card, `drawn_as_card` no binary
+association, `drawn_behind` a package and `is_label` a generalization set
+(`generalization_sets::is_set`).
 
 **A package's default diagram** (AR-575). `defaults::resolve` reads a package's one
 `DefaultDiagramBinding` (the diagram crate's) and gives `DefaultDiagram::Bound` with the structure

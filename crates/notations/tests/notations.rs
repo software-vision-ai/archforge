@@ -838,6 +838,199 @@ fn a_repair_is_judged_by_ids_and_the_problems_reported_follow_it() {
     assert_eq!(diagnosed(opened.session.doc(), &opened.problems), expected);
 }
 
+/// A project of both notations with one of each figure the canvas asks its notation about
+/// (AR-784): UML's nested package, classes, a qualified binary association, an n-ary association
+/// with its diamond, an association class with its card and a generalization set with its label,
+/// all on one class diagram; ER's two tables and a relationship on a schema's diagram.
+struct Figures {
+    s: Session,
+    package: Obj,
+    package_node: Obj,
+    class: Obj,
+    class_node: Obj,
+    association: Obj,
+    end: Obj,
+    qualifier: Obj,
+    nary: Obj,
+    leg: Obj,
+    association_class: Obj,
+    generalization: Obj,
+    set: Obj,
+    label_node: Obj,
+    schema: Obj,
+    entity: Obj,
+    entity_node: Obj,
+    relationship: Obj,
+}
+
+/// [`Figures`], each made through its notation's commands.
+fn figures() -> Figures {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let shop = id(&mut s, "uml.package.add", json!({ "name": "shop" }));
+    let inner = id(&mut s, "uml.package.add", json!({ "name": "inner", "parent": shop }));
+    let class = |s: &mut Session, name: &str| id(s, "uml.class.add", json!({ "package": shop, "name": name }));
+    let (order, line, product, card, bank) =
+        (class(&mut s, "Order"), class(&mut s, "Line"), class(&mut s, "Product"), class(&mut s, "Card"), class(&mut s, "Bank"));
+    let association = id(&mut s, "uml.association.add", json!({ "from": order, "to": line }));
+    let qualifier = id(&mut s, "uml.qualifier.add", json!({ "association": association, "end": 0, "name": "lineNo" }));
+    let nary = id(&mut s, "uml.association.add-nary", json!({ "classes": [order, line, product] }));
+    let association_class = id(&mut s, "uml.association-class.add", json!({ "from": order, "to": product }));
+    let generalization = id(&mut s, "uml.generalization.add", json!({ "specific": card, "general": order }));
+    let other = id(&mut s, "uml.generalization.add", json!({ "specific": bank, "general": order }));
+    let set = id(&mut s, "uml.generalization-set.add", json!({ "generalizations": [generalization, other], "name": "method" }));
+    let d = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": shop, "name": "shop" }));
+    let place = |s: &mut Session, element: &str, x: f64| id(s, "diagram.place", json!({ "diagram": d, "element": element, "x": x, "y": 0.0 }));
+    let package_node = place(&mut s, &inner, 0.0);
+    let class_node = place(&mut s, &order, 300.0);
+    for (i, c) in [&line, &product, &card, &bank].into_iter().enumerate() {
+        place(&mut s, c, 600.0 + 300.0 * i as f64);
+    }
+    place(&mut s, &nary, 900.0);
+    place(&mut s, &association_class, 1200.0);
+    id(&mut s, "uml.generalization-set.place", json!({ "diagram": d, "set": set, "x": 300.0, "y": 400.0 }));
+    let schema = id(&mut s, "er.schema.add", json!({ "name": "sales" }));
+    let customer = id(&mut s, "er.entity.add", json!({ "schema": schema, "name": "customer" }));
+    let invoice = id(&mut s, "er.entity.add", json!({ "schema": schema, "name": "invoice" }));
+    let relationship =
+        id(&mut s, "er.relationship.add", json!({ "from": customer, "to": invoice, "from_end": "exactly-one", "to_end": "zero-or-more" }));
+    let er = id(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema }));
+    let entity_node = id(&mut s, "diagram.place", json!({ "diagram": er, "element": customer, "x": 0.0, "y": 0.0 }));
+    let st = s.doc();
+    let o = |id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let (association, nary, set) = (o(&association), o(&nary), o(&set));
+    let end = archforge_uml::figures::member_ends(st, association).unwrap()[0];
+    let leg = archforge_uml::nary::ends(st, nary)[0];
+    let label_node = archforge_uml::generalization_sets::label_node(st, o(&d), set).unwrap();
+    Figures {
+        package: o(&inner),
+        package_node: o(&package_node),
+        class: o(&order),
+        class_node: o(&class_node),
+        association,
+        end,
+        qualifier: o(&qualifier),
+        nary,
+        leg,
+        association_class: o(&association_class),
+        generalization: o(&generalization),
+        set,
+        label_node,
+        schema: o(&schema),
+        entity: o(&customer),
+        entity_node: o(&entity_node),
+        relationship: o(&relationship),
+        s,
+    }
+}
+
+/// The answer of each of `elements` as its own notation gives it.
+fn told<T>(f: &Figures, elements: &[Obj], own: impl Fn(&dyn Notation, &Store, Obj) -> T) -> Vec<T> {
+    let (st, view) = (f.s.doc(), f.s.view());
+    elements.iter().map(|e| own(view.of_element(st, *e).unwrap(), st, *e)).collect()
+}
+
+/// [`told`], asked through the project's view too, which must give the same answers.
+fn answers<T: PartialEq + std::fmt::Debug>(
+    f: &Figures,
+    elements: &[Obj],
+    own: impl Fn(&dyn Notation, &Store, Obj) -> T,
+    viewed: impl Fn(&ProjectView, &Store, Obj) -> T,
+) -> Vec<T> {
+    let told = told(f, elements, own);
+    let (st, view) = (f.s.doc(), f.s.view());
+    assert_eq!(elements.iter().map(|e| viewed(view, st, *e)).collect::<Vec<_>>(), told, "the view asks each element's notation");
+    told
+}
+
+/// A click on an n-ary association's leg selects its association, the diamond and every leg
+/// being the one element (AR-128); anything else of UML or ER selects itself, ER answering by
+/// default; something no notation holds selects itself.
+#[test]
+fn a_click_selects_what_its_notation_says_the_figure_stands_for() {
+    let f = figures();
+    let uml = answers(&f, &[f.leg, f.nary, f.end, f.association, f.class], |n, st, e| n.selects_as(st, e), |v, st, e| v.selects_as(st, e));
+    assert_eq!(uml, [f.nary, f.nary, f.end, f.association, f.class]);
+    let er = answers(&f, &[f.entity, f.relationship, f.schema], |n, st, e| n.selects_as(st, e), |v, st, e| v.selects_as(st, e));
+    assert_eq!(er, [f.entity, f.relationship, f.schema]);
+    assert_eq!(f.s.view().selects_as(f.s.doc(), f.class_node), f.class_node, "a node belongs to no notation");
+}
+
+/// A selected qualifier draws its association's line selected with it (AR-127); nothing else of
+/// UML, and nothing of ER, by default, draws another figure selected.
+#[test]
+fn a_selected_qualifier_draws_its_associations_line_selected_and_nothing_else_does() {
+    let f = figures();
+    let uml = answers(&f, &[f.qualifier, f.end, f.association, f.class, f.leg], |n, st, e| n.selected_with(st, e), |v, st, e| v.selected_with(st, e));
+    assert_eq!(uml, [Some(f.association), None, None, None, None]);
+    let er = answers(&f, &[f.entity, f.relationship], |n, st, e| n.selected_with(st, e), |v, st, e| v.selected_with(st, e));
+    assert_eq!(er, [None, None]);
+    assert_eq!(f.s.view().selected_with(f.s.doc(), f.class_node), None, "a node belongs to no notation");
+}
+
+/// A line keeps its end handles unless a node shows its element, by default, so for ER's
+/// relationship and table and for what no notation holds; UML's association class keeps them
+/// beside its card, and an n-ary association's leg has none, moving only its class end by its own
+/// handle (AR-128).
+#[test]
+fn a_line_shows_end_handles_unless_its_notation_says_it_has_none() {
+    let f = figures();
+    let uml = answers(
+        &f,
+        &[f.association, f.association_class, f.leg, f.nary, f.class],
+        |n, st, e| n.line_handles(st, e),
+        |v, st, e| v.line_handles(st, e),
+    );
+    assert_eq!(uml, [true, true, false, false, false]);
+    let er = answers(&f, &[f.relationship, f.entity], |n, st, e| n.line_handles(st, e), |v, st, e| v.line_handles(st, e));
+    assert_eq!(er, [true, false]);
+    // What no notation holds takes the default rule: a node, which no node shows, keeps them.
+    assert!(f.s.view().line_handles(f.s.doc(), f.class_node), "a node belongs to no notation");
+}
+
+/// An element is drawn as a card when one of its notation's kinds shows its class as nodes, by
+/// default and so for ER's table but not its relationship; UML's binary association is a line,
+/// though an n-ary one's diamond is a card (AR-128).
+#[test]
+fn an_element_is_drawn_as_a_card_as_its_notation_says() {
+    let f = figures();
+    let elements = [f.class, f.association_class, f.nary, f.association, f.generalization, f.package];
+    let uml = answers(&f, &elements, |n, st, e| n.drawn_as_card(st, e), |v, st, e| v.drawn_as_card(st, e));
+    assert_eq!(uml, [true, true, true, false, false, true]);
+    let er = answers(&f, &[f.entity, f.relationship, f.schema], |n, st, e| n.drawn_as_card(st, e), |v, st, e| v.drawn_as_card(st, e));
+    assert_eq!(er, [true, false, false]);
+    assert!(!f.s.view().drawn_as_card(f.s.doc(), f.class_node), "a node belongs to no notation");
+}
+
+/// A package's card is drawn, and hit, under the other figures (AR-570), its node so through the
+/// view; nothing else of UML, and nothing of ER by default.
+#[test]
+fn a_packages_card_is_drawn_behind_and_nothing_else_is() {
+    let f = figures();
+    let uml = told(&f, &[f.package, f.class, f.association, f.set], |n, st, e| n.drawn_behind(st, e));
+    assert_eq!(uml, [true, false, false, false]);
+    let er = told(&f, &[f.schema, f.entity, f.relationship], |n, st, e| n.drawn_behind(st, e));
+    assert_eq!(er, [false, false, false]);
+    let (st, view) = (f.s.doc(), f.s.view());
+    let nodes = [f.package_node, f.class_node, f.label_node, f.entity_node].map(|n| view.node_drawn_behind(st, n));
+    assert_eq!(nodes, [true, false, false, false]);
+    assert!(!view.node_drawn_behind(st, f.package), "an element is no node");
+}
+
+/// A generalization set's node holds its label, drawn with its lines (AR-129), its node so through
+/// the view; nothing else of UML, and nothing of ER by default.
+#[test]
+fn a_generalization_sets_node_holds_a_label_and_no_other_does() {
+    let f = figures();
+    let uml = told(&f, &[f.set, f.generalization, f.class, f.package], |n, st, e| n.is_label(st, e));
+    assert_eq!(uml, [true, false, false, false]);
+    let er = told(&f, &[f.entity, f.relationship, f.schema], |n, st, e| n.is_label(st, e));
+    assert_eq!(er, [false, false, false]);
+    let (st, view) = (f.s.doc(), f.s.view());
+    let nodes = [f.label_node, f.class_node, f.package_node, f.entity_node].map(|n| view.node_is_label(st, n));
+    assert_eq!(nodes, [true, false, false, false]);
+    assert!(!view.node_is_label(st, f.set), "an element is no node");
+}
+
 /// AR-586: a binding whose diagram or owner the project does not hold, or which names none, is
 /// refused as the project opens, typed and naming it, before anything is built; one that names
 /// what the project holds opens.

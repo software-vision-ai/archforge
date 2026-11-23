@@ -494,12 +494,6 @@ pub fn card_name(store: &Store, c: Obj, diagram: Obj) -> String {
     }
 }
 
-/// Whether the diagram node `n` is drawn, and hit, under the diagram's other figures: a package's
-/// card, which its preview fills, so a class or a note placed over it stays in sight (AR-570).
-pub fn drawn_behind(store: &Store, n: Obj) -> bool {
-    store.get(n, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()).is_some_and(|e| store.class_of(e).ok() == Some(crate::PACKAGE))
-}
-
 /// Whether `diagram` has a node of `element`.
 pub fn shows(store: &Store, diagram: Obj, element: Obj) -> bool {
     archforge_diagram::views_of(store, element).2.into_iter().any(|n| archforge_diagram::diagram_of(store, n) == Some(diagram))

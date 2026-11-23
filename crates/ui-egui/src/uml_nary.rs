@@ -164,10 +164,10 @@ fn roles(store: &Store, classes: &[Obj]) -> Vec<String> {
     out
 }
 
-/// The association an element stands for when it is selected on the canvas: an n-ary
-/// association's end, whose leg was clicked, stands for its association; anything else for itself.
-pub(crate) fn selectable(store: &Store, element: Obj) -> Obj {
-    nary::association_of_end(store, element).unwrap_or(element)
+/// Whether a right click on a figure that selects `a` opens the n-ary association's menu: `a` is
+/// an n-ary association, its diamond or one of its legs having been clicked (AR-128).
+pub(crate) fn has_menu(store: &Store, a: Obj) -> bool {
+    nary::is_nary(store, a)
 }
 
 /// The n-ary association a node (its diamond) or a line (a leg) of the canvas shows, if any.
@@ -374,7 +374,7 @@ pub(crate) fn onto_diamond(rect: Rect, tip: Pos2, towards: Pos2) -> Option<Pos2>
 /// the pointer, and the class under it ringed. Drawn by the shell alone: nothing is in the model.
 fn draw_draft(shell: &Shell, paint: &egui::Painter, p: &Palette, view: View, d: Obj, pointer: Option<Pos2>) {
     let ends = draft(shell);
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some((store, notations)) = shell.session.as_ref().map(|s| (s.doc(), s.view())) else { return };
     let z = view.zoom;
     let stroke = Stroke::new((1.5 * z).clamp(1.0, 3.0), p.accent);
     let dashed = |paint: &egui::Painter, a: Pos2, b: Pos2| {
@@ -382,9 +382,9 @@ fn draw_draft(shell: &Shell, paint: &egui::Painter, p: &Palette, view: View, d: 
     };
     // The class under the pointer, ringed as the next end.
     let target = pointer.and_then(|at| {
-        let grid = crate::canvas::grid(store, d);
+        let grid = crate::canvas::grid(store, notations, d);
         let (x, y) = view.to_canvas(at);
-        match crate::editing::hit(store, &grid, x, y) {
+        match crate::editing::hit(store, notations, &grid, x, y) {
             Some(archforge_diagram::Hit::Node(n)) if crate::uml_relate::class_of_node(store, uuid(store, n)?).is_some() => {
                 Some(view.rect(&archforge_diagram::grid::bounds_of(store, n)))
             }

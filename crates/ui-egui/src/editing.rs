@@ -10,7 +10,7 @@
 use std::collections::BTreeMap;
 
 use archforge_diagram::grid::bounds_of;
-use archforge_diagram::{Grid, Hit, diagram, node};
+use archforge_diagram::{Grid, Hit, ProjectView, diagram, node};
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
@@ -119,11 +119,11 @@ pub struct EntityMenu {
 }
 
 /// What lies at diagram point `(x, y)`: the grid's topmost node or nearest line, looking through a
-/// generalization set's label node (AR-129). A label takes a press only where the last frame drew it
-/// (`canvas.set_labels`), so one that draws nothing, its diagram showing none of its set's lines,
-/// is never hit.
-pub(crate) fn hit(store: &Store, grid: &Grid, x: f64, y: f64) -> Option<Hit> {
-    grid.hit_keeping(x, y, |n| !archforge_uml::generalization_sets::is_label(store, n))
+/// node its notation says holds a label, a generalization set's (AR-129). A label takes a press
+/// only where the last frame drew it (`canvas.set_labels`), so one that draws nothing, its diagram
+/// showing none of its set's lines, is never hit.
+pub(crate) fn hit(store: &Store, notations: &ProjectView, grid: &Grid, x: f64, y: f64) -> Option<Hit> {
+    grid.hit_keeping(x, y, |n| !notations.node_is_label(store, n))
 }
 
 /// What the pointer asked for this frame, decided over the store and applied after.
@@ -184,7 +184,7 @@ pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
     let store = session.doc();
     let mut ids: Vec<Uuid> = Vec::new();
     let boxes = nodes_of(store, d).into_iter().flat_map(|top| archforge_diagram::node_tree(store, top)).map(|n| element_of(store, n).unwrap_or(n));
-    let lines: Vec<Obj> = Grid::build(store, d).lines().map(|(e, _)| line_target(store, e)).collect();
+    let lines: Vec<Obj> = Grid::build(store, d).lines().map(|(e, _)| line_target(store, session.view(), e)).collect();
     let labels: Vec<Obj> = lines.iter().filter(|g| sets::is_generalization(store, **g)).flat_map(|g| sets::sets_of(store, *g)).collect();
     for id in boxes.chain(lines).chain(labels).filter_map(|o| uuid(store, o)) {
         if !ids.contains(&id) {
@@ -197,10 +197,10 @@ pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
     select(shell, ids);
 }
 
-/// What a click on line `e` selects: the element it draws, a leg of an n-ary association its
-/// association (AR-128), and a note link itself.
-fn line_target(store: &Store, e: Obj) -> Obj {
-    crate::uml_nary::selectable(store, store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e))
+/// What a click on line `e` selects: what its notation says a click on the element it draws
+/// selects (a leg of an n-ary association its association, AR-128), and a note link itself.
+fn line_target(store: &Store, notations: &ProjectView, e: Obj) -> Obj {
+    notations.selects_as(store, store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e))
 }
 
 fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
@@ -261,8 +261,8 @@ fn single_selected(store: &Store, d: Obj, selection: &[Obj]) -> Option<Obj> {
 }
 
 /// The corner handle of the selected node under `pos`, if any.
-fn handle_at(store: &Store, d: Obj, selection: &[Obj], view: View, pos: Pos2) -> Option<(Obj, Corner)> {
-    let n = single_selected(store, d, selection).filter(|n| !archforge_uml::generalization_sets::is_label(store, *n))?;
+fn handle_at(store: &Store, notations: &ProjectView, d: Obj, selection: &[Obj], view: View, pos: Pos2) -> Option<(Obj, Corner)> {
+    let n = single_selected(store, d, selection).filter(|n| !notations.node_is_label(store, *n))?;
     let ring = view.rect(&bounds_of(store, n)).expand(4.0);
     let corners = [
         (Corner::TopLeft, ring.left_top()),
@@ -404,6 +404,7 @@ fn decide(
     view: View,
     grid: &Grid,
     store: &Store,
+    notations: &ProjectView,
     d: Obj,
     selection: &[Obj],
     shift: bool,
@@ -414,7 +415,7 @@ fn decide(
     let kind = crate::kinds::kind_of(shell, store, d);
     let hit_node = |pos: Pos2| {
         let (x, y) = view.to_canvas(pos);
-        let card = match hit(store, grid, x, y) {
+        let card = match hit(store, notations, grid, x, y) {
             Some(Hit::Node(n)) => Some(n),
             _ => None,
         };
@@ -521,13 +522,13 @@ fn decide(
                 let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
                 // A cardinality text, grabbed where the last frame drew it, unless a table or its
                 // handle is over it there.
-                if handle_at(store, d, selection, view, from).is_none()
+                if handle_at(store, notations, d, selection, view, from).is_none()
                     && hit_node(from).is_none()
                     && let Some(t) = shell.canvas.ends.iter().find(|t| t.rect.contains(from))
                 {
                     return Action::Start(Gesture::EndText { edge: t.edge, end: t.end, from, centre: t.rect.center(), anchor: t.anchor }, None);
                 }
-                if let Some((n, corner)) = handle_at(store, d, selection, view, from)
+                if let Some((n, corner)) = handle_at(store, notations, d, selection, view, from)
                     && let Some(id) = uuid(store, n)
                 {
                     return Action::Start(Gesture::Resize { node: id, corner, base: unit_rect(store, n), from }, None);
@@ -552,12 +553,12 @@ fn decide(
                     }
                     None => {
                         let (x, y) = view.to_canvas(from);
-                        match hit(store, grid, x, y) {
+                        match hit(store, notations, grid, x, y) {
                             // A right-angled line's middle segment slides; the rest of a line holds.
                             Some(Hit::Edge(e)) => match (segment_at(store, grid, e, x, y, f64::from(SEGMENT_REACH / view.zoom)), uuid(store, e)) {
                                 (Some((index, route)), Some(edge)) => {
                                     let element = store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e);
-                                    let element = crate::uml_nary::selectable(store, element);
+                                    let element = notations.selects_as(store, element);
                                     Action::Start(Gesture::Segment { edge, index, route, from }, uuid(store, element))
                                 }
                                 _ => Action::Nothing,
@@ -572,12 +573,13 @@ fn decide(
                 let (x, y) = view.to_canvas(pos);
                 let shown = match hit_node(pos) {
                     Some(n) => element_of(store, n),
-                    None => match hit(store, grid, x, y) {
+                    None => match hit(store, notations, grid, x, y) {
                         Some(Hit::Edge(e)) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()),
                         _ => None,
                     },
                 };
-                if let Some(a) = shown.and_then(|e| crate::uml_nary::shown_by(store, e)).and_then(|a| uuid(store, a)) {
+                let menu = shown.map(|e| notations.selects_as(store, e)).filter(|a| crate::uml_nary::has_menu(store, *a));
+                if let Some(a) = menu.and_then(|a| uuid(store, a)) {
                     return Action::NaryMenu(pos, a);
                 }
             }
@@ -585,7 +587,7 @@ fn decide(
             if resp.secondary_clicked()
                 && hit_node(pos).is_none()
                 && let (x, y) = view.to_canvas(pos)
-                && let Some(Hit::Edge(e)) = hit(store, grid, x, y)
+                && let Some(Hit::Edge(e)) = hit(store, notations, grid, x, y)
                 && let Some(g) = store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref())
                 && archforge_uml::generalization_sets::is_generalization(store, g)
             {
@@ -609,7 +611,7 @@ fn decide(
                     return Action::ResetEnd(t.edge, t.end);
                 }
                 let (x, y) = view.to_canvas(pos);
-                if let Some(Hit::Edge(e)) = hit(store, grid, x, y)
+                if let Some(Hit::Edge(e)) = hit(store, notations, grid, x, y)
                     && !store.list(e, archforge_diagram::edge::WAYPOINT).unwrap_or_default().is_empty()
                     && let Some(id) = uuid(store, e)
                 {
@@ -676,14 +678,14 @@ fn decide(
                 let (x, y) = view.to_canvas(pos);
                 // A package's tab is its card's (AR-113), over any line that crosses it; a card and a
                 // tab over each other give the one drawn on top.
-                let hit = hit(store, grid, x, y);
+                let hit = hit(store, notations, grid, x, y);
                 let card = match hit {
                     Some(Hit::Node(n)) => Some(n),
                     _ => None,
                 };
                 let target = match (on_top(shell, store, grid, card, pos), hit) {
                     (Some(n), _) => element_of(store, n).unwrap_or(n),
-                    (None, Some(Hit::Edge(e))) => line_target(store, e),
+                    (None, Some(Hit::Edge(e))) => line_target(store, notations, e),
                     (None, _) => d,
                 };
                 let Some(id) = uuid(store, target) else { return Action::Nothing };
@@ -708,7 +710,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
         _ if dismissing => Action::Nothing,
         Some(s) => {
             let selection = s.view().selection.clone();
-            decide(shell, resp, view, grid, s.doc(), d, &selection, shift, origin, released)
+            decide(shell, resp, view, grid, s.doc(), s.view(), d, &selection, shift, origin, released)
         }
         None => Action::Nothing,
     };
@@ -795,13 +797,13 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
     {
         let over_node = shell.session.as_ref().is_some_and(|s| {
             let (x, y) = view.to_canvas(at);
-            matches!(hit(s.doc(), grid, x, y), Some(Hit::Node(_)))
+            matches!(hit(s.doc(), s.view(), grid, x, y), Some(Hit::Node(_)))
         });
         if !over_node && shell.canvas.ends.iter().any(|t| t.rect.contains(at)) {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-        } else if let Some(store) = shell.session.as_ref().map(|s| s.doc()) {
-            let (x, y) = view.to_canvas(at);
-            if let Some(Hit::Edge(e)) = hit(store, grid, x, y)
+        } else if let Some(session) = shell.session.as_ref() {
+            let (store, (x, y)) = (session.doc(), view.to_canvas(at));
+            if let Some(Hit::Edge(e)) = hit(store, session.view(), grid, x, y)
                 && let Some((k, route)) = segment_at(store, grid, e, x, y, f64::from(SEGMENT_REACH / view.zoom))
             {
                 let level = (route[k].1 - route[k + 1].1).abs() < 1e-6;
@@ -1007,16 +1009,9 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
         Some(c) if c == archforge_diagram::EDGE => store.get(o, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()),
         _ => Some(o),
     });
-    let carded = |e: Obj| {
-        let Ok(class) = store.class_of(e) else { return false };
-        // A binary association is a line, though the class of an n-ary one's diamond is shown as a
-        // card (AR-128).
-        session.view().of_element(store, e).is_some_and(|n| n.kinds().iter().any(|k| n.shows(k, class)))
-            && (class != archforge_uml::ASSOCIATION || archforge_uml::nary::is_nary(store, e))
-    };
     let Some(element) = element.filter(|e| {
         let (_, edges, nodes) = archforge_diagram::views_of(store, *e);
-        !edges.is_empty() && nodes.is_empty() && !carded(*e)
+        !edges.is_empty() && nodes.is_empty() && !session.view().drawn_as_card(store, *e)
     }) else {
         return false;
     };
@@ -1043,11 +1038,14 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
 /// gestures: on its card, or on its package's tab, the one drawn on top where a card covers a tab
 /// (AR-570).
 fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
-    let store = shell.session.as_ref()?.doc();
+    let session = shell.session.as_ref()?;
+    let store = session.doc();
     let kind = crate::kinds::kind_of(shell, store, d);
     let card =
         nodes_of(store, d).into_iter().rev().find(|n| part_of_node(kind, store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at));
-    on_top(shell, store, &crate::canvas::grid(store, d), card, at).filter(|n| part_of_node(kind, store, *n).is_some()).and_then(|n| uuid(store, n))
+    on_top(shell, store, &crate::canvas::grid(store, session.view(), d), card, at)
+        .filter(|n| part_of_node(kind, store, *n).is_some())
+        .and_then(|n| uuid(store, n))
 }
 
 /// Of the card under a point and the package tab under it, the one drawn on top: the later in
@@ -1730,15 +1728,13 @@ fn selected_line(
     selection: &[Obj],
 ) -> Option<(Uuid, Vec<(f64, f64)>, [archforge_diagram::figure::EndMark; 2])> {
     let [element] = selection else { return None };
-    // An n-ary association's leg moves only its class end, by its own handle (AR-128).
-    if archforge_uml::nary::association_of_end(store, *element).is_some() {
+    // Its notation says whether its line has handles: an n-ary association's leg moves only its
+    // class end, by its own handle (AR-128); a card's element has no line, but an association class
+    // has both, and its line keeps its handles.
+    if !view.line_handles(store, *element) {
         return None;
     }
-    let (_, edges, nodes) = archforge_diagram::views_of(store, *element);
-    // A card's element has no line, but an association class has both: its line keeps its handles.
-    if !nodes.is_empty() && store.class_of(*element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) {
-        return None;
-    }
+    let (_, edges, _) = archforge_diagram::views_of(store, *element);
     let edge = edges.into_iter().find(|e| store.container(*e).ok().flatten().is_some_and(|(c, _)| c == d))?;
     let route = Grid::build(store, d).line(edge)?.to_vec();
     let line = view.of_element(store, *element).and_then(|n| n.line(store, *element)).unwrap_or_default();
