@@ -962,6 +962,71 @@ fn a_nested_package_goes_with_its_own_stereotype_applications() {
     assert!(why.contains("Ledger applies the profiles its elements use: «Trace» on Drafts. Remove those first."), "{why}");
 }
 
+/// A package with no parent, as a project made before the root package keeps one, takes what it
+/// holds along, so the stereotype applications on its contents go with it and strand nothing
+/// (AR-804): one applying a profile from elsewhere and one it holds itself, used on its classes, an
+/// attribute, a package within and a class there, and on a dependency elsewhere at it, which goes
+/// with it (AR-698), goes in one step with every application. A profile it holds that is used
+/// outside it, or on no element, is still refused, naming only those uses.
+#[test]
+fn a_package_with_no_parent_goes_with_the_stereotype_applications_on_what_it_holds() {
+    use archforge_engine::{EngineError, InUse, Reason, Used};
+    let mut s = session();
+    let [commerce, order, customer, id_attr, persistence, entity, id, _] = shop(&mut s);
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit", "package": commerce }));
+    let tracked = run(&mut s, "uml.stereotype.add", json!({ "profile": audit, "name": "Tracked", "extends": ["Class", "Package"] }));
+    let drafts = run(&mut s, "uml.package.add", json!({ "name": "Drafts", "parent": commerce }));
+    let draft = run(&mut s, "uml.class.add", json!({ "package": drafts, "name": "Draft" }));
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let invoice = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Invoice" }));
+    for (package, profile) in [(&commerce, &persistence), (&commerce, &audit), (&sales, &audit)] {
+        run(&mut s, "uml.profile.apply", json!({ "package": package, "profile": profile }));
+    }
+    let at_commerce = run(&mut s, "uml.dependency.add", json!({ "client": invoice, "supplier": commerce }));
+    let inside = [(&*entity, &*order), (&*id, &*id_attr), (&*tracked, &*customer), (&*tracked, &*drafts), (&*entity, &*draft)];
+    // «Tracked» on the dependency from Invoice too: made on Invoice, its link moved onto the
+    // dependency, as a document made elsewhere may have it.
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(with_applications(&s, &[inside.as_slice(), &[(&*tracked, &*invoice)]].concat()).doc(), &tables, &junctions).unwrap();
+    let mut st = store(1 << 50);
+    rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
+    let on_invoice = profiles::applications_of(&st, obj(&st, &tracked)).into_iter().find(|a| a.element == Some(obj(&st, &invoice))).unwrap();
+    let link = st.referrers(on_invoice.instance).into_iter().find(|(_, p)| *p == archforge_core::link::SOURCE).unwrap().0;
+    st.set(link, archforge_core::link::TARGET, Value::Ref(obj(&st, &at_commerce))).unwrap();
+    // Every use inside Commerce or on what goes with it: it goes in one step, every application with
+    // it, Persistence, Sales and Invoice staying.
+    let mut top = at_top(&session_over(st), &commerce);
+    one_step(&mut top, "element.remove", json!({ "ids": [commerce] }));
+    let st = top.doc();
+    for (gone, what) in [(&commerce, "Commerce"), (&audit, "Audit"), (&drafts, "Drafts"), (&draft, "Draft"), (&at_commerce, "the dependency")] {
+        assert!(st.by_uuid(Uuid::parse(gone).unwrap()).is_none_or(|o| !st.is_alive(o)), "{what} went");
+    }
+    for (stays, what) in [(&persistence, "Persistence"), (&sales, "Sales"), (&invoice, "Invoice")] {
+        assert!(st.is_alive(obj(st, stays)), "{what}, held elsewhere, stays");
+    }
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_uml::INSTANCE_SPECIFICATION)), "no application left");
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_core::LINK)), "no link left");
+    assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
+    // «Tracked» on Invoice itself, which stays: refused, naming Invoice alone, typed.
+    let mut used = at_top(&with_applications(&s, &[inside.as_slice(), &[(&*tracked, &*invoice)]].concat()), &commerce);
+    let why = refused(&mut used, "element.remove", json!({ "ids": [commerce] }));
+    assert!(why.contains("Commerce holds the profile Audit, which is in use: «Tracked» on Invoice. Remove those first."), "{why}");
+    let Err(EngineError::Failed { error, .. }) = used.execute("element.remove", &json!({ "ids": [commerce] })) else { panic!("refused") };
+    let held = Used::HeldProfile { package: "Commerce".to_string(), profile: "Audit".to_string() };
+    let uses = vec![("Tracked".to_string(), vec!["Invoice".to_string()], 1)];
+    assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: held, uses }))));
+    // An application of «Tracked» tracing to no element, as a project edited by hand may hold, goes
+    // with no element: refused, counted.
+    let saved = rows::snapshot(with_applications(&s, &inside).doc(), &tables, &junctions).unwrap();
+    let mut st = store(1 << 50);
+    rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
+    let loose = st.create(archforge_uml::INSTANCE_SPECIFICATION).unwrap();
+    st.push(loose, archforge_uml::instance_specification::CLASSIFIER, Value::Ref(obj(&st, &tracked))).unwrap();
+    let mut loose = at_top(&session_over(st), &commerce);
+    let why = refused(&mut loose, "element.remove", json!({ "ids": [commerce] }));
+    assert!(why.contains("Commerce holds the profile Audit, which is in use: «Tracked» on 1 element. Remove those first."), "{why}");
+}
+
 /// `uml.profile.diagram` fills the profile's diagram as the window's Open profile diagram does:
 /// every metaclass in a row, every stereotype under them and every extension line, as one step;
 /// asked again it adds only what is missing, keeping what the diagram shows where it is.
