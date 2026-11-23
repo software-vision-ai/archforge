@@ -3,9 +3,9 @@
 //! by the words the interface uses for them; a kind not listed is left to the engine's English, and
 //! a reason the engine, the diagrams or UML give too is the shell's own (`panels::said`). The
 //! reasons an ER command is not available now are said here too, as are the ER kinds a refusal
-//! names (AR-785). A word none of a choice's
-//! words is said under the choice's label. A key's columns (AR-492): none, a column of another
-//! table, one that may be null in a primary key, a key a foreign key points at, and no primary key.
+//! names (AR-785). A word none of a choice's words is said under the choice's label. A key's
+//! columns (AR-492): none, a column of another table, one that may be null in a primary key, a key
+//! a foreign key points at, and no primary key.
 //! Mapping tables (AR-505): a relationship that does not resolve into one, a table that does not
 //! collapse back into a relationship, one that cannot be associative, by the rule it breaks, and
 //! a mapping table a step would break, with why in the same words.

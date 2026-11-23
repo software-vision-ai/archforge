@@ -17048,22 +17048,43 @@ fn names_typed_in_place(theme: ThemeKind) {
 }
 
 /// A row Properties selects opens the rows its element sits under in Models, as its notation names
-/// them (AR-785): a column's table and schema in ER, a class's package in the sketch notation.
+/// them (AR-785): in ER exactly the rows its table and schema were before (a column's and a key's
+/// table and schema, a relationship's and a view's schema), and a class's package in the sketch
+/// notation.
 #[test]
 fn a_row_properties_selects_opens_the_rows_its_notation_names() {
+    use std::collections::BTreeSet;
     let find = |h: &Harness<'static, Shell>, name: &str| {
         let st = h.state().session.as_ref().unwrap().doc();
         st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap()).unwrap()
     };
     let (mut h, customer) = table_harness();
     let (customer, email) = (archforge_mof::Uuid::parse(&customer).unwrap(), find(&h, "email"));
-    let schema = {
+    let (schema, key) = {
         let st = h.state().session.as_ref().unwrap().doc();
-        st.uuid(archforge_er::rules::schema_of(st, st.by_uuid(customer).unwrap()).unwrap()).unwrap()
+        let schema = st.uuid(archforge_er::rules::schema_of(st, st.by_uuid(customer).unwrap()).unwrap()).unwrap();
+        let key = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::PRIMARY_KEY)).unwrap();
+        (schema, st.uuid(key).unwrap())
     };
-    h.state_mut().explorer.expanded.clear();
-    crate::panels::select_element(h.state_mut(), email);
-    assert!(h.state().explorer.expanded.contains(&customer) && h.state().explorer.expanded.contains(&schema), "the column's table and schema");
+    let (relationship, view) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Order" })).unwrap().value);
+        let r = serde_json::json!({ "from": customer.to_string(), "to": order.to_string(), "name": "places" });
+        let relationship = id(s.execute("er.relationship.add", &r).unwrap().value);
+        let v = serde_json::json!({ "schema": schema.to_string(), "name": "open_orders", "query": "select * from orders" });
+        (relationship, id(s.execute("er.view.add", &v).unwrap().value))
+    };
+    for (what, element, rows) in [
+        ("a column", email, BTreeSet::from([customer, schema])),
+        ("a key", key, BTreeSet::from([customer, schema])),
+        ("a relationship", relationship, BTreeSet::from([schema])),
+        ("a view", view, BTreeSet::from([schema])),
+    ] {
+        h.state_mut().explorer.expanded.clear();
+        crate::panels::select_element(h.state_mut(), element);
+        assert_eq!(h.state().explorer.expanded.iter().copied().collect::<BTreeSet<_>>(), rows, "{what}");
+    }
     let (mut h, ..) = sketch_harness();
     let (sales, party) = (find(&h, "sales"), find(&h, "Party"));
     h.state_mut().explorer.expanded.clear();
