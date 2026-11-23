@@ -1,11 +1,12 @@
 //! What a notation brings to the shell's explorers, search, problems and panels: its rows in the
 //! Models tree and what `+` adds there, its renames and what a removal takes with it, its entries
 //! in the project search, its problems, the heading and the body of Properties for its elements,
-//! and its commands' refusals in the user's words. The shells (the tree, the filter, the scroll,
+//! its commands' refusals in the user's words, the words for the kinds of its elements, and the
+//! limits of their names and descriptions. The shells (the tree, the filter, the scroll,
 //! the search list, the sections, the fields, the editors) stay shared; each answer is about the
 //! notation's own elements, the classes of its metamodel.
 
-use archforge_mof::{Obj, Store, Uuid};
+use archforge_mof::{ClassId, Obj, Store, Uuid};
 use egui::Rect;
 
 use crate::Shell;
@@ -213,6 +214,35 @@ pub(crate) trait NotationUi: Sync {
         let _ = cmd;
         false
     }
+
+    // Words and limits: each about its own elements; the shell keeps those of the core, the
+    // diagrams and both notations.
+
+    /// The classes of its metamodel it creates, the only ones of it that get a kind word of their
+    /// own ([`crate::model_words::kind_label`]); the rest of its classes say Element.
+    fn created_classes(&self) -> &'static [ClassId];
+    /// Its own word for `class` where the metamodel's name is not what the interface says (ER's
+    /// Entity is a Table); none takes the metamodel's name.
+    fn kind_word(&self, class: ClassId) -> Option<String> {
+        let _ = class;
+        None
+    }
+    /// A kind of element as a refusal names it, with its article where the language has one (`a
+    /// table`), for a kind only its own commands name; none for any other kind.
+    fn a_kind(&self, kind: &str) -> Option<String> {
+        let _ = kind;
+        None
+    }
+    /// The kind word of `obj` when File → Generate… can be about it, as the agent's resources read
+    /// it (a schema, a table, a class); none for anything else.
+    fn scope_word(&self, store: &Store, obj: Obj) -> Option<String> {
+        let _ = (store, obj);
+        None
+    }
+    /// The most characters its commands take in the name of one of its elements.
+    fn name_limit(&self) -> usize;
+    /// The most characters its elements take in a description.
+    fn description_limit(&self) -> usize;
 }
 
 /// The notations the shell knows.
@@ -220,8 +250,38 @@ pub(crate) static UIS: &[&dyn NotationUi] = &[&crate::er_ui::ErUi, &crate::uml_u
 
 /// The notation of `obj`, when the shell knows it.
 pub(crate) fn of(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<&'static dyn NotationUi> {
-    let class = store.class_of(obj).ok()?;
+    of_class(uis, store.class_of(obj).ok()?)
+}
+
+/// The notation whose metamodel holds `class`, when the shell knows it.
+pub(crate) fn of_class(uis: &[&'static dyn NotationUi], class: ClassId) -> Option<&'static dyn NotationUi> {
     uis.iter().copied().find(|u| u.metamodel() == class.metamodel())
+}
+
+/// The most characters a name field takes for `obj`: an element's as its notation says
+/// ([`NotationUi::name_limit`]); a diagram's, or any other's, the most any name takes
+/// ([`longest_name`]), the diagrams' own limit among them.
+pub(crate) fn name_limit(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> usize {
+    of(uis, store, obj).map_or_else(|| longest_name(uis), |ui| ui.name_limit())
+}
+
+/// The most characters a name field takes for the element or diagram `id` of the shell's model
+/// ([`name_limit`]); for one not there, the most any name takes ([`longest_name`]).
+pub(crate) fn name_limit_of(shell: &Shell, id: Uuid) -> usize {
+    let uis = shell.notation_uis;
+    shell.session.as_ref().and_then(|s| s.doc().by_uuid(id).map(|o| name_limit(uis, s.doc(), o))).unwrap_or_else(|| longest_name(uis))
+}
+
+/// The most characters any name takes, a diagram's or an element's of any notation: the filter of
+/// Models takes as much, so any name can be typed into it whole.
+pub(crate) fn longest_name(uis: &[&'static dyn NotationUi]) -> usize {
+    uis.iter().map(|ui| ui.name_limit()).fold(archforge_diagram::rules::MAX_NAME, usize::max)
+}
+
+/// The most characters the description of `obj` takes, as its notation says
+/// ([`NotationUi::description_limit`]); for an element of none, the most any of them takes.
+pub(crate) fn description_limit(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> usize {
+    of(uis, store, obj).map_or_else(|| uis.iter().map(|ui| ui.description_limit()).max().unwrap_or_default(), |ui| ui.description_limit())
 }
 
 /// What a sentence such as "Delete {name} from the model?" calls `obj`, one rule for every path

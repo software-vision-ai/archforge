@@ -46,8 +46,6 @@ const STACK_GAP: f64 = 24.0;
 /// The entity menu's width and row height.
 const MENU_WIDTH: f32 = 260.0;
 const MENU_ROW: f32 = 30.0;
-/// The most characters a name typed in place may have: the ER rule's.
-const MAX_NAME: usize = archforge_er::rules::MAX_NAME;
 
 /// A name being typed in a node's header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1985,6 +1983,8 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
     let font = if in_tab { types::SMALL_STRONG.scaled(z) } else { types::SECTION.scaled(z) };
     paint.rect_filled(field, 2.0 * z, p.accent_tint);
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.rename", "field", field);
+    let Some(entity) = shell.canvas.rename.as_ref().map(|rn| rn.entity) else { return };
+    let limit = crate::notation_ui::name_limit_of(shell, entity);
     let Some(rn) = shell.canvas.rename.as_mut() else { return };
     let fresh = std::mem::take(&mut rn.opened);
     let inner = Rect::from_min_max(
@@ -1997,7 +1997,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
         .frame(egui::Frame::NONE)
         .font(font.font())
         .text_color(p.text.into())
-        .char_limit(MAX_NAME)
+        .char_limit(limit)
         .desired_width(inner.width());
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
     let _ = (*out.response).clone().accessible_name(tr("Name"));

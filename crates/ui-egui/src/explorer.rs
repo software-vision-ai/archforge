@@ -31,8 +31,6 @@ const ROW_HEIGHT: f32 = 32.0;
 const INDENT: f32 = 13.0;
 /// The most rows the tree draws: a model past this size gets the filter, not a longer list.
 const MAX_ROWS: usize = 2000;
-/// The most characters a name typed in place may have: the ER rule's.
-const MAX_NAME: usize = archforge_er::rules::MAX_NAME;
 
 /// What the explorer keeps between frames: nothing the model holds.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -808,7 +806,7 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         .font(types::SMALL.font())
         .text_color(p.text.into())
         .hint_text(egui::RichText::new(tr("Filter models…")).color(p.text_secondary).font(types::SMALL.font()))
-        .char_limit(MAX_NAME)
+        .char_limit(crate::notation_ui::longest_name(shell.notation_uis))
         .desired_width(inner.width());
     let resp = ui.put(inner, edit);
     let _ = resp.clone().accessible_name(tr("Filter models…"));
@@ -912,6 +910,8 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     paint.rect_stroke(field, 5.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     let id = widgets::egui_id("workspace.explorer.rename");
     widgets::record_visible(ui, &mut shell.registry, "workspace.explorer.rename", "field", field);
+    let Some(target) = shell.explorer.rename.as_ref().map(|r| r.target) else { return };
+    let limit = crate::notation_ui::name_limit_of(shell, target);
     let Some(r) = shell.explorer.rename.as_mut() else { return };
     let fresh = r.fresh;
     let inner = crate::panels::field_inner(ui, field.expand2(vec2(2.0, 0.0)));
@@ -921,7 +921,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         .margin(egui::Margin::ZERO)
         .font(types::UI.font())
         .text_color(p.text.into())
-        .char_limit(MAX_NAME)
+        .char_limit(limit)
         .desired_width(inner.width());
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
     let _ = (*out.response).clone().accessible_name(tr("Name"));
