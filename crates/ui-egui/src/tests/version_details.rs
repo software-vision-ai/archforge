@@ -1592,6 +1592,48 @@ fn each_side_of_a_diagram_marks_what_differs_on_it() {
     });
 }
 
+/// A UML diagram's two sides draw its kind's own figures, as the canvas does (AR-788): with a
+/// generalization set in the last version and a class placed since, both sides show the set's line
+/// and label across its member's line.
+#[test]
+fn a_uml_diagrams_two_sides_draw_its_kinds_own_figures() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let sales = edit(&mut h, "uml.package.add", serde_json::json!({ "name": "Sales" }));
+        let class = |h: &mut _, name: &str| edit(h, "uml.class.add", serde_json::json!({ "package": sales, "name": name }));
+        let (party, customer, fresh) = (class(&mut h, "Party"), class(&mut h, "Customer"), class(&mut h, "Fresh"));
+        let diagram =
+            edit(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Billing" }));
+        let place = |h: &mut _, e: &str, x: i32, y: i32| {
+            edit(h, "diagram.place", serde_json::json!({ "diagram": diagram, "element": e, "x": x, "y": y, "width": 200, "height": 120 }))
+        };
+        place(&mut h, &party, 0, 0);
+        place(&mut h, &customer, 0, 300);
+        let g = edit(&mut h, "uml.generalization.add", serde_json::json!({ "specific": customer, "general": party }));
+        edit(&mut h, "diagram.connect-all", serde_json::json!({ "diagram": diagram }));
+        let set = edit(&mut h, "uml.generalization-set.add", serde_json::json!({ "generalizations": [g], "name": "Kinds" }));
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        h.run_steps(2);
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        super::compared(&mut h);
+        let node = place(&mut h, &fresh, 400, 0);
+        list_still(&mut h);
+        let row = h.state().versions.changes.iter().find(|r| r.area == Area::Diagram && r.id.to_string() == node).unwrap();
+        let row = format!("workspace.versions.change.{}.{}", row.id, row.class.0);
+        tap(&mut h, &row);
+        frames_until(&mut h, |h| h.state().versions.element_reading.is_none() && has_id(h, BEFORE));
+        for side in ["before", "after"] {
+            for id in [
+                format!("workspace.change-view.{side}.generalizationSet.{set}"),
+                format!("workspace.change-view.{side}.generalizationSet.{set}.line"),
+            ] {
+                assert!(has_id(&h, &id), "{theme:?}: {id}");
+            }
+        }
+    });
+}
+
 /// The two sides move and zoom together by the keys of either, by plain keys only, and by the wheel
 /// over either; 0 fits them again, and so does opening the diagram again.
 #[test]

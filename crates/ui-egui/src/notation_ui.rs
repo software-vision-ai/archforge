@@ -1,5 +1,6 @@
 //! What a notation brings to the shell's explorers, search, problems and panels: its rows in the
-//! Models tree and what `+` adds there, its renames and what a removal takes with it, its entries
+//! Models tree and what `+` adds there, how a row dropped on another runs, its renames and what a
+//! removal takes with it, its entries
 //! in the project search, its problems, the heading and the body of Properties for its elements,
 //! its commands' refusals in the user's words, the words for the kinds of its elements, and the
 //! limits of their names and descriptions, and the state its own editors, menus and drawings keep
@@ -137,6 +138,15 @@ pub(crate) trait NotationUi: Sync {
     fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
         let _ = (store, dragged, target);
         None
+    }
+    /// Runs the command `cmd` with `params` that a tree row dropped on another gives ([`drop_on`]),
+    /// as one undo step: by default as any command runs; a notation may run it its own way (UML
+    /// moves a package as Properties' Parent package does, with a toast offering Undo). A refusal
+    /// comes back in the user's words, for the tree to say.
+    ///
+    /// [`drop_on`]: NotationUi::drop_on
+    fn run_drop(&self, shell: &mut Shell, cmd: &'static str, params: serde_json::Value) -> Result<(), String> {
+        crate::panels::run(shell, cmd, params).map(|_| ())
     }
     /// Why `obj`, which the model says carries no skill, carries none, in the user's words for the
     /// Skills panel ("Relationships carry no skills"); none takes the panel's general line.

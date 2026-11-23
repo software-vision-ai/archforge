@@ -687,7 +687,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let drop_of = |shell: &Shell, dragged: Uuid, target: &Row| {
         let store = shell.session.as_ref()?.doc();
         let d = store.by_uuid(dragged)?;
-        crate::notation_ui::of(shell.notation_uis, store, target.obj)?.drop_on(store, d, target.obj)
+        let notation = crate::notation_ui::of(shell.notation_uis, store, target.obj)?;
+        notation.drop_on(store, d, target.obj).map(|(cmd, params)| (notation, cmd, params))
     };
     if let (Some(dragged), Some(at)) = (shell.explorer.dragging, ui.input(|i| i.pointer.latest_pos()))
         && let Some(target) = row_at(at).filter(|t| t.id != dragged && drop_of(shell, dragged, t).is_some())
@@ -709,17 +710,9 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     {
         shell.explorer.dropped = None;
         let todo = row_at(at).filter(|t| t.id != dragged).and_then(|t| drop_of(shell, dragged, t));
-        // A package moved here goes as Properties moves it: one step with a toast offering Undo,
-        // its cards kept where they are and none added to its new owner's diagram (AR-568).
-        let package_to = todo.as_ref().filter(|(cmd, _)| *cmd == "uml.package.move").and_then(|(_, params)| {
-            let store = shell.session.as_ref()?.doc();
-            Some((store.by_uuid(dragged)?, store.by_uuid(Uuid::parse(params.get("to")?.as_str()?)?)?))
-        });
-        let out = match (package_to, todo) {
-            (Some((package, to)), _) => crate::package_nav::move_package(shell, package, to),
-            (None, Some((cmd, params))) => run(shell, cmd, params).map(|_| ()),
-            (None, None) => Ok(()),
-        };
+        // The drop runs as the target's notation runs it (a UML package moved as Properties moves
+        // it, AR-568).
+        let out = todo.map_or(Ok(()), |(notation, cmd, params)| notation.run_drop(shell, cmd, params));
         if let Err(e) = out {
             shell.explorer.notice = Some(e);
         }

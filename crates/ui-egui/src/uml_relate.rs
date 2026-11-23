@@ -27,12 +27,14 @@ use egui::{Pos2, Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
 use crate::Shell;
+use crate::canvas::{Drawing, LineDrawn, along, exit_point};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{Combo, ComboOut, FIELD, FieldOut, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
+use crate::widgets;
 
 /// What the Relationship tool draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1513,6 +1515,88 @@ fn apply_end_modifiers(shell: &mut Shell, id: Uuid, end: Obj, i: usize, role: &s
         // fields.
         Err(e) => shell.panels.notice = Some(e),
     }
+}
+
+/// What goes with the line of an association class (AR-125) on the diagram drawn: its tie to its
+/// card when the card is there too, else its name at the line's middle, each recorded for the
+/// automation tree. Gives where the name was drawn, for the line's stereotypes to go above it; none
+/// for the line of anything else.
+pub(crate) fn association_class_extras(
+    paint: &egui::Painter,
+    d: &Drawing<'_>,
+    line: &LineDrawn<'_>,
+    registry: &mut widgets::Registry,
+    ui: &egui::Ui,
+) -> Option<Rect> {
+    let id = d.store.uuid(line.line).ok();
+    if let Some(tied) = tie(paint, d, line.element, line.points, line.selected)
+        && let Some(id) = id
+    {
+        widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.tie"), "edge", tied);
+    }
+    let named = bare_name(paint, d, line.element, line.points);
+    if let Some(named) = named
+        && let Some(id) = id
+    {
+        widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.name"), "label", named);
+    }
+    named
+}
+
+/// An association class's tie (AR-125): when the diagram shows its card too, a dashed line in the
+/// muted ink from the card's edge to the middle of its line `points`, the accent while it is
+/// selected. Drawn with the line, under the cards, so it follows the line and the card as either
+/// moves; it is worked out from what is drawn, never stored. Gives the rectangle from the card's
+/// edge to the line's middle, for the automation tree.
+fn tie(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos2], selected: bool) -> Option<Rect> {
+    let (p, z) = (d.p, d.view.zoom);
+    let rect = d.node_rect(card_here(d, element)?);
+    let middle = along(points, 0.5);
+    let from = exit_point(rect, middle);
+    if !from.is_finite() || !middle.is_finite() || rect.contains(middle) {
+        return None;
+    }
+    let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), if selected { p.accent } else { p.text_muted });
+    paint.extend(egui::Shape::dashed_line(&[from, middle], stroke, 5.0 * z.max(0.5), 4.0 * z.max(0.5)));
+    Some(Rect::from_two_pos(from, middle))
+}
+
+/// The card of association class `element` on the diagram drawn, when it has one there; none for
+/// anything else.
+fn card_here(d: &Drawing<'_>, element: Obj) -> Option<Obj> {
+    let store = d.store;
+    if store.class_of(element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) {
+        return None;
+    }
+    store
+        .referrers(element)
+        .into_iter()
+        .find(|(n, prop)| *prop == archforge_diagram::node::ELEMENT && archforge_diagram::diagram_of(store, *n) == Some(d.diagram))
+        .map(|(n, _)| n)
+}
+
+/// An association class's name at its line's middle, where an association's name sits (above a
+/// level stretch, right of an upright one), while its card is not on the diagram drawn: the line
+/// then still reads as the association class it is. Gives where the name was drawn.
+fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos2]) -> Option<Rect> {
+    let (p, store, z) = (d.p, d.store, d.view.zoom);
+    if store.class_of(element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) || card_here(d, element).is_some() {
+        return None;
+    }
+    let name = archforge_core::name_of(store, element);
+    if name.is_empty() {
+        return None;
+    }
+    let g = ux::galley(paint, &name, types::SMALL.scaled(z), p.text_secondary, None);
+    let upright = {
+        let v = along(points, 0.51) - along(points, 0.49);
+        v.y.abs() > v.x.abs()
+    };
+    let offset = if upright { vec2(8.0 * z, -g.size().y / 2.0) } else { vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z) };
+    let at = along(points, 0.5) + offset;
+    let rect = Rect::from_min_size(at, g.size());
+    paint.galley(at, g, p.text_secondary.into());
+    Some(rect)
 }
 
 /// Every word the kinds' menu and the panels say through `tr` at run time, for the catalogue.

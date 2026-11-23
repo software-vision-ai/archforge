@@ -17,7 +17,14 @@
 //! - **Out by the path bar or ⌘↑**: the owning ancestor's default diagram as it was last left, by
 //!   ownership and never the way in; its tab starts a new route.
 //! - One switch per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
-//!   seconds must pass, before the next switch. A switch fades in over [`FADE`] seconds.
+//!   seconds must pass, before the next switch. A switch fades in over
+//!   [`crate::canvas::SWITCH_FADE`] seconds.
+//!
+//! It is UML's own: UML's diagram kind runs it before and after the canvas draws a diagram
+//! ([`crate::kinds::DiagramKind::before_draw`], [`crate::kinds::DiagramKind::after_draw`]), and
+//! what it keeps between frames is UML's ([`crate::uml_state::UmlState::nav`]). The canvas keeps
+//! what any diagram's view needs: the view each diagram was left with, the zoom made this frame,
+//! and when a switch was last marked, from which the canvas fades in.
 
 use std::collections::HashMap;
 
@@ -30,15 +37,13 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::tr;
 use crate::nav_route::{Route, Step};
-use crate::uml_state::uml;
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
 /// The share of the canvas one package covers once zooming in opens it.
 pub const ENTER_COVER: f32 = 0.6;
 /// How long the thresholds rest after a switch, in seconds.
 pub const REST: f64 = 0.6;
-/// How long a switch fades in, in seconds.
-pub const FADE: f64 = 0.2;
 /// How long the zoom must rest after a switch before the next one: the end of a gesture.
 pub const QUIET: f64 = 0.3;
 /// The zoom a diagram opens at when a switch by zoom or Open lands on it (AR-110).
@@ -56,35 +61,39 @@ pub(crate) struct Landing {
     pub(crate) view: Option<(Vec2, f32)>,
 }
 
-/// What package navigation keeps between frames.
+/// What package navigation keeps between frames, as UML's own ([`crate::uml_state::UmlState`]).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Nav {
-    /// The zoom the user asked for this frame, as a factor; zero for none.
-    pub(crate) intent: f32,
-    /// The view each diagram was last left with, by diagram, as `crate::canvas` keeps it.
-    pub(crate) views: HashMap<Uuid, (Vec2, f32)>,
-    /// The tab whose view the canvas has drawn since it was opened: none while the view is still
-    /// the one of the tab before, to be fitted or centred on the next frame.
-    pub(crate) shown: Option<Uuid>,
     /// The return route of each tab, by the tab's diagram: the package entries that led to it, so
     /// going back returns the way the user came in, though the parent package has other class
     /// diagrams too. Browsing state only: never written into the model, and no undo step.
     pub(crate) routes: HashMap<Uuid, Route>,
-    /// When the last switch happened, and when it began to fade in.
-    pub(crate) switched: Option<f64>,
     /// Where the next frame lands after a zoom out: the package left and the view to restore.
     pub(crate) reveal: Option<Landing>,
     /// True while the diagram just entered is still to be centred at [`LANDING`].
     pub(crate) centre: bool,
+    /// The canvas's count of tabs opened ([`crate::canvas::State::settled`]) when `reveal` or
+    /// `centre` was set: they are for the tab the switch opened, and any tab opened since drops
+    /// them.
+    pub(crate) settled: u64,
     /// When the user last zoomed, and whether the gesture that made the last switch is still on:
     /// no switch happens until it has ended.
     pub(crate) last_zoom: Option<f64>,
     pub(crate) disarmed: bool,
 }
 
-/// Notes a zoom the user made by `factor`.
-pub(crate) fn intend(nav: &mut Nav, factor: f32) {
-    nav.intent = if nav.intent == 0.0 { factor } else { nav.intent * factor };
+/// Package navigation's state, UML's own; none while UML is not one of the shell's notations.
+fn nav(shell: &mut Shell) -> Option<&mut Nav> {
+    uml_mut(&mut shell.notation_states).map(|uml| &mut uml.nav)
+}
+
+/// Marks a switch made `now`, or a zoom out at the top package that went no further: the canvas
+/// fades in, and the thresholds rest until the gesture that made it has ended.
+fn switched(shell: &mut Shell, now: f64) {
+    shell.canvas.switched = Some(now);
+    if let Some(nav) = nav(shell) {
+        nav.disarmed = true;
+    }
 }
 
 fn is_package(store: &Store, o: Obj) -> bool {
@@ -166,21 +175,23 @@ fn enter_by(shell: &mut Shell, package: Uuid, now: f64, by_zoom: bool) {
     let view = (!by_zoom).then_some((shell.canvas.pan, shell.canvas.zoom));
     if d != from
         && let Some(session) = shell.session.as_ref()
+        && let Some(nav) = uml_mut(&mut shell.notation_states).map(|uml| &mut uml.nav)
     {
         let store = session.doc();
         let source_name = store.by_uuid(from).map(|o| archforge_core::name_of(store, o)).unwrap_or_default();
-        let mut route = shell.canvas.nav.routes.get(&from).cloned().unwrap_or_default();
+        let mut route = nav.routes.get(&from).cloned().unwrap_or_default();
         route.push(Step { source: from, destination: d, source_name, view, history: session.history() });
-        shell.canvas.nav.routes.insert(d, route);
+        nav.routes.insert(d, route);
     }
     crate::canvas::open(shell, d);
     // At 100 %, its content centred on the next frame (AR-110).
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = LANDING;
-    shell.canvas.nav.centre = true;
-    shell.canvas.nav.reveal = None;
-    shell.canvas.nav.switched = Some(now);
-    shell.canvas.nav.disarmed = true;
+    let settled = shell.canvas.settled;
+    if let Some(nav) = nav(shell) {
+        (nav.centre, nav.reveal, nav.settled) = (true, None, settled);
+    }
+    switched(shell, now);
 }
 
 /// Opens the default diagram of `package`, an owning ancestor of the open one, by the path bar or
@@ -189,7 +200,9 @@ fn enter_by(shell: &mut Shell, package: Uuid, now: f64, by_zoom: bool) {
 /// (Decision 4). Browsing state only: no model change and no undo step.
 pub(crate) fn leave(shell: &mut Shell, package: Uuid, now: f64) {
     let Some(d) = default_of(shell, package) else { return };
-    shell.canvas.nav.routes.remove(&d);
+    if let Some(nav) = nav(shell) {
+        nav.routes.remove(&d);
+    }
     switch_out(shell, d, None, now);
 }
 
@@ -198,7 +211,7 @@ pub(crate) fn leave(shell: &mut Shell, package: Uuid, now: f64) {
 /// never was.
 fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Landing>, now: f64) {
     crate::canvas::open(shell, d);
-    match (reveal, shell.canvas.nav.views.get(&d).copied()) {
+    match (reveal, shell.canvas.views.get(&d).copied()) {
         (Some(_), _) => {
             shell.canvas.zoom = LANDING;
             shell.canvas.fit_pending = false;
@@ -210,10 +223,11 @@ fn switch_out(shell: &mut Shell, d: Uuid, reveal: Option<Landing>, now: f64) {
         }
         (None, None) => shell.canvas.fit_pending = true,
     }
-    shell.canvas.nav.reveal = reveal;
-    shell.canvas.nav.centre = false;
-    shell.canvas.nav.switched = Some(now);
-    shell.canvas.nav.disarmed = true;
+    let settled = shell.canvas.settled;
+    if let Some(nav) = nav(shell) {
+        (nav.reveal, nav.centre, nav.settled) = (reveal, false, settled);
+    }
+    switched(shell, now);
 }
 
 /// The way back from the open diagram by zoom: the newest step on its tab's route made in this
@@ -226,10 +240,11 @@ fn take_return(shell: &mut Shell) -> Option<(Uuid, Option<(Vec2, f32)>)> {
     let from = shell.canvas.active?;
     let session = shell.session.as_ref()?;
     let store = session.doc();
-    let mut route = shell.canvas.nav.routes.remove(&from)?;
+    let nav = uml_mut(&mut shell.notation_states).map(|uml| &mut uml.nav)?;
+    let mut route = nav.routes.remove(&from)?;
     let shown = |s: Uuid| store.by_uuid(s).is_some_and(|d| store.is_alive(d) && store.class_of(d).ok() == Some(archforge_diagram::DIAGRAM));
     let step = route.take_return(session.history(), shown).reached?;
-    shell.canvas.nav.routes.insert(step.source, route);
+    nav.routes.insert(step.source, route);
     Some((step.source, step.view))
 }
 
@@ -291,20 +306,27 @@ fn centre_at_landing(state: &mut crate::canvas::State, r: Rect, centre: Option<V
     state.pan = if pan.is_finite() { pan } else { Vec2::ZERO };
 }
 
-/// Before the canvas draws: shows the package a zoom out left, takes ⌘↓, ⌘↑ and the zoom keys,
-/// and follows the zoom made this frame across a threshold.
+/// Before the canvas draws diagram `d`, a package's: shows the package a zoom out left, takes ⌘↓,
+/// ⌘↑ and the zoom keys, and follows the zoom made this frame across a threshold. Another
+/// diagram's frame leaves it all be.
 pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
     let now = ui.input(|i| i.time);
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    let Some(here) = package_of_diagram(store, d) else {
-        shell.canvas.nav.intent = 0.0;
-        return;
-    };
+    let Some(here) = package_of_diagram(store, d) else { return };
     // A switch landed: a zoom out as `land` places it, an entry at 100 % with its content centred.
     // Only the tab the switch opened lands: opening another first drops it (`canvas::open`).
-    if let Some(landing) = shell.canvas.nav.reveal.take() {
+    let settled = shell.canvas.settled;
+    let (reveal, centre) = match uml_mut(&mut shell.notation_states).map(|uml| &mut uml.nav) {
+        Some(nav) if nav.settled == settled => (nav.reveal.take(), std::mem::take(&mut nav.centre)),
+        Some(nav) => {
+            (nav.reveal, nav.centre) = (None, false);
+            (None, false)
+        }
+        None => (None, false),
+    };
+    if let Some(landing) = reveal {
         land(shell, r, d, landing);
-    } else if std::mem::take(&mut shell.canvas.nav.centre) {
+    } else if centre {
         let boxes: Vec<archforge_diagram::Rect> = nodes(store, d).into_iter().map(|n| bounds_of(store, n)).collect();
         let centre = if boxes.is_empty() {
             None
@@ -316,19 +338,20 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
         centre_at_landing(&mut shell.canvas, r, centre);
     }
     keys(shell, ui, r, d, here, now);
-    let intent = std::mem::take(&mut shell.canvas.nav.intent);
-    let nav = &mut shell.canvas.nav;
+    let intent = std::mem::take(&mut shell.canvas.zoom_intent);
+    let (last_switch, fit_pending) = (shell.canvas.switched, shell.canvas.fit_pending);
+    let Some(nav) = nav(shell) else { return };
     // The gesture that made the last switch ends once the zoom has rested; only then may another.
     // The rest is measured before this frame's zoom is noted, so the first frame of a new gesture
     // after a pause re-arms, though no idle frame was drawn in between.
-    let rested = nav.last_zoom.is_none_or(|t| now - t >= QUIET) && nav.switched.is_none_or(|t| now - t >= REST);
+    let rested = nav.last_zoom.is_none_or(|t| now - t >= QUIET) && last_switch.is_none_or(|t| now - t >= REST);
     if nav.disarmed && rested {
         nav.disarmed = false;
     }
     if intent != 0.0 {
         nav.last_zoom = Some(now);
     }
-    if intent == 0.0 || (intent - 1.0).abs() < f32::EPSILON || nav.disarmed || shell.canvas.fit_pending {
+    if intent == 0.0 || (intent - 1.0).abs() < f32::EPSILON || nav.disarmed || fit_pending {
         return;
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
@@ -358,8 +381,7 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
             (None, None) => {
                 // Said under the path bar until the next action.
                 shell.canvas.notice = Some(tr("This is the top package: zooming out goes no further"));
-                shell.canvas.nav.disarmed = true;
-                shell.canvas.nav.switched = Some(now);
+                switched(shell, now);
             }
         }
     }
@@ -412,24 +434,15 @@ fn selected_package(shell: &Shell, store: &Store, d: Obj) -> Option<Uuid> {
     nodes(store, d).into_iter().any(|n| element(store, n) == Some(package)).then(|| store.uuid(package).ok()).flatten()
 }
 
-/// After the canvas draws: the path bar at its top left and a selected package's Open, then the
-/// fade of a switch.
+/// After the canvas draws diagram `d`, a package's: the path bar at its top left and a selected
+/// package's Open. Gives how much room the path bar takes at the canvas's top; none on another
+/// diagram.
 pub(crate) fn after_draw(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
     let now = ui.input(|i| i.time);
-    let mut below = 0.0;
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return below };
-    if let Some(here) = package_of_diagram(store, d) {
-        below = path_bar(shell, ui, p, r, here, now);
-        open_control(shell, ui, p, r, d, now);
-    }
-    // The switch fades in: the canvas's colour over it, thinning out.
-    if let Some(t) = shell.canvas.nav.switched {
-        let k = ((now - t) / FADE) as f32;
-        if k < 1.0 {
-            ui.painter().rect_filled(r, 0.0, p.canvas.gamma_multiply(1.0 - k.max(0.0)));
-            ui.ctx().request_repaint();
-        }
-    }
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return 0.0 };
+    let Some(here) = package_of_diagram(store, d) else { return 0.0 };
+    let below = path_bar(shell, ui, p, r, here, now);
+    open_control(shell, ui, p, r, d, now);
     below
 }
 

@@ -11,6 +11,8 @@
 //! 200 by 156 at 16 px from the right and 14 px above the status bar, the toolbar 342 by 50 at
 //! the bottom centre. The grid dots sit 32 units apart and thin out as the zoom falls.
 
+use std::collections::HashMap;
+
 use archforge_diagram::figure::{EndMark, Tone};
 use archforge_diagram::grid::bounds_of;
 use archforge_diagram::{DIAGRAM, Grid, LabelPlace, diagram, edge, label, node, point, style};
@@ -178,8 +180,27 @@ pub struct State {
     /// route ended on its node, and where the line now starts, on screen; a selected line's end
     /// handle follows.
     pub qualified_ends: Vec<(Pos2, Pos2)>,
-    /// Moving between a package's diagram and its parent's (AR-95).
-    pub(crate) nav: crate::package_nav::Nav,
+    /// The view each diagram was last left with, by diagram, kept for some ways back to it, not
+    /// for every one: a diagram's kind may restore it as it moves between diagrams (UML's package
+    /// navigation), and a tab taking over before the view of the tab left was drawn shows it
+    /// ([`settle_view`]).
+    pub(crate) views: HashMap<Uuid, (Vec2, f32)>,
+    /// The tab whose view the canvas has drawn since it was opened: none while the view is still
+    /// the one of the tab before, to be fitted or centred on the next frame.
+    pub(crate) shown: Option<Uuid>,
+    /// How many times a tab has taken the active one's place ([`settle_view`]): what a diagram's
+    /// kind sets up for the tab it opened holds only until the next (UML's landing after a switch).
+    pub(crate) settled: u64,
+    /// The zoom the user made since the diagram's kind last ran before the canvas drew, as a
+    /// factor; zero for none. The kind follows it there ([`crate::kinds::DiagramKind::before_draw`]:
+    /// UML's package navigation across a package's threshold), and the canvas clears it right
+    /// after, so a zoom made later in a frame (the minimap's buttons) reaches the next one.
+    pub(crate) zoom_intent: f32,
+    /// When a diagram's kind last marked a switch: the canvas fades in from then over
+    /// [`SWITCH_FADE`]. Not proof that the diagram shown changed: UML marks one too when a zoom out
+    /// at the top package goes no further, so the gesture rests and the canvas fades on the same
+    /// diagram.
+    pub(crate) switched: Option<f64>,
 }
 
 /// A cardinality text as drawn: its line, which end (0 the line's start, 1 its end), where it
@@ -256,7 +277,11 @@ impl Default for State {
             path_badges: Vec::new(),
             set_labels: Vec::new(),
             qualified_ends: Vec::new(),
-            nav: crate::package_nav::Nav::default(),
+            views: HashMap::new(),
+            shown: None,
+            settled: 0,
+            zoom_intent: 0.0,
+            switched: None,
         }
     }
 }
@@ -273,32 +298,33 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     }
 }
 
-/// Keeps the active tab's pan and zoom as the view it was left with, for package navigation to
-/// restore ([`crate::package_nav::leave`]). Every way of leaving a tab comes here first, so the
-/// view kept is always the last (AR-666). Only a view drawn for that tab counts: one still to be
-/// fitted or centred belongs to the tab before, so the tab's entry stays.
+/// Keeps the active tab's pan and zoom as the view it was left with, for the tab and a diagram's
+/// kind to restore ([`State::views`]). Every way of leaving a tab comes here first, so the view
+/// kept is always the last (AR-666). Only a view drawn for that tab counts: one still to be fitted
+/// or centred belongs to the tab before, so the tab's entry stays.
 fn keep_left_view(state: &mut State) {
     if let Some(from) = state.active
-        && state.nav.shown == Some(from)
+        && state.shown == Some(from)
     {
-        state.nav.views.insert(from, (state.pan, state.zoom));
+        state.views.insert(from, (state.pan, state.zoom));
     }
 }
 
 /// The view `next` opens with when it takes the active tab's place; the view is not drawn for it
 /// yet. A landing or a fit still pending was for the tab left, which navigation sets after opening,
-/// so it goes. A view the canvas never drew for the tab left is half made, so `next` then shows as
-/// last left; after a drawn view an open tab keeps it, as a new one is fitted; a tab with no view
-/// kept, never drawn, is fitted (AR-758).
+/// so it goes: the count of tabs opened moves on ([`State::settled`]). A view the canvas never
+/// drew for the tab left is half made, so `next` then shows as last left; after a drawn view an
+/// open tab keeps it, as a new one is fitted; a tab with no view kept, never drawn, is fitted
+/// (AR-758).
 fn settle_view(state: &mut State, next: Option<Uuid>) {
-    let drawn = state.active.is_some() && state.nav.shown == state.active;
-    state.nav.shown = None;
+    let drawn = state.active.is_some() && state.shown == state.active;
+    state.shown = None;
     if state.active == next {
         return;
     }
     let new = next.is_some_and(|n| !state.tabs.contains(&n));
-    (state.nav.reveal, state.nav.centre) = (None, false);
-    match next.and_then(|n| state.nav.views.get(&n).copied()) {
+    state.settled = state.settled.wrapping_add(1);
+    match next.and_then(|n| state.views.get(&n).copied()) {
         Some((pan, zoom)) if !drawn => (state.pan, state.zoom, state.fit_pending) = (pan, zoom, false),
         Some(_) if !new => state.fit_pending = false,
         _ => state.fit_pending = true,
@@ -478,11 +504,11 @@ fn zoom_about(state: &mut State, factor: f32, at: Vec2) {
     state.zoom = new;
 }
 
-/// A zoom the user makes by `factor` about `at`: the canvas zooms, and package navigation hears
-/// of it.
+/// A zoom the user makes by `factor` about `at`: the canvas zooms, and the diagram's kind hears of
+/// it before the canvas next draws ([`State::zoom_intent`]).
 pub(crate) fn zoom_by(state: &mut State, factor: f32, at: Vec2) {
     zoom_about(state, factor, at);
-    crate::package_nav::intend(&mut state.nav, factor);
+    state.zoom_intent = if state.zoom_intent == 0.0 { factor } else { state.zoom_intent * factor };
 }
 
 /// Fits the whole diagram into the canvas, zoomed out no further than `least`, or shows an empty
@@ -760,16 +786,21 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     if !shell.canvas.pan.is_finite() {
         shell.canvas.pan = Vec2::ZERO;
     }
-    // The view is this diagram's once `before_draw` places a pending landing first; a zoom across
-    // a package's threshold, ⌘↓ or ⌘↑ then moves to another level (AR-95).
-    shell.canvas.nav.shown = shell.canvas.active;
-    crate::package_nav::before_draw(shell, ui, r, d);
+    // The view is this diagram's once the diagram's kind has run before it draws: UML's places a
+    // pending landing first, and a zoom across a package's threshold, ⌘↓ or ⌘↑ then move to another
+    // level (AR-95). The zoom made since the last frame was the kind's to follow; it ends here.
+    shell.canvas.shown = shell.canvas.active;
+    let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
+    if let Some(kind) = kind {
+        kind.before_draw(shell, ui, r, d);
+    }
+    shell.canvas.zoom_intent = 0.0;
     let view = View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
     // An element dragged from the Models explorer lands where it was let go (slice S7), as the
     // diagram's kind places it.
     if let Some((element, at)) = shell.explorer.dropped.take()
         && r.contains(at)
-        && let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d))
+        && let Some(kind) = kind
     {
         kind.drop(shell, d, element, view.to_canvas(at));
     }
@@ -810,7 +841,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
             rename_text: shell.canvas.rename.as_ref().map(|rn| rn.text.as_str()),
             set_drag: crate::editing::set_label_preview(shell, pointer),
         };
-        let scene = Scene { p, store, notations: session.view(), diagram: d, view: &view, grid, area: r };
+        let scene = Scene { p, store, notations: session.view(), kind, diagram: d, view: &view, grid, area: r };
         let drawn = draw_scene(ui, &clip, &scene, live, &mut shell.registry);
         shell.canvas.ends = drawn.ends;
         shell.canvas.qualified_ends = drawn.qualified_ends;
@@ -854,7 +885,10 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         crate::editing::pointer(shell, ui, &resp, view, grid, d);
     }
     crate::editing::overlays(shell, ui, p, r, view, d, &overrides);
-    let below_path = crate::package_nav::after_draw(shell, ui, p, r, d);
+    // What the diagram's kind draws over the canvas (UML's path bar and a package's Open), and the
+    // fade of a switch over that.
+    let below_path = kind.map_or(0.0, |k| k.after_draw(shell, ui, p, r, d));
+    fade(shell, ui, p, r);
     crate::connect::mapping_offer(shell, ui, p, r);
     toast(shell, ui, p, r);
     if minimap_shown(shell, r) {
@@ -874,9 +908,25 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         }
     }
     toolbar(shell, ui, p, r);
-    // What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
-    crate::uml_nary::hint_bar(shell, ui, p, r, below_path);
+    // What a drawing under way has so far, as the diagram's kind says (a UML n-ary association's).
+    if let Some(kind) = kind {
+        kind.hint_bar(shell, ui, p, r, below_path);
+    }
     below_path
+}
+
+/// How long the canvas fades in after a diagram's kind marked a switch, in seconds.
+pub(crate) const SWITCH_FADE: f64 = 0.2;
+
+/// The fade of a switch ([`State::switched`]): the canvas's colour over `r`, thinning out over
+/// [`SWITCH_FADE`].
+fn fade(shell: &Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+    let Some(t) = shell.canvas.switched else { return };
+    let k = ((ui.input(|i| i.time) - t) / SWITCH_FADE) as f32;
+    if k < 1.0 {
+        ui.painter().rect_filled(r, 0.0, p.canvas.gamma_multiply(1.0 - k.max(0.0)));
+        ui.ctx().request_repaint();
+    }
 }
 
 /// A problem badge on the canvas: the problems on hover; for a many-to-many relationship a click
@@ -908,12 +958,14 @@ pub(crate) fn grid(store: &Store, notations: &archforge_diagram::ProjectView, d:
     Grid::build_with(store, d, |n| notations.node_drawn_behind(store, n))
 }
 
-/// A diagram to draw: its store, the notations that describe it, and where it goes on screen.
+/// A diagram to draw: its store, the notations that describe it, its kind, which draws its own
+/// figures beyond them, and where it goes on screen.
 #[derive(Clone, Copy)]
 pub(crate) struct Scene<'a> {
     pub(crate) p: &'a Palette,
     pub(crate) store: &'a Store,
     pub(crate) notations: &'a archforge_diagram::ProjectView,
+    pub(crate) kind: Option<&'static dyn crate::kinds::DiagramKind>,
     pub(crate) diagram: Obj,
     pub(crate) view: &'a View,
     pub(crate) grid: &'a Grid,
@@ -938,6 +990,16 @@ pub(crate) struct Live<'a> {
     pub(crate) set_drag: Option<(Uuid, Vec2)>,
 }
 
+/// A line as drawn this frame, for its diagram's kind to draw what goes with it
+/// ([`crate::kinds::DiagramKind::line_extras`]): the line, its element, its points on screen from
+/// its source to its target, and whether it is drawn selected.
+pub(crate) struct LineDrawn<'a> {
+    pub(crate) line: Obj,
+    pub(crate) element: Obj,
+    pub(crate) points: &'a [Pos2],
+    pub(crate) selected: bool,
+}
+
 /// What drawing a diagram leaves behind: the places the next frame's press looks at, and the
 /// problem badges to draw over everything (their place, ids, element and whether there are many).
 pub(crate) struct Drawn {
@@ -953,7 +1015,7 @@ pub(crate) struct Drawn {
 /// state is read, so any store can be drawn, in a context that has the window's fonts. Each thing
 /// drawn is recorded in `registry`.
 pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>, live: Live<'_>, registry: &mut widgets::Registry) -> Drawn {
-    let Scene { p, store, notations, diagram: d, view, grid, area: r } = *scene;
+    let Scene { p, store, notations, kind, diagram: d, view, grid, area: r } = *scene;
     let overrides = live.overrides;
     let (x0, y0) = view.to_canvas(r.min);
     let (x1, y1) = view.to_canvas(r.max);
@@ -981,6 +1043,7 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
         problems: live.problems,
         diagram: d,
         notations,
+        kind,
         boxes: refs(store, d, diagram::NODE).into_iter().map(|n| (n, model_rect(store, view, overrides, n))).collect(),
         spreads: archforge_diagram::route::spreads(store, d, |n| model_rect(store, view, overrides, n)),
         hovered: live.hovered,
@@ -1001,7 +1064,7 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
     }
     draw_constraint_links(clip, &draw);
     draw_nesting_lines(clip, &draw);
-    let set_labels = draw_sets(clip, &draw, registry, ui);
+    let set_labels = draw.kind.map(|k| k.draw_extras(clip, &draw, registry, ui)).unwrap_or_default();
     for n in &visible.nodes {
         badges.extend(draw_node(clip, &draw, *n, registry, ui));
     }
@@ -1041,21 +1104,23 @@ fn grid_dots(paint: &egui::Painter, p: &Palette, r: Rect, view: &View) {
 }
 
 /// What one frame's drawing reads: the palette, the store, the view, the selection, the rectangles
-/// a gesture previews, the key status toggle and the node whose name is being typed.
-struct Drawing<'a> {
-    p: &'a Palette,
-    store: &'a Store,
-    view: &'a View,
-    selection: &'a [Obj],
+/// a gesture previews, the key status toggle and the node whose name is being typed. A diagram's
+/// kind draws its own figures from it ([`crate::kinds::DiagramKind::draw_extras`]).
+pub(crate) struct Drawing<'a> {
+    pub(crate) p: &'a Palette,
+    pub(crate) store: &'a Store,
+    pub(crate) view: &'a View,
+    pub(crate) selection: &'a [Obj],
     overrides: &'a std::collections::BTreeMap<Uuid, Rect>,
     key_status: bool,
     looking_only: bool,
     renaming: Option<Uuid>,
     /// The problems the rules find, by the element they sit on.
     problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
-    /// The diagram drawn, and the notations that describe its nodes and lines.
-    diagram: Obj,
+    /// The diagram drawn, the notations that describe its nodes and lines, and its kind.
+    pub(crate) diagram: Obj,
     notations: &'a archforge_diagram::ProjectView,
+    kind: Option<&'static dyn crate::kinds::DiagramKind>,
     /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
     /// and where each line's ends sit along their sides: worked out once a frame.
     boxes: Vec<(Obj, archforge_diagram::Rect)>,
@@ -1082,12 +1147,12 @@ struct Drawing<'a> {
     /// first shows one (a package's own diagram, AR-113).
     led: std::cell::OnceCell<std::collections::HashMap<Obj, Obj>>,
     /// A set's label being dragged where no node holds it yet: the set and how far it moved.
-    set_drag: Option<(Uuid, Vec2)>,
+    pub(crate) set_drag: Option<(Uuid, Vec2)>,
 }
 
 impl Drawing<'_> {
     /// A node's rectangle on screen: the gesture's preview when it has one, else as stored.
-    fn node_rect(&self, n: Obj) -> Rect {
+    pub(crate) fn node_rect(&self, n: Obj) -> Rect {
         self.store.uuid(n).ok().and_then(|id| self.overrides.get(&id).copied()).unwrap_or_else(|| self.view.rect(&bounds_of(self.store, n)))
     }
 }
@@ -1931,7 +1996,7 @@ pub fn self_loop(rect: Rect, z: f32) -> Vec<Pos2> {
 }
 
 /// A point along a polyline at `t` of its length, 0 at its start and 1 at its end.
-fn along(points: &[Pos2], t: f32) -> Pos2 {
+pub(crate) fn along(points: &[Pos2], t: f32) -> Pos2 {
     let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
     if points.is_empty() {
         return Pos2::ZERO;
@@ -2030,11 +2095,12 @@ fn draw_edge(
         || selection.contains(&element)
         || selection.iter().any(|o| d.notations.line_selected_with(store, *o) == Some(element))
         || selection.contains(&d.notations.selects_as(store, element));
-    // A leg leaves its diamond where the line meets the diamond's outline, not its node's border.
-    if let Some(source) = element_of(store, e, edge::SOURCE)
-        && element_of(store, source, node::ELEMENT).is_some_and(|a| archforge_uml::nary::is_nary(store, a))
+    // A line starts where the diagram's kind says, when not at its source node's border (a leg of
+    // a UML n-ary association at its diamond's outline).
+    if let Some(kind) = d.kind
+        && let Some(source) = element_of(store, e, edge::SOURCE)
         && let (Some(tip), Some(next)) = (points.first().copied(), points.get(1).copied())
-        && let Some(on) = crate::uml_nary::onto_diamond(d.node_rect(source), tip, next)
+        && let Some(on) = kind.line_start(d, source, tip, next)
     {
         points[0] = on;
     }
@@ -2077,17 +2143,9 @@ fn draw_edge(
             widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.qualifiers.{i}"), "label", rect);
         }
     }
-    if let Some(tied) = tie(paint, d, element, &points, selected)
-        && let Ok(id) = store.uuid(e)
-    {
-        widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.tie"), "edge", tied);
-    }
-    let named = bare_name(paint, d, element, &points);
-    if let Some(named) = named
-        && let Ok(id) = store.uuid(e)
-    {
-        widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.name"), "label", named);
-    }
+    // What the diagram's kind draws with the line beyond its figure (a UML association class's
+    // tie to its card, or its name while the card is not here).
+    let named = d.kind.and_then(|k| k.line_extras(paint, d, &LineDrawn { line: e, element, points: &points, selected }, registry, ui));
     // Where the line's name label sits, when it shows one: its stereotypes go above it.
     let mut name_at: Option<Rect> = named;
     for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
@@ -2336,62 +2394,6 @@ fn draw_qualifier_box(paint: &egui::Painter, p: &Palette, rect: Rect, rows: Vec<
     }
 }
 
-/// An association class's tie (AR-125): when the diagram shows its card too, a dashed line in the
-/// muted ink from the card's edge to the middle of its line `points`, the accent while it is
-/// selected. Drawn with the line, under the cards, so it follows the line and the card as either
-/// moves; it is worked out from what is drawn, never stored. Gives the rectangle from the card's
-/// edge to the line's middle, for the automation tree.
-fn tie(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos2], selected: bool) -> Option<Rect> {
-    let (p, z) = (d.p, d.view.zoom);
-    let rect = d.node_rect(card_here(d, element)?);
-    let middle = along(points, 0.5);
-    let from = exit_point(rect, middle);
-    if !from.is_finite() || !middle.is_finite() || rect.contains(middle) {
-        return None;
-    }
-    let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), if selected { p.accent } else { p.text_muted });
-    paint.extend(egui::Shape::dashed_line(&[from, middle], stroke, 5.0 * z.max(0.5), 4.0 * z.max(0.5)));
-    Some(Rect::from_two_pos(from, middle))
-}
-
-/// The card of association class `element` on the diagram drawn, when it has one there; none for
-/// anything else.
-fn card_here(d: &Drawing<'_>, element: Obj) -> Option<Obj> {
-    let store = d.store;
-    if store.class_of(element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) {
-        return None;
-    }
-    store
-        .referrers(element)
-        .into_iter()
-        .find(|(n, prop)| *prop == node::ELEMENT && archforge_diagram::diagram_of(store, *n) == Some(d.diagram))
-        .map(|(n, _)| n)
-}
-
-/// An association class's name at its line's middle, where an association's name sits (above a
-/// level stretch, right of an upright one), while its card is not on the diagram drawn: the line
-/// then still reads as the association class it is. Gives where the name was drawn.
-fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos2]) -> Option<Rect> {
-    let (p, store, z) = (d.p, d.store, d.view.zoom);
-    if store.class_of(element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) || card_here(d, element).is_some() {
-        return None;
-    }
-    let name = archforge_core::name_of(store, element);
-    if name.is_empty() {
-        return None;
-    }
-    let g = ux::galley(paint, &name, types::SMALL.scaled(z), p.text_secondary, None);
-    let upright = {
-        let v = along(points, 0.51) - along(points, 0.49);
-        v.y.abs() > v.x.abs()
-    };
-    let offset = if upright { vec2(8.0 * z, -g.size().y / 2.0) } else { vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z) };
-    let at = along(points, 0.5) + offset;
-    let rect = Rect::from_min_size(at, g.size());
-    paint.galley(at, g, p.text_secondary.into());
-    Some(rect)
-}
-
 /// The radius of a selected line's end handle, and the room between it and the end's mark.
 pub(crate) const END_HANDLE: f32 = 5.0;
 const END_HANDLE_GAP: f32 = 3.0;
@@ -2614,163 +2616,7 @@ fn halo(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, p: &Palette) {
 /// waypoints; a relationship of a table with itself loops out of its right side. Routed in diagram
 /// coordinates from the rectangles drawn, so a table being dragged takes its lines along. None
 /// when an end is missing.
-/// Where a generalization set shows on screen: its dashed line across its members' lines and its
-/// label's rectangle.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct SetPlace {
-    pub line: [Pos2; 2],
-    pub label: Rect,
-}
-
-/// Where a set shows (AR-129), from its members' routes on screen, each from the specific class
-/// to the general one: the set line runs square across them at a level along their common
-/// direction, `nth` steps of 26 px towards the general class for the `nth` set of the same lines,
-/// and the label of `size` sits on the general's side of it, beside the middle member. A label
-/// moved there (`placed`) sets the level instead: the line runs just past its edge.
-pub(crate) fn set_place(routes: &[Vec<Pos2>], nth: usize, size: Vec2, placed: Option<Rect>, z: f32) -> Option<SetPlace> {
-    let routes: Vec<&Vec<Pos2>> = routes.iter().filter(|r| r.len() >= 2 && r.iter().all(|p| p.is_finite())).collect();
-    if routes.is_empty() {
-        return None;
-    }
-    let sum = routes.iter().fold(Vec2::ZERO, |acc, r| match (r.first(), r.last()) {
-        (Some(a), Some(b)) => acc + (*b - *a),
-        _ => acc,
-    });
-    // Square to the axis the lines mostly run along, as their right-angled routes are.
-    let dir = match (sum.x.abs() > sum.y.abs(), sum.x < 0.0, sum.y > 0.0) {
-        (true, true, _) => vec2(-1.0, 0.0),
-        (true, false, _) => vec2(1.0, 0.0),
-        (false, _, true) => vec2(0.0, 1.0),
-        (false, _, false) => vec2(0.0, -1.0),
-    };
-    let side = vec2(-dir.y, dir.x);
-    let along = |p: Pos2| p.to_vec2().dot(dir);
-    let across = |p: Pos2| p.to_vec2().dot(side);
-    // The extents of the label along the line's direction and across it.
-    let ext_d = dir.y.abs() * size.y + dir.x.abs() * size.x;
-    let ext_n = side.x.abs() * size.x + side.y.abs() * size.y;
-    let gap = 4.0 * z;
-    let level = match placed {
-        Some(r) => along(r.center()) - ext_d / 2.0 - gap,
-        None => {
-            let spans: Vec<(f32, f32)> = routes
-                .iter()
-                .filter_map(|r| {
-                    let (a, b) = (along(*r.first()?), along(*r.last()?));
-                    Some((a.min(b), a.max(b)))
-                })
-                .collect();
-            let lo = spans.iter().map(|s| s.0).fold(f32::MIN, f32::max);
-            let hi = spans.iter().map(|s| s.1).fold(f32::MAX, f32::min);
-            let base = if lo < hi { lo + 0.3 * (hi - lo) } else { spans.iter().map(|s| (s.0 + s.1) / 2.0).sum::<f32>() / spans.len().max(1) as f32 };
-            base + nth.min(16) as f32 * 26.0 * z
-        }
-    };
-    // Where each member's route crosses the level, or its point nearest it.
-    let mut crossings: Vec<f32> = routes
-        .iter()
-        .map(|r| {
-            let hit = r.windows(2).find_map(|w| {
-                let (a, b) = (along(w[0]), along(w[1]));
-                if (a - level) * (b - level) <= 0.0 && (a - b).abs() > 1e-6 {
-                    let t = (level - a) / (b - a);
-                    Some(across(w[0] + (w[1] - w[0]) * t))
-                } else {
-                    None
-                }
-            });
-            hit.unwrap_or_else(|| {
-                let near = r.iter().copied().fold(r[0], |m, p| if (along(p) - level).abs() < (along(m) - level).abs() { p } else { m });
-                across(near)
-            })
-        })
-        .collect();
-    crossings.sort_by(f32::total_cmp);
-    let (first, last) = (*crossings.first()?, *crossings.last()?);
-    let pad = if crossings.len() == 1 { 36.0 * z } else { 24.0 * z };
-    let at = |t: f32| (dir * level + side * t).to_pos2();
-    let line = [at(first - pad), at(last + pad)];
-    let label = match placed {
-        Some(r) => r,
-        None => {
-            let middle = crossings.get(crossings.len() / 2).copied().unwrap_or(first);
-            let anchor = at(middle) + side * 8.0 * z + dir * gap;
-            Rect::from_center_size(anchor + dir * (ext_d / 2.0) + side * (ext_n / 2.0), size)
-        }
-    };
-    (line.iter().all(|p| p.is_finite()) && label.is_finite()).then_some(SetPlace { line, label })
-}
-
-/// The generalization sets of the diagram's lines (AR-129): for each set with a member line here,
-/// a dashed line across its members' lines and its label, `name {complete, disjoint}`, beside it,
-/// worked out from the model each frame; muted, the accent while the set is selected. A label moved
-/// on this diagram sits where its node holds it. Gives the labels drawn, for the next frame's press.
-fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut widgets::Registry, ui: &egui::Ui) -> Vec<SetLabel> {
-    use archforge_uml::generalization_sets as sets;
-    let (p, store, z) = (d.p, d.store, d.view.zoom);
-    let mut by_set: std::collections::BTreeMap<Obj, Vec<Obj>> = std::collections::BTreeMap::new();
-    for e in refs(store, d.diagram, diagram::EDGE) {
-        let Some(g) = element_of(store, e, edge::ELEMENT).filter(|g| sets::is_generalization(store, *g)) else { continue };
-        for s in sets::sets_of(store, g) {
-            by_set.entry(s).or_default().push(e);
-        }
-    }
-    let mut out = Vec::new();
-    // The sets of one general classifier's lines take a level each.
-    let mut nth_of: std::collections::BTreeMap<Option<Obj>, usize> = std::collections::BTreeMap::new();
-    for (s, edges) in by_set {
-        let routes: Vec<Vec<Pos2>> = edges.iter().filter_map(|e| edge_points(d, *e)).collect();
-        let nth = nth_of.entry(sets::general_of(store, s)).or_insert(0);
-        let k = *nth;
-        *nth += 1;
-        let name = archforge_core::name_of(store, s);
-        let braces = sets::braces(store, s);
-        let selected = d.selection.contains(&s);
-        let (name_ink, braces_ink, line_ink) = if selected { (p.accent, p.accent, p.accent) } else { (p.text_secondary, p.text_muted, p.text_muted) };
-        let name_g = ux::galley(paint, &name, types::CAPTION_STRONG.scaled(z), name_ink, None);
-        let braces_g = ux::galley(paint, &braces, types::CAPTION.scaled(z), braces_ink, None);
-        let pad = vec2(6.0, 2.0) * z;
-        let gap = if name.is_empty() { 0.0 } else { 5.0 * z };
-        let size = vec2(name_g.size().x + gap + braces_g.size().x, name_g.size().y.max(braces_g.size().y)) + pad * 2.0;
-        let node = sets::label_node(store, d.diagram, s);
-        let placed = node.map(|n| Rect::from_min_size(d.node_rect(n).min, size));
-        let id = store.uuid(s).ok();
-        let placed = match (d.set_drag, id) {
-            (Some((dragged, by)), Some(id)) if dragged == id => {
-                set_place(&routes, k, size, placed, z).map(|at| Rect::from_min_size(at.label.min + by, size))
-            }
-            _ => placed,
-        };
-        let Some(at) = set_place(&routes, k, size, placed, z) else { continue };
-        let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), line_ink);
-        paint.extend(egui::Shape::dashed_line(&at.line, stroke, (5.0 * z).max(2.0), (4.0 * z).max(2.0)));
-        let label = at.label;
-        paint.rect_filled(label, 4.0 * z, p.canvas);
-        if selected {
-            paint.rect_stroke(label, 4.0 * z, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-        }
-        let mut x = label.left() + pad.x;
-        let y = label.center().y;
-        let name_w = name_g.size().x;
-        paint.galley(pos2(x, y - name_g.size().y / 2.0), name_g, name_ink.into());
-        x += name_w + gap;
-        paint.galley(pos2(x, y - braces_g.size().y / 2.0), braces_g, braces_ink.into());
-        let Some(id) = id else { continue };
-        widgets::record_visible(ui, registry, &format!("workspace.canvas.generalizationSet.{id}"), "label", label);
-        widgets::record_visible(
-            ui,
-            registry,
-            &format!("workspace.canvas.generalizationSet.{id}.line"),
-            "line",
-            Rect::from_two_pos(at.line[0], at.line[1]).expand(3.0),
-        );
-        let text = if name.is_empty() { braces } else { format!("{name} {braces}") };
-        out.push(SetLabel { set: id, rect: label, node: node.and_then(|n| store.uuid(n).ok()), text });
-    }
-    out
-}
-
-fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
+pub(crate) fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
     let (store, view) = (d.store, d.view);
     let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };
     let dragged = store.uuid(e).ok().and_then(|id| d.segment_drag.as_ref().filter(|(s, _)| *s == id)).map(|(_, route)| route);
