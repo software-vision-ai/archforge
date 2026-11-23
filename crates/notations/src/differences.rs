@@ -351,9 +351,10 @@ pub fn diagram_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
     let (name, path) = name_and_path(if new.by_uuid(diagram).is_some() { &new } else { &old }, diagram);
     let (marks, mut apart) = marks_of(&changed, [("before", &old), ("after", &new)], diagram)?;
+    let notations = crate::view();
     let side = |store: Store| {
         store.by_uuid(diagram).map(|d| DiagramSide {
-            grid: Grid::build_with(&store, d, |n| archforge_uml::figures::drawn_behind(&store, n)),
+            grid: Grid::build_with(&store, d, |n| notations.node_drawn_behind(&store, n)),
             diagram: d,
             store,
         })

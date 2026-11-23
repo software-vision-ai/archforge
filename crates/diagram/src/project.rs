@@ -104,6 +104,43 @@ pub trait Notation: Send + Sync + 'static {
         let _ = (store, element, slot);
         String::new()
     }
+    /// What a click on a figure of `element` selects: an n-ary association's end, whose leg was
+    /// clicked, its association, the diamond and every leg being the one element (AR-128). The
+    /// element itself by default.
+    fn selects_as(&self, store: &Store, element: Obj) -> Obj {
+        let _ = store;
+        element
+    }
+    /// The element whose line draws selected while `element` is selected, beside `element`'s own
+    /// figure: a qualifier's association, the qualifier sitting in its line's box, so it marks the
+    /// line, as a selected member marks its own card (AR-127). The element's card, where it has one
+    /// too, is not marked. None by default.
+    fn line_selected_with(&self, store: &Store, element: Obj) -> Option<Obj> {
+        let _ = (store, element);
+        None
+    }
+    /// Whether a selected line of `element` shows the two end handles that move its ends: by
+    /// default when no node shows the element, a card's element having no line of its own.
+    fn line_handles(&self, store: &Store, element: Obj) -> bool {
+        no_node_shows(store, element)
+    }
+    /// Whether the notation draws `element` as a card on a diagram of one of its kinds, whether or
+    /// not one shows it now: by default when one of its kinds shows the element's class as nodes.
+    fn drawn_as_card(&self, store: &Store, element: Obj) -> bool {
+        store.class_of(element).is_ok_and(|class| self.kinds().iter().any(|k| self.shows(k, class)))
+    }
+    /// Whether a node of `element` is drawn, and hit, under the diagram's other figures, such as a
+    /// card its preview fills, so the figures placed over it stay in sight. None is by default.
+    fn drawn_behind(&self, store: &Store, element: Obj) -> bool {
+        let _ = (store, element);
+        false
+    }
+    /// Whether a node of `element` holds a label drawn with the lines it names rather than a card
+    /// of its own, which a press looks through where it draws nothing. None does by default.
+    fn is_label(&self, store: &Store, element: Obj) -> bool {
+        let _ = (store, element);
+        false
+    }
     /// The classes whose elements may be a skill's subject.
     fn skill_subjects(&self) -> &'static [ClassId] {
         &[]
@@ -156,6 +193,12 @@ pub trait Notation: Send + Sync + 'static {
         let _ = store;
         Vec::new()
     }
+}
+
+/// Whether no diagram node shows `element`: whether a selected line of it shows its end handles,
+/// unless its notation says otherwise ([`Notation::line_handles`]).
+fn no_node_shows(store: &Store, element: Obj) -> bool {
+    crate::views_of(store, element).2.is_empty()
 }
 
 /// Something wrong in a project's model that a notation reports as the project opens
@@ -271,6 +314,50 @@ impl ProjectView {
     /// The notation of the element `obj`.
     pub fn of_element(&self, store: &Store, obj: Obj) -> Option<&'static dyn Notation> {
         store.class_of(obj).ok().and_then(|c| self.of_class(c))
+    }
+
+    /// What a click on a figure of `element` selects, as its notation answers
+    /// ([`Notation::selects_as`]); the element itself when no notation holds it.
+    pub fn selects_as(&self, store: &Store, element: Obj) -> Obj {
+        self.of_element(store, element).map_or(element, |n| n.selects_as(store, element))
+    }
+
+    /// The element whose line draws selected while `element` is selected, as its notation answers
+    /// ([`Notation::line_selected_with`]); none when no notation holds it.
+    pub fn line_selected_with(&self, store: &Store, element: Obj) -> Option<Obj> {
+        self.of_element(store, element)?.line_selected_with(store, element)
+    }
+
+    /// Whether a selected line of `element` shows its end handles, as its notation answers
+    /// ([`Notation::line_handles`]); by the default rule, when no node shows it, where no notation
+    /// holds it.
+    pub fn line_handles(&self, store: &Store, element: Obj) -> bool {
+        self.of_element(store, element).map_or_else(|| no_node_shows(store, element), |n| n.line_handles(store, element))
+    }
+
+    /// Whether `element`'s notation draws it as a card ([`Notation::drawn_as_card`]); not when no
+    /// notation holds it.
+    pub fn drawn_as_card(&self, store: &Store, element: Obj) -> bool {
+        self.of_element(store, element).is_some_and(|n| n.drawn_as_card(store, element))
+    }
+
+    /// Whether diagram node `node` is drawn, and hit, under the diagram's other figures, as the
+    /// notation of the live element it shows answers ([`Notation::drawn_behind`]); not when it
+    /// shows none.
+    pub fn node_drawn_behind(&self, store: &Store, node: Obj) -> bool {
+        self.node_element(store, node).is_some_and(|(n, e)| n.drawn_behind(store, e))
+    }
+
+    /// Whether diagram node `node` holds a label, as the notation of the live element it shows
+    /// answers ([`Notation::is_label`]); not when it shows none.
+    pub fn node_is_label(&self, store: &Store, node: Obj) -> bool {
+        self.node_element(store, node).is_some_and(|(n, e)| n.is_label(store, e))
+    }
+
+    /// The live element diagram node `node` shows, with its notation, when one holds it.
+    fn node_element(&self, store: &Store, node: Obj) -> Option<(&'static dyn Notation, Obj)> {
+        let element = store.get(node, crate::node::ELEMENT).ok().and_then(|v| v.as_ref())?;
+        Some((self.of_element(store, element)?, element))
     }
 }
 

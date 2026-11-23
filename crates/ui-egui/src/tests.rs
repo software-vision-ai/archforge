@@ -22613,6 +22613,8 @@ fn a_set_label_that_draws_nothing_takes_no_press() {
             (st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), st.by_uuid(archforge_mof::Uuid::parse(&set_id).unwrap()).unwrap())
         };
         let node = sets::label_node(h.state().session.as_ref().unwrap().doc(), d, set).expect("a node holds its place");
+        let node_id = h.state().session.as_ref().unwrap().doc().uuid(node).unwrap();
+        assert!(!ids(&h).contains(&format!("workspace.canvas.node.{node_id}")), "{theme:?}: the label's node draws no card of its own");
         let bounds = |h: &Harness<'static, Shell>| archforge_diagram::grid::bounds_of(h.state().session.as_ref().unwrap().doc(), node);
         let placed = bounds(&h);
         let at = rect_of(&h, &label_id).center();
@@ -29820,6 +29822,49 @@ fn a_duplicate_qualifier_name_is_refused_in_place_and_nothing_is_written() {
     }
 }
 
+/// Whether the last frame stroked a path in the accent colour of `theme` inside `within`.
+fn accent_path_in(h: &Harness<'static, Shell>, theme: ThemeKind, within: egui::Rect) -> bool {
+    let accent = crate::ux::palette(theme == ThemeKind::Dark).accent;
+    /// Whether `s`, or a shape it holds, is a path stroked in `accent` whose points all lie in `within`.
+    fn walk(s: &egui::Shape, accent: crate::ux::Colour, within: egui::Rect) -> bool {
+        match s {
+            egui::Shape::Path(p) => {
+                matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == accent)
+                    && !p.points.is_empty()
+                    && p.points.iter().all(|at| within.contains(*at))
+            }
+            egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent, within)),
+            _ => false,
+        }
+    }
+    h.output().shapes.iter().any(|c| walk(&c.shape, accent, within))
+}
+
+/// A selected qualifier draws its association's line selected, as its notation says the line goes
+/// with it (AR-127, AR-784); with its class selected instead the line is not. In light and dark.
+#[test]
+fn a_selected_qualifier_draws_its_associations_line_selected() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = qualifiers_sample(theme);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let q = s.execute("uml.qualifier.add", &serde_json::json!({ "association": ids["contains"], "end": 0, "name": "lineNo" })).unwrap();
+        let q = q.value["id"].as_str().unwrap().to_string();
+        let edge = {
+            let st = s.doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["contains"]).unwrap()).unwrap();
+            let d = st.by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
+            let e = archforge_diagram::views_of(st, a).1.into_iter().find(|e| archforge_diagram::diagram_of(st, *e) == Some(d)).unwrap();
+            st.uuid(e).unwrap()
+        };
+        for (selected, marked) in [(&ids["Order"], false), (&q, true)] {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [selected] })).unwrap();
+            h.run();
+            let line = rect_of(&h, &format!("workspace.canvas.edge.{edge}")).expand(2.0);
+            assert_eq!(accent_path_in(&h, theme, line), marked, "{theme:?}: the line drawn selected with {selected}");
+        }
+    }
+}
+
 /// Nested classifiers (AR-132, design page 08, D1 to D4), in light and dark: a right click on
 /// Order's row in Models opens its menu, New inside Order ▸ offers the kinds and Package disabled,
 /// a pick makes one nested classifier in one undo step, named in place, `nested` after its row;
@@ -30953,6 +30998,306 @@ fn a_leg_and_the_diamond_both_select_the_n_ary_association() {
         let at = card(&h, &ids["diamond"]);
         click(&mut h, at);
         assert_eq!(selection(&h), vec![a_obj], "{theme:?}: the diamond selects it");
+    }
+}
+
+/// An n-ary association's legs draw selected with it, a click on one standing for the association
+/// (AR-128, AR-784), and a right click on a leg opens the association's menu as one on its diamond
+/// does. In light and dark.
+#[test]
+fn an_n_ary_associations_legs_draw_selected_with_it_and_a_leg_opens_its_menu() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let leg = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap();
+            let end = archforge_uml::nary::ends(st, a)[0];
+            st.uuid(archforge_diagram::views_of(st, end).1[0]).unwrap()
+        };
+        for (selected, marked) in [(&ids["customer"], false), (&ids["recommends"], true)] {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [selected] })).unwrap();
+            h.run();
+            let line = rect_of(&h, &format!("workspace.canvas.edge.{leg}")).expand(2.0);
+            assert_eq!(accent_path_in(&h, theme, line), marked, "{theme:?}: the leg drawn selected with {selected}");
+        }
+        let empty = rect_of(&h, "workspace.canvas").left_bottom() + egui::vec2(60.0, -200.0);
+        click(&mut h, empty);
+        let at = point_on_edge(&h, leg);
+        right_click(&mut h, at);
+        for key_ in ["add-end", "reconnect-end", "remove", "delete"] {
+            assert!(ids_of(&h).iter().any(|i| *i == format!("workspace.canvas.menu.{key_}")), "{theme:?}: the leg opens {key_}");
+        }
+    }
+}
+
+/// A press on a right-angled leg's segment slides it and selects the n-ary association, as a
+/// click on the leg does (AR-128, AR-784). In light and dark.
+#[test]
+fn a_right_angled_legs_segment_slid_selects_its_n_ary_association() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let (a, leg) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap();
+            (a, archforge_diagram::views_of(st, archforge_uml::nary::ends(st, a)[0]).1[0])
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let leg_id = s.doc().uuid(leg).unwrap().to_string();
+        s.execute("diagram.style", &serde_json::json!({ "ids": [leg_id], "routing": "right-angled" })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        let route = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_diagram::Grid::build(st, st.by_uuid(h.state().canvas.active.unwrap()).unwrap()).line(leg).unwrap().to_vec()
+        };
+        assert!(route.len() >= 3, "{theme:?}: a right-angled route: {route:?}");
+        let view = crate::canvas::View { origin: rect_of(&h, "workspace.canvas").min, pan: h.state().canvas.pan, zoom: h.state().canvas.zoom };
+        let middle = view.to_screen((route[1].0 + route[2].0) / 2.0, (route[1].1 + route[2].1) / 2.0);
+        let level = (route[1].1 - route[2].1).abs() < 1e-6;
+        drag(&mut h, middle, middle + if level { egui::vec2(0.0, -30.0) } else { egui::vec2(-30.0, 0.0) });
+        assert_eq!(selection(&h), vec![a], "{theme:?}: the association, not its end");
+    }
+}
+
+/// An n-ary association's end selected on its own, as `view.select` can select it from the command
+/// line or an agent, shows no handles on its leg's line: the leg moves only its class end, by the
+/// association's own leg handle (AR-128, AR-784). In light and dark.
+#[test]
+fn an_n_ary_end_selected_on_its_own_shows_no_line_end_handles() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let end = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap();
+            st.uuid(archforge_uml::nary::ends(st, a)[0]).unwrap().to_string()
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [end] })).unwrap();
+        h.run();
+        let handles: Vec<String> = ids_of(&h).into_iter().filter(|i| i.starts_with("workspace.canvas.line-end.")).collect();
+        assert!(handles.is_empty(), "{theme:?}: {handles:?}");
+    }
+}
+
+/// A test-only notation over UML's metamodel that draws and places as UML does, but a click on
+/// Order's figure selects Order's package. ER and UML each select what was clicked, so only a
+/// notation like this one shows that the canvas asks a node's notation what a click on it
+/// selects, and draws a card selected with it (AR-784, ADR 0005).
+struct PackageClicks;
+
+impl archforge_diagram::Notation for PackageClicks {
+    /// UML's name, as the notation it stands in for.
+    fn name(&self) -> &'static str {
+        "UML"
+    }
+    /// UML's metamodel.
+    fn metamodel(&self) -> u16 {
+        archforge_uml::INDEX
+    }
+    /// UML's diagram kinds.
+    fn kinds(&self) -> &'static [&'static str] {
+        archforge_uml::UmlNotation.kinds()
+    }
+    /// As UML answers.
+    fn needs_element(&self, kind: &str) -> bool {
+        archforge_uml::UmlNotation.needs_element(kind)
+    }
+    /// As UML answers.
+    fn is_of(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
+        archforge_uml::UmlNotation.is_of(kind, class)
+    }
+    /// As UML answers.
+    fn shows(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
+        archforge_uml::UmlNotation.shows(kind, class)
+    }
+    /// As UML answers.
+    fn may_show(&self, store: &archforge_mof::Store, diagram: archforge_mof::Obj, element: archforge_mof::Obj) -> bool {
+        archforge_uml::UmlNotation.may_show(store, diagram, element)
+    }
+    /// As UML answers.
+    fn connects(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
+        archforge_uml::UmlNotation.connects(kind, class)
+    }
+    /// As UML answers.
+    fn ends(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<(archforge_mof::Obj, archforge_mof::Obj)> {
+        archforge_uml::UmlNotation.ends(store, element)
+    }
+    /// UML's card, so the diagram draws as it does.
+    fn card(
+        &self,
+        store: &archforge_mof::Store,
+        element: archforge_mof::Obj,
+        diagram: archforge_mof::Obj,
+    ) -> Option<archforge_diagram::figure::Card> {
+        archforge_uml::UmlNotation.card(store, element, diagram)
+    }
+    /// UML's line, so the diagram draws as it does.
+    fn line(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
+        archforge_uml::UmlNotation.line(store, element)
+    }
+    /// A click on Order's figure selects Order's package; anything else selects itself.
+    fn selects_as(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> archforge_mof::Obj {
+        if store.class_of(element).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(store, element) == "Order" {
+            archforge_uml::nesting::home_package(store, element).unwrap_or(element)
+        } else {
+            element
+        }
+    }
+}
+
+/// A project of ER and [`PackageClicks`].
+static PACKAGE_CLICKS: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotation, &PackageClicks];
+
+/// The sample class diagram open in `theme`, its session over a view of [`PackageClicks`]: Order's
+/// card's node, Order's package, and Customer with its card's node.
+fn package_clicks_sample(theme: ThemeKind) -> (Harness<'static, Shell>, String, archforge_mof::Obj, archforge_mof::Obj, archforge_mof::Obj) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let d = crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let (tables, junctions) = archforge_notations::storage();
+    let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
+    let next = std::sync::atomic::AtomicU64::new(1 << 40);
+    let ids = Box::new(move || {
+        let mut r = [0u8; 10];
+        r[2..].copy_from_slice(&next.fetch_add(1, std::sync::atomic::Ordering::Relaxed).to_be_bytes());
+        archforge_mof::Uuid::v7(1_761_670_800_000, r)
+    });
+    let mut st = archforge_notations::store(ids).unwrap();
+    archforge_mof::rows::restore(&mut st, &rows, &tables, &junctions).unwrap();
+    let view = archforge_diagram::ProjectView::new(PACKAGE_CLICKS);
+    let session = archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), st, 1, archforge_engine::Options::default(), view);
+    h.state_mut().session = Some(session);
+    crate::canvas::open(h.state_mut(), d);
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let class =
+        |name: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
+    let (order, customer) = (class("Order"), class("Customer"));
+    let node = st.uuid(archforge_diagram::views_of(st, order).2[0]).unwrap().to_string();
+    let package = archforge_uml::nesting::home_package(st, order).unwrap();
+    let customer_node = archforge_diagram::views_of(st, customer).2[0];
+    (h, node, package, customer, customer_node)
+}
+
+/// Whether the last frame stroked a rectangle in the accent colour of `theme` round the centre of
+/// `card`, as a selected card is drawn.
+fn card_ringed(h: &Harness<'static, Shell>, theme: ThemeKind, card: egui::Rect) -> bool {
+    let accent = crate::ux::palette(theme == ThemeKind::Dark).accent;
+    rect_shapes(h).iter().any(|(r, _, stroke)| *stroke == accent && r.contains(card.center()) && r.width() >= card.width() - 4.0)
+}
+
+/// What a click on a node selects is its notation's answer, on every way a node is selected (a
+/// click with Select, a drag that starts a move, Select all, a marquee, and a click with the
+/// Note, Link, classifier and Relationship tools); while that answer is selected the card draws
+/// selected, shows its resize handles and moves with the rest of the selection, the first drag
+/// that makes the selection included: through a notation whose click on Order selects its package.
+/// In light and dark.
+#[test]
+fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, node, package, customer, customer_node) = package_clicks_sample(theme);
+        let clear = |h: &mut Harness<'static, Shell>| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+            h.state_mut().canvas.tool = crate::canvas::Tool::Select;
+            h.run();
+        };
+        let at = card(&h, &node);
+        assert!(!card_ringed(&h, theme, rect_of(&h, &format!("workspace.canvas.node.{node}"))), "{theme:?}: nothing selected yet");
+        click(&mut h, at);
+        assert_eq!(selection(&h), vec![package], "{theme:?}: a click with Select");
+        h.run();
+        assert!(card_ringed(&h, theme, rect_of(&h, &format!("workspace.canvas.node.{node}"))), "{theme:?}: the card draws selected with its package");
+        // Its package selected, the card is the one selected node: its corner handle resizes it.
+        let order_node = h.state().session.as_ref().unwrap().doc().by_uuid(archforge_mof::Uuid::parse(&node).unwrap()).unwrap();
+        let bounds =
+            |h: &Harness<'static, Shell>, n: archforge_mof::Obj| archforge_diagram::grid::bounds_of(h.state().session.as_ref().unwrap().doc(), n);
+        let before = bounds(&h, order_node);
+        let corner = rect_of(&h, &format!("workspace.canvas.node.{node}")).expand(4.0).right_bottom();
+        drag(&mut h, corner, corner + egui::vec2(40.0, 30.0));
+        assert!(bounds(&h, order_node).width > before.width, "{theme:?}: resized by its handle");
+        // With Customer selected beside the package, a drag on Customer's card moves Order's too,
+        // and keeps the selection.
+        let customer_id = h.state().session.as_ref().unwrap().doc().uuid(customer).unwrap().to_string();
+        let package_id = h.state().session.as_ref().unwrap().doc().uuid(package).unwrap().to_string();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [package_id, customer_id] })).unwrap();
+        h.run();
+        let was = bounds(&h, order_node);
+        let customer_card = h.state().session.as_ref().unwrap().doc().uuid(customer_node).unwrap().to_string();
+        let at = card(&h, &customer_card);
+        drag(&mut h, at, at + egui::vec2(30.0, 20.0));
+        assert!(bounds(&h, order_node).x > was.x, "{theme:?}: Order moves with Customer");
+        assert_eq!(selection(&h), vec![package, customer], "{theme:?}: the selection kept");
+        clear(&mut h);
+        let at = card(&h, &node);
+        drag(&mut h, at, at + egui::vec2(20.0, 10.0));
+        assert_eq!(selection(&h), vec![package], "{theme:?}: a drag that moves the card");
+        clear(&mut h);
+        let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
+        crate::editing::select_all(h.state_mut(), d);
+        let order = h.state().session.as_ref().unwrap().doc().get(order_node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap();
+        assert!(selection(&h).contains(&package), "{theme:?}: Select all takes the package");
+        assert!(!selection(&h).contains(&order), "{theme:?}: and not Order");
+        clear(&mut h);
+        let r = rect_of(&h, &format!("workspace.canvas.node.{node}"));
+        drag(&mut h, r.left_top() - egui::vec2(20.0, 20.0), r.center());
+        assert_eq!(selection(&h), vec![package], "{theme:?}: a marquee over the card");
+        for tool in [
+            crate::canvas::Tool::Note,
+            crate::canvas::Tool::Link,
+            crate::canvas::Tool::Place(crate::uml_classifier::TOOL),
+            crate::canvas::Tool::Connect("relationship"),
+        ] {
+            clear(&mut h);
+            h.state_mut().canvas.tool = tool;
+            let at = card(&h, &node);
+            click(&mut h, at);
+            assert_eq!(selection(&h), vec![package], "{theme:?}: a click with {tool:?}");
+        }
+        // With the package's own card on the diagram, the first drag on Order, unselected, moves
+        // both cards, as the selection it makes takes both in, and so does the first drag on the
+        // package's card; a drag on Customer moves Customer alone.
+        clear(&mut h);
+        let (d_id, package_id) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            (h.state().canvas.active.unwrap().to_string(), st.uuid(package).unwrap().to_string())
+        };
+        let placed = h
+            .state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("diagram.place", &serde_json::json!({ "diagram": d_id, "element": package_id, "x": 1400, "y": 700 }))
+            .unwrap();
+        let package_node =
+            h.state().session.as_ref().unwrap().doc().by_uuid(archforge_mof::Uuid::parse(placed.value["id"].as_str().unwrap()).unwrap()).unwrap();
+        h.run();
+        let (order_was, package_was) = (bounds(&h, order_node), bounds(&h, package_node));
+        let at = card(&h, &node);
+        drag(&mut h, at, at + egui::vec2(30.0, 20.0));
+        assert_eq!(selection(&h), vec![package], "{theme:?}: the drag selects the package");
+        assert!(bounds(&h, order_node).x > order_was.x, "{theme:?}: Order moves");
+        assert!(bounds(&h, package_node).x > package_was.x, "{theme:?}: and the package's card with it, on the first drag");
+        // The other way round: the first drag on the package's card, unselected, moves Order's too,
+        // as selecting the package takes Order's card in.
+        clear(&mut h);
+        let (order_was, package_was) = (bounds(&h, order_node), bounds(&h, package_node));
+        let package_card = h.state().session.as_ref().unwrap().doc().uuid(package_node).unwrap().to_string();
+        // The package's card brought into view, its centre at the canvas's.
+        let canvas = rect_of(&h, "workspace.canvas");
+        let (zoom, pan) = (h.state().canvas.zoom, h.state().canvas.pan);
+        let centre = egui::pos2((package_was.x + package_was.width / 2.0) as f32, (package_was.y + package_was.height / 2.0) as f32);
+        h.state_mut().canvas.pan = canvas.center() - canvas.min - centre.to_vec2() * zoom;
+        h.run();
+        let at = card(&h, &package_card);
+        drag(&mut h, at, at + egui::vec2(30.0, 20.0));
+        assert_eq!(selection(&h), vec![package], "{theme:?}: the drag on the package's card selects it");
+        assert!(bounds(&h, package_node).x > package_was.x, "{theme:?}: the package's card moves");
+        assert!(bounds(&h, order_node).x > order_was.x, "{theme:?}: and Order's with it, on the first drag");
+        h.state_mut().canvas.pan = pan;
+        clear(&mut h);
+        let package_was = bounds(&h, package_node);
+        let customer_card = h.state().session.as_ref().unwrap().doc().uuid(customer_node).unwrap().to_string();
+        let at = card(&h, &customer_card);
+        drag(&mut h, at, at + egui::vec2(30.0, 20.0));
+        assert_eq!(bounds(&h, package_node).x, package_was.x, "{theme:?}: Customer's drag leaves the package's card");
     }
 }
 

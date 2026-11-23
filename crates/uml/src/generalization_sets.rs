@@ -220,11 +220,6 @@ pub fn label_node(store: &Store, d: Obj, s: Obj) -> Option<Obj> {
     nodes.into_iter().find(|n| archforge_diagram::diagram_of(store, *n) == Some(d))
 }
 
-/// Whether node `n` holds a set's label.
-pub fn is_label(store: &Store, n: Obj) -> bool {
-    one(store, n, node::ELEMENT).is_some_and(|e| is_set(store, e))
-}
-
 /// Puts set `s`'s label on class diagram `d` with its top left at `(x, y)`: its node moved there,
 /// or made, nested in the node of the set's general classifier (or else of a member's specific
 /// one) so it moves with it. Refused when the diagram shows none of those classifiers.

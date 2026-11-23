@@ -261,6 +261,43 @@ impl Notation for UmlNotation {
         figures::slot_text(store, element, slot)
     }
 
+    /// An n-ary association's end, whose leg was clicked, selects its association (AR-128).
+    fn selects_as(&self, store: &Store, element: Obj) -> Obj {
+        nary::association_of_end(store, element).unwrap_or(element)
+    }
+
+    /// A qualifier draws its association's line selected, not the card of an association class
+    /// (AR-127).
+    fn line_selected_with(&self, store: &Store, element: Obj) -> Option<Obj> {
+        qualifiers::association_of(store, element).map(|(a, _)| a)
+    }
+
+    /// An n-ary association's leg moves only its class end, by its own handle, so its line shows
+    /// none (AR-128); an association class keeps its line's handles beside its card.
+    fn line_handles(&self, store: &Store, element: Obj) -> bool {
+        nary::association_of_end(store, element).is_none()
+            && (store.class_of(element).ok() == Some(ASSOCIATION_CLASS) || archforge_diagram::views_of(store, element).2.is_empty())
+    }
+
+    /// What a structure diagram shows as nodes, but a binary association, which is a line though
+    /// an n-ary one's diamond is a card (AR-128).
+    fn drawn_as_card(&self, store: &Store, element: Obj) -> bool {
+        store
+            .class_of(element)
+            .is_ok_and(|class| self.kinds().iter().any(|k| self.shows(k, class)) && (class != ASSOCIATION || nary::is_nary(store, element)))
+    }
+
+    /// A package's card, which its preview fills, so a class or a note placed over it stays in
+    /// sight (AR-570).
+    fn drawn_behind(&self, store: &Store, element: Obj) -> bool {
+        store.class_of(element).ok() == Some(PACKAGE)
+    }
+
+    /// A generalization set's label, drawn with its set's lines (AR-129).
+    fn is_label(&self, store: &Store, element: Obj) -> bool {
+        generalization_sets::is_set(store, element)
+    }
+
     /// A skill sits on a package, a class, an interface, an enumeration, a data type, a primitive
     /// type of the model's own, an association class, an attribute or an operation; it aims at
     /// every class, interface, enumeration, data type, primitive type, association class,
