@@ -2135,16 +2135,17 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
     }
 }
 
-/// Whether something open on the canvas holds its keys: an editor, a menu or the Stereotypes
-/// picker, which takes typing, Backspace, the arrows and Enter (AR-135), or something a notation
-/// opened there ([`crate::notation_ui::NotationState::holds_keys`]).
+/// Whether something open on the canvas holds its keys: an editor, a menu, something a notation
+/// opened there ([`crate::notation_ui::NotationState::holds_keys`]), or a notation's menu that takes
+/// typing, Backspace, the arrows and Enter, as UML's Stereotypes picker does (AR-135,
+/// [`crate::notation_ui::NotationState::menu_takes_keys`]).
 pub(crate) fn canvas_busy(shell: &Shell) -> bool {
     let c = &shell.canvas;
     c.rename.is_some()
         || c.note_edit.is_some()
         || c.menu.is_some()
         || shell.notation_states.holds_keys()
-        || shell.panels.menu == Some(crate::panels::Menu::StereotypePick)
+        || shell.notation_states.menu_takes_keys(shell.panels.menu)
 }
 
 /// The keys while the canvas has them: Escape back to Select, Delete removes the selected nodes

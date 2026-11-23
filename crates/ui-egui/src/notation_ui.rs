@@ -14,7 +14,7 @@ use egui::Rect;
 
 use crate::Shell;
 use crate::explorer::{Row, Tree};
-use crate::panels::{Editor, Menu, OpenEditor, Subject};
+use crate::panels::{Editor, MenuId, OpenEditor, Subject};
 use crate::problems::Problem;
 use crate::ux::{Icon, Palette};
 
@@ -274,14 +274,21 @@ pub(crate) trait NotationState: Any {
         Vec::new()
     }
     /// Closes its Properties editors as the selection moves on, as Cancel would, except one opened
-    /// this frame and not yet shown; a menu of the shell's one `menu` slot that belongs to what it
-    /// closes goes with it.
-    fn close_editors(&mut self, menu: &mut Option<Menu>) {
+    /// this frame and not yet shown; one of its own menus open in the shell's one `menu` slot that
+    /// belongs to what it closes goes with it, and another owner's menu stays.
+    fn close_editors(&mut self, menu: &mut Option<MenuId>) {
         let _ = menu;
     }
     /// Whether something of its own open on the canvas holds the keys: a row typed in place or a
     /// menu.
     fn holds_keys(&self) -> bool {
+        false
+    }
+    /// Whether `menu`, open in the shell's one menu slot, is one of its own that takes typing,
+    /// Backspace, the arrows and Enter (UML's Stereotypes picker), so the canvas and the Models tree
+    /// leave those keys to it; false for any other menu, another owner's included.
+    fn menu_takes_keys(&self, menu: MenuId) -> bool {
+        let _ = menu;
         false
     }
     /// Ends a drawing under way as the project it is on is set aside: it never outlives that
@@ -325,13 +332,19 @@ impl NotationStates {
     }
 
     /// Closes every notation's Properties editors as the selection moves on.
-    pub(crate) fn close_editors(&mut self, menu: &mut Option<Menu>) {
+    pub(crate) fn close_editors(&mut self, menu: &mut Option<MenuId>) {
         self.0.iter_mut().for_each(|s| s.close_editors(menu));
     }
 
     /// Whether something of any notation's open on the canvas holds the keys.
     pub(crate) fn holds_keys(&self) -> bool {
         self.0.iter().any(|s| s.holds_keys())
+    }
+
+    /// Whether the menu open in the shell's slot, if any, is a notation's that takes the keys
+    /// ([`NotationState::menu_takes_keys`]), as its owner answers.
+    pub(crate) fn menu_takes_keys(&self, menu: Option<MenuId>) -> bool {
+        menu.is_some_and(|m| self.0.iter().any(|s| s.menu_takes_keys(m)))
     }
 
     /// Ends every notation's drawing under way, as the project is set aside.

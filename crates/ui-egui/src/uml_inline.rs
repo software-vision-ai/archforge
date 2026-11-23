@@ -23,6 +23,7 @@ use crate::canvas::{DETAIL_ZOOM, ENTITY_ROW, View};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::uml_panel::{MemberEdit, MemberKind};
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
@@ -280,9 +281,9 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     }
     if !literal {
         ux::icon_in(&paint, chevron.shrink(3.0 * z), &icons::CHEVRON_SMALL, p.text_secondary);
-        let menu_open = shell.panels.menu == Some(crate::panels::Menu::InlineType);
+        let menu_open = shell.panels.menu == Some(menus::INLINE_TYPE);
         if control(shell, ui, "workspace.canvas.member.type.menu", "button", chevron, true).on_hover_text(type_hint_of(operation)).clicked() {
-            shell.panels.menu = if menu_open { None } else { Some(crate::panels::Menu::InlineType) };
+            shell.panels.menu = if menu_open { None } else { Some(menus::INLINE_TYPE) };
         }
     }
     // The details button on the surface, as the type field is, so its ⋯ reads on every row.
@@ -298,7 +299,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     }
     // The type menu, under the type field: a pick sets the type and gives the field the keyboard.
     let mut picked = false;
-    if shell.panels.menu == Some(crate::panels::Menu::InlineType) && !literal {
+    if shell.panels.menu == Some(menus::INLINE_TYPE) && !literal {
         let choices = crate::uml_panel::choices_for_menu(shell, Some(inline.edit.class));
         let chosen = crate::panels::menu_noted(shell, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes, &choices.note_parts);
         let value = chosen.map(|i| choices.values.get(i).cloned().unwrap_or_default());
@@ -312,7 +313,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
             picked = true;
         }
     }
-    let menu_open = shell.panels.menu == Some(crate::panels::Menu::InlineType);
+    let menu_open = shell.panels.menu == Some(menus::INLINE_TYPE);
     // A press on the row itself (its chevron, its details) is no click away.
     let pressed = ui.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos()).flatten());
     let pressed_on_row = pressed.is_some_and(|pos| row.contains(pos));

@@ -14,6 +14,7 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx};
@@ -55,7 +56,7 @@ pub struct State {
     /// A name field being typed: the element and the text so far.
     pub name: Option<NameEdit>,
     /// The select menu that is open.
-    pub menu: Option<Menu>,
+    pub menu: Option<MenuId>,
     /// How far the open menu's rows are scrolled, by the menu's id: a menu longer than the window
     /// has room for scrolls within it.
     pub menu_scroll: Option<(String, f32)>,
@@ -237,94 +238,46 @@ fn linked_label(store: &Store, a: Obj) -> Option<String> {
     Some(format!("{table}.{}", archforge_core::name_of(store, t)))
 }
 
+/// Whose a menu is: the shell's own (Home's, the Versions panel's), or a notation's, by the index
+/// of its metamodel, so two owners' menus never meet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Menu {
-    /// Home's order of the recent projects, a recent project's menu and a pinned folder's.
-    RecentSort,
-    Recent(usize),
-    /// A branch row's menu in the Versions panel, by the row.
-    Branch(usize),
-    Pinned(usize),
-    Kind,
-    /// A relationship's foreign key (slice E3): what it points to, one key pair's child column,
-    /// the two referential actions, deferrability and match.
-    Points,
-    Pair(usize),
-    OnDelete,
-    OnUpdate,
-    Deferrable,
-    Match,
-    /// The key editor's Add a column select (slice E4).
-    KeyColumn,
-    /// The column editor's Generation select (slice S2).
-    Generation,
-    /// The index editor's Add a column select, and a column row's nulls order (slice S3).
-    IndexColumn,
-    IndexNulls(usize),
-    /// Which kind of type the Types section adds, and the column editor's type menu (slice S5).
-    TypeKind,
-    ColumnType,
-    /// The Subtypes section's table menu, discriminator and mapping (slice S6).
-    SubtypeAdd,
-    Discriminator,
-    Mapping,
-    /// The sequence editor's Owned by select (slice S7).
-    OwnedBy,
-    /// A class member editor's visibility, its type or return type, and a parameter's type
-    ///.
-    MemberVisibility,
-    MemberType,
-    ParamType(usize),
-    /// An attribute editor's default literal (for an enumeration's type), Subsets and Redefines
-    /// (AR-126).
-    MemberDefault,
-    MemberSubsets,
-    MemberRedefines,
-    /// The type menu of a member typed in place on its class's card.
-    InlineType,
-    /// An association end's aggregation and its multiplicity's presets.
-    EndAggregation(usize),
-    EndMultiplicity(usize),
-    /// An association end's default literal (for an enumeration's type), Subsets and Redefines
-    /// (AR-126).
-    EndDefault(usize),
-    EndSubsets(usize),
-    EndRedefines(usize),
-    /// A qualifier editor's type (AR-127).
-    QualifierType,
-    /// A template parameter editor's kind, constraint and default (AR-130).
-    TemplateKind,
-    TemplateConstraint,
-    TemplateDefault,
-    /// A template binding's bound element, template, and parameter `k`'s argument (AR-131).
-    BindingBound,
-    BindingTemplate,
-    BindingArgument(usize),
-    /// An n-ary association's end editor's type and multiplicity (AR-128).
-    NaryEndType,
-    NaryEndMultiplicity,
-    /// A classifier's owner, a package or a classifier (AR-132), and the kinds its Nested
-    /// classifiers `+` offers.
-    ClassOwner,
-    NestedKind,
-    /// The package a package sits in (AR-102).
-    PackageParent,
-    /// A generalization set's Add member, and a generalization's sets' `+` (AR-129).
-    SetMember,
-    SetJoin,
-    /// A constraint editor's language presets and the elements it may name (AR-133).
-    ConstraintLanguage,
-    ConstraintElement,
-    /// A stereotype's profile, its Extends `+` and an extension editor's metaclass, and a
-    /// package's Applied profiles `+` (AR-134).
-    StereotypeProfile,
-    StereotypeExtends,
-    ExtensionMetaclass,
-    AppliedProfile,
-    /// The Stereotypes section's picker, and a property's value select by its place among the
-    /// section's properties (AR-135).
-    StereotypePick,
-    StereotypeValue(usize),
+pub(crate) enum Scope {
+    Shell,
+    Notation(u16),
+}
+
+/// A menu of the shell's one open-menu slot ([`State::menu`]): whose it is, which of its owner's
+/// menus by key, and which one of a kind shown more than once (a key pair's, an association end's;
+/// 0 for a menu shown once). Only its owner opens, recognises and closes it: the shell keeps its
+/// own beside the screens they belong to, each notation its own beside its state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MenuId {
+    pub(crate) scope: Scope,
+    pub(crate) key: &'static str,
+    pub(crate) index: usize,
+}
+
+impl MenuId {
+    /// The shell's own menu `key`, the first of its kind.
+    pub(crate) const fn shell(key: &'static str) -> MenuId {
+        MenuId { scope: Scope::Shell, key, index: 0 }
+    }
+
+    /// The menu `key` of the notation whose metamodel is `notation`, the first of its kind.
+    pub(crate) const fn of(notation: u16, key: &'static str) -> MenuId {
+        MenuId { scope: Scope::Notation(notation), key, index: 0 }
+    }
+
+    /// The menu of the same owner and key, number `index` of its kind.
+    pub(crate) const fn at(self, index: usize) -> MenuId {
+        MenuId { index, ..self }
+    }
+
+    /// Which one of `kind` it is, when it is one of them: the same owner's menu of the same key,
+    /// whatever its index; none for any other menu.
+    pub(crate) fn index_in(self, kind: MenuId) -> Option<usize> {
+        (self.scope == kind.scope && self.key == kind.key).then_some(self.index)
+    }
 }
 
 /// The selection the panels describe.
@@ -752,7 +705,7 @@ pub(crate) fn select_field(
     id: &str,
     label: &str,
     value: &str,
-    menu: Menu,
+    menu: MenuId,
 ) -> Rect {
     let paint = ui.painter();
     ux::text(paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
@@ -779,7 +732,7 @@ pub(crate) fn path_select_field(
     id: &str,
     label: &str,
     parts: &[String],
-    menu: Menu,
+    menu: MenuId,
 ) -> Rect {
     let paint = ui.painter();
     let path = parts.join(PATH_SEP);
@@ -819,7 +772,7 @@ pub(crate) struct Combo<'a> {
     /// Why the text was refused: ringed in the danger colour, and told to assistive technology;
     /// the caller draws it under the field.
     pub refused: Option<&'a str>,
-    pub menu: Menu,
+    pub menu: MenuId,
     pub limit: usize,
 }
 
@@ -1647,7 +1600,7 @@ pub(crate) fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
     name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, "er.entity.rename", "entity");
     let kind_word = if associative { tr("Mapping table") } else { tr("Regular") };
     let kind_field =
-        select_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, "workspace.properties.kind", &tr("Kind"), &kind_word, Menu::Kind);
+        select_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, "workspace.properties.kind", &tr("Kind"), &kind_word, menus::KIND);
     y += 17.0 + FIELD + 16.0;
     // A pure mapping table offers to collapse back into its line (slice S4).
     let collapsible = shell.session.as_ref().is_some_and(|s| archforge_er::rules::collapse_problem(s.doc(), entity).is_none());
@@ -1723,7 +1676,7 @@ pub(crate) fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
     y = crate::subtypes::subtypes_section(shell, ui, p, r, y + 4.0, entity, entity_id, entity_id);
     crate::keys::problems_section(shell, ui, p, r, y + 4.0, entity);
     // The kind menu last, over the rows.
-    if shell.panels.menu == Some(Menu::Kind) {
+    if shell.panels.menu == Some(menus::KIND) {
         let items = [tr("Regular"), tr("Mapping table")];
         if let Some(i) = menu(shell, ui, p, kind_field, "workspace.properties.kind", &items) {
             let kind = if i == 1 { "associative" } else { "regular" };
@@ -2012,7 +1965,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     let chevron = Rect::from_min_size(pos2(type_field.right() - 24.0, type_field.top() + 2.0), Vec2::splat(24.0));
     ux::icon(&paint, pos2(chevron.left() + 4.0, chevron.top() + 10.0), &icons::CHEVRON_DOWN, 16.0, p.text_secondary);
     if control(shell, ui, "workspace.properties.column.type.menu", "button", chevron, true).on_hover_text(tr("Pick a type")).clicked() {
-        shell.panels.menu = if shell.panels.menu == Some(Menu::ColumnType) { None } else { Some(Menu::ColumnType) };
+        shell.panels.menu = if shell.panels.menu == Some(menus::COLUMN_TYPE) { None } else { Some(menus::COLUMN_TYPE) };
     }
     match shape {
         archforge_er::rules::TypeShape::Length => {
@@ -2102,7 +2055,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         "workspace.properties.column.generation",
         &tr("Generation"),
         &generation_word,
-        Menu::Generation,
+        menus::GENERATION,
     );
     cy += row;
     if computed {
@@ -2198,7 +2151,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         ux::text(&paint, at(0.0, cy + FIELD + 8.0), why, types::CAPTION, p.amber, Some(inner));
     }
     // The type menu, over the card: the schema's domains and enum types, then the base types.
-    if shell.panels.menu == Some(Menu::ColumnType) {
+    if shell.panels.menu == Some(menus::COLUMN_TYPE) {
         let types: Vec<(Option<(bool, Uuid)>, String)> = shell
             .session
             .as_ref()
@@ -2253,7 +2206,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         }
     }
     // The generation menu, over the card.
-    if shell.panels.menu == Some(Menu::Generation) {
+    if shell.panels.menu == Some(menus::GENERATION) {
         let items: Vec<String> = GENERATIONS.iter().map(|(_, w)| tr(w)).collect();
         if let Some(i) = menu(shell, ui, p, generation_field, "workspace.properties.column.generation", &items)
             && let Some((g, _)) = GENERATIONS.get(i)

@@ -13,10 +13,11 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
+use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, Menu, PAD, check, ghost_button, icon_button, menu, number, run, section, size_value, text_field};
+use crate::panels::{FIELD, PAD, check, ghost_button, icon_button, menu, number, run, section, size_value, text_field};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -151,7 +152,7 @@ pub(crate) fn types_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     let title = fmt(&tr("Types · {n}"), &[("n", &list.len().to_string())]);
     let add_at = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
     let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.types.add", "Add type"))) else {
-        shell.panels.menu = if shell.panels.menu == Some(Menu::TypeKind) { None } else { Some(Menu::TypeKind) };
+        shell.panels.menu = if shell.panels.menu == Some(menus::TYPE_KIND) { None } else { Some(menus::TYPE_KIND) };
         return y + 50.0;
     };
     y = next - 6.0;
@@ -188,7 +189,7 @@ pub(crate) fn types_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
         y = editor(shell, ui, p, r, y);
     }
     // Which kind to add, under the +.
-    if shell.panels.menu == Some(Menu::TypeKind) {
+    if shell.panels.menu == Some(menus::TYPE_KIND) {
         let items = [tr("Domain"), tr("Enum type")];
         let anchor = Rect::from_min_size(pos2(r.right() - PAD - 160.0, add_at.top()), vec2(160.0, 28.0));
         if let Some(i) = menu(shell, ui, p, anchor, "workspace.properties.types.add", &items) {

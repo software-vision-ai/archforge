@@ -16,6 +16,7 @@ use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use ux::Colour;
 
 use crate::i18n::tr;
+use crate::panels::MenuId;
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{self, Palette, icons, types};
@@ -287,6 +288,12 @@ pub(crate) fn brand(paint: &egui::Painter, p: &Palette, r: Rect) -> Rect {
 /// The narrowest the search field shows at; with less room it hides.
 pub(crate) const SEARCH_MIN: f32 = 160.0;
 
+/// Home's menus in the shell's one open-menu slot: the order of the recent projects, a recent
+/// project's menu and a pinned folder's, each by its row.
+pub(crate) const RECENT_SORT: MenuId = MenuId::shell("recent-sort");
+pub(crate) const RECENT: MenuId = MenuId::shell("recent");
+pub(crate) const PINNED: MenuId = MenuId::shell("pinned");
+
 /// The bar's right: the search field from `start` at the earliest, help and the avatar, all on
 /// the bar's middle line. The controls' ids start with `prefix`.
 #[allow(clippy::too_many_arguments, reason = "the bar's two screens differ in their ids, placeholder and search kind")]
@@ -483,7 +490,7 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     let sort_label = ux::galley(&paint, &sort_word, types::SMALL, p.text_secondary, None);
     let sort_at = pos2(chevron.left() - 20.5 - sort_label.size().x, line - 8.5);
     let sort = Rect::from_min_max(pos2(sort_at.x - 8.0, switch.top()), pos2(chevron.right() + 8.0, switch.bottom()));
-    let sort_open = shell.panels.menu == Some(crate::panels::Menu::RecentSort);
+    let sort_open = shell.panels.menu == Some(RECENT_SORT);
     let sort_resp = control(shell, ui, "home.recent.sort", "button", sort, true).on_hover_text(tr("Sort"));
     if sort_resp.hovered() || sort_open {
         paint.rect_filled(sort, 8.0, p.surface);
@@ -491,7 +498,7 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     paint.galley(sort_at, sort_label, p.text_secondary.into());
     ux::icon(&paint, chevron.min + vec2(4.0, 6.0), &icons::CHEVRON_DOWN, 8.0, p.text_secondary);
     if sort_resp.clicked() {
-        shell.panels.menu = if sort_open { None } else { Some(crate::panels::Menu::RecentSort) };
+        shell.panels.menu = if sort_open { None } else { Some(RECENT_SORT) };
     }
     paint.rect_filled(switch, 8.0, p.surface);
     paint.rect_stroke(switch, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
@@ -544,7 +551,7 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
             }
         }
     }
-    if shell.panels.menu == Some(crate::panels::Menu::RecentSort) {
+    if shell.panels.menu == Some(RECENT_SORT) {
         let anchor = Rect::from_min_max(pos2((sort.right() - 160.0).min(sort.left()), sort.top()), sort.max);
         let items = [tr("Last opened"), tr("Name")];
         match crate::panels::menu(shell, ui, p, anchor, "home.recent.sort", &items) {
@@ -703,7 +710,7 @@ fn pinned_tile(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Pain
     ux::text(paint, r.min + vec2(57.0, 13.0), &name, types::BODY_STRONG, p.text, Some(r.width() - 106.0));
     ux::text(paint, r.min + vec2(57.0, 37.0), &place, types::CAPTION, p.text_secondary, Some(r.width() - 106.0));
     let more = Rect::from_center_size(pos2(r.right() - 24.5, r.center().y), Vec2::splat(28.0));
-    let menu = crate::panels::Menu::Pinned(i);
+    let menu = PINNED.at(i);
     let open = shell.panels.menu == Some(menu);
     let more_resp = control(shell, ui, &format!("home.pinned.{i}.more"), "button", more, true).on_hover_text(tr("More"));
     if more_resp.hovered() || open {
@@ -810,7 +817,7 @@ fn recent_more(
     i: usize,
     project: &crate::state::RecentProject,
 ) -> bool {
-    let menu = crate::panels::Menu::Recent(i);
+    let menu = RECENT.at(i);
     let open = shell.panels.menu == Some(menu);
     let over = ui.input(|inp| inp.pointer.hover_pos().is_some_and(|at| owner.contains(at)));
     let resp = control(shell, ui, &format!("home.recent.{i}.more"), "button", more, over || open).on_hover_text(tr("More"));

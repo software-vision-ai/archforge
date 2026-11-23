@@ -19,8 +19,9 @@ use crate::Shell;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx, trn};
-use crate::panels::{FIELD, Menu, PAD, ROW, Subject, icon_button, run, section, select_field};
+use crate::panels::{FIELD, PAD, ROW, Subject, icon_button, run, section, select_field};
 use crate::uml_classifier::Classifier;
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
@@ -496,7 +497,7 @@ pub(crate) fn applied_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
     match section(shell, ui, p, r, y, &title, Some((APPLIED_ADD_ID, "Apply profile"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = if shell.panels.menu == Some(Menu::AppliedProfile) { None } else { Some(Menu::AppliedProfile) };
+            shell.panels.menu = if shell.panels.menu == Some(menus::APPLIED_PROFILE) { None } else { Some(menus::APPLIED_PROFILE) };
             y += 44.0;
         }
     }
@@ -526,7 +527,7 @@ pub(crate) fn applied_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
     }
     let said = fmt(&tr(APPLIED_HELP), &[("name", &own)]);
     y = help(ui, p, left, y + 4.0, width, &said);
-    if shell.panels.menu == Some(Menu::AppliedProfile) {
+    if shell.panels.menu == Some(menus::APPLIED_PROFILE) {
         let rows: Vec<Pick> = if all.is_empty() {
             vec![Pick {
                 label: tr("No profile yet"),
@@ -747,7 +748,7 @@ pub(crate) fn stereotype_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
         STEREOTYPE_PROFILE_ID,
         &tr_ctx("uml", "Profile"),
         &here,
-        Menu::StereotypeProfile,
+        menus::STEREOTYPE_PROFILE,
     );
     let mut y = y + 17.0 + FIELD + 16.0;
     // Extends.
@@ -759,7 +760,7 @@ pub(crate) fn stereotype_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
     match section(shell, ui, p, r, y, &title, Some((EXTENDS_ADD_ID, "Add extended metaclass"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = if shell.panels.menu == Some(Menu::StereotypeExtends) { None } else { Some(Menu::StereotypeExtends) };
+            shell.panels.menu = if shell.panels.menu == Some(menus::STEREOTYPE_EXTENDS) { None } else { Some(menus::STEREOTYPE_EXTENDS) };
             y += 44.0;
         }
     }
@@ -792,7 +793,7 @@ pub(crate) fn stereotype_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
     let said = fmt(&tr(TYPES_HELP), &[("name", &own)]);
     help(ui, p, left, below, width, &said);
     // The menus last, over the sections.
-    if shell.panels.menu == Some(Menu::StereotypeProfile) {
+    if shell.panels.menu == Some(menus::STEREOTYPE_PROFILE) {
         let names: Vec<String> = all.iter().map(|(_, n)| n.clone()).collect();
         if let Some(i) = crate::panels::menu(shell, ui, p, field, STEREOTYPE_PROFILE_ID, &names)
             && let Some((to, _)) = all.get(i)
@@ -801,7 +802,7 @@ pub(crate) fn stereotype_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
             move_stereotype(shell, s_id, *to);
         }
     }
-    if shell.panels.menu == Some(Menu::StereotypeExtends) {
+    if shell.panels.menu == Some(menus::STEREOTYPE_EXTENDS) {
         let rows = extends_rows(&extended, None);
         let picks: Vec<Pick> = rows.iter().map(|(_, pick)| pick.clone()).collect();
         let heading = fmt(&tr("{name} extends"), &[("name", &own)]);
@@ -833,7 +834,7 @@ fn extension_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32
         &format!("{EXTENSION_ID}.metaclass"),
         &tr("Metaclass"),
         &edit.choice,
-        Menu::ExtensionMetaclass,
+        menus::EXTENSION_METACLASS,
     );
     let foot = 12.0 + 17.0 + FIELD + 12.0;
     let remove = icon_button(shell, ui, p, at(0.0, foot), &format!("{EXTENSION_ID}.remove"), &icons::TRASH, p.danger, None, "Remove");
@@ -853,7 +854,7 @@ fn extension_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32
     let card = Rect::from_min_size(pos2(left, y + 4.0), vec2(width, foot + FIELD + 12.0));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    if shell.panels.menu == Some(Menu::ExtensionMetaclass) {
+    if shell.panels.menu == Some(menus::EXTENSION_METACLASS) {
         let rows = extends_rows(extended, edit.target.as_deref());
         let picks: Vec<Pick> = rows.iter().map(|(_, pick)| pick.clone()).collect();
         if let Some(i) = pick_menu(shell, ui, p, field, &format!("{EXTENSION_ID}.metaclass"), &tr("Metaclass"), &picks)

@@ -23,7 +23,8 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx, trn};
-use crate::panels::{FIELD, Menu, PAD, ROW, run, section};
+use crate::panels::{FIELD, PAD, ROW, run, section};
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
@@ -260,11 +261,11 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     };
     let add = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
     let picking =
-        shell.panels.menu == Some(Menu::StereotypePick) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id);
+        shell.panels.menu == Some(menus::STEREOTYPE_PICK) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id);
     match section(shell, ui, p, r, y, &title, Some((&add_id, "Apply stereotype"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = if picking { None } else { Some(Menu::StereotypePick) };
+            shell.panels.menu = if picking { None } else { Some(menus::STEREOTYPE_PICK) };
             if let Some(uml) = uml_mut(&mut shell.notation_states) {
                 uml.stereotypes.menu_for = Some(element_id);
                 uml.stereotypes.filter.clear();
@@ -295,7 +296,7 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     if !matches!(heading, Heading::End(_)) {
         y = show_values_check(shell, ui, p, left, y);
     }
-    if shell.panels.menu == Some(Menu::StereotypePick) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id) {
+    if shell.panels.menu == Some(menus::STEREOTYPE_PICK) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id) {
         picker(shell, ui, p, add, &add_id, element, element_id);
     }
     y + 6.0
@@ -484,7 +485,7 @@ fn value_line(
             ux::icon_mid(&paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
             let state =
                 if set { shown.clone() } else { fmt(&tr("{value} (default)"), &[("value", if default.is_empty() { "—" } else { &default })]) };
-            let menu = Menu::StereotypeValue(index);
+            let menu = menus::STEREOTYPE_VALUE.at(index);
             let open = shell.panels.menu == Some(menu) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id);
             if control(shell, ui, &id, "select", field, true).accessible_name(format!("{p_name}: {state}")).clicked() {
                 shell.panels.menu = if open { None } else { Some(menu) };

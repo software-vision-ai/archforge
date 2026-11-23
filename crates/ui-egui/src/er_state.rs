@@ -7,7 +7,7 @@
 use archforge_mof::{Store, Uuid};
 
 use crate::notation_ui::{NotationState, NotationStates};
-use crate::panels::{Editor, Menu, OpenEditor};
+use crate::panels::{Editor, MenuId, OpenEditor};
 
 /// The column editor's card.
 pub(crate) const COLUMN: Editor = Editor { notation: archforge_er::INDEX, card: "column" };
@@ -21,6 +21,46 @@ pub(crate) const INDEX: Editor = Editor { notation: archforge_er::INDEX, card: "
 pub(crate) const TYPE: Editor = Editor { notation: archforge_er::INDEX, card: "type" };
 /// The sequence or view editor's card.
 pub(crate) const OBJECT: Editor = Editor { notation: archforge_er::INDEX, card: "object" };
+
+/// ER's menus in the shell's one open-menu slot, each by its key among ER's: only ER's screens open
+/// and recognise them. A menu shown once per row is the first of its kind here, and
+/// [`MenuId::at`] names the row's.
+pub(crate) mod menus {
+    use crate::panels::MenuId;
+
+    /// The menu `key` of ER.
+    const fn er(key: &'static str) -> MenuId {
+        MenuId::of(archforge_er::INDEX, key)
+    }
+
+    /// A table's Kind: regular or mapping table.
+    pub(crate) const KIND: MenuId = er("kind");
+    /// A relationship's foreign key (slice E3): what it points to, one key pair's child column
+    /// (by the pair), the two referential actions, deferrability and match.
+    pub(crate) const POINTS: MenuId = er("points");
+    pub(crate) const PAIR: MenuId = er("pair");
+    pub(crate) const ON_DELETE: MenuId = er("on-delete");
+    pub(crate) const ON_UPDATE: MenuId = er("on-update");
+    pub(crate) const DEFERRABLE: MenuId = er("deferrable");
+    pub(crate) const MATCH: MenuId = er("match");
+    /// The key editor's Add a column select (slice E4).
+    pub(crate) const KEY_COLUMN: MenuId = er("key-column");
+    /// The column editor's Generation select (slice S2).
+    pub(crate) const GENERATION: MenuId = er("generation");
+    /// The index editor's Add a column select, and a column row's nulls order, by the row (slice
+    /// S3).
+    pub(crate) const INDEX_COLUMN: MenuId = er("index-column");
+    pub(crate) const INDEX_NULLS: MenuId = er("index-nulls");
+    /// Which kind of type the Types section adds, and the column editor's type menu (slice S5).
+    pub(crate) const TYPE_KIND: MenuId = er("type-kind");
+    pub(crate) const COLUMN_TYPE: MenuId = er("column-type");
+    /// The Subtypes section's table menu, discriminator and mapping (slice S6).
+    pub(crate) const SUBTYPE_ADD: MenuId = er("subtype-add");
+    pub(crate) const DISCRIMINATOR: MenuId = er("discriminator");
+    pub(crate) const MAPPING: MenuId = er("mapping");
+    /// The sequence editor's Owned by select (slice S7).
+    pub(crate) const OWNED_BY: MenuId = er("owned-by");
+}
 
 /// ER's editors and tools between frames.
 #[derive(Debug, Default)]
@@ -116,7 +156,7 @@ impl NotationState for ErState {
     }
 
     /// Closes each editor card not opened this frame; none of ER's menus outlives them.
-    fn close_editors(&mut self, menu: &mut Option<Menu>) {
+    fn close_editors(&mut self, menu: &mut Option<MenuId>) {
         let _ = menu;
         if self.column.as_ref().is_some_and(|e| !e.opened) {
             self.column = None;

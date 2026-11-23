@@ -12,10 +12,11 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::Shell;
+use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, Menu, PAD, check, icon_button, menu, run, section, text_field};
+use crate::panels::{FIELD, PAD, check, icon_button, menu, run, section, text_field};
 use crate::ux::{self, Palette, icons, types};
 
 /// A key being edited: the key, or none for a unique constraint about to be added.
@@ -214,7 +215,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     ux::text(&paint, add.min + vec2(8.0, 5.0), &tr("Add a column"), types::SMALL, p.text_secondary, Some((inner - 36.0).max(0.0)));
     ux::icon_mid(&paint, pos2(add.right() - 14.0, add.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
     if control(shell, ui, "workspace.properties.key.column.add", "select", add, true).clicked() {
-        shell.panels.menu = if shell.panels.menu == Some(Menu::KeyColumn) { None } else { Some(Menu::KeyColumn) };
+        shell.panels.menu = if shell.panels.menu == Some(menus::KEY_COLUMN) { None } else { Some(menus::KEY_COLUMN) };
     }
     cy += FIELD + 12.0;
     if !edit.primary {
@@ -257,7 +258,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         edit.columns.remove(i);
     }
     // The column menu, over the card.
-    if shell.panels.menu == Some(Menu::KeyColumn) {
+    if shell.panels.menu == Some(menus::KEY_COLUMN) {
         let free: Vec<&(Uuid, String, String)> = all_columns.iter().filter(|(c, _, _)| !edit.columns.contains(c)).collect();
         let items: Vec<String> = free.iter().map(|(_, n, t)| if t.is_empty() { n.clone() } else { format!("{n} · {t}") }).collect();
         if items.is_empty() {

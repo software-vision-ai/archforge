@@ -342,7 +342,7 @@ fn details_list_what_changed_since_the_version_before() {
 /// card of `card` again, and Home takes it back.
 fn behind_a_menu_or_dialog(h: &mut Harness<'static, Shell>, offset: impl Fn(&Harness<'static, Shell>) -> f32, card: f32) {
     use egui::Key::{ArrowDown, End, Home, PageDown};
-    let menu = |s: &mut Shell, open: bool| s.panels.menu = open.then_some(crate::panels::Menu::Branch(0));
+    let menu = |s: &mut Shell, open: bool| s.panels.menu = open.then_some(crate::versions::BRANCH_MENU.at(0));
     let dialog = |s: &mut Shell, open: bool| s.explorer.delete = open.then(Default::default);
     let up = |s: &Shell| s.panels.menu.is_some() || s.explorer.delete.is_some();
     for (what, set) in [("a menu open", &menu as &dyn Fn(&mut Shell, bool)), ("a dialog open", &dialog)] {
@@ -1317,7 +1317,7 @@ fn the_page_keys_scroll_the_cards_while_a_related_link_has_the_keyboard() {
         still(h, PageDown, egui::Modifiers::NONE, "at the end");
         key(h, Home, egui::Modifiers::NONE);
         still(h, PageDown, egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND), "the control key");
-        h.state_mut().panels.menu = Some(crate::panels::Menu::Branch(0));
+        h.state_mut().panels.menu = Some(crate::versions::BRANCH_MENU.at(0));
         still(h, End, egui::Modifiers::NONE, "a menu open");
         assert!(h.state().panels.menu.is_some() && focused_on(h, &links[0]), "the menu stayed open over the link");
         h.state_mut().panels.menu = None;
@@ -1379,7 +1379,7 @@ fn the_keys_scroll_the_cards_while_nothing_has_the_keyboard() {
         once(h, End);
         assert_eq!(cards_scroll(h, top, at), end, "the hidden tree has no keys");
         key(h, Home, NONE);
-        h.state_mut().panels.menu = Some(crate::panels::Menu::Branch(0));
+        h.state_mut().panels.menu = Some(crate::versions::BRANCH_MENU.at(0));
         still(h, End, NONE, "a menu open");
         h.state_mut().panels.menu = None;
         h.state_mut().explorer.delete = Some(Default::default());

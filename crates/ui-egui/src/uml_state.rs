@@ -11,7 +11,7 @@ use archforge_mof::{Store, Uuid};
 use egui::Pos2;
 
 use crate::notation_ui::{NotationState, NotationStates};
-use crate::panels::{Editor, Menu, OpenEditor};
+use crate::panels::{Editor, MenuId, OpenEditor};
 
 /// A class member editor's card.
 pub(crate) const MEMBER: Editor = Editor { notation: archforge_uml::INDEX, card: "member" };
@@ -25,6 +25,75 @@ pub(crate) const TEMPLATE: Editor = Editor { notation: archforge_uml::INDEX, car
 pub(crate) const PROFILE: Editor = Editor { notation: archforge_uml::INDEX, card: "profile" };
 /// An n-ary association's end editor's card.
 pub(crate) const NARY_END: Editor = Editor { notation: archforge_uml::INDEX, card: "nary-end" };
+
+/// UML's menus in the shell's one open-menu slot, each by its key among UML's: only UML's screens
+/// open, recognise and close them. A menu shown once per row is the first of its kind here, and
+/// [`MenuId::at`] names the row's.
+pub(crate) mod menus {
+    use crate::panels::MenuId;
+
+    /// The menu `key` of UML.
+    const fn uml(key: &'static str) -> MenuId {
+        MenuId::of(archforge_uml::INDEX, key)
+    }
+
+    /// A class member editor's visibility, its type or return type, and a parameter's type, by the
+    /// parameter.
+    pub(crate) const MEMBER_VISIBILITY: MenuId = uml("member-visibility");
+    pub(crate) const MEMBER_TYPE: MenuId = uml("member-type");
+    pub(crate) const PARAM_TYPE: MenuId = uml("param-type");
+    /// An attribute editor's default literal (for an enumeration's type), Subsets and Redefines
+    /// (AR-126).
+    pub(crate) const MEMBER_DEFAULT: MenuId = uml("member-default");
+    pub(crate) const MEMBER_SUBSETS: MenuId = uml("member-subsets");
+    pub(crate) const MEMBER_REDEFINES: MenuId = uml("member-redefines");
+    /// The type menu of a member typed in place on its class's card.
+    pub(crate) const INLINE_TYPE: MenuId = uml("inline-type");
+    /// An association end's aggregation and its multiplicity's presets, by the end.
+    pub(crate) const END_AGGREGATION: MenuId = uml("end-aggregation");
+    pub(crate) const END_MULTIPLICITY: MenuId = uml("end-multiplicity");
+    /// An association end's default literal (for an enumeration's type), Subsets and Redefines, by
+    /// the end (AR-126).
+    pub(crate) const END_DEFAULT: MenuId = uml("end-default");
+    pub(crate) const END_SUBSETS: MenuId = uml("end-subsets");
+    pub(crate) const END_REDEFINES: MenuId = uml("end-redefines");
+    /// A qualifier editor's type (AR-127).
+    pub(crate) const QUALIFIER_TYPE: MenuId = uml("qualifier-type");
+    /// A template parameter editor's kind, constraint and default (AR-130).
+    pub(crate) const TEMPLATE_KIND: MenuId = uml("template-kind");
+    pub(crate) const TEMPLATE_CONSTRAINT: MenuId = uml("template-constraint");
+    pub(crate) const TEMPLATE_DEFAULT: MenuId = uml("template-default");
+    /// A template binding's bound element, template, and a parameter's argument, by the parameter
+    /// (AR-131).
+    pub(crate) const BINDING_BOUND: MenuId = uml("binding-bound");
+    pub(crate) const BINDING_TEMPLATE: MenuId = uml("binding-template");
+    pub(crate) const BINDING_ARGUMENT: MenuId = uml("binding-argument");
+    /// An n-ary association's end editor's type and multiplicity (AR-128).
+    pub(crate) const NARY_END_TYPE: MenuId = uml("nary-end-type");
+    pub(crate) const NARY_END_MULTIPLICITY: MenuId = uml("nary-end-multiplicity");
+    /// A classifier's owner, a package or a classifier (AR-132), and the kinds its Nested
+    /// classifiers `+` offers.
+    pub(crate) const CLASS_OWNER: MenuId = uml("class-owner");
+    pub(crate) const NESTED_KIND: MenuId = uml("nested-kind");
+    /// The package a package sits in (AR-102).
+    pub(crate) const PACKAGE_PARENT: MenuId = uml("package-parent");
+    /// A generalization set's Add member, and a generalization's sets' `+` (AR-129).
+    pub(crate) const SET_MEMBER: MenuId = uml("set-member");
+    pub(crate) const SET_JOIN: MenuId = uml("set-join");
+    /// A constraint editor's language presets and the elements it may name (AR-133).
+    pub(crate) const CONSTRAINT_LANGUAGE: MenuId = uml("constraint-language");
+    pub(crate) const CONSTRAINT_ELEMENT: MenuId = uml("constraint-element");
+    /// A stereotype's profile, its Extends `+` and an extension editor's metaclass, and a
+    /// package's Applied profiles `+` (AR-134).
+    pub(crate) const STEREOTYPE_PROFILE: MenuId = uml("stereotype-profile");
+    pub(crate) const STEREOTYPE_EXTENDS: MenuId = uml("stereotype-extends");
+    pub(crate) const EXTENSION_METACLASS: MenuId = uml("extension-metaclass");
+    pub(crate) const APPLIED_PROFILE: MenuId = uml("applied-profile");
+    /// The Stereotypes section's picker, and a property's value select by its place among the
+    /// section's properties (AR-135).
+    pub(crate) const STEREOTYPE_PICK: MenuId = uml("stereotype-pick");
+    pub(crate) const STEREOTYPE_VALUE: MenuId = uml("stereotype-value");
+}
 
 /// UML's editors, menus, drawings and tools between frames.
 #[derive(Debug, Default)]
@@ -153,7 +222,7 @@ impl NotationState for UmlState {
     /// Closes each editor card not opened this frame, the refusals said under the sections, a
     /// stereotype's value typed and not entered, and the question about an n-ary end; a binding's
     /// menus belong to the binding they opened on (AR-131), so an open one closes too.
-    fn close_editors(&mut self, menu: &mut Option<Menu>) {
+    fn close_editors(&mut self, menu: &mut Option<MenuId>) {
         if self.member.as_ref().is_some_and(|e| !e.opened) {
             self.member = None;
         }
@@ -176,7 +245,9 @@ impl NotationState for UmlState {
             self.template = None;
         }
         self.template_in_use = None;
-        if matches!(menu, Some(Menu::BindingBound | Menu::BindingTemplate | Menu::BindingArgument(_))) {
+        if menu
+            .is_some_and(|m| [menus::BINDING_BOUND, menus::BINDING_TEMPLATE, menus::BINDING_ARGUMENT].iter().any(|kind| m.index_in(*kind).is_some()))
+        {
             *menu = None;
         }
         if self.nary_end.as_ref().is_some_and(|e| !e.opened) {
@@ -189,6 +260,11 @@ impl NotationState for UmlState {
     /// association.
     fn holds_keys(&self) -> bool {
         self.inline.is_some() || self.line_menu.is_some() || self.nary_menu.is_some()
+    }
+
+    /// The Stereotypes picker, which takes typing, Backspace, the arrows and Enter (AR-135).
+    fn menu_takes_keys(&self, menu: MenuId) -> bool {
+        menu == menus::STEREOTYPE_PICK
     }
 
     /// An n-ary association being drawn and its menu end with the project they were on (AR-128).

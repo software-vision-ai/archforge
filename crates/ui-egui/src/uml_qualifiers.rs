@@ -16,7 +16,8 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, Menu, PAD, ROW, icon_button, run, section, select_field, text_field};
+use crate::panels::{FIELD, PAD, ROW, icon_button, run, section, select_field, text_field};
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
@@ -241,7 +242,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     }
     let type_id = format!("{key}.type");
     let value = shell.session.as_ref().map(|s| crate::uml_panel::type_label(s.doc(), &edit.ty)).unwrap_or_default();
-    let type_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &type_id, &tr("Type"), &value, Menu::QualifierType);
+    let type_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &type_id, &tr("Type"), &value, menus::QUALIFIER_TYPE);
     cy += row;
     let m_id = format!("{key}.multiplicity");
     enter |= text_field(shell, ui, p, at(0.0, cy), half, &m_id, &tr("Multiplicity"), &mut edit.multiplicity, MAX_MULTIPLICITY, false, false);
@@ -275,7 +276,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     crate::panels::reveal(shell, ui, crate::uml_state::QUALIFIER, card);
     // The type menu last, over the card.
-    crate::uml_panel::type_menu(shell, ui, p, type_field, &type_id, &mut edit.ty, Menu::QualifierType, None);
+    crate::uml_panel::type_menu(shell, ui, p, type_field, &type_id, &mut edit.ty, menus::QUALIFIER_TYPE, None);
     if let Some(uml) = uml_mut(&mut shell.notation_states) {
         uml.qualifier = Some(edit.clone());
     }

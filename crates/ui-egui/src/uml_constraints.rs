@@ -19,7 +19,8 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{Combo, ComboOut, FIELD, Menu, PAD, ROW, icon_button, section, text_field};
+use crate::panels::{Combo, ComboOut, FIELD, PAD, ROW, icon_button, section, text_field};
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
@@ -291,7 +292,7 @@ fn chips(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f
         .accessible_name(hint.as_str())
         .clicked()
     {
-        shell.panels.menu = if shell.panels.menu == Some(Menu::ConstraintElement) { None } else { Some(Menu::ConstraintElement) };
+        shell.panels.menu = if shell.panels.menu == Some(menus::CONSTRAINT_ELEMENT) { None } else { Some(menus::CONSTRAINT_ELEMENT) };
     }
     (y + FIELD - at.y, add)
 }
@@ -382,7 +383,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         hint: &hint,
         clear: &clear,
         refused: None,
-        menu: Menu::ConstraintLanguage,
+        menu: menus::CONSTRAINT_LANGUAGE,
         limit: MAX_LANGUAGE,
     };
     match crate::panels::editable_select(shell, ui, p, at(half + 8.0, cy), half, &mut edit.language, &combo) {
@@ -485,7 +486,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     crate::panels::reveal(shell, ui, crate::uml_state::CONSTRAINT, card);
     // The element menu last, over the card.
-    if shell.panels.menu == Some(Menu::ConstraintElement)
+    if shell.panels.menu == Some(menus::CONSTRAINT_ELEMENT)
         && let Some(store) = shell.session.as_ref().map(|s| s.doc())
     {
         let choices = offered(store, &edit.elements);

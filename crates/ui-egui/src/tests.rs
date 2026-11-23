@@ -8691,7 +8691,6 @@ fn each_notation_starts_with_a_state_of_its_own_and_its_cards_are_its_own() {
 #[test]
 fn a_notation_s_state_answers_what_is_edited_held_set_aside_and_closed() {
     use crate::notation_ui::{NotationStates, UIS};
-    use crate::panels::Menu;
     let id = archforge_mof::Uuid([7; 16]);
     let mut states = NotationStates::new(UIS);
     crate::uml_state::uml_mut(&mut states).unwrap().line_menu = Some(egui::pos2(1.0, 1.0));
@@ -8727,7 +8726,7 @@ fn a_notation_s_state_answers_what_is_edited_held_set_aside_and_closed() {
     uml.stereotypes.filter = "Ent".into();
     uml.template_in_use = Some(crate::uml_templates::InUse { parameter: id, why: "bound".into(), binding: None });
     assert!(states.editing(), "an editor card and a question are open");
-    let mut menu = Some(Menu::BindingTemplate);
+    let mut menu = Some(crate::uml_state::menus::BINDING_TEMPLATE);
     states.close_editors(&mut menu);
     assert_eq!(menu, None, "a binding's menu closes with the editors");
     assert_eq!(crate::er_state::er(&states).unwrap().key, Some(key(true)), "an editor opened this frame stays");
@@ -8735,11 +8734,127 @@ fn a_notation_s_state_answers_what_is_edited_held_set_aside_and_closed() {
     assert!(uml.nary_remove.is_none() && uml.final_refused.is_none() && uml.template_in_use.is_none(), "the question and the refusals close");
     assert_eq!(uml.stereotypes, crate::uml_stereotypes::Stereotypes::default(), "the Stereotypes picker's filter goes with them");
     crate::er_state::er_mut(&mut states).unwrap().key = Some(key(false));
-    let mut menu = Some(Menu::KeyColumn);
+    let mut menu = Some(crate::er_state::menus::KEY_COLUMN);
     states.close_editors(&mut menu);
-    assert_eq!(menu, Some(Menu::KeyColumn), "another menu is not the editors' to close");
+    assert_eq!(menu, Some(crate::er_state::menus::KEY_COLUMN), "another menu is not the editors' to close");
     assert!(crate::er_state::er(&states).unwrap().key.is_none(), "an editor shown already closes");
     assert!(!states.editing());
+}
+
+/// A menu of the shell's one slot is its owner's alone: one of a kind shown per row is recognised
+/// whatever its row, and a menu of the same key under another owner, the shell or another
+/// notation, is never taken for it (AR-787).
+#[test]
+fn a_menu_is_recognised_only_by_its_owner_and_key() {
+    use crate::panels::MenuId;
+    let (er, uml) = (archforge_er::INDEX, archforge_uml::INDEX);
+    let pair = crate::er_state::menus::PAIR;
+    assert_eq!(pair.at(3).index_in(pair), Some(3), "a key pair's menu is ER's pair menu, by its row");
+    assert_eq!(pair.at(3), MenuId::of(er, "pair").at(3), "the row changes the index alone");
+    assert_eq!(MenuId::of(er, "points").index_in(pair), None, "another key of the same notation is another menu");
+    assert_eq!(MenuId::of(uml, "pair").at(3).index_in(pair), None, "the same key of another notation is another menu");
+    assert_eq!(MenuId::shell("pair").at(3).index_in(pair), None, "the same key of the shell is another menu");
+    assert_ne!(pair.at(1), pair.at(2), "two rows' menus are two menus");
+
+    let er_menus = {
+        use crate::er_state::menus::*;
+        [
+            KIND,
+            POINTS,
+            PAIR,
+            ON_DELETE,
+            ON_UPDATE,
+            DEFERRABLE,
+            MATCH,
+            KEY_COLUMN,
+            GENERATION,
+            INDEX_COLUMN,
+            INDEX_NULLS,
+            TYPE_KIND,
+            COLUMN_TYPE,
+            SUBTYPE_ADD,
+            DISCRIMINATOR,
+            MAPPING,
+            OWNED_BY,
+        ]
+    };
+    let uml_menus = {
+        use crate::uml_state::menus::*;
+        [
+            MEMBER_VISIBILITY,
+            MEMBER_TYPE,
+            PARAM_TYPE,
+            MEMBER_DEFAULT,
+            MEMBER_SUBSETS,
+            MEMBER_REDEFINES,
+            INLINE_TYPE,
+            END_AGGREGATION,
+            END_MULTIPLICITY,
+            END_DEFAULT,
+            END_SUBSETS,
+            END_REDEFINES,
+            QUALIFIER_TYPE,
+            TEMPLATE_KIND,
+            TEMPLATE_CONSTRAINT,
+            TEMPLATE_DEFAULT,
+            BINDING_BOUND,
+            BINDING_TEMPLATE,
+            BINDING_ARGUMENT,
+            NARY_END_TYPE,
+            NARY_END_MULTIPLICITY,
+            CLASS_OWNER,
+            NESTED_KIND,
+            PACKAGE_PARENT,
+            SET_MEMBER,
+            SET_JOIN,
+            CONSTRAINT_LANGUAGE,
+            CONSTRAINT_ELEMENT,
+            STEREOTYPE_PROFILE,
+            STEREOTYPE_EXTENDS,
+            EXTENSION_METACLASS,
+            APPLIED_PROFILE,
+            STEREOTYPE_PICK,
+            STEREOTYPE_VALUE,
+        ]
+    };
+    let shell_menus = [crate::home::RECENT_SORT, crate::home::RECENT, crate::home::PINNED, crate::versions::BRANCH_MENU];
+    for (owner, scope, menus) in [
+        ("ER", MenuId::of(er, "").scope, &er_menus[..]),
+        ("UML", MenuId::of(uml, "").scope, &uml_menus[..]),
+        ("the shell", MenuId::shell("").scope, &shell_menus[..]),
+    ] {
+        for (i, m) in menus.iter().enumerate() {
+            assert_eq!((m.scope, m.index), (scope, 0), "{owner}'s {} is {owner}'s, the first of its kind", m.key);
+            let twins: Vec<&str> = menus[..i].iter().filter(|o| o.index_in(*m).is_some()).map(|o| o.key).collect();
+            assert!(twins.is_empty(), "{owner}'s menu key {} names one menu, not {twins:?} too", m.key);
+        }
+    }
+}
+
+/// Only a notation's own menu that takes typing keeps the keys from the canvas and the Models tree:
+/// UML's Stereotypes picker does; another of its menus, or a menu of another owner under the
+/// picker's key, does not (AR-135, AR-787).
+#[test]
+fn only_a_notation_s_typed_menu_takes_the_keys() {
+    use crate::notation_ui::{NotationStates, UIS};
+    use crate::panels::MenuId;
+    let states = NotationStates::new(UIS);
+    let pick = crate::uml_state::menus::STEREOTYPE_PICK;
+    assert!(states.menu_takes_keys(Some(pick)), "the Stereotypes picker takes the keys");
+    assert!(!states.menu_takes_keys(None), "no menu open takes nothing");
+    assert!(!states.menu_takes_keys(Some(crate::uml_state::menus::STEREOTYPE_PROFILE)), "a select of UML's leaves the keys");
+    assert!(!states.menu_takes_keys(Some(MenuId::of(archforge_er::INDEX, pick.key))), "ER's menu under the picker's key is not the picker");
+    assert!(!states.menu_takes_keys(Some(MenuId::shell(pick.key))), "nor is the shell's");
+    assert!(!states.menu_takes_keys(Some(pick.at(1))), "the picker is shown once");
+
+    let mut binding = Some(crate::uml_state::menus::BINDING_ARGUMENT.at(2));
+    let mut states = NotationStates::new(UIS);
+    states.close_editors(&mut binding);
+    assert_eq!(binding, None, "a binding's argument menu closes with the editors, whichever parameter it is on");
+    let theirs = MenuId::of(archforge_er::INDEX, crate::uml_state::menus::BINDING_TEMPLATE.key);
+    let mut other = Some(theirs);
+    states.close_editors(&mut other);
+    assert_eq!(other, Some(theirs), "UML closes only its own binding menus, not another owner's of the same key");
 }
 
 /// A notation's state belongs to its project, as the panels and the canvas do: a project opened
@@ -9797,7 +9912,7 @@ fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_eng
     // The kind select makes a mapping table.
     let at = rect_of(&h, "workspace.properties.kind").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::Kind));
+    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::KIND));
     let at = rect_of(&h, "workspace.properties.kind.1").center();
     click(&mut h, at);
     // A mapping table needs its foreign keys: the engine refuses, and the panel says so.
@@ -14021,7 +14136,7 @@ fn the_foreign_key_switch_removes_and_adds_the_key_with_its_columns_as_one_step(
     h.run();
     let at = rect_of(&h, "workspace.properties.pair.0").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::Pair(0)));
+    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::PAIR.at(0)));
     let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.pair.0.")).collect();
     assert!(items.len() >= 2, "{items:?}");
     // The last item is buyer_ref (same type as customer_id).
@@ -14087,7 +14202,7 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     assert!(er_of(h.state()).key.as_ref().is_some_and(|k| k.target.is_none() && !k.primary));
     let at = rect_of(&h, "workspace.properties.key.column.add").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::KeyColumn));
+    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::KEY_COLUMN));
     let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.key.column.add.")).collect();
     assert!(!items.is_empty());
     let at = rect_of(&h, &items[0]).center();
@@ -14365,7 +14480,7 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
     assert!(er_of(h.state()).index.as_ref().is_some_and(|i| i.target.is_none()));
     let at = rect_of(&h, "workspace.properties.index.column.add").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::IndexColumn));
+    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::INDEX_COLUMN));
     let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.index.column.add.")).collect();
     assert_eq!(items.len(), 3, "two columns and an expression: {items:?}");
     let at = rect_of(&h, &items[0]).center();
@@ -14382,7 +14497,7 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
     assert_eq!(er_of(h.state()).index.as_ref().unwrap().columns[1].direction, SortDirection::Descending);
     let at = rect_of(&h, "workspace.properties.index.column.0").center();
     right_click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::IndexNulls(0)));
+    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::INDEX_NULLS.at(0)));
     let at = rect_of(&h, "workspace.properties.index.column.0.nulls.2").center();
     click(&mut h, at);
     assert_eq!(er_of(h.state()).index.as_ref().unwrap().columns[0].nulls, NullsOrder::Last);
@@ -14517,7 +14632,7 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
     assert_eq!(rows.len(), 1, "{rows:?}");
     let at = rect_of(&h, "workspace.properties.types.add").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::TypeKind));
+    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::TYPE_KIND));
     let at = rect_of(&h, "workspace.properties.types.add.1").center();
     click(&mut h, at);
     assert!(er_of(h.state()).type_edit.as_ref().is_some_and(|t| t.kind == crate::types::TypeKind::Enum && t.target.is_none()));
@@ -14556,7 +14671,7 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.type.menu").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ColumnType));
+    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::COLUMN_TYPE));
     let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.type.menu.")).collect();
     assert!(items.len() > 10, "the schema's two types and the base types: {items:?}");
     let at = rect_of(&h, &items[1]).center();
@@ -14674,7 +14789,7 @@ fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button
     assert!(er_of(h.state()).object_edit.as_ref().is_some_and(|e| e.kind == crate::objects::ObjectKind::Sequence && e.target.is_none()));
     let at = rect_of(&h, "workspace.properties.sequence.owned-by").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::OwnedBy));
+    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::OWNED_BY));
     let offered: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.sequence.owned-by.")).collect();
     assert_eq!(offered.len(), 2, "None and Customer.customer_id, not the text column: {offered:?}");
     let at = rect_of(&h, "workspace.properties.sequence.owned-by.1").center();
@@ -17922,7 +18037,7 @@ fn a_package_path_names_every_ancestor_and_a_cycle_ends() {
     let [shown] = shown.as_slice() else { panic!("one text in the field: {shown:?}") };
     assert!(shown.ends_with("Package 40") && !shown.starts_with(root.as_str()), "the field keeps the package's own name: {shown:?}");
     click(&mut h, field.center());
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ClassOwner));
+    assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::CLASS_OWNER));
     for _ in 0..=row_of {
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
     }
@@ -21697,7 +21812,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     h.run();
     let at = rect_of(&h, "workspace.canvas.member.type.menu").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::InlineType));
+    assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::INLINE_TYPE));
     click(&mut h, canvas.left_top() + egui::vec2(30.0, 64.0));
     assert!(uml_of(h.state()).inline.is_none(), "{:?}", uml_of(h.state()).inline);
     assert_eq!(member_rows(&h, catalog, false).last().map(String::as_str), Some("+ tags"));
@@ -26610,7 +26725,7 @@ fn an_association_end_multiplicity_is_picked_or_typed_one_undo_step_each_its_lin
     // The chevron opens the presets, the hint and Clear; a pick writes at once, one undo step.
     let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::EndMultiplicity(0)));
+    assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::END_MULTIPLICITY.at(0)));
     let found = ids(&h);
     for item in ["0", "1", "2", "3", "clear"] {
         assert!(found.contains(&format!("workspace.properties.end.0.multiplicity.menu.{item}")), "{item} in {found:?}");
@@ -26681,10 +26796,13 @@ fn an_association_end_multiplicity_is_picked_or_typed_one_undo_step_each_its_lin
     assert!(painted(&h).iter().any(|t| t == "—"), "an empty field shows the placeholder");
 }
 
+/// An association end's multiplicity presets open from the field with Alt+Down at the current one,
+/// follow the arrows and pick with Enter; Escape closes the menu before it cancels what was typed,
+/// leaving the field writes it, and the menu offers none to many once, as `*`.
 #[test]
 fn an_end_multiplicity_menu_follows_the_keys_and_escape_closes_it_before_it_cancels_the_edit() {
     let (mut h, paid) = paid_by(ThemeKind::Dark, egui::vec2(1600.0, 1000.0));
-    let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::panels::Menu::EndMultiplicity(1));
+    let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::uml_state::menus::END_MULTIPLICITY.at(1));
     // Alt+Down in the field opens the presets at the current one; the arrows move; Enter picks.
     let at = rect_of(&h, "workspace.properties.end.1.multiplicity").center();
     click(&mut h, at);
@@ -26742,7 +26860,7 @@ fn alt_down_opens_a_multiplicity_menu_only_with_alt_alone() {
         let (mut h, _) = paid_by(theme, egui::vec2(1600.0, 1000.0));
         // With the window's own bar and its Alt letters, as on Windows and Linux (AR-538).
         h.state_mut().in_window_menu = true;
-        let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::panels::Menu::EndMultiplicity(1));
+        let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::uml_state::menus::END_MULTIPLICITY.at(1));
         let at = rect_of(&h, "workspace.properties.end.1.multiplicity").center();
         click(&mut h, at);
         for more in [M::SHIFT, M::CTRL, M::MAC_CMD | M::COMMAND, M::CTRL | M::COMMAND] {
@@ -26833,7 +26951,7 @@ fn the_chevron_keeps_a_typed_multiplicity_a_draft_so_a_pick_is_one_step_and_esca
     retype(&mut h, "workspace.properties.end.0.multiplicity", "3");
     let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::EndMultiplicity(0)));
+    assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::END_MULTIPLICITY.at(0)));
     assert_eq!((end_multiplicities(&h, paid).0[0].as_str(), typed_multiplicity(&h, 0)), ("1", "3".to_string()));
     assert_eq!(revision(&h), before);
     assert!(h.ctx.memory(|m| m.has_focus(id)));
@@ -26859,7 +26977,7 @@ fn the_chevron_keeps_a_typed_multiplicity_a_draft_so_a_pick_is_one_step_and_esca
 fn leaving_a_multiplicity_closes_its_menu_and_its_rows_and_refusal_reach_assistive_technology() {
     use egui_kittest::kittest::{NodeT, Queryable};
     let (mut h, paid) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::panels::Menu::EndMultiplicity(1));
+    let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::uml_state::menus::END_MULTIPLICITY.at(1));
     // The menu's rows and the chevron carry their words.
     let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu").center();
     click(&mut h, at);
@@ -27609,9 +27727,8 @@ fn pick_waits_harness(
 /// row is gone (AR-749).
 #[test]
 fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
-    use crate::panels::Menu;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        for (menu, id) in [(Menu::Recent(0), "home.recent.0.menu"), (Menu::Pinned(0), "home.pinned.0.menu")] {
+        for (menu, id) in [(crate::home::RECENT.at(0), "home.recent.0.menu"), (crate::home::PINNED.at(0), "home.pinned.0.menu")] {
             let (mut h, host, waits, opens) = pick_waits_harness(theme);
             h.state_mut().pin_from_picker();
             h.run();
@@ -27627,7 +27744,7 @@ fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
             let opened = (s.is_opening(), host.opens.lock().unwrap().len(), opens.load(std::sync::atomic::Ordering::SeqCst));
             assert_eq!(opened, (false, 0, 0), "{theme:?}: {id}: Enter opened nothing");
             let left = (s.state.recent.len(), s.state.pinned.len());
-            assert_eq!(left, if menu == Menu::Recent(0) { (0, 1) } else { (1, 0) }, "{theme:?}: {id}: the row reached ran");
+            assert_eq!(left, if menu == crate::home::RECENT.at(0) { (0, 1) } else { (1, 0) }, "{theme:?}: {id}: the row reached ran");
             // The row reached, then the pick ends and Up with Enter come in that frame: Up reaches
             // the opening, not yet seen, so Enter waits for it to be drawn.
             let (mut h, host, waits, opens) = pick_waits_harness(theme);
@@ -27705,7 +27822,7 @@ fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
                 let left = (s.state.recent.len(), s.state.pinned.len());
                 assert_eq!(
                     left,
-                    if menu == Menu::Recent(0) { (0, 1) } else { (1, 0) },
+                    if menu == crate::home::RECENT.at(0) { (0, 1) } else { (1, 0) },
                     "{theme:?}: {id}, same frame {same_frame}: the row pressed ran"
                 );
             }
@@ -27713,10 +27830,11 @@ fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
             let (mut h, ..) = pick_waits_harness(theme);
             h.state_mut().panels.menu = Some(menu);
             h.run();
-            let (opening, other) = if menu == Menu::Recent(0) { ("Open", "Remove from recent projects") } else { ("Open a project here", "Unpin") };
+            let (opening, other) =
+                if menu == crate::home::RECENT.at(0) { ("Open", "Remove from recent projects") } else { ("Open a project here", "Unpin") };
             reader_click(&mut h, crate::panels::menu_row_id(id, (other, ""), 0));
             let left = (h.state().state.recent.len(), h.state().state.pinned.len());
-            assert_eq!(left, if menu == Menu::Recent(0) { (0, 1) } else { (1, 0) }, "{theme:?}: {id}: a screen reader's click ran its row");
+            assert_eq!(left, if menu == crate::home::RECENT.at(0) { (0, 1) } else { (1, 0) }, "{theme:?}: {id}: a screen reader's click ran its row");
             // A screen reader's click on the opening as a pick starts and takes it away runs
             // nothing in its place.
             let (mut h, host, _waits, opens) = pick_waits_harness(theme);
@@ -27768,7 +27886,7 @@ fn a_menus_rows_of_one_text_are_told_apart() {
         click(&mut h, at);
         assert_eq!(picks.lock().unwrap().as_slice(), [(0, "Sales".to_string())], "{theme:?}: the first row, alone, not its twin");
         // Billing reached, then the two change places: Enter picks Billing where it went.
-        h.state_mut().panels.menu = Some(crate::panels::Menu::Kind);
+        h.state_mut().panels.menu = Some(crate::er_state::menus::KIND);
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         swapped.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -27890,7 +28008,7 @@ fn rows_menu(theme: ThemeKind, rows: &MenuRowsSet, picks: &std::sync::Arc<std::s
         },
         shell,
     );
-    h.state_mut().panels.menu = Some(crate::panels::Menu::Kind);
+    h.state_mut().panels.menu = Some(crate::er_state::menus::KIND);
     h.run();
     h
 }
@@ -30482,7 +30600,7 @@ fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_
         h.run();
         let field = rect_of(&h, crate::uml_nesting::OWNER_ID);
         click(&mut h, field.center());
-        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ClassOwner));
+        assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::CLASS_OWNER));
         assert!(painted(&h).iter().any(|t| t == "OWNER"));
         assert!(painted(&h).iter().any(|t| t == "itself"), "{theme:?}: {:?}", painted(&h));
         assert!(painted(&h).iter().any(|t| t == "class Enumeration 1 already holds that name"), "Customer owns one of its name");
@@ -30755,7 +30873,7 @@ fn template_parameters_are_edited_in_properties_and_boxed_on_both_diagrams() {
         let at = rect_of(&h, &format!("{kind}.value")).center();
         click(&mut h, at);
         assert_eq!(uml_of(h.state()).template.as_ref().unwrap().kind, archforge_uml::templates::Kind::Class, "a kind not supported is never taken");
-        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::TemplateKind), "the menu stays open");
+        assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::TEMPLATE_KIND), "the menu stays open");
         let at = rect_of(&h, &format!("{kind}.data-type")).center();
         click(&mut h, at);
         assert_eq!(uml_of(h.state()).template.as_ref().unwrap().kind, archforge_uml::templates::Kind::DataType);
@@ -31116,7 +31234,7 @@ fn profiles_are_made_in_models_edited_in_properties_and_applied_to_packages() {
         assert!(h.query_by_label("Profile: Profile 1").is_some(), "the Profile select's accessible name");
         let at = rect_of(&h, crate::uml_profiles::EXTENDS_ADD_ID).center();
         click(&mut h, at);
-        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypeExtends));
+        assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::STEREOTYPE_EXTENDS));
         assert!(painted(&h).iter().any(|t| t == "not drawn by Archforge yet"), "the rest disabled with why");
         let before = h.state().session.as_ref().unwrap().revision();
         let refused = format!("{}.{}", crate::uml_profiles::EXTENDS_ADD_ID, archforge_uml::profiles::METACLASSES.len());
@@ -32125,7 +32243,7 @@ fn stereotypes_are_applied_and_their_values_edited_in_properties() {
         // F4: the picker.
         let at = rect_of(&h, crate::uml_stereotypes::ADD_ID).center();
         click(&mut h, at);
-        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypePick));
+        assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::STEREOTYPE_PICK));
         assert!(painted_has(&h, "APPLY TO ORDER"), "{theme:?}: {:?}", painted(&h));
         assert!(painted_has(&h, "properties only") && painted_has(&h, "associations only") && painted_has(&h, "Logging not applied"));
         let id_row = {
@@ -32407,7 +32525,34 @@ fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
         key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
         assert_eq!(uml_of(h.state()).stereotypes.filter, "e", "{theme:?}: Backspace edits the filter");
         assert_eq!(shown(&h), cards, "{theme:?}: the card stays on the diagram");
-        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypePick));
+        assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::STEREOTYPE_PICK));
+    }
+}
+
+/// With the Stereotypes picker open while Models has the keys, Backspace and the arrows stay the
+/// picker's: the selected class is neither removed nor left for another row (AR-135, AR-787).
+#[test]
+fn the_picker_keeps_its_keys_from_the_models_tree() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let at = rect_of(&h, crate::uml_stereotypes::ADD_ID).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.menu, Some(crate::uml_state::menus::STEREOTYPE_PICK), "{theme:?}: the picker is open");
+        (h.state_mut().explorer.focused, h.state_mut().canvas.focused) = (true, false);
+        h.event(egui::Event::Text("en".into()));
+        h.run();
+        let before = h.state().session.as_ref().unwrap().revision();
+        for k in [egui::Key::Backspace, egui::Key::ArrowDown] {
+            key(&mut h, k, egui::Modifiers::NONE);
+            assert!(h.state().explorer.delete.is_none(), "{theme:?}: {k:?} asks Models to remove nothing");
+            assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "{theme:?}: {k:?} removes nothing");
+            assert_eq!(crate::panels::selected_id(h.state()), Some(order), "{theme:?}: {k:?} leaves the class selected");
+        }
+        assert_eq!(uml_of(h.state()).stereotypes.filter, "e", "{theme:?}: Backspace edited the picker's filter");
     }
 }
 

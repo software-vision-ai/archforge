@@ -760,8 +760,9 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             sub_reached: None,
         });
     }
-    // The Stereotypes picker takes typing, Backspace, the arrows and Enter (AR-135).
-    if tree_keys && shell.explorer.context.is_none() && shell.panels.menu != Some(crate::panels::Menu::StereotypePick) {
+    // A notation's menu that takes typing, Backspace, the arrows and Enter keeps them, as UML's
+    // Stereotypes picker does (AR-135).
+    if tree_keys && shell.explorer.context.is_none() && !shell.notation_states.menu_takes_keys(shell.panels.menu) {
         keyboard(shell, ui, &rows, selected_obj, tree_view(tree, r.top() + FIRST_ROW, ROW));
     }
     if shell.explorer.menu_open {
