@@ -266,6 +266,7 @@ dependencies = [
  "archforge-uml",
  "craft-atomic",
  "craft-dialogs",
+ "craft-testkit",
  "eframe",
  "egui",
  "egui_kittest",
@@ -1126,6 +1127,11 @@ source = "git+https://github.com/storytold/craft-libs?branch=main#52fc6b5b3d2179
 dependencies = [
  "serde_json",
 ]
+
+[[package]]
+name = "craft-testkit"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?branch=main#52fc6b5b3d2179239664136e84543231f8576f8d"
 
 [[package]]
 name = "crc32fast"
