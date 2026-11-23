@@ -32,6 +32,7 @@ use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::panels::{FIELD, Menu, PAD, ROW, Subject, check, icon_button, run, section, select_field, text_field};
 use crate::uml_relate::Relate;
+use crate::uml_state::{UmlState, uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
@@ -101,7 +102,7 @@ fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
 /// Whether the Relationship tool is armed with N-ary association on a class diagram.
 pub(crate) fn armed(shell: &Shell) -> bool {
     shell.canvas.tool == Tool::Connect(TOOL)
-        && shell.canvas.uml_relation == Relate::NAry
+        && uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default() == Relate::NAry
         && crate::kinds::active_kind(shell).is_some_and(|k| k.kind() == archforge_uml::STRUCTURE_DIAGRAM)
 }
 
@@ -112,7 +113,7 @@ pub(crate) fn clicks(shell: &Shell, tool: &str) -> bool {
 
 /// The draft's ends on the open diagram, none when there is no draft there.
 fn draft(shell: &Shell) -> Vec<DraftEnd> {
-    match &shell.canvas.nary {
+    match uml(&shell.notation_states).and_then(|uml| uml.nary.as_ref()) {
         Some(Nary::Draft { diagram, ends }) if shell.canvas.active == Some(*diagram) => ends.clone(),
         _ => Vec::new(),
     }
@@ -120,29 +121,29 @@ fn draft(shell: &Shell) -> Vec<DraftEnd> {
 
 /// The association Add end waits on, on the open diagram.
 pub(crate) fn adding_end(shell: &Shell) -> Option<Uuid> {
-    match &shell.canvas.nary {
+    match uml(&shell.notation_states).and_then(|uml| uml.nary.as_ref()) {
         Some(Nary::AddEnd { diagram, association }) if shell.canvas.active == Some(*diagram) => Some(*association),
         _ => None,
     }
 }
 
-/// Drops what is under way when it no longer holds: a draft once the tool is not N-ary
-/// association any more, its diagram is not the open one, or a class or card it picked is gone;
-/// Add end once another tool is chosen, another diagram opened, or the association is gone or no
-/// longer n-ary. A draft never outlives its gesture.
-pub fn retain(state: &mut crate::canvas::State, store: &Store) {
+/// Drops what is under way when it no longer holds on the centre `canvas` shows: a draft once the
+/// tool is not N-ary association any more, its diagram is not the open one, or a class or card it
+/// picked is gone; Add end once another tool is chosen, another diagram opened, or the association
+/// is gone or no longer n-ary. A draft never outlives its gesture.
+pub(crate) fn retain(state: &mut UmlState, canvas: &crate::canvas::State, store: &Store) {
     let alive = |id: &Uuid| store.by_uuid(*id).is_some_and(|o| store.is_alive(o));
     let keep = match &state.nary {
         None => true,
         Some(Nary::Draft { diagram, ends }) => {
-            state.active == Some(*diagram)
-                && state.tool == Tool::Connect(TOOL)
-                && state.uml_relation == Relate::NAry
+            canvas.active == Some(*diagram)
+                && canvas.tool == Tool::Connect(TOOL)
+                && state.relation == Relate::NAry
                 && ends.iter().all(|e| alive(&e.class) && alive(&e.node))
         }
         Some(Nary::AddEnd { diagram, association }) => {
-            state.active == Some(*diagram)
-                && state.tool == Tool::Select
+            canvas.active == Some(*diagram)
+                && canvas.tool == Tool::Select
                 && store.by_uuid(*association).is_some_and(|a| store.is_alive(a) && nary::is_nary(store, a))
         }
     };
@@ -207,19 +208,23 @@ pub(crate) fn click(shell: &mut Shell, d: Obj, node: Uuid, double: bool) {
     }
     let Some(class) = uuid(store, c) else { return };
     ends.push(DraftEnd { class, node });
-    shell.canvas.nary = Some(Nary::Draft { diagram, ends });
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.nary = Some(Nary::Draft { diagram, ends });
+    }
 }
 
 /// Drops the draft's last end.
 pub(crate) fn back(shell: &mut Shell) {
-    if let Some(Nary::Draft { ends, .. }) = shell.canvas.nary.as_mut() {
+    if let Some(Nary::Draft { ends, .. }) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.nary.as_mut()) {
         ends.pop();
     }
 }
 
 /// Drops what is under way, a draft or Add end, and hands back to Select: nothing is written.
 pub(crate) fn cancel(shell: &mut Shell) {
-    shell.canvas.nary = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.nary = None;
+    }
     shell.canvas.tool = Tool::Select;
 }
 
@@ -278,7 +283,9 @@ pub(crate) fn finish(shell: &mut Shell, d: Obj) {
     });
     match out {
         Ok(o) => {
-            shell.canvas.nary = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.nary = None;
+            }
             shell.canvas.tool = Tool::Select;
             if let Some(id) = o.value.get(0).and_then(|v| v.get("id")).and_then(|v| v.as_str())
                 && let Err(e) = run(shell, "view.select", json!({ "ids": [id] }))
@@ -305,7 +312,9 @@ pub(crate) fn keys(shell: &mut Shell, ui: &egui::Ui, d: Obj) -> bool {
     });
     if escape {
         if adding {
-            shell.canvas.nary = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.nary = None;
+            }
         } else {
             cancel(shell);
         }
@@ -449,7 +458,7 @@ pub(crate) fn overlay(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, vi
     if shell.canvas.gesture.is_none() {
         leg_handles(shell, ui, p, r, view, d);
     }
-    if let Some((at, a)) = shell.canvas.nary_menu {
+    if let Some((at, a)) = uml(&shell.notation_states).and_then(|uml| uml.nary_menu) {
         menu(shell, ui, p, r, at, a, d);
     }
 }
@@ -541,7 +550,9 @@ pub(crate) fn hint_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, b
 pub(crate) fn add_end(shell: &mut Shell, node: Uuid) {
     shell.canvas.notice = None;
     let Some(a) = adding_end(shell) else { return };
-    shell.canvas.nary = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.nary = None;
+    }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(c) = crate::uml_relate::class_of_node(store, node) else {
         shell.canvas.notice = Some(tr("An n-ary association joins classes and interfaces"));
@@ -567,7 +578,9 @@ pub(crate) fn arm_add_end(shell: &mut Shell, a: Uuid) {
         return;
     };
     shell.canvas.tool = Tool::Select;
-    shell.canvas.nary = Some(Nary::AddEnd { diagram, association: a });
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.nary = Some(Nary::AddEnd { diagram, association: a });
+    }
     // The canvas takes the keys, so Escape cancels at once.
     shell.canvas.focused = true;
 }
@@ -657,11 +670,15 @@ fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, at: Pos2, a: Uui
         ry += MENU_ROW;
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos)));
-    if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.canvas.nary_menu = None;
+    if (outside || ui.input(|i| i.key_pressed(egui::Key::Escape)))
+        && let Some(uml) = uml_mut(&mut shell.notation_states)
+    {
+        uml.nary_menu = None;
     }
     let Some(key) = picked else { return };
-    shell.canvas.nary_menu = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.nary_menu = None;
+    }
     let diamond = shell.session.as_ref().and_then(|s| {
         let store = s.doc();
         uuid(store, nary::node_in(store, d, store.by_uuid(a)?)?)
@@ -775,19 +792,21 @@ pub(crate) fn open(shell: &mut Shell, id: Uuid, i: usize) {
     let Some(e) = store.by_uuid(id).and_then(|a| nary::ends(store, a).get(i).copied()) else { return };
     let (_, _, ordered, unique) = archforge_uml::modifiers::flags(store, e);
     let navigable = store.by_uuid(id).is_some_and(|a| archforge_uml::figures::navigable(store, a, e));
-    shell.panels.nary_end = Some(EndEdit {
-        association: id,
-        end: i,
-        role: name_of(store, e),
-        ty: nary::end_type(store, e).and_then(|t| uuid(store, t)),
-        multiplicity: archforge_uml::figures::multiplicity(store, e),
-        navigable,
-        ordered,
-        unique,
-        refused: None,
-        opened: true,
-    });
-    shell.panels.nary_remove = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.nary_end = Some(EndEdit {
+            association: id,
+            end: i,
+            role: name_of(store, e),
+            ty: nary::end_type(store, e).and_then(|t| uuid(store, t)),
+            multiplicity: archforge_uml::figures::multiplicity(store, e),
+            navigable,
+            ordered,
+            unique,
+            refused: None,
+            opened: true,
+        });
+        uml.nary_remove = None;
+    }
     shell.panels.menu = None;
 }
 
@@ -838,9 +857,9 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
         return;
     };
     y = next - 6.0;
-    let asking = shell.panels.nary_remove.filter(|q| q.association == id);
+    let asking = uml(&shell.notation_states).and_then(|uml| uml.nary_remove).filter(|q| q.association == id);
     for (i, text) in rows.iter().enumerate() {
-        if shell.panels.nary_end.as_ref().is_some_and(|e| e.association == id && e.end == i) {
+        if uml(&shell.notation_states).and_then(|uml| uml.nary_end.as_ref()).is_some_and(|e| e.association == id && e.end == i) {
             y = editor(shell, ui, p, r, y);
             continue;
         }
@@ -891,7 +910,7 @@ const MAX_MULTIPLICITY: usize = 24;
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.nary_end.clone() else { return y };
+    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.nary_end.clone()) else { return y };
     let background = paint.add(egui::Shape::Noop);
     let left = r.left() + PAD;
     let inner = (width - 24.0).max(0.0);
@@ -979,7 +998,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::NaryEnd, card);
+    crate::panels::reveal(shell, ui, crate::uml_state::NARY_END, card);
     // The type menu last, over the card: a pick changes the field; Apply moves the end.
     if shell.panels.menu == Some(Menu::NaryEndType) {
         let names: Vec<String> = types_of.iter().map(|(_, n)| n.clone()).collect();
@@ -990,12 +1009,18 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             shell.panels.menu = None;
         }
     }
-    shell.panels.nary_end = Some(edit.clone());
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.nary_end = Some(edit.clone());
+    }
     let escape = shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape));
     if cancel || escape {
-        shell.panels.nary_end = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.nary_end = None;
+        }
     } else if remove {
-        shell.panels.nary_end = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.nary_end = None;
+        }
         remove_end(shell, edit.association, edit.end);
     } else if apply || enter {
         commit(shell, &edit);
@@ -1025,7 +1050,7 @@ fn refusal(store: &Store, edit: &EndEdit) -> Option<(Option<&'static str>, Strin
 /// the editor; a refusal keeps it open with the reason under its field, the model untouched.
 fn commit(shell: &mut Shell, edit: &EndEdit) {
     if let Some(why) = shell.session.as_ref().and_then(|s| refusal(s.doc(), edit)) {
-        if let Some(e) = shell.panels.nary_end.as_mut() {
+        if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.nary_end.as_mut()) {
             e.refused = Some(why);
         }
         return;
@@ -1058,14 +1083,16 @@ fn commit(shell: &mut Shell, edit: &EndEdit) {
     });
     match out {
         Ok(o) => {
-            shell.panels.nary_end = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.nary_end = None;
+            }
             shell.panels.notice = None;
             if let Some(first) = o.value.get(0).filter(|_| moved) {
                 say_dropped(shell, first);
             }
         }
         Err(e) => {
-            if let Some(ed) = shell.panels.nary_end.as_mut() {
+            if let Some(ed) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.nary_end.as_mut()) {
                 ed.refused = Some((None, crate::panels::refusal(&e)));
             }
         }
@@ -1080,7 +1107,9 @@ pub(crate) fn remove_end(shell: &mut Shell, id: Uuid, i: usize) {
     let ends = nary::ends(store, a);
     let Some(end) = ends.get(i).copied() else { return };
     if ends.len() <= nary::MIN_ENDS {
-        shell.panels.nary_remove = Some(RemoveAsk { association: id, end: i, opened: true });
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.nary_remove = Some(RemoveAsk { association: id, end: i, opened: true });
+        }
         return;
     }
     let called = {
@@ -1105,7 +1134,9 @@ fn ask_remove(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, a:
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
     let ends = nary::ends(store, a);
     let Some(end) = ends.get(q.end).copied() else {
-        shell.panels.nary_remove = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.nary_remove = None;
+        }
         return y;
     };
     let class_of = |e: Obj| nary::end_type(store, e).map(|t| name_of(store, t)).unwrap_or_default();
@@ -1152,7 +1183,7 @@ fn ask_remove(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, a:
     let binary_resp = control(shell, ui, binary_id, "button", binary, true).accessible_name(binary_label.as_str());
     if q.opened {
         keep_resp.request_focus();
-        if let Some(ask) = shell.panels.nary_remove.as_mut() {
+        if let Some(ask) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.nary_remove.as_mut()) {
             ask.opened = false;
         }
     }
@@ -1174,9 +1205,13 @@ fn ask_remove(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, a:
     paint.galley(pos2(left, card.bottom() + 12.0), g, p.text_secondary.into());
     let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
     if keep_resp.clicked() || escape {
-        shell.panels.nary_remove = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.nary_remove = None;
+        }
     } else if binary_resp.clicked() {
-        shell.panels.nary_remove = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.nary_remove = None;
+        }
         if let Err(e) = run(shell, "uml.association.remove-end", json!({ "association": a_id, "end": q.end, "binary": true })) {
             shell.panels.notice = Some(e);
         }
@@ -1185,7 +1220,7 @@ fn ask_remove(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, a:
 }
 
 /// Drops an editor or a question whose association, or end, is gone.
-pub(crate) fn retain_valid(state: &mut crate::panels::State, store: &Store) {
+pub(crate) fn retain_valid(state: &mut UmlState, store: &Store) {
     let ends = |id: Uuid| store.by_uuid(id).filter(|a| store.is_alive(*a) && nary::is_nary(store, *a)).map(|a| nary::ends(store, a).len());
     if state.nary_end.as_ref().is_some_and(|e| ends(e.association).is_none_or(|n| e.end >= n)) {
         state.nary_end = None;

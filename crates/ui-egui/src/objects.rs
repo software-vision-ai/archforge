@@ -14,6 +14,7 @@ use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
+use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx};
 use crate::panels::{FIELD, Menu, PAD, check, icon_button, menu, run, section, select_field, text_field};
@@ -154,7 +155,9 @@ pub fn open(shell: &mut Shell, schema: Uuid, kind: ObjectKind, target: Option<Uu
             }
         }
     }
-    shell.panels.object_edit = Some(edit);
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.object_edit = Some(edit);
+    }
     shell.panels.menu = None;
 }
 
@@ -197,7 +200,7 @@ pub(crate) fn section_of(
         return y + 50.0;
     };
     y = next - 6.0;
-    let editing = |shell: &Shell| shell.panels.object_edit.as_ref().filter(|e| e.kind == kind).cloned();
+    let editing = |shell: &Shell| er(&shell.notation_states).and_then(|er| er.object_edit.as_ref()).filter(|e| e.kind == kind).cloned();
     let editing_new = editing(shell).is_some_and(|e| e.target.is_none() && e.schema == schema_id);
     let chosen = crate::panels::selected_id(shell);
     for row in &list {
@@ -257,7 +260,7 @@ fn owners(store: &Store, schema: Obj, chosen: Option<Uuid>) -> (Vec<(Uuid, Strin
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, schema: Obj) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.object_edit.clone() else { return y };
+    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.object_edit.clone()) else { return y };
     let row = 17.0 + FIELD + 10.0;
     let height = match edit.kind {
         ObjectKind::Sequence => 12.0 + row * 3.0 + 28.0 + row + 4.0 + FIELD + 12.0,
@@ -266,7 +269,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::Object, card);
+    crate::panels::reveal(shell, ui, crate::er_state::OBJECT, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -379,9 +382,13 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
     if let Some(why) = &edit.refused {
         ux::text(&paint, at(0.0, cy + FIELD + 8.0), why, types::CAPTION, p.amber, Some(inner));
     }
-    shell.panels.object_edit = Some(edit.clone());
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.object_edit = Some(edit.clone());
+    }
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-        shell.panels.object_edit = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.object_edit = None;
+        }
     } else if remove {
         let (cmd, key) = match edit.kind {
             ObjectKind::Sequence => ("er.sequence.remove", "sequence"),
@@ -389,7 +396,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
         };
         match run(shell, cmd, json!({ key: edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
             Ok(_) => {
-                shell.panels.object_edit = None;
+                if let Some(er) = er_mut(&mut shell.notation_states) {
+                    er.object_edit = None;
+                }
                 reselect(shell, edit.schema);
             }
             Err(e) => refuse(shell, e),
@@ -400,8 +409,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
     card.bottom() + 8.0
 }
 
+/// Shows `why` on the open sequence or view editor's card, which stays open with what was typed.
 fn refuse(shell: &mut Shell, why: String) {
-    if let Some(t) = shell.panels.object_edit.as_mut() {
+    if let Some(t) = er_mut(&mut shell.notation_states).and_then(|er| er.object_edit.as_mut()) {
         t.refused = Some(why);
     }
 }
@@ -462,7 +472,9 @@ fn commit(shell: &mut Shell, edit: &ObjectEdit) {
     };
     match run(shell, cmd, params) {
         Ok(_) => {
-            shell.panels.object_edit = None;
+            if let Some(er) = er_mut(&mut shell.notation_states) {
+                er.object_edit = None;
+            }
             shell.panels.notice = None;
             reselect(shell, edit.schema);
         }

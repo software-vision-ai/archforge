@@ -21,6 +21,7 @@ use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::panels::{FIELD, Menu, PAD, ROW, Subject, icon_button, run, section, select_field};
 use crate::uml_classifier::Classifier;
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
 /// The ids of a stereotype's Properties (F1).
@@ -468,7 +469,9 @@ fn refusal(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y: f32, wid
         paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text.into());
         if control(shell, ui, &format!("{USES_ID}.show"), "button", b, true).accessible_name(label).clicked() {
             let ids: Vec<String> = r.uses.iter().map(Uuid::to_string).collect();
-            shell.panels.profile_refused = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.profile_refused = None;
+            }
             if let Err(e) = run(shell, "view.select", json!({ "ids": ids })) {
                 shell.panels.notice = Some(e);
             }
@@ -499,26 +502,26 @@ pub(crate) fn applied_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
     }
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
-    let editing = shell.panels.profile_edit.as_ref().filter(|e| e.owner == package_id).cloned();
+    let editing = uml(&shell.notation_states).and_then(|uml| uml.profile_edit.as_ref()).filter(|e| e.owner == package_id).cloned();
     for (id, label) in &applied {
         let key = format!("{APPLIED_ROW_ID}.{id}");
         let target = id.to_string();
         let open = editing.as_ref().is_some_and(|e| e.target.as_deref() == Some(target.as_str()));
-        let refused = shell.panels.profile_refused.as_ref().is_some_and(|x| x.owner == package_id);
+        let refused = uml(&shell.notation_states).and_then(|uml| uml.profile_refused.as_ref()).is_some_and(|x| x.owner == package_id);
         let (clicked, edit) = row(shell, ui, p, pos2(left, y), width, &key, label, &icons::PROFILE, open || refused, true);
         y += ROW;
         if clicked {
             crate::panels::select_element(shell, *id);
         }
-        if edit {
-            shell.panels.profile_edit = Some(ProfileEdit { owner: package_id, target: Some(target.clone()), choice: target.clone(), opened: true });
-            shell.panels.profile_refused = None;
+        if edit && let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_edit = Some(ProfileEdit { owner: package_id, target: Some(target.clone()), choice: target.clone(), opened: true });
+            uml.profile_refused = None;
         }
         if open {
             y = unapply_editor(shell, ui, p, left, y, width, package_id, *id, label);
         }
     }
-    if let Some(refusal_shown) = shell.panels.profile_refused.clone().filter(|x| x.owner == package_id) {
+    if let Some(refusal_shown) = uml(&shell.notation_states).and_then(|uml| uml.profile_refused.clone()).filter(|x| x.owner == package_id) {
         y = refusal(shell, ui, p, left, y + 4.0, width, &refusal_shown);
     }
     let said = fmt(&tr(APPLIED_HELP), &[("name", &own)]);
@@ -582,13 +585,17 @@ fn unapply_editor(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y: f
         "Unapply profile",
     );
     let cancel = icon_button(shell, ui, p, at(inner - FIELD), &format!("{APPLIED_EDIT_ID}.cancel"), &icons::CLOSE, p.text_secondary, None, "Cancel");
-    if let Some(e) = shell.panels.profile_edit.as_mut() {
+    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.profile_edit.as_mut()) {
         e.opened = false;
     }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.profile_edit = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_edit = None;
+        }
     } else if unapply {
-        shell.panels.profile_edit = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_edit = None;
+        }
         unapply_profile(shell, package, profile);
     }
     card.bottom() + 8.0
@@ -608,13 +615,17 @@ pub(crate) fn unapply_profile(shell: &mut Shell, package: Uuid, profile: Uuid) {
         })
     });
     if let Some(r) = refused {
-        shell.panels.profile_refused = Some(r);
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_refused = Some(r);
+        }
         return;
     }
     match run(shell, "uml.profile.unapply", json!({ "package": package.to_string(), "profile": profile.to_string() })) {
         Ok(_) => {
             shell.panels.notice = None;
-            shell.panels.profile_refused = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.profile_refused = None;
+            }
         }
         Err(e) => shell.panels.notice = Some(e),
     }
@@ -752,20 +763,20 @@ pub(crate) fn stereotype_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
             y += 44.0;
         }
     }
-    let editing = shell.panels.profile_edit.clone().filter(|e| e.owner == s_id);
+    let editing = uml(&shell.notation_states).and_then(|uml| uml.profile_edit.clone()).filter(|e| e.owner == s_id);
     for m in &extended {
         let open = editing.as_ref().is_some_and(|e| e.target.as_deref() == Some(m.as_str()));
         let (_, edit) = row(shell, ui, p, pos2(left, y), width, &format!("{EXTENDS_ROW_ID}.{m}"), m, &icons::CLASS, open, true);
         y += ROW;
-        if edit {
-            shell.panels.profile_edit = Some(ProfileEdit { owner: s_id, target: Some(m.clone()), choice: m.clone(), opened: true });
-            shell.panels.profile_refused = None;
+        if edit && let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_edit = Some(ProfileEdit { owner: s_id, target: Some(m.clone()), choice: m.clone(), opened: true });
+            uml.profile_refused = None;
         }
         if open {
             y = extension_editor(shell, ui, p, left, y, width, s_id, &extended);
         }
     }
-    if let Some(shown) = shell.panels.profile_refused.clone().filter(|x| x.owner == s_id) {
+    if let Some(shown) = uml(&shell.notation_states).and_then(|uml| uml.profile_refused.clone()).filter(|x| x.owner == s_id) {
         y = refusal(shell, ui, p, left, y + 4.0, width, &shown);
     }
     y = help(
@@ -808,7 +819,7 @@ pub(crate) fn stereotype_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
 /// it, Cancel and Apply. Gives the y under it.
 #[allow(clippy::too_many_arguments, reason = "an editor is drawn for its stereotype and its row")]
 fn extension_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32, y: f32, width: f32, s: Uuid, extended: &[String]) -> f32 {
-    let Some(mut edit) = shell.panels.profile_edit.clone() else { return y };
+    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.profile_edit.clone()) else { return y };
     let paint = ui.painter().clone();
     let background = paint.add(egui::Shape::Noop);
     let inner = (width - 24.0).max(0.0);
@@ -852,17 +863,25 @@ fn extension_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32
         }
     }
     edit.opened = false;
-    shell.panels.profile_edit = Some(edit.clone());
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.profile_edit = Some(edit.clone());
+    }
     let target = edit.target.clone().unwrap_or_default();
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-        shell.panels.profile_edit = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_edit = None;
+        }
     } else if remove {
         let kept: Vec<String> = extended.iter().filter(|m| **m != target).cloned().collect();
-        shell.panels.profile_edit = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_edit = None;
+        }
         set_extends(shell, s, &kept, Some(&target));
     } else if apply || ui.input(|i| i.key_pressed(egui::Key::Enter)) && shell.panels.menu.is_none() {
         let kept: Vec<String> = extended.iter().map(|m| if *m == target { edit.choice.clone() } else { m.clone() }).collect();
-        shell.panels.profile_edit = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_edit = None;
+        }
         set_extends(shell, s, &kept, Some(&target));
     }
     card.bottom() + 8.0
@@ -886,13 +905,17 @@ fn set_extends(shell: &mut Shell, s: Uuid, names: &[String], dropped: Option<&st
         })
     });
     if let Some(r) = refused {
-        shell.panels.profile_refused = Some(r);
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_refused = Some(r);
+        }
         return;
     }
     match run(shell, "uml.stereotype.set", json!({ "stereotype": s.to_string(), "extends": names })) {
         Ok(_) => {
             shell.panels.notice = None;
-            shell.panels.profile_refused = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.profile_refused = None;
+            }
         }
         Err(e) => shell.panels.notice = Some(e),
     }
@@ -911,7 +934,9 @@ fn move_stereotype(shell: &mut Shell, s: Uuid, to: Uuid) {
         })
     });
     if let Some(r) = refused {
-        shell.panels.profile_refused = Some(r);
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.profile_refused = Some(r);
+        }
         return;
     }
     match run(shell, "uml.stereotype.set", json!({ "stereotype": s.to_string(), "profile": to.to_string() })) {

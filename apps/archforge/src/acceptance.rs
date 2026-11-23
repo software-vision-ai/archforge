@@ -279,14 +279,18 @@ fn count(h: &H, class: archforge_mof::ClassId) -> usize {
 /// table's primary key, then Apply.
 fn add_column(h: &mut H, name: &str, ty: &str, primary_key: bool) {
     click_on(h, "workspace.properties.columns.add");
-    let edit = h.state_mut().panels.column.as_mut().unwrap_or_else(|| panic!("{name}: the column editor opens"));
+    let edit = archforge_ui_egui::panels::column_edit_mut(h.state_mut()).unwrap_or_else(|| panic!("{name}: the column editor opens"));
     edit.name = name.into();
     edit.ty = ty.into();
     edit.primary_key = primary_key;
     edit.not_null = primary_key;
     h.run();
     click_on(h, "workspace.properties.column.apply");
-    assert!(h.state().panels.column.is_none(), "{name}: Apply writes the column and closes the editor: {:?}", h.state().panels.notice);
+    assert!(
+        archforge_ui_egui::panels::column_edit(h.state()).is_none(),
+        "{name}: Apply writes the column and closes the editor: {:?}",
+        h.state().panels.notice
+    );
 }
 
 /// A user models an ER diagram through the real shell, saves, closes and reopens it unchanged.

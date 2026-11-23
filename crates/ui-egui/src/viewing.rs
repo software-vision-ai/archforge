@@ -24,6 +24,7 @@ pub(crate) struct Viewing {
     diagrams: diagrams::State,
     canvas: canvas::State,
     panels: panels::State,
+    notation_states: crate::notation_ui::NotationStates,
 }
 
 impl Viewing {
@@ -98,6 +99,7 @@ impl Shell {
         viewing.commit.clone_from(&commit);
         let showing = self.canvas.active;
         (self.explorer, self.diagrams, self.canvas, self.panels) = Default::default();
+        self.notation_states = crate::notation_ui::NotationStates::new(self.notation_uis);
         self.session = Some(preview);
         self.session_replaced();
         self.open_in_version(showing);
@@ -138,6 +140,7 @@ impl Shell {
             diagrams: std::mem::take(&mut self.diagrams),
             canvas: std::mem::take(&mut self.canvas),
             panels: std::mem::take(&mut self.panels),
+            notation_states: std::mem::replace(&mut self.notation_states, crate::notation_ui::NotationStates::new(self.notation_uis)),
         }));
         self.session = Some(preview);
         self.session_replaced();
@@ -178,6 +181,7 @@ impl Shell {
         self.diagrams = v.diagrams;
         self.canvas = v.canvas;
         self.panels = v.panels;
+        self.notation_states = v.notation_states;
         self.session_replaced();
         true
     }

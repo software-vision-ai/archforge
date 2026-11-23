@@ -13,6 +13,7 @@ use serde_json::json;
 
 use crate::Shell;
 use crate::connect::cardinality_text;
+use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{FIELD, FieldOut, Menu, PAD, ROW, Subject, check, edit_field, name_field, run, section, select_field};
@@ -221,16 +222,20 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
 /// A role field: typed in place, committed on Enter or when the keyboard leaves it; Escape brings
 /// the role back.
 fn role_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, rel: &Rel, end: usize) {
-    let mut text = match &shell.panels.role {
+    let mut text = match er(&shell.notation_states).and_then(|er| er.role.as_ref()) {
         Some(e) if e.target == rel.id && e.end == end => e.text.clone(),
         _ => rel.roles[end].clone(),
     };
     let id = format!("workspace.properties.role.{}", if end == 0 { "from" } else { "to" });
     let out = edit_field(shell, ui, p, at, width, &id, &tr("Role"), &mut text, archforge_er::rules::MAX_NAME, false, true);
     if out == FieldOut::Cancel {
-        shell.panels.role = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.role = None;
+        }
     } else if out == FieldOut::Commit {
-        shell.panels.role = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.role = None;
+        }
         if text.trim() != rel.roles[end] {
             let mut roles = rel.roles.clone();
             roles[end] = text.trim().to_string();
@@ -239,9 +244,13 @@ fn role_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2,
             apply(shell, rel.id, out);
         }
     } else if text != rel.roles[end] {
-        shell.panels.role = Some(RoleEdit { target: rel.id, end, text });
-    } else if shell.panels.role.as_ref().is_some_and(|e| e.target == rel.id && e.end == end) {
-        shell.panels.role = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.role = Some(RoleEdit { target: rel.id, end, text });
+        }
+    } else if er(&shell.notation_states).and_then(|er| er.role.as_ref()).is_some_and(|e| e.target == rel.id && e.end == end)
+        && let Some(er) = er_mut(&mut shell.notation_states)
+    {
+        er.role = None;
     }
 }
 
@@ -361,10 +370,12 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     }
     y += 50.0;
     let Some(fk) = rel.fk.as_ref() else {
-        if shell.panels.no_key_card == Some(rel.id) {
+        if er(&shell.notation_states).and_then(|er| er.no_key_card) == Some(rel.id) {
             let has_key = shell.session.as_ref().is_some_and(|s| archforge_er::rules::primary_key_of(s.doc(), rel.parent).is_some());
             if has_key {
-                shell.panels.no_key_card = None;
+                if let Some(er) = er_mut(&mut shell.notation_states) {
+                    er.no_key_card = None;
+                }
             } else {
                 parent_without_key(shell, ui, p, r, y, rel, parent_name, child_name);
             }
@@ -421,7 +432,7 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     y += 17.0 + FIELD + 14.0;
     // More: Deferrable, and Match when it can matter.
     let more = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 24.0));
-    let open = shell.panels.more_open;
+    let open = er(&shell.notation_states).is_some_and(|er| er.more_open);
     ux::icon_in(
         &paint,
         Rect::from_min_size(more.min + vec2(0.0, 4.0), Vec2::splat(16.0)),
@@ -429,8 +440,10 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         p.text_secondary,
     );
     ux::text(&paint, more.min + vec2(22.0, 2.0), &tr("More"), types::UI, p.text, Some((width - 22.0).max(0.0)));
-    if control(shell, ui, "workspace.properties.more", "disclosure", more, true).clicked() {
-        shell.panels.more_open = !open;
+    if control(shell, ui, "workspace.properties.more", "disclosure", more, true).clicked()
+        && let Some(er) = er_mut(&mut shell.notation_states)
+    {
+        er.more_open = !open;
     }
     y += 34.0;
     let mut deferrable = None;
@@ -636,7 +649,9 @@ fn add_foreign_key(shell: &mut Shell, rel: &Rel, _parent_name: &str) {
     if archforge_er::rules::primary_key_of(store, rel.parent).is_none() {
         // Nothing to point at: the card below the switch says so.
         shell.panels.menu = None;
-        shell.panels.no_key_card = Some(rel.id);
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.no_key_card = Some(rel.id);
+        }
         return;
     }
     let (Some(parent), Some(child)) = (store.uuid(rel.parent).ok(), store.uuid(rel.child).ok()) else { return };
@@ -744,14 +759,4 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
         .chain(DEFERRABLE.iter().map(|(_, _, w)| *w))
         .chain(MATCH.iter().map(|(_, _, w)| *w))
         .chain(["Add id column", "Choose key columns"])
-}
-
-/// Drops what the store no longer has.
-pub fn retain_valid(state: &mut crate::panels::State, store: &Store) {
-    if state.role.as_ref().is_some_and(|e| store.by_uuid(e.target).is_none()) {
-        state.role = None;
-    }
-    if state.no_key_card.is_some_and(|id| store.by_uuid(id).is_none()) {
-        state.no_key_card = None;
-    }
 }

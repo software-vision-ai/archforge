@@ -29,6 +29,26 @@ fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.run();
 }
 
+/// ER's own state in `shell`, whose notations hold ER.
+fn er_of(shell: &Shell) -> &crate::er_state::ErState {
+    crate::er_state::er(&shell.notation_states).expect("the shell's notations hold ER")
+}
+
+/// ER's own state in `shell`, to change.
+fn er_of_mut(shell: &mut Shell) -> &mut crate::er_state::ErState {
+    crate::er_state::er_mut(&mut shell.notation_states).expect("the shell's notations hold ER")
+}
+
+/// UML's own state in `shell`, whose notations hold UML.
+fn uml_of(shell: &Shell) -> &crate::uml_state::UmlState {
+    crate::uml_state::uml(&shell.notation_states).expect("the shell's notations hold UML")
+}
+
+/// UML's own state in `shell`, to change.
+fn uml_of_mut(shell: &mut Shell) -> &mut crate::uml_state::UmlState {
+    crate::uml_state::uml_mut(&mut shell.notation_states).expect("the shell's notations hold UML")
+}
+
 /// The real shell in the harness at the design's frame size.
 fn harness(theme: ThemeKind) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
@@ -975,7 +995,7 @@ fn a_draft_refused_as_the_selection_moves_on_names_its_element() {
         assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the next selection");
         let (mut h, made) = modifiers_sample(theme);
         select(&mut h, made["holds"].clone());
-        h.state_mut().panels.ends.as_mut().unwrap().role[1] = "a\u{7}b".into();
+        uml_of_mut(h.state_mut()).ends.as_mut().unwrap().role[1] = "a\u{7}b".into();
         select(&mut h, made["Order"].clone());
         let notice = h.state().panels.notice.clone().unwrap_or_default();
         assert!(notice.starts_with("Not kept on the element selected before: "), "{theme:?}: {notice}");
@@ -5256,7 +5276,7 @@ fn a_menu_closed_by_its_title_gives_the_keyboard_back() {
         assert_eq!(h.state().menu_bar.open, Some("view"), "{theme:?}");
         click_menu(&mut h, "strip.menu.view");
         assert_eq!((h.state().menu_bar.open, h.ctx.memory(egui::Memory::focused)), (None, field), "{theme:?}");
-        assert!(h.state().panels.column.is_some(), "{theme:?}: the editor it was in is still open");
+        assert!(er_of(h.state()).column.is_some(), "{theme:?}: the editor it was in is still open");
         let mut h = menu_harness(theme, true);
         click_menu(&mut h, "strip.menu.view");
         click_menu(&mut h, "strip.menu.view");
@@ -6019,7 +6039,7 @@ fn a_use_that_refuses_is_said_in_the_chosen_language() {
             let at = rect_of(&h, &control).center();
             click(&mut h, at);
         }
-        assert_eq!(h.state().panels.profile_refused.as_ref().map(|r| r.why.clone()), Some(on_class.clone()), "{theme:?}");
+        assert_eq!(uml_of(h.state()).profile_refused.as_ref().map(|r| r.why.clone()), Some(on_class.clone()), "{theme:?}");
         // A third element, and the uses are counted.
         id(&mut h, "uml.stereotype.apply", json!({ "element": invoice, "stereotype": entity }));
         assert_eq!(refused(&mut h, "uml.profile.unapply", unapply), in_package(&on(&trn("{n} element", "{n} elements", 3))), "{theme:?}");
@@ -6256,25 +6276,25 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         h.run();
         let at = reached_in_properties(&mut h, "workspace.properties.constraints.add");
         click(&mut h, at);
-        let edit = h.state_mut().panels.constraint.as_mut().expect("the editor");
+        let edit = uml_of_mut(h.state_mut()).constraint.as_mut().expect("the editor");
         (edit.expression, edit.form, edit.form_chosen) = ("total > 0".into(), archforge_uml::constraints::Form::Braces, true);
         h.run();
         let revision = h.state().session.as_ref().unwrap().revision();
         let at = reached_in_properties(&mut h, "workspace.properties.constraint.apply");
         click(&mut h, at);
         let braces = tr("Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.");
-        let edit = h.state().panels.constraint.clone().expect("the editor stays open");
+        let edit = uml_of(h.state()).constraint.clone().expect("the editor stays open");
         assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(braces.as_str()), Some("show")), "{theme:?}");
         assert!(braces.starts_with("Geschweifte Klammern") && painted(&h).contains(&braces), "{theme:?}: said in German in the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
         // Any other refusal of Apply is said under it, as a sentence: here the diagram as the element.
         // The refusal brought the editor's foot into view (AR-469): Apply is pressed where it shows.
         let shown = h.state().canvas.active.unwrap();
-        h.state_mut().panels.constraint.as_mut().expect("the editor").elements = vec![shown];
+        uml_of_mut(h.state_mut()).constraint.as_mut().expect("the editor").elements = vec![shown];
         h.run();
         let at = rect_of(&h, "workspace.properties.constraint.apply").center();
         click(&mut h, at);
-        let edit = h.state().panels.constraint.clone().expect("the editor stays open");
+        let edit = uml_of(h.state()).constraint.clone().expect("the editor stays open");
         assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(outside.as_str()), None), "{theme:?}");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
         // A control above what shows is not listed either.
@@ -6283,7 +6303,7 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         // Cancel, under the refusal and in view with it, closes the editor and writes nothing.
         let at = rect_of(&h, "workspace.properties.constraint.cancel").center();
         click(&mut h, at);
-        assert!(h.state().panels.constraint.is_none(), "{theme:?}: Cancel closes the editor");
+        assert!(uml_of(h.state()).constraint.is_none(), "{theme:?}: Cancel closes the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
         // The control above is found by wheeling up.
         let at = reached_in_properties(&mut h, above);
@@ -6405,12 +6425,12 @@ fn constraint_refused(theme: ThemeKind) -> Harness<'static, Shell> {
     h.run();
     let at = reached_in_properties(&mut h, "workspace.properties.constraints.add");
     click(&mut h, at);
-    let edit = h.state_mut().panels.constraint.as_mut().expect("the editor");
+    let edit = uml_of_mut(h.state_mut()).constraint.as_mut().expect("the editor");
     (edit.expression, edit.form, edit.form_chosen) = ("total > 0".into(), archforge_uml::constraints::Form::Braces, true);
     h.run();
     let before = in_view(&h, CONSTRAINT_APPLY).expect("the editor opened in view");
     click(&mut h, before);
-    let edit = h.state().panels.constraint.clone().expect("the editor stays open");
+    let edit = uml_of(h.state()).constraint.clone().expect("the editor stays open");
     assert_eq!(edit.refused_at, Some("show"), "{theme:?}: refused above the buttons");
     h
 }
@@ -6421,22 +6441,22 @@ fn constraint_refused(theme: ThemeKind) -> Harness<'static, Shell> {
 fn a_refused_constraint_keeps_its_buttons_in_view() {
     in_both_appearances(|theme| {
         let mut h = constraint_refused(theme);
-        let braces = h.state().panels.constraint.as_ref().and_then(|e| e.refused.clone()).unwrap_or_default();
+        let braces = uml_of(h.state()).constraint.as_ref().and_then(|e| e.refused.clone()).unwrap_or_default();
         assert!(said_in_view(&h, &braces), "{theme:?}: the refusal is in view");
         let at = in_view(&h, CONSTRAINT_APPLY).expect("Apply in view after the refusal");
         assert!(in_view(&h, CONSTRAINT_CANCEL).is_some(), "{theme:?}: Cancel in view after the refusal");
         // The diagram as the element: refused under the buttons, which stay in view with it.
         let shown = h.state().canvas.active.unwrap();
-        h.state_mut().panels.constraint.as_mut().expect("the editor").elements = vec![shown];
+        uml_of_mut(h.state_mut()).constraint.as_mut().expect("the editor").elements = vec![shown];
         click(&mut h, at);
-        let edit = h.state().panels.constraint.clone().expect("the editor stays open");
+        let edit = uml_of(h.state()).constraint.clone().expect("the editor stays open");
         let outside = crate::i18n::tr("A constraint names only elements of this model.");
         assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(outside.as_str()), None), "{theme:?}");
         assert!(said_in_view(&h, &outside), "{theme:?}: the refusal under the buttons is in view");
         assert!(in_view(&h, CONSTRAINT_APPLY).is_some(), "{theme:?}: Apply in view after the second refusal");
         let at = in_view(&h, CONSTRAINT_CANCEL).expect("Cancel in view after the second refusal");
         click(&mut h, at);
-        assert!(h.state().panels.constraint.is_none(), "{theme:?}: Cancel closes the editor");
+        assert!(uml_of(h.state()).constraint.is_none(), "{theme:?}: Cancel closes the editor");
     });
 }
 
@@ -6454,7 +6474,7 @@ fn a_body_scrolled_away_from_a_refusal_stays_put() {
         // A linked note picked instead: the refusal goes, the card shrinks, and the body stays.
         let at = in_view(&h, "workspace.properties.constraint.show.note").expect("Linked note in view");
         click(&mut h, at);
-        assert_eq!(h.state().panels.constraint.as_ref().and_then(|e| e.refused.clone()), None, "{theme:?}: the refusal went");
+        assert_eq!(uml_of(h.state()).constraint.as_ref().and_then(|e| e.refused.clone()), None, "{theme:?}: the refusal went");
         assert!(in_view(&h, CONSTRAINT_APPLY).is_none(), "{theme:?}: Apply is still out of view");
         assert_eq!(h.state().panels.scroll, put, "{theme:?}: the refusal's going moved nothing");
     });
@@ -6475,11 +6495,11 @@ fn a_refusal_brings_its_own_editor_into_view_when_two_are_open() {
         click(&mut h, at);
         let at = reached_in_properties(&mut h, "workspace.properties.attributes.add");
         click(&mut h, at);
-        assert!(h.state().panels.member.is_some() && h.state().panels.constraint.is_some(), "{theme:?}: both editors open");
+        assert!(uml_of(h.state()).member.is_some() && uml_of(h.state()).constraint.is_some(), "{theme:?}: both editors open");
         assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: the attribute's editor in view");
         assert!(in_view(&h, CONSTRAINT_APPLY).is_none(), "{theme:?}: the constraint's editor under the fold");
         let why = crate::i18n::tr("A constraint names only elements of this model.");
-        h.state_mut().panels.constraint.as_mut().expect("the editor").refused = Some(why.clone());
+        uml_of_mut(h.state_mut()).constraint.as_mut().expect("the editor").refused = Some(why.clone());
         h.run();
         assert!(said_in_view(&h, &why), "{theme:?}: the constraint's refusal is in view");
         assert!(in_view(&h, CONSTRAINT_APPLY).is_some() && in_view(&h, CONSTRAINT_CANCEL).is_some(), "{theme:?}: its buttons too");
@@ -6510,7 +6530,7 @@ fn an_end_editor_moved_to_another_end_comes_into_view() {
         let at = in_view(&h, &above).expect("the end above at the fold");
         let apply = format!("workspace.properties.end.{}.apply", last - 1);
         click(&mut h, at);
-        assert_eq!(h.state().panels.nary_end.as_ref().map(|e| e.end), Some(last - 1), "{theme:?}: the editor moved");
+        assert_eq!(uml_of(h.state()).nary_end.as_ref().map(|e| e.end), Some(last - 1), "{theme:?}: the editor moved");
         assert!(in_view(&h, &apply).is_some(), "{theme:?}: its Apply in view");
     });
 }
@@ -6530,7 +6550,7 @@ fn a_member_editor_moved_to_another_list_comes_into_view() {
         click(&mut h, at);
         let at = reached_in_properties(&mut h, "workspace.properties.operations.add");
         click(&mut h, at);
-        let kind = h.state().panels.member.as_ref().map(|e| (e.kind, e.target));
+        let kind = uml_of(h.state()).member.as_ref().map(|e| (e.kind, e.target));
         assert_eq!(kind, Some((crate::uml_panel::MemberKind::Operation, None)), "{theme:?}: a new operation's editor");
         assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: its Apply in view");
     });
@@ -6552,11 +6572,11 @@ fn a_refused_card_taller_than_the_body_shows_its_foot() {
         click(&mut h, at);
         let top = in_view(&h, "workspace.properties.member.name").is_some();
         assert!(top && in_view(&h, "workspace.properties.member.apply").is_none(), "{theme:?}: opened, the card shows its top");
-        h.state_mut().panels.member.as_mut().expect("the editor").params[1].name = "p0".into();
+        uml_of_mut(h.state_mut()).member.as_mut().expect("the editor").params[1].name = "p0".into();
         h.run();
         let at = reached_in_properties(&mut h, "workspace.properties.member.apply");
         click(&mut h, at);
-        let why = h.state().panels.member.as_ref().and_then(|e| e.refused.clone().filter(|_| e.refused_at.is_none())).expect("refused");
+        let why = uml_of(h.state()).member.as_ref().and_then(|e| e.refused.clone().filter(|_| e.refused_at.is_none())).expect("refused");
         assert!(said_in_view(&h, &why), "{theme:?}: the refusal is in view: {why}");
         assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: Apply in view");
         assert!(in_view(&h, "workspace.properties.member.cancel").is_some(), "{theme:?}: Cancel in view");
@@ -6608,17 +6628,17 @@ fn a_refused_attribute_keeps_its_buttons_in_view() {
         h.run();
         let at = reached_in_properties(&mut h, "workspace.properties.attributes.add");
         click(&mut h, at);
-        h.state_mut().panels.member.as_mut().expect("the editor").name = "note0".into();
+        uml_of_mut(h.state_mut()).member.as_mut().expect("the editor").name = "note0".into();
         h.run();
         let at = in_view(&h, "workspace.properties.member.apply").expect("the editor opened in view");
         click(&mut h, at);
-        let why = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("the name is refused");
+        let why = uml_of(h.state()).member.as_ref().and_then(|e| e.refused.clone()).expect("the name is refused");
         assert!(why.contains("note0"), "{theme:?}: {why}");
         assert!(said_in_view(&h, &why), "{theme:?}: the refusal is in view");
         assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: Apply in view");
         let at = in_view(&h, "workspace.properties.member.cancel").expect("Cancel in view");
         click(&mut h, at);
-        assert!(h.state().panels.member.is_none(), "{theme:?}: Cancel closes the editor");
+        assert!(uml_of(h.state()).member.is_none(), "{theme:?}: Cancel closes the editor");
     });
 }
 
@@ -8642,6 +8662,235 @@ fn the_shell_knows_notations_and_their_longest_description_is_the_old_limit() {
     assert_eq!(archforge_er::rules::MAX_TEXT, 4096);
 }
 
+/// Each notation the shell knows starts with a state of its own that nothing is open in, reached
+/// only as that notation's own type; a notation the shell does not know has none there. Every
+/// Properties editor card is named by its notation and its own name, so no two cards meet (AR-787).
+#[test]
+fn each_notation_starts_with_a_state_of_its_own_and_its_cards_are_its_own() {
+    use crate::notation_ui::{NotationStates, UIS};
+    let states = NotationStates::new(UIS);
+    assert!(crate::er_state::er(&states).is_some(), "ER keeps its own state");
+    assert!(crate::uml_state::uml(&states).is_some(), "UML keeps its own state");
+    assert!(!states.editing() && !states.holds_keys(), "nothing is open in a fresh state");
+    let open = states.open_editors();
+    assert!(open.iter().all(|(_, editor)| editor.is_none()), "no editor is open in a fresh state");
+    let cards: Vec<_> = open.iter().map(|(card, _)| *card).collect();
+    let er_cards: Vec<_> = cards.iter().filter(|c| c.notation == archforge_er::INDEX).map(|c| c.card).collect();
+    let uml_cards: Vec<_> = cards.iter().filter(|c| c.notation == archforge_uml::INDEX).map(|c| c.card).collect();
+    assert_eq!(er_cards, ["column", "key", "check", "index", "type", "object"]);
+    assert_eq!(uml_cards, ["member", "constraint", "qualifier", "template", "profile", "nary-end"]);
+    assert_eq!(cards.len(), er_cards.len() + uml_cards.len(), "every card is ER's or UML's");
+    let sketch = NotationStates::new(SKETCH_UIS);
+    assert!(crate::er_state::er(&sketch).is_some(), "the sketch shell knows ER");
+    assert!(crate::uml_state::uml(&sketch).is_none(), "a notation the shell does not know keeps no state there");
+}
+
+/// What the shell asks a notation's state: whether something is being edited or drawn, what holds
+/// the canvas's keys, what a project set aside ends, and what moving the selection closes, a
+/// binding's menu in the shell's one menu slot among it; an editor opened this frame stays (AR-787).
+#[test]
+fn a_notation_s_state_answers_what_is_edited_held_set_aside_and_closed() {
+    use crate::notation_ui::{NotationStates, UIS};
+    use crate::panels::Menu;
+    let id = archforge_mof::Uuid([7; 16]);
+    let mut states = NotationStates::new(UIS);
+    crate::uml_state::uml_mut(&mut states).unwrap().line_menu = Some(egui::pos2(1.0, 1.0));
+    assert!(states.holds_keys() && !states.editing(), "the generalization lines' menu holds the keys and edits nothing");
+    let uml = crate::uml_state::uml_mut(&mut states).unwrap();
+    (uml.line_menu, uml.nary_menu) = (None, Some((egui::pos2(1.0, 1.0), id)));
+    assert!(states.holds_keys(), "an n-ary association's menu holds the keys");
+    crate::uml_state::uml_mut(&mut states).unwrap().nary = Some(crate::uml_nary::Nary::AddEnd { diagram: id, association: id });
+    assert!(states.editing(), "an n-ary association under way is being drawn");
+    states.set_aside();
+    let uml = crate::uml_state::uml(&states).unwrap();
+    assert!(uml.nary.is_none() && uml.nary_menu.is_none(), "a drawing and its menu end with the project set aside");
+    assert!(!states.editing() && !states.holds_keys());
+
+    let key = |opened| crate::keys::KeyEdit {
+        target: None,
+        entity: id,
+        primary: false,
+        name: String::new(),
+        columns: Vec::new(),
+        nulls_distinct: true,
+        refused: None,
+        opened,
+    };
+    crate::er_state::er_mut(&mut states).unwrap().role = Some(crate::relation::RoleEdit { target: id, end: 0, text: "buyer".into() });
+    assert!(states.editing(), "a relationship's role is being typed");
+    crate::er_state::er_mut(&mut states).unwrap().role = None;
+
+    crate::er_state::er_mut(&mut states).unwrap().key = Some(key(true));
+    let uml = crate::uml_state::uml_mut(&mut states).unwrap();
+    uml.nary_remove = Some(crate::uml_nary::RemoveAsk { association: id, end: 0, opened: true });
+    uml.final_refused = Some(id);
+    uml.stereotypes.filter = "Ent".into();
+    uml.template_in_use = Some(crate::uml_templates::InUse { parameter: id, why: "bound".into(), binding: None });
+    assert!(states.editing(), "an editor card and a question are open");
+    let mut menu = Some(Menu::BindingTemplate);
+    states.close_editors(&mut menu);
+    assert_eq!(menu, None, "a binding's menu closes with the editors");
+    assert_eq!(crate::er_state::er(&states).unwrap().key, Some(key(true)), "an editor opened this frame stays");
+    let uml = crate::uml_state::uml(&states).unwrap();
+    assert!(uml.nary_remove.is_none() && uml.final_refused.is_none() && uml.template_in_use.is_none(), "the question and the refusals close");
+    assert_eq!(uml.stereotypes, crate::uml_stereotypes::Stereotypes::default(), "the Stereotypes picker's filter goes with them");
+    crate::er_state::er_mut(&mut states).unwrap().key = Some(key(false));
+    let mut menu = Some(Menu::KeyColumn);
+    states.close_editors(&mut menu);
+    assert_eq!(menu, Some(Menu::KeyColumn), "another menu is not the editors' to close");
+    assert!(crate::er_state::er(&states).unwrap().key.is_none(), "an editor shown already closes");
+    assert!(!states.editing());
+}
+
+/// A notation's state belongs to its project, as the panels and the canvas do: a project opened
+/// beside another starts fresh, the one parked keeps its tools' kinds when shown again while its
+/// drawing under way ends, and a project opened after the last one closed starts fresh too (AR-787).
+#[test]
+fn a_notation_s_state_goes_with_its_project() {
+    use crate::uml_classifier::Classifier;
+    let opened = |name: &str| crate::Opened { name: name.into(), path: format!("/tmp/{name}.archforge").into(), ..Default::default() };
+    let mut shell = Shell::new(Services::default());
+    shell.open_project(opened("First"));
+    uml_of_mut(&mut shell).classifier = Classifier::Interface;
+    uml_of_mut(&mut shell).nary =
+        Some(crate::uml_nary::Nary::AddEnd { diagram: archforge_mof::Uuid([7; 16]), association: archforge_mof::Uuid([7; 16]) });
+    shell.open_project(opened("Second"));
+    assert_eq!(uml_of(&shell).classifier, Classifier::Class, "a project opened beside another starts fresh");
+    uml_of_mut(&mut shell).classifier = Classifier::DataType;
+    shell.activate(0);
+    assert_eq!(uml_of(&shell).classifier, Classifier::Interface, "the parked project keeps its own");
+    assert!(uml_of(&shell).nary.is_none(), "a drawing under way ended as its project was set aside");
+    shell.activate(1);
+    assert_eq!(uml_of(&shell).classifier, Classifier::DataType);
+    shell.close_project();
+    shell.close_project();
+    assert!(shell.tabs.is_empty(), "both closed");
+    shell.open_project(opened("Third"));
+    assert_eq!(uml_of(&shell).classifier, Classifier::Class, "a project opened after the last closed starts fresh");
+}
+
+/// What a notation keeps about an element goes when the element does, and stays while it is there:
+/// ER's editors, a role, the key card and the mapping offer once their table or schema is gone, and
+/// UML's row typed in place, profile editor, its refusal and an association's ends once their
+/// element is. A row typed in place is being edited and holds the canvas's keys (AR-787).
+#[test]
+fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
+    use crate::objects::ObjectKind;
+    use crate::types::TypeKind;
+    let (mut h, nodes) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let s = h.state_mut();
+    let session = s.session.as_mut().unwrap();
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let schema = id(session.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+    let table = id(session.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Customer" })).unwrap().value);
+    let store = session.doc();
+    let node = store.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
+    let class = store.uuid(store.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap();
+    assert!(crate::uml_inline::open(s, class, crate::uml_panel::MemberKind::Attribute, None), "Catalog's card takes a row");
+    assert!(s.notation_states.editing() && s.notation_states.holds_keys(), "a row typed in place is edited and holds the keys");
+    crate::panels::open_column(s, table, None);
+    crate::keys::open(s, table, None);
+    crate::checks::open(s, table, None);
+    crate::indexes::open(s, table, None);
+    crate::types::open(s, schema, TypeKind::Domain, None);
+    crate::objects::open(s, schema, ObjectKind::Sequence, None);
+    let er = er_of_mut(s);
+    er.role = Some(crate::relation::RoleEdit { target: table, end: 0, text: "buyer".into() });
+    er.no_key_card = Some(table);
+    er.mapping = Some(crate::connect::MappingOffer { relationship: table, name: "CustomerCustomer".into(), refused: None });
+    let modifiers = crate::uml_relate::EndModifiers {
+        is_static: false,
+        default: String::new(),
+        derived: false,
+        read_only: false,
+        ordered: false,
+        unique: true,
+        subsets: Vec::new(),
+        redefines: Vec::new(),
+    };
+    let uml = uml_of_mut(s);
+    uml.profile_edit = Some(crate::uml_profiles::ProfileEdit { owner: class, target: None, choice: String::new(), opened: true });
+    uml.profile_refused = Some(crate::uml_profiles::ProfileRefusal { owner: class, why: "in use".into(), uses: Vec::new() });
+    uml.ends = Some(crate::uml_relate::EndsEdit {
+        association: class,
+        role: Default::default(),
+        multiplicity: Default::default(),
+        written_role: Default::default(),
+        written: Default::default(),
+        refused: Default::default(),
+        role_tried: Default::default(),
+        modifiers: [modifiers.clone(), modifiers.clone()],
+        written_modifiers: [modifiers.clone(), modifiers],
+        modifier_refused: Default::default(),
+        modifiers_open: Default::default(),
+        modifiers_last: None,
+    });
+    let kept = |s: &Shell| {
+        let (er, uml) = (er_of(s), uml_of(s));
+        [
+            er.column.is_some(),
+            er.key.is_some(),
+            er.check.is_some(),
+            er.index.is_some(),
+            er.type_edit.is_some(),
+            er.object_edit.is_some(),
+            er.role.is_some(),
+            er.no_key_card.is_some(),
+            er.mapping.is_some(),
+            uml.inline.is_some(),
+            uml.profile_edit.is_some(),
+            uml.profile_refused.is_some(),
+            uml.ends.is_some(),
+        ]
+    };
+    let retain = |s: &mut Shell| s.notation_states.retain_valid(s.session.as_ref().unwrap().doc(), &s.canvas);
+    retain(s);
+    assert_eq!(kept(s), [true; 13], "everything stays while its element is there");
+    let session = s.session.as_mut().unwrap();
+    session.execute("er.schema.remove", &serde_json::json!({ "schema": schema.to_string() })).unwrap();
+    session.execute("element.remove", &serde_json::json!({ "ids": [class.to_string()] })).unwrap();
+    retain(s);
+    assert_eq!(kept(s), [false; 13], "everything goes with its element");
+}
+
+/// A type menu's choices and a property's targets are kept for one session only: another session of
+/// the same model at the same revision, as a replacement or a version shown installs, builds them
+/// again rather than offering what the last session held (AR-787).
+#[test]
+fn kept_type_and_target_choices_are_built_again_for_another_session_of_the_same_model() {
+    use serde_json::json;
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| {
+        crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+    };
+    let sales = id(&mut h, "uml.package.add", json!({ "name": "Sales" }));
+    let status = id(&mut h, "uml.enumeration.add", json!({ "package": sales, "name": "Status" }));
+    id(&mut h, "uml.literal.add", json!({ "enumeration": status, "name": "open" }));
+    let status = archforge_mof::Uuid::parse(&status).unwrap();
+    let read = |h: &mut Harness<'static, Shell>| {
+        let s = h.state_mut();
+        let choices = crate::uml_panel::choices_for_menu(s, None);
+        let invoice = choices.labels.iter().any(|l| l == "Invoice");
+        crate::uml_panel::keep_choices(s, choices);
+        let targets = crate::uml_panel::take_targets(s, "status", |_| None, |st| st.by_uuid(status));
+        let literals = targets.literals.clone().unwrap_or_default();
+        crate::uml_panel::keep_targets(s, targets);
+        (invoice, literals)
+    };
+    let first = h.state().build(&rows_now(&h)).unwrap();
+    let revision = first.revision();
+    h.state_mut().install(first, false);
+    assert_eq!(read(&mut h), (false, vec!["open".to_string()]));
+    assert_eq!(read(&mut h), (false, vec!["open".to_string()]), "kept for the same session and revision");
+    // The model moves on, and another session of it is built at the revision the first was kept at.
+    id(&mut h, "uml.class.add", json!({ "package": sales, "name": "Invoice" }));
+    id(&mut h, "uml.literal.add", json!({ "enumeration": status.to_string(), "name": "shut" }));
+    let second = h.state().build(&rows_now(&h)).unwrap();
+    assert_eq!(second.revision(), revision, "the same revision, in a history of its own");
+    h.state_mut().install(second, false);
+    assert_eq!(read(&mut h), (true, vec!["open".to_string(), "shut".to_string()]), "built again for the new session");
+}
+
 /// A name of nothing but spaces is refused before it is sent, except for a diagram and for what a
 /// notation's rename command may leave unnamed: a relationship's, in ER and in UML (AR-786).
 #[test]
@@ -9522,14 +9771,14 @@ fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_eng
     // Open the second column's editor and make it unique and not null.
     let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
-    assert!(h.state().panels.column.is_some(), "the editor opened");
+    assert!(er_of(h.state()).column.is_some(), "the editor opened");
     let at = rect_of(&h, "workspace.properties.column.unique").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.not-null").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
     let email_obj = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
@@ -9539,7 +9788,7 @@ fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_eng
     // The + adds a column through the editor.
     let at = rect_of(&h, "workspace.properties.columns.add").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.is_none() && c.name == "column_1"));
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.is_none() && c.name == "column_1"));
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
     let st = h.state().session.as_ref().unwrap().doc();
@@ -9572,11 +9821,11 @@ fn a_column_refused_in_properties_says_why_in_plain_words() {
             let opener = if new { "workspace.properties.columns.add".to_string() } else { format!("{}.edit", rows[1]) };
             let at = rect_of(&h, &opener).center();
             click(&mut h, at);
-            h.state_mut().panels.column.as_mut().unwrap_or_else(|| panic!("{theme:?}: the editor opened")).name = "customer_id".into();
+            er_of_mut(h.state_mut()).column.as_mut().unwrap_or_else(|| panic!("{theme:?}: the editor opened")).name = "customer_id".into();
             h.run();
             let at = rect_of(&h, "workspace.properties.column.apply").center();
             click(&mut h, at);
-            let refused = h.state().panels.column.as_ref().and_then(|c| c.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
+            let refused = er_of(h.state()).column.as_ref().and_then(|c| c.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
             let plain = refused.starts_with("There is a column named") && !refused.contains("er.") && !refused.contains("name:");
             assert!(plain, "{theme:?}, new {new}: {refused}");
         }
@@ -9607,8 +9856,8 @@ fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
     let keys_add = rect_of(&h, "workspace.properties.keys.add");
     assert!(last.bottom() > keys_add.top(), "the list reaches over the keys: {last:?} {keys_add:?}");
     click(&mut h, egui::pos2(keys_add.center().x.min(last.right() - 4.0), last.center().y));
-    assert_eq!(h.state().panels.column.as_ref().map(|c| c.ty.clone()), Some(crate::panels::BASE_TYPES[n].to_string()));
-    assert!(h.state().panels.key.is_none(), "the key editor under the list stayed closed");
+    assert_eq!(er_of(h.state()).column.as_ref().map(|c| c.ty.clone()), Some(crate::panels::BASE_TYPES[n].to_string()));
+    assert!(er_of(h.state()).key.is_none(), "the key editor under the list stayed closed");
     let at = rect_of(&h, "workspace.properties.column.type.menu").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.type.menu.2").center();
@@ -9616,11 +9865,11 @@ fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
     // Primary key brings Not null with it.
     let at = rect_of(&h, "workspace.properties.column.primary-key").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.primary_key && c.not_null));
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.primary_key && c.not_null));
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
     h.run();
-    assert!(h.state().panels.column.is_none(), "one Apply closes the editor: {:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "one Apply closes the editor: {:?}", er_of(h.state()).column);
     let st = h.state().session.as_ref().unwrap().doc();
     let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
     assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3, "one column added");
@@ -9630,7 +9879,7 @@ fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.not-null").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| !c.primary_key && !c.not_null));
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| !c.primary_key && !c.not_null));
 }
 
 #[test]
@@ -9647,7 +9896,7 @@ fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_sel
     };
     select(&mut h, &email);
     h.run();
-    assert!(h.state().panels.column.is_none(), "selecting a column only marks its row: {:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "selecting a column only marks its row: {:?}", er_of(h.state()).column);
     // A click on a row selects its column, as the tree and the canvas do, and opens its table in
     // the tree so the row there shows too; it does not open the editor.
     let customer_id = archforge_mof::Uuid::parse(&customer).unwrap();
@@ -9660,11 +9909,11 @@ fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_sel
     assert_eq!(selected_name(&h), "email", "the row's click selects its column");
     assert!(h.state().explorer.expanded.contains(&customer_id), "its table opens in the tree");
     assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{email}")), "{:?}", ids(&h));
-    assert!(h.state().panels.column.is_none(), "a click on the row does not open it");
+    assert!(er_of(h.state()).column.is_none(), "a click on the row does not open it");
     let at = rect_of(&h, &format!("workspace.properties.column.{email}.edit")).center();
     click(&mut h, at);
     h.run();
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "the edit button opens it");
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "the edit button opens it");
     // The edit button of a row while the table is selected selects the column too.
     let at = rect_of(&h, "workspace.properties.column.cancel").center();
     click(&mut h, at);
@@ -9674,24 +9923,24 @@ fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_sel
     click(&mut h, at);
     h.run();
     assert_eq!(selected_name(&h), "email");
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "and opens it");
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "and opens it");
     // Selecting the table, then the column again: the editor closed and stays closed.
     select(&mut h, &customer);
     h.run();
-    assert!(h.state().panels.column.is_none(), "selecting elsewhere closes it");
+    assert!(er_of(h.state()).column.is_none(), "selecting elsewhere closes it");
     select(&mut h, &email);
     h.run();
-    assert!(h.state().panels.column.is_none(), "coming back does not reopen it");
+    assert!(er_of(h.state()).column.is_none(), "coming back does not reopen it");
     // The + opens an editor for a new column; Cancel closes it and it stays closed.
     let at = rect_of(&h, "workspace.properties.columns.add").center();
     click(&mut h, at);
     h.run();
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.is_none()), "the + opens an editor for a new column");
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.is_none()), "the + opens an editor for a new column");
     let at = rect_of(&h, "workspace.properties.column.cancel").center();
     click(&mut h, at);
     h.run();
     h.run();
-    assert!(h.state().panels.column.is_none(), "Cancel stays closed: {:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "Cancel stays closed: {:?}", er_of(h.state()).column);
 }
 
 /// The text the store has for skill `id`.
@@ -13284,7 +13533,7 @@ fn the_entity_menu_removes_from_the_diagram_and_the_dialog_deletes_from_the_mode
     click(&mut h, at);
     let at = rect_of(&h, "workspace.canvas.adorn.add-column").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.is_none() && c.entity.to_string() == customer));
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.is_none() && c.entity.to_string() == customer));
     assert_eq!(h.state().state.panel, crate::state::Panel::Properties);
     // A right click opens the menu; Remove from this diagram keeps the table in the model.
     let at = rect_of(&h, &order_node).center();
@@ -13434,7 +13683,7 @@ fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
     // A double click on the second column row opens that column's editor.
     let at = rect.left_top() + egui::vec2(100.0, 77.0 + 20.0 + 6.0);
     double_click(&mut h, at);
-    let edit = h.state().panels.column.clone().expect("the column editor opened");
+    let edit = er_of(h.state()).column.clone().expect("the column editor opened");
     assert_eq!(edit.entity.to_string(), customer);
     assert_eq!(edit.name, "email", "the second row is the email column");
     // With the Entity tool, a click on a node selects it instead of placing one.
@@ -13453,7 +13702,7 @@ fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
     for _ in 0..45 {
         h.step();
     }
-    h.state_mut().panels.column = None;
+    er_of_mut(h.state_mut()).column = None;
     let at = rect_of(&h, &order_node).center();
     click(&mut h, at);
     key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
@@ -13597,11 +13846,11 @@ fn a_mapping_table_refused_for_its_name_says_why_in_plain_words() {
             rel.unwrap().value["id"].as_str().unwrap().to_string()
         };
         let relationship = archforge_mof::Uuid::parse(&line).unwrap();
-        h.state_mut().canvas.mapping = Some(crate::connect::MappingOffer { relationship, name: "Customer".into(), refused: None });
+        er_of_mut(h.state_mut()).mapping = Some(crate::connect::MappingOffer { relationship, name: "Customer".into(), refused: None });
         h.run();
         let at = rect_of(&h, "workspace.mapping.add").center();
         click(&mut h, at);
-        let refused = h.state().canvas.mapping.as_ref().and_then(|o| o.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
+        let refused = er_of(h.state()).mapping.as_ref().and_then(|o| o.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
         assert!(
             refused.starts_with("There is a table named Customer") && !refused.contains("er.") && !refused.contains("name:"),
             "{theme:?}: {refused}"
@@ -13622,13 +13871,13 @@ fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapp
     assert!(ids(&h).iter().any(|i| i == "workspace.cardinality.preset.3"), "{:?}", ids(&h));
     let at = rect_of(&h, "workspace.cardinality.preset.3").center();
     click(&mut h, at);
-    assert!(h.state().canvas.relationship.many_to_many());
+    assert!(er_of(h.state()).relationship.many_to_many());
     let at = rect_of(&h, "workspace.cardinality.identifying").center();
     click(&mut h, at);
-    assert!(h.state().canvas.relationship.identifying);
+    assert!(er_of(h.state()).relationship.identifying);
     let at = rect_of(&h, "workspace.cardinality.end.1").center();
     click(&mut h, at);
-    assert_eq!(h.state().canvas.relationship.to, archforge_er::Cardinality::ExactlyOne);
+    assert_eq!(er_of(h.state()).relationship.to, archforge_er::Cardinality::ExactlyOne);
     let at = rect_of(&h, "workspace.cardinality.preset.3").center();
     click(&mut h, at);
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
@@ -13645,12 +13894,12 @@ fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapp
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(archforge_er::rules::is_many_to_many(st, rels[0]));
     assert!(!crate::connect::has_foreign_key(st, rels[0]), "no key for a many-to-many line");
-    let offer = h.state().canvas.mapping.clone().expect("the mapping table is offered");
+    let offer = er_of(h.state()).mapping.clone().expect("the mapping table is offered");
     assert_eq!(offer.name, "CustomerOrder");
     assert!(ids(&h).iter().any(|i| i == "workspace.mapping.add"));
     let at = rect_of(&h, "workspace.mapping.add").center();
     click(&mut h, at);
-    assert!(h.state().canvas.mapping.is_none(), "{:?}", h.state().canvas.mapping);
+    assert!(er_of(h.state()).mapping.is_none(), "{:?}", er_of(h.state()).mapping);
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "CustomerOrder"), "the mapping table exists");
 }
@@ -13835,7 +14084,7 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     // + opens the editor for a new unique constraint; a column is added from the menu; Apply.
     let at = rect_of(&h, "workspace.properties.keys.add").center();
     click(&mut h, at);
-    assert!(h.state().panels.key.as_ref().is_some_and(|k| k.target.is_none() && !k.primary));
+    assert!(er_of(h.state()).key.as_ref().is_some_and(|k| k.target.is_none() && !k.primary));
     let at = rect_of(&h, "workspace.properties.key.column.add").center();
     click(&mut h, at);
     assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::KeyColumn));
@@ -13843,10 +14092,10 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     assert!(!items.is_empty());
     let at = rect_of(&h, &items[0]).center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.key.as_ref().unwrap().columns.len(), 1);
+    assert_eq!(er_of(h.state()).key.as_ref().unwrap().columns.len(), 1);
     let at = rect_of(&h, "workspace.properties.key.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.key.is_none(), "{:?}", h.state().panels.key);
+    assert!(er_of(h.state()).key.is_none(), "{:?}", er_of(h.state()).key);
     let st = h.state().session.as_ref().unwrap().doc();
     let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
     assert_eq!(archforge_er::rules::unique_constraints(st, customer_obj).len(), 1, "the unique constraint was added");
@@ -13855,7 +14104,7 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     let pk_row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.key.row.") && !i.ends_with(".edit")).unwrap();
     let at = rect_of(&h, &format!("{pk_row}.edit")).center();
     click(&mut h, at);
-    assert!(h.state().panels.key.as_ref().is_some_and(|k| k.primary));
+    assert!(er_of(h.state()).key.as_ref().is_some_and(|k| k.primary));
     let at = rect_of(&h, "workspace.properties.key.remove").center();
     click(&mut h, at);
     let st = h.state().session.as_ref().unwrap().doc();
@@ -13972,18 +14221,18 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
     let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
-    h.state_mut().panels.column.as_mut().unwrap().ty = "VARCHAR".into();
+    er_of_mut(h.state_mut()).column.as_mut().unwrap().ty = "VARCHAR".into();
     h.run();
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.column.length"), "a varchar takes a length: {:?}", ids(&h));
     assert!(!ids(&h).iter().any(|i| i == "workspace.properties.column.scale"));
     {
-        let c = h.state_mut().panels.column.as_mut().unwrap();
+        let c = er_of_mut(h.state_mut()).column.as_mut().unwrap();
         c.length = "255".into();
         c.default = "''".into();
     }
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
     let st = h.state().session.as_ref().unwrap().doc();
     let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
     assert_eq!(archforge_er::rules::type_display(st, email), "VARCHAR(255)");
@@ -13993,7 +14242,7 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
     {
-        let c = h.state_mut().panels.column.as_mut().unwrap();
+        let c = er_of_mut(h.state_mut()).column.as_mut().unwrap();
         c.ty = "NUMERIC".into();
         c.length.clear();
         c.precision = "4".into();
@@ -14003,27 +14252,27 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.column.scale"));
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.refused.is_some()), "the refusal stays in the editor");
-    h.state_mut().panels.column.as_mut().unwrap().scale = "2".into();
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.refused.is_some()), "the refusal stays in the editor");
+    er_of_mut(h.state_mut()).column.as_mut().unwrap().scale = "2".into();
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_er::rules::type_display(st, email), "NUMERIC(4, 2)");
     // Generation: computed with an expression through the select and the expression field.
     let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
     let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
-    h.state_mut().panels.column.as_mut().unwrap().default.clear();
+    er_of_mut(h.state_mut()).column.as_mut().unwrap().default.clear();
     let at = rect_of(&h, "workspace.properties.column.generation").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.generation.3").center();
     click(&mut h, at);
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.column.expression"), "a computed column takes an expression");
-    h.state_mut().panels.column.as_mut().unwrap().expression = "lower(name)".into();
+    er_of_mut(h.state_mut()).column.as_mut().unwrap().expression = "lower(name)".into();
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_er::rules::generation_of(st, email), archforge_er::Generation::ComputedStored);
     assert_eq!(archforge_er::rules::text_of(st, email, archforge_er::attribute::EXPRESSION), "lower(name)");
@@ -14093,19 +14342,19 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
     // one, the check is added and the table stays selected.
     let at = rect_of(&h, "workspace.properties.checks.add").center();
     click(&mut h, at);
-    assert!(h.state().panels.check.as_ref().is_some_and(|c| c.target.is_none()));
+    assert!(er_of(h.state()).check.as_ref().is_some_and(|c| c.target.is_none()));
     let at = rect_of(&h, "workspace.properties.check.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.check.as_ref().is_some_and(|c| c.refused.is_some()), "{:?}", h.state().panels.check);
+    assert!(er_of(h.state()).check.as_ref().is_some_and(|c| c.refused.is_some()), "{:?}", er_of(h.state()).check);
     let customer_obj = {
         let st = h.state().session.as_ref().unwrap().doc();
         st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap()
     };
     assert!(archforge_er::rules::checks_of(h.state().session.as_ref().unwrap().doc(), customer_obj).is_empty());
-    h.state_mut().panels.check.as_mut().unwrap().expression = "email <> ''".into();
+    er_of_mut(h.state_mut()).check.as_mut().unwrap().expression = "email <> ''".into();
     let at = rect_of(&h, "workspace.properties.check.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.check.is_none(), "{:?}", h.state().panels.check);
+    assert!(er_of(h.state()).check.is_none(), "{:?}", er_of(h.state()).check);
     assert_eq!(archforge_er::rules::checks_of(h.state().session.as_ref().unwrap().doc(), customer_obj).len(), 1);
     assert_eq!(ids(&h).iter().filter(|i| i.starts_with("workspace.properties.check.row.") && !i.ends_with(".edit")).count(), 1);
     assert_eq!(selected_name(&h), "Customer");
@@ -14113,7 +14362,7 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
     // first takes Nulls last from its right-click menu; Apply writes the index in one command.
     let at = rect_of(&h, "workspace.properties.indexes.add").center();
     click(&mut h, at);
-    assert!(h.state().panels.index.as_ref().is_some_and(|i| i.target.is_none()));
+    assert!(er_of(h.state()).index.as_ref().is_some_and(|i| i.target.is_none()));
     let at = rect_of(&h, "workspace.properties.index.column.add").center();
     click(&mut h, at);
     assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::IndexColumn));
@@ -14127,19 +14376,19 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
     assert_eq!(items.len(), 2, "the column left and an expression: {items:?}");
     let at = rect_of(&h, &items[0]).center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.index.as_ref().unwrap().columns.len(), 2);
+    assert_eq!(er_of(h.state()).index.as_ref().unwrap().columns.len(), 2);
     let at = rect_of(&h, "workspace.properties.index.column.1.direction").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.index.as_ref().unwrap().columns[1].direction, SortDirection::Descending);
+    assert_eq!(er_of(h.state()).index.as_ref().unwrap().columns[1].direction, SortDirection::Descending);
     let at = rect_of(&h, "workspace.properties.index.column.0").center();
     right_click(&mut h, at);
     assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::IndexNulls(0)));
     let at = rect_of(&h, "workspace.properties.index.column.0.nulls.2").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.index.as_ref().unwrap().columns[0].nulls, NullsOrder::Last);
+    assert_eq!(er_of(h.state()).index.as_ref().unwrap().columns[0].nulls, NullsOrder::Last);
     let at = rect_of(&h, "workspace.properties.index.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.index.is_none(), "{:?}", h.state().panels.index);
+    assert!(er_of(h.state()).index.is_none(), "{:?}", er_of(h.state()).index);
     {
         let st = h.state().session.as_ref().unwrap().doc();
         let indexes = archforge_er::rules::indexes_of(st, customer_obj);
@@ -14153,10 +14402,10 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
     let row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.index.row.") && !i.ends_with(".edit")).unwrap();
     let at = rect_of(&h, &format!("{row}.edit")).center();
     click(&mut h, at);
-    assert!(h.state().panels.index.as_ref().is_some_and(|i| i.target.is_some()));
+    assert!(er_of(h.state()).index.as_ref().is_some_and(|i| i.target.is_some()));
     let at = rect_of(&h, "workspace.properties.index.remove").center();
     click(&mut h, at);
-    assert!(h.state().panels.index.is_none());
+    assert!(er_of(h.state()).index.is_none());
     assert!(archforge_er::rules::indexes_of(h.state().session.as_ref().unwrap().doc(), customer_obj).is_empty());
 }
 
@@ -14195,10 +14444,10 @@ fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_colla
     let row = marks[0].trim_end_matches(".link").to_string();
     let at = rect_of(&h, &format!("{row}.edit")).center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.column.as_ref().and_then(|c| c.linked.as_deref()), Some("Customer.customer_id"));
+    assert_eq!(er_of(h.state()).column.as_ref().and_then(|c| c.linked.as_deref()), Some("Customer.customer_id"));
     let at = rect_of(&h, "workspace.properties.column.unlink").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.linked.is_none() && c.unlink), "{:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.linked.is_none() && c.unlink), "{:?}", er_of(h.state()).column);
     // Cancel keeps the link; Unlink then Apply is one step that drops it.
     let at = rect_of(&h, "workspace.properties.column.cancel").center();
     click(&mut h, at);
@@ -14209,7 +14458,7 @@ fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_colla
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
     assert!(!ids(&h).iter().any(|i| i.ends_with(".link")), "the mark is gone");
     // The relationship's parent end set to zero-or-one makes the key column nullable.
     {
@@ -14271,19 +14520,19 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
     assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::TypeKind));
     let at = rect_of(&h, "workspace.properties.types.add.1").center();
     click(&mut h, at);
-    assert!(h.state().panels.type_edit.as_ref().is_some_and(|t| t.kind == crate::types::TypeKind::Enum && t.target.is_none()));
+    assert!(er_of(h.state()).type_edit.as_ref().is_some_and(|t| t.kind == crate::types::TypeKind::Enum && t.target.is_none()));
     let at = rect_of(&h, "workspace.properties.enum.literal.add").center();
     click(&mut h, at);
     click(&mut h, at);
     {
-        let edit = h.state_mut().panels.type_edit.as_mut().unwrap();
+        let edit = er_of_mut(h.state_mut()).type_edit.as_mut().unwrap();
         edit.name = "customer_status".into();
         edit.literals = vec!["active".into(), "dormant".into()];
     }
     h.run();
     let at = rect_of(&h, "workspace.properties.type.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.type_edit.is_none(), "{:?}", h.state().panels.type_edit);
+    assert!(er_of(h.state()).type_edit.is_none(), "{:?}", er_of(h.state()).type_edit);
     let (schema_obj, enum_id) = {
         let st = h.state().session.as_ref().unwrap().doc();
         let schema_obj = st.by_uuid(archforge_mof::Uuid::parse(&schema).unwrap()).unwrap();
@@ -14312,10 +14561,10 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
     assert!(items.len() > 10, "the schema's two types and the base types: {items:?}");
     let at = rect_of(&h, &items[1]).center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.column.as_ref().and_then(|c| c.enum_type), Some(enum_id));
+    assert_eq!(er_of(h.state()).column.as_ref().and_then(|c| c.enum_type), Some(enum_id));
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
     let st = h.state().session.as_ref().unwrap().doc();
     let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
     let email = st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().iter().filter_map(archforge_mof::Value::as_ref).nth(1).unwrap();
@@ -14333,11 +14582,11 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
     let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
     assert!(!ids(&h).iter().any(|i| i == "workspace.properties.column.default"), "a domain column shows no default of its own");
-    h.state_mut().panels.column.as_mut().unwrap().not_null = true;
+    er_of_mut(h.state_mut()).column.as_mut().unwrap().not_null = true;
     h.run();
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(!archforge_er::rules::is_nullable(st, email));
     assert_eq!(archforge_er::rules::type_display(st, email), "email_address");
@@ -14345,18 +14594,18 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
     // domain's default counts and the typed one goes with the pick.
     let at = rect_of(&h, "workspace.properties.columns.add").center();
     click(&mut h, at);
-    h.state_mut().panels.column.as_mut().unwrap().default = "'x'".into();
+    er_of_mut(h.state_mut()).column.as_mut().unwrap().default = "'x'".into();
     h.run();
     let at = rect_of(&h, "workspace.properties.column.type.menu").center();
     click(&mut h, at);
     let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.type.menu.")).collect();
     let at = rect_of(&h, &items[0]).center();
     click(&mut h, at);
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.domain.is_some() && c.default.is_empty()));
+    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.domain.is_some() && c.default.is_empty()));
     let at = rect_of(&h, "workspace.properties.column.apply").center();
     click(&mut h, at);
     // The add selects the new column, whose editor opens on it without a refusal.
-    assert!(h.state().panels.column.as_ref().is_none_or(|c| c.refused.is_none() && c.target.is_some()), "{:?}", h.state().panels.column);
+    assert!(er_of(h.state()).column.as_ref().is_none_or(|c| c.refused.is_none() && c.target.is_some()), "{:?}", er_of(h.state()).column);
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3);
 }
@@ -14422,7 +14671,7 @@ fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button
     // + opens the sequence editor; Owned by offers the whole-number columns; Apply writes it.
     let at = rect_of(&h, "workspace.properties.sequences.add").center();
     click(&mut h, at);
-    assert!(h.state().panels.object_edit.as_ref().is_some_and(|e| e.kind == crate::objects::ObjectKind::Sequence && e.target.is_none()));
+    assert!(er_of(h.state()).object_edit.as_ref().is_some_and(|e| e.kind == crate::objects::ObjectKind::Sequence && e.target.is_none()));
     let at = rect_of(&h, "workspace.properties.sequence.owned-by").center();
     click(&mut h, at);
     assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::OwnedBy));
@@ -14430,29 +14679,29 @@ fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button
     assert_eq!(offered.len(), 2, "None and Customer.customer_id, not the text column: {offered:?}");
     let at = rect_of(&h, "workspace.properties.sequence.owned-by.1").center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.object_edit.as_ref().and_then(|e| e.owned_by), Some(key));
+    assert_eq!(er_of(h.state()).object_edit.as_ref().and_then(|e| e.owned_by), Some(key));
     {
-        let edit = h.state_mut().panels.object_edit.as_mut().unwrap();
+        let edit = er_of_mut(h.state_mut()).object_edit.as_mut().unwrap();
         edit.name = "customer_id_seq".into();
         edit.start = "one".into();
     }
     h.run();
     let at = rect_of(&h, "workspace.properties.object.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.object_edit.as_ref().is_some_and(|e| e.refused.is_some()), "a start that is no number is refused");
+    assert!(er_of(h.state()).object_edit.as_ref().is_some_and(|e| e.refused.is_some()), "a start that is no number is refused");
     {
-        let edit = h.state_mut().panels.object_edit.as_mut().unwrap();
+        let edit = er_of_mut(h.state_mut()).object_edit.as_mut().unwrap();
         edit.start = "1000".into();
         edit.minimum = "1000".into();
     }
     h.run();
     click(&mut h, at);
-    assert!(h.state().panels.object_edit.is_none(), "{:?}", h.state().panels.object_edit);
+    assert!(er_of(h.state()).object_edit.is_none(), "{:?}", er_of(h.state()).object_edit);
     // The view editor takes the query over several lines.
     let at = rect_of(&h, "workspace.properties.views.add").center();
     click(&mut h, at);
     {
-        let edit = h.state_mut().panels.object_edit.as_mut().unwrap();
+        let edit = er_of_mut(h.state_mut()).object_edit.as_mut().unwrap();
         assert_eq!(edit.kind, crate::objects::ObjectKind::View);
         edit.name = "recent_customers".into();
         edit.query = "SELECT customer_id\nFROM \"Customer\"\n".into();
@@ -14461,7 +14710,7 @@ fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button
     h.run();
     let at = rect_of(&h, "workspace.properties.object.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.object_edit.is_none(), "{:?}", h.state().panels.object_edit);
+    assert!(er_of(h.state()).object_edit.is_none(), "{:?}", er_of(h.state()).object_edit);
     let (seq, view) = {
         let st = h.state().session.as_ref().unwrap().doc();
         let s = st.by_uuid(archforge_mof::Uuid::parse(&schema).unwrap()).unwrap();
@@ -14481,10 +14730,10 @@ fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button
     }
     let at = rect_of(&h, &format!("workspace.explorer.row.{view}")).center();
     click(&mut h, at);
-    assert!(h.state().panels.object_edit.is_none(), "selecting it does not open its editor");
+    assert!(er_of(h.state()).object_edit.is_none(), "selecting it does not open its editor");
     let at = rect_of(&h, &format!("workspace.properties.view.row.{view}.edit")).center();
     click(&mut h, at);
-    assert!(h.state().panels.object_edit.as_ref().is_some_and(|e| e.target == Some(view) && e.materialized));
+    assert!(er_of(h.state()).object_edit.as_ref().is_some_and(|e| e.target == Some(view) && e.materialized));
     // The bin removes it; the schema is selected again.
     let at = rect_of(&h, "workspace.properties.object.remove").center();
     click(&mut h, at);
@@ -16819,6 +17068,11 @@ fn sketch_classes(store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<
         .collect()
 }
 
+/// The sketch notation's state: none of its own, as the trait's answers say.
+struct SketchState;
+
+impl crate::notation_ui::NotationState for SketchState {}
+
 impl crate::notation_ui::NotationUi for SketchUi {
     fn metamodel(&self) -> u16 {
         archforge_uml::INDEX
@@ -16875,6 +17129,10 @@ impl crate::notation_ui::NotationUi for SketchUi {
     /// Shorter than any other notation's, so a field that takes it is told apart.
     fn description_limit(&self) -> usize {
         SKETCH_DESCRIPTION_LIMIT
+    }
+    /// The sketch keeps nothing of its own between frames.
+    fn new_state(&self) -> Box<dyn crate::notation_ui::NotationState> {
+        Box::new(SketchState)
     }
     fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
         (store.class_of(o).ok()? == archforge_uml::CLASS).then(|| {
@@ -17366,14 +17624,14 @@ fn a_class_takes_attributes_in_properties_typed_checked_moved_and_removed_each_o
     // + opens the editor with the name taking the keyboard; a built-in type makes the Types package.
     let at = rect_of(&h, "workspace.properties.attributes.add").center();
     click(&mut h, at);
-    assert!(h.state().panels.member.as_ref().is_some_and(|e| e.target.is_none()), "the editor is open for a new attribute");
+    assert!(uml_of(h.state()).member.as_ref().is_some_and(|e| e.target.is_none()), "the editor is open for a new attribute");
     h.event(egui::Event::Text("rating".into()));
     h.run();
     pick_type(&mut h, "workspace.properties.member.type", "Real");
     type_into(&mut h, "workspace.properties.member.multiplicity", "0..1");
     let at = rect_of(&h, "workspace.properties.member.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+    assert!(uml_of(h.state()).member.is_none(), "{:?}", uml_of(h.state()).member);
     assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- email : String", "+ rating : Real [0..1]"]);
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(
@@ -17404,17 +17662,17 @@ fn a_class_takes_attributes_in_properties_typed_checked_moved_and_removed_each_o
     // Its edit button opens the editor in its place; a multiplicity that does not read is refused.
     let at = rect_of(&h, &format!("{row}.edit")).center();
     click(&mut h, at);
-    assert_eq!(h.state().panels.member.as_ref().and_then(|e| e.target), Some(rating));
-    assert_eq!(h.state().panels.member.as_ref().unwrap().multiplicity, "0..1");
-    h.state_mut().panels.member.as_mut().unwrap().multiplicity = "3..1".into();
+    assert_eq!(uml_of(h.state()).member.as_ref().and_then(|e| e.target), Some(rating));
+    assert_eq!(uml_of(h.state()).member.as_ref().unwrap().multiplicity, "0..1");
+    uml_of_mut(h.state_mut()).member.as_mut().unwrap().multiplicity = "3..1".into();
     let at = rect_of(&h, "workspace.properties.member.apply").center();
     click(&mut h, at);
-    let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
+    let refused = uml_of(h.state()).member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
     assert_eq!(refused, "The upper bound must be at least 3.", "said in the user's words");
-    assert_eq!(h.state().panels.member.as_ref().and_then(|e| e.refused_at), Some("multiplicity"), "under its field");
+    assert_eq!(uml_of(h.state()).member.as_ref().and_then(|e| e.refused_at), Some("multiplicity"), "under its field");
     assert_eq!(member_rows(&h, customer, false)[2], "+ rating : Real [0..1]", "nothing changed");
     // Private and static, applied.
-    h.state_mut().panels.member.as_mut().unwrap().multiplicity = "1..*".into();
+    uml_of_mut(h.state_mut()).member.as_mut().unwrap().multiplicity = "1..*".into();
     let at = rect_of(&h, "workspace.properties.member.visibility").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.member.visibility.1").center();
@@ -17435,7 +17693,7 @@ fn a_class_takes_attributes_in_properties_typed_checked_moved_and_removed_each_o
     let at = rect_of(&h, "workspace.properties.member.remove").center();
     click(&mut h, at);
     assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- email : String"]);
-    assert!(h.state().panels.member.is_none());
+    assert!(uml_of(h.state()).member.is_none());
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- rating : Real [1..*]", "- email : String"]);
 }
@@ -17481,7 +17739,7 @@ fn a_class_takes_operations_with_parameters_and_turns_abstract_in_properties() {
     scroll(&mut h);
     let at = rect_of(&h, "workspace.properties.member.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+    assert!(uml_of(h.state()).member.is_none(), "{:?}", uml_of(h.state()).member);
     assert_eq!(member_rows(&h, payment, true), ["+ refund(to : Customer, times) : Boolean"]);
     let st = h.state().session.as_ref().unwrap().doc();
     let op = archforge_uml::members::operations(st, st.by_uuid(payment).unwrap())[0];
@@ -17491,7 +17749,7 @@ fn a_class_takes_operations_with_parameters_and_turns_abstract_in_properties() {
     let op_id = st.uuid(op).unwrap();
     let at = rect_of(&h, &format!("workspace.properties.operation.{op_id}.edit")).center();
     click(&mut h, at);
-    let edit = h.state().panels.member.clone().unwrap();
+    let edit = uml_of(h.state()).member.clone().unwrap();
     assert_eq!((edit.name.as_str(), edit.params.len(), edit.is_abstract), ("refund", 2, true));
     // The built-in Boolean, by its name, which the commands resolve to the one in Types.
     assert_eq!(edit.ty, "Boolean");
@@ -17834,7 +18092,7 @@ fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_
             (order, crate::uml_panel::MemberKind::Operation, "+ pay() : Boolean"),
         ] {
             assert!(crate::uml_inline::open(h.state_mut(), class, kind, None), "{kind:?}'s draft opens");
-            h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "Returned".into();
+            uml_of_mut(h.state_mut()).inline.as_mut().unwrap().edit.name = "Returned".into();
             h.run();
             // Its ring: the accent's outline round the tinted row, a row's height, not a card's.
             let tinted: Vec<egui::Rect> = rect_shapes(&h).into_iter().filter(|(_, fill, _)| *fill == p.accent_tint).map(|(r, _, _)| r).collect();
@@ -17856,7 +18114,7 @@ fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_
             );
             rings.push((ring.top() - above.bottom(), ring.height()));
             key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-            assert!(h.state().canvas.inline.is_none());
+            assert!(uml_of(h.state()).inline.is_none());
         }
         assert_eq!(rings[0], rings[1], "{theme:?}: a literal's draft is spaced as an attribute's");
         assert_eq!(rings[0], rings[2], "{theme:?}: a literal's draft is spaced as an operation's");
@@ -17921,7 +18179,7 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
             h.run();
             let at = rect_of(h, "workspace.properties.member.apply").center();
             click(h, at);
-            assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+            assert!(uml_of(h.state()).member.is_none(), "{:?}", uml_of(h.state()).member);
             h.run();
         };
         add_operation(&mut h, "calculateTotal");
@@ -17978,7 +18236,7 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         h.run();
         let at = rect_of(&h, &format!("workspace.properties.operation.{op}.edit")).center();
         click(&mut h, at);
-        h.state_mut().panels.member.as_mut().unwrap().name = "approveAll".into();
+        uml_of_mut(h.state_mut()).member.as_mut().unwrap().name = "approveAll".into();
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
         h.run();
@@ -21373,7 +21631,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     // The attributes' + opens a draft row with the name taking the keys; Tab moves to the type.
     let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
     click(&mut h, at);
-    assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.kind == crate::uml_panel::MemberKind::Attribute && i.edit.target.is_none()));
+    assert!(uml_of(h.state()).inline.as_ref().is_some_and(|i| i.edit.kind == crate::uml_panel::MemberKind::Attribute && i.edit.target.is_none()));
     h.event(egui::Event::Text("code".into()));
     h.run();
     key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
@@ -21385,21 +21643,21 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     let written = revision(&h);
     assert!(painted(&h).iter().any(|t| t == "+ code : Integer"), "the card shows it");
     // The next draft is open; a type the model does not have is refused beside it, nothing written.
-    assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.name.is_empty() && i.edit.target.is_none()));
+    assert!(uml_of(h.state()).inline.as_ref().is_some_and(|i| i.edit.name.is_empty() && i.edit.target.is_none()));
     h.event(egui::Event::Text("rating".into()));
     h.run();
     key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
     h.event(egui::Event::Text("Currency".into()));
     h.run();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-    let refused = h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
+    let refused = uml_of(h.state()).inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
     assert!(refused.contains("Currency"), "{refused}");
     assert!(painted(&h).contains(&refused), "said beside the row");
-    assert_eq!(h.state().canvas.inline.as_ref().unwrap().edit.name, "rating", "the text stays");
+    assert_eq!(uml_of(h.state()).inline.as_ref().unwrap().edit.name, "rating", "the text stays");
     assert_eq!((member_rows(&h, catalog, false).len(), revision(&h)), (2, written), "nothing written");
     // Escape drops only the draft; undo takes back the member written.
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().canvas.inline.is_none());
+    assert!(uml_of(h.state()).inline.is_none());
     assert_eq!(member_rows(&h, catalog, false).len(), 2);
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     assert_eq!(member_rows(&h, catalog, false), ["+ name : String"]);
@@ -21409,7 +21667,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     select(&mut h);
     let at = rect_of(&h, "workspace.canvas.class.add-operation").center();
     click(&mut h, at);
-    assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(crate::uml_panel::MemberKind::Operation));
+    assert_eq!(uml_of(h.state()).inline.as_ref().map(|i| i.edit.kind), Some(crate::uml_panel::MemberKind::Operation));
     h.event(egui::Event::Text("reprice".into()));
     h.run();
     let at = rect_of(&h, "workspace.canvas.member.type.menu").center();
@@ -21417,7 +21675,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     let real = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None).iter().position(|(l, _)| l == "Real").unwrap();
     let at = rect_of(&h, &format!("workspace.canvas.member.type.{real}")).center();
     click(&mut h, at);
-    assert_eq!(h.state().canvas.inline.as_ref().unwrap().ty, "Real");
+    assert_eq!(uml_of(h.state()).inline.as_ref().unwrap().ty, "Real");
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     assert_eq!(member_rows(&h, catalog, true), ["+ reprice() : Real"]);
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
@@ -21429,7 +21687,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     h.run();
     let canvas = rect_of(&h, "workspace.canvas");
     click(&mut h, canvas.left_top() + egui::vec2(30.0, 64.0));
-    assert!(h.state().canvas.inline.is_none());
+    assert!(uml_of(h.state()).inline.is_none());
     assert_eq!(member_rows(&h, catalog, false).last().map(String::as_str), Some("+ notes"));
     // So is one whose type menu was open when the pointer went elsewhere.
     select(&mut h);
@@ -21441,7 +21699,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     click(&mut h, at);
     assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::InlineType));
     click(&mut h, canvas.left_top() + egui::vec2(30.0, 64.0));
-    assert!(h.state().canvas.inline.is_none(), "{:?}", h.state().canvas.inline);
+    assert!(uml_of(h.state()).inline.is_none(), "{:?}", uml_of(h.state()).inline);
     assert_eq!(member_rows(&h, catalog, false).last().map(String::as_str), Some("+ tags"));
     // ⋯ takes the draft to Properties' editor with what was typed.
     select(&mut h);
@@ -21451,19 +21709,19 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     h.run();
     let at = rect_of(&h, "workspace.canvas.member.details").center();
     click(&mut h, at);
-    assert!(h.state().canvas.inline.is_none());
-    let edit = h.state().panels.member.clone().expect("Properties' editor");
+    assert!(uml_of(h.state()).inline.is_none());
+    let edit = uml_of(h.state()).member.clone().expect("Properties' editor");
     assert_eq!((edit.name.as_str(), edit.target, edit.class), ("reference", None, catalog));
-    h.state_mut().panels.member = None;
+    uml_of_mut(h.state_mut()).member = None;
     // ⇧⌘↩ opens an operation's row from the keys.
     select(&mut h);
     h.state_mut().canvas.focused = true;
     key(&mut h, egui::Key::Enter, egui::Modifiers { command: true, shift: true, ..Default::default() });
-    assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(crate::uml_panel::MemberKind::Operation));
+    assert_eq!(uml_of(h.state()).inline.as_ref().map(|i| i.edit.kind), Some(crate::uml_panel::MemberKind::Operation));
     // An agent removing the class drops the row.
     h.state_mut().session.as_mut().unwrap().execute("element.remove", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
     h.run();
-    assert!(h.state().canvas.inline.is_none());
+    assert!(uml_of(h.state()).inline.is_none());
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     h.run();
     // Drawn too small for its rows, the card leaves the member to Properties' editor.
@@ -21471,8 +21729,8 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     select(&mut h);
     h.state_mut().canvas.focused = true;
     key(&mut h, egui::Key::Enter, egui::Modifiers { command: true, ..Default::default() });
-    assert!(h.state().canvas.inline.is_none());
-    assert!(h.state().panels.member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()));
+    assert!(uml_of(h.state()).inline.is_none());
+    assert!(uml_of(h.state()).member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()));
 }
 
 #[test]
@@ -21501,24 +21759,24 @@ fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_k
     // Renamed in place, it keeps that Money.
     assert!(crate::uml_inline::open(h.state_mut(), catalog, crate::uml_panel::MemberKind::Attribute, Some(fee)));
     h.run();
-    h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "charge".into();
+    uml_of_mut(h.state_mut()).inline.as_mut().unwrap().edit.name = "charge".into();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-    assert!(h.state().canvas.inline.is_none(), "{:?}", h.state().canvas.inline);
+    assert!(uml_of(h.state()).inline.is_none(), "{:?}", uml_of(h.state()).inline);
     assert_eq!(type_of(&h), money, "the type stays the one it was");
     // Typing a name two types share is refused, the type unchanged.
     assert!(crate::uml_inline::open(h.state_mut(), catalog, crate::uml_panel::MemberKind::Attribute, Some(fee)));
     h.run();
-    h.state_mut().canvas.inline.as_mut().unwrap().ty = "money".into();
+    uml_of_mut(h.state_mut()).inline.as_mut().unwrap().ty = "money".into();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-    let refused = h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
+    let refused = uml_of(h.state()).inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
     assert!(refused.contains("money"), "{refused}");
     assert_eq!(type_of(&h), money);
     // A type no type has stays with the row when ⋯ is pressed, rather than going over as another.
-    h.state_mut().canvas.inline.as_mut().unwrap().ty = "Currency".into();
+    uml_of_mut(h.state_mut()).inline.as_mut().unwrap().ty = "Currency".into();
     let at = rect_of(&h, "workspace.canvas.member.details").center();
     click(&mut h, at);
-    assert!(h.state().panels.member.is_none(), "Properties' editor stays closed");
-    assert!(h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).is_some_and(|r| r.contains("Currency")));
+    assert!(uml_of(h.state()).member.is_none(), "Properties' editor stays closed");
+    assert!(uml_of(h.state()).inline.as_ref().and_then(|i| i.refused.clone()).is_some_and(|r| r.contains("Currency")));
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     // A draft at the end of Order's attributes moves its operation down, still drawn in the card.
     let order = class(&h, "Order");
@@ -21704,14 +21962,14 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
     h.run();
     let at = rect_of(&h, "workspace.canvas.adorn.add-attribute").center();
     click(&mut h, at);
-    assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.target.is_none() && i.edit.class == order));
+    assert!(uml_of(h.state()).inline.as_ref().is_some_and(|i| i.edit.target.is_none() && i.edit.class == order));
     h.event(egui::Event::Text("status".into()));
     h.run();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     assert_eq!(member_rows(&h, order, false), ["+ id : Integer", "+ placedAt : Date", "+ status"]);
-    assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.target.is_none() && i.edit.name.is_empty()), "the next draft");
+    assert!(uml_of(h.state()).inline.as_ref().is_some_and(|i| i.edit.target.is_none() && i.edit.name.is_empty()), "the next draft");
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().canvas.inline.is_none());
+    assert!(uml_of(h.state()).inline.is_none());
     // A double click on the operation's row of the card edits it in place.
     let st = h.state().session.as_ref().unwrap().doc();
     let node = archforge_diagram::views_of(st, st.by_uuid(order).unwrap())
@@ -21734,9 +21992,9 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     let total = st.uuid(archforge_uml::members::operations(st, st.by_uuid(order).unwrap())[0]).unwrap();
-    assert_eq!(h.state().canvas.inline.as_ref().and_then(|i| i.edit.target), Some(total), "{:?}", h.state().canvas.inline);
+    assert_eq!(uml_of(h.state()).inline.as_ref().and_then(|i| i.edit.target), Some(total), "{:?}", uml_of(h.state()).inline);
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().canvas.inline.is_none());
+    assert!(uml_of(h.state()).inline.is_none());
     // Delete takes it off this diagram only; Shift+Delete asks, then takes it from the model.
     let at = rect_of(&h, &format!("workspace.canvas.node.{node_id}")).center();
     click(&mut h, at);
@@ -22191,7 +22449,7 @@ fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_dro
     click(&mut h, at);
     let at = rect_of(&h, "workspace.relate.composition").center();
     click(&mut h, at);
-    assert_eq!(h.state().canvas.uml_relation, crate::uml_relate::Relate::Composition);
+    assert_eq!(uml_of(h.state()).relation, crate::uml_relate::Relate::Composition);
     assert!(h.state().canvas.popover.is_none(), "a pick closes the menu");
     // Drawn from the whole, Catalog, to the part, Customer: one step, the line on the diagram.
     let at = rect_of(&h, "workspace.tools.relationship").center();
@@ -22209,7 +22467,7 @@ fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_dro
     h.run();
     assert_eq!(edge_count(&h), before + 1);
     // A generalization that would make a cycle is refused and said; nothing is drawn.
-    h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Generalization;
+    uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::Generalization;
     let at = rect_of(&h, "workspace.tools.relationship").center();
     click(&mut h, at);
     let (from, to) = (node(&h, "Payment"), node(&h, "CardPayment"));
@@ -22218,7 +22476,7 @@ fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_dro
     let notice = h.state().canvas.notice.clone().expect("the refusal is said");
     assert!(notice.contains("cycle"), "{notice}");
     // A dependency dropped on empty canvas: a new class there, its name open for typing.
-    h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Dependency;
+    uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::Dependency;
     let at = rect_of(&h, "workspace.tools.relationship").center();
     click(&mut h, at);
     let from = node(&h, "Catalog");
@@ -22254,7 +22512,7 @@ fn empty_spot(h: &Harness<'static, Shell>, nodes: &std::collections::BTreeMap<St
 #[test]
 fn the_classifier_tool_places_the_kind_its_menu_chose_walked_by_the_keys_and_a_new_window_starts_at_class() {
     use crate::uml_classifier::Classifier;
-    assert_eq!(crate::canvas::State::default().uml_classifier, Classifier::Class, "a new window starts at Class");
+    assert_eq!(crate::uml_state::UmlState::default().classifier, Classifier::Class, "a new window starts at Class");
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         let found = ids(&h);
@@ -22276,7 +22534,7 @@ fn the_classifier_tool_places_the_kind_its_menu_chose_walked_by_the_keys_and_a_n
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         assert_eq!(h.state().canvas.menu_focus, Some(1));
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert_eq!(h.state().canvas.uml_classifier, Classifier::Interface);
+        assert_eq!(uml_of(h.state()).classifier, Classifier::Interface);
         assert_eq!(h.state().canvas.popover, None, "a pick closes the menu");
         assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL), "and arms the tool");
         assert_eq!(classifier_hint(&h), "Interface");
@@ -22306,7 +22564,7 @@ fn the_classifier_tool_places_the_kind_its_menu_chose_walked_by_the_keys_and_a_n
         click(&mut h, at);
         assert!(h.state().canvas.focused, "the canvas has the keys");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::Interface));
+        assert_eq!((h.state().canvas.popover, uml_of(h.state()).classifier), (None, Classifier::Interface));
         assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL), "Escape keeps the armed tool");
         // A press on the canvas outside the open menu closes it and places nothing; the next one
         // places with the tool still armed.
@@ -22336,12 +22594,12 @@ fn the_classifier_tool_places_the_kind_its_menu_chose_walked_by_the_keys_and_a_n
         click(&mut h, at);
         key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert_eq!(h.state().canvas.uml_classifier, Classifier::Class);
+        assert_eq!(uml_of(h.state()).classifier, Classifier::Class);
         let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
         click(&mut h, at);
         let at = rect_of(&h, "workspace.classifier.interface").center();
         click(&mut h, at);
-        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::Interface));
+        assert_eq!((h.state().canvas.popover, uml_of(h.state()).classifier), (None, Classifier::Interface));
         // The arrows while the menu is open move no card.
         let order = nodes["Order"].clone();
         let at = rect_of(&h, &format!("workspace.canvas.node.{order}")).center();
@@ -22507,7 +22765,7 @@ fn an_interface_takes_members_on_its_card_and_in_properties_and_is_offered_as_a_
     pick_type(&mut h, "workspace.properties.member.type", "Boolean");
     let at = rect_of(&h, "workspace.properties.member.apply").center();
     click(&mut h, at);
-    assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+    assert!(uml_of(h.state()).member.is_none(), "{:?}", uml_of(h.state()).member);
     assert_eq!(member_rows(&h, payable, true), ["+ pay() : Boolean"]);
     // Its members are public: the editor's Visibility offers Public alone.
     let at = rect_of(&h, "workspace.properties.attributes.add").center();
@@ -22579,7 +22837,7 @@ fn no_subclasses_makes_a_classifier_final_and_specialising_it_is_refused() {
         let refusal = "PricingService is final: nothing may specialise it. Clear \"No subclasses\" in its Properties first.";
         let revision = h.state().session.as_ref().unwrap().revision();
         let edges = edge_count(&h);
-        h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Generalization;
+        uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::Generalization;
         let at = rect_of(&h, "workspace.tools.relationship").center();
         click(&mut h, at);
         let from = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["OrderLine"])).center();
@@ -22705,7 +22963,7 @@ fn generalization_sets_are_made_from_the_menu_the_shortcut_and_properties() {
             h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
         }
         h.run();
-        assert!(h.state().canvas.line_menu.is_some(), "the menu opened");
+        assert!(uml_of(h.state()).line_menu.is_some(), "the menu opened");
         assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 3, "the selection is kept");
         assert!(painted(&h).iter().any(|t| t == "3 GENERALIZATIONS · TO PAYMENT"), "{:?}", painted(&h));
         assert!(painted(&h).iter().any(|t| t == "none for Payment yet"));
@@ -22971,11 +23229,11 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         assert_eq!(member_node(&h).description(), Some("A subclass could not redefine this member. Shown as {leaf} after it."));
         let at = rect_of(&h, MEMBER_LEAF_ID).center();
         click(&mut h, at);
-        assert!(h.state().panels.member.as_ref().unwrap().is_leaf);
+        assert!(uml_of(h.state()).member.as_ref().unwrap().is_leaf);
         assert!(!is_leaf(&h, authorise), "nothing written before Apply");
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
-        assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+        assert!(uml_of(h.state()).member.is_none(), "{:?}", uml_of(h.state()).member);
         assert!(is_leaf(&h, authorise));
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set operation"));
         h.run();
@@ -23003,13 +23261,13 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         click(&mut h, at);
         h.run();
         let said = "CardPayment::amount redefines it. Remove that redefinition first.";
-        assert!(!h.state().panels.member.as_ref().unwrap().is_leaf, "the box stays clear");
+        assert!(!uml_of(h.state()).member.as_ref().unwrap().is_leaf, "the box stays clear");
         assert!(painted(&h).iter().any(|t| t == said), "{:?}", painted(&h));
         assert!(ids(&h).contains(&format!("{MEMBER_LEAF_ID}.refusal")));
         let node = member_node(&h);
         assert!(node.description().is_some_and(|d| d.ends_with(said)), "{:?}", node.description());
         assert_eq!(revision(&h), before, "nothing entered the model or its history");
-        h.state_mut().panels.member = None;
+        uml_of_mut(h.state_mut()).member = None;
         // With that redefinition gone, Payment's amount made leaf; CardPayment's Redefines lists it
         // marked `{leaf}`, and its pick is refused under the field.
         let clear = serde_json::json!({ "attribute": card_amount.to_string(), "redefines": [] });
@@ -23026,13 +23284,13 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         let at = rect_of(&h, "workspace.properties.member.redefines.1").center();
         click(&mut h, at);
         h.run();
-        let edit = h.state().panels.member.clone().unwrap();
+        let edit = uml_of(h.state()).member.clone().unwrap();
         assert!(edit.redefines.is_empty());
         let refusal = "amount is leaf: nothing may redefine it. Clear \"No redefinition\" on it first.";
         assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(refusal), Some("redefines")));
         assert!(painted(&h).iter().any(|t| t == refusal), "{:?}", painted(&h));
         // Leaf cleared on Payment's amount: Redefines offers it, and it is picked and applied.
-        h.state_mut().panels.member = None;
+        uml_of_mut(h.state_mut()).member = None;
         let clear = serde_json::json!({ "attribute": amount_id.to_string(), "leaf": false });
         h.state_mut().session.as_mut().unwrap().execute("uml.attribute.set", &clear).unwrap();
         crate::uml_panel::open(h.state_mut(), card_id, MemberKind::Attribute, Some(card_amount));
@@ -23043,7 +23301,7 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         let at = rect_of(&h, "workspace.properties.member.redefines.1").center();
         click(&mut h, at);
         h.run();
-        assert_eq!(h.state().panels.member.as_ref().unwrap().redefines, [amount_id]);
+        assert_eq!(uml_of(h.state()).member.as_ref().unwrap().redefines, [amount_id]);
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
         let st = h.state().session.as_ref().unwrap().doc();
@@ -23084,7 +23342,7 @@ fn the_relationship_tool_joins_interfaces_and_refuses_what_would_make_a_class_sp
     let (payable, refundable) = (placed[0].clone(), placed[1].clone());
     let before = edge_count(&h);
     let relate = |h: &mut Harness<'static, Shell>, kind: crate::uml_relate::Relate, from: egui::Pos2, to: egui::Pos2| {
-        h.state_mut().canvas.uml_relation = kind;
+        uml_of_mut(h.state_mut()).relation = kind;
         h.state_mut().canvas.notice = None;
         let at = rect_of(h, "workspace.tools.relationship").center();
         click(h, at);
@@ -23179,7 +23437,7 @@ fn the_relationship_tool_draws_an_interface_realization_from_a_class_to_an_inter
             assert!(h.query_by_label("Interface realization: from the implementing class to its interface").is_some(), "the row says its direction");
         }
         click(&mut h, realization.center());
-        assert_eq!(h.state().canvas.uml_relation, crate::uml_relate::Relate::Realization);
+        assert_eq!(uml_of(h.state()).relation, crate::uml_relate::Relate::Realization);
         // The tool says which way it draws, in its tooltip and its accessible name.
         let hint = {
             use crate::kinds::DiagramKind;
@@ -23393,7 +23651,7 @@ fn the_classifier_tool_places_an_enumeration_named_in_place_whose_card_takes_lit
         let (interface, enumeration) = (rect_of(&h, "workspace.classifier.interface"), rect_of(&h, "workspace.classifier.enumeration"));
         assert!(enumeration.top() >= interface.bottom(), "Enumeration under Interface");
         click(&mut h, enumeration.center());
-        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::Enumeration));
+        assert_eq!((h.state().canvas.popover, uml_of(h.state()).classifier), (None, Classifier::Enumeration));
         assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL));
         assert_eq!(classifier_hint(&h), "Enumeration", "the tooltip and accessible name name the kind");
         assert_eq!(*Classifier::Enumeration.tool_icon(), crate::ux::icons::TOOL_ENUMERATION, "the face shows the kind's icon");
@@ -23410,7 +23668,7 @@ fn the_classifier_tool_places_an_enumeration_named_in_place_whose_card_takes_lit
         let home = archforge_uml::commands::package_of(st, st.by_uuid(status).unwrap()).map(|p| archforge_core::name_of(st, p));
         assert_eq!(home.as_deref(), Some("Commerce"), "in the diagram's package");
         assert!(painted(&h).iter().any(|t| t == "«enumeration»"), "its eyebrow is its keyword, as written");
-        assert_eq!(h.state().canvas.uml_classifier, Classifier::Enumeration, "the kind stays for the window");
+        assert_eq!(uml_of(h.state()).classifier, Classifier::Enumeration, "the kind stays for the window");
         // Selected, its card offers Connect and a literal: the adorner and its compartment's +,
         // no attribute or operation. (Selected by the model: a click where it was placed would
         // count as the placing click's second.)
@@ -23428,18 +23686,18 @@ fn the_classifier_tool_places_an_enumeration_named_in_place_whose_card_takes_lit
         // ⇧⌘↩ opens nothing on it; ⌘↩ a literal's draft.
         h.state_mut().canvas.focused = true;
         key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
-        assert!(h.state().canvas.inline.is_none() && h.state().panels.member.is_none(), "no operation's draft");
+        assert!(uml_of(h.state()).inline.is_none() && uml_of(h.state()).member.is_none(), "no operation's draft");
         key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
-        let inline = h.state().canvas.inline.clone().expect("a literal's draft");
+        let inline = uml_of(h.state()).inline.clone().expect("a literal's draft");
         assert_eq!((inline.edit.kind, inline.edit.target), (crate::uml_panel::MemberKind::Literal, None));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert!(h.state().canvas.inline.is_none());
+        assert!(uml_of(h.state()).inline.is_none());
         // Its menu's row adds a literal; a class's adds an attribute.
         right_click(&mut h, at);
         assert!(painted(&h).iter().any(|t| t == "Add literal"), "the menu names the literal");
         let row = rect_of(&h, "workspace.canvas.menu.add-row").center();
         click(&mut h, row);
-        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(crate::uml_panel::MemberKind::Literal));
+        assert_eq!(uml_of(h.state()).inline.as_ref().map(|i| i.edit.kind), Some(crate::uml_panel::MemberKind::Literal));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         let at = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Order"])).center();
         right_click(&mut h, at);
@@ -23499,7 +23757,7 @@ fn an_enumeration_takes_literals_typed_on_its_card_each_one_undo_step() {
         // The compartment's + opens a draft row: a name, no type.
         let at = rect_of(&h, "workspace.canvas.enumeration.add-literal").center();
         click(&mut h, at);
-        let inline = h.state().canvas.inline.clone().expect("a draft row");
+        let inline = uml_of(h.state()).inline.clone().expect("a draft row");
         assert_eq!((inline.edit.kind, inline.edit.target, inline.edit.class), (MemberKind::Literal, None, status));
         let found = ids(&h);
         assert!(found.iter().any(|i| i == "workspace.canvas.member.name") && found.iter().any(|i| i == "workspace.canvas.member.details"));
@@ -23510,7 +23768,7 @@ fn an_enumeration_takes_literals_typed_on_its_card_each_one_undo_step() {
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(literal_names(&h, status), ["Placed"]);
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add literal"), "one undo step");
-        assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.name.is_empty() && i.edit.target.is_none()), "the next draft");
+        assert!(uml_of(h.state()).inline.as_ref().is_some_and(|i| i.edit.name.is_empty() && i.edit.target.is_none()), "the next draft");
         h.event(egui::Event::Text("Paid".into()));
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -23520,14 +23778,14 @@ fn an_enumeration_takes_literals_typed_on_its_card_each_one_undo_step() {
         h.event(egui::Event::Text("placed".into()));
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        let refused = h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
+        let refused = uml_of(h.state()).inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
         assert_eq!(refused, "There is a literal named Placed already.");
         assert!(painted(&h).contains(&refused), "said under the row");
-        assert_eq!(h.state().canvas.inline.as_ref().unwrap().edit.name, "placed", "the text stays");
+        assert_eq!(uml_of(h.state()).inline.as_ref().unwrap().edit.name, "placed", "the text stays");
         assert_eq!((literal_names(&h, status).len(), revision(&h)), (2, written), "nothing written");
         // Escape drops only the draft; undo takes back the literal written, redo brings it again.
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert!(h.state().canvas.inline.is_none());
+        assert!(uml_of(h.state()).inline.is_none());
         assert_eq!(literal_names(&h, status), ["Placed", "Paid"]);
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         assert_eq!(literal_names(&h, status), ["Placed"]);
@@ -23539,12 +23797,12 @@ fn an_enumeration_takes_literals_typed_on_its_card_each_one_undo_step() {
         h.run();
         let at = rect_of(&h, "workspace.canvas.adorn.add-literal").center();
         click(&mut h, at);
-        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Literal));
+        assert_eq!(uml_of(h.state()).inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Literal));
         h.event(egui::Event::Text("Shipped".into()));
         h.run();
         let away = empty_spot(&h, &nodes);
         click(&mut h, away);
-        assert!(h.state().canvas.inline.is_none());
+        assert!(uml_of(h.state()).inline.is_none());
         assert_eq!(literal_names(&h, status), ["Placed", "Paid", "Shipped"]);
         // An empty one only goes.
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [status.to_string()] })).unwrap();
@@ -23552,10 +23810,10 @@ fn an_enumeration_takes_literals_typed_on_its_card_each_one_undo_step() {
         let written = revision(&h);
         let at = rect_of(&h, "workspace.canvas.enumeration.add-literal").center();
         click(&mut h, at);
-        assert!(h.state().canvas.inline.is_some());
+        assert!(uml_of(h.state()).inline.is_some());
         let away = empty_spot(&h, &nodes);
         click(&mut h, away);
-        assert!(h.state().canvas.inline.is_none());
+        assert!(uml_of(h.state()).inline.is_none());
         assert_eq!((literal_names(&h, status).len(), revision(&h)), (3, written), "nothing written");
         // The card grew to show every literal: no "more" row.
         assert!(!painted(&h).iter().any(|t| t.contains("more literal")), "{:?}", painted(&h));
@@ -23563,16 +23821,16 @@ fn an_enumeration_takes_literals_typed_on_its_card_each_one_undo_step() {
         let paid = literal_named(&h, status, "Paid");
         let at = card_row(&h, &node, 1);
         double_click(&mut h, at);
-        let inline = h.state().canvas.inline.clone().expect("the row opens in place");
+        let inline = uml_of(h.state()).inline.clone().expect("the row opens in place");
         assert_eq!((inline.edit.kind, inline.edit.target, inline.edit.name.as_str()), (MemberKind::Literal, Some(paid), "Paid"));
-        h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "SHIPPED".into();
+        uml_of_mut(h.state_mut()).inline.as_mut().unwrap().edit.name = "SHIPPED".into();
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert_eq!(h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).as_deref(), Some("There is a literal named Shipped already."));
-        h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "Settled".into();
+        assert_eq!(uml_of(h.state()).inline.as_ref().and_then(|i| i.refused.clone()).as_deref(), Some("There is a literal named Shipped already."));
+        uml_of_mut(h.state_mut()).inline.as_mut().unwrap().edit.name = "Settled".into();
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert!(h.state().canvas.inline.is_none(), "an edited row closes when written");
+        assert!(uml_of(h.state()).inline.is_none(), "an edited row closes when written");
         assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Shipped"]);
         assert_eq!(literal_named(&h, status, "Settled"), paid, "it keeps its identity");
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Rename literal"));
@@ -23596,7 +23854,7 @@ fn an_enumeration_at_its_literal_cap_says_so_and_takes_no_more() {
         h.event(egui::Event::Text("More".into()));
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
+        let refused = uml_of(h.state()).member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
         assert_eq!(refused, "An enumeration holds at most 256 literals.");
         assert_eq!((literal_names(&h, status).len(), h.state().session.as_ref().unwrap().revision()), (256, revision), "nothing written");
     }
@@ -23624,8 +23882,8 @@ fn a_card_that_lists_only_some_of_its_members_adds_one_in_properties() {
     h.state_mut().canvas.focused = true;
     h.run();
     key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
-    assert!(h.state().canvas.inline.is_none(), "no draft row among the rows");
-    assert!(h.state().panels.member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()), "Properties' editor instead");
+    assert!(uml_of(h.state()).inline.is_none(), "no draft row among the rows");
+    assert!(uml_of(h.state()).member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()), "Properties' editor instead");
 }
 
 /// Properties lists an enumeration's literals under `Literals · n`, each with its pencil: `+` and
@@ -23649,7 +23907,7 @@ fn an_enumeration_s_literals_are_added_edited_moved_and_removed_in_properties() 
         // + opens the editor: its name alone, the name taking the keys; Enter writes it.
         let at = rect_of(&h, "workspace.properties.literals.add").center();
         click(&mut h, at);
-        let edit = h.state().panels.member.clone().expect("the editor");
+        let edit = uml_of(h.state()).member.clone().expect("the editor");
         assert_eq!((edit.kind, edit.target), (MemberKind::Literal, None));
         let found = ids(&h);
         assert!(found.iter().any(|i| i == "workspace.properties.member.name"));
@@ -23659,7 +23917,7 @@ fn an_enumeration_s_literals_are_added_edited_moved_and_removed_in_properties() 
         h.event(egui::Event::Text("Cancelled".into()));
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+        assert!(uml_of(h.state()).member.is_none(), "{:?}", uml_of(h.state()).member);
         assert_eq!(literal_names(&h, status), ["Placed", "Paid", "Shipped", "Cancelled"]);
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add literal"), "one undo step");
         // Its card grew to show it, in the same step.
@@ -23671,7 +23929,7 @@ fn an_enumeration_s_literals_are_added_edited_moved_and_removed_in_properties() 
         let paid = literal_named(&h, status, "Paid");
         let at = rect_of(&h, &format!("workspace.properties.literal.{paid}.edit")).center();
         click(&mut h, at);
-        assert_eq!(h.state().panels.member.as_ref().map(|e| (e.target, e.name.clone())), Some((Some(paid), "Paid".to_string())));
+        assert_eq!(uml_of(h.state()).member.as_ref().map(|e| (e.target, e.name.clone())), Some((Some(paid), "Paid".to_string())));
         let found = ids(&h);
         for id in ["remove", "up", "down", "cancel", "apply"] {
             assert!(found.iter().any(|i| *i == format!("workspace.properties.member.{id}")), "{id}");
@@ -23688,15 +23946,15 @@ fn an_enumeration_s_literals_are_added_edited_moved_and_removed_in_properties() 
         );
         assert!(cancel.right() < apply.left() && (remove.top() - apply.top()).abs() < 1.0);
         let revision = h.state().session.as_ref().unwrap().revision();
-        h.state_mut().panels.member.as_mut().unwrap().name = "shipped".into();
+        uml_of_mut(h.state_mut()).member.as_mut().unwrap().name = "shipped".into();
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
-        let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
+        let refused = uml_of(h.state()).member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
         assert_eq!(refused, "There is a literal named Shipped already.");
         assert!(painted(&h).contains(&refused), "said in the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing written");
         // Apply renames it: the same literal, one undo step.
-        h.state_mut().panels.member.as_mut().unwrap().name = "Settled".into();
+        uml_of_mut(h.state_mut()).member.as_mut().unwrap().name = "Settled".into();
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
         assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Shipped", "Cancelled"]);
@@ -23717,15 +23975,15 @@ fn an_enumeration_s_literals_are_added_edited_moved_and_removed_in_properties() 
         assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Cancelled", "Shipped"]);
         assert_eq!(literal_named(&h, status, "Shipped"), shipped, "it keeps its identity");
         // Cancel and Escape discard what was typed.
-        h.state_mut().panels.member.as_mut().unwrap().name = "Lost".into();
+        uml_of_mut(h.state_mut()).member.as_mut().unwrap().name = "Lost".into();
         let at = rect_of(&h, "workspace.properties.member.cancel").center();
         click(&mut h, at);
-        assert!(h.state().panels.member.is_none());
+        assert!(uml_of(h.state()).member.is_none());
         let at = rect_of(&h, &format!("workspace.properties.literal.{shipped}.edit")).center();
         click(&mut h, at);
-        h.state_mut().panels.member.as_mut().unwrap().name = "Lost".into();
+        uml_of_mut(h.state_mut()).member.as_mut().unwrap().name = "Lost".into();
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert!(h.state().panels.member.is_none());
+        assert!(uml_of(h.state()).member.is_none());
         assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Cancelled", "Shipped"]);
         // Remove takes it away, one step; undo brings it back in its place.
         let at = rect_of(&h, &format!("workspace.properties.literal.{shipped}.edit")).center();
@@ -23765,7 +24023,7 @@ fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_de
         assert!(painted(&h).iter().any(|t| t == "Constraints · 0"), "the section shows on a class");
         let at = rect_of(&h, "workspace.properties.constraints.add").center();
         click(&mut h, at);
-        let edit = h.state().panels.constraint.clone().expect("the editor");
+        let edit = uml_of(h.state()).constraint.clone().expect("the editor");
         assert_eq!((edit.target, edit.context, edit.elements.clone()), (None, order, vec![order]), "the selected element is constrained");
         assert_eq!(edit.name, "Constraint 1");
         let found = ids(&h);
@@ -23780,18 +24038,18 @@ fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_de
         let at = rect_of(&h, "workspace.properties.constraint.apply").center();
         click(&mut h, at);
         let refused = "Type an expression. A constraint without one states no rule.";
-        assert_eq!(h.state().panels.constraint.as_ref().and_then(|e| e.refused.clone()).as_deref(), Some(refused));
+        assert_eq!(uml_of(h.state()).constraint.as_ref().and_then(|e| e.refused.clone()).as_deref(), Some(refused));
         assert!(painted(&h).iter().any(|t| t == refused), "said in the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing written");
         // Typed and applied: one step, braces on the open diagram for a short expression.
-        let edit = h.state_mut().panels.constraint.as_mut().unwrap();
+        let edit = uml_of_mut(h.state_mut()).constraint.as_mut().unwrap();
         edit.name = "nonEmpty".into();
         edit.expression = "lines->notEmpty()".into();
         h.run();
-        assert!(h.state().panels.constraint.as_ref().unwrap().refused.is_none(), "the refusal goes once there is text");
+        assert!(uml_of(h.state()).constraint.as_ref().unwrap().refused.is_none(), "the refusal goes once there is text");
         let at = rect_of(&h, "workspace.properties.constraint.apply").center();
         click(&mut h, at);
-        assert!(h.state().panels.constraint.is_none(), "{:?}", h.state().panels.constraint);
+        assert!(uml_of(h.state()).constraint.is_none(), "{:?}", uml_of(h.state()).constraint);
         assert_eq!(constraint_rows(&h, "Order"), ["nonEmpty {lines->notEmpty()}"]);
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add constraint"), "one undo step");
         h.run();
@@ -23811,21 +24069,21 @@ fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_de
         // The pencil reopens it; Payment picked from the element menu and Linked note make it a note.
         let at = rect_of(&h, &format!("workspace.properties.constraint.{c}.edit")).center();
         click(&mut h, at);
-        assert_eq!(h.state().panels.constraint.as_ref().map(|e| e.target), Some(Some(c)));
+        assert_eq!(uml_of(h.state()).constraint.as_ref().map(|e| e.target), Some(Some(c)));
         let at = rect_of(&h, "workspace.properties.constraint.elements.add").center();
         click(&mut h, at);
         let menu: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.constraint.elements.menu.")).collect();
         assert!(!menu.is_empty(), "the model's elements are offered");
         let at = rect_of(&h, "workspace.properties.constraint.elements.menu.0").center();
         click(&mut h, at);
-        assert_eq!(h.state().panels.constraint.as_ref().unwrap().elements.len(), 2, "a pick adds it");
+        assert_eq!(uml_of(h.state()).constraint.as_ref().unwrap().elements.len(), 2, "a pick adds it");
         assert!(ids(&h).iter().any(|i| i == "workspace.properties.constraint.element.1.remove"), "with two, each may go");
-        h.state_mut().panels.constraint.as_mut().unwrap().elements = vec![order, payment];
+        uml_of_mut(h.state_mut()).constraint.as_mut().unwrap().elements = vec![order, payment];
         h.run();
-        assert_eq!(h.state().panels.constraint.as_ref().unwrap().elements, vec![order, payment]);
+        assert_eq!(uml_of(h.state()).constraint.as_ref().unwrap().elements, vec![order, payment]);
         let at = rect_of(&h, "workspace.properties.constraint.show.note").center();
         click(&mut h, at);
-        h.state_mut().panels.constraint.as_mut().unwrap().expression = "payment.amount = total()\nwhen status = Paid".into();
+        uml_of_mut(h.state_mut()).constraint.as_mut().unwrap().expression = "payment.amount = total()\nwhen status = Paid".into();
         let at = rect_of(&h, "workspace.properties.constraint.apply").center();
         click(&mut h, at);
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Edit constraint"), "one undo step");
@@ -23841,7 +24099,7 @@ fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_de
         h.run();
         let at = rect_of(&h, &format!("workspace.canvas.node.{note}")).center();
         double_click(&mut h, at);
-        assert_eq!(h.state().panels.constraint.as_ref().map(|e| e.target), Some(Some(c)), "the note's double click opens it");
+        assert_eq!(uml_of(h.state()).constraint.as_ref().map(|e| e.target), Some(Some(c)), "the note's double click opens it");
         let at = rect_of(&h, "workspace.properties.constraint.cancel").center();
         click(&mut h, at);
         // Deleting Payment drops it, one step, and the toast says what nonEmpty constrains now.
@@ -24231,7 +24489,7 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         let (mut h, nodes, [status, closing]) = enumeration_sample(theme);
         let node = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.canvas.node.{id}")).center();
         let relate = |h: &mut Harness<'static, Shell>, kind: Relate, from: egui::Pos2, to: egui::Pos2| {
-            h.state_mut().canvas.uml_relation = kind;
+            uml_of_mut(h.state_mut()).relation = kind;
             h.state_mut().canvas.notice = None;
             let at = rect_of(h, "workspace.tools.relationship").center();
             click(h, at);
@@ -24431,7 +24689,7 @@ fn a_relationship_refused_on_a_class_diagram_says_why_in_plain_words() {
             let d = h.state().canvas.active.unwrap();
             let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
             let revision = h.state().session.as_ref().unwrap().revision();
-            h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Dependency;
+            uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::Dependency;
             crate::uml_relate::connect(h.state_mut(), d, node, node);
             h.run();
             // The sentence as the catalogue words it: the kind, with a capital, in its template.
@@ -24504,7 +24762,7 @@ fn the_classifier_tool_places_a_data_type_named_in_place_whose_card_takes_attrib
             key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         }
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::DataType));
+        assert_eq!((h.state().canvas.popover, uml_of(h.state()).classifier), (None, Classifier::DataType));
         assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL));
         assert_eq!(classifier_hint(&h), "Data type", "the tooltip and accessible name name the kind");
         assert_eq!(*Classifier::DataType.tool_icon(), crate::ux::icons::TOOL_DATA_TYPE, "the face shows the kind's icon");
@@ -24522,7 +24780,7 @@ fn the_classifier_tool_places_a_data_type_named_in_place_whose_card_takes_attrib
         let home = archforge_uml::commands::package_of(st, st.by_uuid(money).unwrap()).map(|p| archforge_core::name_of(st, p));
         assert_eq!(home.as_deref(), Some("Commerce"), "in the diagram's package");
         assert!(painted(&h).iter().any(|t| t == "«dataType»"), "its eyebrow is its keyword, as written");
-        assert_eq!(h.state().canvas.uml_classifier, Classifier::DataType, "the kind stays for the window");
+        assert_eq!(uml_of(h.state()).classifier, Classifier::DataType, "the kind stays for the window");
         // Selected, its card offers an attribute and an operation, as a class's does, and no literal.
         let node = node_of(&h, money);
         let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
@@ -24543,7 +24801,7 @@ fn the_classifier_tool_places_a_data_type_named_in_place_whose_card_takes_attrib
         // The attributes' + opens a draft row; Enter writes it as one step and opens the next.
         let at_plus = rect_of(&h, "workspace.canvas.class.add-attribute").center();
         click(&mut h, at_plus);
-        let inline = h.state().canvas.inline.clone().expect("a draft row");
+        let inline = uml_of(h.state()).inline.clone().expect("a draft row");
         assert_eq!((inline.edit.kind, inline.edit.target, inline.edit.class), (MemberKind::Attribute, None, money));
         h.event(egui::Event::Text("amount".into()));
         h.run();
@@ -24551,7 +24809,7 @@ fn the_classifier_tool_places_a_data_type_named_in_place_whose_card_takes_attrib
         h.event(egui::Event::Text("Real".into()));
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert!(h.state().canvas.inline.is_some(), "the next draft opens");
+        assert!(uml_of(h.state()).inline.is_some(), "the next draft opens");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert_eq!(member_rows(&h, money, false), ["+ amount : Real"]);
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add attribute"));
@@ -24564,12 +24822,12 @@ fn the_classifier_tool_places_a_data_type_named_in_place_whose_card_takes_attrib
         let (alt, ctrl) = (egui::Modifiers::ALT, egui::Modifiers::CTRL);
         for other in [mac | alt, mac | ctrl, win | alt, mac | shift | alt, mac | shift | ctrl, win | shift | alt] {
             key(&mut h, egui::Key::Enter, other);
-            assert!(h.state().canvas.inline.is_none(), "{theme:?}: {other:?}");
+            assert!(uml_of(h.state()).inline.is_none(), "{theme:?}: {other:?}");
         }
         // Each chord in each shape, over the two appearances.
         let (shape, other_shape) = if theme == ThemeKind::Light { (mac, win) } else { (win, mac) };
         key(&mut h, egui::Key::Enter, shape | shift);
-        assert_eq!(h.state().canvas.inline.as_ref().map(|i| (i.edit.kind, i.edit.class)), Some((MemberKind::Operation, money)));
+        assert_eq!(uml_of(h.state()).inline.as_ref().map(|i| (i.edit.kind, i.edit.class)), Some((MemberKind::Operation, money)));
         h.event(egui::Event::Text("add".into()));
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -24577,17 +24835,17 @@ fn the_classifier_tool_places_a_data_type_named_in_place_whose_card_takes_attrib
         assert_eq!(member_rows(&h, money, true), ["+ add()"]);
         h.state_mut().canvas.focused = true;
         key(&mut h, egui::Key::Enter, other_shape);
-        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
+        assert_eq!(uml_of(h.state()).inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         let adorner = rect_of(&h, "workspace.canvas.adorn.add-attribute").center();
         click(&mut h, adorner);
-        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
+        assert_eq!(uml_of(h.state()).inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         right_click(&mut h, at);
         assert!(painted(&h).iter().any(|t| t == "Add attribute"), "the menu names the attribute");
         let row = rect_of(&h, "workspace.canvas.menu.add-row").center();
         click(&mut h, row);
-        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
+        assert_eq!(uml_of(h.state()).inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // Each written member is one step: undone, the card is as it was.
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
@@ -24721,7 +24979,7 @@ fn a_data_type_in_properties_takes_attributes_and_operations_and_is_offered_as_a
         click(&mut h, at);
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
-        assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+        assert!(uml_of(h.state()).member.is_none(), "{:?}", uml_of(h.state()).member);
         assert_eq!(member_rows(&h, money, false), ["- amount : Real"]);
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add attribute"));
         // An operation returning the data type itself.
@@ -24836,7 +25094,7 @@ fn a_type_menu_s_labels_follow_the_interface_language_and_are_reused_while_nothi
         click(&mut h, at);
         let at = rect_of(&h, "workspace.properties.member.type").center();
         click(&mut h, at);
-        let kept = |h: &Harness<'static, Shell>| h.state().panels.type_choices.clone().expect("the open menu keeps its choices");
+        let kept = |h: &Harness<'static, Shell>| uml_of(h.state()).type_choices.clone().expect("the open menu keeps its choices");
         let english = kept(&h);
         assert_eq!((english.language, english.labels.first().map(String::as_str)), ("en", Some("None")));
         assert!(painted(&h).iter().any(|t| t == "None"), "the menu shows None");
@@ -24870,7 +25128,7 @@ fn the_relationship_tool_joins_no_association_to_a_data_type_and_specializes_one
         let (mut h, nodes, [money, _], [money_node, price_node]) = data_type_sample(theme);
         let node = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.canvas.node.{id}")).center();
         let relate = |h: &mut Harness<'static, Shell>, kind: Relate, from: egui::Pos2, to: egui::Pos2| {
-            h.state_mut().canvas.uml_relation = kind;
+            uml_of_mut(h.state_mut()).relation = kind;
             h.state_mut().canvas.notice = None;
             let at = rect_of(h, "workspace.tools.relationship").center();
             click(h, at);
@@ -25012,7 +25270,7 @@ fn the_classifier_tool_places_a_primitive_type_named_in_place_whose_card_is_its_
             key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         }
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::PrimitiveType));
+        assert_eq!((h.state().canvas.popover, uml_of(h.state()).classifier), (None, Classifier::PrimitiveType));
         assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL));
         assert_eq!(classifier_hint(&h), "Primitive type", "the tooltip and accessible name name the kind");
         assert_eq!(*Classifier::PrimitiveType.tool_icon(), crate::ux::icons::TOOL_PRIMITIVE_TYPE, "the face shows the kind's icon");
@@ -25031,7 +25289,7 @@ fn the_classifier_tool_places_a_primitive_type_named_in_place_whose_card_is_its_
         assert!(painted(&h).iter().any(|t| t == "«primitive»"), "its eyebrow is its keyword, as written");
         let node = node_of(&h, sku);
         assert_eq!(node_height(&h, &node), archforge_uml::PRIMITIVE_TYPE_SIZE.1, "a header's height: no compartment under it");
-        assert_eq!(h.state().canvas.uml_classifier, Classifier::PrimitiveType, "the kind stays for the window");
+        assert_eq!(uml_of(h.state()).classifier, Classifier::PrimitiveType, "the kind stays for the window");
         // Selected, its card offers a line and no member.
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sku.to_string()] })).unwrap();
         h.run();
@@ -25050,11 +25308,11 @@ fn the_classifier_tool_places_a_primitive_type_named_in_place_whose_card_is_its_
         for modifiers in [egui::Modifiers::COMMAND, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT] {
             h.state_mut().canvas.focused = true;
             key(&mut h, egui::Key::Enter, modifiers);
-            assert!(h.state().canvas.inline.is_none() && h.state().panels.member.is_none(), "{modifiers:?} opens nothing");
+            assert!(uml_of(h.state()).inline.is_none() && uml_of(h.state()).member.is_none(), "{modifiers:?} opens nothing");
         }
         let card = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
         double_click(&mut h, card + egui::vec2(0.0, 12.0));
-        assert!(h.state().canvas.inline.is_none() && h.state().panels.member.is_none(), "a double click opens nothing");
+        assert!(uml_of(h.state()).inline.is_none() && uml_of(h.state()).member.is_none(), "a double click opens nothing");
         h.state_mut().canvas.rename = None;
         // Its menu has no row to add a member.
         right_click(&mut h, card);
@@ -25330,7 +25588,7 @@ fn the_type_menu_tells_same_named_types_apart_and_never_swaps_a_built_in_type_fo
         let at = rect_of(&h, "workspace.properties.member.type").center();
         click(&mut h, at);
         // Both are offered, once each, told apart by their notes; a name no other shares has none.
-        let kept = h.state().panels.type_choices.clone().expect("the open menu keeps its choices");
+        let kept = uml_of(h.state()).type_choices.clone().expect("the open menu keeps its choices");
         let both: Vec<usize> = kept.labels.iter().enumerate().filter(|(_, l)| *l == "Integer").map(|(i, _)| i).collect();
         assert_eq!(both.len(), 2, "{:?}", kept.labels);
         let (builtin, mine) = (both[0], both[1]);
@@ -25390,7 +25648,7 @@ fn the_type_menu_tells_same_named_types_apart_and_never_swaps_a_built_in_type_fo
         h.run();
         let revision = h.state().session.as_ref().unwrap().revision();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        let refused = h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
+        let refused = uml_of(h.state()).inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
         assert_eq!(refused, "Several types are named Integer; pick one from the menu.");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing written");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
@@ -25409,7 +25667,7 @@ fn the_relationship_tool_joins_no_association_to_a_primitive_type_and_specialize
         let (mut h, nodes, [sku, _], [sku_node, code_node]) = primitive_type_sample(theme);
         let node = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.canvas.node.{id}")).center();
         let relate = |h: &mut Harness<'static, Shell>, kind: Relate, from: egui::Pos2, to: egui::Pos2| {
-            h.state_mut().canvas.uml_relation = kind;
+            uml_of_mut(h.state_mut()).relation = kind;
             h.state_mut().canvas.notice = None;
             let at = rect_of(h, "workspace.tools.relationship").center();
             click(h, at);
@@ -25568,7 +25826,7 @@ fn the_relationship_tool_draws_an_association_class_with_its_card_as_one_step_an
             assert!(r.h.query_by_label("Association class: between two classes, with a card of its own").is_some(), "the row says what it draws");
         }
         click(&mut r.h, class.center());
-        assert_eq!(r.h.state().canvas.uml_relation, crate::uml_relate::Relate::AssociationClass);
+        assert_eq!(uml_of(r.h.state()).relation, crate::uml_relate::Relate::AssociationClass);
         let relate = |r: &mut Reviews, from: egui::Pos2, to: egui::Pos2| {
             r.h.state_mut().canvas.notice = None;
             r.h.state_mut().canvas.rename = None;
@@ -25723,7 +25981,7 @@ fn an_association_class_shows_its_ends_and_members_in_properties_and_takes_membe
         // A new attribute typed on the card through its adorner, as on a class's card.
         let at = rect_of(&r.h, "workspace.canvas.adorn.add-attribute").center();
         click(&mut r.h, at);
-        assert!(r.h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.target.is_none() && i.edit.class == ac_id));
+        assert!(uml_of(r.h.state()).inline.as_ref().is_some_and(|i| i.edit.target.is_none() && i.edit.class == ac_id));
         r.h.event(egui::Event::Text("text".into()));
         r.h.run();
         key(&mut r.h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -25731,7 +25989,7 @@ fn an_association_class_shows_its_ends_and_members_in_properties_and_takes_membe
         key(&mut r.h, egui::Key::Escape, egui::Modifiers::NONE);
         // ⇧⌘↩ opens an operation's row.
         key(&mut r.h, egui::Key::Enter, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
-        assert!(r.h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.kind == crate::uml_panel::MemberKind::Operation));
+        assert!(uml_of(r.h.state()).inline.as_ref().is_some_and(|i| i.edit.kind == crate::uml_panel::MemberKind::Operation));
         r.h.event(egui::Event::Text("publish".into()));
         r.h.run();
         key(&mut r.h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -26186,7 +26444,7 @@ fn an_association_class_s_attributes_and_end_roles_keep_apart_on_the_card_and_in
         r.h.event(egui::Event::Text("reviewer".into()));
         r.h.run();
         key(&mut r.h, egui::Key::Enter, egui::Modifiers::NONE);
-        let refused = r.h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone());
+        let refused = uml_of(r.h.state()).inline.as_ref().and_then(|i| i.refused.clone());
         assert_eq!(refused.as_deref(), Some("An end of this association class has the role reviewer; an attribute takes another name."));
         assert_eq!(member_rows(&r.h, ac_id, false), ["+ stars : Integer"], "nothing written");
         key(&mut r.h, egui::Key::Escape, egui::Modifiers::NONE);
@@ -26311,7 +26569,7 @@ fn end_multiplicities(h: &Harness<'static, Shell>, a: archforge_mof::Uuid) -> ([
 
 /// The multiplicity field of end `i` as typed.
 fn typed_multiplicity(h: &Harness<'static, Shell>, i: usize) -> String {
-    h.state().panels.ends.as_ref().unwrap().multiplicity[i].clone()
+    uml_of(h.state()).ends.as_ref().unwrap().multiplicity[i].clone()
 }
 
 /// Clicks the field `id`, selects what it holds and types `text` over it.
@@ -26397,7 +26655,7 @@ fn an_association_end_multiplicity_is_picked_or_typed_one_undo_step_each_its_lin
     ] {
         retype(&mut h, "workspace.properties.end.1.multiplicity", bad);
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert_eq!(h.state().panels.ends.as_ref().unwrap().refused[1].as_deref(), Some(why), "{bad}");
+        assert_eq!(uml_of(h.state()).ends.as_ref().unwrap().refused[1].as_deref(), Some(why), "{bad}");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     }
     assert_eq!(revision(&h), before);
@@ -26505,10 +26763,12 @@ fn alt_down_opens_a_multiplicity_menu_only_with_alt_alone() {
     });
 }
 
+/// A refused multiplicity's reason stays while its text stays unwritten, through writes to another
+/// field of the end, and goes once the field holds what the model has; a refusal reads in full.
 #[test]
 fn a_multiplicity_refusal_stays_until_its_own_field_is_written_and_reads_in_full() {
     let (mut h, paid) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    let refused = |h: &Harness<'static, Shell>, i: usize| h.state().panels.ends.as_ref().unwrap().refused[i].clone();
+    let refused = |h: &Harness<'static, Shell>, i: usize| uml_of(h.state()).ends.as_ref().unwrap().refused[i].clone();
     // Writing another field of the end keeps the reason while the refused text stays.
     retype(&mut h, "workspace.properties.end.1.multiplicity", "abc");
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -28109,16 +28369,16 @@ fn escape_closes_about_and_leaves_a_draft_behind_it_as_it_was() {
     let (mut h, _customer) = class_properties("Customer");
     let at = rect_of(&h, "workspace.properties.attributes.add").center();
     click(&mut h, at);
-    assert!(h.state().panels.member.is_some(), "an attribute draft is open");
+    assert!(uml_of(h.state()).member.is_some(), "an attribute draft is open");
     h.state_mut().open_about();
     h.run();
     for more in NOT_ALONE {
         key(&mut h, egui::Key::Escape, more);
-        assert!(h.state().about.is_some() && h.state().panels.member.is_some(), "Escape with {more:?} closes nothing");
+        assert!(h.state().about.is_some() && uml_of(h.state()).member.is_some(), "Escape with {more:?} closes nothing");
     }
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert!(h.state().about.is_none(), "Escape closes About");
-    assert!(h.state().panels.member.is_some(), "and the draft behind it stays");
+    assert!(uml_of(h.state()).member.is_some(), "and the draft behind it stays");
 }
 
 #[test]
@@ -28597,7 +28857,7 @@ fn edit_attribute(h: &mut Harness<'static, Shell>, id: &str) {
     h.run();
     let at = rect_of(h, &format!("workspace.properties.attribute.{id}.edit")).center();
     click(h, at);
-    assert_eq!(h.state().panels.member.as_ref().and_then(|e| e.target).map(|t| t.to_string()).as_deref(), Some(id));
+    assert_eq!(uml_of(h.state()).member.as_ref().and_then(|e| e.target).map(|t| t.to_string()).as_deref(), Some(id));
 }
 
 /// The attribute editor shows the modifiers in the design's layout: Default value, Static, Derived,
@@ -28628,12 +28888,12 @@ fn the_attribute_editor_writes_its_modifiers_in_one_apply_and_cancel_or_escape_l
             assert!(shown.iter().any(|t| t == label), "{label} in {shown:?}");
         }
         // The choices are built once for this state of the project and kept while frames go by.
-        let kept = h.state().panels.targets.clone();
+        let kept = uml_of(h.state()).targets.clone();
         assert_eq!(kept.len(), 1, "one list for the open editor");
         for _ in 0..3 {
             h.step();
         }
-        assert_eq!(h.state().panels.targets, kept, "the same list, not built again every frame");
+        assert_eq!(uml_of(h.state()).targets, kept, "the same list, not built again every frame");
         // Subsets lists Item's parts, which Order specializes, and nothing else.
         let at = rect_of(&h, "workspace.properties.member.subsets").center();
         click(&mut h, at);
@@ -28653,7 +28913,7 @@ fn the_attribute_editor_writes_its_modifiers_in_one_apply_and_cancel_or_escape_l
         assert_eq!(before, "+ lines : Item [*]", "nothing is written before Apply");
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
-        assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+        assert!(uml_of(h.state()).member.is_none(), "{:?}", uml_of(h.state()).member);
         assert_eq!(attribute_row(&h, &lines), "+ / lines : Item [*] = none {ordered, subsets parts}");
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set attribute"));
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
@@ -28667,14 +28927,14 @@ fn the_attribute_editor_writes_its_modifiers_in_one_apply_and_cancel_or_escape_l
             edit_attribute(&mut h, &lines);
             let at = rect_of(&h, "workspace.properties.member.read-only").center();
             click(&mut h, at);
-            assert!(h.state().panels.member.as_ref().is_some_and(|e| e.read_only));
+            assert!(uml_of(h.state()).member.as_ref().is_some_and(|e| e.read_only));
             if way == "cancel" {
                 let at = rect_of(&h, "workspace.properties.member.cancel").center();
                 click(&mut h, at);
             } else {
                 key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
             }
-            assert!(h.state().panels.member.is_none(), "{way} closes the editor");
+            assert!(uml_of(h.state()).member.is_none(), "{way} closes the editor");
             assert_eq!(attribute_row(&h, &lines), written, "{way} leaves the model");
         }
     }
@@ -28708,26 +28968,26 @@ fn a_modifier_refusal_sits_under_its_field_and_an_enumeration_s_default_is_a_lit
         pick_type(&mut h, "workspace.properties.member.type", "Integer");
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
-        let edit = h.state().panels.member.clone().expect("the editor stays open");
+        let edit = uml_of(h.state()).member.clone().expect("the editor stays open");
         assert_eq!(edit.refused_at, Some("type"));
         assert_eq!(edit.refused.as_deref(), Some("The default value Paid does not fit Integer; change or clear it first."));
         assert!(painted(&h).iter().any(|t| t.contains("does not fit Integer")), "said under the field");
         assert_eq!(attribute_row(&h, &status), "+ status : Status = Paid", "nothing written");
         // A default that does not read: refused under the default.
-        h.state_mut().panels.member.as_mut().unwrap().default = "many".into();
+        uml_of_mut(h.state_mut()).member.as_mut().unwrap().default = "many".into();
         h.run();
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
-        let edit = h.state().panels.member.clone().expect("the editor stays open");
+        let edit = uml_of(h.state()).member.clone().expect("the editor stays open");
         assert_eq!(edit.refused_at, Some("default"));
         assert_eq!(edit.refused.as_deref(), Some("many is not a whole number, which an Integer's default is, such as 42."));
         assert_eq!(attribute_row(&h, &status), "+ status : Status = Paid", "nothing written");
         // Corrected, it is written.
-        h.state_mut().panels.member.as_mut().unwrap().default = "7".into();
+        uml_of_mut(h.state_mut()).member.as_mut().unwrap().default = "7".into();
         h.run();
         let at = rect_of(&h, "workspace.properties.member.apply").center();
         click(&mut h, at);
-        assert!(h.state().panels.member.is_none());
+        assert!(uml_of(h.state()).member.is_none());
         assert_eq!(attribute_row(&h, &status), "+ status : Integer = 7");
     }
 }
@@ -28771,7 +29031,7 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         click(&mut h, at);
         assert_eq!(line(&h), (Some("/items".into()), Some("* = none {ordered, subsets lines}".into())));
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set association end"));
-        assert!(h.state().panels.ends.as_ref().is_some_and(|e| !e.modifiers_open[1]), "written, the Modifiers close");
+        assert!(uml_of(h.state()).ends.as_ref().is_some_and(|e| !e.modifiers_open[1]), "written, the Modifiers close");
         assert!(!ids(&h).iter().any(|i| i == "workspace.properties.end.1.apply"));
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         assert_eq!(line(&h), (Some("items".into()), Some("*".into())), "one step");
@@ -28785,29 +29045,29 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         for way in ["cancel", "escape"] {
             let at = rect_of(&h, "workspace.properties.end.1.read-only").center();
             click(&mut h, at);
-            assert!(h.state().panels.ends.as_ref().is_some_and(|e| e.modifiers[1].read_only));
+            assert!(uml_of(h.state()).ends.as_ref().is_some_and(|e| e.modifiers[1].read_only));
             if way == "cancel" {
                 let at = rect_of(&h, "workspace.properties.end.1.cancel").center();
                 click(&mut h, at);
             } else {
                 key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
             }
-            assert!(h.state().panels.ends.as_ref().is_some_and(|e| !e.modifiers[1].read_only), "{way}");
+            assert!(uml_of(h.state()).ends.as_ref().is_some_and(|e| !e.modifiers[1].read_only), "{way}");
             assert_eq!(line(&h).1.as_deref(), Some("* = none {ordered, subsets lines}"), "{way} leaves the model");
         }
         // A property the rules refuse, said under Redefines: Item's parts is no general's for Order's end.
         let parts = archforge_mof::Uuid::parse(&made["lines"]).unwrap();
-        h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].redefines = vec![parts];
+        uml_of_mut(h.state_mut()).ends.as_mut().unwrap().modifiers[1].redefines = vec![parts];
         h.run();
         let at = rect_of(&h, "workspace.properties.end.1.apply").center();
         click(&mut h, at);
-        let refused = h.state().panels.ends.as_ref().and_then(|e| e.modifier_refused[1].clone());
+        let refused = uml_of(h.state()).ends.as_ref().and_then(|e| e.modifier_refused[1].clone());
         assert_eq!(refused, Some(("redefines", "lines is not a property this one can redefine.".to_string())));
         assert!(painted(&h).iter().any(|t| t == "lines is not a property this one can redefine."), "under its field");
         assert_eq!(line(&h).1.as_deref(), Some("* = none {ordered, subsets lines}"), "nothing written");
-        assert!(h.state().panels.ends.as_ref().is_some_and(|e| e.modifiers_open[1]), "refused, the Modifiers stay open");
+        assert!(uml_of(h.state()).ends.as_ref().is_some_and(|e| e.modifiers_open[1]), "refused, the Modifiers stay open");
         // Enter in the Default field applies, as Apply does, and closes the Modifiers.
-        h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].redefines.clear();
+        uml_of_mut(h.state_mut()).ends.as_mut().unwrap().modifiers[1].redefines.clear();
         let at = rect_of(&h, "workspace.properties.end.1.default").center();
         click(&mut h, at);
         key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
@@ -28815,9 +29075,9 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(line(&h).1.as_deref(), Some("* = few {ordered, subsets lines}"), "Enter applied");
-        assert!(h.state().panels.ends.as_ref().is_some_and(|e| !e.modifiers_open[1] && e.modifier_refused[1].is_none()));
+        assert!(uml_of(h.state()).ends.as_ref().is_some_and(|e| !e.modifiers_open[1] && e.modifier_refused[1].is_none()));
         // The role written at once keeps the modifiers.
-        h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].redefines.clear();
+        uml_of_mut(h.state_mut()).ends.as_mut().unwrap().modifiers[1].redefines.clear();
         let at = rect_of(&h, "workspace.properties.end.1.role").center();
         click(&mut h, at);
         key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
@@ -28850,7 +29110,7 @@ fn both_modifiers_open(theme: ThemeKind, changed: &[usize]) -> Harness<'static, 
 fn escape_in_an_end_s_role_leaves_the_other_end_s_modifiers() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = both_modifiers_open(theme, &[0]);
-        let (ends, before) = (|h: &Harness<'static, Shell>| h.state().panels.ends.clone().unwrap(), revision(&h));
+        let (ends, before) = (|h: &Harness<'static, Shell>| uml_of(h.state()).ends.clone().unwrap(), revision(&h));
         retype(&mut h, "workspace.properties.end.1.role", "goods");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert_eq!(ends(&h).role[1], "items", "{theme:?}: the role is given up");
@@ -28865,7 +29125,7 @@ fn escape_in_an_end_s_role_leaves_the_other_end_s_modifiers() {
 fn escape_in_an_end_s_default_goes_to_its_own_modifiers() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = both_modifiers_open(theme, &[1]);
-        let changed = |h: &Harness<'static, Shell>| h.state().panels.ends.as_ref().unwrap().modifiers.clone().map(|m| m.read_only);
+        let changed = |h: &Harness<'static, Shell>| uml_of(h.state()).ends.as_ref().unwrap().modifiers.clone().map(|m| m.read_only);
         let at = rect_of(&h, "workspace.properties.end.0.default").center();
         click(&mut h, at);
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
@@ -28882,7 +29142,7 @@ fn escape_in_an_end_s_default_goes_to_its_own_modifiers() {
 #[test]
 fn escape_with_no_field_goes_on_to_the_other_end_once_the_last_is_resolved() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let pending = |h: &Harness<'static, Shell>| h.state().panels.ends.clone().map(|e| [0, 1].map(|i| e.modifiers[i] != e.written_modifiers[i]));
+        let pending = |h: &Harness<'static, Shell>| uml_of(h.state()).ends.clone().map(|e| [0, 1].map(|i| e.modifiers[i] != e.written_modifiers[i]));
         for way in ["escape", "cancel", "apply"] {
             let mut h = both_modifiers_open(theme, &[0, 1]);
             h.state_mut().panels.scroll = 10_000.0;
@@ -29960,7 +30220,7 @@ fn qualifiers_are_added_moved_and_removed_in_properties_and_boxed_on_the_line() 
         assert_eq!(qualifier_rows(&h, &a), [Vec::<String>::new(), Vec::new()], "nothing before Apply");
         let at = rect_of(&h, "workspace.properties.end.0.qualifier.0.apply").center();
         click(&mut h, at);
-        assert!(h.state().panels.qualifier.is_none(), "applied, the editor closes");
+        assert!(uml_of(h.state()).qualifier.is_none(), "applied, the editor closes");
         assert_eq!(qualifier_rows(&h, &a), [vec!["lineNo : Integer".to_string()], Vec::new()]);
         assert_eq!(h.state().canvas.qualified_ends.len(), 1, "its end moved out to the box, for the next frame's handle");
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add qualifier"));
@@ -30021,7 +30281,7 @@ fn qualifiers_are_added_moved_and_removed_in_properties_and_boxed_on_the_line() 
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         assert_eq!(qualifier_rows(&h, &a)[0], ["kind", "lineNo : Integer"], "the removal is one step");
         // A row's click selects the qualifier: Properties stays the association's, the row marked.
-        h.state_mut().panels.qualifier = None;
+        uml_of_mut(h.state_mut()).qualifier = None;
         h.run();
         let at = rect_of(&h, "workspace.properties.end.0.qualifier.1").left_center() + egui::vec2(20.0, 0.0);
         click(&mut h, at);
@@ -30057,7 +30317,7 @@ fn a_duplicate_qualifier_name_is_refused_in_place_and_nothing_is_written() {
         pick_type(&mut h, "workspace.properties.end.0.qualifier.1.type", "String");
         let at = rect_of(&h, "workspace.properties.end.0.qualifier.1.apply").center();
         click(&mut h, at);
-        let edit = h.state().panels.qualifier.clone().expect("the editor stays open");
+        let edit = uml_of(h.state()).qualifier.clone().expect("the editor stays open");
         assert_eq!(edit.refused_at, Some("name"));
         assert_eq!(edit.refused.as_deref(), Some("This end already has a qualifier named lineNo. Pick another name."));
         assert!(painted(&h).iter().any(|t| t == "This end already has a qualifier named lineNo. Pick another name."), "said in place");
@@ -30068,7 +30328,7 @@ fn a_duplicate_qualifier_name_is_refused_in_place_and_nothing_is_written() {
         key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
         h.event(egui::Event::Text("kind".into()));
         h.run();
-        assert!(h.state().panels.qualifier.as_ref().is_some_and(|e| e.refused.is_none()));
+        assert!(uml_of(h.state()).qualifier.as_ref().is_some_and(|e| e.refused.is_none()));
         let at = rect_of(&h, "workspace.properties.end.0.qualifier.1.apply").center();
         click(&mut h, at);
         assert_eq!(qualifier_rows(&h, &a)[0], ["lineNo : Integer", "kind : String"]);
@@ -30465,7 +30725,7 @@ fn template_parameters_are_edited_in_properties_and_boxed_on_both_diagrams() {
         assert!(signature_of(&h, &repo).is_empty(), "nothing before Apply");
         let at = rect_of(&h, "workspace.properties.class.templateParameter.0.apply").center();
         click(&mut h, at);
-        assert!(h.state().panels.template.is_none(), "applied, the editor closes");
+        assert!(uml_of(h.state()).template.is_none(), "applied, the editor closes");
         assert_eq!(signature_of(&h, &repo), ["T : Class"]);
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add template parameter"));
         h.run();
@@ -30494,13 +30754,13 @@ fn template_parameters_are_edited_in_properties_and_boxed_on_both_diagrams() {
         }
         let at = rect_of(&h, &format!("{kind}.value")).center();
         click(&mut h, at);
-        assert_eq!(h.state().panels.template.as_ref().unwrap().kind, archforge_uml::templates::Kind::Class, "a kind not supported is never taken");
+        assert_eq!(uml_of(h.state()).template.as_ref().unwrap().kind, archforge_uml::templates::Kind::Class, "a kind not supported is never taken");
         assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::TemplateKind), "the menu stays open");
         let at = rect_of(&h, &format!("{kind}.data-type")).center();
         click(&mut h, at);
-        assert_eq!(h.state().panels.template.as_ref().unwrap().kind, archforge_uml::templates::Kind::DataType);
+        assert_eq!(uml_of(h.state()).template.as_ref().unwrap().kind, archforge_uml::templates::Kind::DataType);
         pick_entry(&mut h, "workspace.properties.class.templateParameter.1.default", "1");
-        assert_eq!(h.state().panels.template.as_ref().unwrap().default, "Integer", "the built-in types first");
+        assert_eq!(uml_of(h.state()).template.as_ref().unwrap().default, "Integer", "the built-in types first");
         let at = rect_of(&h, "workspace.properties.class.templateParameter.1.apply").center();
         click(&mut h, at);
         assert_eq!(signature_of(&h, &repo), ["T : Class", "Key : DataType = Integer"]);
@@ -30567,12 +30827,12 @@ fn template_parameter_refusals_are_said_in_place_and_nothing_is_written() {
         h.run();
         let at = rect_of(&h, "workspace.properties.class.templateParameter.1.apply").center();
         click(&mut h, at);
-        let edit = h.state().panels.template.clone().expect("the editor stays open");
+        let edit = uml_of(h.state()).template.clone().expect("the editor stays open");
         assert_eq!(edit.refused_at, Some("name"));
         let said = "Repository already has a template parameter named T. Pick another name.";
         assert!(painted(&h).iter().any(|t| t == said), "{theme:?}: said in place, {:?}", painted(&h));
         assert_eq!((signature_of(&h, &repo), h.state().session.as_ref().unwrap().undo_label().map(str::to_string)), before, "nothing written");
-        h.state_mut().panels.template = None;
+        uml_of_mut(h.state_mut()).template = None;
         h.run();
         // T's default offers only what fits Entity: Order, Entity; Repository is left out.
         let at = rect_of(&h, "workspace.properties.class.templateParameter.0.edit").center();
@@ -30586,16 +30846,16 @@ fn template_parameter_refusals_are_said_in_place_and_nothing_is_written() {
         );
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // Typed in by hand, a default that does not fit is refused under Default.
-        if let Some(e) = h.state_mut().panels.template.as_mut() {
+        if let Some(e) = uml_of_mut(h.state_mut()).template.as_mut() {
             e.default = repo.clone();
         }
         h.run();
         let at = rect_of(&h, "workspace.properties.class.templateParameter.0.apply").center();
         click(&mut h, at);
-        let edit = h.state().panels.template.clone().expect("the editor stays open");
+        let edit = uml_of(h.state()).template.clone().expect("the editor stays open");
         assert_eq!(edit.refused_at, Some("default"), "{:?}", edit.refused);
         assert_eq!(signature_of(&h, &repo), ["T : Class > Entity"], "nothing written");
-        h.state_mut().panels.template = None;
+        uml_of_mut(h.state_mut()).template = None;
         h.run();
         // In the sample model OrderRepository binds Repository: Key's removal is refused, naming
         // the binding (C5).
@@ -30676,7 +30936,7 @@ fn a_template_binding_is_drawn_and_applied_from_its_draft() {
         let (mut h, _, (from, to)) = binding_sample(theme);
         let d = h.state().canvas.active.unwrap();
         let undo = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
-        h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::TemplateBinding;
+        uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::TemplateBinding;
         let draw = |h: &mut Harness<'static, Shell>| {
             let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
             crate::uml_relate::connect(h.state_mut(), d, from, to);
@@ -30698,14 +30958,14 @@ fn a_template_binding_is_drawn_and_applied_from_its_draft() {
         click(&mut h, at);
         assert!(painted(&h).iter().any(|t| t.contains("T needs an argument: pick a class.")), "{:?}", painted(&h));
         assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.refusal"));
-        assert!(h.state().panels.binding.is_some() && bindings_in(&h).is_empty());
+        assert!(uml_of(h.state()).binding.is_some() && bindings_in(&h).is_empty());
         // Cancel leaves nothing; so does Escape.
         let at = rect_of(&h, "workspace.properties.templateBinding.cancel").center();
         click(&mut h, at);
-        assert!(h.state().panels.binding.is_none() && bindings_in(&h).is_empty());
+        assert!(uml_of(h.state()).binding.is_none() && bindings_in(&h).is_empty());
         draw(&mut h);
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert!(h.state().panels.binding.is_none() && bindings_in(&h).is_empty());
+        assert!(uml_of(h.state()).binding.is_none() && bindings_in(&h).is_empty());
         assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo, "{theme:?}: the history as it was");
         // T picked from its selector (Entity, Order, OrderRepository, Repository), then Apply.
         draw(&mut h);
@@ -30794,12 +31054,12 @@ fn a_template_binding_s_substitutions_are_edited_in_properties() {
         let before = label(&h);
         // Pair is the first template by name, Repository the second.
         pick_entry(&mut h, "workspace.properties.templateBinding.template", "0");
-        assert!(h.state().panels.binding.as_ref().is_some_and(|d| d.binding.is_some()), "the draft over the binding");
+        assert!(uml_of(h.state()).binding.as_ref().is_some_and(|d| d.binding.is_some()), "the draft over the binding");
         assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.apply"));
         assert_eq!(label(&h), before, "nothing written yet");
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["Order"]] })).unwrap();
         h.run();
-        assert!(h.state().panels.binding.is_none(), "{theme:?}: the draft goes with the selection");
+        assert!(uml_of(h.state()).binding.is_none(), "{theme:?}: the draft goes with the selection");
         assert_eq!(label(&h), before);
     }
 }
@@ -31022,7 +31282,7 @@ fn the_relationship_menu_lists_n_ary_association_after_association_class_below_a
         assert!(painted(&h).iter().any(|t| t == "N-ary association"), "{theme:?}: named");
         let at = nary.center();
         click(&mut h, at);
-        assert_eq!(h.state().canvas.uml_relation, crate::uml_relate::Relate::NAry);
+        assert_eq!(uml_of(h.state()).relation, crate::uml_relate::Relate::NAry);
         assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Connect("relationship"));
         assert!(h.state().canvas.popover.is_none(), "a pick closes the menu");
     }
@@ -31067,7 +31327,7 @@ fn an_n_ary_association_is_drawn_class_by_class_and_finished_as_one_undo_step() 
         assert_eq!((diamonds_here(&h), legs_on(&h, None)), (1, 3), "{theme:?}: the diamond and three legs");
         assert_eq!(selection(&h), vec![made[0].0], "{theme:?}: the association selected");
         assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
-        assert!(h.state().canvas.nary.is_none());
+        assert!(uml_of(h.state()).nary.is_none());
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add n-ary association"));
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         h.run();
@@ -31123,20 +31383,20 @@ fn backspace_drops_the_last_end_and_every_cancel_leaves_nothing_behind() {
             let at = card(h, &ids[n]);
             click(h, at);
         }
-        assert!(matches!(&h.state().canvas.nary, Some(crate::uml_nary::Nary::Draft { ends, .. }) if ends.len() == 2));
+        assert!(matches!(&uml_of(h.state()).nary, Some(crate::uml_nary::Nary::Draft { ends, .. }) if ends.len() == 2));
     };
     start(&mut h);
     key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
-    assert!(matches!(&h.state().canvas.nary, Some(crate::uml_nary::Nary::Draft { ends, .. }) if ends.len() == 1), "Backspace drops one");
+    assert!(matches!(&uml_of(h.state()).nary, Some(crate::uml_nary::Nary::Draft { ends, .. }) if ends.len() == 1), "Backspace drops one");
     assert!(painted(&h).iter().any(|t| t == "N-ary association · 1 end — click a class for the next end"), "the singular");
     // Escape.
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().canvas.nary.is_none() && h.state().canvas.tool == crate::canvas::Tool::Select, "Escape cancels");
+    assert!(uml_of(h.state()).nary.is_none() && h.state().canvas.tool == crate::canvas::Tool::Select, "Escape cancels");
     // Another tool.
     start(&mut h);
     let at = rect_of(&h, "workspace.tools.select").center();
     click(&mut h, at);
-    assert!(h.state().canvas.nary.is_none(), "another tool cancels");
+    assert!(uml_of(h.state()).nary.is_none(), "another tool cancels");
     // Another kind of relationship.
     start(&mut h);
     let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
@@ -31144,21 +31404,21 @@ fn backspace_drops_the_last_end_and_every_cancel_leaves_nothing_behind() {
     let at = rect_of(&h, "workspace.relate.association").center();
     click(&mut h, at);
     h.run();
-    assert!(h.state().canvas.nary.is_none(), "another kind cancels");
+    assert!(uml_of(h.state()).nary.is_none(), "another kind cancels");
     // Empty canvas.
     start(&mut h);
     let empty = rect_of(&h, "workspace.canvas").left_bottom() + egui::vec2(60.0, -200.0);
     click(&mut h, empty);
-    assert!(h.state().canvas.nary.is_none(), "a click on empty canvas cancels");
+    assert!(uml_of(h.state()).nary.is_none(), "a click on empty canvas cancels");
     // Another diagram, and back: no draft comes back.
     start(&mut h);
     let commerce = h.state().canvas.tabs[0];
     crate::canvas::open(h.state_mut(), commerce);
     h.run();
-    assert!(h.state().canvas.nary.is_none(), "another diagram drops it");
+    assert!(uml_of(h.state()).nary.is_none(), "another diagram drops it");
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&ids["diagram"]).unwrap());
     h.run();
-    assert!(h.state().canvas.nary.is_none() && !painted(&h).iter().any(|t| t == "New n-ary association"), "nothing stale");
+    assert!(uml_of(h.state()).nary.is_none() && !painted(&h).iter().any(|t| t == "New n-ary association"), "nothing stale");
     assert_eq!(revision(&h), before, "the model is as it was");
     assert!(naries(&h).is_empty());
 }
@@ -31171,7 +31431,7 @@ fn backspace_before_the_first_end_removes_the_selection_as_ever() {
     arm_nary(&mut h);
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["Product"]] })).unwrap();
     h.run();
-    assert!(h.state().canvas.nary.as_ref().is_none_or(|n| matches!(n, crate::uml_nary::Nary::Draft { ends, .. } if ends.is_empty())), "no end yet");
+    assert!(uml_of(h.state()).nary.as_ref().is_none_or(|n| matches!(n, crate::uml_nary::Nary::Draft { ends, .. } if ends.is_empty())), "no end yet");
     let shown = |h: &Harness<'static, Shell>| {
         let st = h.state().session.as_ref().unwrap().doc();
         let d = st.by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
@@ -31210,7 +31470,7 @@ fn a_class_clicked_twice_gives_two_ends_of_one_type_and_a_data_type_is_refused()
     let at = card(&h, &money);
     click(&mut h, at);
     assert_eq!(h.state().canvas.notice.as_deref(), Some("A data type joins no association"));
-    assert!(h.state().canvas.nary.is_none(), "no end");
+    assert!(uml_of(h.state()).nary.is_none(), "no end");
     for n in ["customer", "customer", "product"] {
         let at = card(&h, &ids[n]);
         click(&mut h, at);
@@ -31577,7 +31837,7 @@ fn an_n_ary_end_s_editor_applies_as_one_step_and_refuses_a_duplicate_role_in_pla
         }
         let at = rect_of(&h, "workspace.properties.end.2.apply").center();
         click(&mut h, at);
-        assert!(h.state().panels.nary_end.is_none(), "{theme:?}: applied, the editor closes");
+        assert!(uml_of(h.state()).nary_end.is_none(), "{theme:?}: applied, the editor closes");
         assert_eq!(naries(&h)[0].1[2], "source : Catalog [0..1]");
         let (a, end) = {
             let st = h.state().session.as_ref().unwrap().doc();
@@ -31599,11 +31859,11 @@ fn an_n_ary_end_s_editor_applies_as_one_step_and_refuses_a_duplicate_role_in_pla
         let at = rect_of(&h, "workspace.properties.end.1.apply").center();
         click(&mut h, at);
         let said = "Another end has the role customer already. Pick another role.";
-        assert!(h.state().panels.nary_end.as_ref().is_some_and(|e| e.refused.as_ref().is_some_and(|(at, why)| *at == Some("role") && why == said)));
+        assert!(uml_of(h.state()).nary_end.as_ref().is_some_and(|e| e.refused.as_ref().is_some_and(|(at, why)| *at == Some("role") && why == said)));
         assert!(painted(&h).iter().any(|t| t == said), "{theme:?}: said under the field");
         assert_eq!(revision(&h), before, "{theme:?}: nothing written");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert!(h.state().panels.nary_end.is_none(), "Escape cancels");
+        assert!(uml_of(h.state()).nary_end.is_none(), "Escape cancels");
     }
 }
 
@@ -31622,16 +31882,16 @@ fn add_end_from_the_plus_takes_the_next_class_clicked() {
     assert_eq!(naries(&h)[0].1.len(), 4);
     assert_eq!(naries(&h)[0].1[3], "customer2 : Customer [*]");
     assert_eq!(legs_on(&h, None), 4, "its leg drawn");
-    assert!(h.state().canvas.nary.is_none(), "one class only");
+    assert!(uml_of(h.state()).nary.is_none(), "one class only");
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     assert_eq!(naries(&h)[0].1.len(), 3, "one step");
     // Escape right after the `+` cancels it, the canvas taking the keys.
     h.run();
     let at = rect_of(&h, "workspace.properties.association.ends.add").center();
     click(&mut h, at);
-    assert!(h.state().canvas.nary.is_some(), "armed again");
+    assert!(uml_of(h.state()).nary.is_some(), "armed again");
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().canvas.nary.is_none(), "Escape cancels Add end from the panel too");
+    assert!(uml_of(h.state()).nary.is_none(), "Escape cancels Add end from the panel too");
     // From the diamond's menu too; Escape cancels it.
     h.run();
     let at = card(&h, &ids["diamond"]);
@@ -31641,9 +31901,9 @@ fn add_end_from_the_plus_takes_the_next_class_clicked() {
     }
     let at = rect_of(&h, "workspace.canvas.menu.add-end").center();
     click(&mut h, at);
-    assert!(h.state().canvas.nary.is_some(), "armed");
+    assert!(uml_of(h.state()).nary.is_some(), "armed");
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().canvas.nary.is_none(), "Escape cancels Add end");
+    assert!(uml_of(h.state()).nary.is_none(), "Escape cancels Add end");
 }
 
 /// A selected leg's class end drags onto another class, moving that end there with its leg; the
@@ -31719,7 +31979,7 @@ fn removing_an_end_of_four_is_one_step_and_one_of_three_asks_to_keep_or_make_it_
             click(h, at);
             let at = rect_of(h, "workspace.properties.end.2.remove").center();
             click(h, at);
-            assert!(h.state().panels.nary_remove.is_some(), "asked");
+            assert!(uml_of(h.state()).nary_remove.is_some(), "asked");
             let shown = painted(h);
             for said in ["Two ends would remain", "Keep 3 ends", "Make it binary"] {
                 assert!(shown.iter().any(|t| t == said), "{said} in {shown:?}");
@@ -31730,10 +31990,10 @@ fn removing_an_end_of_four_is_one_step_and_one_of_three_asks_to_keep_or_make_it_
         assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(keep))), "{theme:?}: Keep 3 ends focused");
         let at = rect_of(&h, keep).center();
         click(&mut h, at);
-        assert!(h.state().panels.nary_remove.is_none() && revision(&h) == before && naries(&h)[0].1.len() == 3, "{theme:?}: Keep changes nothing");
+        assert!(uml_of(h.state()).nary_remove.is_none() && revision(&h) == before && naries(&h)[0].1.len() == 3, "{theme:?}: Keep changes nothing");
         ask(&mut h);
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert!(h.state().panels.nary_remove.is_none() && revision(&h) == before, "{theme:?}: Escape keeps");
+        assert!(uml_of(h.state()).nary_remove.is_none() && revision(&h) == before, "{theme:?}: Escape keeps");
         ask(&mut h);
         let at = rect_of(&h, "workspace.properties.association.ends.removeConfirm.binary").center();
         click(&mut h, at);
@@ -31938,7 +32198,7 @@ fn stereotypes_are_applied_and_their_values_edited_in_properties() {
         assert_eq!(card.eyebrow, archforge_diagram::figure::Text::Plain("«Entity»".into()));
         assert_eq!(card.compartments.len(), 2, "no values while the diagram hides them");
         // Show stereotype values on this diagram: Order's card lists table, and grows to show it.
-        h.state_mut().panels.stereotypes.value = None;
+        uml_of_mut(h.state_mut()).stereotypes.value = None;
         let height = |h: &Harness<'static, Shell>| {
             let st = h.state().session.as_ref().unwrap().doc();
             archforge_diagram::grid::bounds_of(st, st.by_uuid(archforge_mof::Uuid::parse(&nodes["Order"]).unwrap()).unwrap()).height
@@ -32145,7 +32405,7 @@ fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
         h.event(egui::Event::Text("en".into()));
         h.run();
         key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
-        assert_eq!(h.state().panels.stereotypes.filter, "e", "{theme:?}: Backspace edits the filter");
+        assert_eq!(uml_of(h.state()).stereotypes.filter, "e", "{theme:?}: Backspace edits the filter");
         assert_eq!(shown(&h), cards, "{theme:?}: the card stays on the diagram");
         assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypePick));
     }
@@ -32601,7 +32861,7 @@ fn the_stereotype_picker_filter_ignores_capitals_and_accents() {
         let at = rect_of(&h, crate::uml_stereotypes::ADD_ID).center();
         click(&mut h, at);
         for (typed, found, left) in [("STRASSE", &street, &check), ("prufung", &check, &street)] {
-            h.state_mut().panels.stereotypes.filter.clear();
+            uml_of_mut(h.state_mut()).stereotypes.filter.clear();
             h.event(egui::Event::Text(typed.into()));
             h.run();
             let shown = ids(&h);

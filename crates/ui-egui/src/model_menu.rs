@@ -4,13 +4,14 @@
 
 use crate::Shell;
 use crate::actions::{Action, free};
-use crate::canvas::{self, Tool};
+use crate::canvas::Tool;
 use crate::home::off_words;
 use crate::i18n::tr;
 use crate::kinds::active_kind;
 use crate::state::Explorer;
 use crate::uml_classifier::{self, Classifier};
 use crate::uml_relate::Relate;
+use crate::uml_state::uml_mut;
 
 const ER: Option<&str> = Some(archforge_er::DIAGRAM_KIND);
 const UML: Option<&str> = Some(archforge_uml::STRUCTURE_DIAGRAM);
@@ -25,25 +26,37 @@ macro_rules! row {
 /// A row that arms the classifier tool with `$kind`, as the tool's own menu does.
 macro_rules! classifier {
     ($id:literal, $kind:ident) => {
-        row!(UML, $id, Classifier::$kind.word(), |c| (c.uml_classifier, c.tool) = (Classifier::$kind, Tool::Place(uml_classifier::TOOL)))
+        row!(UML, $id, Classifier::$kind.word(), |s| {
+            if let Some(uml) = uml_mut(&mut s.notation_states) {
+                uml.classifier = Classifier::$kind;
+            }
+            s.canvas.tool = Tool::Place(uml_classifier::TOOL);
+        })
     };
 }
 
 /// A row that arms the Relationship tool with `$kind`, as the tool's own menu does.
 macro_rules! relation {
     ($id:literal, $kind:ident) => {
-        row!(UML, $id, tr(Relate::$kind.word()), |c| (c.uml_relation, c.tool) = (Relate::$kind, Tool::Connect("relationship")))
+        row!(UML, $id, tr(Relate::$kind.word()), |s| {
+            if let Some(uml) = uml_mut(&mut s.notation_states) {
+                uml.relation = Relate::$kind;
+            }
+            s.canvas.tool = Tool::Connect("relationship");
+        })
     };
 }
 
 /// The rows of every diagram, last in the menu as they are on the toolbar.
-static SHARED: &[Action] =
-    &[row!(None, "model.note", tr("Note"), |c| c.tool = Tool::Note), row!(None, "model.link", tr("Link note"), |c| c.tool = Tool::Link)];
+static SHARED: &[Action] = &[
+    row!(None, "model.note", tr("Note"), |s| s.canvas.tool = Tool::Note),
+    row!(None, "model.link", tr("Link note"), |s| s.canvas.tool = Tool::Link),
+];
 
 /// An ER diagram's rows.
 static ER_ROWS: &[&[Action]] = &[&[
-    row!(ER, "model.entity", tr("Entity"), |c| c.tool = Tool::Place("entity")),
-    row!(ER, "model.relationship", tr("Relationship"), |c| c.tool = Tool::Connect("relationship")),
+    row!(ER, "model.entity", tr("Entity"), |s| s.canvas.tool = Tool::Place("entity")),
+    row!(ER, "model.relationship", tr("Relationship"), |s| s.canvas.tool = Tool::Connect("relationship")),
 ]];
 
 /// A class diagram's rows: the classifier tool's kinds and Package, then the Relationship tool's sections.
@@ -54,7 +67,7 @@ static UML_ROWS: &[&[Action]] = &[
         classifier!("model.enumeration", Enumeration),
         classifier!("model.data-type", DataType),
         classifier!("model.primitive-type", PrimitiveType),
-        row!(UML, "model.package", tr("Package"), |c| c.tool = Tool::Place("package")),
+        row!(UML, "model.package", tr("Package"), |s| s.canvas.tool = Tool::Place("package")),
     ],
     &[
         relation!("model.relate.association", Association),
@@ -101,10 +114,11 @@ fn can_pick(shell: &Shell, kind: Option<&str>) -> bool {
     shown && !covered(shell) && free(shell) && shell.session.as_ref().is_some_and(|s| !s.read_only())
 }
 
-/// Arms a tool through `set`, closing the toolbar's popover. Asks again: a chosen row runs a frame later.
-fn pick(shell: &mut Shell, kind: Option<&str>, set: fn(&mut canvas::State)) {
+/// Arms a tool through `set`, with the kind a notation's tool makes, closing the toolbar's popover.
+/// Asks again: a chosen row runs a frame later.
+fn pick(shell: &mut Shell, kind: Option<&str>, set: fn(&mut Shell)) {
     if can_pick(shell, kind) {
-        set(&mut shell.canvas);
+        set(shell);
         shell.canvas.popover = None;
         shell.canvas.menu_focus = None;
     }

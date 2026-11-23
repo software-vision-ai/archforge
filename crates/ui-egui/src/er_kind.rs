@@ -8,6 +8,7 @@ use egui::{Pos2, Rect};
 
 use crate::Shell;
 use crate::canvas::View;
+use crate::er_state::er;
 use crate::i18n::tr;
 use crate::kinds::{DiagramKind, KindTool, ToolUse};
 use crate::ux::{Palette, icons};
@@ -113,7 +114,7 @@ impl DiagramKind for ErKind {
         if key != "relationship" {
             return false;
         }
-        let kind = shell.canvas.relationship;
+        let kind = er(&shell.notation_states).map(|er| er.relationship).unwrap_or_default();
         let fill = if active { p.accent_tint } else { p.surface };
         crate::connect::tool_line(paint, p, b.center(), kind.from, kind.to, ink, fill);
         true

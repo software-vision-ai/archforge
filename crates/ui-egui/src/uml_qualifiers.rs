@@ -17,6 +17,7 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{FIELD, Menu, PAD, ROW, icon_button, run, section, select_field, text_field};
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
 /// The longest multiplicity typed.
@@ -82,7 +83,9 @@ pub(crate) fn open(shell: &mut Shell, association: Uuid, end: usize, target: Opt
         edit.ty = type_value(store, q);
         edit.multiplicity = archforge_uml::figures::multiplicity(store, q);
     }
-    shell.panels.qualifier = Some(edit);
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.qualifier = Some(edit);
+    }
     shell.panels.menu = None;
 }
 
@@ -135,7 +138,9 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         paint.galley(pos2(r.left() + PAD, y), g, p.text_secondary.into());
         y += h + 8.0;
     }
-    let editing = |shell: &Shell| shell.panels.qualifier.as_ref().filter(|e| e.association == a_id && e.end == i).map(|e| e.target);
+    let editing = |shell: &Shell| {
+        uml(&shell.notation_states).and_then(|uml| uml.qualifier.as_ref()).filter(|e| e.association == a_id && e.end == i).map(|e| e.target)
+    };
     let chosen = crate::panels::selected_id(shell);
     for (k, (id, text)) in rows.iter().enumerate() {
         if editing(shell) == Some(Some(*id)) {
@@ -210,7 +215,7 @@ fn picks(store: &Store, edit: &QualifierEdit) -> Option<String> {
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k: usize) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.qualifier.clone() else { return y };
+    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.qualifier.clone()) else { return y };
     let background = paint.add(egui::Shape::Noop);
     let left = r.left() + PAD;
     let inner = (width - 24.0).max(0.0);
@@ -268,17 +273,23 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::Qualifier, card);
+    crate::panels::reveal(shell, ui, crate::uml_state::QUALIFIER, card);
     // The type menu last, over the card.
     crate::uml_panel::type_menu(shell, ui, p, type_field, &type_id, &mut edit.ty, Menu::QualifierType, None);
-    shell.panels.qualifier = Some(edit.clone());
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.qualifier = Some(edit.clone());
+    }
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-        shell.panels.qualifier = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.qualifier = None;
+        }
     } else if remove {
         let target = edit.target.map(|t| t.to_string()).unwrap_or_default();
         match run(shell, "element.remove", json!({ "ids": [target] })) {
             Ok(_) => {
-                shell.panels.qualifier = None;
+                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    uml.qualifier = None;
+                }
                 let _ = run(shell, "view.select", json!({ "ids": [edit.association.to_string()] }));
             }
             Err(e) => refuse(shell, e, None),
@@ -291,8 +302,10 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     card.bottom() + 8.0
 }
 
+/// Shows `why` on the open qualifier editor's card, with `at` naming the field it is said
+/// under; the editor stays open with what was typed.
 fn refuse(shell: &mut Shell, why: String, at: Option<&'static str>) {
-    if let Some(e) = shell.panels.qualifier.as_mut() {
+    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.qualifier.as_mut()) {
         e.refused = Some(why);
         e.refused_at = at;
     }
@@ -309,7 +322,7 @@ fn move_qualifier(shell: &mut Shell, edit: &QualifierEdit, up: bool) {
     let Some(to) = to else { return };
     match run(shell, "uml.qualifier.move", json!({ "qualifier": target.to_string(), "at": to })) {
         Ok(_) => {
-            if let Some(e) = shell.panels.qualifier.as_mut() {
+            if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.qualifier.as_mut()) {
                 e.refused = None;
                 e.refused_at = None;
             }
@@ -363,7 +376,9 @@ fn commit(shell: &mut Shell, edit: &QualifierEdit) {
     };
     match run(shell, cmd, params) {
         Ok(_) => {
-            shell.panels.qualifier = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.qualifier = None;
+            }
             shell.panels.notice = None;
         }
         Err(e) => refuse(shell, e, None),
@@ -382,12 +397,12 @@ pub(crate) fn retain_valid(edit: &mut Option<QualifierEdit>, store: &Store) {
 #[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn refuse_sample(shell: &mut Shell, association: Uuid, end: usize, typed: &str, ty: &str) {
     open(shell, association, end, None);
-    if let Some(e) = shell.panels.qualifier.as_mut() {
+    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.qualifier.as_mut()) {
         e.name = typed.to_string();
         e.ty = ty.to_string();
         e.multiplicity = "1".to_string();
     }
-    let Some(edit) = shell.panels.qualifier.clone() else { return };
+    let Some(edit) = uml(&shell.notation_states).and_then(|uml| uml.qualifier.clone()) else { return };
     commit(shell, &edit);
 }
 

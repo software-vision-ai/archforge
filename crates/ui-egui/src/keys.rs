@@ -12,6 +12,7 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::Shell;
+use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{FIELD, Menu, PAD, check, icon_button, menu, run, section, text_field};
@@ -65,28 +66,30 @@ pub fn rows(store: &Store, e: Obj) -> Vec<KeyRow> {
 
 /// Opens the editor on a key, or on a unique constraint to add to `entity`.
 pub fn open(shell: &mut Shell, entity: Uuid, target: Option<&KeyRow>) {
-    shell.panels.key = Some(match target {
-        Some(k) => KeyEdit {
-            target: Some(k.id),
-            entity,
-            primary: k.primary,
-            name: k.name.clone(),
-            columns: k.columns.iter().map(|(id, _, _)| *id).collect(),
-            nulls_distinct: k.nulls_distinct,
-            refused: None,
-            opened: true,
-        },
-        None => KeyEdit {
-            target: None,
-            entity,
-            primary: false,
-            name: String::new(),
-            columns: Vec::new(),
-            nulls_distinct: true,
-            refused: None,
-            opened: true,
-        },
-    });
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.key = Some(match target {
+            Some(k) => KeyEdit {
+                target: Some(k.id),
+                entity,
+                primary: k.primary,
+                name: k.name.clone(),
+                columns: k.columns.iter().map(|(id, _, _)| *id).collect(),
+                nulls_distinct: k.nulls_distinct,
+                refused: None,
+                opened: true,
+            },
+            None => KeyEdit {
+                target: None,
+                entity,
+                primary: false,
+                name: String::new(),
+                columns: Vec::new(),
+                nulls_distinct: true,
+                refused: None,
+                opened: true,
+            },
+        });
+    }
     shell.panels.menu = None;
 }
 
@@ -104,9 +107,9 @@ pub(crate) fn keys_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         return y;
     };
     y = next - 6.0;
-    let editing_new = shell.panels.key.as_ref().is_some_and(|k| k.target.is_none() && k.entity == entity_id);
+    let editing_new = er(&shell.notation_states).and_then(|er| er.key.as_ref()).is_some_and(|k| k.target.is_none() && k.entity == entity_id);
     for key in &keys {
-        if shell.panels.key.as_ref().is_some_and(|k| k.target == Some(key.id)) {
+        if er(&shell.notation_states).and_then(|er| er.key.as_ref()).is_some_and(|k| k.target == Some(key.id)) {
             y = editor(shell, ui, p, r, y);
             continue;
         }
@@ -140,7 +143,7 @@ pub(crate) fn keys_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.key.clone() else { return y };
+    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.key.clone()) else { return y };
     // The table's columns, named, for the rows and the menu.
     let all_columns: Vec<(Uuid, String, String)> = match shell.session.as_ref().and_then(|s| s.doc().by_uuid(edit.entity).map(|e| (s.doc(), e))) {
         Some((store, e)) => store
@@ -160,7 +163,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::Key, card);
+    crate::panels::reveal(shell, ui, crate::er_state::KEY, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -265,9 +268,13 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             edit.columns.push(*id);
         }
     }
-    shell.panels.key = Some(edit.clone());
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.key = Some(edit.clone());
+    }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.key = None;
+        if let Some(er) = er_mut(&mut shell.notation_states) {
+            er.key = None;
+        }
     } else if remove {
         let (cmd, params) = if edit.primary {
             ("er.primary-key.remove", json!({ "entity": edit.entity.to_string() }))
@@ -275,7 +282,11 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             ("er.unique.remove", json!({ "unique": edit.target.map(|t| t.to_string()).unwrap_or_default() }))
         };
         match run(shell, cmd, params) {
-            Ok(_) => shell.panels.key = None,
+            Ok(_) => {
+                if let Some(er) = er_mut(&mut shell.notation_states) {
+                    er.key = None;
+                }
+            }
             Err(e) => refuse(shell, e),
         }
     } else if apply || name_done {
@@ -284,8 +295,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     card.bottom() + 8.0
 }
 
+/// Shows `why` on the open key editor's card, which stays open with what was typed.
 fn refuse(shell: &mut Shell, why: String) {
-    if let Some(k) = shell.panels.key.as_mut() {
+    if let Some(k) = er_mut(&mut shell.notation_states).and_then(|er| er.key.as_mut()) {
         k.refused = Some(why);
     }
 }
@@ -305,7 +317,9 @@ fn commit(shell: &mut Shell, edit: &KeyEdit) {
     };
     match run(shell, cmd, params) {
         Ok(_) => {
-            shell.panels.key = None;
+            if let Some(er) = er_mut(&mut shell.notation_states) {
+                er.key = None;
+            }
             shell.panels.notice = None;
             // The command selected the key; the table is what the panel shows.
             let entity = edit.entity.to_string();

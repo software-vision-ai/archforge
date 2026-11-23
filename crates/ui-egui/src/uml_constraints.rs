@@ -20,6 +20,7 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{Combo, ComboOut, FIELD, Menu, PAD, ROW, icon_button, section, text_field};
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
@@ -101,7 +102,9 @@ pub(crate) fn open(shell: &mut Shell, context: Uuid, target: Option<Uuid>) {
             None => edit.form = constraints::suggested_form(store, c),
         }
     }
-    shell.panels.constraint = Some(edit);
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.constraint = Some(edit);
+    }
     shell.panels.menu = None;
 }
 
@@ -126,7 +129,8 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         return y + 50.0;
     };
     y = next - 6.0;
-    let editing = |shell: &Shell| shell.panels.constraint.as_ref().filter(|e| e.context == context_id).map(|e| e.target);
+    let editing =
+        |shell: &Shell| uml(&shell.notation_states).and_then(|uml| uml.constraint.as_ref()).filter(|e| e.context == context_id).map(|e| e.target);
     let chosen = crate::panels::selected_id(shell);
     for (id, text) in &rows {
         if editing(shell) == Some(Some(*id)) {
@@ -339,7 +343,7 @@ fn refusal_box(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, w
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.constraint.clone() else { return y };
+    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.constraint.clone()) else { return y };
     let background = paint.add(egui::Shape::Noop);
     let left = r.left() + PAD;
     let inner = (width - 24.0).max(0.0);
@@ -479,7 +483,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::Constraint, card);
+    crate::panels::reveal(shell, ui, crate::uml_state::CONSTRAINT, card);
     // The element menu last, over the card.
     if shell.panels.menu == Some(Menu::ConstraintElement)
         && let Some(store) = shell.session.as_ref().map(|s| s.doc())
@@ -495,10 +499,14 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             edit.elements.push(*id);
         }
     }
-    shell.panels.constraint = Some(edit.clone());
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.constraint = Some(edit.clone());
+    }
     // Enter in the name writes; in the expression it is a new line.
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-        shell.panels.constraint = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.constraint = None;
+        }
     } else if remove {
         remove_constraint(shell, &edit);
     } else if up || down {
@@ -509,8 +517,10 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     card.bottom() + 8.0
 }
 
+/// Shows `why` on the open constraint editor's card, with `at` naming the field it is said
+/// under; the editor stays open with what was typed.
 fn refuse(shell: &mut Shell, why: String, at: Option<&'static str>) {
-    if let Some(e) = shell.panels.constraint.as_mut() {
+    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.constraint.as_mut()) {
         e.refused = Some(why);
         e.refused_at = at;
     }
@@ -518,7 +528,9 @@ fn refuse(shell: &mut Shell, why: String, at: Option<&'static str>) {
 
 /// Selects the context again once the editor has done its work.
 fn reselect(shell: &mut Shell, context: Uuid) {
-    shell.panels.constraint = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.constraint = None;
+    }
     let _ = crate::panels::run(shell, "view.select", json!({ "ids": [context.to_string()] }));
 }
 

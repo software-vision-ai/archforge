@@ -24,6 +24,7 @@ use serde_json::{Map, Value as Json, json};
 use crate::Shell;
 use crate::i18n::{fmt, tr, trn};
 use crate::panels::{FIELD, Menu, PAD, Subject, run, section, select_field};
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
 /// The ids' stem: `workspace.properties.templateBinding.bound`, `.template`,
@@ -81,7 +82,9 @@ pub(crate) fn open_new(shell: &mut Shell, d: Obj, nodes: (Uuid, Uuid), bound: Ob
         refused: None,
         opened_over: crate::panels::selected_id(shell),
     };
-    shell.panels.binding = Some(draft);
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.binding = Some(draft);
+    }
     shell.panels.menu = None;
     shell.state.show_panel(crate::state::Panel::Properties);
 }
@@ -91,22 +94,24 @@ fn open_for_template(shell: &mut Shell, b: Obj, template: Obj) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let (Ok(id), Ok(t)) = (store.uuid(b), store.uuid(template)) else { return };
     let Some(bound) = templates::bound_element(store, b).and_then(|o| store.uuid(o).ok()) else { return };
-    shell.panels.binding = Some(BindingDraft {
-        binding: Some(id),
-        diagram: None,
-        nodes: None,
-        bound,
-        template: t,
-        args: empty_args(store, template),
-        refused: None,
-        opened_over: Some(id),
-    });
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.binding = Some(BindingDraft {
+            binding: Some(id),
+            diagram: None,
+            nodes: None,
+            bound,
+            template: t,
+            args: empty_args(store, template),
+            refused: None,
+            opened_over: Some(id),
+        });
+    }
 }
 
 /// The line of a new binding's draft on diagram `d`, from the bound class's node to the template's:
 /// the nodes it joins, while one is open there.
 pub(crate) fn draft_line(shell: &Shell, d: Obj) -> Option<(Uuid, Uuid)> {
-    let draft = shell.panels.binding.as_ref().filter(|b| b.binding.is_none())?;
+    let draft = uml(&shell.notation_states).and_then(|uml| uml.binding.as_ref()).filter(|b| b.binding.is_none())?;
     let store = shell.session.as_ref()?.doc();
     (draft.diagram == store.uuid(d).ok()).then_some(draft.nodes).flatten()
 }
@@ -277,7 +282,7 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     let half = ((width - 8.0) / 2.0).max(0.0);
     let left = r.left() + PAD;
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
-    let d = if draft { shell.panels.binding.clone() } else { None };
+    let d = if draft { uml(&shell.notation_states).and_then(|uml| uml.binding.clone()) } else { None };
     let (bound, template) = match (&d, binding) {
         (Some(d), _) => (store.by_uuid(d.bound), store.by_uuid(d.template)),
         (None, Some(b)) => (templates::bound_element(store, b), bindings::template_of(store, b)),
@@ -395,7 +400,9 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         let items: Vec<String> = choices.iter().map(|c| name_of(store, *c)).collect();
         if let Some(t) = crate::panels::menu(shell, ui, p, field, &template_id, &items).and_then(|i| choices.get(i)).copied() {
             if Some(t) == current_template {
-                shell.panels.binding = None;
+                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    uml.binding = None;
+                }
             } else {
                 open_for_template(shell, b, t);
             }
@@ -411,7 +418,8 @@ fn pick_argument(shell: &mut Shell, binding: Option<Obj>, q: Obj, value: String)
     let Ok(qid) = store.uuid(q) else { return };
     let binding_id = binding.and_then(|b| store.uuid(b).ok());
     // A draft over this binding, or a new one, takes the pick; nothing is written.
-    if let Some(d) = shell.panels.binding.as_mut().filter(|d| binding.is_none() || d.binding == binding_id) {
+    if let Some(d) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.binding.as_mut()).filter(|d| binding.is_none() || d.binding == binding_id)
+    {
         match d.args.iter_mut().find(|(x, _)| *x == qid) {
             Some(slot) => slot.1 = value,
             None => d.args.push((qid, value)),
@@ -441,7 +449,7 @@ fn set_bound(shell: &mut Shell, b: Obj, c: Obj) {
 fn draft_foot(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32) -> f32 {
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
-    let Some(draft) = shell.panels.binding.clone() else { return y };
+    let Some(draft) = uml(&shell.notation_states).and_then(|uml| uml.binding.clone()) else { return y };
     if let Some(why) = draft.refused.as_deref() {
         y += refusal_box(shell, ui, p, pos2(left, y), width, why) + 12.0;
     }
@@ -489,7 +497,9 @@ fn draft_foot(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     y += h;
     let escape = shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape));
     if cancel.clicked() || escape {
-        shell.panels.binding = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.binding = None;
+        }
     } else if apply.clicked() {
         apply_draft(shell);
     }
@@ -498,10 +508,10 @@ fn draft_foot(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
 
 /// Writes the draft as one undo step, or says what it still needs and keeps it open.
 fn apply_draft(shell: &mut Shell) {
-    let Some(draft) = shell.panels.binding.clone() else { return };
+    let Some(draft) = uml(&shell.notation_states).and_then(|uml| uml.binding.clone()) else { return };
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     if let Some(why) = missing_words(store, &draft) {
-        if let Some(d) = shell.panels.binding.as_mut() {
+        if let Some(d) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.binding.as_mut()) {
             d.refused = Some(why);
         }
         return;
@@ -537,13 +547,15 @@ fn apply_draft(shell: &mut Shell) {
     };
     match out {
         Ok(made) => {
-            shell.panels.binding = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.binding = None;
+            }
             if let Some(b) = made {
                 crate::panels::select_element(shell, b);
             }
         }
         Err(e) => {
-            if let Some(d) = shell.panels.binding.as_mut() {
+            if let Some(d) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.binding.as_mut()) {
                 d.refused = Some(e);
             }
         }
@@ -554,7 +566,7 @@ fn apply_draft(shell: &mut Shell) {
 /// substitutions and the draft's foot. True when it drew, so the selection's panel is not drawn.
 pub(crate) fn draft_panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> bool {
     drop_stale(shell);
-    if shell.panels.binding.as_ref().is_none_or(|d| d.binding.is_some()) {
+    if uml(&shell.notation_states).and_then(|uml| uml.binding.as_ref()).is_none_or(|d| d.binding.is_some()) {
         return false;
     }
     let paint = ui.painter().clone();
@@ -571,7 +583,7 @@ pub(crate) fn draft_panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
 /// Drops a draft whose elements are gone, whose diagram is no longer the open one, or whose
 /// selection has moved on: a draft belongs to the gesture that opened it.
 pub(crate) fn drop_stale(shell: &mut Shell) {
-    let Some(d) = shell.panels.binding.clone() else { return };
+    let Some(d) = uml(&shell.notation_states).and_then(|uml| uml.binding.clone()) else { return };
     let store = shell.session.as_ref().map(|s| s.doc());
     let gone = store.is_none_or(|st| {
         st.by_uuid(d.bound).is_none_or(|o| !st.is_alive(o))
@@ -579,8 +591,10 @@ pub(crate) fn drop_stale(shell: &mut Shell) {
             || d.binding.is_some_and(|b| st.by_uuid(b).is_none_or(|o| !st.is_alive(o)))
     });
     let moved = crate::panels::selected_id(shell) != d.opened_over || (d.binding.is_none() && d.diagram != shell.canvas.active);
-    if gone || moved {
-        shell.panels.binding = None;
+    if (gone || moved)
+        && let Some(uml) = uml_mut(&mut shell.notation_states)
+    {
+        uml.binding = None;
     }
 }
 
@@ -589,7 +603,7 @@ pub(crate) fn drop_stale(shell: &mut Shell) {
 pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let Some(o) = subject.obj else { return };
     drop_stale(shell);
-    let draft = shell.panels.binding.as_ref().is_some_and(|d| d.binding == subject.id && d.binding.is_some());
+    let draft = uml(&shell.notation_states).and_then(|uml| uml.binding.as_ref()).is_some_and(|d| d.binding == subject.id && d.binding.is_some());
     let below = sections(shell, ui, p, r, y, Some(o), draft, false);
     if draft {
         draft_foot(shell, ui, p, r, below + 4.0);

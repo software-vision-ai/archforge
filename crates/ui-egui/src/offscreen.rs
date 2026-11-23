@@ -3,7 +3,9 @@
 
 mod versions;
 
+use crate::er_state::er_mut;
 use crate::theme::ThemeKind;
+use crate::uml_state::uml_mut;
 use crate::{Folder, Services, Shell};
 
 /// What a render shows.
@@ -715,7 +717,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 && let Ok(entity) = store.uuid(entity)
             {
                 crate::panels::open_column(&mut shell, entity, Some(column));
-                if let Some(c) = shell.panels.column.as_mut() {
+                if let Some(c) = er_mut(&mut shell.notation_states).and_then(|er| er.column.as_mut()) {
                     c.more = true;
                 }
             }
@@ -730,7 +732,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 && let Some(index) = crate::indexes::rows(store, e).into_iter().next()
             {
                 crate::indexes::open(&mut shell, entity, Some(&index));
-                if let Some(i) = shell.panels.index.as_mut() {
+                if let Some(i) = er_mut(&mut shell.notation_states).and_then(|er| er.index.as_mut()) {
                     i.more = true;
                 }
             }
@@ -858,7 +860,9 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             }
         } else {
             shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
-            shell.canvas.uml_relation = crate::uml_relate::Relate::Composition;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.relation = crate::uml_relate::Relate::Composition;
+            }
             shell.canvas.popover = Some("relationship-kinds");
         }
     }
@@ -866,7 +870,9 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         shell.adopt_project();
         sample_interfaces(&mut shell)?;
         if screen == Screen::WorkspaceClassifierKinds {
-            shell.canvas.uml_classifier = crate::uml_classifier::Classifier::Interface;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.classifier = crate::uml_classifier::Classifier::Interface;
+            }
             shell.canvas.tool = crate::canvas::Tool::Place(crate::uml_classifier::TOOL);
             shell.canvas.popover = Some(crate::uml_classifier::KINDS);
         }
@@ -892,14 +898,18 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         // The Relationship tool armed after the line was selected, as a click on it leaves the
         // selection: the toolbar shows Interface realization active beside its Properties.
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
-        shell.canvas.uml_relation = crate::uml_relate::Relate::Realization;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.relation = crate::uml_relate::Relate::Realization;
+        }
     }
     if screen == Screen::WorkspaceAssociationClass {
         shell.adopt_project();
         sample_association_class(&mut shell)?;
         // The Relationship tool armed after the element was selected, as the realization's screen.
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
-        shell.canvas.uml_relation = crate::uml_relate::Relate::AssociationClass;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.relation = crate::uml_relate::Relate::AssociationClass;
+        }
     }
     if screen == Screen::WorkspaceModifiers {
         shell.adopt_project();
@@ -999,7 +1009,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         if !crate::uml_inline::open(&mut shell, class, crate::uml_panel::MemberKind::Attribute, None) {
             return Err("the class's card cannot hold a row".into());
         }
-        if let Some(inline) = shell.canvas.inline.as_mut() {
+        if let Some(inline) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.inline.as_mut()) {
             inline.edit.name = "code".into();
             inline.ty = "Integer".into();
         }
@@ -1481,7 +1491,9 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
     crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [payment.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     shell.panels.editors_for = Some(payment);
-    shell.panels.final_refused = Some(payment);
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.final_refused = Some(payment);
+    }
     // At full size, PricingService over Payment and CardPayment, so its `{final}` reads.
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
@@ -1502,13 +1514,17 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
     let uuid = |k: &str| ids.get(k).and_then(|v| archforge_mof::Uuid::parse(v)).ok_or_else(|| format!("the sample's {k}"));
     if !drawn {
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
-        shell.canvas.uml_relation = crate::uml_relate::Relate::NAry;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.relation = crate::uml_relate::Relate::NAry;
+        }
         let diagram = uuid("diagram")?;
         let ends = vec![
             crate::uml_nary::DraftEnd { class: uuid("Customer")?, node: uuid("customer")? },
             crate::uml_nary::DraftEnd { class: uuid("Product")?, node: uuid("product")? },
         ];
-        shell.canvas.nary = Some(crate::uml_nary::Nary::Draft { diagram, ends });
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.nary = Some(crate::uml_nary::Nary::Draft { diagram, ends });
+        }
         return Ok(Some(format!("workspace.canvas.node.{}", uuid("catalog")?)));
     }
     let a = uuid("recommends")?;
@@ -1517,7 +1533,9 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
     if screen == Screen::WorkspaceNary {
         crate::uml_nary::open(shell, a, 2);
     } else {
-        shell.panels.nary_remove = Some(crate::uml_nary::RemoveAsk { association: a, end: 2, opened: true });
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.nary_remove = Some(crate::uml_nary::RemoveAsk { association: a, end: 2, opened: true });
+        }
     }
     Ok(None)
 }
@@ -1736,7 +1754,9 @@ fn sample_leaf(shell: &mut Shell) -> Result<(), String> {
     shell.state.show_panel(crate::state::Panel::Properties);
     shell.panels.editors_for = Some(payment_id);
     let refused = shell.session.as_ref().and_then(|s| crate::uml_panel::member_leaf_refusal(s.doc(), &amount_edit, true));
-    shell.panels.member = Some(MemberEdit { refused, refused_at: Some("leaf"), opened: false, ..amount_edit });
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.member = Some(MemberEdit { refused, refused_at: Some("leaf"), opened: false, ..amount_edit });
+    }
     // Order, PricingService, Payment and CardPayment in sight, so `{leaf}` reads on Order's total()
     // and `{final, leaf}` after PricingService's name.
     shell.canvas.fit_pending = false;
@@ -2172,7 +2192,7 @@ fn literal_draft(shell: &mut Shell) -> Result<(), String> {
     if !crate::uml_inline::open(shell, status, crate::uml_panel::MemberKind::Literal, None) {
         return Err("OrderStatus's card cannot hold a row".into());
     }
-    if let Some(inline) = shell.canvas.inline.as_mut() {
+    if let Some(inline) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.inline.as_mut()) {
         inline.edit.name = "Returned".into();
     }
     Ok(())
@@ -2550,19 +2570,23 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
             if !crate::uml_inline::open(shell, order, crate::uml_panel::MemberKind::Attribute, None) {
                 return Err("Order's card cannot hold a row".into());
             }
-            if let Some(inline) = shell.canvas.inline.as_mut() {
+            if let Some(inline) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.inline.as_mut()) {
                 inline.edit.name = "number".into();
                 inline.ty = "Integer".into();
             }
         }
         2 => {
             shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
-            shell.canvas.uml_relation = crate::uml_relate::Relate::Association;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.relation = crate::uml_relate::Relate::Association;
+            }
             shell.canvas.popover = Some("relationship-kinds");
         }
         4 => {
             shell.canvas.tool = crate::canvas::Tool::Place(crate::uml_classifier::TOOL);
-            shell.canvas.uml_classifier = crate::uml_classifier::Classifier::Class;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.classifier = crate::uml_classifier::Classifier::Class;
+            }
             shell.canvas.popover = Some(crate::uml_classifier::KINDS);
             shell.canvas.menu_focus = Some(2);
         }
@@ -2570,7 +2594,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
             if !crate::uml_inline::open(shell, id(&status)?, crate::uml_panel::MemberKind::Literal, None) {
                 return Err("OrderStatus's card cannot hold a row".into());
             }
-            if let Some(inline) = shell.canvas.inline.as_mut() {
+            if let Some(inline) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.inline.as_mut()) {
                 inline.edit.name = "Cancelled".into();
             }
         }

@@ -25,6 +25,7 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::panels::{FIELD, Menu, PAD, ROW, icon_button, run, section, select_field, text_field};
+use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
 /// The ids' stem: `workspace.properties.class.templateParameters.add`,
@@ -120,8 +121,10 @@ pub(crate) fn open(shell: &mut Shell, classifier: Uuid, target: Option<Uuid>) {
         edit.constraint = value_of(store, templates::constraint_of(store, p));
         edit.default = value_of(store, templates::default_of(store, p));
     }
-    shell.panels.template = Some(edit);
-    shell.panels.template_in_use = None;
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.template = Some(edit);
+        uml.template_in_use = None;
+    }
     shell.panels.menu = None;
 }
 
@@ -213,8 +216,9 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         return y + 50.0;
     };
     y = next - 6.0;
-    let editing = |shell: &Shell| shell.panels.template.as_ref().filter(|e| e.classifier == c_id).map(|e| e.target);
-    let in_use = shell.panels.template_in_use.clone().filter(|u| rows.iter().any(|(id, _)| *id == u.parameter));
+    let editing =
+        |shell: &Shell| uml(&shell.notation_states).and_then(|uml| uml.template.as_ref()).filter(|e| e.classifier == c_id).map(|e| e.target);
+    let in_use = uml(&shell.notation_states).and_then(|uml| uml.template_in_use.clone()).filter(|u| rows.iter().any(|(id, _)| *id == u.parameter));
     for (k, (id, text)) in rows.iter().enumerate() {
         if editing(shell) == Some(Some(*id)) {
             y = editor(shell, ui, p, r, y, k);
@@ -264,7 +268,9 @@ fn in_use_box(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     if control(shell, ui, &format!("{ID}.showBinding"), "button", b, true).accessible_name(label).clicked()
         && let Some(binding) = u.binding
     {
-        shell.panels.template_in_use = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.template_in_use = None;
+        }
         crate::panels::select_element(shell, binding);
     }
     y = b.bottom() + 12.0;
@@ -300,7 +306,7 @@ fn label_of(store: &Store, value: &str, empty: &str) -> String {
 fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k: usize) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = shell.panels.template.clone() else { return y };
+    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.template.clone()) else { return y };
     let background = paint.add(egui::Shape::Noop);
     let left = r.left() + PAD;
     let inner = (width - 24.0).max(0.0);
@@ -361,7 +367,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::panels::Editor::Template, card);
+    crate::panels::reveal(shell, ui, crate::uml_state::TEMPLATE, card);
     // The menus last, over the card; Escape with one open closes the menu alone.
     let menu_open = shell.panels.menu.is_some();
     if shell.panels.menu == Some(Menu::TemplateKind)
@@ -404,9 +410,13 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
         edit.refused = None;
         edit.refused_at = None;
     }
-    shell.panels.template = Some(edit.clone());
+    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        uml.template = Some(edit.clone());
+    }
     if cancel || (!menu_open && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-        shell.panels.template = None;
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.template = None;
+        }
     } else if remove {
         remove_parameter(shell, &edit);
     } else if up || down {
@@ -518,8 +528,10 @@ fn kind_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &st
     picked
 }
 
+/// Shows `why` on the open template parameter editor's card, with `at` naming the field it is said
+/// under; the editor stays open with what was typed.
 fn refuse(shell: &mut Shell, why: String, at: Option<&'static str>) {
-    if let Some(e) = shell.panels.template.as_mut() {
+    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.template.as_mut()) {
         e.refused = Some(why);
         e.refused_at = at;
     }
@@ -567,12 +579,18 @@ fn remove_parameter(shell: &mut Shell, edit: &TemplateEdit) {
     let Some(target) = edit.target else { return };
     let refused = shell.session.as_ref().and_then(|s| s.doc().by_uuid(target).and_then(|o| in_use(s.doc(), o)));
     if let Some((why, binding)) = refused {
-        shell.panels.template = None;
-        shell.panels.template_in_use = Some(InUse { parameter: target, why, binding });
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.template = None;
+            uml.template_in_use = Some(InUse { parameter: target, why, binding });
+        }
         return;
     }
     match run(shell, "element.remove", json!({ "ids": [target.to_string()] })) {
-        Ok(_) => shell.panels.template = None,
+        Ok(_) => {
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.template = None;
+            }
+        }
         Err(e) => refuse(shell, e, None),
     }
 }
@@ -588,7 +606,7 @@ fn move_parameter(shell: &mut Shell, edit: &TemplateEdit, up: bool) {
     let Some(to) = to else { return };
     match run(shell, "uml.template-parameter.move", json!({ "parameter": target.to_string(), "at": to })) {
         Ok(_) => {
-            if let Some(e) = shell.panels.template.as_mut() {
+            if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.template.as_mut()) {
                 e.refused = None;
                 e.refused_at = None;
             }
@@ -667,7 +685,9 @@ fn commit(shell: &mut Shell, edit: &TemplateEdit) {
     };
     match run(shell, cmd, params) {
         Ok(_) => {
-            shell.panels.template = None;
+            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                uml.template = None;
+            }
             shell.panels.notice = None;
         }
         Err(e) => refuse(shell, e, None),
@@ -678,7 +698,7 @@ fn commit(shell: &mut Shell, edit: &TemplateEdit) {
 /// uses the parameter.
 #[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn remove_sample(shell: &mut Shell) {
-    if let Some(edit) = shell.panels.template.clone() {
+    if let Some(edit) = uml(&shell.notation_states).and_then(|uml| uml.template.clone()) {
         remove_parameter(shell, &edit);
     }
 }

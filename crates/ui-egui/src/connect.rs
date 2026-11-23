@@ -16,6 +16,7 @@ use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::canvas::{View, end_glyph};
+use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::ux::{self, Palette, types};
@@ -131,7 +132,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     paint.rect_filled(m, 10.0, p.surface);
     paint.rect_stroke(m, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let at = |x: f32, y: f32| m.min + vec2(x, y);
-    let kind = shell.canvas.relationship;
+    let kind = er(&shell.notation_states).map(|er| er.relationship).unwrap_or_default();
     ux::text(&paint, at(16.0, 14.0), &tr("Cardinality").to_uppercase(), types::EYEBROW, p.text_secondary, Some(160.0));
     let readout = format!("{} — {}", cardinality_text(kind.from), cardinality_text(kind.to));
     let g = ux::galley(&paint, &readout, types::SMALL, p.text, None);
@@ -183,7 +184,9 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     if control(shell, ui, "workspace.cardinality.identifying", "toggle", sw, true).on_hover_text(tr("Identifying")).clicked() {
         next.identifying = !kind.identifying;
     }
-    shell.canvas.relationship = next;
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.relationship = next;
+    }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || anchor.contains(pos)));
     if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         shell.canvas.popover = None;
@@ -199,7 +202,7 @@ pub(crate) fn live_line(shell: &Shell, paint: &egui::Painter, p: &Palette, view:
     if !rect.is_finite() || !pointer.is_finite() {
         return;
     }
-    let kind = shell.canvas.relationship;
+    let kind = er(&shell.notation_states).map(|er| er.relationship).unwrap_or_default();
     let z = view.zoom;
     let stroke = Stroke::new((1.5 * z).clamp(1.0, 3.0), p.accent);
     let (start, end) = match target {
@@ -233,7 +236,7 @@ pub(crate) fn live_line(shell: &Shell, paint: &egui::Painter, p: &Palette, view:
 /// relationship; a many-to-many one opens the mapping table offer.
 pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     shell.canvas.notice = None;
-    let kind = shell.canvas.relationship;
+    let kind = er(&shell.notation_states).map(|er| er.relationship).unwrap_or_default();
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
     let node_entity = |id: Uuid| {
@@ -294,12 +297,14 @@ pub fn offer_mapping(shell: &mut Shell, relationship: Uuid) {
     let Some(rel) = store.by_uuid(relationship) else { return };
     let end = |p| store.get(rel, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
     let name = format!("{}{}", end(archforge_er::relationship::FROM), end(archforge_er::relationship::TO));
-    shell.canvas.mapping = Some(MappingOffer { relationship, name, refused: None });
+    if let Some(er) = er_mut(&mut shell.notation_states) {
+        er.mapping = Some(MappingOffer { relationship, name, refused: None });
+    }
 }
 
 /// The mapping table offer, over the canvas: the design's card "Many to many picked".
 pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
-    let Some(offer) = shell.canvas.mapping.clone() else { return };
+    let Some(offer) = er(&shell.notation_states).and_then(|er| er.mapping.clone()) else { return };
     let (from, to, chips) = match shell.session.as_ref().and_then(|s| s.doc().by_uuid(offer.relationship).map(|rel| (s.doc(), rel))) {
         Some((store, rel)) => {
             let end = |p| store.get(rel, p).ok().and_then(|v| v.as_ref());
@@ -315,7 +320,9 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
             (name(f), name(t), chips)
         }
         None => {
-            shell.canvas.mapping = None;
+            if let Some(er) = er_mut(&mut shell.notation_states) {
+                er.mapping = None;
+            }
             return;
         }
     };
@@ -332,7 +339,7 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     paint.rect_filled(field, 6.0, p.field);
     widgets::record_visible(ui, &mut shell.registry, "workspace.mapping.name", "field", field);
     let inner = crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left(), field.top()), pos2(field.right(), field.bottom())));
-    if let Some(o) = shell.canvas.mapping.as_mut() {
+    if let Some(o) = er_mut(&mut shell.notation_states).and_then(|er| er.mapping.as_mut()) {
         let edit = egui::TextEdit::singleline(&mut o.name)
             .id(widgets::egui_id("workspace.mapping.name"))
             .frame(egui::Frame::NONE)
@@ -378,17 +385,25 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     }
     match action {
         Some(true) => {
-            let name = shell.canvas.mapping.as_ref().map(|o| o.name.trim().to_string()).unwrap_or_default();
+            let name = er(&shell.notation_states).and_then(|er| er.mapping.as_ref()).map(|o| o.name.trim().to_string()).unwrap_or_default();
             match run(shell, "er.relationship.resolve", json!({ "relationship": offer.relationship.to_string(), "name": name })) {
-                Ok(_) => shell.canvas.mapping = None,
+                Ok(_) => {
+                    if let Some(er) = er_mut(&mut shell.notation_states) {
+                        er.mapping = None;
+                    }
+                }
                 Err(e) => {
-                    if let Some(o) = shell.canvas.mapping.as_mut() {
+                    if let Some(o) = er_mut(&mut shell.notation_states).and_then(|er| er.mapping.as_mut()) {
                         o.refused = Some(e);
                     }
                 }
             }
         }
-        Some(false) => shell.canvas.mapping = None,
+        Some(false) => {
+            if let Some(er) = er_mut(&mut shell.notation_states) {
+                er.mapping = None;
+            }
+        }
         None => {}
     }
 }
