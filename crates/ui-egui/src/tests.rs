@@ -8853,6 +8853,44 @@ fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
     assert_eq!(kept(s), [false; 13], "everything goes with its element");
 }
 
+/// A type menu's choices and a property's targets are kept for one session only: another session of
+/// the same model at the same revision, as a replacement or a version shown installs, builds them
+/// again rather than offering what the last session held (AR-787).
+#[test]
+fn kept_type_and_target_choices_are_built_again_for_another_session_of_the_same_model() {
+    use serde_json::json;
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| {
+        crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+    };
+    let sales = id(&mut h, "uml.package.add", json!({ "name": "Sales" }));
+    let status = id(&mut h, "uml.enumeration.add", json!({ "package": sales, "name": "Status" }));
+    id(&mut h, "uml.literal.add", json!({ "enumeration": status, "name": "open" }));
+    let status = archforge_mof::Uuid::parse(&status).unwrap();
+    let read = |h: &mut Harness<'static, Shell>| {
+        let s = h.state_mut();
+        let choices = crate::uml_panel::choices_for_menu(s, None);
+        let invoice = choices.labels.iter().any(|l| l == "Invoice");
+        crate::uml_panel::keep_choices(s, choices);
+        let targets = crate::uml_panel::take_targets(s, "status", |_| None, |st| st.by_uuid(status));
+        let literals = targets.literals.clone().unwrap_or_default();
+        crate::uml_panel::keep_targets(s, targets);
+        (invoice, literals)
+    };
+    let first = h.state().build(&rows_now(&h)).unwrap();
+    let revision = first.revision();
+    h.state_mut().install(first, false);
+    assert_eq!(read(&mut h), (false, vec!["open".to_string()]));
+    assert_eq!(read(&mut h), (false, vec!["open".to_string()]), "kept for the same session and revision");
+    // The model moves on, and another session of it is built at the revision the first was kept at.
+    id(&mut h, "uml.class.add", json!({ "package": sales, "name": "Invoice" }));
+    id(&mut h, "uml.literal.add", json!({ "enumeration": status.to_string(), "name": "shut" }));
+    let second = h.state().build(&rows_now(&h)).unwrap();
+    assert_eq!(second.revision(), revision, "the same revision, in a history of its own");
+    h.state_mut().install(second, false);
+    assert_eq!(read(&mut h), (true, vec!["open".to_string(), "shut".to_string()]), "built again for the new session");
+}
+
 /// A name of nothing but spaces is refused before it is sent, except for a diagram and for what a
 /// notation's rename command may leave unnamed: a relationship's, in ER and in UML (AR-786).
 #[test]

@@ -795,22 +795,30 @@ pub(crate) fn types_named(store: &Store, name: &str, within: Option<Obj>) -> Vec
 }
 
 /// The open type menu's choices for a member of `within`, built by [`type_choices`] only when the
-/// project, its state, the classifier or the interface language changed since they were last built;
-/// taken out of the shell for the frame, to be handed back with [`keep_choices`].
+/// project, the session, its state, the classifier or the interface language changed since they
+/// were last built; taken out of the shell for the frame, to be handed back with [`keep_choices`].
 pub(crate) fn choices_for_menu(shell: &mut Shell, within: Option<Uuid>) -> crate::panels::TypeChoices {
     let Some(session) = shell.session.as_ref() else { return crate::panels::TypeChoices::default() };
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
-    let revision = session.revision();
+    let (history, revision) = (session.history(), session.revision());
     let language = crate::i18n::language();
     match uml_mut(&mut shell.notation_states).and_then(|uml| uml.type_choices.take()) {
-        Some(kept) if kept.project == project && kept.revision == revision && kept.language == language && kept.within == within => kept,
+        Some(kept)
+            if kept.project == project
+                && kept.history == history
+                && kept.revision == revision
+                && kept.language == language
+                && kept.within == within =>
+        {
+            kept
+        }
         _ => {
             let choices = type_choices(store, within.and_then(|w| store.by_uuid(w)));
             let note_parts = type_notes(store, &choices);
             let notes = note_parts.iter().map(|parts| parts.join(crate::panels::PATH_SEP)).collect();
             let (labels, values) = choices.into_iter().unzip();
-            crate::panels::TypeChoices { project, revision, language, within, labels, values, notes, note_parts }
+            crate::panels::TypeChoices { project, history, revision, language, within, labels, values, notes, note_parts }
         }
     }
 }
@@ -1414,7 +1422,7 @@ pub struct Target {
 /// The properties Subsets and Redefines offer for one shape of one property, in the order of their
 /// labels, Subsets' without the name rule, which [`offered_subsets`] applies to the name being
 /// typed; and the literals of the property's type when it is an enumeration. Kept for the state of
-/// the project and the interface language they were built in (AR-126).
+/// the project, in its session's history, and the interface language they were built in (AR-126).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TargetChoices {
     pub key: String,
@@ -1431,9 +1439,9 @@ pub struct TargetChoices {
 const KEPT_TARGETS: usize = 4;
 
 /// The choices for `what` (the property's shape as text, its name aside), taken out of the shell
-/// for the frame: the kept ones when the project, its state and the language are the same, else
-/// built once from `shape` and `enumeration` (the property's type when it is one) and kept from
-/// then on. Hand them back with [`keep_targets`].
+/// for the frame: the kept ones when the project, the session, its state and the language are the
+/// same, else built once from `shape` and `enumeration` (the property's type when it is one) and
+/// kept from then on. Hand them back with [`keep_targets`].
 pub(crate) fn take_targets(
     shell: &mut Shell,
     what: &str,
@@ -1443,7 +1451,7 @@ pub(crate) fn take_targets(
     let Some(session) = shell.session.as_ref() else { return TargetChoices::default() };
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
-    let key = format!("{project:?}|{}|{}|{what}", session.revision(), crate::i18n::language());
+    let key = format!("{project:?}|{}|{}|{}|{what}", session.history(), session.revision(), crate::i18n::language());
     if let Some(kept) = uml_mut(&mut shell.notation_states).map(|uml| &mut uml.targets)
         && let Some(i) = kept.iter().position(|t| t.key == key)
     {

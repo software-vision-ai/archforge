@@ -8,8 +8,10 @@ other things go with it; `notation_ui::NotationUi` is what a notation brings to 
 search, the problems and Properties, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
 `notation_ui::NotationState` is what a notation keeps between frames for its own editors, menus,
 drawings and tools, `er_state` ER's and `uml_state` UML's, which the shell holds, parks with the
-project and asks only whether something is being edited, which editors are open, what to drop and
-what to close; and
+project, starts fresh with each project opened and each version shown, and asks only through that
+trait: whether something is being edited, which editors are open, what to drop, what to close,
+whether something of its own holds the canvas's keys (an open menu holds them without being an
+edit), and to end a drawing under way when its project is set aside; and
 `uml_classifier` the class diagram's classifier tool with its menu of kinds),
 the Diagrams explorer (`diagrams`: the model's folders and diagrams, the model behind the open
 diagram, the New diagram dialog from its `+` and the tab strip's, a diagram row's menu and Delete

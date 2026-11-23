@@ -1434,7 +1434,8 @@ fn dated_as_before(h: &Harness<'static, Shell>) {
 }
 
 /// A step takes no hold, wakes the window, and leaves the version, its date and its view until the
-/// next arrives; what was set aside stays through it, the notations' own state among it.
+/// next arrives, which shows with the notations' state fresh; what was set aside stays through it,
+/// the notations' own state among it.
 #[test]
 fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
     use crate::uml_classifier::Classifier;
@@ -1444,6 +1445,9 @@ fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
         assert_eq!(uml_of(h.state()).classifier, Classifier::Class, "a version shows with the notations' state of its own");
         answer_versions(&host);
         h.run_steps(3);
+        // What a notation kept for the version in view is that session's: the next starts fresh.
+        uml_of_mut(h.state_mut()).classifier = Classifier::DataType;
+        uml_of_mut(h.state_mut()).type_choices = Some(crate::panels::TypeChoices::default());
         step_to(&mut h, "b");
         assert!(!h.state().is_held(), "no hold");
         assert!(h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay.as_secs() < 1, "it wakes while waiting");
@@ -1451,6 +1455,8 @@ fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
         dated_as_before(&h);
         answer_read(&mut h, &host, Ok(b));
         showing(&h, "b", (true, false));
+        assert_eq!(uml_of(h.state()).classifier, Classifier::Class, "the next version shows with the notations' state fresh");
+        assert_eq!(uml_of(h.state()).type_choices, None, "and nothing the last version's session kept");
         assert!(!h.state().is_held() && h.query_by_label("Viewing the version of 9 Nov b").is_some(), "the date comes with it");
         assert!(h.state_mut().back_to_current_work() && schema_names(&h).contains(&"c".to_string()), "the work comes back");
         assert_eq!(uml_of(h.state()).classifier, Classifier::Interface, "the notations' state set aside comes back with it");

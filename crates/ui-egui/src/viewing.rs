@@ -99,6 +99,7 @@ impl Shell {
         viewing.commit.clone_from(&commit);
         let showing = self.canvas.active;
         (self.explorer, self.diagrams, self.canvas, self.panels) = Default::default();
+        self.notation_states = crate::notation_ui::NotationStates::new(self.notation_uis);
         self.session = Some(preview);
         self.session_replaced();
         self.open_in_version(showing);

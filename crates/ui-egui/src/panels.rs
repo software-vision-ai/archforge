@@ -1109,12 +1109,15 @@ fn noted_width(ui: &egui::Ui, p: &Palette, items: &[String], notes: &[String]) -
         .fold(0.0, f32::max)
 }
 
-/// A type menu's choices kept between frames: whose and which state of it they were built for, in
-/// which interface language (the labels are translated), their labels, the values the commands
-/// take and the muted notes that tell same-named ones apart, in the same order.
+/// A type menu's choices kept between frames: whose and which state of it they were built for (a
+/// revision means something only in its session's history, as another session of the same model,
+/// a version shown or a replacement, starts its revisions anew), in which interface language (the
+/// labels are translated), their labels, the values the commands take and the muted notes that
+/// tell same-named ones apart, in the same order.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TypeChoices {
     pub project: Option<Uuid>,
+    pub history: u64,
     pub revision: u64,
     pub language: &'static str,
     /// The classifier whose member is typed, whose template parameters the menu offers (AR-130).
