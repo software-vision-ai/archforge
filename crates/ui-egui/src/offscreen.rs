@@ -1069,7 +1069,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         if screen == Screen::WorkspaceToast {
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
             let text = crate::i18n::fmt(&crate::i18n::tr("{what} removed"), &[("what", "region")]);
-            shell.canvas.toast = Some(crate::connect::Toast { text, until: u64::MAX, undo_label });
+            shell.canvas.toast = Some(crate::canvas::Toast { text, until: u64::MAX, undo_label });
         }
         if screen == Screen::WorkspaceCrossSchema {
             sample_cross_schema(&mut shell)?;

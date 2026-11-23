@@ -50,6 +50,13 @@ const REFUSED_TOAST_FOOT: f32 = 80.0;
 const REFUSED_TOAST_TEXT: f32 = 30.0;
 /// How much higher it stands over a toast with Undo at that place, three rows at the most.
 const OVER_UNDO_TOAST: f32 = 3.0 * types::SMALL.line + 22.0 + 8.0;
+/// A toast's size and how many frames it stays.
+const TOAST: Vec2 = vec2(440.0, 40.0);
+/// The narrowest toast beside the minimap; with less room it moves above the minimap.
+const TOAST_MIN: f32 = 300.0;
+/// The most lines a toast's text wraps to.
+const TOAST_ROWS: usize = 3;
+pub(crate) const TOAST_FRAMES: u64 = 300;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
 pub(crate) const ENTITY_HEADER: f32 = archforge_diagram::figure::CARD_HEADER;
@@ -95,6 +102,15 @@ pub struct MinimapDrag {
     scale: f32,
     origin: Pos2,
     grab: Vec2,
+}
+
+/// A line of text at the canvas's foot for a while, with Undo.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Toast {
+    pub text: String,
+    pub until: u64,
+    /// The undo step the toast speaks of: once another step tops the history, the toast goes.
+    pub undo_label: Option<String>,
 }
 
 /// What the centre keeps between frames: the open tabs, the view and the toggles.
@@ -158,7 +174,7 @@ pub struct State {
     /// starting at Class.
     pub uml_classifier: crate::uml_classifier::Classifier,
     pub mapping: Option<crate::connect::MappingOffer>,
-    pub toast: Option<crate::connect::Toast>,
+    pub toast: Option<Toast>,
     /// A note's text being typed in place (slice E4).
     pub note_edit: Option<crate::editing::NoteEdit>,
     /// The texts of the skills with a tab, as typed.
@@ -552,7 +568,7 @@ pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     // With no diagram showing, as after the last open one was deleted, the toast and its Undo
     // show over the empty centre all the same (AR-644).
     if active_diagram(shell).is_none() {
-        crate::connect::toast(shell, ui, p, canvas_rect);
+        toast(shell, ui, p, canvas_rect);
     }
     if canvas_rect.width() > 0.0 && canvas_rect.height() > 0.0 {
         if shell.canvas.notice_is_refused_step() {
@@ -597,6 +613,47 @@ fn refused_toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.circle_filled(pos2(card.left() + 17.0, at.y + types::SMALL.line / 2.0), 3.0, p.amber);
     paint.galley(at, text, p.text.into());
     widgets::announce(ui, &mut shell.registry, "workspace.canvas.notice", card, &words);
+}
+
+/// The toast at the canvas's foot: the text and Undo, gone after its frames or on Undo.
+pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+    let Some(t) = shell.canvas.toast.clone() else { return };
+    let top = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+    if shell.frames > t.until || top != t.undo_label {
+        shell.canvas.toast = None;
+        return;
+    }
+    let paint = ui.painter().clone();
+    // Clear of the minimap: at the canvas's foot, left of the minimap while there is room
+    // beside it, else above it; the text wraps rather than running under Undo.
+    let edge = 16.0;
+    let minimap = minimap_box(shell, r);
+    let right = minimap.map_or(r.right() - edge, |m| m.left() - edge);
+    let beside = right - (r.left() + edge) >= TOAST_MIN;
+    let width = if beside { TOAST.x.min(right - r.left() - edge) } else { TOAST.x.min(r.width() - 2.0 * edge) }.max(0.0);
+    let undo = ux::galley(&paint, &tr("Undo"), types::SMALL, p.accent_tint, None);
+    let undo_w = undo.size().x + 16.0;
+    let text = ux::galley_rows(&paint, &t.text, types::SMALL, p.surface, Some((width - 16.0 - 12.0 - undo_w - 8.0).max(0.0)), TOAST_ROWS);
+    let height = (text.size().y + 22.0).max(TOAST.y);
+    let bottom = match (beside, minimap) {
+        (false, Some(mm)) => mm.top() - 12.0,
+        _ => r.bottom() - 78.0,
+    };
+    let left = if beside { (r.center().x - width / 2.0).min(right - width) } else { r.center().x - width / 2.0 };
+    let left = left.min(r.right() - edge - width).max(r.left() + edge);
+    let m = Rect::from_min_size(pos2(left, bottom - height), vec2(width, height));
+    ux::shadow(&paint, m, 8.0, p.shadow);
+    paint.rect_filled(m, 8.0, p.text);
+    let b = Rect::from_min_size(pos2(m.right() - 8.0 - undo_w, m.center().y - 14.0), vec2(undo_w, 28.0));
+    paint.galley(pos2(m.left() + 16.0, m.center().y - text.size().y / 2.0), text, p.surface.into());
+    paint.galley(b.min + vec2(8.0, (b.height() - undo.size().y) / 2.0), undo, p.accent_tint.into());
+    widgets::record_visible(ui, &mut shell.registry, "workspace.toast", "toast", m);
+    if control(shell, ui, "workspace.toast.undo", "button", b, true).clicked() {
+        shell.canvas.toast = None;
+        if let Err(e) = run(shell, "edit.undo", serde_json::Value::Null) {
+            shell.canvas.notice = Some(e);
+        }
+    }
 }
 
 /// The tab strip: the new-diagram `+` at the left, then a tab per open diagram or skill.
@@ -816,7 +873,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     }
     for (at, control_id, element, element_obj, many) in pending_badges {
         let texts = shell.problems.get(&element_obj).cloned().unwrap_or_default();
-        crate::connect::badge(shell, ui, p, at, control_id, element, &texts, many);
+        badge(shell, ui, p, at, control_id, element, &texts, many);
     }
     if let Some(grid) = grid.as_ref() {
         crate::editing::pointer(shell, ui, &resp, view, grid, d);
@@ -824,7 +881,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     crate::editing::overlays(shell, ui, p, r, view, d, &overrides);
     let below_path = crate::package_nav::after_draw(shell, ui, p, r, d);
     crate::connect::mapping_offer(shell, ui, p, r);
-    crate::connect::toast(shell, ui, p, r);
+    toast(shell, ui, p, r);
     if minimap_shown(shell, r) {
         minimap(shell, ui, p, r, bounds, &view);
     } else if r.width() >= 16.0 + layout(crate::kinds::active_kind(shell)).width + 16.0 + 28.0 + MINIMAP_GAP.x {
@@ -845,6 +902,27 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     // What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
     crate::uml_nary::hint_bar(shell, ui, p, r, below_path);
     below_path
+}
+
+/// A problem badge on the canvas: the problems on hover; for a many-to-many relationship a click
+/// opens the mapping table offer.
+#[allow(clippy::too_many_arguments, reason = "a badge is drawn from its place, its control id, its element and its texts")]
+pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, control_id: Uuid, element: Uuid, texts: &[String], many_to_many: bool) {
+    let paint = ui.painter().clone();
+    let b = Rect::from_center_size(at, Vec2::splat(18.0));
+    paint.circle_filled(b.center(), 9.0, p.surface);
+    paint.circle_stroke(b.center(), 9.0, Stroke::new(1.2, p.key_foreign));
+    if many_to_many {
+        ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(10.0)), &icons::PLUS, p.key_foreign);
+    } else {
+        let g = ux::galley(&paint, "!", types::CAPTION, p.key_foreign, None);
+        paint.galley(b.center() - g.size() / 2.0, g, p.key_foreign.into());
+    }
+    let hint = if many_to_many { tr("Many to many · add a mapping table") } else { texts.join("\n") };
+    // Live for its hover; only a many-to-many badge acts on a click.
+    if control(shell, ui, &format!("workspace.canvas.problem.{control_id}"), "badge", b, true).on_hover_text(hint).clicked() && many_to_many {
+        crate::connect::offer_mapping(shell, element);
+    }
 }
 
 /// The index of diagram `d` as the canvas draws and hits it: packages' cards under the other
@@ -1103,7 +1181,7 @@ fn draw_node(
                 archforge_diagram::figure::Text::Plain(k) => Some(k.as_str()),
                 archforge_diagram::figure::Text::Said(..) => None,
             };
-            crate::uml_nary::draw_diamond(paint, p, rect, &card.name, keyword, z, selected, &look_of(store, n, node::STYLE));
+            draw_diamond(paint, p, rect, &card.name, keyword, z, selected, &look_of(store, n, node::STYLE));
         }
         Some(_) if let Some(card) = card => {
             // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
@@ -1247,6 +1325,33 @@ fn draw_node(
     }
     let e = element.filter(|e| d.problems.contains_key(e))?;
     Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
+}
+
+/// A hollow diamond filling `rect`, over `fill`.
+pub(crate) fn diamond_shape(paint: &egui::Painter, rect: Rect, fill: ux::Colour, stroke: Stroke) {
+    let points = vec![rect.left_center(), rect.center_top(), rect.right_center(), rect.center_bottom()];
+    paint.add(egui::Shape::convex_polygon(points, fill, stroke));
+}
+
+/// Draws an n-ary association's diamond node at `rect` (AR-128): a hollow diamond in the line's
+/// ink, the accent while it is selected, its name above it.
+#[allow(clippy::too_many_arguments, reason = "a diamond is drawn with its name, its stereotypes and its look")]
+pub(crate) fn draw_diamond(paint: &egui::Painter, p: &Palette, rect: Rect, name: &str, keyword: Option<&str>, z: f32, selected: bool, look: &Look) {
+    let ink = if selected { p.accent } else { look.stroke.unwrap_or(p.text_secondary) };
+    let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
+    diamond_shape(paint, rect, look.fill.unwrap_or(p.canvas), Stroke::new(width, ink));
+    let text_ink = look.text.unwrap_or(p.text_secondary);
+    let mut top = rect.top() - 8.0 * z;
+    if !name.is_empty() {
+        let g = ux::galley(paint, name, types::SMALL.scaled(z), text_ink, None);
+        top -= g.size().y;
+        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top), g, text_ink.into());
+    }
+    // Its stereotypes above its name, `«Reference»`, as a line's are (AR-135).
+    if let Some(k) = keyword {
+        let g = ux::galley(paint, k, types::CAPTION.scaled(z), text_ink, None);
+        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top - g.size().y - 1.0 * z), g, text_ink.into());
+    }
 }
 
 /// A constraint as its diagram shows it (AR-133): braces, `{expression}` in purple beside its
@@ -1833,6 +1938,21 @@ pub(crate) fn exit_point(rect: Rect, toward: Pos2) -> Pos2 {
     if t.is_finite() { c + d * t } else { c }
 }
 
+/// How far a self relationship's loop reaches out of its entity.
+/// The diagram's self-loop, on screen (the grid hit-tests the same shape).
+const LOOP_REACH: f32 = archforge_diagram::grid::LOOP_REACH as f32;
+const LOOP_HALF: f32 = archforge_diagram::grid::LOOP_HALF as f32;
+/// The points of a self relationship's loop on the entity's right side.
+pub fn self_loop(rect: Rect, z: f32) -> Vec<Pos2> {
+    let cy = rect.center().y;
+    vec![
+        pos2(rect.right(), cy - LOOP_HALF * z),
+        pos2(rect.right() + LOOP_REACH * z, cy - LOOP_HALF * z),
+        pos2(rect.right() + LOOP_REACH * z, cy + LOOP_HALF * z),
+        pos2(rect.right(), cy + LOOP_HALF * z),
+    ]
+}
+
 /// A point along a polyline at `t` of its length, 0 at its start and 1 at its end.
 fn along(points: &[Pos2], t: f32) -> Pos2 {
     let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
@@ -1973,7 +2093,7 @@ fn draw_edge(
     if line.ends[1].mark.set_back() > 0.0 {
         drawn[n - 1] = shape(line.ends[1].mark, points[n - 1], points[n - 2]).1;
     }
-    crate::connect::line(paint, &drawn, stroke, !line.dashed, z);
+    self::line(paint, &drawn, stroke, !line.dashed, z);
     for (i, rect, rows) in boxes {
         draw_qualifier_box(paint, p, rect, rows, Stroke::new((1.0 * z).clamp(1.0, 2.0), stroke.color), z);
         if let Ok(id) = store.uuid(e) {
@@ -2119,6 +2239,15 @@ fn draw_edge(
         }
     }
     badge
+}
+
+/// A line, solid for an identifying relationship and dashed for the rest.
+pub fn line(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, identifying: bool, z: f32) {
+    if identifying {
+        paint.add(egui::Shape::line(points.to_vec(), stroke));
+    } else {
+        paint.add(egui::Shape::dashed_line(points, stroke, 6.0 * z.max(0.5), 4.0 * z.max(0.5)));
+    }
 }
 
 /// A line's stereotypes, `«Reference»` (AR-135, F3), in the caption style: just above its name
@@ -2669,7 +2798,7 @@ fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
     let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };
     let dragged = store.uuid(e).ok().and_then(|id| d.segment_drag.as_ref().filter(|(s, _)| *s == id)).map(|(_, route)| route);
     let points: Vec<Pos2> = if source == target {
-        crate::connect::self_loop(d.node_rect(source), view.zoom)
+        self_loop(d.node_rect(source), view.zoom)
     } else if let Some(route) = dragged {
         route.iter().map(|(x, y)| view.to_screen(*x, *y)).collect()
     } else {
@@ -3222,6 +3351,21 @@ fn a_short_line_s_two_end_texts_keep_clear_of_each_other() {
         [(Pos2::ZERO, pos2(600.0, 0.0), vec2(40.0, 14.0), EndMark::FilledDiamond), (pos2(600.0, 0.0), Pos2::ZERO, vec2(40.0, 14.0), EndMark::None)];
     let c = beside_pair(far, 1.0);
     assert_eq!(c, far.map(|(e, t, s, m)| beside(e, t, s, 1.0, m)));
+}
+
+/// A self relationship's loop leaves its entity's right side and comes back to it, around the
+/// entity's centre.
+#[cfg(test)]
+#[test]
+fn a_self_loop_leaves_and_returns_on_the_right_side_around_the_centre() {
+    let rect = Rect::from_min_size(pos2(100.0, 100.0), vec2(240.0, 166.0));
+    let points = self_loop(rect, 1.0);
+    assert_eq!(points.len(), 4);
+    assert!(points.iter().all(|p| p.is_finite()));
+    assert_eq!(points[0].x, rect.right());
+    assert_eq!(points[3].x, rect.right());
+    assert_eq!(points[1].x, rect.right() + LOOP_REACH);
+    assert!((points[0].y + points[3].y) / 2.0 - rect.center().y < 0.001);
 }
 
 /// Every hover text of the tables, for the catalogue tests.

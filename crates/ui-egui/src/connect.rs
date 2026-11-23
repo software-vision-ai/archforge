@@ -18,7 +18,7 @@ use serde_json::json;
 use crate::canvas::{View, end_glyph};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::ux::{self, Palette, icons, types};
+use crate::ux::{self, Palette, types};
 use crate::{Shell, widgets};
 
 /// The popover's size and its rows.
@@ -27,17 +27,6 @@ const CHOICE: Vec2 = vec2(64.0, 26.0);
 const CHOICE_PITCH: f32 = 76.0;
 /// The mapping table offer's size.
 const OFFER: Vec2 = vec2(300.0, 200.0);
-/// A toast's size and how many frames it stays.
-const TOAST: Vec2 = vec2(440.0, 40.0);
-/// The narrowest toast beside the minimap; with less room it moves above the minimap.
-const TOAST_MIN: f32 = 300.0;
-/// The most lines a toast's text wraps to.
-const TOAST_ROWS: usize = 3;
-pub(crate) const TOAST_FRAMES: u64 = 300;
-/// How far a self relationship's loop reaches out of its entity.
-/// The diagram's self-loop, on screen (the grid hit-tests the same shape).
-const LOOP_REACH: f32 = archforge_diagram::grid::LOOP_REACH as f32;
-const LOOP_HALF: f32 = archforge_diagram::grid::LOOP_HALF as f32;
 
 /// The cardinalities a new relationship gets, and whether it is identifying.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,15 +66,6 @@ pub struct MappingOffer {
     pub refused: Option<String>,
 }
 
-/// A line of text at the canvas's foot for a while, with Undo.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Toast {
-    pub text: String,
-    pub until: u64,
-    /// The undo step the toast speaks of: once another step tops the history, the toast goes.
-    pub undo_label: Option<String>,
-}
-
 /// Runs a command for a line being drawn or offered; a refusal comes back in plain words
 /// ([`crate::panels::refusal`]).
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -109,17 +89,6 @@ pub fn has_foreign_key(store: &Store, rel: Obj) -> bool {
 /// A cardinality as the design writes it beside an end.
 pub(crate) fn cardinality_text(c: Cardinality) -> String {
     archforge_er::figures::cardinality_text(c).to_string()
-}
-
-/// The points of a self relationship's loop on the entity's right side.
-pub fn self_loop(rect: Rect, z: f32) -> Vec<Pos2> {
-    let cy = rect.center().y;
-    vec![
-        pos2(rect.right(), cy - LOOP_HALF * z),
-        pos2(rect.right() + LOOP_REACH * z, cy - LOOP_HALF * z),
-        pos2(rect.right() + LOOP_REACH * z, cy + LOOP_HALF * z),
-        pos2(rect.right(), cy + LOOP_HALF * z),
-    ]
 }
 
 /// Draws the ends of a short sample line over `fill`, as the popover's choices show them.
@@ -235,19 +204,19 @@ pub(crate) fn live_line(shell: &Shell, paint: &egui::Painter, p: &Palette, view:
     let stroke = Stroke::new((1.5 * z).clamp(1.0, 3.0), p.accent);
     let (start, end) = match target {
         Some(t) if t == rect => {
-            let points = self_loop(rect, z);
+            let points = crate::canvas::self_loop(rect, z);
             paint.add(egui::Shape::line(points.clone(), stroke));
             (points[0], points[3])
         }
         Some(t) => {
             let end = crate::canvas::exit_point(t, rect.center());
             let start = crate::canvas::exit_point(rect, end);
-            line(paint, &[start, end], stroke, kind.identifying, z);
+            crate::canvas::line(paint, &[start, end], stroke, kind.identifying, z);
             (start, end)
         }
         None => {
             let start = crate::canvas::exit_point(rect, pointer);
-            line(paint, &[start, pointer], stroke, kind.identifying, z);
+            crate::canvas::line(paint, &[start, pointer], stroke, kind.identifying, z);
             (start, pointer)
         }
     };
@@ -255,15 +224,6 @@ pub(crate) fn live_line(shell: &Shell, paint: &egui::Painter, p: &Palette, view:
     end_glyph(paint, p, end, start, end_mark(Some(kind.to)), stroke, z, true);
     if let Some(t) = target {
         paint.rect_stroke(t.expand(4.0), 4.0, Stroke::new(1.5, p.accent), StrokeKind::Inside);
-    }
-}
-
-/// A line, solid for an identifying relationship and dashed for the rest.
-pub fn line(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, identifying: bool, z: f32) {
-    if identifying {
-        paint.add(egui::Shape::line(points.to_vec(), stroke));
-    } else {
-        paint.add(egui::Shape::dashed_line(points, stroke, 6.0 * z.max(0.5), 4.0 * z.max(0.5)));
     }
 }
 
@@ -465,138 +425,15 @@ pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
         Ok(_) => {
             let text = if name.is_empty() { tr("Relationship removed") } else { fmt(&tr("{name} removed"), &[("name", &name)]) };
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            shell.canvas.toast = Some(Toast { text, until: shell.frames.saturating_add(TOAST_FRAMES), undo_label });
+            shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
         }
         Err(e) => shell.canvas.notice = Some(e),
     }
     true
-}
-
-/// Removes the selected line's element of any notation (a class diagram's association,
-/// generalization or dependency) with the lines that show it, as one undo step, and says so in the
-/// toast with Undo; false when no such line is selected. An element its notation also draws as a
-/// card (an association class) is never deleted from the model here, card or no card: Delete on
-/// its line takes it from the diagram, and only ⇧⌫ and its dialog delete it.
-pub fn remove_selected_line(shell: &mut Shell) -> bool {
-    let Some(session) = shell.session.as_ref() else { return false };
-    let store = session.doc();
-    let element = session.view().selection.iter().copied().find_map(|o| match store.class_of(o).ok() {
-        Some(c) if c == archforge_diagram::EDGE => store.get(o, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()),
-        _ => Some(o),
-    });
-    let carded = |e: Obj| {
-        let Ok(class) = store.class_of(e) else { return false };
-        // A binary association is a line, though the class of an n-ary one's diamond is shown as a
-        // card (AR-128).
-        session.view().of_element(store, e).is_some_and(|n| n.kinds().iter().any(|k| n.shows(k, class)))
-            && (class != archforge_uml::ASSOCIATION || archforge_uml::nary::is_nary(store, e))
-    };
-    let Some(element) = element.filter(|e| {
-        let (_, edges, nodes) = archforge_diagram::views_of(store, *e);
-        !edges.is_empty() && nodes.is_empty() && !carded(*e)
-    }) else {
-        return false;
-    };
-    let Some(id) = store.uuid(element).ok() else { return false };
-    let word = crate::notation_ui::of(shell.notation_uis, store, element).and_then(|ui| ui.words(store, element)).map(|w| w.word).unwrap_or_default();
-    // The generalization sets it alone made up go with it, and the toast says so (AR-129).
-    let gone = crate::uml_sets::emptied_names(store, &[element]);
-    let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
-    let Some(session) = shell.session.as_mut() else { return false };
-    let removed = session.execute("element.remove", &json!({ "ids": [id.to_string()] })).map_err(|e| crate::panels::refusal(&e));
-    match removed {
-        Ok(_) => {
-            let text = crate::uml_sets::removed_text(&word, &gone);
-            let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            shell.canvas.toast = Some(Toast { text, until: shell.frames.saturating_add(TOAST_FRAMES), undo_label });
-            crate::uml_constraints::say_dropped(shell, said, "");
-        }
-        Err(e) => shell.canvas.notice = Some(e),
-    }
-    true
-}
-
-/// The toast at the canvas's foot: the text and Undo, gone after its frames or on Undo.
-pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
-    let Some(t) = shell.canvas.toast.clone() else { return };
-    let top = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-    if shell.frames > t.until || top != t.undo_label {
-        shell.canvas.toast = None;
-        return;
-    }
-    let paint = ui.painter().clone();
-    // Clear of the minimap: at the canvas's foot, left of the minimap while there is room
-    // beside it, else above it; the text wraps rather than running under Undo.
-    let edge = 16.0;
-    let minimap = crate::canvas::minimap_box(shell, r);
-    let right = minimap.map_or(r.right() - edge, |m| m.left() - edge);
-    let beside = right - (r.left() + edge) >= TOAST_MIN;
-    let width = if beside { TOAST.x.min(right - r.left() - edge) } else { TOAST.x.min(r.width() - 2.0 * edge) }.max(0.0);
-    let undo = ux::galley(&paint, &tr("Undo"), types::SMALL, p.accent_tint, None);
-    let undo_w = undo.size().x + 16.0;
-    let text = ux::galley_rows(&paint, &t.text, types::SMALL, p.surface, Some((width - 16.0 - 12.0 - undo_w - 8.0).max(0.0)), TOAST_ROWS);
-    let height = (text.size().y + 22.0).max(TOAST.y);
-    let bottom = match (beside, minimap) {
-        (false, Some(mm)) => mm.top() - 12.0,
-        _ => r.bottom() - 78.0,
-    };
-    let left = if beside { (r.center().x - width / 2.0).min(right - width) } else { r.center().x - width / 2.0 };
-    let left = left.min(r.right() - edge - width).max(r.left() + edge);
-    let m = Rect::from_min_size(pos2(left, bottom - height), vec2(width, height));
-    ux::shadow(&paint, m, 8.0, p.shadow);
-    paint.rect_filled(m, 8.0, p.text);
-    let b = Rect::from_min_size(pos2(m.right() - 8.0 - undo_w, m.center().y - 14.0), vec2(undo_w, 28.0));
-    paint.galley(pos2(m.left() + 16.0, m.center().y - text.size().y / 2.0), text, p.surface.into());
-    paint.galley(b.min + vec2(8.0, (b.height() - undo.size().y) / 2.0), undo, p.accent_tint.into());
-    widgets::record_visible(ui, &mut shell.registry, "workspace.toast", "toast", m);
-    if control(shell, ui, "workspace.toast.undo", "button", b, true).clicked() {
-        shell.canvas.toast = None;
-        if let Err(e) = run(shell, "edit.undo", serde_json::Value::Null) {
-            shell.canvas.notice = Some(e);
-        }
-    }
-}
-
-/// A problem badge on the canvas: the problems on hover; for a many-to-many relationship a click
-/// opens the mapping table offer.
-#[allow(clippy::too_many_arguments, reason = "a badge is drawn from its place, its control id, its element and its texts")]
-pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, control_id: Uuid, element: Uuid, texts: &[String], many_to_many: bool) {
-    let paint = ui.painter().clone();
-    let b = Rect::from_center_size(at, Vec2::splat(18.0));
-    paint.circle_filled(b.center(), 9.0, p.surface);
-    paint.circle_stroke(b.center(), 9.0, Stroke::new(1.2, p.key_foreign));
-    if many_to_many {
-        ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(10.0)), &icons::PLUS, p.key_foreign);
-    } else {
-        let g = ux::galley(&paint, "!", types::CAPTION, p.key_foreign, None);
-        paint.galley(b.center() - g.size() / 2.0, g, p.key_foreign.into());
-    }
-    let hint = if many_to_many { tr("Many to many · add a mapping table") } else { texts.join("\n") };
-    // Live for its hover; only a many-to-many badge acts on a click.
-    if control(shell, ui, &format!("workspace.canvas.problem.{control_id}"), "badge", b, true).on_hover_text(hint).clicked() && many_to_many {
-        offer_mapping(shell, element);
-    }
 }
 
 /// Every hover text to translate, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Presets", "Start", "End"].into_iter()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_self_loop_leaves_and_returns_on_the_right_side_around_the_centre() {
-        let rect = Rect::from_min_size(pos2(100.0, 100.0), vec2(240.0, 166.0));
-        let points = self_loop(rect, 1.0);
-        assert_eq!(points.len(), 4);
-        assert!(points.iter().all(|p| p.is_finite()));
-        assert_eq!(points[0].x, rect.right());
-        assert_eq!(points[3].x, rect.right());
-        assert_eq!(points[1].x, rect.right() + LOOP_REACH);
-        assert!((points[0].y + points[3].y) / 2.0 - rect.center().y < 0.001);
-    }
 }

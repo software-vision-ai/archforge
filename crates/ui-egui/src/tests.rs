@@ -27644,7 +27644,7 @@ fn the_removal_toast_keeps_clear_of_the_minimap_at_every_width_and_its_undo_stil
         h.set_size(size);
         let undo_label = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
         let until = h.state().frames + 1000;
-        h.state_mut().canvas.toast = Some(crate::connect::Toast { text: text.clone(), until, undo_label });
+        h.state_mut().canvas.toast = Some(crate::canvas::Toast { text: text.clone(), until, undo_label });
         h.run();
         let toast = rect_of(&h, "workspace.toast");
         let undo = rect_of(&h, "workspace.toast.undo");

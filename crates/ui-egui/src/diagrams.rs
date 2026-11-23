@@ -721,7 +721,7 @@ pub(crate) fn delete_diagram(shell: &mut Shell, id: Uuid) {
     match run(shell, "diagram.remove", json!({ "diagram": id.to_string() })) {
         Ok(_) => {
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+            shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(300), undo_label });
         }
         Err(e) => shell.diagrams.notice = Some(e),
     }

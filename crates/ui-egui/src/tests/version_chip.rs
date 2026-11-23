@@ -1190,7 +1190,7 @@ fn the_toast_stands_above_a_toast_with_undo() {
         let canvas = refused_over_a_diagram(&mut h, &host);
         let alone = rect_of(&h, NOTICE);
         let undo_label = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
-        h.state_mut().canvas.toast = Some(crate::connect::Toast { text: "Removed".into(), until: u64::MAX, undo_label });
+        h.state_mut().canvas.toast = Some(crate::canvas::Toast { text: "Removed".into(), until: u64::MAX, undo_label });
         h.run_steps(2);
         assert!(rect_of(&h, NOTICE).bottom() < rect_of(&h, "workspace.toast").top(), "over the canvas's toast");
         h.state_mut().canvas.toast = None;

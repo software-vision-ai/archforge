@@ -572,7 +572,7 @@ pub(crate) fn move_package(shell: &mut Shell, package: Obj, to: Obj) -> Result<(
         session.batch(&label, |b| b.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() })).map(|_| ()));
     moved.map_err(|e| crate::panels::refusal(&e))?;
     let text = crate::i18n::fmt(&tr("{what} moved into {where}"), &[("what", what.as_str()), ("where", into.as_str())]);
-    shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label: Some(label) });
+    shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(300), undo_label: Some(label) });
     Ok(())
 }
 

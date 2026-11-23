@@ -2665,7 +2665,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
                         fmt(&tr("{name} removed · {keys} went with it"), &[("name", &edit.name), ("keys", &went.join(", "))])
                     };
                     let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-                    shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+                    shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(300), undo_label });
                 }
                 Err(e) => set_column_refusal(shell, e),
             }

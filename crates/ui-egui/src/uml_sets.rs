@@ -187,7 +187,7 @@ pub(crate) fn remove_selected_set(shell: &mut Shell) -> bool {
         Ok(_) => {
             let text = fmt(&tr("{name} removed; its generalizations stay"), &[("name", &said)]);
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(crate::connect::TOAST_FRAMES), undo_label });
+            shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
         }
         Err(e) => shell.canvas.notice = Some(e),
     }
@@ -446,7 +446,7 @@ fn delete(shell: &mut Shell, elements: &[Obj]) {
         Ok(_) => {
             let text = removed_text(&what, &gone);
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(crate::connect::TOAST_FRAMES), undo_label });
+            shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
         }
         Err(e) => shell.canvas.notice = Some(e),
     }
