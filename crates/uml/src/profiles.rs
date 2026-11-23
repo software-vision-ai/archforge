@@ -647,17 +647,34 @@ pub fn moving_uses(store: &Store, moved: Obj, to: Obj) -> Uses {
     uses
 }
 
+/// Whether an element goes when `package` is removed with `going`: the package itself (AR-800), an
+/// element among `going` or inside one (AR-698), and, when the package has no parent, anything it
+/// holds, which it takes along rather than hands up (AR-804).
+fn goes_with<'a>(store: &'a Store, package: Obj, going: &'a [Obj]) -> impl Fn(Obj) -> bool + 'a {
+    let top = crate::commands::package_of(store, package).is_none();
+    move |e| e == package || (top && store.contains(package, e)) || going.iter().any(|g| *g == e || store.contains(*g, e))
+}
+
 /// The uses removing `package` would strand: applications on elements it hands up to its parent
-/// whose profile only it applies there. Those on `package` itself go with it (AR-800), and so do
-/// those on an element among `going`, or inside one: a dependency at a package that goes, say
-/// ([`crate::commands::dependencies_going`], AR-698); none of them strands anything.
+/// whose profile only it applies there. Those on what goes with it strand nothing: on `package`
+/// itself (AR-800), on an element among `going`, or inside one, a dependency at a
+/// package that goes, say ([`crate::commands::dependencies_going`], AR-698), and on anything a
+/// package with no parent holds, as it hands nothing up (AR-804).
 pub fn removal_uses(store: &Store, package: Obj, going: &[Obj]) -> Uses {
-    let goes = |e: Obj| e == package || going.iter().any(|g| *g == e || store.contains(*g, e));
+    let goes = goes_with(store, package, going);
     let mut uses = Uses::default();
     for (_, profile) in applied(store, package) {
-        uses.merge(stranded(store, package, profile, goes));
+        uses.merge(stranded(store, package, profile, &goes));
     }
     uses
+}
+
+/// The uses of `profile`, which `package`, having no parent, takes along when it is removed with
+/// `going`: every application of its stereotypes but those on what goes too ([`goes_with`],
+/// AR-804), an application tracing to no element among them, as it goes with no element.
+fn held_uses(store: &Store, package: Obj, profile: Obj, going: &[Obj]) -> Uses {
+    let goes = goes_with(store, package, going);
+    uses_where(store, &stereotypes(store, profile), |a| a.element.is_none_or(|e| !goes(e)))
 }
 
 /// The uses dropping `stereotype`'s extension to `metaclass` would strand: applications on elements
@@ -730,9 +747,9 @@ pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
 
 /// Why `o` may not be removed for its uses, when that is so: a profile or a stereotype whose
 /// stereotypes are applied, a stereotype property whose values are set, a package whose profile
-/// applications its contents need, but for those on the package itself (AR-800) or on an element
-/// among `going`, or inside one, which go with it (AR-698); and the library and its metaclasses,
-/// which are UML's own.
+/// applications its contents need, but for those on the package itself (AR-800), on an element
+/// among `going`, or inside one (AR-698), or, for a package with no parent, on anything it holds
+/// (AR-804), which go with it; and the library and its metaclasses, which are UML's own.
 pub fn removal_problem_with(store: &Store, o: Obj, going: &[Obj]) -> Option<CommandError> {
     if let Some(refused) = library_refusal(store, "ids", o) {
         return Some(refused);
@@ -742,10 +759,11 @@ pub fn removal_problem_with(store: &Store, o: Obj, going: &[Obj]) -> Option<Comm
         c if c == STEREOTYPE => stereotype_uses(store, o),
         c if c == PACKAGE => {
             // A package with no parent takes what it holds along: a profile inside it goes, and
-            // is checked for uses as a profile removed on its own is.
+            // is checked for uses as a profile removed on its own is, but for those on what goes
+            // with it (AR-804).
             if crate::commands::package_of(store, o).is_none() {
                 for profile in profiles_within(store, o) {
-                    let uses = profile_uses(store, profile);
+                    let uses = held_uses(store, o, profile, going);
                     if !uses.is_empty() {
                         let held = Used::HeldProfile { package: name_of(store, o), profile: name_of(store, profile) };
                         return Some(in_use(store, "ids", held, &uses));
