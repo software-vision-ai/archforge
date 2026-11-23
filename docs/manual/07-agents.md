@@ -816,10 +816,10 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   showed already kept, as the window's Open profile diagram does. Unapplying,
   deleting, dropping an extension, moving a stereotype or moving what a use sits in is refused
   while elements use the stereotypes, the uses named; deleting a used element with
-  `element_remove` removes its applications with it, and the applications on a dependency a
-  removed package takes along go with it and count as no use. `uml_profile_list`, `uml_stereotype_get`,
-  `uml_package_profiles`, `uml_profile_uses` and `uml_metaclass_list` read them; a profile or a
-  stereotype is removed with `element_remove`.
+  `element_remove` removes its applications with it, and the applications on a removed package
+  itself and on a dependency it takes along go with it and count as no use. `uml_profile_list`,
+  `uml_stereotype_get`, `uml_package_profiles`, `uml_profile_uses` and `uml_metaclass_list` read
+  them; a profile or a stereotype is removed with `element_remove`.
 - **Stereotypes applied**: `uml_stereotype_apply` applies a stereotype to an element (a classifier,
   an attribute or an association end, an n-ary association's ends included, which the window's
   Properties do not offer yet (their ids come from `uml_association_add_nary` or
