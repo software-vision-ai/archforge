@@ -8250,6 +8250,312 @@ fn an_er_checks_refused_are_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// Every kind of typed refusal, as samples for the test that no two notations claim one: each
+/// reason that names a kind, a relationship or another word of the notations', with every such
+/// word, and one or more of each other reason.
+fn every_reason() -> Vec<archforge_engine::Reason> {
+    use archforge_diagram::commands::{ARRANGED, DIAGRAM_ELEMENT, NOTE, NOTE_LINK, STYLED};
+    use archforge_diagram::project::{ELEMENT, NOTATION_ELEMENT};
+    use archforge_engine::{
+        Accepted, BindingFault, DefaultKind, End, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty, NotOneOf, Parameter, Reason,
+        Revision, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
+    };
+    // UML's kinds and relationships, ER's, the diagrams', and the words of a side, a part, an axis
+    // or a notation.
+    let named = [
+        "class|association class|interface|enumeration|data type|primitive type|built-in type|package|profile|stereotype|applied stereotype",
+        "metaclass|element|attribute|operation|literal|qualifier|property|subsetted property|redefined property|template parameter",
+        "generalization|generalization set|realization|binding|association|association end|dependency|constraint|constrained element",
+        "class diagram|schema|table|column|relationship|domain|enum type|enum literal|sequence|view|key|primary key|unique constraint",
+        "foreign key|foreign key column|check|index|index column|subtype|key column|skill|diagram|node|edge|label|waypoint|nesting level",
+        "type|size|default|collation|width|height|fill|stroke|text|x|y|ER|UML",
+    ];
+    let constants = [NOTE, NOTE_LINK, DIAGRAM_ELEMENT, STYLED, ARRANGED, ELEMENT, NOTATION_ELEMENT];
+    let words: Vec<&'static str> = named.into_iter().flat_map(|line| line.split('|')).chain(constants).collect();
+    let name = || String::from("Order");
+    let param = |kind: &'static str| {
+        Box::new(Parameter { name: "T".into(), kind, constraint: None, template: "List".into(), bound: "Orders".into(), argument: "Order".into() })
+    };
+    let revision = Revision { history: 1, revision: 2 };
+    let mut out = Vec::new();
+    for &w in &words {
+        out.extend([
+            Reason::NameTaken { kind: w, name: name() },
+            Reason::DependsOnItself { kind: w },
+            Reason::HoldsBuiltInName { kind: w, name: name() },
+            Reason::SpecializesOnlyItsKind { kind: w },
+            Reason::OnlyItsKindSpecializes { kind: w },
+            Reason::SpecializesNothing { kind: w },
+            Reason::NothingSpecializes { kind: w },
+            Reason::Again { relationship: w },
+            Reason::Cycle { relationship: w },
+            Reason::KindsDiffer { relationship: w },
+            Reason::KindNotSupported { kind: w },
+            Reason::BuiltInTaken { kind: w, name: name() },
+            Reason::NamedTwice { kind: w, name: name() },
+            Reason::NamesExpected { kind: w },
+            Reason::ItemsExpected { kind: w },
+            Reason::NotA { kind: w, name: name() },
+            Reason::IdEmpty { kind: w },
+            Reason::NoPlace { kind: w, at: 9, last: 2 },
+            Reason::CoordinateNotANumber { axis: w },
+            Reason::CoordinateTooFar { axis: w },
+            Reason::IdsExpected { kind: w },
+            Reason::SizeOutOfRange { side: w },
+            Reason::Labelled { slot: w },
+            Reason::NotAColour { part: w },
+            Reason::NotRemovable { notation: w },
+            Reason::NotDescribable { notation: w },
+            Reason::SchemasDiffer { relationship: w },
+            Reason::WouldBreak { kind: w, name: "pk".into(), why: Box::new(Reason::NameEmpty) },
+            Reason::TooDeep { kind: w, max: 32 },
+            Reason::DomainGives { what: w },
+            Reason::EnumTypeTakesNo { what: w },
+            Reason::Unextended(Box::new(Unextended { stereotype: "Entity".into(), metaclass: w, extends: vec!["Class".into()] })),
+            Reason::NeedsArgument(Box::new([*param(w)])),
+            Reason::Misfit(param(w)),
+            Reason::DefaultMisfit(param(w)),
+            Reason::NeedsDefault(param(w)),
+            Reason::WouldNotFit(param(w)),
+            Reason::ParameterInUse(param(w)),
+            Reason::LastParameter(param(w)),
+        ]);
+        for min in 1..=3 {
+            out.push(Reason::TooFew { kind: w, min });
+        }
+        out.push(Reason::TooMany { kind: w, max: 32 });
+        for &other in &words {
+            out.push(Reason::CannotSpecialize { kind: w, general: other });
+            out.push(Reason::Itself { relationship: w, kind: other });
+            for end in [End::Source, End::Target, End::Any] {
+                out.push(Reason::WrongEnd { relationship: w, end, kind: other });
+            }
+        }
+    }
+    let faults = [BindingFault::Missing, BindingFault::Duplicate, BindingFault::DeadTarget, BindingFault::WrongKind, BindingFault::WrongOwner];
+    for fault in faults.into_iter().map(Some).chain([None]) {
+        out.push(Reason::ParentDefaultUnsound { parent: "Sales".into(), fault });
+        out.push(Reason::DefaultDiagramOf { package: "Sales".into(), fault });
+        out.extend(fault.map(Reason::InvalidBinding));
+    }
+    for kind in [
+        DefaultKind::Integer,
+        DefaultKind::Real,
+        DefaultKind::Boolean,
+        DefaultKind::UnlimitedNatural,
+        DefaultKind::Literal("Colour".into()),
+        DefaultKind::Text,
+    ] {
+        out.push(Reason::DefaultUnread { value: "x".into(), kind });
+    }
+    for what in [WordPlace::DiagramKind, WordPlace::TextSlot, WordPlace::IndexDirection, WordPlace::IndexNulls] {
+        for known in [Vec::new(), vec!["asc".to_string()]] {
+            out.push(Reason::NotOneOf(Box::new(NotOneOf { what, word: "sideways".into(), known })));
+        }
+    }
+    let rules = [TargetRule::NotAProperty, TargetRule::Unnamed, TargetRule::SameName, TargetRule::Leaf];
+    out.extend(rules.into_iter().flat_map(|rule| [false, true].map(|redefining| Reason::TargetBreaks { name: "n".into(), rule, redefining })));
+    let misfits = [
+        ValueMisfit::TooMany { max: 256 },
+        ValueMisfit::Empty,
+        ValueMisfit::TooLong { max: 64 },
+        ValueMisfit::Unread { value: "x".into(), accepted: Accepted::Integer },
+        ValueMisfit::Count { given: 3, lower: 1, upper: Some(2) },
+        ValueMisfit::Twice { value: "x".into() },
+    ];
+    out.extend(misfits.into_iter().map(|misfit| Reason::Values(Box::new(Values { property: "tags".into(), misfit }))));
+    let used = [Used::Element("Order".into()), Used::Moved("Order".into()), Used::AppliedProfiles { package: "Sales".into() }];
+    out.extend(used.into_iter().map(|what| Reason::InUse(Box::new(InUse { what, uses: vec![("Entity".into(), vec!["Order".into()], 1)] }))));
+    out.extend([
+        Reason::PackageIntoItself,
+        Reason::RootPackageStays,
+        Reason::TypesPackageKept,
+        Reason::TypesPackageExists,
+        Reason::NameEmpty,
+        Reason::NameNotText,
+        Reason::TextEmpty,
+        Reason::TooLong { max: 64 },
+        Reason::ControlCharacter,
+        Reason::EdgeSpace,
+        Reason::Final { name: name() },
+        Reason::ParentsDiffer(Box::new([("Car".into(), "Vehicle".into()), ("Boat".into(), "Thing".into())])),
+        Reason::OtherEndAggregates,
+        Reason::WholeAllowsMany,
+        Reason::WholeAllowsOne,
+        Reason::WholeNavigable,
+        Reason::NaryAggregates,
+        Reason::TypeInUse(Box::new(TypeInUse { name: "money".into(), columns: vec!["price".into()], count: 1 })),
+        Reason::UmlOwn { metaclass: None },
+        Reason::UmlOwn { metaclass: Some("Class".into()) },
+        Reason::ProfileApplied { package: "Sales".into(), profile: "Persistence".into() },
+        Reason::ProfileNotApplied { package: "Sales".into(), profile: "Persistence".into() },
+        Reason::MetaclassNotDrawn { name: "Actor".into() },
+        Reason::NotAMetaclass { name: "Thing".into() },
+        Reason::ExtensionEnd { name: "base_Class".into() },
+        Reason::ValuesSet { name: "table".into(), elements: 2 },
+        Reason::InNoProfile,
+        Reason::LiteralName { name: "".into(), why: Box::new(Reason::NameEmpty) },
+        Reason::LiteralName { name: " a".into(), why: Box::new(Reason::EdgeSpace) },
+        Reason::IsApplication,
+        Reason::NotInModel,
+        Reason::InProfile { name: name() },
+        Reason::TakesNoStereotype { name: name() },
+        Reason::StereotypeApplied { stereotype: "Entity".into(), element: "Order".into() },
+        Reason::ProfileOutOfScope { profile: "Persistence".into(), package: "Sales".into() },
+        Reason::NotApplied { stereotype: "Entity".into(), element: "Order".into() },
+        Reason::NoProperty(Box::new(NoProperty { stereotype: "Entity".into(), name: "table".into(), has: vec!["schema".into()] })),
+        Reason::NoProperties { stereotype: "Entity".into(), name: "table".into() },
+        Reason::ValuesExpected,
+        Reason::Gone,
+        Reason::ParameterElement { name: "T".into(), template: "List".into() },
+        Reason::NoExpression,
+        Reason::NotAContext,
+        Reason::NotConstrainable,
+        Reason::BracesNoElement,
+        Reason::NoContext,
+        Reason::OneCoordinate,
+        Reason::TakesNoDescription,
+        Reason::TooManyComments { max: 64 },
+        Reason::NotAnItemKey { key: "colour".into() },
+        Reason::UnknownKey { key: "expresion".into(), takes: &["expression", "name"] },
+        Reason::UnknownKey { key: String::new(), takes: &["expression", "name"] },
+        Reason::NoElement { id: "1234".into() },
+        Reason::BuiltInNotLeaf { name: "Integer".into() },
+        Reason::Redefined(Box::new(["size".into()])),
+        Reason::ValuesMisfit { name: "tags".into(), elements: 2, bounds: "1..2".into() },
+        Reason::LiteralValued(Box::new(LiteralValued {
+            literal: "Red".into(),
+            property: "colour".into(),
+            stereotype: "Painted".into(),
+            element: "Car".into(),
+        })),
+        Reason::DefaultTooLong { max: 256 },
+        Reason::DefaultUnfit { value: "x".into(), ty: None },
+        Reason::DefaultUnfit { value: "x".into(), ty: Some("Integer".into()) },
+        Reason::NotShown { name: name() },
+        Reason::OutsideDiagram { name: name() },
+        Reason::ShownAlready { name: name() },
+        Reason::OtherDiagram,
+        Reason::ShowsElement,
+        Reason::StraightLink,
+        Reason::NoRelationship,
+        Reason::LacksEnd,
+        Reason::NotAtEnd { end: End::Source },
+        Reason::NotAtEnd { end: End::Target },
+        Reason::NotLinkable,
+        Reason::TargetOtherDiagram,
+        Reason::LinkUnlabelled,
+        Reason::ArrangedTooFar,
+        Reason::ElementNotRemovable { name: name() },
+        Reason::RemovedWhereEdited,
+        Reason::SubtypeKeyPart,
+        Reason::NotAPlainWord,
+        Reason::NotColumnOf { column: "c".into(), table: "t".into() },
+        Reason::NullableKeyColumn { name: "c".into() },
+        Reason::ColumnCount { columns: 1, table: "t".into(), key: 2 },
+        Reason::TypesDiffer { column: "a".into(), target: "b".into(), types: Box::new([Some("TEXT".into()), None]) },
+        Reason::KeyInUse { foreign_key: "fk".into(), table: "t".into() },
+        Reason::NoPrimaryKey { table: "t".into() },
+        Reason::KeyNotOf { table: "t".into() },
+        Reason::NoKeyColumns { table: "t".into() },
+        Reason::IdentifyingCycle { child: "a".into(), parent: "b".into() },
+        Reason::SetNullNotNullable { column: "c".into() },
+        Reason::RelationshipNotJoining { table: "a".into(), references: "b".into() },
+        Reason::IdentifyingOutsideKey { column: "c".into() },
+        Reason::HasSupertype { table: "t".into() },
+        Reason::InSubtypeKey,
+        Reason::IdentifyingWithoutForeignKey,
+        Reason::KeyWithoutForeignKey,
+        Reason::ManyToManyForeignKey,
+        Reason::RoleNeeded,
+        Reason::RoleWithoutLetter,
+        Reason::Mapping(MappingRule::NotManyToMany),
+        Reason::Mapping(MappingRule::KeysInPrimaryKey { table: "t".into(), keys: 1 }),
+        Reason::Sequence(SequenceRule::IncrementZero),
+        Reason::Sequence(SequenceRule::StartBelow { start: 0, minimum: 1 }),
+        Reason::ColumnOfOtherSchema { column: "c".into() },
+        Reason::InNoTable { column: "c".into() },
+        Reason::NotIntegerType { column: "c".into(), ty: "".into() },
+        Reason::NotIntegerType { column: "c".into(), ty: "TEXT".into() },
+        Reason::Generation(GenerationRule::ComputedNeedsExpression),
+        Reason::NotNullable,
+        Reason::AttributeAndExpression { column: "c".into() },
+        Reason::NoAttributeNorExpression,
+        Reason::SizeMisfit { rule: SizeRule::OutOfRange, ty: "VARCHAR".into(), value: 0 },
+        Reason::SizeInTypeName,
+        Reason::DomainAndEnum,
+        Reason::FollowsNoColumn { name: "n".into() },
+        Reason::PastLastColumn { columns: 3 },
+        Reason::StaleRevision { expected: Some(revision), current: revision },
+        Reason::StaleRevision { expected: None, current: revision },
+        Reason::ConnectionExists { dependency: "uses".into() },
+        Reason::StaleChoice { candidates: Box::new([]) },
+        Reason::StaleChoice { candidates: Box::new(["uses".into()]) },
+        Reason::NotOwnDiagram { diagram: "Main".into(), package: "Sales".into() },
+        Reason::NoDiagramYet { package: "Sales".into() },
+        Reason::ReplacementIsRemoved,
+        Reason::ReplacementNotNeeded { diagram: "Main".into() },
+        Reason::OneReplacement,
+        Reason::NotReplacement { diagram: "Main".into(), package: "Sales".into() },
+    ]);
+    out
+}
+
+/// Each refusal belongs to one notation (AR-786): no typed reason, no reason a command is not
+/// available, in a project without a model root or in a new one, and no rename command that may
+/// leave its element unnamed is claimed by two of the registered notations. Some notation claims at
+/// least one of each of the three, so the samples reach the hooks.
+#[test]
+fn no_two_notations_claim_the_same_refusal() {
+    use crate::notation_ui::{NotationUi, UIS};
+    crate::i18n::set_language("en");
+    let claimants = |claims: &dyn Fn(&dyn NotationUi) -> bool| UIS.iter().filter(|ui| claims(**ui)).map(|ui| ui.metamodel()).collect::<Vec<_>>();
+    let mut claimed = [0; 3];
+    for reason in every_reason() {
+        let by = claimants(&|ui| ui.said(&reason).is_some());
+        assert!(by.len() <= 1, "{reason:?} is said by the notations of the metamodels {by:?}");
+        claimed[0] += by.len();
+    }
+    let ids = || {
+        let mut n: u128 = 0;
+        Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        })
+    };
+    let rootless = archforge_notations::store(ids()).unwrap();
+    let options = archforge_engine::Options::default();
+    let rootless = archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), rootless, 1, options, archforge_notations::view());
+    let new = archforge_notations::new_project_session("Shop", ids()).unwrap();
+    for info in [&rootless, &new].into_iter().flat_map(|session| session.registry().infos(&session.facts())) {
+        if let Some(reason) = info.disabled_reason {
+            let by = claimants(&|ui| ui.disabled(reason).is_some());
+            assert!(by.len() <= 1, "{reason:?} is said by the notations of the metamodels {by:?}");
+            claimed[1] += by.len();
+        }
+        let by = claimants(&|ui| ui.may_be_unnamed(info.id));
+        assert!(by.len() <= 1, "{} may leave its element unnamed for the notations of the metamodels {by:?}", info.id);
+        claimed[2] += by.len();
+    }
+    assert!(claimed.iter().all(|n| *n > 0), "claims of typed reasons, reasons not available and renames: {claimed:?}");
+}
+
+/// A name of nothing but spaces is refused before it is sent, except for a diagram and for what a
+/// notation's rename command may leave unnamed: a relationship's, in ER and in UML (AR-786).
+#[test]
+fn an_empty_name_is_refused_unless_the_rename_may_leave_it_unnamed() {
+    crate::i18n::set_language("en");
+    let mut shell = Shell::new(Services::default());
+    for cmd in ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"] {
+        assert!(!crate::panels::refuse_empty_name(&mut shell, cmd, "  "), "{cmd} may leave its element unnamed");
+        assert_eq!(shell.panels.notice, None, "{cmd}");
+    }
+    for cmd in ["er.schema.rename", "uml.class.rename"] {
+        assert!(crate::panels::refuse_empty_name(&mut shell, cmd, "  "), "{cmd} needs a name");
+        assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."), "{cmd}");
+    }
+}
+
 /// An index's columns refused are said in the chosen language: none, too many, one twice, an item
 /// of another shape, and an index column with both a column and an expression or with neither, also
 /// as a problem of a loaded index without columns. In light and dark (AR-500).

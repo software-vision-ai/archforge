@@ -80,6 +80,7 @@ mod uml_panel;
 mod uml_profiles;
 mod uml_qualifiers;
 mod uml_relate;
+mod uml_said;
 mod uml_sets;
 mod uml_stereotypes;
 mod uml_templates;

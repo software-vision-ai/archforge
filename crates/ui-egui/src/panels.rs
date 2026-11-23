@@ -15,7 +15,7 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::home::control;
-use crate::i18n::{fmt, tr, tr_ctx, trn};
+use crate::i18n::{fmt, tr, tr_ctx};
 use crate::notation_ui::Words;
 use crate::state::Panel;
 use crate::ux::{self, Palette, icons, types};
@@ -525,41 +525,47 @@ pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
     format!("{first}{}{}", chars.as_str(), if reason.ends_with(['.', '!', '?']) { "" } else { "." })
 }
 
-/// A typed refusal in the user's words; none for a kind of element the catalogues don't name, which
-/// the engine's sentence then says.
+/// A typed refusal in the user's words: the shell's own, which the engine, the diagrams or both
+/// notations give (a name or a text refused, an id of no element or none given, an item's key no
+/// list takes, an expression or a description refused, a coordinate, a default that is none of an
+/// enumeration's literals), then the one notation's whose commands give it
+/// ([`NotationUi::said`](crate::notation_ui::NotationUi::said)); none for a reason or a kind of
+/// element the catalogues don't name, which the engine's sentence then says.
 pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_engine::Reason;
-    let (template, kind, name) = match reason {
-        Reason::NameTaken { kind, name } => (tr("There is {what} named {name} already."), *kind, name.as_str()),
-        Reason::DependsOnItself { kind } => (tr("{what} cannot depend on itself."), *kind, ""),
-        Reason::PackageIntoItself => return Some(tr("A package cannot go into itself or a package it holds.")),
-        Reason::NameEmpty => return Some(tr("A name can't be empty.")),
-        Reason::TextEmpty => return Some(tr("The text can't be empty.")),
-        Reason::TooLong { max } => return Some(fmt(&tr("It can't be longer than {max} characters."), &[("max", &max.to_string())])),
-        Reason::ControlCharacter => return Some(tr("It can't hold a control or hidden character.")),
-        Reason::EdgeSpace => return Some(tr("It can't start or end with a space.")),
-        Reason::InUse(used) => return Some(crate::uml_profiles::in_use(used)),
-        Reason::UmlOwn { metaclass: None } => return Some(tr("The UML library holds the metaclasses that stereotypes extend. It never changes.")),
-        Reason::UmlOwn { metaclass: Some(name) } => {
-            return Some(fmt(&tr("{name} is a UML metaclass, kept in the UML library. It never changes."), &[("name", name)]));
+    use archforge_engine::{DefaultKind, Reason};
+    Some(match reason {
+        Reason::NameTaken { kind, name } => fmt(&tr("There is {what} named {name} already."), &[("what", &a_kind(kind)?), ("name", name)]),
+        Reason::NameEmpty => tr("A name can't be empty."),
+        Reason::TextEmpty => tr("The text can't be empty."),
+        Reason::TooLong { max } => fmt(&tr("It can't be longer than {max} characters."), &[("max", &max.to_string())]),
+        Reason::ControlCharacter => tr("It can't hold a control or hidden character."),
+        Reason::EdgeSpace => tr("It can't start or end with a space."),
+        Reason::IdEmpty { kind: archforge_diagram::project::ELEMENT } => tr("No element is given. Give its id."),
+        Reason::NoElement { id } => fmt(&tr("There is no element with the id {id}."), &[("id", id)]),
+        Reason::UnknownKey { key, takes } => {
+            let template = if key.is_empty() {
+                tr("An item holds a key without a name. It takes {takes}.")
+            } else {
+                tr("An item takes no {key}. It takes {takes}.")
+            };
+            fmt(&template, &[("key", key), ("takes", &takes.join(", "))])
+        }
+        Reason::NoExpression => tr("Type an expression. A constraint without one states no rule."),
+        Reason::TakesNoDescription => tr("This element takes no description."),
+        Reason::CoordinateNotANumber { axis } => fmt(&tr("The {axis} is not a number."), &[("axis", axis)]),
+        Reason::CoordinateTooFar { axis } => {
+            let max = archforge_diagram::rules::MAX_COORD.to_string();
+            fmt(&tr("The {axis} is farther than {max} from the origin."), &[("axis", axis), ("max", &max)])
+        }
+        Reason::DefaultUnread { value, kind: DefaultKind::Literal(en) } => {
+            fmt(&tr("{value} is not a literal of {enumeration}."), &[("value", value), ("enumeration", en)])
         }
         other => {
-            return relationship_said(other)
-                .or_else(|| template_said(other))
-                .or_else(|| set_and_end_said(other))
-                .or_else(|| profile_said(other))
-                .or_else(|| constraint_said(other))
-                .or_else(|| target_said(other))
-                .or_else(|| diagram_said(other))
-                .or_else(|| crate::er_said::said(other))
-                .or_else(|| crate::engine_said::reason(other));
+            return diagram_said(other)
+                .or_else(|| crate::engine_said::reason(other))
+                .or_else(|| crate::notation_ui::UIS.iter().find_map(|ui| ui.said(other)));
         }
-    };
-    let what = a_kind(kind)?;
-    // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
-    let what =
-        if template.starts_with("{what}") { what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect() } else { what };
-    Some(fmt(&template, &[("what", &what), ("name", name)]))
+    })
 }
 
 /// A diagram command's refusal: an id or an element of the wrong kind where a diagram, a box, a line
@@ -572,8 +578,8 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
 /// note's link or shown already, a style's colour not of the form #rrggbb, and a diagram arranged
 /// that shows no box or would put one out of reach; and the shared commands' list of elements that
 /// is empty, no list of ids or names one twice, an element of no notation, and a notation's elements
-/// it does not describe yet; none for another reason. A coordinate is said as a constraint's is, and
-/// an id of no element or none given as the other commands' are.
+/// it does not describe yet; none for another reason. A coordinate, an id of no element and an
+/// element not given are said with the shell's other own refusals ([`said`]).
 fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
     use archforge_diagram::commands::{ARRANGED, DIAGRAM_ELEMENT, NOTE, NOTE_LINK, STYLED};
     use archforge_diagram::project::{ELEMENT, NOTATION_ELEMENT};
@@ -650,211 +656,6 @@ fn not_one_of_said(no: &archforge_engine::NotOneOf) -> Option<String> {
         (WordPlace::DiagramKind, true) => tr("This project holds no notation, so it knows no diagram kind."),
         (WordPlace::TextSlot, false) => fmt(&tr("This line has no label text {word}. It has {slots}."), &args),
         (WordPlace::TextSlot, true) => fmt(&tr("This line has no label text {word}. It has none."), &args),
-        _ => return None,
-    })
-}
-
-/// A constraint's or a description's rule broken, or a constraint command's parameter refused, in
-/// the constraint editor's own words where it has them; none for another reason.
-fn constraint_said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_engine::Reason;
-    Some(match reason {
-        Reason::IdEmpty { kind: "constraint" } => tr("No constraint is given. Give its id."),
-        Reason::NotA { kind: "constraint", name } => fmt(&tr("{name} is not a constraint of this model."), &[("name", name)]),
-        Reason::IdsExpected { kind: "constrained element" } => tr("Give the elements as a list of ids."),
-        Reason::NoContext => tr("This constraint is among no element's constraints."),
-        Reason::NoPlace { kind: "constraint", at, last } => fmt(
-            &tr("There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last."),
-            &[("at", &at.to_string()), ("last", &last.to_string())],
-        ),
-        Reason::OneCoordinate => tr("Give both x and y, or neither to place it where it reads."),
-        Reason::CoordinateNotANumber { axis } => fmt(&tr("The {axis} is not a number."), &[("axis", axis)]),
-        Reason::CoordinateTooFar { axis } => {
-            let max = archforge_diagram::rules::MAX_COORD.to_string();
-            fmt(&tr("The {axis} is farther than {max} from the origin."), &[("axis", axis), ("max", &max)])
-        }
-        Reason::NoExpression => tr("Type an expression. A constraint without one states no rule."),
-        Reason::BracesNoElement => tr("Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note."),
-        Reason::NotAContext => tr("Only a classifier of the model's own or a package owns constraints."),
-        Reason::NotConstrainable => tr("A constraint names only elements of this model."),
-        Reason::TooMany { kind: "constrained element", max } => fmt(&tr("A constraint names at most {max} elements."), &[("max", &max.to_string())]),
-        Reason::NamedTwice { kind: "constrained element", .. } => tr("An element is named twice. Name each element once."),
-        Reason::TakesNoDescription => tr("This element takes no description."),
-        Reason::TooManyComments { max } => fmt(
-            &tr("This element owns {max} comments or more, so its description can't be found. Remove some in the file first."),
-            &[("max", &max.to_string())],
-        ),
-        _ => return None,
-    })
-}
-
-/// A rule broken by the properties a property subsets or redefines, as a list of ids or each
-/// property named, by an element made leaf, or by a property's default; none for another reason.
-fn target_said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_engine::Reason;
-    const SUBSETTED: &str = "subsetted property";
-    const REDEFINED: &str = "redefined property";
-    Some(match reason {
-        Reason::TooMany { kind: SUBSETTED, max } => fmt(&tr("A property subsets at most {max} properties."), &[("max", &max.to_string())]),
-        Reason::TooMany { kind: REDEFINED, max } => fmt(&tr("A property redefines at most {max} properties."), &[("max", &max.to_string())]),
-        Reason::NamedTwice { kind: SUBSETTED | REDEFINED, .. } => tr("An element is named twice. Name each element once."),
-        Reason::IdsExpected { kind: SUBSETTED | REDEFINED } => tr("Give the properties as a list of ids."),
-        Reason::IdEmpty { kind: SUBSETTED | REDEFINED } => tr("An item in the list has no id. Give each property's id."),
-        Reason::NotAnItemKey { key } => fmt(&tr("{key} is not a key here. An item holds an id and a name."), &[("key", key)]),
-        Reason::NoElement { id } => fmt(&tr("There is no element with the id {id}."), &[("id", id)]),
-        Reason::BuiltInNotLeaf { name } => fmt(&tr("{name} is a built-in type, which is never made leaf."), &[("name", name)]),
-        Reason::Redefined(names) => crate::uml_panel::leaf_refusal(names),
-        Reason::TargetBreaks { name, rule, redefining } => crate::uml_panel::target_refusal(name, *rule, *redefining),
-        other => return crate::uml_panel::default_said(other),
-    })
-}
-
-/// A profile's or a stereotype's rule broken; none for a reason or a kind the catalogues don't say.
-fn profile_said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_engine::Reason;
-    let offered = || archforge_uml::profiles::METACLASSES.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ");
-    Some(match reason {
-        Reason::ProfileApplied { package, profile } => {
-            fmt(&tr("{package} applies {profile} already."), &[("package", package), ("profile", profile)])
-        }
-        Reason::ProfileNotApplied { package, profile } => {
-            fmt(&tr("{package} does not apply {profile}."), &[("package", package), ("profile", profile)])
-        }
-        Reason::TooMany { kind: "stereotype", max } => fmt(&tr("A profile holds at most {max} stereotypes."), &[("max", &max.to_string())]),
-        Reason::TooMany { kind: "metaclass", max } => fmt(&tr("A stereotype extends at most {max} metaclasses."), &[("max", &max.to_string())]),
-        Reason::MetaclassNotDrawn { name } => fmt(
-            &tr("{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}."),
-            &[("name", name), ("metaclasses", &offered())],
-        ),
-        Reason::NotAMetaclass { name } => {
-            fmt(&tr("{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}."), &[("name", name), ("metaclasses", &offered())])
-        }
-        Reason::NamedTwice { kind: "metaclass", name } => fmt(&tr("{name} is named twice. Name each metaclass once."), &[("name", name)]),
-        Reason::NamesExpected { kind: "metaclass" } => tr("Give the metaclasses as a list of names."),
-        Reason::InNoProfile => tr("This stereotype is in no profile."),
-        Reason::ExtensionEnd { name } => {
-            fmt(&tr("{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead."), &[("name", name)])
-        }
-        Reason::ValuesSet { name, elements } => {
-            let n = u64::try_from(*elements).ok()?;
-            let set = trn("{name} has values on {n} element. Remove those first.", "{name} has values on {n} elements. Remove those first.", n);
-            fmt(&set, &[("name", name)])
-        }
-        other => return crate::uml_stereotypes::said(other),
-    })
-}
-
-/// A relationship's rule broken, in the words the canvas says it with; none for a reason or a kind
-/// the catalogues don't say.
-fn relationship_said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_engine::Reason;
-    Some(match reason {
-        Reason::SpecializesOnlyItsKind { kind } => match *kind {
-            "interface" => tr("An interface specializes only an interface"),
-            "enumeration" => tr("An enumeration specializes only an enumeration"),
-            "data type" => tr("A data type specializes only a data type"),
-            "primitive type" => tr("A primitive type specializes only a primitive type"),
-            _ => return None,
-        },
-        Reason::OnlyItsKindSpecializes { kind } => match *kind {
-            "enumeration" => tr("Only an enumeration specializes an enumeration"),
-            "data type" => tr("Only a data type specializes a data type"),
-            "primitive type" => tr("Only a primitive type specializes a primitive type"),
-            _ => return None,
-        },
-        Reason::CannotSpecialize { kind: "class" | "association class", general: "interface" } => tr("A class cannot specialize an interface"),
-        Reason::SpecializesNothing { kind: "built-in type" } => tr("A built-in type specializes nothing"),
-        Reason::NothingSpecializes { kind: "association class" } => tr("Nothing specializes an association class"),
-        Reason::Final { name } => {
-            fmt(&tr("{name} is final: nothing may specialise it. Clear \"No subclasses\" in its Properties first."), &[("name", name)])
-        }
-        Reason::Itself { relationship: "generalization", .. } => tr("A classifier cannot specialize itself"),
-        Reason::Itself { relationship: "association class", .. } => tr("An association class does not join itself"),
-        Reason::Again { relationship: "generalization" } => tr("This one specializes that one already"),
-        Reason::Again { relationship: "realization" } => tr("This class realizes that interface already"),
-        Reason::Cycle { relationship: "generalization" } => tr("That one specializes this one already, which would make a cycle"),
-        Reason::WrongEnd { relationship: "binding", end: archforge_engine::End::Source, .. } => {
-            tr("Only a class, an interface or a data type binds a template")
-        }
-        Reason::WrongEnd { relationship: "binding", end: archforge_engine::End::Target, .. } => {
-            tr("A binding ends at a template: a class, an interface or a data type with template parameters")
-        }
-        Reason::KindsDiffer { relationship: "binding" } => tr("A template is bound by a classifier of its own kind"),
-        Reason::Itself { relationship: "binding", .. } => tr("A template does not bind itself"),
-        Reason::Again { relationship: "binding" } => tr("This one binds that template already"),
-        Reason::Cycle { relationship: "binding" } => tr("That template binds this one already, which would make a cycle"),
-        Reason::WrongEnd { relationship: "association", kind, .. } => match *kind {
-            "enumeration" => tr("An enumeration is a data type and joins no association"),
-            "data type" => tr("A data type joins no association"),
-            "primitive type" => tr("A primitive type joins no association"),
-            _ => return None,
-        },
-        Reason::WrongEnd { relationship: "association class", .. } => tr("An association class joins only classes"),
-        Reason::WrongEnd { relationship: "realization", end: archforge_engine::End::Source, .. } => tr("Only a class implements an interface"),
-        Reason::WrongEnd { relationship: "realization", end: archforge_engine::End::Target, .. } => tr("A class realizes only an interface"),
-        _ => return None,
-    })
-}
-
-/// A template rule broken, in the words the template and binding editors say it with; none for a
-/// reason or a kind the catalogues don't say.
-fn template_said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_engine::Reason;
-    use archforge_uml::templates::Kind;
-    let kind = |noun: &str| Kind::ALL.into_iter().find(|k| k.noun() == noun);
-    Some(match reason {
-        Reason::KindNotSupported { kind: k } => {
-            fmt(&tr("{kind} template parameters are not supported yet."), &[("kind", &crate::uml_templates::kind_word(kind(k)?))])
-        }
-        Reason::TooMany { kind: "template parameter", max } => fmt(&tr("A template has at most {max} parameters."), &[("max", &max.to_string())]),
-        Reason::NeedsArgument(params) => {
-            crate::uml_bindings::lacking(&params.iter().map(|p| Some((p.name.as_str(), kind(p.kind)?))).collect::<Option<Vec<_>>>()?)?
-        }
-        Reason::Misfit(p) => crate::uml_templates::must(&p.name, kind(p.kind)?, p.constraint.as_deref()),
-        Reason::DefaultMisfit(p) => {
-            fmt(&tr("{default} does not fit {name}: pick a default its arguments could be."), &[("default", &p.argument), ("name", &p.name)])
-        }
-        Reason::NeedsDefault(p) => fmt(
-            &tr("{bound} binds {template} and gives {name} no argument, so {name} needs a default."),
-            &[("bound", &p.bound), ("template", &p.template), ("name", &p.name)],
-        ),
-        Reason::WouldNotFit(p) => fmt(
-            &tr("{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first."),
-            &[("bound", &p.bound), ("name", &p.name), ("actual", &p.argument)],
-        ),
-        Reason::ParameterInUse(p) => fmt(
-            &tr("{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}."),
-            &[("bound", &p.bound), ("name", &p.name), ("actual", &p.argument)],
-        ),
-        Reason::LastParameter(p) => fmt(
-            &tr("{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}."),
-            &[("bound", &p.bound), ("template", &p.template), ("name", &p.name)],
-        ),
-        Reason::BuiltInTaken { kind, name } => fmt(
-            &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type."),
-            &[("what", &a_kind(kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
-        ),
-        _ => return None,
-    })
-}
-
-/// A generalization set's or an association end's rule broken, in the words the set menu and the
-/// end editor say it with; none for a reason or a kind the catalogues don't say.
-fn set_and_end_said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_engine::Reason;
-    Some(match reason {
-        Reason::TooFew { kind: "generalization", min: 1 } => tr("A set groups at least one generalization."),
-        Reason::TooMany { kind: "generalization", max } => {
-            crate::i18n::trn("A set groups at most {n} generalization.", "A set groups at most {n} generalizations.", u64::try_from(*max).ok()?)
-        }
-        Reason::ParentsDiffer(ends) => crate::uml_sets::parents_differ(ends),
-        Reason::TooFew { kind: "association end", min: 3 } => tr("An n-ary association needs three ends or more."),
-        Reason::TooMany { kind: "association end", max } => fmt(&tr("An association takes at most {n} ends"), &[("n", &max.to_string())]),
-        Reason::OtherEndAggregates => tr("The other end has an aggregation already: only the part's end has one."),
-        Reason::WholeAllowsMany => tr("A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first."),
-        Reason::WholeAllowsOne => tr("This end is a composition's whole, which allows one at most."),
-        Reason::WholeNavigable => tr("The whole's end of an aggregation or composition is not navigable."),
-        Reason::NaryAggregates => tr("An n-ary association's ends are not aggregations: only a binary association has a whole and a part."),
         _ => return None,
     })
 }
@@ -1810,13 +1611,14 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     }
 }
 
-/// The rename commands whose name may be emptied, which leaves the element unnamed.
-const MAY_BE_UNNAMED: [&str; 3] = ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"];
-
 /// Refuses a name of nothing but spaces for an element that needs one, before anything is sent:
-/// the panel says so in plain words, and the name as written stays. Gives whether it refused.
+/// the panel says so in plain words, and the name as written stays. A diagram may be left without a
+/// name, as may what a notation's rename command `cmd` leaves unnamed
+/// ([`NotationUi::may_be_unnamed`](crate::notation_ui::NotationUi::may_be_unnamed)). Gives whether
+/// it refused.
 pub(crate) fn refuse_empty_name(shell: &mut Shell, cmd: &str, name: &str) -> bool {
-    let refused = name.trim().is_empty() && !MAY_BE_UNNAMED.contains(&cmd);
+    let may_be_unnamed = cmd == "diagram.rename" || crate::notation_ui::UIS.iter().any(|ui| ui.may_be_unnamed(cmd));
+    let refused = name.trim().is_empty() && !may_be_unnamed;
     if refused {
         shell.panels.notice = Some(tr("A name can't be empty."));
     }

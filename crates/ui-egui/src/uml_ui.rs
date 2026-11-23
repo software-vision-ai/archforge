@@ -1026,6 +1026,22 @@ impl NotationUi for UmlUi {
             crate::uml_constraints::section_of(shell, ui, p, r, below, o, id);
         }
     }
+
+    /// UML's own refusals: those its commands alone give, in its editors' and the canvas's words.
+    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
+        crate::uml_said::said(reason)
+    }
+
+    /// No element yet of the kind a UML command needs: a package, a classifier, a relationship, a
+    /// template or its binding, a constraint, a profile, a stereotype or its application.
+    fn disabled(&self, reason: &str) -> Option<String> {
+        crate::uml_said::disabled(reason)
+    }
+
+    /// A relationship may lose its name, which leaves it unnamed.
+    fn may_be_unnamed(&self, cmd: &str) -> bool {
+        cmd == "uml.relationship.rename"
+    }
 }
 
 /// How Properties names `o`, whatever owns it.

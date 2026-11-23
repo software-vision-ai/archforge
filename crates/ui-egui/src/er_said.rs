@@ -1,6 +1,8 @@
-//! The ER commands' typed refusals in the user's words (AR-438): `panels::said` asks here last, so
-//! a reason UML says too keeps UML's row. Only the ER kinds are matched, by the words the interface
-//! uses for them; a kind not listed is left to the engine's English. A word none of a choice's
+//! The ER commands' typed refusals in the user's words (AR-438), which ER's own hook says
+//! (`NotationUi::said`, AR-786): only the reasons ER's commands alone give, and only the ER kinds,
+//! by the words the interface uses for them; a kind not listed is left to the engine's English, and
+//! a reason the engine, the diagrams or UML give too is the shell's own (`panels::said`). The
+//! reasons an ER command is not available now are said here too. A word none of a choice's
 //! words is said under the choice's label. A key's columns (AR-492): none, a column of another
 //! table, one that may be null in a primary key, a key a foreign key points at, and no primary key.
 //! Mapping tables (AR-505): a relationship that does not resolve into one, a table that does not
@@ -20,11 +22,10 @@
 //! deep. A column's generation (AR-494): the rule it breaks, also for a column on
 //! a domain that would break, and a key or identity column asked to be nullable. A column's own
 //! (AR-495): a default or collation its domain gives, an unlink of one that follows no column, and
-//! a place past its table's last; a default none of an enum type's literals is UML's row. A
+//! a place past its table's last; a default none of an enum type's literals is the shell's row. A
 //! column's or a domain's size (AR-496): the rule it breaks, with the type and the size. Checks
-//! (AR-499): a domain's checks too many, one named twice, an item of another shape and an item's
-//! key the list does not take (said without a kind, for any list of items); an empty expression is
-//! a constraint's row.
+//! (AR-499): a domain's checks too many, one named twice and an item of another shape; an item's
+//! key the list does not take and an empty expression are the shell's rows.
 //! An index's columns (AR-500): none, too many, one twice, an item of another shape, and an index
 //! column with both a column and an expression or with neither.
 //! A removal (AR-508): an element removed where it is edited, and a part of a subtype's key
@@ -79,6 +80,16 @@ const INDEX_COLUMN: &str = "index column";
 
 /// A subtype, as the refusals of a table's supertype name the relationship and the kind.
 const SUBTYPE: &str = "subtype";
+
+/// Why an ER command is not available now, in the user's words, by the reason its availability
+/// check gives; none for another reason.
+pub(crate) fn disabled(reason: &str) -> Option<String> {
+    Some(match reason {
+        archforge_er::commands::NO_SCHEMAS => tr("There is no schema yet."),
+        archforge_er::commands::NO_ENTITIES => tr("There is no entity yet."),
+        _ => return None,
+    })
+}
 
 /// An ER command's refusal in the user's words; none for a reason or a kind this doesn't say.
 pub(crate) fn said(reason: &Reason) -> Option<String> {
@@ -183,14 +194,6 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
             fmt(&tr("{column} is given with an expression too. An index column sorts by a column or by an expression."), &[("column", column)])
         }
         Reason::NoAttributeNorExpression => tr("An index column needs a column or an expression to sort by."),
-        Reason::UnknownKey { key, takes } => {
-            let template = if key.is_empty() {
-                tr("An item holds a key without a name. It takes {takes}.")
-            } else {
-                tr("An item takes no {key}. It takes {takes}.")
-            };
-            fmt(&template, &[("key", key), ("takes", &takes.join(", "))])
-        }
         Reason::NotOneOf(no) => return not_one_of_said(no),
         Reason::TypeInUse(used) => {
             let n = u64::try_from(used.count).ok()?;
