@@ -3,7 +3,7 @@
 //! removals and descriptions routed to it through the one project view.
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
-use archforge_diagram::{Notation, ProjectView};
+use archforge_diagram::{Notation, OpenProblem, ProjectView};
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{CommandError, Options};
 use archforge_mof::rows::{self, Cell};
@@ -760,10 +760,11 @@ fn unsound_bindings() -> rows::Rows {
     rows::snapshot(&st, &tables, &junctions).unwrap()
 }
 
-/// Each diagnosis as the name of the package it concerns and the problem's own name.
-fn diagnosed(st: &Store, all: &[archforge_uml::defaults::Diagnosis]) -> Vec<(String, String)> {
-    let owner = |d: &archforge_uml::defaults::Diagnosis| d.owner.map(|o| archforge_core::name_of(st, o)).unwrap_or_default();
-    all.iter().map(|d| (owner(d), format!("{:?}", d.problem).split(['(', ' ']).next().unwrap_or_default().to_string())).collect()
+/// Each problem reported as a project opens as the notation reporting it, the name of the element
+/// it concerns and its code.
+fn diagnosed(st: &Store, all: &[OpenProblem]) -> Vec<(&'static str, String, &'static str)> {
+    let owner = |p: &OpenProblem| p.owner.map(|o| archforge_core::name_of(st, o)).unwrap_or_default();
+    all.iter().map(|p| (p.notation, owner(p), p.code)).collect()
 }
 
 /// AR-586: a project whose bindings are unsound opens as it was stored, its rows unchanged and
@@ -777,10 +778,18 @@ fn unsound_bindings_open_unchanged_and_are_reported() {
     let st = opened.session.doc();
     assert_eq!(rows::snapshot(st, &tables, &junctions).unwrap(), written, "the rows are as they were read");
     assert!(!opened.session.is_dirty(), "nothing to save");
-    let named = |pairs: [(&str, &str); 4]| pairs.map(|(p, k)| (p.to_string(), k.to_string())).to_vec();
-    let expected = named([("Sales", "Duplicate"), ("Billing", "WrongKind"), ("Stock", "WrongOwner"), ("Orders", "Missing")]);
+    let named = |pairs: [(&str, &'static str); 4]| pairs.map(|(p, k)| ("UML", p.to_string(), k)).to_vec();
+    let expected = named([
+        ("Sales", "default_diagram_duplicate"),
+        ("Billing", "default_diagram_wrong_kind"),
+        ("Stock", "default_diagram_wrong_owner"),
+        ("Orders", "default_diagram_missing"),
+    ]);
     assert_eq!(diagnosed(st, &opened.problems), expected);
-    assert_eq!(opened.problems, archforge_uml::defaults::problems(st), "the problems of the session's own store");
+    assert_eq!(opened.problems, archforge_notations::open_problems(st), "the problems of the session's own store");
+    // UML's own typed problems, asked of UML: the same owners in the same order, in the same words.
+    let typed: Vec<_> = archforge_uml::defaults::problems(st).into_iter().map(|d| (d.owner, d.problem.to_string())).collect();
+    assert_eq!(opened.problems.iter().map(|p| (p.owner, p.message.clone())).collect::<Vec<_>>(), typed);
     // A repair that touches a binding is refused, and so is one that adds one.
     let retarget = |st: &mut Store| {
         let b = archforge_diagram::defaults::bindings(st)[0];
@@ -825,7 +834,7 @@ fn a_repair_is_judged_by_ids_and_the_problems_reported_follow_it() {
         st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(billing)).unwrap();
     })
     .unwrap();
-    let expected = [("Sales", "WrongOwner"), ("Billing", "Missing")].map(|(p, k)| (p.to_string(), k.to_string()));
+    let expected = [("Sales", "default_diagram_wrong_owner"), ("Billing", "default_diagram_missing")].map(|(p, k)| ("UML", p.to_string(), k));
     assert_eq!(diagnosed(opened.session.doc(), &opened.problems), expected);
 }
 

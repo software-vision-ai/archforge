@@ -43,7 +43,8 @@ would change a binding, compared by ids, is refused. A version opened to be look
 | `registry_checked` | the commands of `registry` with a commit check run on every change before it is kept, whose refusal takes the change back whole; for tests of an operation's atomicity (AR-641) |
 | `new_project_session` | a session with the project's Model root named `name`; the host supplies the ids |
 | `session_from_rows`, `session_from_rows_repaired` | a session rebuilt from a project's rows and checked (by `check_kinds_in_rows`, `check_bindings_in_rows`, then `name_kind`), saved as it is; the second runs a repair on the store first; refused with an `OpenError` |
-| `session_from_rows_diagnosed`, `Opened` | the second, with the binding problems of the store the session gets, after the repair (`archforge_uml::defaults::problems`), beside it |
+| `session_from_rows_diagnosed`, `Opened` | the second, with the problems of the store the session gets, after the repair (`open_problems`), beside it |
+| `open_problems` | what every notation of `NOTATIONS` reports wrong in a store as a project opens (`Notation::open_problems`), each an `OpenProblem` of the diagram crate, in the order of the notations: UML's default-diagram binding problems today |
 | `OpenError` | why rows do not open: `UnknownKinds` or `BrokenBindings`, which callers match, or any other reason in English |
 | `check_bindings_in_rows`, `BrokenBinding`, `BindingEnd` | the default-diagram bindings in rows whose owner or diagram is no row of any table, or none |
 | `check_kinds`, `check_kinds_in_rows`, `UnknownKinds`, `UnknownDiagram` | the diagrams of kinds no notation knows, in a store or in rows of any shape whose diagram table has its `id` and `kind` columns, read by name alone, so a host checks a project before it brings its tables up to date |

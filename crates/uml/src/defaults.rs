@@ -63,6 +63,30 @@ impl std::fmt::Display for BindingProblem {
 
 impl std::error::Error for BindingProblem {}
 
+impl BindingProblem {
+    /// The problem's code as UML reports it when a project opens (AR-782), the same in every
+    /// version.
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            BindingProblem::Missing => "default_diagram_missing",
+            BindingProblem::Duplicate(_) => "default_diagram_duplicate",
+            BindingProblem::DeadTarget { .. } => "default_diagram_dead_target",
+            BindingProblem::WrongKind { .. } => "default_diagram_wrong_kind",
+            BindingProblem::WrongOwner { .. } => "default_diagram_wrong_owner",
+        }
+    }
+
+    /// The objects the problem names: its bindings in id order, then the diagram one names.
+    pub(crate) fn objects(&self) -> Vec<Obj> {
+        match self {
+            BindingProblem::Missing => Vec::new(),
+            BindingProblem::Duplicate(all) => all.clone(),
+            BindingProblem::DeadTarget { binding } => vec![*binding],
+            BindingProblem::WrongKind { binding, diagram } | BindingProblem::WrongOwner { binding, diagram } => vec![*binding, *diagram],
+        }
+    }
+}
+
 /// A binding problem found in a store, with the element whose default it concerns: none for a
 /// binding that names no owner.
 #[derive(Debug, Clone, PartialEq, Eq)]

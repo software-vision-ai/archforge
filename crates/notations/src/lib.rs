@@ -12,7 +12,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
-use archforge_diagram::{DiagramView, Notation, ProjectView};
+use archforge_diagram::{DiagramView, Notation, OpenProblem, ProjectView};
 use archforge_mof::rows::{Cell, Rows};
 use archforge_mof::schema::{Junction, Table};
 use archforge_mof::{ClassId, CompositeSlabs, MetaError, Metamodel, NameKind, Slabs, Store, Universe, Uuid};
@@ -96,6 +96,12 @@ pub type Session = archforge_engine::Session<Store, ProjectView>;
 /// opens refuses only two elements of one kind named alike, whatever the case, in one owner.
 pub fn name_kind(class: ClassId) -> Option<NameKind> {
     PARTS.iter().find(|p| p.index == class.metamodel()).map_or(ONE_KIND, |p| (p.name_kind)(class))
+}
+
+/// What every notation of [`NOTATIONS`] reports wrong in `store` as a project opens
+/// ([`Notation::open_problems`]): each notation's in its own order, the notations in theirs.
+pub fn open_problems(store: &Store) -> Vec<OpenProblem> {
+    NOTATIONS.iter().flat_map(|n| n.open_problems(store)).collect()
 }
 
 /// A view of a project holding every notation.
@@ -399,18 +405,17 @@ pub fn session_from_rows_repaired(
     session_from_rows_diagnosed(rows, ids, repair).map(|opened| opened.session)
 }
 
-/// A project's session as it opens, with what is wrong with its default-diagram bindings.
+/// A project's session as it opens, with what its notations report wrong in its model.
 pub struct Opened {
     pub session: Session,
-    /// The binding problems of the session's store, after any repair, as
-    /// [`archforge_uml::defaults::problems`] gives them: reported, never repaired, so the bindings
-    /// open as they were stored.
-    pub problems: Vec<archforge_uml::defaults::Diagnosis>,
+    /// The problems of the session's store, after any repair, as [`open_problems`] gives them:
+    /// reported, never repaired, so the model opens as it was stored.
+    pub problems: Vec<OpenProblem>,
 }
 
-/// [`session_from_rows_repaired`], with the binding problems of the model opened. A version opened
-/// to be looked at reports those of its own revision. No repair changes a binding, its ids compared
-/// whatever store the repair leaves: one that would is refused.
+/// [`session_from_rows_repaired`], with the problems its notations report in the model opened. A
+/// version opened to be looked at reports those of its own revision. No repair changes a binding,
+/// its ids compared whatever store the repair leaves: one that would is refused.
 pub fn session_from_rows_diagnosed(
     rows: &archforge_mof::rows::Rows,
     ids: Box<dyn FnMut() -> Uuid + Send>,
@@ -453,7 +458,7 @@ pub fn session_from_rows_diagnosed(
         return Err(OpenError::Unreadable("the project has no model root".into()));
     }
     // Read from the store the session gets, so they hold whatever the repair changed around a binding.
-    let problems = archforge_uml::defaults::problems(&st);
+    let problems = open_problems(&st);
     let mut session = Session::with_view(registry, st, FIRST_COUNTER, archforge_engine::Options::default(), view());
     session.mark_saved().map_err(|e| e.to_string())?;
     Ok(Opened { session, problems })
