@@ -648,18 +648,20 @@ pub fn moving_uses(store: &Store, moved: Obj, to: Obj) -> Uses {
 }
 
 /// Whether an element goes when `package` is removed with `going`: the package itself (AR-800), an
-/// element among `going` or inside one (AR-698), and, when the package has no parent, anything it
-/// holds, which it takes along rather than hands up (AR-804).
+/// element among `going`, a dependency at a package that goes (AR-698) or an element named in the
+/// same removal (AR-805), and what one of them holds, but for a nested package, which hands what it
+/// holds up rather than takes it along; a package with no parent takes it along (AR-804).
 fn goes_with<'a>(store: &'a Store, package: Obj, going: &'a [Obj]) -> impl Fn(Obj) -> bool + 'a {
-    let top = crate::commands::package_of(store, package).is_none();
-    move |e| e == package || (top && store.contains(package, e)) || going.iter().any(|g| *g == e || store.contains(*g, e))
+    let hands_up = |g: Obj| store.class_of(g).ok() == Some(PACKAGE) && crate::commands::package_of(store, g).is_some();
+    move |e| std::iter::once(&package).chain(going).any(|g| *g == e || (!hands_up(*g) && store.contains(*g, e)))
 }
 
 /// The uses removing `package` would strand: applications on elements it hands up to its parent
 /// whose profile only it applies there. Those on what goes with it strand nothing: on `package`
-/// itself (AR-800), on an element among `going`, or inside one, a dependency at a
-/// package that goes, say ([`crate::commands::dependencies_going`], AR-698), and on anything a
-/// package with no parent holds, as it hands nothing up (AR-804).
+/// itself (AR-800), on an element among `going`, or inside one that does not hand it up, a
+/// dependency at a package that goes, say ([`crate::commands::dependencies_going`], AR-698), or an
+/// element named in the same removal (AR-805), and on anything a package with no parent holds, as it
+/// hands nothing up (AR-804).
 pub fn removal_uses(store: &Store, package: Obj, going: &[Obj]) -> Uses {
     let goes = goes_with(store, package, going);
     let mut uses = Uses::default();
@@ -748,8 +750,9 @@ pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
 /// Why `o` may not be removed for its uses, when that is so: a profile or a stereotype whose
 /// stereotypes are applied, a stereotype property whose values are set, a package whose profile
 /// applications its contents need, but for those on the package itself (AR-800), on an element
-/// among `going`, or inside one (AR-698), or, for a package with no parent, on anything it holds
-/// (AR-804), which go with it; and the library and its metaclasses, which are UML's own.
+/// among `going`, or inside one that does not hand it up (AR-698, AR-805), or, for a package with no
+/// parent, on anything it holds (AR-804), which go with it; and the library and its metaclasses,
+/// which are UML's own.
 pub fn removal_problem_with(store: &Store, o: Obj, going: &[Obj]) -> Option<CommandError> {
     if let Some(refused) = library_refusal(store, "ids", o) {
         return Some(refused);
