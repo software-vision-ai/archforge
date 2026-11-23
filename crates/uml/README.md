@@ -220,7 +220,10 @@ profile or anything else that is no package, or a `BindingProblem`: `Missing` (s
 but no binding), `Duplicate`, `DeadTarget`, `WrongKind` (no structure diagram) or `WrongOwner`
 (another element's diagram, or a binding of something that is no package). It never falls back to
 the first diagram found and changes nothing. `defaults::problems` lists every problem in a store as
-a `Diagnosis`, ordered by the owner's id and then the binding's.
+a `Diagnosis`, ordered by the owner's id and then the binding's. UML's `open_problems` reports them
+in that order as a project opens, as the diagram crate's `OpenProblem` every notation reports in
+(AR-782): the element it concerns, a code (`default_diagram_missing`, `_duplicate`, `_dead_target`,
+`_wrong_kind`, `_wrong_owner`), the bindings and the diagram it names, and its English words.
 A package's first class diagram is bound as its default as it is made (AR-579): UML's
 `binds_default` holds for a package's, never a profile's, so `diagram.add` makes the binding with
 the diagram in one undo step; a second diagram, and one of a package that has class diagrams but no

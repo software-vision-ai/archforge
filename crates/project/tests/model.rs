@@ -980,7 +980,7 @@ fn a_version_reports_the_binding_problems_it_was_saved_with() {
         opened.session.set_read_only(true).unwrap();
         let st = opened.session.doc();
         assert_eq!(&rows_of(st, &schema), rows, "opened as it was saved");
-        opened.problems.iter().map(|d| (d.owner.map(|o| archforge_core::name_of(st, o)), d.problem.to_string())).collect::<Vec<_>>()
+        opened.problems.iter().map(|p| (p.owner.map(|o| archforge_core::name_of(st, o)), p.message.clone())).collect::<Vec<_>>()
     };
     let duplicate = archforge_uml::defaults::BindingProblem::Duplicate(Vec::new()).to_string();
     assert_eq!(problems(&project.read_model_at(&schema, &version).unwrap(), &duplicated), [(Some("Sales".to_string()), duplicate)]);

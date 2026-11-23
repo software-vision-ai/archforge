@@ -149,6 +149,30 @@ pub trait Notation: Send + Sync + 'static {
         let _ = (store, obj);
         String::new()
     }
+    /// What is wrong in `store` with the notation's own elements as a project opens: reported,
+    /// never repaired, so the model opens as it was stored, in an order of the notation's choosing
+    /// that does not change with the handles. None by default.
+    fn open_problems(&self, store: &Store) -> Vec<OpenProblem> {
+        let _ = store;
+        Vec::new()
+    }
+}
+
+/// Something wrong in a project's model that a notation reports as the project opens
+/// ([`Notation::open_problems`]), told the same way by every notation: which one, the element it
+/// concerns, a code for it, the objects it names and what it is in English.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OpenProblem {
+    /// The name of the notation that reports it, as [`Notation::name`] gives it.
+    pub notation: &'static str,
+    /// The element the problem concerns; none when it concerns no live element.
+    pub owner: Option<Obj>,
+    /// The problem's kind, in the notation's own words, the same in every version: `snake_case`.
+    pub code: &'static str,
+    /// The other objects the problem names, in the notation's order.
+    pub objects: Vec<Obj>,
+    /// The problem in English, for the command line; an interface says it in its own words.
+    pub message: String,
 }
 
 /// What a notation's removal took away and handed up (AR-675), which `element.remove` answers

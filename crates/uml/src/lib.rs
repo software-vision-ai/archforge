@@ -333,6 +333,20 @@ impl Notation for UmlNotation {
     fn description(&self, store: &Store, obj: Obj) -> String {
         descriptions::description_of(store, obj)
     }
+
+    /// Every default-diagram binding problem in `store`, as [`defaults::problems`] orders them:
+    /// the element it concerns (a package, or a profile or none for a binding that is wrong
+    /// whatever it names), the bindings and diagram it names, and its English words.
+    fn open_problems(&self, store: &Store) -> Vec<archforge_diagram::OpenProblem> {
+        let report = |d: defaults::Diagnosis| archforge_diagram::OpenProblem {
+            notation: self.name(),
+            owner: d.owner,
+            code: d.problem.code(),
+            objects: d.problem.objects(),
+            message: d.problem.to_string(),
+        };
+        defaults::problems(store).into_iter().map(report).collect()
+    }
 }
 
 /// A project's notations when it holds UML alone.

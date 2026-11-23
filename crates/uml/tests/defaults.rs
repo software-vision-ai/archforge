@@ -1,6 +1,7 @@
 //! A package's default diagram through its binding (AR-575): each state built by hand in a store
 //! under fixed ids: bound, none yet, missing, duplicate, a dead, a wrong-kind and a foreign target,
-//! a profile, and every problem of a store in a stable order.
+//! a profile, and every problem of a store in a stable order, which UML reports as a project opens
+//! in the words every notation uses (AR-782).
 //! Each state read through `uml.package.default.get`, on the revision its caller read, as a
 //! read-only tool that leaves no undo step (AR-576). A diagram a binding names stays: removing it,
 //! or an element of another one's, is refused typed with nothing changed (AR-578), an association
@@ -15,12 +16,12 @@
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
-use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
+use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, Notation, OpenProblem, ProjectView};
 use archforge_engine::{BindingFault, EngineError, Options, Reason, Revision, Session};
 use archforge_mof::rows::{self, Cell};
 use archforge_mof::{ClassId, CompositeSlabs, Obj, Store, Uuid, Value};
 use archforge_uml::defaults::{BindingProblem, DefaultDiagram, Diagnosis, problems, resolve};
-use archforge_uml::{ALONE, PACKAGE, PROFILE, STRUCTURE_DIAGRAM, registry};
+use archforge_uml::{ALONE, PACKAGE, PROFILE, STRUCTURE_DIAGRAM, UmlNotation, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -218,6 +219,47 @@ fn a_stores_problems_come_in_the_order_of_their_ids() {
     let mut back = bare();
     rows::restore(&mut back, &rows::snapshot(&st, &tables, &junctions).unwrap(), &tables, &junctions).unwrap();
     assert_eq!(ids(&back), ids(&st), "read back with other handles");
+}
+
+/// AR-782: as a project opens, UML reports each binding problem in the words every notation uses,
+/// in the order of `problems`: the package it concerns, a code of its own, the bindings and the
+/// diagram it names, and its English words. A store with none reports none.
+#[test]
+fn uml_reports_each_binding_problem_in_the_words_every_notation_uses() {
+    let (mut st, model) = store();
+    assert_eq!(UmlNotation.open_problems(&st), []);
+    let missing = add(&mut st, model, PACKAGE, 0x10);
+    diagram(&mut st, model, 0x11, STRUCTURE_DIAGRAM, missing);
+    let duplicate = add(&mut st, model, PACKAGE, 0x20);
+    let twice = diagram(&mut st, model, 0x21, STRUCTURE_DIAGRAM, duplicate);
+    // Made in the other order from their ids.
+    let (later, earlier) = (bind(&mut st, model, 0x23, duplicate, twice), bind(&mut st, model, 0x22, duplicate, twice));
+    let dead = add(&mut st, model, PACKAGE, 0x30);
+    let gone = diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, dead);
+    let emptied = bind(&mut st, model, 0x32, dead, gone);
+    st.set(emptied, DEFAULT_DIAGRAM, Value::Null).unwrap();
+    let wrong_kind = add(&mut st, model, PACKAGE, 0x40);
+    let other = diagram(&mut st, model, 0x41, OTHER_DIAGRAM, wrong_kind);
+    let to_other = bind(&mut st, model, 0x42, wrong_kind, other);
+    let wrong_owner = add(&mut st, model, PACKAGE, 0x50);
+    let theirs = diagram(&mut st, model, 0x51, STRUCTURE_DIAGRAM, missing);
+    let to_theirs = bind(&mut st, model, 0x52, wrong_owner, theirs);
+    let open = |owner, code, objects: Vec<Obj>, problem: BindingProblem| OpenProblem {
+        notation: "UML",
+        owner: Some(owner),
+        code,
+        objects,
+        message: problem.to_string(),
+    };
+    let expected = [
+        open(missing, "default_diagram_missing", vec![], BindingProblem::Missing),
+        open(duplicate, "default_diagram_duplicate", vec![earlier, later], BindingProblem::Duplicate(Vec::new())),
+        open(dead, "default_diagram_dead_target", vec![emptied], BindingProblem::DeadTarget { binding: emptied }),
+        open(wrong_kind, "default_diagram_wrong_kind", vec![to_other, other], BindingProblem::WrongKind { binding: to_other, diagram: other }),
+        open(wrong_owner, "default_diagram_wrong_owner", vec![to_theirs, theirs], BindingProblem::WrongOwner { binding: to_theirs, diagram: theirs }),
+    ];
+    assert_eq!(UmlNotation.open_problems(&st), expected);
+    assert_eq!(problems(&st).len(), expected.len(), "one for each of UML's own");
 }
 
 /// A session over `st`, which nothing has changed yet.
