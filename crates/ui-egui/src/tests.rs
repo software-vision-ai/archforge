@@ -16955,8 +16955,8 @@ fn a_second_notations_elements_show_in_the_tree_are_found_and_get_their_own_prop
 
 /// A name typed in place takes as many characters as its element's notation lets it have
 /// (AR-785): a class of the sketch notation, whose names are shorter than any other's, on the
-/// canvas, in the Models tree and in Properties; a diagram's name and the filter of Models the
-/// most any name has. A description takes what its notation's does.
+/// canvas, in the Models tree and in Properties; a diagram's name the diagrams' rules allow, and
+/// the filter of Models the most any name has. A description takes what its notation's does.
 #[test]
 fn a_name_typed_in_place_takes_what_its_notation_allows() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -16978,7 +16978,10 @@ fn names_typed_in_place(theme: ThemeKind) {
     let longest = archforge_er::rules::MAX_NAME.max(archforge_diagram::rules::MAX_NAME);
     assert!(SKETCH_NAME_LIMIT < longest, "the sketch's limit is told apart from the others'");
     assert_eq!(name_limit_of(h.state(), party), SKETCH_NAME_LIMIT);
-    assert_eq!(name_limit_of(h.state(), archforge_mof::Uuid::parse(&d).unwrap()), longest, "a diagram");
+    // A diagram's name takes the diagrams' own limit, never another notation's, so its field takes
+    // no name `diagram.rename` refuses. Every limit is 128 today, so this names the constant
+    // rather than telling the values apart.
+    assert_eq!(name_limit_of(h.state(), archforge_mof::Uuid::parse(&d).unwrap()), archforge_diagram::rules::MAX_NAME, "a diagram");
     assert_eq!(name_limit_of(h.state(), archforge_mof::Uuid([7; 16])), longest, "an element not in the model");
     assert_eq!(longest_name(SKETCH_UIS), longest);
     {

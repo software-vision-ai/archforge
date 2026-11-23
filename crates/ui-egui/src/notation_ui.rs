@@ -258,10 +258,14 @@ pub(crate) fn of_class(uis: &[&'static dyn NotationUi], class: ClassId) -> Optio
     uis.iter().copied().find(|u| u.metamodel() == class.metamodel())
 }
 
-/// The most characters a name field takes for `obj`: an element's as its notation says
-/// ([`NotationUi::name_limit`]); a diagram's, or any other's, the most any name takes
-/// ([`longest_name`]), the diagrams' own limit among them.
+/// The most characters a name field takes for `obj`, as its rename command does: a diagram's as
+/// the diagrams' rules allow, so its field never takes a name `diagram.rename` refuses, an
+/// element's as its notation says ([`NotationUi::name_limit`]); for anything else, the most any
+/// name takes ([`longest_name`]).
 pub(crate) fn name_limit(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> usize {
+    if store.class_of(obj).ok() == Some(archforge_diagram::DIAGRAM) {
+        return archforge_diagram::rules::MAX_NAME;
+    }
     of(uis, store, obj).map_or_else(|| longest_name(uis), |ui| ui.name_limit())
 }
 
