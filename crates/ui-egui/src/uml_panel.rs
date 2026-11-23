@@ -23,8 +23,9 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, Menu, PAD, ROW, Subject, check, field_inner, icon_button, menu, run, section, select_field, text_field};
+use crate::panels::{FIELD, MenuId, PAD, ROW, Subject, check, field_inner, icon_button, menu, run, section, select_field, text_field};
 use crate::uml_classifier::Classifier;
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
@@ -577,7 +578,7 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         parent_id,
         &tr("Parent package"),
         &here,
-        Menu::PackageParent,
+        menus::PACKAGE_PARENT,
     );
     // Its stereotypes (AR-135), the profiles it applies (AR-134, F5), then its constraints (AR-133).
     if let Some(id) = subject.id {
@@ -585,7 +586,7 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         let below = crate::uml_profiles::applied_section(shell, ui, p, r, below, package, id);
         crate::uml_constraints::section_of(shell, ui, p, r, below, package, id);
     }
-    if shell.panels.menu == Some(Menu::PackageParent) {
+    if shell.panels.menu == Some(menus::PACKAGE_PARENT) {
         let paths: Vec<Vec<String>> = choices.iter().map(|(_, n)| n.clone()).collect();
         if let Some(i) = crate::panels::menu_paths(shell, ui, p, field, parent_id, &paths)
             && let Some((to, _)) = choices.get(i)
@@ -833,7 +834,7 @@ pub(crate) fn keep_choices(shell: &mut Shell, choices: crate::panels::TypeChoice
 /// The menu of a type select for a member of `within`, when it is open; sets `ty` to the type
 /// picked.
 #[allow(clippy::too_many_arguments, reason = "a menu is drawn for its field, id, value and the classifier typed in")]
-pub(crate) fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: Menu, within: Option<Uuid>) {
+pub(crate) fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: MenuId, within: Option<Uuid>) {
     if shell.panels.menu != Some(which) {
         return;
     }
@@ -894,7 +895,7 @@ fn bare_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect, id
 }
 
 /// A filled select without a label, showing `value`; a click opens or closes `which`.
-fn bare_select(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, value: &str, which: Menu) {
+fn bare_select(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, value: &str, which: MenuId) {
     let paint = ui.painter();
     paint.rect_filled(field, 6.0, p.field);
     ux::text_mid(paint, field.left() + 8.0, field.center().y, value, types::SMALL, p.text, Some((field.width() - 30.0).max(0.0)));
@@ -946,14 +947,14 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let vis = if literal {
         Rect::NOTHING
     } else {
-        select_field(shell, ui, p, at(0.0, cy), narrow, vis_id, &tr("Visibility"), &shown, Menu::MemberVisibility)
+        select_field(shell, ui, p, at(0.0, cy), narrow, vis_id, &tr("Visibility"), &shown, menus::MEMBER_VISIBILITY)
     };
     let name_id = "workspace.properties.member.name";
     let (name_x, name_w) = if literal { (0.0, inner) } else { (narrow + 8.0, wide) };
     enter |= text_field(shell, ui, p, at(name_x, cy), name_w, name_id, &tr("Name"), &mut edit.name, archforge_uml::commands::MAX_NAME, take, false);
     cy += row;
     // Type selects, whose menus open over what is under them, drawn last.
-    let mut menus: Vec<(Rect, String, Menu)> = Vec::new();
+    let mut type_selects: Vec<(Rect, String, MenuId)> = Vec::new();
     let mut modifier_menus: Option<ModifierMenus> = None;
     let type_id = "workspace.properties.member.type";
     match edit.kind {
@@ -961,8 +962,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         MemberKind::Attribute => {
             let half = ((inner - 8.0) / 2.0).max(0.0);
             let value = shell.session.as_ref().map(|s| type_label(s.doc(), &edit.ty)).unwrap_or_default();
-            let field = select_field(shell, ui, p, at(0.0, cy), half, type_id, &tr("Type"), &value, Menu::MemberType);
-            menus.push((field, type_id.into(), Menu::MemberType));
+            let field = select_field(shell, ui, p, at(0.0, cy), half, type_id, &tr("Type"), &value, menus::MEMBER_TYPE);
+            type_selects.push((field, type_id.into(), menus::MEMBER_TYPE));
             let m_id = "workspace.properties.member.multiplicity";
             enter |=
                 text_field(shell, ui, p, at(half + 8.0, cy), half, m_id, &tr("Multiplicity"), &mut edit.multiplicity, MAX_MULTIPLICITY, false, false);
@@ -975,8 +976,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         }
         MemberKind::Operation => {
             let value = shell.session.as_ref().map(|s| type_label(s.doc(), &edit.ty)).unwrap_or_default();
-            let field = select_field(shell, ui, p, at(0.0, cy), inner, type_id, &tr("Return type"), &value, Menu::MemberType);
-            menus.push((field, type_id.into(), Menu::MemberType));
+            let field = select_field(shell, ui, p, at(0.0, cy), inner, type_id, &tr("Return type"), &value, menus::MEMBER_TYPE);
+            type_selects.push((field, type_id.into(), menus::MEMBER_TYPE));
             cy += row;
             let right = check(shell, ui, p, at(0.0, cy), "workspace.properties.member.static", &tr("Static"), &mut edit.is_static);
             check(shell, ui, p, pos2(right + 4.0, y + cy), "workspace.properties.member.abstract", &tr("Abstract"), &mut edit.is_abstract);
@@ -1011,8 +1012,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                 cy += FIELD + 6.0;
                 let field = Rect::from_min_size(at(0.0, cy), vec2(ty_width, FIELD));
                 let value = shell.session.as_ref().map(|s| type_label(s.doc(), &param.ty)).unwrap_or_default();
-                bare_select(shell, ui, p, field, &format!("{id}.type"), &value, Menu::ParamType(i));
-                menus.push((field, format!("{id}.type"), Menu::ParamType(i)));
+                bare_select(shell, ui, p, field, &format!("{id}.type"), &value, menus::PARAM_TYPE.at(i));
+                type_selects.push((field, format!("{id}.type"), menus::PARAM_TYPE.at(i)));
                 let m = Rect::from_min_size(at(ty_width + 8.0, cy), vec2(narrow, FIELD));
                 enter |= bare_field(shell, ui, p, m, &format!("{id}.multiplicity"), "1", &mut param.multiplicity, MAX_MULTIPLICITY);
                 edit.params[i] = param;
@@ -1080,17 +1081,17 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     crate::panels::reveal(shell, ui, crate::uml_state::MEMBER, card);
     // The menus last, over the card.
-    if shell.panels.menu == Some(Menu::MemberVisibility)
+    if shell.panels.menu == Some(menus::MEMBER_VISIBILITY)
         && !literal
         && let Some(i) = menu(shell, ui, p, vis, vis_id, &words)
     {
         edit.visibility = i;
     }
     let within = edit.class;
-    for (field, id, which) in menus {
-        let slot = match which {
-            Menu::ParamType(i) => edit.params.get_mut(i).map(|p| &mut p.ty),
-            _ => Some(&mut edit.ty),
+    for (field, id, which) in type_selects {
+        let slot = match which.index_in(menus::PARAM_TYPE) {
+            Some(i) => edit.params.get_mut(i).map(|p| &mut p.ty),
+            None => Some(&mut edit.ty),
         };
         if let Some(ty) = slot {
             type_menu(shell, ui, p, field, &id, ty, which, Some(within));
@@ -1259,7 +1260,7 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
     let default = match &targets.literals {
         Some(_) => {
             let shown = if edit.default.trim().is_empty() { tr("None") } else { edit.default.clone() };
-            Some(select_field(shell, ui, p, pos2(at.x, y), width, default_id, &tr("Default value"), &shown, Menu::MemberDefault))
+            Some(select_field(shell, ui, p, pos2(at.x, y), width, default_id, &tr("Default value"), &shown, menus::MEMBER_DEFAULT))
         }
         None => {
             let limit = archforge_uml::modifiers::MAX_DEFAULT;
@@ -1286,7 +1287,7 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
         None => (tr("None"), tr("None")),
     };
     let subsets =
-        select_field(shell, ui, p, pos2(at.x, y), half, "workspace.properties.member.subsets", &tr("Subsets"), &subsets_shown, Menu::MemberSubsets);
+        select_field(shell, ui, p, pos2(at.x, y), half, "workspace.properties.member.subsets", &tr("Subsets"), &subsets_shown, menus::MEMBER_SUBSETS);
     let redefines = select_field(
         shell,
         ui,
@@ -1296,7 +1297,7 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
         "workspace.properties.member.redefines",
         &tr("Redefines"),
         &redefines_shown,
-        Menu::MemberRedefines,
+        menus::MEMBER_REDEFINES,
     );
     y += 17.0 + FIELD + 6.0;
     let mut said = 0.0_f32;
@@ -1332,19 +1333,19 @@ fn chosen_names(store: &Store, ids: &[Uuid]) -> String {
 fn modifier_menu_picks(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: ModifierMenus, edit: &mut MemberEdit) {
     let ModifierMenus { default, subsets: (subsets_field, targets), redefines: redefines_field, name } = m;
     match shell.panels.menu {
-        Some(Menu::MemberDefault) => {
+        Some(menus::MEMBER_DEFAULT) => {
             if let (Some(field), Some(names)) = (default, targets.literals.as_ref())
                 && let Some(pick) = literal_menu(shell, ui, p, field, "workspace.properties.member.default", names)
             {
                 edit.default = pick;
             }
         }
-        Some(Menu::MemberSubsets) => {
+        Some(menus::MEMBER_SUBSETS) => {
             if let Some(pick) = target_menu(shell, ui, p, subsets_field, "workspace.properties.member.subsets", &offered_subsets(&targets, &name)) {
                 edit.subsets = pick;
             }
         }
-        Some(Menu::MemberRedefines) => match redefines_menu(shell, ui, p, redefines_field, "workspace.properties.member.redefines", &targets) {
+        Some(menus::MEMBER_REDEFINES) => match redefines_menu(shell, ui, p, redefines_field, "workspace.properties.member.redefines", &targets) {
             Some(Ok(pick)) => {
                 edit.redefines = pick;
                 if edit.refused_at == Some("redefines") {

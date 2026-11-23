@@ -12,9 +12,10 @@ use serde_json::json;
 
 use crate::Shell;
 use crate::checks::badge;
+use crate::er_state::menus;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, Menu, PAD, check, menu, run, section, select_field};
+use crate::panels::{FIELD, PAD, check, menu, run, section, select_field};
 use crate::ux::{self, Palette, icons, types};
 
 /// The mappings as the select offers them: the engine's word and the label.
@@ -124,7 +125,7 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
             (
                 rows(store, e),
                 // Only while the menu is open: it walks every table's chain.
-                if shell.panels.menu == Some(Menu::SubtypeAdd) { candidates(store, e) } else { Vec::new() },
+                if shell.panels.menu == Some(menus::SUBTYPE_ADD) { candidates(store, e) } else { Vec::new() },
                 rr::subtyping_flags(store, e),
                 rr::discriminator_of(store, e).and_then(|a| store.uuid(a).ok()),
                 rr::mapping_of(store, e),
@@ -136,7 +137,7 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
     let title = fmt(&tr("Subtypes · {n}"), &[("n", &list.len().to_string())]);
     let add_at = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
     let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.subtypes.add", "Add subtype"))) else {
-        shell.panels.menu = if shell.panels.menu == Some(Menu::SubtypeAdd) { None } else { Some(Menu::SubtypeAdd) };
+        shell.panels.menu = if shell.panels.menu == Some(menus::SUBTYPE_ADD) { None } else { Some(menus::SUBTYPE_ADD) };
         return y + 50.0;
     };
     y = next - 6.0;
@@ -183,7 +184,7 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
             "workspace.properties.subtypes.discriminator",
             &tr("Discriminator"),
             &disc_word,
-            Menu::Discriminator,
+            menus::DISCRIMINATOR,
         );
         y += 17.0 + FIELD + 12.0;
         let map_field = select_field(
@@ -195,10 +196,10 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
             "workspace.properties.subtypes.mapping",
             &tr("Mapping"),
             &mapping_label(mapping),
-            Menu::Mapping,
+            menus::MAPPING,
         );
         y += 17.0 + FIELD + 12.0;
-        if shell.panels.menu == Some(Menu::Discriminator) {
+        if shell.panels.menu == Some(menus::DISCRIMINATOR) {
             let mut items = vec![tr("None")];
             items.extend(columns.iter().map(|(_, n)| n.clone()));
             if let Some(i) = menu(shell, ui, p, disc_field, "workspace.properties.subtypes.discriminator", &items) {
@@ -206,7 +207,7 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
                 set_subtyping(shell, e_id, complete, disjoint, picked, mapping);
             }
         }
-        if shell.panels.menu == Some(Menu::Mapping) {
+        if shell.panels.menu == Some(menus::MAPPING) {
             let items: Vec<String> = MAPPINGS.iter().map(|(_, l)| tr(l)).collect();
             if let Some(i) = menu(shell, ui, p, map_field, "workspace.properties.subtypes.mapping", &items)
                 && let Some((m, _)) = MAPPINGS.get(i)
@@ -216,7 +217,7 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
         }
     }
     // The tables that can become subtypes, under the +.
-    if shell.panels.menu == Some(Menu::SubtypeAdd) {
+    if shell.panels.menu == Some(menus::SUBTYPE_ADD) {
         if cands.is_empty() {
             shell.panels.menu = None;
         } else {

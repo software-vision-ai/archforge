@@ -16,12 +16,17 @@ use ux::Colour;
 use crate::chat_words::{Clock, date_and_time, seconds_of};
 use crate::explorer::{TreeScroll, scroll_tree};
 use crate::i18n::{fmt, tr, tr_ctx, trn};
+use crate::panels::MenuId;
 use crate::settings::{Look, button, control, focus_ring};
 use crate::ux::{self, Palette, icons, types};
 use crate::{BranchEntry, Shell, VersionEntry, VersionRead, VersionsPage, widgets};
 
 /// The versions read at a time.
 const PAGE: usize = 50;
+
+/// A branch row's menu in the Versions panel, by the row: the shell's own, in its one open-menu
+/// slot.
+pub(crate) const BRANCH_MENU: MenuId = MenuId::shell("branch");
 /// A section's header, and a version's row and the distance between rows.
 const HEADER: f32 = 40.0;
 const ROW: f32 = 48.0;
@@ -153,7 +158,7 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         }
         // A menu's row is by its place in the list, which the next read may change.
         (v.branches_reading, v.branches_failed, v.branches_asked) = (None, None, false);
-        if matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
+        if shell.panels.menu.is_some_and(|m| m.index_in(BRANCH_MENU).is_some()) {
             shell.panels.menu = None;
         }
         (v.about, v.page, v.failed, v.reading, v.asked) = (about, None, None, None, false);
@@ -187,7 +192,7 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
     take_more(v);
     let waiting = v.branches_reading.is_some();
     // A row of an open menu may now hold another branch.
-    if take_branches(v) && matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
+    if take_branches(v) && shell.panels.menu.is_some_and(|m| m.index_in(BRANCH_MENU).is_some()) {
         shell.panels.menu = None;
     }
     // The chip and its list, drawn before, may now say another branch, date or limit.
@@ -625,7 +630,7 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
         control(shell, ui, &id("row"), "row", area, true)
     };
     let _ = resp.clone().accessible_name(said.into_iter().flatten().collect::<Vec<_>>().join(", "));
-    let menu = crate::panels::Menu::Branch(i);
+    let menu = BRANCH_MENU.at(i);
     let renames = !b.name.eq_ignore_ascii_case("main") && crate::branch_ask::offered(shell);
     let entries = [(Entry::Switch, !b.current), (Entry::Rename, renames), (Entry::Delete, renames && !b.current)]
         .into_iter()

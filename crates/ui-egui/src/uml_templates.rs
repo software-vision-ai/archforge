@@ -24,7 +24,8 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, Menu, PAD, ROW, icon_button, run, section, select_field, text_field};
+use crate::panels::{FIELD, PAD, ROW, icon_button, run, section, select_field, text_field};
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
@@ -321,7 +322,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     let name_id = format!("{key}.name");
     enter |= text_field(shell, ui, p, at(0.0, cy), half, &name_id, &tr("Name"), &mut edit.name, archforge_uml::commands::MAX_NAME, take, false);
     let kind_id = format!("{key}.kind");
-    let kind_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &kind_id, &tr("Kind"), &kind_word(edit.kind), Menu::TemplateKind);
+    let kind_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &kind_id, &tr("Kind"), &kind_word(edit.kind), menus::TEMPLATE_KIND);
     let ring = |field: &str, x: f32, top: f32| {
         if edit.refused_at == Some(field) {
             paint.rect_stroke(Rect::from_min_size(at(x, top + 17.0), vec2(half, FIELD)), 6.0, Stroke::new(1.0, p.danger), StrokeKind::Inside);
@@ -334,9 +335,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     let (c_label, d_label) =
         store.map(|st| (label_of(st, &edit.constraint, &tr("Any")), label_of(st, &edit.default, &tr("None")))).unwrap_or_default();
     let c_id = format!("{key}.constraint");
-    let c_field = select_field(shell, ui, p, at(0.0, cy), half, &c_id, &tr("Constrained to"), &c_label, Menu::TemplateConstraint);
+    let c_field = select_field(shell, ui, p, at(0.0, cy), half, &c_id, &tr("Constrained to"), &c_label, menus::TEMPLATE_CONSTRAINT);
     let d_id = format!("{key}.default");
-    let d_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &d_id, &tr("Default"), &d_label, Menu::TemplateDefault);
+    let d_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &d_id, &tr("Default"), &d_label, menus::TEMPLATE_DEFAULT);
     ring("constraint", 0.0, cy);
     ring("default", half + 8.0, cy);
     cy += row;
@@ -370,7 +371,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     crate::panels::reveal(shell, ui, crate::uml_state::TEMPLATE, card);
     // The menus last, over the card; Escape with one open closes the menu alone.
     let menu_open = shell.panels.menu.is_some();
-    if shell.panels.menu == Some(Menu::TemplateKind)
+    if shell.panels.menu == Some(menus::TEMPLATE_KIND)
         && let Some(kind) = kind_menu(shell, ui, p, kind_field, &kind_id, edit.kind)
     {
         edit.kind = kind;
@@ -384,7 +385,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
             }
         }
     }
-    if shell.panels.menu == Some(Menu::TemplateConstraint)
+    if shell.panels.menu == Some(menus::TEMPLATE_CONSTRAINT)
         && let Some(choices) = shell.session.as_ref().map(|s| constraint_choices(s.doc(), edit.kind))
     {
         let items: Vec<String> = choices.iter().map(|(l, _)| l.clone()).collect();
@@ -397,7 +398,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
             }
         }
     }
-    if shell.panels.menu == Some(Menu::TemplateDefault)
+    if shell.panels.menu == Some(menus::TEMPLATE_DEFAULT)
         && let Some(choices) = shell.session.as_ref().map(|s| default_choices(s.doc(), edit.kind, &edit.constraint))
     {
         let items: Vec<String> = choices.iter().map(|(l, _)| l.clone()).collect();

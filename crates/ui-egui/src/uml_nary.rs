@@ -30,8 +30,9 @@ use crate::Shell;
 use crate::canvas::{Tool, View};
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, Menu, PAD, ROW, Subject, check, icon_button, run, section, select_field, text_field};
+use crate::panels::{FIELD, PAD, ROW, Subject, check, icon_button, run, section, select_field, text_field};
 use crate::uml_relate::Relate;
+use crate::uml_state::menus;
 use crate::uml_state::{UmlState, uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
@@ -937,7 +938,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let types_of = shell.session.as_ref().map(|s| end_types(s.doc())).unwrap_or_default();
     let type_id = format!("{key}.type");
     let shown = edit.ty.and_then(|t| types_of.iter().find(|(id, _)| *id == t)).map(|(_, n)| n.clone()).unwrap_or_default();
-    let type_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &type_id, &tr("Type"), &shown, Menu::NaryEndType);
+    let type_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &type_id, &tr("Type"), &shown, menus::NARY_END_TYPE);
     cy += row;
     if let Some((Some("role"), why)) = edit.refused.clone() {
         cy += refusal_box(&paint, p, at(0.0, cy - 4.0), inner, &why) + 8.0;
@@ -957,7 +958,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         hint: &tr("Or type a number or range"),
         clear: &tr("Clear"),
         refused: edit.refused.as_ref().filter(|(at, _)| *at == Some("multiplicity")).map(|(_, why)| why.as_str()),
-        menu: Menu::NaryEndMultiplicity,
+        menu: menus::NARY_END_MULTIPLICITY,
         limit: MAX_MULTIPLICITY,
     };
     match crate::panels::editable_select(shell, ui, p, at(0.0, cy), half, &mut edit.multiplicity, &combo) {
@@ -1000,7 +1001,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     crate::panels::reveal(shell, ui, crate::uml_state::NARY_END, card);
     // The type menu last, over the card: a pick changes the field; Apply moves the end.
-    if shell.panels.menu == Some(Menu::NaryEndType) {
+    if shell.panels.menu == Some(menus::NARY_END_TYPE) {
         let names: Vec<String> = types_of.iter().map(|(_, n)| n.clone()).collect();
         if let Some(k) = crate::panels::menu(shell, ui, p, type_field, &type_id, &names)
             && let Some((t, _)) = types_of.get(k)

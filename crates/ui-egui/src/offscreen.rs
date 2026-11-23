@@ -5,6 +5,7 @@ mod versions;
 
 use crate::er_state::er_mut;
 use crate::theme::ThemeKind;
+use crate::uml_state::menus;
 use crate::uml_state::uml_mut;
 use crate::{Folder, Services, Shell};
 
@@ -776,7 +777,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         sample_packages(&mut shell, screen == Screen::WorkspaceInsidePackage)?;
         if screen == Screen::WorkspacePackageParent {
             shell.state.show_panel(crate::state::Panel::Properties);
-            shell.panels.menu = Some(crate::panels::Menu::PackageParent);
+            shell.panels.menu = Some(menus::PACKAGE_PARENT);
         }
     }
     if screen == Screen::WorkspacePackagePaths {
@@ -853,7 +854,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             crate::panels::run(&mut shell, "view.select", serde_json::json!({ "ids": [id.to_string()] }))?;
             shell.state.show_panel(crate::state::Panel::Properties);
             if screen == Screen::WorkspaceMultiplicityPresets {
-                shell.panels.menu = Some(crate::panels::Menu::EndMultiplicity(1));
+                shell.panels.menu = Some(menus::END_MULTIPLICITY.at(1));
             }
             if screen == Screen::WorkspaceMultiplicityRefused {
                 crate::uml_relate::refuse_typed(&mut shell, id, 1, "5..2")?;
@@ -952,7 +953,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         shell.state.show_panel(crate::state::Panel::Properties);
         shell.state.show_explorer(crate::state::Explorer::Models);
         if screen == Screen::WorkspaceStereotypePicker {
-            shell.panels.menu = Some(crate::panels::Menu::StereotypePick);
+            shell.panels.menu = Some(menus::STEREOTYPE_PICK);
         }
     }
     if screen == Screen::WorkspaceGeneralizationSets {
@@ -1625,7 +1626,7 @@ fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     if in_use {
         crate::uml_templates::remove_sample(shell);
     } else if screen == Screen::WorkspaceTemplateKinds {
-        shell.panels.menu = Some(crate::panels::Menu::TemplateKind);
+        shell.panels.menu = Some(menus::TEMPLATE_KIND);
     }
     shell.panels.editors_for = Some(repo);
     shell.canvas.fit_pending = false;

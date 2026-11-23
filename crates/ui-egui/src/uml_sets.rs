@@ -20,7 +20,8 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, FieldOut, Menu, PAD, ROW, Subject, edit_field, menu, run, section};
+use crate::panels::{FIELD, FieldOut, PAD, ROW, Subject, edit_field, menu, run, section};
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
@@ -651,11 +652,11 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     match section(shell, ui, p, r, y, &title, Some((add_id, "Add member"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = Some(Menu::SetMember);
+            shell.panels.menu = Some(menus::SET_MEMBER);
             y += 44.0;
         }
     }
-    if shell.panels.menu == Some(Menu::SetMember) {
+    if shell.panels.menu == Some(menus::SET_MEMBER) {
         let items = if candidate_names.is_empty() {
             vec![fmt(&tr("No other generalization to {general}"), &[("general", &general_name)])]
         } else {
@@ -714,11 +715,11 @@ pub(crate) fn generalization_section(shell: &mut Shell, ui: &egui::Ui, p: &Palet
     match section(shell, ui, p, r, y, &title, Some((add_id, "Add to a generalization set"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = Some(Menu::SetJoin);
+            shell.panels.menu = Some(menus::SET_JOIN);
             y += 44.0;
         }
     }
-    if shell.panels.menu == Some(Menu::SetJoin)
+    if shell.panels.menu == Some(menus::SET_JOIN)
         && let Some(i) = menu(shell, ui, p, plus, add_id, &offers)
     {
         match i.checked_sub(1).and_then(|k| joinable.get(k)) {

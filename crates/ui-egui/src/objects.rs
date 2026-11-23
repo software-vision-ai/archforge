@@ -14,10 +14,11 @@ use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
+use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx};
-use crate::panels::{FIELD, Menu, PAD, check, icon_button, menu, run, section, select_field, text_field};
+use crate::panels::{FIELD, PAD, check, icon_button, menu, run, section, select_field, text_field};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -308,9 +309,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
             let (list, more) = shell.session.as_ref().map(|s| owners(s.doc(), schema, edit.owned_by)).unwrap_or_default();
             let value = edit.owned_by.and_then(|o| list.iter().find(|(id, _)| *id == o).map(|(_, l)| l.clone())).unwrap_or_else(|| tr("None"));
             let field =
-                select_field(shell, ui, p, at(0.0, cy), inner, "workspace.properties.sequence.owned-by", &tr("Owned by"), &value, Menu::OwnedBy);
+                select_field(shell, ui, p, at(0.0, cy), inner, "workspace.properties.sequence.owned-by", &tr("Owned by"), &value, menus::OWNED_BY);
             cy += row + 4.0;
-            if shell.panels.menu == Some(Menu::OwnedBy) {
+            if shell.panels.menu == Some(menus::OWNED_BY) {
                 // Past the most the menu lists, it says how many it leaves out; the command takes any.
                 let tail = (more > 0).then(|| crate::i18n::trn("{n} more column, not listed", "{n} more columns, not listed", more as u64));
                 let items: Vec<String> = std::iter::once(tr("None")).chain(list.iter().map(|(_, l)| l.clone())).chain(tail).collect();

@@ -15,8 +15,9 @@ use crate::Shell;
 use crate::explorer::fresh_name;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{Menu, PAD, PATH_SEP, ROW, run, section};
+use crate::panels::{PAD, PATH_SEP, ROW, run, section};
 use crate::uml_classifier::Classifier;
+use crate::uml_state::menus;
 use crate::ux::{self, Palette, icons, types};
 
 /// The Owner select's id; its menu's rows add `.{i}` (D3).
@@ -152,7 +153,7 @@ pub(crate) fn owner_rows(store: &Store, c: Obj) -> Vec<OwnerRow> {
 /// own name shows, the whole path its tooltip and accessible name; a click opens its menu.
 pub(crate) fn owner_field(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, class: Obj) -> Rect {
     let here = shell.session.as_ref().and_then(|s| nesting::owner_of(s.doc(), class).map(|o| owner_parts(s.doc(), o))).unwrap_or_default();
-    crate::panels::path_select_field(shell, ui, p, at, width, OWNER_ID, &tr("Owner"), &here, Menu::ClassOwner)
+    crate::panels::path_select_field(shell, ui, p, at, width, OWNER_ID, &tr("Owner"), &here, menus::CLASS_OWNER)
 }
 
 /// What the Owner explains under its field for a nested classifier (D2).
@@ -171,7 +172,7 @@ pub(crate) fn owner_help(store: &Store, class: Obj) -> Option<String> {
 /// The arrow keys walk the rows that may be picked, Enter picks, Escape or a press elsewhere
 /// closes; a pick moves the classifier there as one undo step.
 pub(crate) fn owner_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, class: Obj, class_id: Uuid) {
-    if shell.panels.menu != Some(Menu::ClassOwner) {
+    if shell.panels.menu != Some(menus::CLASS_OWNER) {
         return;
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
@@ -362,7 +363,7 @@ pub(crate) fn nested_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
     match section(shell, ui, p, r, y, &title, Some((NESTED_ADD_ID, "Add nested classifier"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = if shell.panels.menu == Some(Menu::NestedKind) { None } else { Some(Menu::NestedKind) };
+            shell.panels.menu = if shell.panels.menu == Some(menus::NESTED_KIND) { None } else { Some(menus::NESTED_KIND) };
             y += 44.0;
         }
     }
@@ -391,7 +392,7 @@ pub(crate) fn nested_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         }
         y += ROW;
     }
-    if shell.panels.menu == Some(Menu::NestedKind) {
+    if shell.panels.menu == Some(menus::NESTED_KIND) {
         let words: Vec<String> = KINDS.iter().map(|k| k.word()).collect();
         if let Some(i) = crate::panels::menu(shell, ui, p, add, NESTED_ADD_ID, &words)
             && let Some(kind) = KINDS.get(i)

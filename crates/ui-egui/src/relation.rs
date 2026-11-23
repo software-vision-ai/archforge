@@ -13,10 +13,11 @@ use serde_json::json;
 
 use crate::Shell;
 use crate::connect::cardinality_text;
+use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, FieldOut, Menu, PAD, ROW, Subject, check, edit_field, name_field, run, section, select_field};
+use crate::panels::{FIELD, FieldOut, PAD, ROW, Subject, check, edit_field, name_field, run, section, select_field};
 use crate::ux::{self, Palette, icons, types};
 
 /// A cardinality button's size and pitch.
@@ -382,14 +383,11 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         }
         return;
     };
-    let open_pair = match shell.panels.menu {
-        Some(Menu::Pair(i)) => Some(i),
-        _ => None,
-    };
+    let open_pair = shell.panels.menu.and_then(|m| m.index_in(menus::PAIR));
     let Some(v) = shell.session.as_ref().map(|s| fk_view(s.doc(), rel, fk, open_pair, child_name)) else { return };
     // Points to.
     let points =
-        select_field(shell, ui, p, pos2(r.left() + PAD, y), width, "workspace.properties.points-to", &tr("Points to"), &v.key_word, Menu::Points);
+        select_field(shell, ui, p, pos2(r.left() + PAD, y), width, "workspace.properties.points-to", &tr("Points to"), &v.key_word, menus::POINTS);
     y += 17.0 + FIELD + 14.0;
     // The pairs: the parent's key columns against the child's.
     let half = ((width - 8.0) / 2.0).max(0.0);
@@ -408,7 +406,7 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         ux::text_mid(&paint, field.left() + 8.0, field.center().y, child_col, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
         ux::icon_mid(&paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
         if control(shell, ui, &format!("workspace.properties.pair.{i}"), "select", field, true).clicked() {
-            shell.panels.menu = if shell.panels.menu == Some(Menu::Pair(i)) { None } else { Some(Menu::Pair(i)) };
+            shell.panels.menu = if shell.panels.menu == Some(menus::PAIR.at(i)) { None } else { Some(menus::PAIR.at(i)) };
         }
         pair_fields.push(field);
         y += ROW;
@@ -417,7 +415,7 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     // On delete and On update.
     let (delete_word, update_word) = (word_of(&ACTIONS, v.on_delete).1, word_of(&ACTIONS, v.on_update).1);
     let on_delete =
-        select_field(shell, ui, p, pos2(r.left() + PAD, y), half, "workspace.properties.on-delete", &tr("On delete"), &delete_word, Menu::OnDelete);
+        select_field(shell, ui, p, pos2(r.left() + PAD, y), half, "workspace.properties.on-delete", &tr("On delete"), &delete_word, menus::ON_DELETE);
     let on_update = select_field(
         shell,
         ui,
@@ -427,7 +425,7 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         "workspace.properties.on-update",
         &tr("On update"),
         &update_word,
-        Menu::OnUpdate,
+        menus::ON_UPDATE,
     );
     y += 17.0 + FIELD + 14.0;
     // More: Deferrable, and Match when it can matter.
@@ -459,18 +457,18 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
             "workspace.properties.deferrable",
             &tr("Deferrable"),
             &word,
-            Menu::Deferrable,
+            menus::DEFERRABLE,
         ));
         y += 17.0 + FIELD + 14.0;
         if v.columns.len() >= 2 && v.any_nullable {
             let word = word_of(&MATCH, v.matching).1;
             matching =
-                Some(select_field(shell, ui, p, pos2(r.left() + PAD, y), width, "workspace.properties.match", &tr("Match"), &word, Menu::Match));
+                Some(select_field(shell, ui, p, pos2(r.left() + PAD, y), width, "workspace.properties.match", &tr("Match"), &word, menus::MATCH));
         }
     }
     // The open menu, over the rest.
     match shell.panels.menu {
-        Some(Menu::Points) => {
+        Some(menus::POINTS) => {
             let items: Vec<Item> = v
                 .keys
                 .iter()
@@ -485,7 +483,8 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
                 apply(shell, rel.id, out);
             }
         }
-        Some(Menu::Pair(i)) => {
+        Some(m) if m.index_in(menus::PAIR).is_some() => {
+            let i = m.index;
             // The rows are read at the frame's start, so a menu just opened draws next frame.
             let Some((_, items, targets, heading)) = v.pair_menu.as_ref() else {
                 if i >= v.pairs.len() {
@@ -510,8 +509,8 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
                 }
             }
         }
-        Some(Menu::OnDelete) | Some(Menu::OnUpdate) => {
-            let which_delete = shell.panels.menu == Some(Menu::OnDelete);
+        Some(menus::ON_DELETE) | Some(menus::ON_UPDATE) => {
+            let which_delete = shell.panels.menu == Some(menus::ON_DELETE);
             let current = if which_delete { v.on_delete } else { v.on_update };
             let items: Vec<Item> =
                 ACTIONS.iter().map(|(a, _, w)| Item { label: tr(w), detail: String::new(), enabled: true, on: *a == current }).collect();
@@ -525,8 +524,8 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
                 apply(shell, rel.id, out);
             }
         }
-        Some(Menu::Deferrable) | Some(Menu::Match) => {
-            let is_deferrable = shell.panels.menu == Some(Menu::Deferrable);
+        Some(menus::DEFERRABLE) | Some(menus::MATCH) => {
+            let is_deferrable = shell.panels.menu == Some(menus::DEFERRABLE);
             let Some(anchor) = (if is_deferrable { deferrable } else { matching }) else {
                 shell.panels.menu = None;
                 return;

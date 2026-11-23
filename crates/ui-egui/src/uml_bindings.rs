@@ -23,7 +23,8 @@ use serde_json::{Map, Value as Json, json};
 
 use crate::Shell;
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, Menu, PAD, Subject, run, section, select_field};
+use crate::panels::{FIELD, PAD, Subject, run, section, select_field};
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
@@ -317,9 +318,18 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         fixed_field(shell, ui, p, pos2(left, y), half, &bound_id, &tr("Bound element"), &bound_name);
         fixed_field(shell, ui, p, pos2(left + half + 8.0, y), half, &template_id, &tr("Template"), &template_name);
     } else {
-        bound_field = Some(select_field(shell, ui, p, pos2(left, y), half, &bound_id, &tr("Bound element"), &bound_name, Menu::BindingBound));
-        template_field =
-            Some(select_field(shell, ui, p, pos2(left + half + 8.0, y), half, &template_id, &tr("Template"), &template_name, Menu::BindingTemplate));
+        bound_field = Some(select_field(shell, ui, p, pos2(left, y), half, &bound_id, &tr("Bound element"), &bound_name, menus::BINDING_BOUND));
+        template_field = Some(select_field(
+            shell,
+            ui,
+            p,
+            pos2(left + half + 8.0, y),
+            half,
+            &template_id,
+            &tr("Template"),
+            &template_name,
+            menus::BINDING_TEMPLATE,
+        ));
     }
     y += 17.0 + FIELD + 16.0;
     let title = fmt(&tr("Substitutions · {n}"), &[("n", &rows.len().to_string())]);
@@ -366,7 +376,7 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
             None => resp,
         };
         if resp.clicked() {
-            let m = Menu::BindingArgument(k);
+            let m = menus::BINDING_ARGUMENT.at(k);
             shell.panels.menu = if shell.panels.menu == Some(m) { None } else { Some(m) };
         }
         fields.push(field);
@@ -374,7 +384,7 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     }
     // The menus over everything drawn so far.
     let store_now = shell.session.as_ref().map(|s| s.doc());
-    if let (Some(Menu::BindingArgument(k)), Some(store)) = (shell.panels.menu, store_now)
+    if let (Some(k), Some(store)) = (shell.panels.menu.and_then(|m| m.index_in(menus::BINDING_ARGUMENT)), store_now)
         && let (Some((q, ..)), Some(field)) = (rows.get(k), fields.get(k))
     {
         let choices = argument_choices(store, *q);
@@ -384,7 +394,7 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
             pick_argument(shell, binding, *q, v);
         }
     }
-    if let (Some(Menu::BindingBound), Some(field), Some(b), Some(store)) =
+    if let (Some(menus::BINDING_BOUND), Some(field), Some(b), Some(store)) =
         (shell.panels.menu, bound_field, binding, shell.session.as_ref().map(|s| s.doc()))
     {
         let choices = bound_choices(store, b, template);
@@ -393,7 +403,7 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
             set_bound(shell, b, c);
         }
     }
-    if let (Some(Menu::BindingTemplate), Some(field), Some(b), Some(store)) =
+    if let (Some(menus::BINDING_TEMPLATE), Some(field), Some(b), Some(store)) =
         (shell.panels.menu, template_field, binding, shell.session.as_ref().map(|s| s.doc()))
     {
         let choices = template_choices(store, b, bound);

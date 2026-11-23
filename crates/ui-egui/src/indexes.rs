@@ -13,10 +13,11 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
+use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, Menu, PAD, check, icon_button, menu, run, section, text_field};
+use crate::panels::{FIELD, PAD, check, icon_button, menu, run, section, text_field};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -278,9 +279,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         }
         let hit = Rect::from_min_max(row.min, pos2(dir.left(), row.bottom()));
         if control(shell, ui, &format!("workspace.properties.index.column.{i}"), "row", hit, true).secondary_clicked() {
-            shell.panels.menu = Some(Menu::IndexNulls(i));
+            shell.panels.menu = Some(menus::INDEX_NULLS.at(i));
         }
-        if shell.panels.menu == Some(Menu::IndexNulls(i)) {
+        if shell.panels.menu == Some(menus::INDEX_NULLS.at(i)) {
             nulls_anchor = Some((i, row));
         }
         cy += 32.0;
@@ -294,7 +295,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     ux::text(&paint, add.min + vec2(8.0, 5.0), &tr("Add a column"), types::SMALL, ink, Some((inner - 36.0).max(0.0)));
     ux::icon_mid(&paint, pos2(add.right() - 14.0, add.center().y), &icons::CHEVRON_DOWN, ink);
     if control(shell, ui, "workspace.properties.index.column.add", "select", add, true).clicked() && !full {
-        shell.panels.menu = if shell.panels.menu == Some(Menu::IndexColumn) { None } else { Some(Menu::IndexColumn) };
+        shell.panels.menu = if shell.panels.menu == Some(menus::INDEX_COLUMN) { None } else { Some(menus::INDEX_COLUMN) };
     }
     cy += FIELD + 12.0;
     // More: Where and Method.
@@ -375,7 +376,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         edit.columns.remove(i);
     }
     // The menus, over the card.
-    if shell.panels.menu == Some(Menu::IndexColumn) {
+    if shell.panels.menu == Some(menus::INDEX_COLUMN) {
         let used: Vec<Uuid> = edit.columns.iter().filter_map(|c| c.attribute).collect();
         let free: Vec<&(Uuid, String, String)> = all_columns.iter().filter(|(c, _, _)| !used.contains(c)).collect();
         let mut items: Vec<String> = free.iter().map(|(_, n, t)| if t.is_empty() { n.clone() } else { format!("{n} · {t}") }).collect();

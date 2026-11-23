@@ -11,7 +11,11 @@ drawings and tools, `er_state` ER's and `uml_state` UML's, which the shell holds
 project, starts fresh with each project opened and each version shown, and asks only through that
 trait: whether something is being edited, which editors are open, what to drop, what to close,
 whether something of its own holds the canvas's keys (an open menu holds them without being an
-edit), and to end a drawing under way when its project is set aside; and
+edit), whether a menu of its own takes the keys, and to end a drawing under way when its project
+is set aside; the shell keeps one open-menu slot, which holds a `panels::MenuId`: the shell's own
+menus (Home's, the Versions panel's) in their scope, each notation's by its metamodel in its own,
+with a key and an index, so a notation opens, recognises and closes only its own (`er_state::menus`,
+`uml_state::menus`); and
 `uml_classifier` the class diagram's classifier tool with its menu of kinds),
 the Diagrams explorer (`diagrams`: the model's folders and diagrams, the model behind the open
 diagram, the New diagram dialog from its `+` and the tab strip's, a diagram row's menu and Delete
@@ -100,7 +104,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |
 | `explorer::{State, ContextMenu, add, remove_selection, rows, fresh_name, Row, Tree}` | the Models explorer's state (a row's context menu among it, AR-132) and the actions the tests and the host drive |
-| `panels::{State, draw, retain_valid, column_edit, column_edit_mut, ColumnEdit, SkillEdit, Applies, Menu}` | the right panels' state and body (the column editor itself is ER's own state, which `column_edit` reads for the app's journeys); every change goes through `er.*` and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not) |
+| `panels::{State, draw, retain_valid, column_edit, column_edit_mut, ColumnEdit, SkillEdit, Applies, MenuId}` | the right panels' state and body (the column editor itself is ER's own state, which `column_edit` reads for the app's journeys); every change goes through `er.*` and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not) |
 | `diagrams::{State, RowMenu, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows, a row's menu and the New diagram dialog |
 | `versions::State` | the Versions explorer's state: what it has read, how its sections are folded, and what the keyboard has just moved to, which its list brings into view |
 | `save_version::Dialog` | the Save version dialog: the description typed, the revision its summary is of, and how its save went |

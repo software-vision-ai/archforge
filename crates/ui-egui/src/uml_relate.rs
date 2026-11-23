@@ -29,7 +29,8 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{Combo, ComboOut, FIELD, FieldOut, Menu, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
+use crate::panels::{Combo, ComboOut, FIELD, FieldOut, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
+use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
 
@@ -1098,7 +1099,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             hint: &tr("Or type a number or range"),
             clear: &tr("Clear"),
             refused: refusal.as_deref(),
-            menu: Menu::EndMultiplicity(i),
+            menu: menus::END_MULTIPLICITY.at(i),
             limit: 24,
         };
         let asked = editable_select(shell, ui, p, at + vec2(half + 8.0, 0.0), half, &mut edit.multiplicity[i], &combo);
@@ -1171,11 +1172,11 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             &format!("{key}.aggregation"),
             &tr("Aggregation"),
             &words[aggregations[i]],
-            Menu::EndAggregation(i),
+            menus::END_AGGREGATION.at(i),
         );
         y += 17.0 + FIELD + 16.0;
         let mut agg = aggregations[i];
-        if shell.panels.menu == Some(Menu::EndAggregation(i))
+        if shell.panels.menu == Some(menus::END_AGGREGATION.at(i))
             && let Some(k) = menu(shell, ui, p, field, &format!("{key}.aggregation"), &words)
         {
             agg = k;
@@ -1352,7 +1353,7 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let default = match &targets.literals {
         Some(_) => {
             let shown = if m.default.trim().is_empty() { tr("None") } else { m.default.clone() };
-            Some(select_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &shown, Menu::EndDefault(i)))
+            Some(select_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &shown, menus::END_DEFAULT.at(i)))
         }
         None => {
             enter = text_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &mut m.default, limit, false, false);
@@ -1376,9 +1377,10 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         _ => tr("None"),
     };
     let (subsets_shown, redefines_shown) = (shown(&m.subsets), shown(&m.redefines));
-    let subsets = select_field(shell, ui, p, pos2(left, y), half, &format!("{key}.subsets"), &tr("Subsets"), &subsets_shown, Menu::EndSubsets(i));
+    let subsets =
+        select_field(shell, ui, p, pos2(left, y), half, &format!("{key}.subsets"), &tr("Subsets"), &subsets_shown, menus::END_SUBSETS.at(i));
     let redefines =
-        select_field(shell, ui, p, pos2(right, y), half, &format!("{key}.redefines"), &tr("Redefines"), &redefines_shown, Menu::EndRedefines(i));
+        select_field(shell, ui, p, pos2(right, y), half, &format!("{key}.redefines"), &tr("Redefines"), &redefines_shown, menus::END_REDEFINES.at(i));
     y += 17.0 + FIELD + 6.0;
     let mut said = 0.0_f32;
     let offered = crate::uml_panel::offered_subsets(&targets, &role);
@@ -1422,19 +1424,19 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     y += FIELD + 16.0;
     // The menus over what is under them.
     match shell.panels.menu {
-        Some(Menu::EndDefault(k)) if k == i => {
+        Some(open) if open == menus::END_DEFAULT.at(i) => {
             if let (Some(field), Some(names)) = (default, targets.literals.as_ref())
                 && let Some(pick) = crate::uml_panel::literal_menu(shell, ui, p, field, &default_id, names)
             {
                 m.default = pick;
             }
         }
-        Some(Menu::EndSubsets(k)) if k == i => {
+        Some(open) if open == menus::END_SUBSETS.at(i) => {
             if let Some(pick) = crate::uml_panel::target_menu(shell, ui, p, subsets, &format!("{key}.subsets"), &offered) {
                 m.subsets = pick;
             }
         }
-        Some(Menu::EndRedefines(k)) if k == i => {
+        Some(open) if open == menus::END_REDEFINES.at(i) => {
             match crate::uml_panel::redefines_menu(shell, ui, p, redefines, &format!("{key}.redefines"), &targets) {
                 Some(Ok(pick)) => {
                     m.redefines = pick;
