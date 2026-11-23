@@ -1042,7 +1042,86 @@ impl NotationUi for UmlUi {
     fn may_be_unnamed(&self, cmd: &str) -> bool {
         cmd == "uml.relationship.rename"
     }
+
+    /// Every class it creates, those its classifier tool and defaults pick through a variable
+    /// among them.
+    fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
+        CREATED
+    }
+
+    /// A property is an attribute, an enumeration literal a literal, and a profile the modeller's
+    /// word, not a person's profile.
+    fn kind_word(&self, class: archforge_mof::ClassId) -> Option<String> {
+        Some(match class {
+            c if c == archforge_uml::PROPERTY => tr("Attribute"),
+            c if c == archforge_uml::ENUMERATION_LITERAL => tr("Literal"),
+            c if c == archforge_uml::PROFILE => tr_ctx("uml", "Profile"),
+            _ => return None,
+        })
+    }
+
+    /// The UML kinds only its commands name in a refusal: a class, an interface, a package and
+    /// the rest.
+    fn a_kind(&self, kind: &str) -> Option<String> {
+        crate::uml_said::a_kind(kind)
+    }
+
+    /// A class, as the agent reads it for documentation.
+    fn scope_word(&self, store: &Store, obj: Obj) -> Option<String> {
+        (class(store, obj)? == archforge_uml::CLASS).then(|| tr("Class"))
+    }
+
+    /// The longest name its commands take.
+    fn name_limit(&self) -> usize {
+        archforge_uml::commands::MAX_NAME
+    }
+
+    /// The longest description Comment its commands write.
+    fn description_limit(&self) -> usize {
+        archforge_uml::descriptions::MAX_DESCRIPTION
+    }
 }
+
+/// The UML classes `archforge_uml`'s commands create, each with a kind word of its own.
+const CREATED: &[archforge_mof::ClassId] = &[
+    archforge_uml::ASSOCIATION,
+    archforge_uml::ASSOCIATION_CLASS,
+    archforge_uml::CLASS,
+    archforge_uml::CLASSIFIER_TEMPLATE_PARAMETER,
+    archforge_uml::COMMENT,
+    archforge_uml::CONSTRAINT,
+    archforge_uml::DATA_TYPE,
+    archforge_uml::DEPENDENCY,
+    archforge_uml::ENUMERATION,
+    archforge_uml::ENUMERATION_LITERAL,
+    archforge_uml::EXTENSION,
+    archforge_uml::EXTENSION_END,
+    archforge_uml::GENERALIZATION,
+    archforge_uml::GENERALIZATION_SET,
+    archforge_uml::INSTANCE_SPECIFICATION,
+    archforge_uml::INSTANCE_VALUE,
+    archforge_uml::INTERFACE,
+    archforge_uml::INTERFACE_REALIZATION,
+    archforge_uml::LITERAL_BOOLEAN,
+    archforge_uml::LITERAL_INTEGER,
+    archforge_uml::LITERAL_REAL,
+    archforge_uml::LITERAL_STRING,
+    archforge_uml::LITERAL_UNLIMITED_NATURAL,
+    archforge_uml::MODEL,
+    archforge_uml::OPAQUE_EXPRESSION,
+    archforge_uml::OPERATION,
+    archforge_uml::PACKAGE,
+    archforge_uml::PARAMETER,
+    archforge_uml::PRIMITIVE_TYPE,
+    archforge_uml::PROFILE,
+    archforge_uml::PROFILE_APPLICATION,
+    archforge_uml::PROPERTY,
+    archforge_uml::REDEFINABLE_TEMPLATE_SIGNATURE,
+    archforge_uml::SLOT,
+    archforge_uml::STEREOTYPE,
+    archforge_uml::TEMPLATE_BINDING,
+    archforge_uml::TEMPLATE_PARAMETER_SUBSTITUTION,
+];
 
 /// How Properties names `o`, whatever owns it.
 fn words_of(store: &Store, o: Obj) -> Option<Words> {

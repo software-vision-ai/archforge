@@ -2,9 +2,10 @@
 //! (`NotationUi::said`, AR-786): only the reasons ER's commands alone give, and only the ER kinds,
 //! by the words the interface uses for them; a kind not listed is left to the engine's English, and
 //! a reason the engine, the diagrams or UML give too is the shell's own (`panels::said`). The
-//! reasons an ER command is not available now are said here too. A word none of a choice's
-//! words is said under the choice's label. A key's columns (AR-492): none, a column of another
-//! table, one that may be null in a primary key, a key a foreign key points at, and no primary key.
+//! reasons an ER command is not available now are said here too, as are the ER kinds a refusal
+//! names (AR-785). A word none of a choice's words is said under the choice's label. A key's
+//! columns (AR-492): none, a column of another table, one that may be null in a primary key, a key
+//! a foreign key points at, and no primary key.
 //! Mapping tables (AR-505): a relationship that does not resolve into one, a table that does not
 //! collapse back into a relationship, one that cannot be associative, by the rule it breaks, and
 //! a mapping table a step would break, with why in the same words.
@@ -44,27 +45,31 @@
 
 use archforge_engine::{GenerationRule, MappingRule, NotOneOf, Reason, SizeRule, WordPlace};
 
-use crate::i18n::{fmt, tr, trn};
+use crate::i18n::{fmt, tr, tr_ctx, trn};
 
-/// The kinds of ER element a refusal names, as `archforge_er`'s commands type them.
-const KINDS: [&str; 16] = [
-    "schema",
-    "table",
-    "column",
-    "relationship",
-    "domain",
-    "enum type",
-    "sequence",
-    "view",
-    "primary key",
-    "unique constraint",
-    "foreign key",
-    "check",
-    "index",
-    "subtype",
-    "key",
-    "key column",
-];
+/// A kind of ER element as a refusal names it, with its article where the language has one, as
+/// `archforge_er`'s commands type it; none for another kind.
+pub(crate) fn a_kind(kind: &str) -> Option<String> {
+    Some(match kind {
+        "schema" => tr_ctx("refusal", "a schema"),
+        "table" => tr_ctx("refusal", "a table"),
+        "column" => tr_ctx("refusal", "a column"),
+        "relationship" => tr_ctx("refusal", "a relationship"),
+        "domain" => tr_ctx("refusal", "a domain"),
+        "enum type" => tr_ctx("refusal", "an enum type"),
+        "sequence" => tr_ctx("refusal", "a sequence"),
+        "view" => tr_ctx("refusal", "a view"),
+        "primary key" => tr_ctx("refusal", "a primary key"),
+        "unique constraint" => tr_ctx("refusal", "a unique constraint"),
+        "foreign key" => tr_ctx("refusal", "a foreign key"),
+        "check" => tr_ctx("refusal", "a check"),
+        "index" => tr_ctx("refusal", "an index"),
+        "subtype" => tr_ctx("refusal", "a subtype"),
+        "key" => tr_ctx("refusal", "a key"),
+        "key column" => tr_ctx("refusal", "a key column"),
+        _ => return None,
+    })
+}
 
 /// A key's columns, as a list refused names them.
 const KEY_COLUMN: &str = "key column";
@@ -93,10 +98,9 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 
 /// An ER command's refusal in the user's words; none for a reason or a kind this doesn't say.
 pub(crate) fn said(reason: &Reason) -> Option<String> {
-    let what = |kind: &str| KINDS.contains(&kind).then(|| crate::panels::a_kind(kind)).flatten();
     Some(match reason {
-        Reason::IdEmpty { kind } => fmt(&tr("No id is given. Give the id of {what}."), &[("what", &what(kind)?)]),
-        Reason::NotA { kind, name } => fmt(&tr("{name} is not {what}."), &[("name", name), ("what", &what(kind)?)]),
+        Reason::IdEmpty { kind } => fmt(&tr("No id is given. Give the id of {what}."), &[("what", &a_kind(kind)?)]),
+        Reason::NotA { kind, name } => fmt(&tr("{name} is not {what}."), &[("name", name), ("what", &a_kind(kind)?)]),
         Reason::IdsExpected { kind: KEY_COLUMN } => tr("Give the key's columns as a list of ids."),
         Reason::TooMany { kind: KEY_COLUMN, max } => fmt(&tr("A key holds at most {max} columns."), &[("max", &max.to_string())]),
         Reason::NamedTwice { kind: KEY_COLUMN, .. } => tr("An element is named twice. Name each element once."),

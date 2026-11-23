@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use archforge_er::rules as r;
-use archforge_mof::{Obj, Store, Uuid, Value};
+use archforge_mof::{ClassId, Obj, Store, Uuid, Value};
 use egui::Rect;
 use serde_json::json;
 
@@ -507,4 +507,63 @@ impl NotationUi for ErUi {
     fn may_be_unnamed(&self, cmd: &str) -> bool {
         cmd == "er.relationship.rename"
     }
+
+    /// Every class its commands create ([`CREATED`]).
+    fn created_classes(&self) -> &'static [ClassId] {
+        CREATED
+    }
+
+    /// An entity is a table, an attribute a column, a generalization a subtype.
+    fn kind_word(&self, class: ClassId) -> Option<String> {
+        Some(match class {
+            c if c == archforge_er::ENTITY => tr("Table"),
+            c if c == archforge_er::ATTRIBUTE => tr("Column"),
+            c if c == archforge_er::GENERALIZATION => tr("Subtype"),
+            _ => return None,
+        })
+    }
+
+    /// The ER kinds its commands name in a refusal: a table, a column, a key and the rest.
+    fn a_kind(&self, kind: &str) -> Option<String> {
+        crate::er_said::a_kind(kind)
+    }
+
+    /// A schema or a table, as the agent reads them for DDL or documentation.
+    fn scope_word(&self, store: &Store, obj: Obj) -> Option<String> {
+        Some(match class(store, obj)? {
+            c if c == archforge_er::SCHEMA => tr("Schema"),
+            c if c == archforge_er::ENTITY => tr("Table"),
+            _ => return None,
+        })
+    }
+
+    /// The ER rules' longest name.
+    fn name_limit(&self) -> usize {
+        r::MAX_NAME
+    }
+
+    /// The ER rules' longest text, which a description is.
+    fn description_limit(&self) -> usize {
+        r::MAX_TEXT
+    }
 }
+
+/// The ER classes `archforge_er`'s commands create, each with a kind word of its own.
+const CREATED: &[ClassId] = &[
+    archforge_er::ATTRIBUTE,
+    archforge_er::CHECK_CONSTRAINT,
+    archforge_er::DOMAIN,
+    archforge_er::DOMAIN_CHECK,
+    archforge_er::ENTITY,
+    archforge_er::ENUM_TYPE,
+    archforge_er::FOREIGN_KEY,
+    archforge_er::GENERALIZATION,
+    archforge_er::INDEX_COLUMN,
+    archforge_er::PRIMARY_KEY,
+    archforge_er::RELATIONSHIP,
+    archforge_er::SCHEMA,
+    archforge_er::SEQUENCE,
+    archforge_er::TABLE_INDEX,
+    archforge_er::UNIQUE_CONSTRAINT,
+    archforge_er::VIEW,
+];

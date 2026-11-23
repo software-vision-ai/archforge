@@ -8540,6 +8540,108 @@ fn no_two_notations_claim_the_same_refusal() {
     assert!(claimed.iter().all(|n| *n > 0), "claims of typed reasons, reasons not available and renames: {claimed:?}");
 }
 
+/// A refusal names each kind of element in its catalogue row, with its article, as before the
+/// notations said their own (AR-785): the shell's for the kinds the core, the diagrams or both
+/// notations name, and one notation's for each of the rest; a kind no row names is none.
+#[test]
+fn each_kind_a_refusal_names_is_said_by_the_shell_or_one_notation() {
+    use crate::i18n::{set_language, tr_ctx};
+    use crate::notation_ui::UIS;
+    let own = [("element", "an element"), ("constraint", "a constraint"), ("skill", "a skill")];
+    let er = [
+        ("schema", "a schema"),
+        ("table", "a table"),
+        ("column", "a column"),
+        ("relationship", "a relationship"),
+        ("domain", "a domain"),
+        ("enum type", "an enum type"),
+        ("sequence", "a sequence"),
+        ("view", "a view"),
+        ("primary key", "a primary key"),
+        ("unique constraint", "a unique constraint"),
+        ("foreign key", "a foreign key"),
+        ("check", "a check"),
+        ("index", "an index"),
+        ("subtype", "a subtype"),
+        ("key", "a key"),
+        ("key column", "a key column"),
+    ];
+    let uml = [
+        ("class", "a class"),
+        ("association class", "an association class"),
+        ("interface", "an interface"),
+        ("enumeration", "an enumeration"),
+        ("data type", "a data type"),
+        ("primitive type", "a primitive type"),
+        ("package", "a package"),
+        ("profile", "a profile"),
+        ("stereotype", "a stereotype"),
+        ("attribute", "an attribute"),
+        ("operation", "an operation"),
+        ("literal", "a literal"),
+        ("qualifier", "a qualifier"),
+        ("template parameter", "a template parameter"),
+        ("generalization set", "a generalization set"),
+        ("association end", "an association end"),
+    ];
+    set_language("de");
+    assert_ne!(tr_ctx("refusal", "a table"), "a table", "the rows checked are really translations");
+    for (owner, kinds) in [(None, &own[..]), (Some(archforge_er::INDEX), &er[..]), (Some(archforge_uml::INDEX), &uml[..])] {
+        for (kind, row) in kinds {
+            assert_eq!(crate::panels::a_kind(kind), Some(tr_ctx("refusal", row)), "{kind}");
+            let by: Vec<u16> = UIS.iter().filter(|ui| ui.a_kind(kind).is_some()).map(|ui| ui.metamodel()).collect();
+            assert_eq!(by, owner.into_iter().collect::<Vec<_>>(), "{kind} is said by the notations of the metamodels {by:?}");
+        }
+    }
+    for kind in ["waypoint", "nesting level", "Table", ""] {
+        assert_eq!(crate::panels::a_kind(kind), None, "{kind:?}");
+    }
+    set_language("en");
+}
+
+/// Each notation answers for its own elements alone (AR-785): every class it creates is of its
+/// metamodel, so the kind words find it; a schema, a table and a class are what Generate can be
+/// about, a column and a package are not; and its limits are its commands'.
+#[test]
+fn each_notation_answers_the_words_and_limits_of_its_own_elements() {
+    use crate::notation_ui::{NotationUi, UIS};
+    crate::i18n::set_language("en");
+    for ui in UIS {
+        assert!(!ui.created_classes().is_empty());
+        for class in ui.created_classes() {
+            assert_eq!(class.metamodel(), ui.metamodel(), "{class:?} is not of the metamodel {}", ui.metamodel());
+        }
+    }
+    let (h, customer) = table_harness();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+    let schema = archforge_er::rules::schema_of(st, customer).unwrap();
+    let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
+    let er = crate::er_ui::ErUi;
+    assert_eq!(er.scope_word(st, schema).as_deref(), Some("Schema"));
+    assert_eq!(er.scope_word(st, customer).as_deref(), Some("Table"));
+    assert_eq!(er.scope_word(st, email), None, "a column is no scope");
+    assert_eq!((er.name_limit(), er.description_limit()), (archforge_er::rules::MAX_NAME, archforge_er::rules::MAX_TEXT));
+    let (h, ..) = sketch_harness();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let o = |name: &str| st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap();
+    let uml = crate::uml_ui::UmlUi;
+    assert_eq!(uml.scope_word(st, o("Party")).as_deref(), Some("Class"));
+    assert_eq!(uml.scope_word(st, o("sales")), None, "a package is no scope");
+    assert_eq!((uml.name_limit(), uml.description_limit()), (archforge_uml::commands::MAX_NAME, archforge_uml::descriptions::MAX_DESCRIPTION));
+}
+
+/// The notations the shell knows are never none (AR-785): a description field for an element no
+/// notation owns takes the most any of them takes, which is the 4096 characters every description
+/// field took before the notations said their own, never a fallback over an empty list.
+#[test]
+fn the_shell_knows_notations_and_their_longest_description_is_the_old_limit() {
+    use crate::notation_ui::UIS;
+    assert!(!UIS.is_empty());
+    assert_eq!(UIS.iter().map(|ui| ui.description_limit()).max(), Some(archforge_er::rules::MAX_TEXT));
+    assert_eq!(archforge_er::rules::MAX_TEXT, 4096);
+}
+
 /// A name of nothing but spaces is refused before it is sent, except for a diagram and for what a
 /// notation's rename command may leave unnamed: a relationship's, in ER and in UML (AR-786).
 #[test]
@@ -16754,11 +16856,25 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
         None
     }
+    /// The package, the one row that opens.
     fn foldable(&self, _: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
         vec![pkg]
     }
+    /// The package a class sits in.
     fn parents(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
         store.container(o).ok().flatten().map(|(c, _)| c).into_iter().collect()
+    }
+    /// The class, the one kind it makes.
+    fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
+        &[archforge_uml::CLASS]
+    }
+    /// Shorter than any other notation's, so a field that takes it is told apart.
+    fn name_limit(&self) -> usize {
+        SKETCH_NAME_LIMIT
+    }
+    /// Shorter than any other notation's, so a field that takes it is told apart.
+    fn description_limit(&self) -> usize {
+        SKETCH_DESCRIPTION_LIMIT
     }
     fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
         (store.class_of(o).ok()? == archforge_uml::CLASS).then(|| {
@@ -16803,10 +16919,18 @@ impl crate::notation_ui::NotationUi for SketchUi {
             crate::home::control(shell, ui, &format!("workspace.properties.sketch.attribute.{i}"), "row", row, true);
             crate::ux::text(&ui.painter().clone(), row.min, a, crate::ux::types::UI, p.text, None);
         }
+        // The shared name field, under the attributes.
+        let at = egui::pos2(r.left() + 16.0, y + attributes.len() as f32 * 28.0 + 8.0);
+        crate::panels::name_field(shell, ui, p, at, r.width() - 32.0, subject, "uml.class.rename", "class");
     }
 }
 
 static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi, &SketchUi];
+
+/// The sketch notation's limits, shorter than any other notation's, so a field that takes them is
+/// told apart from one that takes another's.
+const SKETCH_NAME_LIMIT: usize = 40;
+const SKETCH_DESCRIPTION_LIMIT: usize = 100;
 
 #[test]
 fn a_second_notations_elements_show_in_the_tree_are_found_and_get_their_own_properties() {
@@ -16838,6 +16962,135 @@ fn a_second_notations_elements_show_in_the_tree_are_found_and_get_their_own_prop
     let texts = painted(&h);
     assert!(texts.iter().any(|t| t == "Class · sketch"), "{texts:?}");
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.sketch.attribute.0"), "the class's attributes section");
+}
+
+/// A name typed in place takes as many characters as its element's notation lets it have
+/// (AR-785): a class of the sketch notation, whose names are shorter than any other's, on the
+/// canvas, in the Models tree and in Properties; a diagram's name the diagrams' rules allow, and
+/// the filter of Models the most any name has. A description takes what its notation's does.
+#[test]
+fn a_name_typed_in_place_takes_what_its_notation_allows() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        names_typed_in_place(theme);
+    }
+}
+
+/// [`a_name_typed_in_place_takes_what_its_notation_allows`] in one appearance.
+fn names_typed_in_place(theme: ThemeKind) {
+    use crate::notation_ui::{description_limit, longest_name, name_limit_of};
+    let (mut h, d, a, ..) = sketch_harness();
+    h.state_mut().state.theme = theme;
+    h.run();
+    let (pkg, party) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let o = |name: &str| st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap()).unwrap();
+        (o("sales"), o("Party"))
+    };
+    let longest = archforge_er::rules::MAX_NAME.max(archforge_diagram::rules::MAX_NAME);
+    assert!(SKETCH_NAME_LIMIT < longest, "the sketch's limit is told apart from the others'");
+    assert_eq!(name_limit_of(h.state(), party), SKETCH_NAME_LIMIT);
+    // A diagram's name takes the diagrams' own limit, never another notation's, so its field takes
+    // no name `diagram.rename` refuses. Every limit is 128 today, so this names the constant
+    // rather than telling the values apart.
+    assert_eq!(name_limit_of(h.state(), archforge_mof::Uuid::parse(&d).unwrap()), archforge_diagram::rules::MAX_NAME, "a diagram");
+    assert_eq!(name_limit_of(h.state(), archforge_mof::Uuid([7; 16])), longest, "an element not in the model");
+    assert_eq!(longest_name(SKETCH_UIS), longest);
+    {
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(description_limit(SKETCH_UIS, st, st.by_uuid(party).unwrap()), SKETCH_DESCRIPTION_LIMIT);
+    }
+    let typed = "y".repeat(longest + 20);
+    // On the canvas: the name is selected whole, so typing replaces it, up to the sketch's limit.
+    h.state_mut().canvas.rename = Some(crate::editing::NodeRename {
+        node: archforge_mof::Uuid::parse(&a).unwrap(),
+        entity: party,
+        text: "Party".into(),
+        opened: true,
+        refused: None,
+    });
+    h.run();
+    h.event(egui::Event::Text(typed.clone()));
+    h.run();
+    assert_eq!(h.state().canvas.rename.as_ref().map(|r| r.text.chars().count()), Some(SKETCH_NAME_LIMIT), "on the canvas");
+    h.state_mut().canvas.rename = None;
+    // In the Models tree.
+    h.state_mut().explorer.expanded.insert(pkg);
+    h.state_mut().explorer.rename = Some(crate::explorer::Rename::fresh(party, "Party".into()));
+    h.run();
+    h.run();
+    h.event(egui::Event::Text(typed.clone()));
+    h.run();
+    assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.chars().count()), Some(SKETCH_NAME_LIMIT), "in the Models tree");
+    h.state_mut().explorer.rename = None;
+    h.run();
+    // In Properties, the name and the description, each as the sketch's limits allow.
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [party.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    for (field, limit) in [("workspace.properties.name", SKETCH_NAME_LIMIT), ("workspace.properties.description", SKETCH_DESCRIPTION_LIMIT)] {
+        let at = rect_of(&h, field).center();
+        click(&mut h, at);
+        h.event(egui::Event::Text(typed.repeat(40)));
+        h.run();
+        let kept = match field {
+            "workspace.properties.name" => h.state().panels.name.as_ref().map(|n| n.text.chars().count()),
+            _ => h.state().panels.description.as_ref().map(|d| d.text.chars().count()),
+        };
+        assert_eq!(kept, Some(limit), "{field}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    }
+    // The filter takes any name whole.
+    let at = rect_of(&h, "workspace.explorer.filter").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text(typed));
+    h.run();
+    assert_eq!(h.state().explorer.filter.chars().count(), longest, "the filter");
+}
+
+/// A row Properties selects opens the rows its element sits under in Models, as its notation names
+/// them (AR-785): in ER exactly the rows its table and schema were before (a column's and a key's
+/// table and schema, a relationship's and a view's schema), and a class's package in the sketch
+/// notation.
+#[test]
+fn a_row_properties_selects_opens_the_rows_its_notation_names() {
+    use std::collections::BTreeSet;
+    let find = |h: &Harness<'static, Shell>, name: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap()).unwrap()
+    };
+    let (mut h, customer) = table_harness();
+    let (customer, email) = (archforge_mof::Uuid::parse(&customer).unwrap(), find(&h, "email"));
+    let (schema, key) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let schema = st.uuid(archforge_er::rules::schema_of(st, st.by_uuid(customer).unwrap()).unwrap()).unwrap();
+        let key = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::PRIMARY_KEY)).unwrap();
+        (schema, st.uuid(key).unwrap())
+    };
+    let (relationship, view) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Order" })).unwrap().value);
+        let r = serde_json::json!({ "from": customer.to_string(), "to": order.to_string(), "name": "places" });
+        let relationship = id(s.execute("er.relationship.add", &r).unwrap().value);
+        let v = serde_json::json!({ "schema": schema.to_string(), "name": "open_orders", "query": "select * from orders" });
+        (relationship, id(s.execute("er.view.add", &v).unwrap().value))
+    };
+    for (what, element, rows) in [
+        ("a column", email, BTreeSet::from([customer, schema])),
+        ("a key", key, BTreeSet::from([customer, schema])),
+        ("a relationship", relationship, BTreeSet::from([schema])),
+        ("a view", view, BTreeSet::from([schema])),
+    ] {
+        h.state_mut().explorer.expanded.clear();
+        crate::panels::select_element(h.state_mut(), element);
+        assert_eq!(h.state().explorer.expanded.iter().copied().collect::<BTreeSet<_>>(), rows, "{what}");
+    }
+    let (mut h, ..) = sketch_harness();
+    let (sales, party) = (find(&h, "sales"), find(&h, "Party"));
+    h.state_mut().explorer.expanded.clear();
+    crate::panels::select_element(h.state_mut(), party);
+    assert_eq!(h.state().explorer.expanded.iter().copied().collect::<Vec<_>>(), [sales], "the class's package");
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 1, "and it is selected");
 }
 
 /// The class diagram the canvas shows, and its classes' names on it.

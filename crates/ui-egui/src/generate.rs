@@ -11,6 +11,7 @@ use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::home::control;
 use crate::i18n::{fmt, tr};
+use crate::notation_ui::NotationUi;
 use crate::ux::{self, icons, types};
 use crate::{Shell, widgets};
 
@@ -42,31 +43,25 @@ struct Scope {
     name: String,
 }
 
-/// The kind word of an element the resources read, when it is one.
-fn kind_of(store: &Store, o: Obj) -> Option<String> {
-    let class = store.class_of(o).ok()?;
-    Some(if class == archforge_er::SCHEMA {
-        tr("Schema")
-    } else if class == archforge_er::ENTITY {
-        tr("Table")
-    } else if class == archforge_uml::CLASS {
-        tr("Class")
-    } else if class == archforge_diagram::DIAGRAM {
-        tr("Diagram")
-    } else {
-        return None;
-    })
+/// The kind word of an element the resources read, when it is one: a diagram, or what its
+/// notation says Generate can be about
+/// ([`NotationUi::scope_word`](crate::notation_ui::NotationUi::scope_word)).
+fn kind_of(uis: &[&'static dyn NotationUi], store: &Store, o: Obj) -> Option<String> {
+    if store.class_of(o).ok()? == archforge_diagram::DIAGRAM {
+        return Some(tr("Diagram"));
+    }
+    crate::notation_ui::of(uis, store, o)?.scope_word(store, o)
 }
 
 /// The selected element the resources read, else the open diagram.
 fn scope(shell: &Shell, store: &Store) -> Option<Scope> {
     let selection = shell.session.as_ref().map(|s| s.view().selection.clone()).unwrap_or_default();
     let picked = match selection.as_slice() {
-        [one] if kind_of(store, *one).is_some() => Some(*one),
+        [one] if kind_of(shell.notation_uis, store, *one).is_some() => Some(*one),
         _ => None,
     };
     let obj = picked.or_else(|| store.by_uuid(shell.canvas.active?))?;
-    let kind = kind_of(store, obj)?;
+    let kind = kind_of(shell.notation_uis, store, obj)?;
     Some(Scope { id: store.uuid(obj).ok()?, obj, kind, name: archforge_core::name_of(store, obj) })
 }
 

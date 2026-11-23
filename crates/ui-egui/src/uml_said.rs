@@ -2,13 +2,37 @@
 //! give, each in the words of the editor or the canvas that meets it (relationships, templates and
 //! bindings, generalization sets and association ends, profiles and stereotypes, constraints, what
 //! a property subsets or redefines, defaults, packages and their default diagrams), and the reasons
-//! a UML command is not available now. A reason the engine, the diagrams or ER give too is the
+//! a UML command is not available now, and the kinds of element only UML's commands name in a
+//! refusal (AR-785). A reason the engine, the diagrams or ER give too is the
 //! shell's own (`panels::said`, `engine_said`).
 
 use archforge_engine::{BindingFault, Reason};
 
-use crate::i18n::{fmt, tr, trn};
-use crate::panels::a_kind;
+use crate::i18n::{fmt, tr, tr_ctx, trn};
+
+/// A kind of UML element as a refusal names it, with its article where the language has one, as
+/// `archforge_uml`'s commands alone type it; none for another kind.
+pub(crate) fn a_kind(kind: &str) -> Option<String> {
+    Some(match kind {
+        "class" => tr_ctx("refusal", "a class"),
+        "association class" => tr_ctx("refusal", "an association class"),
+        "interface" => tr_ctx("refusal", "an interface"),
+        "enumeration" => tr_ctx("refusal", "an enumeration"),
+        "data type" => tr_ctx("refusal", "a data type"),
+        "primitive type" => tr_ctx("refusal", "a primitive type"),
+        "package" => tr_ctx("refusal", "a package"),
+        "profile" => tr_ctx("refusal", "a profile"),
+        "stereotype" => tr_ctx("refusal", "a stereotype"),
+        "attribute" => tr_ctx("refusal", "an attribute"),
+        "operation" => tr_ctx("refusal", "an operation"),
+        "literal" => tr_ctx("refusal", "a literal"),
+        "qualifier" => tr_ctx("refusal", "a qualifier"),
+        "template parameter" => tr_ctx("refusal", "a template parameter"),
+        "generalization set" => tr_ctx("refusal", "a generalization set"),
+        "association end" => tr_ctx("refusal", "an association end"),
+        _ => return None,
+    })
+}
 
 /// A refusal only UML's commands give, in the user's words; none for another reason or for a kind
 /// of element the catalogues don't name, which the engine's sentence then says.
@@ -17,7 +41,7 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
     Some(match reason {
         Reason::DependsOnItself { kind } => {
             let template = tr("{what} cannot depend on itself.");
-            let what = a_kind(kind)?;
+            let what = crate::panels::a_kind(kind)?;
             // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
             let what = if template.starts_with("{what}") {
                 what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect()
@@ -42,7 +66,7 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         }
         Reason::HoldsBuiltInName { kind, name } => fmt(
             &tr("The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first."),
-            &[("what", &a_kind(kind)?), ("name", name), ("types", types)],
+            &[("what", &crate::panels::a_kind(kind)?), ("name", name), ("types", types)],
         ),
         Reason::InvalidBinding(BindingFault::Missing) => {
             tr("The package has class diagrams, but none is its default. Choose one of them as its default diagram.")
@@ -291,7 +315,7 @@ fn template_said(reason: &Reason) -> Option<String> {
         ),
         Reason::BuiltInTaken { kind, name } => fmt(
             &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type."),
-            &[("what", &a_kind(kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
+            &[("what", &crate::panels::a_kind(kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
         ),
         _ => return None,
     })

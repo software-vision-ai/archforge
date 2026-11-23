@@ -329,13 +329,13 @@ fn every_class_the_notations_create_has_a_kind_word() {
         }
     }
     assert!(created.contains("Interface realization"), "the scan found {created:?}; the scanner is broken");
-    let kinds: Vec<String> = crate::model_words::KINDS.iter().map(|c| crate::model_words::words(&universe.class(*c).unwrap().name)).collect();
+    let kinds: Vec<String> = crate::model_words::kinds().iter().map(|c| crate::model_words::words(&universe.class(*c).unwrap().name)).collect();
     // What a notation draws is the diagram metamodel's: boxes, lines and their labels. A package's
     // default-diagram binding is the diagram metamodel's too, worded Default diagram on its own (AR-553).
     for class in created.iter().filter(|c| !["Node", "Edge", "Label", "Default diagram binding"].contains(&c.as_str())) {
-        assert!(kinds.contains(class), "the notations create {class}, which has no kind word; add it to KINDS");
+        assert!(kinds.contains(class), "the notations create {class}, which has no kind word; add it to its notation's created_classes");
     }
-    for class in crate::model_words::KINDS {
+    for class in &crate::model_words::kinds() {
         let known = universe.class(*class).unwrap();
         assert!(!known.is_abstract && class.metamodel() != archforge_diagram::INDEX, "{} cannot be an element's kind", known.name);
     }

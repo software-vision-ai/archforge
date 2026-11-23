@@ -24,7 +24,6 @@ use crate::{Shell, widgets};
 pub(crate) const PAD: f32 = 16.0;
 pub(crate) const FIELD: f32 = 28.0;
 pub(crate) const ROW: f32 = 36.0;
-const MAX_NAME: usize = archforge_er::rules::MAX_NAME;
 const MAX_TYPE: usize = archforge_er::rules::MAX_TYPE;
 
 /// The row of the open menu the arrow keys reached and the rows drawn above and below it, each as
@@ -660,46 +659,17 @@ fn not_one_of_said(no: &archforge_engine::NotOneOf) -> Option<String> {
     })
 }
 
-/// A kind of element as a refusal names it, with its article where the language has one; none for
-/// a kind the catalogues don't name.
+/// A kind of element as a refusal names it, with its article where the language has one: the
+/// shell's own for the kinds the core, the diagrams or both notations name (an element, a
+/// constraint, a skill), then the one notation's whose commands alone name it
+/// ([`NotationUi::a_kind`](crate::notation_ui::NotationUi::a_kind)); none for a kind the
+/// catalogues don't name.
 pub(crate) fn a_kind(kind: &str) -> Option<String> {
     Some(match kind {
-        "class" => tr_ctx("refusal", "a class"),
-        "association class" => tr_ctx("refusal", "an association class"),
-        "interface" => tr_ctx("refusal", "an interface"),
-        "enumeration" => tr_ctx("refusal", "an enumeration"),
-        "data type" => tr_ctx("refusal", "a data type"),
-        "primitive type" => tr_ctx("refusal", "a primitive type"),
-        "package" => tr_ctx("refusal", "a package"),
-        "profile" => tr_ctx("refusal", "a profile"),
-        "stereotype" => tr_ctx("refusal", "a stereotype"),
         "element" => tr_ctx("refusal", "an element"),
-        "schema" => tr_ctx("refusal", "a schema"),
-        "attribute" => tr_ctx("refusal", "an attribute"),
-        "operation" => tr_ctx("refusal", "an operation"),
-        "literal" => tr_ctx("refusal", "a literal"),
-        "qualifier" => tr_ctx("refusal", "a qualifier"),
-        "template parameter" => tr_ctx("refusal", "a template parameter"),
-        "generalization set" => tr_ctx("refusal", "a generalization set"),
-        "table" => tr_ctx("refusal", "a table"),
-        "column" => tr_ctx("refusal", "a column"),
-        "relationship" => tr_ctx("refusal", "a relationship"),
-        "domain" => tr_ctx("refusal", "a domain"),
-        "enum type" => tr_ctx("refusal", "an enum type"),
-        "sequence" => tr_ctx("refusal", "a sequence"),
-        "view" => tr_ctx("refusal", "a view"),
         "constraint" => tr_ctx("refusal", "a constraint"),
-        "key" => tr_ctx("refusal", "a key"),
-        "primary key" => tr_ctx("refusal", "a primary key"),
-        "unique constraint" => tr_ctx("refusal", "a unique constraint"),
-        "foreign key" => tr_ctx("refusal", "a foreign key"),
-        "check" => tr_ctx("refusal", "a check"),
-        "index" => tr_ctx("refusal", "an index"),
-        "subtype" => tr_ctx("refusal", "a subtype"),
-        "key column" => tr_ctx("refusal", "a key column"),
         "skill" => tr_ctx("refusal", "a skill"),
-        "association end" => tr_ctx("refusal", "an association end"),
-        _ => return None,
+        _ => return crate::notation_ui::UIS.iter().find_map(|ui| ui.a_kind(kind)),
     })
 }
 
@@ -1633,7 +1603,8 @@ pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: 
         Some(n) if n.target == id => n.text.clone(),
         _ => subject.name.clone(),
     };
-    let out = edit_field(shell, ui, p, at, width, "workspace.properties.name", &tr("Name"), &mut text, MAX_NAME, false, true);
+    let limit = crate::notation_ui::name_limit_of(shell, id);
+    let out = edit_field(shell, ui, p, at, width, "workspace.properties.name", &tr("Name"), &mut text, limit, false, true);
     if out == FieldOut::Cancel {
         shell.panels.name = None;
     } else if out == FieldOut::Commit {
@@ -1731,23 +1702,12 @@ pub(crate) fn description_pending(panels: &State) -> bool {
 fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject) {
     let (Some(id), Some(obj)) = (subject.id, subject.obj) else { return };
     let current = description_now(shell, obj);
+    let Some(limit) = shell.session.as_ref().map(|s| crate::notation_ui::description_limit(shell.notation_uis, s.doc(), obj)) else { return };
     let mut text = match &shell.panels.description {
         Some(d) if d.target == id => d.text.clone(),
         _ => current.clone(),
     };
-    let out = edit_field(
-        shell,
-        ui,
-        p,
-        at,
-        width,
-        "workspace.properties.description",
-        &tr("Description"),
-        &mut text,
-        archforge_er::rules::MAX_TEXT,
-        false,
-        true,
-    );
+    let out = edit_field(shell, ui, p, at, width, "workspace.properties.description", &tr("Description"), &mut text, limit, false, true);
     if out == FieldOut::Cancel {
         shell.panels.description = None;
     } else if out == FieldOut::Commit {
@@ -1903,13 +1863,14 @@ pub(crate) fn selected_id(shell: &Shell) -> Option<Uuid> {
 }
 
 /// Selects an element a Properties row lists, so the Models tree and the canvas mark it as they
-/// would for a click there; its table and schema open in the tree so its row shows.
+/// would for a click there; the rows it sits under open in the tree, as its notation says
+/// ([`NotationUi::parents`](crate::notation_ui::NotationUi::parents)), so its row shows.
 pub(crate) fn select_element(shell: &mut Shell, id: Uuid) {
     if let Some(store) = shell.session.as_ref().map(|s| s.doc())
         && let Some(o) = store.by_uuid(id)
+        && let Some(ui) = crate::notation_ui::of(shell.notation_uis, store, o)
     {
-        let parents = [archforge_er::rules::entity_of(store, o), archforge_er::rules::schema_of(store, o)];
-        shell.explorer.expanded.extend(parents.into_iter().flatten().filter_map(|p| store.uuid(p).ok()));
+        shell.explorer.expanded.extend(ui.parents(store, o).into_iter().filter_map(|p| store.uuid(p).ok()));
     }
     if let Err(e) = run(shell, "view.select", json!({ "ids": [id.to_string()] })) {
         shell.panels.notice = Some(e);
@@ -2152,8 +2113,19 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
     let mut cy = 12.0;
-    let mut enter =
-        text_field(shell, ui, p, at(0.0, cy), inner, "workspace.properties.column.name", &tr("Name"), &mut edit.name, MAX_NAME, take, false);
+    let mut enter = text_field(
+        shell,
+        ui,
+        p,
+        at(0.0, cy),
+        inner,
+        "workspace.properties.column.name",
+        &tr("Name"),
+        &mut edit.name,
+        archforge_er::rules::MAX_NAME,
+        take,
+        false,
+    );
     cy += row;
     if let Some(target) = edit.linked.clone() {
         // What the column follows, with the way out of it.
@@ -2342,7 +2314,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
                 "workspace.properties.column.collation",
                 &tr("Collation"),
                 &mut edit.collation,
-                MAX_NAME,
+                archforge_er::rules::MAX_NAME,
                 false,
                 false,
             );
