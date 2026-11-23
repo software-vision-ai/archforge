@@ -504,7 +504,7 @@ pub fn remove_selection(shell: &mut Shell) {
                     fmt(&tr("{name} removed"), &[("name", &name)])
                 };
                 let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-                shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+                shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(300), undo_label });
                 crate::uml_constraints::say_dropped(shell, said, &name);
             }
             Err(e) => shell.explorer.notice = Some(e),
@@ -1467,7 +1467,7 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
                                 fmt(&tr("{name} removed"), &[("name", &d.name)])
                             };
                             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-                            shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+                            shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(300), undo_label });
                             crate::uml_constraints::say_dropped(shell, said, &d.name);
                         }
                         None => crate::uml_constraints::say_dropped(shell, said, &fmt(&tr("{name} deleted"), &[("name", &d.name)])),

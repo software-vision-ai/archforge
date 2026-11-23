@@ -637,5 +637,5 @@ pub(crate) fn say_dropped(shell: &mut Shell, said: Option<String>, lead: &str) {
         Some(t) if t.until > shell.frames => format!("{} · {said}", t.text),
         _ => format!("{lead} · {said}"),
     };
-    shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(400), undo_label });
+    shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(400), undo_label });
 }

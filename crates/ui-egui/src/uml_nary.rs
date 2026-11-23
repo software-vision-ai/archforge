@@ -341,42 +341,6 @@ fn leg_points(diamond: Rect, card: Rect) -> Vec<Pos2> {
     vec![from, pos2(c.x, m.y), pos2(c.x, if c.y < m.y { card.bottom() } else { card.top() })]
 }
 
-/// A hollow diamond filling `rect`, over `fill`.
-fn diamond_shape(paint: &egui::Painter, rect: Rect, fill: ux::Colour, stroke: Stroke) {
-    let points = vec![rect.left_center(), rect.center_top(), rect.right_center(), rect.center_bottom()];
-    paint.add(egui::Shape::convex_polygon(points, fill, stroke));
-}
-
-/// Draws an n-ary association's diamond node at `rect` (AR-128): a hollow diamond in the line's
-/// ink, the accent while it is selected, its name above it.
-#[allow(clippy::too_many_arguments, reason = "a diamond is drawn with its name, its stereotypes and its look")]
-pub(crate) fn draw_diamond(
-    paint: &egui::Painter,
-    p: &Palette,
-    rect: Rect,
-    name: &str,
-    keyword: Option<&str>,
-    z: f32,
-    selected: bool,
-    look: &crate::canvas::Look,
-) {
-    let ink = if selected { p.accent } else { look.stroke.unwrap_or(p.text_secondary) };
-    let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
-    diamond_shape(paint, rect, look.fill.unwrap_or(p.canvas), Stroke::new(width, ink));
-    let text_ink = look.text.unwrap_or(p.text_secondary);
-    let mut top = rect.top() - 8.0 * z;
-    if !name.is_empty() {
-        let g = ux::galley(paint, name, types::SMALL.scaled(z), text_ink, None);
-        top -= g.size().y;
-        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top), g, text_ink.into());
-    }
-    // Its stereotypes above its name, `«Reference»`, as a line's are (AR-135).
-    if let Some(k) = keyword {
-        let g = ux::galley(paint, k, types::CAPTION.scaled(z), text_ink, None);
-        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top - g.size().y - 1.0 * z), g, text_ink.into());
-    }
-}
-
 /// Where an n-ary leg's end at its diamond `rect` meets the diamond's outline: `tip`, on the
 /// node's border, moved on along the leg into the node (`towards` is the leg's next point) until it
 /// reaches the diamond, so the leg touches the diamond wherever it leaves the node. None when the
@@ -465,7 +429,7 @@ fn draw_draft(shell: &Shell, paint: &egui::Painter, p: &Palette, view: View, d: 
         paint.galley(role_at, role_g, p.text_secondary.into());
         paint.galley(many_at, many_g, p.text_secondary.into());
     }
-    diamond_shape(paint, diamond, p.canvas, stroke);
+    crate::canvas::diamond_shape(paint, diamond, p.canvas, stroke);
     if let Some(at) = pointer.filter(|at| !diamond.contains(*at)) {
         let end = target.map_or(at, |t| crate::canvas::exit_point(t, diamond.center()));
         let from = onto_diamond(diamond, crate::canvas::exit_point(diamond, end), end).unwrap_or(diamond.center());
@@ -1127,7 +1091,7 @@ pub(crate) fn remove_end(shell: &mut Shell, id: Uuid, i: usize) {
         Ok(_) => {
             let text = fmt(&tr("End {role} removed"), &[("role", &called)]);
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(crate::connect::TOAST_FRAMES), undo_label });
+            shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
         }
         Err(e) => shell.panels.notice = Some(e),
     }
