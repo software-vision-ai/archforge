@@ -612,12 +612,14 @@ pub fn unapply_uses(store: &Store, package: Obj, profile: Obj) -> Uses {
 }
 
 /// The uses unapplying `profile` from `package` would strand ([`unapply_uses`]), but for those on
-/// an element `goes` says goes, which go with it.
+/// an element `goes` says goes, which go with it; a package around the element that `goes` says
+/// goes too applies the profile to nothing after the removal, so it keeps no use (AR-805).
 fn stranded(store: &Store, package: Obj, profile: Obj, goes: impl Fn(Obj) -> bool) -> Uses {
+    let applies = |p: Obj| p != package && !goes(p) && applied(store, p).iter().any(|(_, x)| *x == profile);
     uses_where(store, &stereotypes(store, profile), |a| {
         a.element.is_some_and(|e| {
             let around = scopes(store, e);
-            !goes(e) && around.contains(&package) && !around.iter().any(|p| *p != package && applied(store, *p).iter().any(|(_, x)| *x == profile))
+            !goes(e) && around.contains(&package) && !around.iter().any(|p| applies(*p))
         })
     })
 }

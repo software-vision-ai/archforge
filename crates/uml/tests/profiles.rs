@@ -1085,6 +1085,53 @@ fn a_nested_package_goes_with_the_stereotype_applications_on_what_goes_with_it()
     assert!(why.contains("Ledger applies the profiles its elements use: «Trace» on Draft. Remove those first."), "{why}");
 }
 
+/// A package around an element provides its profile only while it stays (AR-805): removing a
+/// nested package together with the package around it that applies the same profile is refused
+/// for a use on what they hand up, each no longer counting the other, typed and changing nothing;
+/// with a package that stays around them applying the profile too, it goes in one step.
+#[test]
+fn a_package_that_goes_too_provides_no_profile_to_what_is_handed_up() {
+    use archforge_engine::{EngineError, InUse, Reason, Used};
+    let mut s = session();
+    let outer = run(&mut s, "uml.package.add", json!({ "name": "Outer" }));
+    let inner = run(&mut s, "uml.package.add", json!({ "name": "Inner", "parent": outer }));
+    let entry = run(&mut s, "uml.class.add", json!({ "package": inner, "name": "Entry" }));
+    let customer = run(&mut s, "uml.class.add", json!({ "package": inner, "name": "Customer" }));
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit" }));
+    let trace = run(&mut s, "uml.stereotype.add", json!({ "profile": audit, "name": "Trace", "extends": ["Class"] }));
+    let shared = run(&mut s, "uml.profile.add", json!({ "name": "Shared" }));
+    let kept = run(&mut s, "uml.stereotype.add", json!({ "profile": shared, "name": "Kept", "extends": ["Class"] }));
+    for (package, profile) in [(&inner, &audit), (&inner, &shared), (&outer, &shared)] {
+        run(&mut s, "uml.profile.apply", json!({ "package": package, "profile": profile }));
+    }
+    let uses = [(&*trace, &*entry), (&*kept, &*customer)];
+    let ids = json!({ "ids": [inner, outer, entry] });
+    // The root package applies neither: Customer would land there out of Shared's reach.
+    let mut alone = with_applications(&s, &uses);
+    run(&mut alone, "uml.class.add", json!({ "package": outer, "name": "Journal" }));
+    alone.undo().unwrap();
+    let history = |s: &S| (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string));
+    let before = history(&alone);
+    let why = refused(&mut alone, "element.remove", ids.clone());
+    assert!(why.contains("Inner applies the profiles its elements use: «Kept» on Customer. Remove those first."), "{why}");
+    let Err(EngineError::Failed { error, .. }) = alone.execute("element.remove", &ids) else { panic!("refused") };
+    let applied = Used::AppliedProfiles { package: "Inner".to_string() };
+    let named = vec![("Kept".to_string(), vec!["Customer".to_string()], 1)];
+    assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: applied, uses: named }))));
+    assert_eq!(history(&alone), before, "the history is as it was");
+    // The root package applies Shared too: one step, Customer handed up into its reach.
+    let root = s.doc().uuid(archforge_uml::commands::root_package(s.doc()).unwrap()).unwrap().to_string();
+    run(&mut s, "uml.profile.apply", json!({ "package": root, "profile": shared }));
+    let mut reached = with_applications(&s, &uses);
+    one_step(&mut reached, "element.remove", ids);
+    let st = reached.doc();
+    for (gone, what) in [(&inner, "Inner"), (&outer, "Outer"), (&entry, "Entry")] {
+        assert!(st.by_uuid(Uuid::parse(gone).unwrap()).is_none_or(|o| !st.is_alive(o)), "{what} went");
+    }
+    assert_eq!(st.container(obj(st, &customer)).unwrap().map(|(p, _)| p), archforge_uml::commands::root_package(st), "Customer was handed up");
+    assert_eq!(profiles::applications_of(st, obj(st, &kept)).len(), 1, "its application stays");
+}
+
 /// A package with no parent holding a profile, removed with the elements outside it that use the
 /// profile, goes in one step with every application, as they go too (AR-805); one used on what a
 /// nested package named with it hands up is still refused with the same text, typed.
