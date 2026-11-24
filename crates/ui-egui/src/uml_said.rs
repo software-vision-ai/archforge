@@ -16,6 +16,8 @@ pub(crate) fn a_kind(kind: &str) -> Option<String> {
     Some(match kind {
         "class" => tr_ctx("refusal", "a class"),
         "association class" => tr_ctx("refusal", "an association class"),
+        "association" => tr_ctx("refusal", "an association"),
+        "generalization" => tr_ctx("refusal", "a generalization"),
         "interface" => tr_ctx("refusal", "an interface"),
         "enumeration" => tr_ctx("refusal", "an enumeration"),
         "data type" => tr_ctx("refusal", "a data type"),

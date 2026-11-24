@@ -482,7 +482,7 @@ fn the_sweep_over_profiles_breaks_nothing() {
 /// and counted past that (AR-437).
 #[test]
 fn every_use_that_refuses_carries_its_reason_typed() {
-    use archforge_engine::{EngineError, InUse, Reason, Used};
+    use archforge_engine::{EngineError, InUse, Named, Reason, Used};
     let mut s = session();
     let [commerce, order, customer, id_attr, persistence, entity, id, reference] = shop(&mut s);
     run(&mut s, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }));
@@ -497,9 +497,9 @@ fn every_use_that_refuses_carries_its_reason_typed() {
     let text = |n: &str| n.to_string();
     // Three elements are counted; one, or two of different names, are named.
     let counted = vec![(text("Entity"), vec![], 3)];
-    let both = vec![counted[0].clone(), (text("Id"), vec![text("id")], 1)];
-    let named = [(text("Tracked"), vec![text("Order"), text("Customer")], 2)];
-    let in_use = |what: Used, uses: &[(String, Vec<String>, usize)]| Reason::InUse(Box::new(InUse { what, uses: uses.to_vec() }));
+    let both = vec![counted[0].clone(), (text("Id"), vec!["id".into()], 1)];
+    let named = [(text("Tracked"), vec!["Order".into(), "Customer".into()], 2)];
+    let in_use = |what: Used, uses: &[(String, Vec<Named>, usize)]| Reason::InUse(Box::new(InUse { what, uses: uses.to_vec() }));
     let check = |s: &mut S, cmd: &str, p: Json, reason: Reason, english: &str| {
         let before = picture(s.doc());
         let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
@@ -953,7 +953,7 @@ fn a_nested_package_goes_with_its_own_stereotype_applications() {
     let why = refused(&mut used, "element.remove", json!({ "ids": [ledger] }));
     assert!(why.contains("Ledger applies the profiles its elements use: «Trace» on Entry. Remove those first."), "{why}");
     let Err(EngineError::Failed { error, .. }) = used.execute("element.remove", &json!({ "ids": [ledger] })) else { panic!("refused") };
-    let uses = vec![("Trace".to_string(), vec!["Entry".to_string()], 1)];
+    let uses = vec![("Trace".to_string(), vec!["Entry".into()], 1)];
     assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: Used::AppliedProfiles { package: "Ledger".to_string() }, uses }))));
     assert_eq!(history(&used), before, "the history is as it was");
     // «Trace» on Drafts, a package Ledger hands up as it does Entry: refused alike, naming Drafts.
@@ -1013,7 +1013,7 @@ fn a_package_with_no_parent_goes_with_the_stereotype_applications_on_what_it_hol
     assert!(why.contains("Commerce holds the profile Audit, which is in use: «Tracked» on Invoice. Remove those first."), "{why}");
     let Err(EngineError::Failed { error, .. }) = used.execute("element.remove", &json!({ "ids": [commerce] })) else { panic!("refused") };
     let held = Used::HeldProfile { package: "Commerce".to_string(), profile: "Audit".to_string() };
-    let uses = vec![("Tracked".to_string(), vec!["Invoice".to_string()], 1)];
+    let uses = vec![("Tracked".to_string(), vec!["Invoice".into()], 1)];
     assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: held, uses }))));
     // An application of «Tracked» tracing to no element, as a project edited by hand may hold, goes
     // with no element: refused, counted.
@@ -1075,7 +1075,7 @@ fn a_nested_package_goes_with_the_stereotype_applications_on_what_goes_with_it()
     assert!(why.contains("Ledger applies the profiles its elements use: «Trace» on Entry. Remove those first."), "{why}");
     let Err(EngineError::Failed { error, .. }) = stays.execute("element.remove", &json!({ "ids": [ledger, account] })) else { panic!("refused") };
     let applied = Used::AppliedProfiles { package: "Ledger".to_string() };
-    let uses = vec![("Trace".to_string(), vec!["Entry".to_string()], 1)];
+    let uses = vec![("Trace".to_string(), vec!["Entry".into()], 1)];
     assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: applied, uses }))));
     assert_eq!(history(&stays), before, "the history is as it was");
     // «Trace» on Draft, which Drafts, named with Ledger, hands up out of Audit's reach: refused,
@@ -1116,7 +1116,7 @@ fn a_package_that_goes_too_provides_no_profile_to_what_is_handed_up() {
     assert!(why.contains("Inner applies the profiles its elements use: «Kept» on Customer. Remove those first."), "{why}");
     let Err(EngineError::Failed { error, .. }) = alone.execute("element.remove", &ids) else { panic!("refused") };
     let applied = Used::AppliedProfiles { package: "Inner".to_string() };
-    let named = vec![("Kept".to_string(), vec!["Customer".to_string()], 1)];
+    let named = vec![("Kept".to_string(), vec!["Customer".into()], 1)];
     assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: applied, uses: named }))));
     assert_eq!(history(&alone), before, "the history is as it was");
     // The root package applies Shared too: one step, Customer handed up into its reach.
@@ -1153,7 +1153,7 @@ fn a_profile_stereotype_or_property_goes_with_the_elements_named_with_it_that_us
     };
     let history = |s: &S| (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string));
     let in_use = |name: &str, uses| Reason::InUse(Box::new(InUse { what: Used::Element(name.to_string()), uses }));
-    let on_customer = || vec![("Entity".to_string(), vec!["Customer".to_string()], 1)];
+    let on_customer = || vec![("Entity".to_string(), vec!["Customer".into()], 1)];
     let removals = [
         (&persistence, "Persistence is in use: «Entity» on Customer. Remove those first.", in_use("Persistence", on_customer())),
         (&entity, "Entity is in use: «Entity» on Customer. Remove those first.", in_use("Entity", on_customer())),
@@ -1235,7 +1235,7 @@ fn a_package_holding_a_profile_goes_with_the_elements_named_with_it_that_use_it(
     assert!(why.contains("Commerce holds the profile Audit, which is in use: «Tracked» on Invoice. Remove those first."), "{why}");
     let Err(EngineError::Failed { error, .. }) = handed.execute("element.remove", &json!({ "ids": [commerce, sales] })) else { panic!("refused") };
     let held = Used::HeldProfile { package: "Commerce".to_string(), profile: "Audit".to_string() };
-    let uses = vec![("Tracked".to_string(), vec!["Invoice".to_string()], 1)];
+    let uses = vec![("Tracked".to_string(), vec!["Invoice".into()], 1)];
     assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: held, uses }))));
 }
 
@@ -1247,7 +1247,7 @@ fn a_package_holding_a_profile_goes_with_the_elements_named_with_it_that_use_it(
 /// associations up, names both.
 #[test]
 fn a_nested_package_goes_with_the_stereotype_applications_on_the_relationships_of_a_class_named_with_it() {
-    use archforge_engine::{EngineError, InUse, Reason, Used};
+    use archforge_engine::{EngineError, InUse, Named, Reason, Used};
     let mut s = session();
     let [commerce, ..] = shop(&mut s);
     let ledger = run(&mut s, "uml.package.add", json!({ "name": "Ledger", "parent": commerce }));
@@ -1285,15 +1285,15 @@ fn a_nested_package_goes_with_the_stereotype_applications_on_the_relationships_o
     assert!(why.contains("Ledger applies the profiles its elements use: «Trace» on files. Remove those first."), "{why}");
     let Err(EngineError::Failed { error, .. }) = stays.execute("element.remove", &ids) else { panic!("refused") };
     let applied = || Used::AppliedProfiles { package: "Ledger".to_string() };
-    let uses = vec![("Trace".to_string(), vec!["files".to_string()], 1)];
+    let uses = vec![("Trace".to_string(), vec!["files".into()], 1)];
     assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: applied(), uses }))));
     assert_eq!(history(&stays), before, "the history is as it was");
     // Ledger alone, as Models asks before it removes it: Entry is handed up, and posts with it.
     let alone = profiles::removal_problem(stays.doc(), obj(stays.doc(), &ledger)).and_then(|e| e.reason);
     let Some(Reason::InUse(said)) = alone else { panic!("{alone:?}") };
     let mut named = said.uses.iter().flat_map(|u| u.1.clone()).collect::<Vec<_>>();
-    named.sort();
-    assert_eq!((said.what, named), (applied(), vec!["files".to_string(), "posts".to_string()]));
+    named.sort_by_key(|n| format!("{n:?}"));
+    assert_eq!((said.what, named), (applied(), vec![Named::from("files"), Named::from("posts")]));
 }
 
 /// A package with no parent takes along the relationships that touch the classes it holds,
@@ -1344,7 +1344,7 @@ fn a_package_with_no_parent_goes_with_the_stereotype_applications_on_the_relatio
     assert!(why.contains("Commerce holds the profile Audit, which is in use: «Tracked» on Invoice. Remove those first."), "{why}");
     let Err(EngineError::Failed { error, .. }) = stays.execute("element.remove", &ids) else { panic!("refused") };
     let held = Used::HeldProfile { package: "Commerce".to_string(), profile: "Audit".to_string() };
-    let reason = Some(Reason::InUse(Box::new(InUse { what: held, uses: vec![("Tracked".to_string(), vec!["Invoice".to_string()], 1)] })));
+    let reason = Some(Reason::InUse(Box::new(InUse { what: held, uses: vec![("Tracked".to_string(), vec!["Invoice".into()], 1)] })));
     assert_eq!(error.reason, reason);
     assert_eq!(history(&stays), before, "the history is as it was");
     assert_eq!(profiles::removal_problem(stays.doc(), obj(stays.doc(), &commerce)).and_then(|e| e.reason), reason, "as Models says it");
@@ -1376,7 +1376,7 @@ fn a_profile_stereotype_or_property_goes_with_the_uses_on_the_relationships_of_a
     };
     let history = |s: &S| (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string));
     let in_use = |name: &str| {
-        let uses = vec![("Reference".to_string(), vec!["lives".to_string()], 1)];
+        let uses = vec![("Reference".to_string(), vec!["lives".into()], 1)];
         Reason::InUse(Box::new(InUse { what: Used::Element(name.to_string()), uses }))
     };
     let removals = [
@@ -1408,6 +1408,63 @@ fn a_profile_stereotype_or_property_goes_with_the_uses_on_the_relationships_of_a
         let Err(EngineError::Failed { error, .. }) = stays.execute("element.remove", &ids) else { panic!("refused") };
         assert_eq!(error.reason, Some(reason));
         assert_eq!(history(&stays), before, "the history is as it was");
+    }
+}
+
+/// A refusal names an element in use that has no name by its kind, never as an empty name
+/// (AR-807): «Tracked» on an unnamed generalization, an unnamed association or an association end
+/// with no role, alone or beside a named association, is said so by the profile's, the
+/// stereotype's and the held profile's refusals of `element.remove`, each typed with the kind; two
+/// unnamed elements of one kind, which no reader tells apart, are counted.
+#[test]
+fn a_removal_refusal_names_an_unnamed_element_in_use_by_its_kind() {
+    use archforge_engine::{EngineError, InUse, Named, Reason, Used};
+    let mut s = session();
+    let [commerce, order, customer, ..] = shop(&mut s);
+    let tools = run(&mut s, "uml.package.add", json!({ "name": "Tools" }));
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit", "package": tools }));
+    let tracked =
+        run(&mut s, "uml.stereotype.add", json!({ "profile": audit, "name": "Tracked", "extends": ["Association", "Generalization", "Property"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": commerce, "profile": audit }));
+    let bills = run(&mut s, "uml.association.add", json!({ "from": order, "to": customer, "name": "bills" }));
+    let link = run(&mut s, "uml.association.add", json!({ "from": order, "to": customer }));
+    let kind = run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": customer }));
+    let party = run(&mut s, "uml.class.add", json!({ "package": commerce, "name": "Party" }));
+    let also = run(&mut s, "uml.generalization.add", json!({ "specific": customer, "general": party }));
+    let end = {
+        let st = s.doc();
+        st.uuid(archforge_uml::nary::ends(st, obj(st, &link))[0]).unwrap().to_string()
+    };
+    let unnamed = |kind: &'static str| Named::Unnamed { kind };
+    let cases: [(&[&str], &str, Vec<Named>); 5] = [
+        (&[&kind], "«Tracked» on a generalization", vec![unnamed("generalization")]),
+        (&[&bills, &kind], "«Tracked» on bills and a generalization", vec!["bills".into(), unnamed("generalization")]),
+        (&[&link, &kind], "«Tracked» on an association and a generalization", vec![unnamed("association"), unnamed("generalization")]),
+        (&[&end], "«Tracked» on an association end", vec![unnamed("association end")]),
+        (&[&kind, &also], "«Tracked» on 2 elements", vec![]),
+    ];
+    let history = |s: &S| (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string));
+    let held = Used::HeldProfile { package: "Tools".to_string(), profile: "Audit".to_string() };
+    let removals = [
+        (&audit, "Audit is in use", Used::Element("Audit".to_string())),
+        (&tracked, "Tracked is in use", Used::Element("Tracked".to_string())),
+        (&tools, "Tools holds the profile Audit, which is in use", held),
+    ];
+    for (on, uses, named) in cases {
+        let applied: Vec<(&str, &str)> = on.iter().map(|e| (tracked.as_str(), *e)).collect();
+        let mut t = at_top(&with_applications(&s, &applied), &tools);
+        run(&mut t, "uml.class.add", json!({ "package": commerce, "name": "Line" }));
+        t.undo().unwrap();
+        let before = history(&t);
+        for (gone, said, what) in &removals {
+            let ids = json!({ "ids": [gone] });
+            let why = refused(&mut t, "element.remove", ids.clone());
+            assert!(why.contains(&format!("{said}: {uses}. Remove those first.")), "{why}");
+            let Err(EngineError::Failed { error, .. }) = t.execute("element.remove", &ids) else { panic!("refused") };
+            let typed = InUse { what: what.clone(), uses: vec![("Tracked".to_string(), named.clone(), on.len())] };
+            assert_eq!(error.reason, Some(Reason::InUse(Box::new(typed))), "{why}");
+            assert_eq!(history(&t), before, "the history is as it was, after {why}");
+        }
     }
 }
 

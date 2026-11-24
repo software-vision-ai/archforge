@@ -804,6 +804,8 @@ str		This element takes no description.	Este elemento no admite descripción.
 str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	Este elemento posee {max} comentarios o más, por lo que no se puede encontrar su descripción. Elimina antes algunos en el archivo.
 str	refusal	a class	una clase
 str	refusal	an association class	una clase de asociación
+str	refusal	an association	una asociación
+str	refusal	a generalization	una generalización
 str	refusal	an interface	una interfaz
 str	refusal	an enumeration	una enumeración
 str	refusal	a data type	un tipo de datos

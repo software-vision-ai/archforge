@@ -804,6 +804,8 @@ str		This element takes no description.	此元素不能有描述。
 str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	此元素拥有 {max} 条或更多注释，因此找不到它的描述。请先在文件中删除一些。
 str	refusal	a class	类
 str	refusal	an association class	关联类
+str	refusal	an association	关联
+str	refusal	a generalization	泛化
 str	refusal	an interface	接口
 str	refusal	an enumeration	枚举
 str	refusal	a data type	数据类型

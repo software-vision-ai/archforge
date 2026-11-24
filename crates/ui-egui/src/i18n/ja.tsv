@@ -804,6 +804,8 @@ str		This element takes no description.	この要素には説明を付けられ�
 str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	この要素は {max} 個以上のコメントを所有しているため、説明を見つけられません。先にファイルでいくつか削除してください。
 str	refusal	a class	クラス
 str	refusal	an association class	関連クラス
+str	refusal	an association	関連
+str	refusal	a generalization	汎化
 str	refusal	an interface	インターフェース
 str	refusal	an enumeration	列挙
 str	refusal	a data type	データ型

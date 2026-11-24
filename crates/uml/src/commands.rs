@@ -82,7 +82,11 @@ pub(crate) fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: 
 
 /// What an element is, with its article: a class, an interface.
 pub(crate) fn a_what(store: &Store, o: Obj) -> String {
-    let what = what(store, o);
+    with_article(what(store, o))
+}
+
+/// A kind of element ([`what`]) with its article: a class, an association.
+pub(crate) fn with_article(what: &str) -> String {
     let article = if what.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
     format!("{article} {what}")
 }
@@ -257,11 +261,14 @@ pub fn classifiers(store: &Store, package: Obj) -> Vec<Obj> {
 }
 
 /// What an element is, as a refusal names it: a class, an interface, an enumeration, a data type, a
-/// primitive type, an association class, a package, a literal.
+/// primitive type, an association class, a package, a literal; an association, a generalization
+/// and an association end, which may have no name, so a refusal names them by it (AR-807).
 pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
     match store.class_of(o).ok() {
         Some(c) if c == CLASS => "class",
         Some(c) if c == ASSOCIATION_CLASS => "association class",
+        Some(c) if c == crate::ASSOCIATION => "association",
+        Some(c) if c == crate::GENERALIZATION => "generalization",
         Some(c) if c == INTERFACE => "interface",
         Some(c) if c == ENUMERATION => "enumeration",
         Some(c) if c == DATA_TYPE => "data type",
@@ -269,6 +276,7 @@ pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
         Some(c) if c == PACKAGE => "package",
         Some(c) if c == crate::ENUMERATION_LITERAL => "literal",
         Some(c) if c == crate::GENERALIZATION_SET => "generalization set",
+        Some(c) if c == crate::PROPERTY && store.get(o, crate::property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some() => "association end",
         Some(c) if c == crate::PROPERTY => "attribute",
         Some(c) if c == crate::OPERATION => "operation",
         Some(c) if c == crate::CONSTRAINT => "constraint",

@@ -35,7 +35,7 @@
 use std::collections::BTreeSet;
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, InUse, Params, Reason, Used, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, InUse, Named, Params, Reason, Used, always, cmd};
 use archforge_mof::{ClassId, Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
@@ -728,23 +728,41 @@ fn values_left(store: &Store, p: Obj, goes: impl Fn(Obj) -> bool) -> usize {
         .count()
 }
 
-/// The uses as a refusal names them: per stereotype its name, its elements' names while there are
-/// at most two of different names (else none, as they are counted), and how many in all.
-pub fn uses_named(store: &Store, uses: &Uses) -> Vec<(String, Vec<String>, usize)> {
-    let named = |(s, es, loose): &(Obj, Vec<Obj>, usize)| {
-        let names: Vec<String> = es.iter().take(MAX_NAMED.saturating_add(1)).map(|e| name_of(store, *e)).collect();
-        let alike = matches!(names.as_slice(), [a, b] if a.eq_ignore_ascii_case(b));
+/// An element as a refusal or the delete dialog names a use on it: by its name, or, when it has
+/// none, by its kind, as an unnamed generalization or association is (AR-807).
+pub fn named(store: &Store, e: Obj) -> Named {
+    let name = name_of(store, e);
+    if name.is_empty() { Named::Unnamed { kind: crate::commands::what(store, e) } } else { Named::Name(name) }
+}
+
+/// The uses as a refusal names them: per stereotype its name, its elements ([`named`]) while there
+/// are at most two told apart, by different names or kinds (else none, as they are counted), and
+/// how many in all.
+pub fn uses_named(store: &Store, uses: &Uses) -> Vec<(String, Vec<Named>, usize)> {
+    let same = |a: &Named, b: &Named| match (a, b) {
+        (Named::Name(a), Named::Name(b)) => a.eq_ignore_ascii_case(b),
+        (Named::Unnamed { kind: a }, Named::Unnamed { kind: b }) => a == b,
+        _ => false,
+    };
+    let told = |(s, es, loose): &(Obj, Vec<Obj>, usize)| {
+        let names: Vec<Named> = es.iter().take(MAX_NAMED.saturating_add(1)).map(|e| named(store, *e)).collect();
+        let alike = matches!(names.as_slice(), [a, b] if same(a, b));
         let told = *loose == 0 && names.len() <= MAX_NAMED && !alike;
         (name_of(store, *s), if told { names } else { Vec::new() }, es.len().saturating_add(*loose))
     };
-    uses.by.iter().map(named).collect()
+    uses.by.iter().map(told).collect()
 }
 
 /// The uses in words: `«Entity» on Order and Customer, «Id» on 2 elements`, each stereotype's
-/// elements named while there are at most two, else counted.
+/// elements named, one with no name by its kind (`a generalization`, AR-807), while there are at
+/// most two, else counted.
 pub fn uses_text(store: &Store, uses: &Uses) -> String {
-    let said = |(s, names, n): (String, Vec<String>, usize)| match n {
-        _ if !names.is_empty() => format!("«{s}» on {}", names.join(" and ")),
+    let word = |n: &Named| match n {
+        Named::Name(name) => name.clone(),
+        Named::Unnamed { kind } => crate::commands::with_article(kind),
+    };
+    let said = |(s, names, n): (String, Vec<Named>, usize)| match n {
+        _ if !names.is_empty() => format!("«{s}» on {}", names.iter().map(word).collect::<Vec<_>>().join(" and ")),
         1 => format!("«{s}» on 1 element"),
         n => format!("«{s}» on {n} elements"),
     };

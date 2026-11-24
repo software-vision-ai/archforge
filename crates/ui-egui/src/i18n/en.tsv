@@ -803,6 +803,8 @@ str		This element takes no description.	This element takes no description.
 str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	This element owns {max} comments or more, so its description can't be found. Remove some in the file first.
 str	refusal	a class	a class
 str	refusal	an association class	an association class
+str	refusal	an association	an association
+str	refusal	a generalization	a generalization
 str	refusal	an interface	an interface
 str	refusal	an enumeration	an enumeration
 str	refusal	a data type	a data type
