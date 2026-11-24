@@ -1,6 +1,6 @@
 //! What a notation brings to the shell's explorers, search, problems and panels: its rows in the
-//! Models tree and what `+` adds there, how a row dropped on another runs, its renames and what a
-//! removal takes with it, what Delete and a chord of its own on the canvas do to its selected
+//! Models tree and what `+` adds there, how a row dropped on another runs, its renames, what a
+//! removal takes with it and what is said of it, what Delete and a chord of its own on the canvas do to its selected
 //! elements, what it draws over the canvas whatever diagram shows and what a problem badge that
 //! offers a way out does, its entries in the project search, its problems, the heading and the body of Properties for its elements,
 //! its commands' refusals in the user's words, the words for the kinds of its elements, and the
@@ -65,6 +65,18 @@ pub(crate) struct Words {
     pub this: String,
     pub on_this: String,
     pub name: String,
+}
+
+/// What a notation works out about a removal of its own elements before it runs, while they are
+/// still in the store, for what is said once it went through ([`NotationUi::before_removal`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Removal {
+    /// What goes with the elements that the toast of a line's removal names after the element's
+    /// own words ([`NotationUi::removed_text`]): UML's generalization sets a line alone made up.
+    pub went: Vec<String>,
+    /// What it says after the toast of any removal, of what else the removal changes: UML's
+    /// constraints that name what goes ([`say_after`]); none when it changes nothing else.
+    pub after: Option<String>,
 }
 
 /// Where among the canvas's own overlays a notation's go ([`NotationUi::canvas_overlay`]), each
@@ -159,6 +171,15 @@ pub(crate) trait NotationUi: Sync {
         let _ = (store, obj);
         None
     }
+    /// What it says of the removal of `objs`, elements of its own, worked out before the removal
+    /// runs ([`Removal`]); an empty one when it has nothing to say. Only the words: whether they may
+    /// go and what goes with them are asked above.
+    fn before_removal(&self, store: &Store, objs: &[Obj]) -> Removal;
+    /// The toast once a line's element of its own was removed from the model, `what` being its
+    /// kind's word (`Generalization`), with what [`before_removal`] worked out.
+    ///
+    /// [`before_removal`]: NotationUi::before_removal
+    fn removed_text(&self, what: &str, removal: &Removal) -> String;
     /// Whether a drop of `dragged` on `target` is one the model refuses (a package into itself):
     /// its target is ringed in amber, not the accent.
     fn drop_refused(&self, store: &Store, dragged: Obj, target: Obj) -> bool {
@@ -455,6 +476,39 @@ impl NotationStates {
     pub(crate) fn card_draft(&self, store: &Store) -> Option<(Obj, usize, Option<usize>)> {
         self.0.iter().find_map(|s| s.card_draft(store))
     }
+}
+
+/// What the notations say of the removal of `objs`, each asked of its own elements alone
+/// ([`NotationUi::before_removal`]), in the order of the notations; an element of none, such as a
+/// diagram, says nothing.
+pub(crate) fn before_removal(uis: &[&'static dyn NotationUi], store: &Store, objs: &[Obj]) -> Removal {
+    let mut out = Removal::default();
+    for ui in uis {
+        let own: Vec<Obj> = objs.iter().copied().filter(|o| store.class_of(*o).is_ok_and(|c| c.metamodel() == ui.metamodel())).collect();
+        if own.is_empty() {
+            continue;
+        }
+        let said = ui.before_removal(store, &own);
+        out.went.extend(said.went);
+        out.after = match (out.after, said.after) {
+            (Some(first), Some(next)) => Some(format!("{first} · {next}")),
+            (first, next) => first.or(next),
+        };
+    }
+    out
+}
+
+/// Says what a removal that went through changed beyond what it removed (`after`, from
+/// [`Removal::after`]): after the toast it made while that toast still shows, or in a toast of
+/// its own led by `lead` (`Payment deleted`), with Undo; nothing when it changed nothing else.
+pub(crate) fn say_after(shell: &mut Shell, after: Option<String>, lead: &str) {
+    let Some(after) = after else { return };
+    let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+    let text = match shell.canvas.toast.take() {
+        Some(t) if t.until > shell.frames => format!("{} · {after}", t.text),
+        _ => format!("{lead} · {after}"),
+    };
+    shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(400), undo_label });
 }
 
 /// Draws every notation's overlays at `layer` over the canvas `on`, in the order of the notations

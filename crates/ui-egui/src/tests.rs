@@ -17345,8 +17345,9 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
 
 /// The sketch notation in the shell's explorers, search and panels, for the tests alone: a package
 /// at the top of the Models tree with its classes under it, each class found by the search as a
-/// Class of its package, and a class's Properties a section of its attributes.
-struct SketchUi;
+/// Class of its package, and a class's Properties a section of its attributes. Its name (`sketch`)
+/// is the one it signs what it says of a removal with, so two of them are told apart.
+struct SketchUi(&'static str);
 
 fn sketch_classes(store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
     store
@@ -17428,6 +17429,18 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn canvas_delete(&self, _: &mut Shell, _: bool) -> bool {
         false
     }
+    /// Names each element it is asked about and counts them, signed with its name, so a test sees
+    /// what reached it and which of two answered.
+    fn before_removal(&self, store: &archforge_mof::Store, objs: &[archforge_mof::Obj]) -> crate::notation_ui::Removal {
+        crate::notation_ui::Removal {
+            went: objs.iter().map(|o| format!("{} in the {}", archforge_core::name_of(store, *o), self.0)).collect(),
+            after: Some(format!("the {} saw {} go", self.0, objs.len())),
+        }
+    }
+    /// Says the word and how many names its removal gave, in its own words.
+    fn removed_text(&self, what: &str, removal: &crate::notation_ui::Removal) -> String {
+        format!("{what} gone from the {} with {} named", self.0, removal.went.len())
+    }
     /// The sketch draws nothing over the canvas.
     fn canvas_overlay(&self, _: &mut Shell, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
     fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
@@ -17479,7 +17492,13 @@ impl crate::notation_ui::NotationUi for SketchUi {
     }
 }
 
-static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi, &SketchUi];
+static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi, &SketchUi("sketch")];
+
+/// Two sketch notations told apart by name, both answering for UML's metamodel, so a test sees
+/// which of them answers and in what order.
+static FIRST_SKETCH: SketchUi = SketchUi("first");
+static SECOND_SKETCH: SketchUi = SketchUi("second");
+static TWO_SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi, &FIRST_SKETCH, &SECOND_SKETCH];
 
 /// The sketch notation's limits, shorter than any other notation's, so a field that takes them is
 /// told apart from one that takes another's.
@@ -17599,6 +17618,82 @@ fn names_typed_in_place(theme: ThemeKind) {
     h.event(egui::Event::Text(typed));
     h.run();
     assert_eq!(h.state().explorer.filter.chars().count(), longest, "the filter");
+}
+
+/// The shared removals ask the removed element's notation what to say (AR-789): Delete on a line
+/// toasts the sketch's own words for it, then what the sketch worked out before the removal; the
+/// Models tree's dialog says the same after its own lead; each notation is asked of its own
+/// elements alone, a diagram of none, in the order of the notations. In light and dark.
+#[test]
+fn the_shared_removals_say_what_the_elements_notation_says() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        shared_removals_ask_the_notation(theme);
+    }
+}
+
+/// [`the_shared_removals_say_what_the_elements_notation_says`] in one appearance: the sample class
+/// diagram, its UML elements answered by the sketch notation.
+fn shared_removals_ask_the_notation(theme: ThemeKind) {
+    let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    h.state_mut().notation_uis = SKETCH_UIS;
+    h.run();
+    {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let o = |id: archforge_mof::Uuid| st.by_uuid(id).unwrap();
+        let (order, payment) = (o(named(&h, archforge_uml::CLASS, "Order")), o(named(&h, archforge_uml::CLASS, "Payment")));
+        let diagram = o(h.state().canvas.active.unwrap());
+        let said = crate::notation_ui::before_removal(SKETCH_UIS, st, &[diagram, order, payment]);
+        let want = crate::notation_ui::Removal {
+            went: vec!["Order in the sketch".into(), "Payment in the sketch".into()],
+            after: Some("the sketch saw 2 go".into()),
+        };
+        assert_eq!(said, want, "{theme:?}: the sketch is asked of its own two, the diagram of none");
+        let none = crate::notation_ui::before_removal(SKETCH_UIS, st, &[diagram]);
+        assert_eq!(none, crate::notation_ui::Removal::default(), "{theme:?}: no notation is asked of nothing of its own");
+        let said = crate::notation_ui::before_removal(TWO_SKETCH_UIS, st, &[order]);
+        assert_eq!(said.went, ["Order in the first", "Order in the second"], "{theme:?}: each notation's names, in their order");
+        assert_eq!(said.after.as_deref(), Some("the first saw 1 go · the second saw 1 go"), "{theme:?}");
+    }
+    // Delete on a generalization's line: the sketch's words for it, then what it saw.
+    let g = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let drawn = |o: &archforge_mof::Obj| !archforge_diagram::views_of(st, *o).1.is_empty();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::GENERALIZATION) && drawn(o)).unwrap()).unwrap()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [g.to_string()] })).unwrap();
+    h.run();
+    let at = rect_of(&h, "workspace.canvas").center();
+    h.event(egui::Event::PointerMoved(at));
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    let toast = h.state().canvas.toast.as_ref().map(|t| t.text.clone());
+    assert_eq!(toast.as_deref(), Some("Class gone from the sketch with 1 named · the sketch saw 1 go"), "{theme:?}");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.state_mut().canvas.toast = None;
+    // With two notations for the line's metamodel, the one that gives the toast is the one asked
+    // what goes: the toast names its one answer, not both notations'.
+    h.state_mut().notation_uis = TWO_SKETCH_UIS;
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [g.to_string()] })).unwrap();
+    h.run();
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    let toast = h.state().canvas.toast.as_ref().map(|t| t.text.clone());
+    assert_eq!(toast.as_deref(), Some("Class gone from the first with 1 named · the first saw 1 go"), "{theme:?}");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.state_mut().canvas.toast = None;
+    h.state_mut().notation_uis = SKETCH_UIS;
+    h.run();
+    // Order removed in the Models tree, through its dialog: the lead, then what the sketch saw.
+    let order = named(&h, archforge_uml::CLASS, "Order");
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [order.to_string()] })).unwrap();
+    h.run();
+    crate::explorer::remove_selection(h.state_mut());
+    h.run();
+    assert!(h.state().explorer.delete.is_some(), "{theme:?}: a diagram shows Order, so the dialog asks");
+    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+    click(&mut h, at);
+    let toast = h.state().canvas.toast.as_ref().map(|t| t.text.clone());
+    assert_eq!(toast.as_deref(), Some("Order deleted · the sketch saw 1 go"), "{theme:?}");
 }
 
 /// A row Properties selects opens the rows its element sits under in Models, as its notation names
@@ -23452,6 +23547,133 @@ fn a_set_label_that_draws_nothing_takes_no_press() {
         let back = rect_of(&h, &label_id).center();
         click(&mut h, back);
         assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![set]);
+    }
+}
+
+/// The sample with its payment kinds, BankTransfer's generalization alone in the set Kinds and
+/// named by the constraint settled on Payment beside Payment: the generalizations' ids and
+/// Payment's.
+fn sample_with_a_set_and_a_rule(theme: ThemeKind) -> (Harness<'static, Shell>, [String; 3], String) {
+    let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let (gens, payment) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": [gens[1]], "name": "Kinds" })).unwrap();
+    let rule = serde_json::json!({ "context": payment, "name": "settled", "expression": "x", "constrained": [gens[1], payment] });
+    s.execute("uml.constraint.add", &rule).unwrap();
+    h.run();
+    (h, gens, payment)
+}
+
+/// What each notation says of a removal of its own (AR-789), worked out before it runs: UML the
+/// generalization sets a line alone made up and what it does to the constraints, and its toast
+/// for the line naming those sets; ER nothing beyond `{what} removed`. In light and dark.
+#[test]
+fn each_notation_says_what_a_removal_of_its_own_does() {
+    use crate::notation_ui::{NotationUi, Removal};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (h, gens, _) = sample_with_a_set_and_a_rule(theme);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let o = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+        let said = crate::uml_ui::UmlUi.before_removal(st, &[o(&gens[1])]);
+        let want = Removal { went: vec!["Kinds".into()], after: Some("settled now constrains Payment only".into()) };
+        assert_eq!(said, want, "{theme:?}");
+        let text = crate::uml_ui::UmlUi.removed_text("Generalization", &said);
+        assert_eq!(text, "Generalization removed · Kinds had no other member and went too", "{theme:?}");
+        // CardPayment's generalization is in no set and no rule names it.
+        let plain = crate::uml_ui::UmlUi.before_removal(st, &[o(&gens[0])]);
+        assert_eq!(plain, Removal::default(), "{theme:?}");
+        assert_eq!(crate::uml_ui::UmlUi.removed_text("Generalization", &plain), "Generalization removed", "{theme:?}");
+        // ER says nothing before, and its toast names no set even when given one.
+        assert_eq!(crate::er_ui::ErUi.before_removal(st, &[]), Removal::default(), "{theme:?}");
+        assert_eq!(crate::er_ui::ErUi.removed_text("Relationship", &want), "Relationship removed", "{theme:?}");
+    }
+}
+
+/// The shared removals say what UML worked out (AR-789), as before: Delete on a line alone in a
+/// set names the set and then the rule it changes; the Models tree's removal at once says the rule
+/// after `{name} deleted`, and a nested package's after `{name} removed`. In light and dark.
+#[test]
+fn a_removal_says_what_its_notation_worked_out() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, gens, payment) = sample_with_a_set_and_a_rule(theme);
+        let toast = |h: &Harness<'static, Shell>| h.state().canvas.toast.as_ref().map(|t| t.text.clone());
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [gens[1]] })).unwrap();
+        h.run();
+        let at = rect_of(&h, "workspace.canvas").center();
+        h.event(egui::Event::PointerMoved(at));
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        let want = "Generalization removed · Kinds had no other member and went too · settled now constrains Payment only";
+        assert_eq!(toast(&h).as_deref(), Some(want), "{theme:?}");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.state_mut().canvas.toast = None;
+        h.run();
+        // A class on no diagram, named by a rule: removed at once, the rule said after the lead.
+        let pkg = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&payment).unwrap()).unwrap()).unwrap();
+            st.uuid(p).unwrap().to_string()
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let extra = id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "Extra" })).unwrap().value);
+        let rule = serde_json::json!({ "context": payment, "name": "spare", "expression": "x", "constrained": [extra, payment] });
+        s.execute("uml.constraint.add", &rule).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [extra] })).unwrap();
+        h.run();
+        crate::explorer::remove_selection(h.state_mut());
+        assert!(h.state().explorer.delete.is_none(), "{theme:?}: nothing else goes, so no dialog");
+        assert_eq!(toast(&h).as_deref(), Some("Extra deleted · spare now constrains Payment only"), "{theme:?}");
+        h.state_mut().canvas.toast = None;
+        // A nested package named by a rule hands up what it holds: the rule after its toast.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let inner = id(s.execute("uml.package.add", &serde_json::json!({ "parent": pkg, "name": "Inner" })).unwrap().value);
+        let rule = serde_json::json!({ "context": payment, "name": "kept", "expression": "x", "constrained": [inner, payment] });
+        s.execute("uml.constraint.add", &rule).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [inner] })).unwrap();
+        h.run();
+        crate::explorer::remove_selection(h.state_mut());
+        assert!(h.state().explorer.delete.is_none(), "{theme:?}: a nested package hands up, no dialog");
+        assert_eq!(toast(&h).as_deref(), Some("Inner removed · kept now constrains Payment only"), "{theme:?}");
+    }
+}
+
+/// The Models delete dialog for a nested package that hands up what it holds (AR-789): a stereotype
+/// applied to it makes Models ask, and once confirmed the toast says where what it held moved, then
+/// what the removal does to the constraint that named it beside Payment, which stays. In light and
+/// dark.
+#[test]
+fn a_nested_package_deleted_through_the_dialog_says_where_its_contents_went_and_then_the_rule() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let payment = named(&h, archforge_uml::CLASS, "Payment").to_string();
+        let (pkg, outer) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&payment).unwrap()).unwrap()).unwrap();
+            (st.uuid(p).unwrap().to_string(), archforge_core::name_of(st, p))
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let profile = id(s.execute("uml.profile.add", &serde_json::json!({ "name": "Layers" })).unwrap().value);
+        let module = serde_json::json!({ "profile": profile, "name": "Module", "extends": ["Package"] });
+        let module = id(s.execute("uml.stereotype.add", &module).unwrap().value);
+        s.execute("uml.profile.apply", &serde_json::json!({ "package": pkg, "profile": profile })).unwrap();
+        let inner = id(s.execute("uml.package.add", &serde_json::json!({ "parent": pkg, "name": "Inner" })).unwrap().value);
+        s.execute("uml.class.add", &serde_json::json!({ "package": inner, "name": "Held" })).unwrap();
+        s.execute("uml.stereotype.apply", &serde_json::json!({ "element": inner, "stereotype": module })).unwrap();
+        let rule = serde_json::json!({ "context": payment, "name": "kept", "expression": "x", "constrained": [inner, payment] });
+        s.execute("uml.constraint.add", &rule).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [inner] })).unwrap();
+        h.run();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: its stereotype application makes Models ask"));
+        assert_eq!(asked.hands_to, Some((outer.clone(), true)), "{theme:?}: what it holds moves to its parent");
+        let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+        click(&mut h, at);
+        let toast = h.state().canvas.toast.as_ref().map(|t| t.text.clone());
+        let want = format!("Inner removed; what it held moved to {outer} · kept now constrains Payment only");
+        assert_eq!(toast, Some(want), "{theme:?}");
     }
 }
 

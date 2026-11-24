@@ -633,22 +633,16 @@ pub(crate) fn dropped_text(store: &Store, dropped: &[constraints::Dropped]) -> O
     }
 }
 
+/// What removing `objs`, as `element.remove` removes them, does to the constraints, worked out
+/// before the removal; to be said after it by [`crate::notation_ui::say_after`].
+pub(crate) fn said_of_removal(store: &Store, objs: &[Obj]) -> Option<String> {
+    dropped_text(store, &constraints::dropped_by(store, objs))
+}
+
 /// The ids a removal names, as `element.remove` takes them, worked out into what it does to the
-/// constraints; to be said after the removal by [`say_dropped`].
+/// constraints ([`said_of_removal`]).
 pub(crate) fn before_removal(shell: &Shell, ids: &[String]) -> Option<String> {
     let store = shell.session.as_ref()?.doc();
     let objs: Vec<Obj> = ids.iter().filter_map(|i| Uuid::parse(i).and_then(|u| store.by_uuid(u))).collect();
-    dropped_text(store, &constraints::dropped_by(store, &objs))
-}
-
-/// Says what a removal that went through did to the constraints: after the toast it made, or in a
-/// toast of its own led by `lead`, with Undo.
-pub(crate) fn say_dropped(shell: &mut Shell, said: Option<String>, lead: &str) {
-    let Some(said) = said else { return };
-    let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-    let text = match shell.canvas.toast.take() {
-        Some(t) if t.until > shell.frames => format!("{} · {said}", t.text),
-        _ => format!("{lead} · {said}"),
-    };
-    shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(400), undo_label });
+    said_of_removal(store, &objs)
 }

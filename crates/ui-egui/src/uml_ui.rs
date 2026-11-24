@@ -16,7 +16,7 @@ use crate::editing::Action;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::kinds::{DiagramKind, KindTool, Press, ToolUse};
-use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Words};
+use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
 use crate::panels::Subject;
 use crate::uml_classifier::Classifier;
 use crate::uml_panel::{MemberKind, member_of};
@@ -844,6 +844,17 @@ impl NotationUi for UmlUi {
     /// A nested package hands what it holds to its parent when it is removed.
     fn hands_up(&self, store: &Store, obj: Obj) -> Option<Obj> {
         if class(store, obj) == Some(archforge_uml::PACKAGE) { package_of(store, obj) } else { None }
+    }
+
+    /// The generalization sets `objs` alone made up, which go with them (AR-129), and what the
+    /// removal does to the constraints that name what goes (AR-133).
+    fn before_removal(&self, store: &Store, objs: &[Obj]) -> Removal {
+        Removal { went: crate::uml_sets::emptied_names(store, objs), after: crate::uml_constraints::said_of_removal(store, objs) }
+    }
+
+    /// `{what} removed`, naming the generalization sets that went with it, left with no member.
+    fn removed_text(&self, what: &str, removal: &Removal) -> String {
+        crate::uml_sets::removed_text(what, &removal.went)
     }
 
     /// A classifier dragged onto a package moves there, a nested one out of its owner too; dragged

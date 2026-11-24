@@ -493,7 +493,7 @@ pub fn remove_selection(shell: &mut Shell) {
     if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)).filter(|_| applications.is_empty()) {
         let (name, to) = (crate::notation_ui::label(shell.notation_uis, store, obj), name_of(store, parent));
         let held = ui.is_some_and(|u| u.has_children(store, obj));
-        let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
+        let removal = crate::notation_ui::before_removal(shell.notation_uis, store, &[obj]);
         match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
             Ok(_) => {
                 let text = if held {
@@ -503,7 +503,7 @@ pub fn remove_selection(shell: &mut Shell) {
                 };
                 let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
                 shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(300), undo_label });
-                crate::uml_constraints::say_dropped(shell, said, &name);
+                crate::notation_ui::say_after(shell, removal.after, &name);
             }
             Err(e) => shell.explorer.notice = Some(e),
         }
@@ -515,9 +515,9 @@ pub fn remove_selection(shell: &mut Shell) {
     let diagrams = crate::editing::diagrams_showing(store, obj);
     if [relationships, keys, foreign_keys, diagrams].iter().all(|n| *n == 0) && !has_children && applications.is_empty() {
         let lead = fmt(&tr("{name} deleted"), &[("name", &crate::notation_ui::label(shell.notation_uis, store, obj))]);
-        let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
+        let removal = crate::notation_ui::before_removal(shell.notation_uis, store, &[obj]);
         match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
-            Ok(_) => crate::uml_constraints::say_dropped(shell, said, &lead),
+            Ok(_) => crate::notation_ui::say_after(shell, removal.after, &lead),
             Err(e) => shell.explorer.notice = Some(e),
         }
         return;
@@ -1450,7 +1450,11 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
             shell.explorer.delete = None;
             if primary {
                 let ids: Vec<String> = d.ids.iter().map(|i| i.to_string()).collect();
-                let said = crate::uml_constraints::before_removal(shell, &ids);
+                let removal = shell.session.as_ref().map_or_else(crate::notation_ui::Removal::default, |s| {
+                    let store = s.doc();
+                    let objs: Vec<Obj> = d.ids.iter().filter_map(|i| store.by_uuid(*i)).collect();
+                    crate::notation_ui::before_removal(shell.notation_uis, store, &objs)
+                });
                 match run(shell, "element.remove", json!({ "ids": ids })) {
                     Ok(_) => match &d.hands_to {
                         // A nested package's contents moved up: the toast says where, with Undo.
@@ -1462,9 +1466,9 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
                             };
                             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
                             shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(300), undo_label });
-                            crate::uml_constraints::say_dropped(shell, said, &d.name);
+                            crate::notation_ui::say_after(shell, removal.after, &d.name);
                         }
-                        None => crate::uml_constraints::say_dropped(shell, said, &fmt(&tr("{name} deleted"), &[("name", &d.name)])),
+                        None => crate::notation_ui::say_after(shell, removal.after, &fmt(&tr("{name} deleted"), &[("name", &d.name)])),
                     },
                     Err(e) => shell.explorer.notice = Some(e),
                 }
