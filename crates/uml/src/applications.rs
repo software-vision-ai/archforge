@@ -33,7 +33,8 @@
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{
-    Accepted, CommandError, CommandSpec, Ctx, Facts, LiteralValued, NoProperty, Params, Reason, Unextended, ValueMisfit, Values, always, cmd,
+    Accepted, AppliedTo, CommandError, CommandSpec, Ctx, Facts, LiteralValued, NoProperty, Params, Reason, Unextended, ValueMisfit, Values, always,
+    cmd,
 };
 use archforge_mof::{Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
@@ -505,8 +506,10 @@ pub fn reshape_refusal(store: &Store, property: Obj, ty: Option<Obj>, bounds: (u
 }
 
 /// The refusal under `key` of a removal that would lose a value, `goes` telling what the removal
-/// takes away: a literal a value names, on an application whose element stays, its reason typed.
-/// None when none would.
+/// takes away: a literal a value names, on an application whose element stays, its reason typed;
+/// the element named by its name or, having none, its kind, and an application on no element said
+/// to be on none, to be changed in the file, as no command reaches it (AR-808). None when none
+/// would.
 pub fn literal_refusal(store: &Store, key: &str, goes: impl Fn(Obj) -> bool) -> Option<CommandError> {
     for v in store.alive().filter(|o| store.class_of(*o).ok() == Some(INSTANCE_VALUE)) {
         let Some(l) = one(store, v, instance_value::INSTANCE).filter(|l| store.class_of(*l).ok() == Some(crate::ENUMERATION_LITERAL)) else {
@@ -523,9 +526,13 @@ pub fn literal_refusal(store: &Store, key: &str, goes: impl Fn(Obj) -> bool) -> 
             continue;
         }
         let property = one(store, s, slot::DEFINING_FEATURE).map(|p| name_of(store, p)).unwrap_or_default();
-        let element = element.map(|e| name_or_id(store, e)).unwrap_or_default();
+        let element = element.map_or(AppliedTo::Nothing, |e| AppliedTo::Element(profiles::named(store, e)));
         let (literal, stereotype) = (name_of(store, l), name_of(store, stereotype));
-        let said = format!("the literal {literal} is the value of {property} in «{stereotype}» on {element}; set another value there first");
+        let valued = format!("the literal {literal} is the value of {property} in «{stereotype}»");
+        let said = match &element {
+            AppliedTo::Element(e) => format!("{valued} on {}; set another value there first", profiles::named_text(e)),
+            AppliedTo::Nothing => format!("{valued} on no element; change that value in the file first"),
+        };
         return Some(refuse(key, said).because(Reason::LiteralValued(Box::new(LiteralValued { literal, property, stereotype, element }))));
     }
     None

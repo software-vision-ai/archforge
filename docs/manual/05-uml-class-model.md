@@ -1698,7 +1698,10 @@ stereotypes. A stereotype and its values are model data, saved with the model.
   on, cards that would hide a value grow, in the same step.
 - **Nothing is lost unseen.** While a value is set, the stereotype's property is not deleted, given
   another type, or given a multiplicity the value breaks, and a literal a value names is not
-  deleted: each is refused, saying which value to change first.
+  deleted: each is refused, saying which value to change first. An element with no name is named
+  by its kind: *The literal lazy is the value of fetch in «Reference» on an association.* A
+  stereotype applied to no element, as a project file edited by hand may hold, cannot be reached
+  in Archforge, so the refusal says it is *on no element* and to change that value in the file.
 
 <!-- picture: workspace-stereotypes light | Order selected on Commerce's diagram: its card reads «Entity» over its name, «Id» + id : Integer, and an «Entity» compartment with table = "orders"; «Reference» above places; Properties shows Stereotypes · 1 with «Entity» Persistence, table set to orders and cached false with the default tag, and Show stereotype values on this diagram ticked -->
 

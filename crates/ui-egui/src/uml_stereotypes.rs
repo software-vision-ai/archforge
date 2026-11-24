@@ -12,7 +12,7 @@
 //! diagram. The rules are the model's (`archforge_uml::applications`): the shell asks them and says
 //! their answers in the user's words.
 
-use archforge_engine::{Accepted, ValueMisfit, Values};
+use archforge_engine::{Accepted, AppliedTo, LiteralValued, ValueMisfit, Values};
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::applications::{self, Offer, ValueProblem};
 use archforge_uml::modifiers::DefaultForm;
@@ -184,6 +184,20 @@ fn out_of_scope(profile: &str, package: &str) -> String {
     fmt(&tr("Its profile {profile} is not applied to {package} or a package around it."), &[("profile", profile), ("package", package)])
 }
 
+/// A literal a value names, refused, in the user's words: the element its stereotype is applied to
+/// by its name or, having none, its kind ([`crate::uml_profiles::element_text`]), or none at all,
+/// which only the file reaches (AR-808).
+fn literal_valued(v: &LiteralValued) -> String {
+    let valued = [("literal", v.literal.as_str()), ("property", v.property.as_str()), ("stereotype", v.stereotype.as_str())];
+    let AppliedTo::Element(e) = &v.element else {
+        let text = tr("The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.");
+        return fmt(&text, &valued);
+    };
+    let element = crate::uml_profiles::element_text(e);
+    let text = tr("The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.");
+    fmt(&text, &[valued.as_slice(), &[("element", element.as_str())]].concat())
+}
+
 /// An engine's refusal to apply a stereotype in the user's words, the picker's own where it has
 /// them; none for any other reason.
 pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
@@ -232,10 +246,7 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
                 &[("name", name), ("bounds", bounds)],
             )
         }
-        Reason::LiteralValued(v) => fmt(
-            &tr("The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first."),
-            &[("literal", &v.literal), ("property", &v.property), ("stereotype", &v.stereotype), ("element", &v.element)],
-        ),
+        Reason::LiteralValued(v) => literal_valued(v),
         _ => return None,
     })
 }

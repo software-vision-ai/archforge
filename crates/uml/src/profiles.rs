@@ -753,16 +753,21 @@ pub fn uses_named(store: &Store, uses: &Uses) -> Vec<(String, Vec<Named>, usize)
     uses.by.iter().map(told).collect()
 }
 
+/// An element ([`named`]) in words: its name, or its kind with its article, as `a generalization`
+/// (AR-807).
+pub(crate) fn named_text(named: &Named) -> String {
+    match named {
+        Named::Name(name) => name.clone(),
+        Named::Unnamed { kind } => crate::commands::with_article(kind),
+    }
+}
+
 /// The uses in words: `«Entity» on Order and Customer, «Id» on 2 elements`, each stereotype's
 /// elements named, one with no name by its kind (`a generalization`, AR-807), while there are at
 /// most two, else counted.
 pub fn uses_text(store: &Store, uses: &Uses) -> String {
-    let word = |n: &Named| match n {
-        Named::Name(name) => name.clone(),
-        Named::Unnamed { kind } => crate::commands::with_article(kind),
-    };
     let said = |(s, names, n): (String, Vec<Named>, usize)| match n {
-        _ if !names.is_empty() => format!("«{s}» on {}", names.iter().map(word).collect::<Vec<_>>().join(" and ")),
+        _ if !names.is_empty() => format!("«{s}» on {}", names.iter().map(named_text).collect::<Vec<_>>().join(" and ")),
         1 => format!("«{s}» on 1 element"),
         n => format!("«{s}» on {n} elements"),
     };

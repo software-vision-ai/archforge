@@ -1464,6 +1464,7 @@ str		{name} is a stereotype's extension end. Drop the metaclass from what the st
 plural		{name} has values on {n} element. Remove those first.	{name} a des valeurs sur {n} élément. Retirez-les d’abord.|{name} a des valeurs sur {n} éléments. Retirez-les d’abord.
 plural		Values on {n} element don't fit {name} [{bounds}].	Les valeurs sur {n} élément ne conviennent pas à {name} [{bounds}].|Les valeurs sur {n} éléments ne conviennent pas à {name} [{bounds}].
 str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	Le littéral {literal} est la valeur de {property} dans «{stereotype}» sur {element}. Donnez-y d’abord une autre valeur.
+str		The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.	Le littéral {literal} est la valeur de {property} dans «{stereotype}», qui n’est appliqué à aucun élément. Modifiez d’abord cette valeur dans le fichier.
 str		Stereotypes · {n}	Stéréotypes · {n}
 str		Add stereotype	Ajouter un stéréotype
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Aucun pour l’instant. Ajoutez-en un ici ou depuis Modèles ▸ Nouveau ▸ Stéréotype.
