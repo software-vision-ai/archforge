@@ -307,30 +307,31 @@ pub fn ticked(shell: &Shell, id: &str) -> Option<bool> {
     view_menu::ticked(shell, id)
 }
 
-/// The action `id`.
-fn find(id: &str) -> Option<&'static Action> {
-    ACTIONS.iter().chain(model_menu::rows()).chain(view_menu::ROWS).find(|a| a.id == id)
+/// The action `id`, the Model menu's rows those of `kinds`.
+fn find(kinds: &[&'static dyn crate::kinds::DiagramKind], id: &str) -> Option<&'static Action> {
+    ACTIONS.iter().chain(model_menu::rows(kinds)).chain(view_menu::ROWS).find(|a| a.id == id)
 }
 
 /// The name of the action `id`; empty when the table has none.
 pub fn label(shell: &Shell, id: &str) -> String {
-    find(id).map(|a| (a.label)(shell)).unwrap_or_default()
+    find(shell.kinds, id).map(|a| (a.label)(shell)).unwrap_or_default()
 }
 
-/// The keys of the action `id`, when it has any.
+/// The keys of the action `id`, when it has any. Asked with no shell, it looks among the rows of
+/// the kinds a shell starts with ([`crate::kinds::KINDS`]); no row of the Model menu has keys.
 pub fn keys(id: &str) -> Option<&'static Keys> {
-    find(id)?.keys.as_ref()
+    find(crate::kinds::KINDS, id)?.keys.as_ref()
 }
 
 /// Whether the action `id` can act now; an action the table lacks cannot.
 pub fn available(shell: &Shell, id: &str) -> bool {
-    find(id).is_some_and(|a| (a.available)(shell))
+    find(shell.kinds, id).is_some_and(|a| (a.available)(shell))
 }
 
 /// Runs the action `id`; an id the table lacks does nothing. Asks nothing first: what offers an
 /// action shows whether it can act, and each handler keeps its own guards.
 pub fn run(shell: &mut Shell, id: &str) {
-    if let Some(action) = find(id) {
+    if let Some(action) = find(shell.kinds, id) {
         (action.run)(shell);
     }
 }
@@ -811,8 +812,12 @@ pub(crate) mod tests {
     /// never on together; and none has Redo's second key.
     #[test]
     fn only_history_and_back_share_their_keys() {
-        let keyed: Vec<(&str, &Keys)> =
-            ACTIONS.iter().chain(model_menu::rows()).chain(view_menu::ROWS).filter_map(|a| Some((a.id, a.keys.as_ref()?))).collect();
+        let keyed: Vec<(&str, &Keys)> = ACTIONS
+            .iter()
+            .chain(model_menu::rows(crate::kinds::KINDS))
+            .chain(view_menu::ROWS)
+            .filter_map(|a| Some((a.id, a.keys.as_ref()?)))
+            .collect();
         let same = |a: &Keys, b: &Keys| a.key == b.key && a.modifiers == b.modifiers;
         let mut shared = Vec::new();
         for (n, (first, keys)) in keyed.iter().enumerate() {

@@ -6,8 +6,9 @@
 //! takes, whether its popover's menu takes the keys, what Select all takes in beside the boxes
 //! and lines, and where a label of its own figures is let go; and the hooks the canvas runs as it
 //! draws one of its diagrams: before and after the drawing, where a line starts, what goes with a
-//! line, the figures of no one node or line, and the hint bar. Select, Pan, Note, Link note, Grid
-//! and Arrange stay shared; the status marks toggle shows where a kind has marks (ER's key status).
+//! line, the figures of no one node or line, and the hint bar; and its rows of the Model menu.
+//! Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows where
+//! a kind has marks (ER's key status).
 
 use archforge_diagram::ProjectView;
 use archforge_mof::{Obj, Store, Uuid};
@@ -70,6 +71,12 @@ pub(crate) trait DiagramKind: Sync {
     fn kind(&self) -> &'static str;
     /// Its tools, in toolbar order.
     fn tools(&self) -> &'static [KindTool];
+    /// Its rows of the Model menu while one of its diagrams shows, by section, in the menu's order:
+    /// one for each thing its tools make, each arming the tool as its toolbar button and popover
+    /// do (made with [`crate::model_menu::menu_row`]). The menu adds Note and Link note after them.
+    /// Every kind answers, as it answers its tools: a kind with tools and no rows would leave the
+    /// menu without them.
+    fn menu_rows(&self) -> &'static [&'static [crate::actions::Action]];
     /// Its name in the New diagram dialog.
     fn word(&self) -> String;
     /// The name of its group in the Diagrams explorer, which holds its diagrams.

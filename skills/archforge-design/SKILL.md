@@ -123,7 +123,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   bar has those two in its application menu, and `actions::file_menu` drops them without leaving an
   empty group, so no divider stands at the menu's end.
 - The Model menu (`crates/ui-egui/src/model_menu.rs`) arms the toolbar's own tools, so a row makes
-  nothing by itself: its rows are the open diagram's notation's, then Note and Link note. Its group
+  nothing by itself: its rows are those the open diagram's kind answers (`DiagramKind::menu_rows`),
+  then Note and Link note. Its group
   stays with no diagram, its rows off, so the bar doesn't move; the native menu is rebuilt when the
   rows change. A row is off while no diagram shows or the model can't change.
 - The Versions menu (`actions::VERSIONS_MENU`, AR-305) is Save version… (⇧⌘S), History… (⇧⌘H, the
