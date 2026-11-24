@@ -936,24 +936,32 @@ fn fade(shell: &Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
 }
 
 /// A problem badge on the canvas: the problems on hover; one whose figure offers a way out of the
-/// problem (`resolvable`) says it and takes a click, as the element's notation answers
-/// ([`crate::notation_ui::NotationUi::resolve`]: ER's many-to-many relationship opens the mapping
-/// table offer).
+/// problem (`resolvable`) shows a plus, says the way out and takes a click, as the element's
+/// notation answers ([`crate::notation_ui::NotationUi::resolve_hint`]: ER's many-to-many
+/// relationship opens the mapping table offer). Where the notation offers none, the badge stays a
+/// plain one: its problems on hover, no click.
 #[allow(clippy::too_many_arguments, reason = "a badge is drawn from its place, its control id, its element and its texts")]
 pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, control_id: Uuid, element: Uuid, texts: &[String], resolvable: bool) {
     let paint = ui.painter().clone();
     let b = Rect::from_center_size(at, Vec2::splat(18.0));
     paint.circle_filled(b.center(), 9.0, p.surface);
     paint.circle_stroke(b.center(), 9.0, Stroke::new(1.2, p.key_foreign));
-    let resolver =
-        shell.session.as_ref().filter(|_| resolvable).and_then(|s| crate::notation_ui::of(shell.notation_uis, s.doc(), s.doc().by_uuid(element)?));
-    if resolvable {
+    let way_out = shell
+        .session
+        .as_ref()
+        .filter(|_| resolvable)
+        .and_then(|s| crate::notation_ui::of(shell.notation_uis, s.doc(), s.doc().by_uuid(element)?))
+        .and_then(|notation| Some((notation, notation.resolve_hint()?)));
+    if way_out.is_some() {
         ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(10.0)), &icons::PLUS, p.key_foreign);
     } else {
         let g = ux::galley(&paint, "!", types::CAPTION, p.key_foreign, None);
         paint.galley(b.center() - g.size() / 2.0, g, p.key_foreign.into());
     }
-    let hint = resolver.and_then(|notation| notation.resolve_hint()).unwrap_or_else(|| texts.join("\n"));
+    let (resolver, hint) = match way_out {
+        Some((notation, hint)) => (Some(notation), hint),
+        None => (None, texts.join("\n")),
+    };
     // Live for its hover; only a badge that offers a way out acts on a click.
     if control(shell, ui, &format!("workspace.canvas.problem.{control_id}"), "badge", b, true).on_hover_text(hint).clicked()
         && let Some(notation) = resolver

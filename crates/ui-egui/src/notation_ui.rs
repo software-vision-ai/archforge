@@ -311,7 +311,8 @@ pub(crate) trait NotationUi: Sync {
     fn canvas_overlay(&self, shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>);
     /// What a problem badge on one of its elements says on hover when the badge offers a way out
     /// of the problem, as the element's figure says it does (ER's many-to-many relationship: "Many
-    /// to many · add a mapping table"); none leaves the problems' own texts.
+    /// to many · add a mapping table"); none leaves the badge a plain one, its problems on hover
+    /// and no click.
     fn resolve_hint(&self) -> Option<String> {
         None
     }

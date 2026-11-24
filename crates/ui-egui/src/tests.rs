@@ -32124,6 +32124,54 @@ fn a_resolvable_badge_says_and_does_what_its_notation_answers() {
     }
 }
 
+/// The texts the problem badge of `element` paints, drawn alone in a frame of its own, offering a
+/// way out or not as `resolvable` says.
+fn badge_texts(shell: &mut Shell, element: archforge_mof::Uuid, resolvable: bool) -> Vec<String> {
+    /// Collects the texts of `s` and of the shapes it holds into `out`.
+    fn walk(s: &egui::Shape, out: &mut Vec<String>) {
+        match s {
+            egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let ctx = egui::Context::default();
+    ctx.set_fonts(crate::fonts::definitions());
+    // The fonts are in place a pass later; that pass draws nothing.
+    let mut warm = ctx.run_ui(egui::RawInput::default(), |_| {});
+    warm.textures_delta.clear();
+    let p = crate::ux::palette(shell.state.theme == ThemeKind::Dark);
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        crate::canvas::badge(shell, ui, p, egui::pos2(100.0, 100.0), element, element, &["A problem".to_string()], resolvable);
+    });
+    out.textures_delta.clear();
+    let mut texts = Vec::new();
+    out.shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
+    texts
+}
+
+/// A badge whose figure offers a way out shows the plus only where its element's notation says
+/// one (AR-789): an ER relationship's does, with no "!"; a UML class's, which UML offers none for,
+/// stays a plain badge with its "!". In light and dark.
+#[test]
+fn a_badge_shows_a_way_out_only_where_its_notation_offers_one() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let rel = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
+        };
+        assert!(!badge_texts(h.state_mut(), rel, true).contains(&"!".to_string()), "{theme:?}: ER's plus");
+        assert!(badge_texts(h.state_mut(), rel, false).contains(&"!".to_string()), "{theme:?}: a plain badge");
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let class = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS)).unwrap()).unwrap()
+        };
+        assert!(badge_texts(h.state_mut(), class, true).contains(&"!".to_string()), "{theme:?}: UML offers no way out");
+    }
+}
+
 /// The accent-coloured line segments `h` painted last frame, each with its two ends.
 fn accent_segments(h: &Harness<'static, Shell>) -> Vec<[egui::Pos2; 2]> {
     /// Collects the accent segments of `s` and of the shapes it holds into `out`.
@@ -32213,8 +32261,9 @@ fn the_canvas_draws_a_card_grown_by_the_row_typed_on_it() {
 }
 
 /// A problem badge that offers a way out acts on a click as its notation says (AR-789): the badge
-/// of a many-to-many line drawn from Customer to Order opens ER's mapping table offer named after
-/// both; Order's badge, for its missing primary key, opens nothing. In light and dark.
+/// of a many-to-many line drawn from Customer to Order says the way out on hover and opens ER's
+/// mapping table offer named after both; Order's badge, for its missing primary key, opens nothing.
+/// In light and dark.
 #[test]
 fn a_many_to_many_badge_opens_the_mapping_offer_and_another_badge_nothing() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -32242,6 +32291,14 @@ fn a_many_to_many_badge_opens_the_mapping_offer_and_another_badge_nothing() {
         };
         h.run();
         let badge = |what: archforge_mof::Uuid| format!("workspace.canvas.problem.{what}");
+        // The line's badge says the way out while the pointer rests on it.
+        let hint = "Many to many · add a mapping table";
+        let before = painted(&h).iter().filter(|t| *t == hint).count();
+        h.event(egui::Event::PointerMoved(rect_of(&h, &badge(edge)).center()));
+        for _ in 0..40 {
+            h.step();
+        }
+        assert_eq!(painted(&h).iter().filter(|t| *t == hint).count(), before + 1, "{theme:?}: its tooltip");
         let at = rect_of(&h, &badge(order)).center();
         click(&mut h, at);
         assert!(er_of(h.state()).mapping.is_none(), "{theme:?}: Order's badge offers nothing");
