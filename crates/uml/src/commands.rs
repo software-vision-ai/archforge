@@ -1000,9 +1000,10 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     // removing a set keeps its generalizations.
     let emptied = crate::generalization_sets::emptied_by(store, &all);
     all.extend(emptied);
-    // A stereotype application goes with the element it applies to (AR-134).
-    let applications = crate::profiles::applications_on(store, &all);
-    all.extend(applications);
+    // A stereotype application goes with the element it applies to (AR-134), before anything else:
+    // its values need the stereotype's properties, which a profile, a stereotype or a property
+    // named in the same removal takes away (AR-805).
+    let all: Vec<Obj> = crate::profiles::applications_on(store, &all).into_iter().chain(all).collect();
     // A profile a package with no parent takes along has its applications taken away first, as a
     // profile removed on its own has; its uses were refused above (AR-134).
     let taken: Vec<Obj> = objs

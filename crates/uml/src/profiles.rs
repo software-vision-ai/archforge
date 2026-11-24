@@ -673,12 +673,18 @@ pub fn removal_uses(store: &Store, package: Obj, going: &[Obj]) -> Uses {
     uses
 }
 
+/// The uses of `stereotypes` left when they go with what `goes` says goes: every application but
+/// those on an element that goes, which go with it (AR-804, AR-805), an application tracing to no
+/// element among them, as it goes with no element.
+fn uses_left(store: &Store, stereotypes: &[Obj], goes: impl Fn(Obj) -> bool) -> Uses {
+    uses_where(store, stereotypes, |a| a.element.is_none_or(|e| !goes(e)))
+}
+
 /// The uses of `profile`, which `package`, having no parent, takes along when it is removed with
 /// `going`: every application of its stereotypes but those on what goes too ([`goes_with`],
-/// AR-804), an application tracing to no element among them, as it goes with no element.
+/// [`uses_left`], AR-804).
 fn held_uses(store: &Store, package: Obj, profile: Obj, going: &[Obj]) -> Uses {
-    let goes = goes_with(store, package, going);
-    uses_where(store, &stereotypes(store, profile), |a| a.element.is_none_or(|e| !goes(e)))
+    uses_left(store, &stereotypes(store, profile), goes_with(store, package, going))
 }
 
 /// The uses dropping `stereotype`'s extension to `metaclass` would strand: applications on elements
@@ -692,7 +698,19 @@ pub fn extension_uses(store: &Store, stereotype: Obj, metaclass: Obj) -> Uses {
 
 /// How many slots hold a value of the stereotype property `p`: its values set on applications.
 pub fn values_set(store: &Store, p: Obj) -> usize {
-    store.referrers(p).into_iter().filter(|(s, prop)| *prop == slot::DEFINING_FEATURE && is(store, *s, crate::SLOT)).count()
+    values_left(store, p, |_| false)
+}
+
+/// How many of `p`'s values set ([`values_set`]) are left when what `goes` says goes is removed:
+/// all but those on an application whose element goes, which go with it (AR-805), a value on an
+/// application tracing to no element among them.
+fn values_left(store: &Store, p: Obj, goes: impl Fn(Obj) -> bool) -> usize {
+    let on = |s: Obj| store.container(s).ok().flatten().and_then(|(instance, _)| element_of(store, instance));
+    store
+        .referrers(p)
+        .into_iter()
+        .filter(|(s, prop)| *prop == slot::DEFINING_FEATURE && is(store, *s, crate::SLOT) && on(*s).is_none_or(|e| !goes(e)))
+        .count()
 }
 
 /// The uses as a refusal names them: per stereotype its name, its elements' names while there are
@@ -750,18 +768,20 @@ pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
 }
 
 /// Why `o` may not be removed for its uses, when that is so: a profile or a stereotype whose
-/// stereotypes are applied, a stereotype property whose values are set, a package whose profile
-/// applications its contents need, but for those on the package itself (AR-800), on an element
-/// among `going`, or inside one that does not hand it up (AR-698, AR-805), or, for a package with no
-/// parent, on anything it holds (AR-804), which go with it; and the library and its metaclasses,
-/// which are UML's own.
+/// stereotypes are applied and a stereotype property whose values are set, but for those on an
+/// element among `going`, or inside one that does not hand it up, which go with it (AR-805); a
+/// package whose profile applications its contents need, but for those on the package itself
+/// (AR-800), on an element among `going`, or inside one that does not hand it up (AR-698, AR-805),
+/// or, for a package with no parent, on anything it holds (AR-804), which go with it; and the
+/// library and its metaclasses, which are UML's own.
 pub fn removal_problem_with(store: &Store, o: Obj, going: &[Obj]) -> Option<CommandError> {
     if let Some(refused) = library_refusal(store, "ids", o) {
         return Some(refused);
     }
     let uses = match store.class_of(o).ok()? {
-        c if c == PROFILE => profile_uses(store, o),
-        c if c == STEREOTYPE => stereotype_uses(store, o),
+        // The applications on what goes in the same removal go with it (AR-805).
+        c if c == PROFILE => uses_left(store, &stereotypes(store, o), goes_with(store, o, going)),
+        c if c == STEREOTYPE => uses_left(store, &[o], goes_with(store, o, going)),
         c if c == PACKAGE => {
             // A package with no parent takes what it holds along: a profile inside it goes, and
             // is checked for uses as a profile removed on its own is, but for those on what goes
@@ -787,7 +807,7 @@ pub fn removal_problem_with(store: &Store, o: Obj, going: &[Obj]) -> Option<Comm
                 let said = format!("{name} is a stereotype's extension end; drop the metaclass from what the stereotype extends instead");
                 return Some(refuse("ids", said).because(Reason::ExtensionEnd { name }));
             }
-            let n = values_set(store, o);
+            let n = values_left(store, o, goes_with(store, o, going));
             if n == 0 {
                 return None;
             }

@@ -1132,6 +1132,79 @@ fn a_package_that_goes_too_provides_no_profile_to_what_is_handed_up() {
     assert_eq!(profiles::applications_of(st, obj(st, &kept)).len(), 1, "its application stays");
 }
 
+/// A profile, a stereotype or a stereotype's property, removed with every element that uses it,
+/// goes in one step with those applications and their values, as they go too (AR-805); one used, or
+/// with a value set, on an element that stays, or on an application tracing to no element, is still
+/// refused with the same text, typed, changing nothing.
+#[test]
+fn a_profile_stereotype_or_property_goes_with_the_elements_named_with_it_that_use_it() {
+    use archforge_engine::{EngineError, InUse, Reason, Used};
+    let mut s = session();
+    let [commerce, order, customer, _, persistence, entity, ..] = applied_shop(&mut s);
+    let table = property(&mut s, &entity, "table");
+    // «Entity» on each of `on`, its table set.
+    let with_values = |on: &[&str]| {
+        let uses: Vec<(&str, &str)> = on.iter().map(|e| (entity.as_str(), *e)).collect();
+        let mut t = with_applications(&s, &uses);
+        for e in on {
+            run(&mut t, "uml.stereotype.set-value", json!({ "element": e, "stereotype": entity, "property": "table", "values": ["t"] }));
+        }
+        t
+    };
+    let history = |s: &S| (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string));
+    let in_use = |name: &str, uses| Reason::InUse(Box::new(InUse { what: Used::Element(name.to_string()), uses }));
+    let on_customer = || vec![("Entity".to_string(), vec!["Customer".to_string()], 1)];
+    let removals = [
+        (&persistence, "Persistence is in use: «Entity» on Customer. Remove those first.", in_use("Persistence", on_customer())),
+        (&entity, "Entity is in use: «Entity» on Customer. Remove those first.", in_use("Entity", on_customer())),
+        (&table, "the values of table are set on 1 element; remove those first", Reason::ValuesSet { name: "table".into(), elements: 1 }),
+    ];
+    for (gone, english, reason) in removals {
+        // Every use on Order, named with it: one step, its application and value going with it.
+        let mut going = with_values(&[&order]);
+        one_step(&mut going, "element.remove", json!({ "ids": [gone, order] }));
+        let st = going.doc();
+        for (went, what) in [(gone, "what was named"), (&order, "Order")] {
+            assert!(st.by_uuid(Uuid::parse(went).unwrap()).is_none_or(|o| !st.is_alive(o)), "{what} went, with {english}");
+        }
+        for class in [archforge_uml::INSTANCE_SPECIFICATION, archforge_uml::SLOT] {
+            assert!(st.alive().all(|o| st.class_of(o).ok() != Some(class)), "no application or value left, with {english}");
+        }
+        assert!(st.is_alive(obj(st, &customer)), "Customer stays");
+        // A use on Customer too, which stays: refused, naming it, typed, the history as it was.
+        let mut stays = with_values(&[&order, &customer]);
+        run(&mut stays, "uml.class.add", json!({ "package": commerce, "name": "Line" }));
+        stays.undo().unwrap();
+        let before = history(&stays);
+        let ids = json!({ "ids": [gone, order] });
+        let why = refused(&mut stays, "element.remove", ids.clone());
+        assert!(why.contains(english), "{why}");
+        let Err(EngineError::Failed { error, .. }) = stays.execute("element.remove", &ids) else { panic!("refused") };
+        assert_eq!(error.reason, Some(reason));
+        assert_eq!(history(&stays), before, "the history is as it was");
+    }
+    // An application of «Entity» tracing to no element, its table set, as a project edited by hand
+    // may hold: it goes with no element, so each is refused, counting it.
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(with_values(&[&order]).doc(), &tables, &junctions).unwrap();
+    let mut st = store(1 << 50);
+    rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
+    let loose = st.create(archforge_uml::INSTANCE_SPECIFICATION).unwrap();
+    st.push(loose, archforge_uml::instance_specification::CLASSIFIER, Value::Ref(obj(&st, &entity))).unwrap();
+    let slot = st.create(archforge_uml::SLOT).unwrap();
+    st.set(slot, archforge_uml::slot::DEFINING_FEATURE, Value::Ref(obj(&st, &table))).unwrap();
+    st.push(loose, archforge_uml::instance_specification::SLOT, Value::Ref(slot)).unwrap();
+    let mut loose = session_over(st);
+    for (gone, english) in [
+        (&persistence, "Persistence is in use: «Entity» on 1 element. Remove those first."),
+        (&entity, "Entity is in use: «Entity» on 1 element. Remove those first."),
+        (&table, "the values of table are set on 1 element; remove those first"),
+    ] {
+        let why = refused(&mut loose, "element.remove", json!({ "ids": [gone, order] }));
+        assert!(why.contains(english), "{why}");
+    }
+}
+
 /// A package with no parent holding a profile, removed with the elements outside it that use the
 /// profile, goes in one step with every application, as they go too (AR-805); one used on what a
 /// nested package named with it hands up is still refused with the same text, typed.
