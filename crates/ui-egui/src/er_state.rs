@@ -66,7 +66,7 @@ pub(crate) mod menus {
 #[derive(Debug, Default)]
 pub(crate) struct ErState {
     /// The column editor, open on a column or on a column about to be added.
-    pub column: Option<crate::panels::ColumnEdit>,
+    pub column: Option<crate::er_table::ColumnEdit>,
     /// The key editor, open on a key or on a unique constraint about to be added (slice E4).
     pub key: Option<crate::keys::KeyEdit>,
     /// The check and index editors (slice S3).

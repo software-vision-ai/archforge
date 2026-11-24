@@ -717,7 +717,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             if let Some((column, entity)) = email
                 && let Ok(entity) = store.uuid(entity)
             {
-                crate::panels::open_column(&mut shell, entity, Some(column));
+                crate::er_table::open_column(&mut shell, entity, Some(column));
                 if let Some(c) = er_mut(&mut shell.notation_states).and_then(|er| er.column.as_mut()) {
                     c.more = true;
                 }

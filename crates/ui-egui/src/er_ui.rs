@@ -27,7 +27,8 @@ fn name(store: &Store, o: Obj) -> String {
     archforge_core::name_of(store, o)
 }
 
-fn children(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
+/// The alive elements `o` lists in `prop`, in its order.
+pub(crate) fn children(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
     store.list(o, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|c| store.is_alive(*c)).collect()
 }
 
@@ -441,6 +442,11 @@ impl NotationUi for ErUi {
         (class(store, o) == Some(archforge_er::ATTRIBUTE)).then(|| tr("Table"))
     }
 
+    /// A column shares its table's page, whose Properties it shows; none for a column of no table.
+    fn page(&self, store: &Store, o: Obj) -> Option<Obj> {
+        if class(store, o) == Some(archforge_er::ATTRIBUTE) { r::entity_of(store, o) } else { Some(o) }
+    }
+
     fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
         let width = r.width() - 2.0 * crate::panels::PAD;
         match subject.class {
@@ -450,7 +456,7 @@ impl NotationUi for ErUi {
                     let y = crate::types::types_section(shell, ui, p, r, y + 17.0 + FIELD + 16.0, o, id);
                     let y = crate::objects::section_of(shell, ui, p, r, y, o, id, crate::objects::ObjectKind::Sequence);
                     let y = crate::objects::section_of(shell, ui, p, r, y, o, id, crate::objects::ObjectKind::View);
-                    crate::keys::problems_section(shell, ui, p, r, y + 4.0, o);
+                    crate::panels::problems_section(shell, ui, p, r, y + 4.0, o);
                 }
             }
             Some(c) if c == archforge_er::GENERALIZATION => {
@@ -462,7 +468,7 @@ impl NotationUi for ErUi {
                 });
                 if let (Some((sup, sup_id)), Some(id)) = (sup, subject.id) {
                     let y = crate::subtypes::subtypes_section(shell, ui, p, r, y, sup, sup_id, id);
-                    crate::keys::problems_section(shell, ui, p, r, y + 4.0, sup);
+                    crate::panels::problems_section(shell, ui, p, r, y + 4.0, sup);
                 }
             }
             Some(c) if c == archforge_er::DOMAIN || c == archforge_er::ENUM_TYPE => {
@@ -474,7 +480,7 @@ impl NotationUi for ErUi {
                 });
                 if let Some((schema, schema_id, _)) = schema {
                     let y = crate::types::types_section(shell, ui, p, r, y, schema, schema_id);
-                    crate::keys::problems_section(shell, ui, p, r, y + 4.0, schema);
+                    crate::panels::problems_section(shell, ui, p, r, y + 4.0, schema);
                 }
             }
             Some(c) if c == archforge_er::SEQUENCE || c == archforge_er::VIEW => {
@@ -486,10 +492,10 @@ impl NotationUi for ErUi {
                 });
                 if let Some((schema, schema_id, kind)) = schema {
                     let y = crate::objects::section_of(shell, ui, p, r, y, schema, schema_id, kind);
-                    crate::keys::problems_section(shell, ui, p, r, y + 4.0, schema);
+                    crate::panels::problems_section(shell, ui, p, r, y + 4.0, schema);
                 }
             }
-            Some(c) if c == archforge_er::ENTITY => crate::panels::entity_body(shell, ui, p, r, y, subject),
+            Some(c) if c == archforge_er::ENTITY => crate::er_table::entity_body(shell, ui, p, r, y, subject),
             Some(c) if c == archforge_er::RELATIONSHIP => crate::relation::body(shell, ui, p, r, y, subject),
             Some(c) if c == archforge_er::ATTRIBUTE => {
                 // A column: its table's panel, the column's row marked.
@@ -500,7 +506,7 @@ impl NotationUi for ErUi {
                     Some(Subject::of(e, store.uuid(e).ok()?, archforge_er::ENTITY, words))
                 });
                 if let Some(table) = table {
-                    crate::panels::entity_body(shell, ui, p, r, y, &table);
+                    crate::er_table::entity_body(shell, ui, p, r, y, &table);
                 }
             }
             _ => {}

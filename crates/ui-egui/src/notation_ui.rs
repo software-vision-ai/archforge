@@ -2,7 +2,7 @@
 //! Models tree and what `+` adds there, how a row dropped on another runs, its renames, what a
 //! removal takes with it and what is said of it, what Delete and a chord of its own on the canvas do to its selected
 //! elements, what it draws over the canvas whatever diagram shows and what a problem badge that
-//! offers a way out does, its entries in the project search, its problems, the heading and the body of Properties for its elements,
+//! offers a way out does, its entries in the project search, its problems, the heading and the body of Properties for its elements and which share a page,
 //! its commands' refusals in the user's words, the words for the kinds of its elements, and the
 //! limits of their names and descriptions, and the state its own editors, menus and drawings keep
 //! between frames. The shells (the tree, the filter, the scroll, the search list, the sections, the
@@ -254,6 +254,14 @@ pub(crate) trait NotationUi: Sync {
     fn heading(&self, store: &Store, obj: Obj) -> Option<String> {
         let _ = (store, obj);
         None
+    }
+    /// The element `obj` shares a page with, as the right panel decides whether to keep its scroll:
+    /// selecting `obj` after that element, or that element after `obj`, in the same panel keeps it
+    /// where it was scrolled (a column shares its table's, whose Properties it shows); by default
+    /// its own, none when it has none. It changes only the scroll, never what a panel draws.
+    fn page(&self, store: &Store, obj: Obj) -> Option<Obj> {
+        let _ = store;
+        Some(obj)
     }
     /// Draws the body of Properties for `subject`, an element of its metamodel.
     #[allow(clippy::too_many_arguments, reason = "the body is drawn into the panel from its top, for its subject")]

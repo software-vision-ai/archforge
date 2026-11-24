@@ -50,15 +50,18 @@ with a toast's Undo; `relation`: a relationship's Properties — Identifying, th
 cardinality buttons and roles, the Foreign key switch that adds or removes the key with its
 columns in one step, Points to, the key pairs with a child column chosen among those of the same
 type, On delete / On update, More with Deferrable and Match, and the card for a parent without a
-key with Add id column; `keys`: a table's keys with the key editor — name, the columns in key
-order, Add a column, Nulls distinct — and the Problems section that lists what the rules find on
-the selection; `checks` and `indexes`: a table's check constraints (name, expression) and indexes
+key with Add id column; `er_table`: a table's Properties — name, kind, the columns with the
+in-place column editor (type with its length or precision and scale, default, generation with the
+expression of a computed column, collation under More), then its keys, checks, indexes, subtypes
+and problems; `keys`: a table's keys with the key editor — name, the columns in key
+order, Add a column, Nulls distinct; `checks` and `indexes`: a table's check constraints (name, expression) and indexes
 (name, Unique, the columns in index order with a direction button and a nulls order from the row's
 menu, an expression typed in place, Where and Method under More) with their editors; `problems`: those problems by element, badged on the canvas), the right rail between the
-canvas and its panel with Properties (`panels`: a schema's name; a table's name, kind, columns
-with the in-place column editor — type with its length or precision and scale, default,
-generation with the expression of a computed column, collation under More — keys; a diagram's
-name and schema; a description under every heading, the text DDL writes as a comment) and Skills (the skills on the
+canvas and its panel with Properties (`panels`: the body the selection's notation draws, a scroll kept
+while the selection moves within what its notation calls one page (a column and its table), a
+diagram's name and schema,
+the Problems section that lists what the rules find on the selection, and a description under
+every heading, the text DDL writes as a comment) and Skills (the skills on the
 selection, the inherited ones, the skill editor) following the selection, the status bar), drawn
 from the design with its own palette, type and icons (`ux`); its colours are `ux::Colour` values, which only `ux` makes. Icons are drawn crisp: each is rasterised once per size into an alpha mask at the screen's own pixels, its
 strokes a whole number of pixels on the pixel grid (`ux::raster`), and drawn at a standard size by
@@ -118,7 +121,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |
 | `explorer::{State, ContextMenu, add, remove_selection, rows, fresh_name, Row, Tree}` | the Models explorer's state (a row's context menu among it, AR-132) and the actions the tests and the host drive |
-| `panels::{State, draw, retain_valid, column_edit, column_edit_mut, ColumnEdit, SkillEdit, Applies, MenuId}` | the right panels' state and body (the column editor itself is ER's own state, which `column_edit` reads for the app's journeys); every change goes through `er.*` and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not) |
+| `panels::{State, draw, retain_valid, SkillEdit, Applies, MenuId}` | the right panels' state and body; every change goes through the notations' and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not) |
 | `diagrams::{State, RowMenu, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows, a row's menu and the New diagram dialog |
 | `versions::State` | the Versions explorer's state: what it has read, how its sections are folded, and what the keyboard has just moved to, which its list brings into view |
 | `save_version::Dialog` | the Save version dialog: the description typed, the revision its summary is of, and how its save went |
@@ -132,7 +135,8 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `subtypes::{SubtypeRow, rows}` | a supertype's Subtypes section with Complete, Disjoint, Discriminator and Mapping (slice S6); the canvas's Generalization tool draws a subtype line with a hollow triangle at the supertype |
 | `objects::{ObjectKind, ObjectEdit, ObjectRow, sequence_rows, view_rows, open, kind_of}` | a schema's sequences and views with their editors (slice S7); the Models tree lists them under the schema, a table row drags onto the canvas to be placed with its lines, and a table of another schema draws dimmed and dashed with its schema named |
 | `types::{TypeKind, TypeEdit, TypeRow, rows, open, kind_of}` | a schema's domains and enum types with the domain and enum editors (slice S5); the column editor's type menu lists them before the base types |
-| `panels::ColumnEdit::linked` | the column a key column follows, shown as a link mark on its row and on the canvas, with Unlink in its editor (slice S4); a pure mapping table's Properties offer to collapse it |
+| `er_table::{ColumnEdit, column_edit, column_edit_mut}` | a table's Properties, ER's own: the column editor's state, which is ER's state and which `column_edit` reads for the app's journeys |
+| `er_table::ColumnEdit::linked` | the column a key column follows, shown as a link mark on its row and on the canvas, with Unlink in its editor (slice S4); a pure mapping table's Properties offer to collapse it |
 | `problems::{Problem, all, by_element, of}` | the problems the shell shows, on the element the user would fix them on |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |

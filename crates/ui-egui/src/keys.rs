@@ -4,8 +4,7 @@
 //! (name, the columns in key order with a grip and a remove, Add a column, Nulls distinct for a
 //! unique constraint; remove, cancel and apply as icons). Apply is the one step that goes to undo,
 //! through `er.primary-key.set`, `er.unique.add` or `er.unique.set`; the bin runs
-//! `er.primary-key.remove` or `er.unique.remove`. Below the keys, Problems lists what the rules
-//! find on the selection; a click selects the element.
+//! `er.primary-key.remove` or `er.unique.remove`.
 
 use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
@@ -330,45 +329,6 @@ fn commit(shell: &mut Shell, edit: &KeyEdit) {
         }
         Err(e) => refuse(shell, e),
     }
-}
-
-/// The Problems section for a selection, when the rules find any; gives the y under it.
-pub(crate) fn problems_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: Obj) -> f32 {
-    let paint = ui.painter().clone();
-    let width = (r.width() - 2.0 * PAD).max(0.0);
-    let problems: Vec<(Option<Uuid>, String)> = match shell.session.as_ref() {
-        Some(s) => crate::problems::of(shell.notation_uis, s.doc(), &shell.problems, subject)
-            .into_iter()
-            .map(|pr| (s.doc().uuid(pr.element).ok(), pr.text))
-            .collect(),
-        None => return y,
-    };
-    if problems.is_empty() {
-        return y;
-    }
-    let title = fmt(&tr("Problems · {n}"), &[("n", &problems.len().to_string())]);
-    y = section(shell, ui, p, r, y, &title, None).unwrap_or(y + 50.0) - 6.0;
-    let own = shell.session.as_ref().and_then(|s| s.doc().uuid(subject).ok());
-    for (i, (element, text)) in problems.iter().enumerate() {
-        let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 28.0));
-        let live = element.is_some() && *element != own;
-        let resp = control(shell, ui, &format!("workspace.properties.problem.{i}"), "row", row, live);
-        if resp.hovered() && live {
-            paint.rect_filled(row, 6.0, p.page);
-        }
-        paint.circle_stroke(pos2(row.left() + 10.0, row.center().y), 6.0, Stroke::new(1.2, p.key_foreign));
-        ux::text(&paint, pos2(row.left() + 8.0, row.top() + 6.0), "!", types::TINY, p.key_foreign, None);
-        ux::text(&paint, row.min + vec2(26.0, 6.0), text, types::SMALL, p.text, Some((width - 30.0).max(0.0)));
-        if resp.clicked()
-            && live
-            && let Some(id) = element
-            && let Err(e) = run(shell, "view.select", json!({ "ids": [id.to_string()] }))
-        {
-            shell.panels.notice = Some(e);
-        }
-        y += 28.0;
-    }
-    y + 8.0
 }
 
 /// Every hover text to translate, for the catalogue tests.

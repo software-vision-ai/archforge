@@ -31,6 +31,7 @@ mod engine_said;
 mod er_kind;
 mod er_said;
 mod er_state;
+pub mod er_table;
 mod er_ui;
 pub mod explorer;
 mod field_keys;

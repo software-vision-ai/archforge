@@ -8903,7 +8903,7 @@ fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
     let class = store.uuid(store.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap();
     assert!(crate::uml_inline::open(s, class, crate::uml_panel::MemberKind::Attribute, None), "Catalog's card takes a row");
     assert!(s.notation_states.editing() && s.notation_states.holds_keys(), "a row typed in place is edited and holds the keys");
-    crate::panels::open_column(s, table, None);
+    crate::er_table::open_column(s, table, None);
     crate::keys::open(s, table, None);
     crate::checks::open(s, table, None);
     crate::indexes::open(s, table, None);
@@ -9973,12 +9973,12 @@ fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
     // section row under it.
     let at = rect_of(&h, "workspace.properties.column.type.menu").center();
     click(&mut h, at);
-    let n = crate::panels::BASE_TYPES.len() - 1;
+    let n = crate::er_table::BASE_TYPES.len() - 1;
     let last = rect_of(&h, &format!("workspace.properties.column.type.menu.{n}"));
     let keys_add = rect_of(&h, "workspace.properties.keys.add");
     assert!(last.bottom() > keys_add.top(), "the list reaches over the keys: {last:?} {keys_add:?}");
     click(&mut h, egui::pos2(keys_add.center().x.min(last.right() - 4.0), last.center().y));
-    assert_eq!(er_of(h.state()).column.as_ref().map(|c| c.ty.clone()), Some(crate::panels::BASE_TYPES[n].to_string()));
+    assert_eq!(er_of(h.state()).column.as_ref().map(|c| c.ty.clone()), Some(crate::er_table::BASE_TYPES[n].to_string()));
     assert!(er_of(h.state()).key.is_none(), "the key editor under the list stayed closed");
     let at = rect_of(&h, "workspace.properties.column.type.menu").center();
     click(&mut h, at);
@@ -14424,7 +14424,7 @@ fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
                 .unwrap(),
         )
         .unwrap();
-    crate::panels::open_column(h.state_mut(), archforge_mof::Uuid::parse(&_customer).unwrap(), Some(customer_id));
+    crate::er_table::open_column(h.state_mut(), archforge_mof::Uuid::parse(&_customer).unwrap(), Some(customer_id));
     {
         let s = h.state_mut().session.as_mut().unwrap();
         s.execute("view.select", &serde_json::json!({ "ids": [_customer] })).unwrap();
@@ -15071,6 +15071,78 @@ fn the_properties_body_scrolls_and_an_editor_opened_below_the_fold_comes_into_vi
     }
     h.run();
     assert_eq!(h.state().panels.scroll, 0.0);
+}
+
+/// A column's Properties page is its table's, as ER answers the shell
+/// ([`crate::notation_ui::NotationUi::page`]): moving from a table to one of its columns keeps the
+/// body where it was scrolled, and moving on to another element starts it at the top.
+#[test]
+fn a_column_shows_its_tables_page_so_moving_to_it_keeps_the_scroll() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1440.0, 760.0));
+        let (schema, column) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+            let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+            let customer = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
+            let mut last = String::new();
+            for i in 0..14 {
+                let added = s.execute(
+                    "er.attribute.add",
+                    &serde_json::json!({ "entity": customer, "name": format!("column_{i}"), "type": "BIGINT", "primary_key": i == 0 }),
+                );
+                last = id(added.unwrap().value);
+            }
+            s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+            (schema, last)
+        };
+        h.run();
+        let body = h.state().panels.body.unwrap();
+        h.event(egui::Event::PointerMoved(body.center()));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -2000.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(30);
+        let scrolled = h.state().panels.scroll;
+        assert!(scrolled > 0.0, "{theme:?}: the table's body scrolled");
+        // Its column shows the same page: the body stays where it was.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [column] })).unwrap();
+        h.run();
+        assert_eq!(h.state().panels.scroll, scrolled, "{theme:?}: the column's page is its table's");
+        // The schema is another page: it starts at the top.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
+        h.run();
+        assert_eq!(h.state().panels.scroll, 0.0, "{theme:?}: another element starts at the top");
+    }
+}
+
+/// Every notation answers which page Properties shows for its elements: ER a column's table and
+/// any other element its own, UML each element its own.
+#[test]
+fn each_notation_answers_the_page_of_its_elements() {
+    let mut n: u128 = 0;
+    let ids = Box::new(move || {
+        n += 1;
+        archforge_mof::Uuid(n.to_le_bytes())
+    });
+    let mut s = archforge_notations::new_project_session("P", ids).unwrap();
+    let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+    let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+    let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
+    let column = id(s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT" })).unwrap().value);
+    let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+    let store = s.doc();
+    let obj = |id: &str| store.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+    let er = crate::notation_ui::of(crate::notation_ui::UIS, store, obj(&table)).unwrap();
+    assert_eq!(er.page(store, obj(&column)), Some(obj(&table)), "a column's page is its table's");
+    assert_eq!(er.page(store, obj(&table)), Some(obj(&table)));
+    assert_eq!(er.page(store, obj(&schema)), Some(obj(&schema)));
+    let uml = crate::notation_ui::of(crate::notation_ui::UIS, store, obj(&root)).unwrap();
+    assert_eq!(uml.page(store, obj(&root)), Some(obj(&root)));
 }
 
 #[test]
