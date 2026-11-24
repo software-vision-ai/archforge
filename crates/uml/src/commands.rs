@@ -845,8 +845,10 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     if let Some(refused) = crate::templates::removals_problem(store, &params) {
         return Err(refused);
     }
-    // The dependencies at the packages that go go too (AR-698), so the uses on them strand nothing.
+    // The dependencies at the packages that go go too (AR-698), and so does everything named here
+    // (AR-805), so the uses on any of it strand nothing.
     let incident = dependencies_going(store, objs);
+    let named: Vec<Obj> = incident.iter().chain(objs).copied().collect();
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
         if let Some(why) = crate::templates::parameter_element_problem(store, *o) {
@@ -863,7 +865,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
         }
         // A profile, a stereotype or a property in use, a package whose applications its contents
         // need, and UML's own metaclasses stay, the uses named (AR-134).
-        if let Some(refused) = crate::profiles::removal_problem_with(store, *o, &incident) {
+        if let Some(refused) = crate::profiles::removal_problem_with(store, *o, &named) {
             return Err(refused);
         }
         if !removable.contains(&class) || end {
@@ -998,9 +1000,10 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     // removing a set keeps its generalizations.
     let emptied = crate::generalization_sets::emptied_by(store, &all);
     all.extend(emptied);
-    // A stereotype application goes with the element it applies to (AR-134).
-    let applications = crate::profiles::applications_on(store, &all);
-    all.extend(applications);
+    // A stereotype application goes with the element it applies to (AR-134), before anything else:
+    // its values need the stereotype's properties, which a profile, a stereotype or a property
+    // named in the same removal takes away (AR-805).
+    let all: Vec<Obj> = crate::profiles::applications_on(store, &all).into_iter().chain(all).collect();
     // A profile a package with no parent takes along has its applications taken away first, as a
     // profile removed on its own has; its uses were refused above (AR-134).
     let taken: Vec<Obj> = objs
