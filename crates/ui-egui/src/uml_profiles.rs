@@ -9,7 +9,7 @@
 //! that selects them. The rules are the model's (`archforge_uml::profiles`): the shell asks them
 //! and says their answers in the user's words.
 
-use archforge_engine::{InUse, Used};
+use archforge_engine::{InUse, Named, Used};
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::profiles::{self, Uses};
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
@@ -74,12 +74,22 @@ pub struct ProfileRefusal {
 
 // What the shell says of uses.
 
-/// The elements a stereotype is used on, in words: one name, two names joined, or how many, `n`,
-/// when none is named.
-fn on_text(names: &[String], n: usize) -> String {
+/// An element a stereotype is used on, in words: its name, or, when it has none, its kind with its
+/// article, as `a generalization` (AR-807); a kind the catalogues don't name is `an element`, as
+/// the model names an element of a kind it has no word for.
+pub(crate) fn element_text(named: &Named) -> String {
+    match named {
+        Named::Name(name) => name.clone(),
+        Named::Unnamed { kind } => crate::panels::a_kind(kind).unwrap_or_else(|| tr_ctx("refusal", "an element")),
+    }
+}
+
+/// The elements a stereotype is used on, in words: one element ([`element_text`]), two joined, or
+/// how many, `n`, when none is named.
+fn on_text(names: &[Named], n: usize) -> String {
     match names {
-        [one] => one.clone(),
-        [a, b] => fmt(&tr("{first} and {second}"), &[("first", a), ("second", b)]),
+        [one] => element_text(one),
+        [a, b] => fmt(&tr("{first} and {second}"), &[("first", &element_text(a)), ("second", &element_text(b))]),
         _ => trn("{n} element", "{n} elements", u64::try_from(n).unwrap_or(u64::MAX)),
     }
 }
@@ -88,7 +98,7 @@ fn on_text(names: &[String], n: usize) -> String {
 /// on Order and Customer, «Id» on 2 elements. Remove those first.`: what Profiles' panels say before
 /// asking, and what a refusal of the engine's says (AR-437).
 pub(crate) fn in_use(used: &InUse) -> String {
-    let on = |(s, names, n): &(String, Vec<String>, usize)| {
+    let on = |(s, names, n): &(String, Vec<Named>, usize)| {
         fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", s), ("elements", &on_text(names, *n))])
     };
     let uses = used.uses.iter().map(on).collect::<Vec<_>>().join(", ");
@@ -1059,4 +1069,70 @@ fn apply_samples(shell: &mut Shell) -> Result<(), String> {
         session.execute("uml.stereotype.apply", &json!({ "element": element, "stereotype": stereotype })).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use archforge_engine::{InUse, Named, Reason, Used};
+    use serde_json::json;
+
+    use crate::i18n::set_language;
+
+    /// An element in use that has no name is said by its kind, with its article, in the user's
+    /// language, never as an empty name (AR-807): an unnamed generalization beside a named
+    /// association, an unnamed association and an association end with no role, in English and in
+    /// German; a kind the catalogues don't name is an element.
+    #[test]
+    fn an_unnamed_element_in_use_is_said_by_its_kind() {
+        let unnamed = |kind| Named::Unnamed { kind };
+        let said = |names: Vec<Named>| {
+            let n = names.len();
+            let held = Used::HeldProfile { package: "Tools".into(), profile: "Audit".into() };
+            crate::panels::said(&Reason::InUse(Box::new(InUse { what: held, uses: vec![("Tracked".into(), names, n)] })))
+        };
+        let cases = [
+            (vec!["bills".into(), unnamed("generalization")], "bills and a generalization", "bills und eine Generalisierung"),
+            (vec![unnamed("association")], "an association", "eine Assoziation"),
+            (vec![unnamed("association end")], "an association end", "ein Assoziationsende"),
+            (vec![unnamed("untyped kind")], "an element", "ein Element"),
+        ];
+        for (names, english, german) in cases {
+            set_language("en");
+            let en = format!("Tools holds the profile Audit, which is in use: «Tracked» on {english}. Remove those first.");
+            assert_eq!(said(names.clone()), Some(en));
+            set_language("de");
+            let de = format!("Tools enthält das Profil Audit, das verwendet wird: «Tracked» auf {german}. Diese zuerst entfernen.");
+            assert_eq!(said(names), Some(de));
+        }
+        set_language("en");
+    }
+
+    /// The delete dialog names a stereotype application on an element with no name by its kind
+    /// (AR-807): deleting a class names «Trace» on its unnamed association, which goes with it, in
+    /// English and in German.
+    #[test]
+    fn the_delete_dialog_names_an_unnamed_element_by_its_kind() {
+        let mut n: u128 = 0;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        });
+        let mut s = archforge_notations::new_project_session("Shop", ids).unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
+        let commerce = run("uml.package.add", json!({ "name": "Commerce" }));
+        let order = run("uml.class.add", json!({ "package": commerce, "name": "Order" }));
+        let customer = run("uml.class.add", json!({ "package": commerce, "name": "Customer" }));
+        let audit = run("uml.profile.add", json!({ "name": "Audit" }));
+        let trace = run("uml.stereotype.add", json!({ "profile": audit, "name": "Trace", "extends": ["Association"] }));
+        run("uml.profile.apply", json!({ "package": commerce, "profile": audit }));
+        let link = run("uml.association.add", json!({ "from": order, "to": customer }));
+        s.execute("uml.stereotype.apply", &json!({ "element": link, "stereotype": trace })).unwrap();
+        let st = s.doc();
+        let order = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
+        for (language, said) in [("en", "«Trace» on an association"), ("de", "«Trace» auf eine Assoziation")] {
+            set_language(language);
+            assert_eq!(crate::uml_stereotypes::going_along(st, order), [said], "{language}");
+        }
+        set_language("en");
+    }
 }

@@ -785,9 +785,27 @@ pub struct Unextended {
 pub struct InUse {
     /// What is in use, and where.
     pub what: Used,
-    /// The uses by stereotype: its name, the names of the elements it is applied to while a refusal
-    /// names them (two at most, none when it counts them), and how many applications in all.
-    pub uses: Vec<(String, Vec<String>, usize)>,
+    /// The uses by stereotype: its name, the elements it is applied to while a refusal names them
+    /// (two at most, none when it counts them), and how many applications in all.
+    pub uses: Vec<(String, Vec<Named>, usize)>,
+}
+
+/// An element as a refusal names it: by its name, or by its kind when it has none, so no sentence
+/// says an empty name (AR-807).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Named {
+    /// Its name.
+    Name(String),
+    /// It has no name, as a generalization or an association may not: its kind as an English
+    /// noun, as `"generalization"`, for an interface to say in its own words.
+    Unnamed { kind: &'static str },
+}
+
+impl From<&str> for Named {
+    /// An element named `name`.
+    fn from(name: &str) -> Self {
+        Self::Name(name.to_string())
+    }
 }
 
 /// What a [`Reason::TypeInUse`] names; boxed in the reason, so the error stays small.

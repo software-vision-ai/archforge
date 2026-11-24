@@ -866,7 +866,8 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &
 }
 
 /// What a stereotype application on `element`, and on what it holds and takes along, says in the
-/// delete dialog: `«Entity» on Order`, `«Id» on id`, each application once.
+/// delete dialog: `«Entity» on Order`, `«Id» on id`, each application once, one on an element with
+/// no name naming its kind, as `«Trace» on an association` (AR-807).
 pub(crate) fn going_along(store: &Store, element: Obj) -> Vec<String> {
     let mut going = vec![element];
     if store.class_of(element).is_ok_and(archforge_uml::is_classifier) {
@@ -879,7 +880,8 @@ pub(crate) fn going_along(store: &Store, element: Obj) -> Vec<String> {
         .filter_map(|i| {
             let s = applications::stereotype_of(store, i)?;
             let e = profiles::element_of(store, i).filter(|e| !hands_up || *e == element)?;
-            Some(fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", &name(store, s)), ("elements", &name(store, e))]))
+            let on = crate::uml_profiles::element_text(&profiles::named(store, e));
+            Some(fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", &name(store, s)), ("elements", &on)]))
         })
         .collect()
 }

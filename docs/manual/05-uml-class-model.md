@@ -1631,9 +1631,11 @@ extend are UML model elements of their own, saved with the model, not labels or 
   stereotype's property whose values are set, and moving or deleting the package or element they
   sit in out of the profile's reach are refused, the uses counted: *Persistence is in use in
   Commerce: «Entity» on Order and Customer, «Id» on 2 elements, «Reference» on places. Remove
-  those first.* **Show the 5 uses** selects them. Renaming a profile or a stereotype keeps every
-  use. Deleting a package refuses the same way when its elements would lose the profile that
-  reaches them, and when it would take along a profile that is in use outside what goes with it.
+  those first.* **Show the 5 uses** selects them. An element with no name, such as a
+  generalization or an association left unnamed, is named by its kind: *«Reference» on places and
+  an association*. Renaming a profile or a stereotype keeps every use. Deleting a package refuses
+  the same way when its elements would lose the profile that reaches them, and when it would take
+  along a profile that is in use outside what goes with it.
   Stereotypes on the package itself, on a dependency deleted with it, on the other elements
   deleted in the same step, and on the relationships of a class deleted, which go with the class,
   go with it and do not count. A package left beside the root package by a project made before the

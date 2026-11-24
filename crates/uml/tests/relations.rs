@@ -334,14 +334,18 @@ fn a_dependency_end_moves_onto_a_package_and_an_association_end_never_does() {
 }
 
 /// Anything but a package or a classifier at either end of a dependency is refused, typed as the
-/// wrong end it is, as is the UML library, a metaclass and an element depending on itself; nothing
+/// wrong end it is, an association, a generalization and an association end by their kinds
+/// (AR-807), as is the UML library, a metaclass and an element depending on itself; nothing
 /// changes and no undo step is recorded (AR-696).
 #[test]
 fn a_dependency_end_that_is_no_package_or_classifier_is_refused_typed_with_nothing_recorded() {
     use archforge_engine::End;
     let mut s = session();
-    let (pkg, d, c, _) = classes(&mut s, &["Order"], 0);
+    let (pkg, d, c, _) = classes(&mut s, &["Order", "Customer"], 0);
     let attribute = run(&mut s, "uml.attribute.add", json!({ "class": c[0], "name": "total" }));
+    let association = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));
+    let generalization = run(&mut s, "uml.generalization.add", json!({ "specific": c[0], "general": c[1] }));
+    let end = s.doc().uuid(archforge_uml::nary::ends(s.doc(), obj(&s, &association))[0]).unwrap().to_string();
     run(&mut s, "element.describe", json!({ "element": c[0], "text": "Kept." }));
     let comment = s.doc().list(obj(&s, &c[0]), archforge_uml::element::OWNED_COMMENT).unwrap()[0].as_ref().unwrap();
     let comment = s.doc().uuid(comment).unwrap().to_string();
@@ -353,6 +357,9 @@ fn a_dependency_end_that_is_no_package_or_classifier_is_refused_typed_with_nothi
     let cases = [
         (attribute.as_str(), pkg.as_str(), wrong(End::Source, "attribute")),
         (pkg.as_str(), attribute.as_str(), wrong(End::Target, "attribute")),
+        (association.as_str(), pkg.as_str(), wrong(End::Source, "association")),
+        (pkg.as_str(), generalization.as_str(), wrong(End::Target, "generalization")),
+        (end.as_str(), pkg.as_str(), wrong(End::Source, "association end")),
         (comment.as_str(), pkg.as_str(), wrong(End::Source, "element")),
         (c[0].as_str(), d.as_str(), wrong(End::Target, "element")),
         (profile.as_str(), c[0].as_str(), wrong(End::Source, "profile")),
