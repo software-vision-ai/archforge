@@ -307,7 +307,7 @@ fn scene(shell: &mut Shell, clip: &egui::Ui, p: &Palette, (side, area, view): (&
         segment_drag: None,
         draft: None,
         rename_text: None,
-        set_drag: None,
+        label_drag: None,
         looking_only: true,
     };
     let mut drawn = Registry::default();

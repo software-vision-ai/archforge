@@ -8,7 +8,7 @@
 //! shell holds it as one notation's state among others ([`crate::notation_ui::NotationState`]);
 //! UML's screens reach it through [`uml`] and [`uml_mut`].
 
-use archforge_mof::{Store, Uuid};
+use archforge_mof::{Obj, Store, Uuid};
 use egui::Pos2;
 
 use crate::notation_ui::{NotationState, NotationStates};
@@ -281,5 +281,11 @@ impl NotationState for UmlState {
     /// canvas (AR-128, AR-129).
     fn canvas_pressed(&mut self) {
         (self.line_menu, self.nary_menu) = (None, None);
+    }
+
+    /// The member typed in place on its class's card, which the card is drawn with
+    /// ([`crate::uml_inline::draft`]).
+    fn card_draft(&self, store: &Store) -> Option<(Obj, usize, Option<usize>)> {
+        crate::uml_inline::draft(self.inline.as_ref()?, store)
     }
 }

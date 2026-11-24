@@ -1,8 +1,9 @@
 //! What ER brings to the shell's explorers, search, problems and panels: the
 //! Models tree's schemas with their skills, types, sequences, views and tables, and a table's
 //! skills and columns; `+` adds a schema, a table or a column; the search's schemas, tables,
-//! columns, relationships and types; the problems the rules find, in the user's words; and
-//! Properties for every ER element, drawn by ER's sections.
+//! columns, relationships and types; the problems the rules find, in the user's words;
+//! Properties for every ER element, drawn by ER's sections; and over the canvas, the mapping table
+//! offer a many-to-many relationship's badge opens.
 
 use std::collections::BTreeSet;
 
@@ -14,7 +15,7 @@ use serde_json::json;
 use crate::Shell;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, trn};
-use crate::notation_ui::{Added, Entry, NotationState, NotationUi, Offer, Words};
+use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Words};
 use crate::panels::{FIELD, Subject};
 use crate::problems::Problem;
 use crate::ux::{Palette, icons};
@@ -557,6 +558,31 @@ impl NotationUi for ErUi {
     fn canvas_delete(&self, shell: &mut Shell, shift: bool) -> bool {
         !shift && crate::connect::remove_selected_relationship(shell)
     }
+
+    /// The mapping table offer, over the fade and under the toast, while one is open; it closes
+    /// itself once its relationship is gone. Nothing at the other layers.
+    fn canvas_overlay(&self, shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
+        if layer == Layer::Offers {
+            crate::connect::mapping_offer(shell, ui, on.p, on.r);
+        }
+    }
+
+    /// A many-to-many relationship's badge offers its mapping table.
+    fn resolve_hint(&self) -> Option<String> {
+        Some(tr("Many to many · add a mapping table"))
+    }
+
+    /// Opens the mapping table offer for the many-to-many relationship `element`.
+    fn resolve(&self, shell: &mut Shell, element: Uuid) {
+        crate::connect::offer_mapping(shell, element);
+    }
+}
+
+/// The words of ER's figures, which reach `tr` through the figures' descriptions, for the
+/// catalogue tests.
+#[cfg(test)]
+pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
+    archforge_er::figures::WORDS.iter().copied()
 }
 
 /// The ER classes `archforge_er`'s commands create, each with a kind word of its own.

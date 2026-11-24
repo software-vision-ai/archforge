@@ -135,10 +135,9 @@ pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Opt
     true
 }
 
-/// The row typed on a card, as the canvas draws it: the class, its compartment, and the row
-/// counted across the compartments (none for a new one).
-pub(crate) fn draft(shell: &Shell, store: &Store) -> Option<(Obj, usize, Option<usize>)> {
-    let inline = uml(&shell.notation_states).and_then(|uml| uml.inline.as_ref())?;
+/// The row `inline` typed on a card, as the canvas draws it: the class, its compartment, and the
+/// row counted across the compartments (none for a new one); none once its class or member is gone.
+pub(crate) fn draft(inline: &InlineMember, store: &Store) -> Option<(Obj, usize, Option<usize>)> {
     let c = store.by_uuid(inline.edit.class)?;
     let row = match inline.edit.target {
         None => None,
@@ -168,7 +167,7 @@ fn row_place(shell: &Shell, store: &Store, view: View, c: Obj) -> Option<(Rect, 
     let n = card_node(shell, store, c)?;
     let d = archforge_diagram::diagram_of(store, n)?;
     let mut card = shell.session.as_ref()?.view().of_element(store, c)?.card(store, c, d)?;
-    let (_, compartment, row) = draft(shell, store)?;
+    let (_, compartment, row) = draft(uml(&shell.notation_states)?.inline.as_ref()?, store)?;
     crate::canvas::with_draft(&mut card, compartment, row);
     let index = match row {
         Some(i) => i,

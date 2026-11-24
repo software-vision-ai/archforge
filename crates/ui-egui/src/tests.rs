@@ -15703,7 +15703,7 @@ fn drawn_alone_at(
             segment_drag: None,
             draft: None,
             rename_text: None,
-            set_drag: None,
+            label_drag: None,
         };
         recorded.borrow_mut().begin_frame();
         let drawn = crate::canvas::draw_scene(ui, &ui.painter().with_clip_rect(area), &scene, live, &mut recorded.borrow_mut());
@@ -17428,6 +17428,8 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn canvas_delete(&self, _: &mut Shell, _: bool) -> bool {
         false
     }
+    /// The sketch draws nothing over the canvas.
+    fn canvas_overlay(&self, _: &mut Shell, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
     fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
         (store.class_of(o).ok()? == archforge_uml::CLASS).then(|| {
             let pkg = store.container(o).ok().flatten().map(|(c, _)| archforge_core::name_of(store, c)).unwrap_or_default();
@@ -23437,7 +23439,7 @@ fn a_set_label_that_draws_nothing_takes_no_press() {
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
         h.run();
         assert!(!ids(&h).contains(&label_id), "nothing drawn");
-        assert!(h.state().canvas.set_labels.is_empty());
+        assert!(h.state().canvas.extra_labels.is_empty());
         click(&mut h, at);
         assert!(!h.state().session.as_ref().unwrap().view().selection.contains(&set), "the hidden label is not selectable");
         drag(&mut h, at, at + egui::vec2(60.0, 40.0));
@@ -31949,6 +31951,370 @@ fn a_press_and_escape_close_each_notations_own() {
     uml.canvas_pressed();
     er.canvas_escape();
     assert!(uml.line_menu.is_none() && uml.nary_menu.is_none() && er.mapping.is_none());
+}
+
+/// What `notation` draws over the canvas of `h`'s open diagram at `layer`, alone in a frame of its
+/// own, the canvas where the harness's last frame drew it: how many shapes it painted and the ids it
+/// recorded. The harness draws a frame after, so its controls are found again.
+fn overlaid(
+    h: &mut Harness<'static, Shell>,
+    notation: &dyn crate::notation_ui::NotationUi,
+    layer: crate::notation_ui::Layer,
+) -> (usize, Vec<String>) {
+    let r = rect_of(h, "workspace.canvas");
+    let dark = h.state().state.theme == ThemeKind::Dark;
+    let shell = h.state_mut();
+    let view = crate::canvas::View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
+    let d = shell.session.as_ref().unwrap().doc().by_uuid(shell.canvas.active.unwrap()).unwrap();
+    let overrides = std::collections::BTreeMap::new();
+    let ctx = egui::Context::default();
+    ctx.set_fonts(crate::fonts::definitions());
+    // The fonts are in place a pass later; that pass draws nothing.
+    let mut warm = ctx.run_ui(egui::RawInput::default(), |_| {});
+    warm.textures_delta.clear();
+    // Both of the registry's frames emptied, so only what this one records is read.
+    shell.registry.begin_frame();
+    shell.registry.begin_frame();
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0));
+    let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ui| {
+        let on = crate::notation_ui::Overlaid { p: crate::ux::palette(dark), r, view, d, overrides: &overrides };
+        notation.canvas_overlay(shell, ui, layer, &on);
+    });
+    out.textures_delta.clear();
+    let drawn = (out.shapes.len(), shell.widgets().iter().map(|w| w.id.clone()).collect());
+    h.run();
+    drawn
+}
+
+/// What each notation draws over the canvas goes at its own layer (AR-789): ER's mapping table
+/// offer over the fade, under the toast, and nothing at the drafts, rows and menus; UML, with
+/// nothing of its own open, draws nothing at any layer. In light and dark.
+#[test]
+fn ers_overlay_is_its_mapping_offer_at_the_offers_layer() {
+    use crate::notation_ui::Layer;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let rel = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
+        };
+        crate::connect::offer_mapping(h.state_mut(), rel);
+        let (shapes, ids) = overlaid(&mut h, &crate::er_ui::ErUi, Layer::Offers);
+        assert!(shapes > 0 && ids.iter().any(|i| i == "workspace.mapping.name"), "{theme:?}: the offer, {ids:?}");
+        for layer in [Layer::Drafts, Layer::Rows, Layer::Menus] {
+            assert_eq!(overlaid(&mut h, &crate::er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
+        }
+        for layer in [Layer::Drafts, Layer::Rows, Layer::Menus, Layer::Offers] {
+            assert_eq!(overlaid(&mut h, &crate::uml_ui::UmlUi, layer), (0, Vec::new()), "{theme:?}: UML draws nothing at {layer:?}");
+        }
+        assert!(er_of(h.state()).mapping.is_some(), "{theme:?}: the offer is still open");
+    }
+}
+
+/// What UML draws over the canvas goes at its own layers (AR-789): a template binding's draft at
+/// the drafts, a member typed in place on its card at the rows, the menu of generalization lines at
+/// the menus, each at that layer alone, and nothing at the offers; ER, with nothing of its own open,
+/// draws nothing at any layer. In light and dark.
+#[test]
+fn umls_overlays_go_at_their_layers() {
+    use crate::notation_ui::Layer;
+    let all = [Layer::Drafts, Layer::Rows, Layer::Menus, Layer::Offers];
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        // A binding drawn and not applied: its draft's dashed line, which records no control.
+        let (mut h, _, (from, to)) = binding_sample(theme);
+        uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::TemplateBinding;
+        let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
+        crate::uml_relate::connect(h.state_mut(), d, from, to);
+        h.run();
+        for layer in all {
+            let (shapes, ids) = overlaid(&mut h, &crate::uml_ui::UmlUi, layer);
+            assert_eq!(shapes > 0, layer == Layer::Drafts, "{theme:?}: the draft is drawn at {layer:?} alone");
+            assert!(ids.is_empty(), "{theme:?}: {layer:?} {ids:?}");
+            assert_eq!(overlaid(&mut h, &crate::er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
+        }
+        // A member typed on Catalog's card, and the menu of three selected generalization lines.
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let class = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let node = st.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
+            st.uuid(st.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap()
+        };
+        assert!(crate::uml_inline::open(h.state_mut(), class, crate::uml_panel::MemberKind::Attribute, None), "{theme:?}: the row opens");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
+        h.run();
+        uml_of_mut(h.state_mut()).line_menu = Some(rect_of(&h, "workspace.canvas").center());
+        for layer in all {
+            let (_, ids) = overlaid(&mut h, &crate::uml_ui::UmlUi, layer);
+            let row = ids.iter().any(|i| i.starts_with("workspace.canvas.member."));
+            let menu = ids.iter().any(|i| i.starts_with("workspace.canvas.contextMenu"));
+            assert_eq!((row, menu), (layer == Layer::Rows, layer == Layer::Menus), "{theme:?}: at {layer:?}, {ids:?}");
+            assert_eq!(overlaid(&mut h, &crate::er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
+        }
+    }
+}
+
+/// The card typed on is drawn with its row as UML's state says (AR-789): none while nothing is
+/// typed, the class, its attributes' compartment and a new row once a member is typed on Catalog's
+/// card; ER's state has no row of its own; the shell's states answer as UML's does. In light and
+/// dark.
+#[test]
+fn a_card_draft_is_the_notations_row_typed_in_place() {
+    use crate::notation_ui::NotationState;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (class, catalog) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let node = st.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
+            let class = st.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap();
+            (st.uuid(class).unwrap(), class)
+        };
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(uml_of(h.state()).card_draft(st), None, "{theme:?}");
+        assert!(crate::uml_inline::open(h.state_mut(), class, crate::uml_panel::MemberKind::Attribute, None), "{theme:?}");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(uml_of(h.state()).card_draft(st), Some((catalog, 0, None)), "{theme:?}: a new attribute on Catalog");
+        assert_eq!(er_of(h.state()).card_draft(st), None, "{theme:?}: ER types no row on a card");
+        assert_eq!(h.state().notation_states.card_draft(st), Some((catalog, 0, None)), "{theme:?}");
+    }
+}
+
+/// A generalization set's label says its whole text after "Generalization set" while the pointer is
+/// on it (AR-129), in the words UML gives the label as it draws it (AR-789). In light and dark.
+#[test]
+fn a_generalization_sets_label_says_its_hover_text_in_umls_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method", "complete": true }));
+        let set = archforge_mof::Uuid::parse(set.unwrap().value["id"].as_str().unwrap()).unwrap();
+        h.run();
+        let labels = h.state().canvas.extra_labels.clone();
+        let hover = "Generalization set method {complete, overlapping}";
+        assert_eq!(labels.iter().map(|l| (l.element, l.hover.as_str())).collect::<Vec<_>>(), [(set, hover)], "{theme:?}");
+        // The canvas says it while the pointer rests on the label.
+        let before = painted(&h).iter().filter(|t| *t == hover).count();
+        h.event(egui::Event::PointerMoved(labels[0].rect.center()));
+        for _ in 0..40 {
+            h.step();
+        }
+        assert_eq!(painted(&h).iter().filter(|t| *t == hover).count(), before + 1, "{theme:?}: its tooltip");
+    }
+}
+
+/// A problem badge that offers a way out says and does what its element's notation answers
+/// (AR-789): ER's many-to-many relationship offers its mapping table and a click opens the offer;
+/// UML offers none. In light and dark.
+#[test]
+fn a_resolvable_badge_says_and_does_what_its_notation_answers() {
+    use crate::notation_ui::NotationUi;
+    assert_eq!(crate::er_ui::ErUi.resolve_hint().as_deref(), Some("Many to many · add a mapping table"));
+    assert_eq!(crate::uml_ui::UmlUi.resolve_hint(), None);
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let rel = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
+        };
+        crate::uml_ui::UmlUi.resolve(h.state_mut(), rel);
+        assert!(er_of(h.state()).mapping.is_none(), "{theme:?}: UML opens nothing");
+        crate::er_ui::ErUi.resolve(h.state_mut(), rel);
+        assert_eq!(er_of(h.state()).mapping.as_ref().map(|m| m.relationship), Some(rel), "{theme:?}: ER opens the offer");
+    }
+}
+
+/// The texts the problem badge of `element` paints, drawn alone in a frame of its own, offering a
+/// way out or not as `resolvable` says.
+fn badge_texts(shell: &mut Shell, element: archforge_mof::Uuid, resolvable: bool) -> Vec<String> {
+    /// Collects the texts of `s` and of the shapes it holds into `out`.
+    fn walk(s: &egui::Shape, out: &mut Vec<String>) {
+        match s {
+            egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let ctx = egui::Context::default();
+    ctx.set_fonts(crate::fonts::definitions());
+    // The fonts are in place a pass later; that pass draws nothing.
+    let mut warm = ctx.run_ui(egui::RawInput::default(), |_| {});
+    warm.textures_delta.clear();
+    let p = crate::ux::palette(shell.state.theme == ThemeKind::Dark);
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        crate::canvas::badge(shell, ui, p, egui::pos2(100.0, 100.0), element, element, &["A problem".to_string()], resolvable);
+    });
+    out.textures_delta.clear();
+    let mut texts = Vec::new();
+    out.shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
+    texts
+}
+
+/// A badge whose figure offers a way out shows the plus only where its element's notation says
+/// one (AR-789): an ER relationship's does, with no "!"; a UML class's, which UML offers none for,
+/// stays a plain badge with its "!". In light and dark.
+#[test]
+fn a_badge_shows_a_way_out_only_where_its_notation_offers_one() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let rel = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
+        };
+        assert!(!badge_texts(h.state_mut(), rel, true).contains(&"!".to_string()), "{theme:?}: ER's plus");
+        assert!(badge_texts(h.state_mut(), rel, false).contains(&"!".to_string()), "{theme:?}: a plain badge");
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let class = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS)).unwrap()).unwrap()
+        };
+        assert!(badge_texts(h.state_mut(), class, true).contains(&"!".to_string()), "{theme:?}: UML offers no way out");
+    }
+}
+
+/// The accent-coloured line segments `h` painted last frame, each with its two ends.
+fn accent_segments(h: &Harness<'static, Shell>) -> Vec<[egui::Pos2; 2]> {
+    /// Collects the accent segments of `s` and of the shapes it holds into `out`.
+    fn walk(s: &egui::Shape, accent: egui::Color32, out: &mut Vec<[egui::Pos2; 2]>) {
+        match s {
+            egui::Shape::LineSegment { points, stroke } if stroke.color == accent => out.push(*points),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, accent, out)),
+            _ => {}
+        }
+    }
+    let accent: egui::Color32 = crate::ux::palette(h.state().state.theme == ThemeKind::Dark).accent.into();
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, accent, &mut out));
+    out
+}
+
+/// The canvas draws UML's draft of a template binding where the drafts go (AR-789): accent dashes
+/// from OrderRepository to Repository, the open arrow's tip on Repository's border; none once the
+/// draft is cancelled. In light and dark.
+#[test]
+fn the_canvas_draws_a_template_bindings_draft_with_its_arrow_at_the_template() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, (from, to)) = binding_sample(theme);
+        h.run();
+        assert!(accent_segments(&h).is_empty(), "{theme:?}: nothing drafted yet");
+        uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::TemplateBinding;
+        let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
+        crate::uml_relate::connect(h.state_mut(), d, from, to);
+        h.run();
+        let segments = accent_segments(&h);
+        assert!(segments.len() > 3, "{theme:?}: dashes and an arrow, {segments:?}");
+        // The arrow's two strokes meet at its tip; no dash shares an end with another.
+        let tips: Vec<egui::Pos2> = segments
+            .iter()
+            .enumerate()
+            .flat_map(|(i, a)| segments.iter().skip(i + 1).flat_map(move |b| a.iter().filter(move |p| b.contains(p)).copied()))
+            .collect();
+        let (bound, template) = (rect_of(&h, &format!("workspace.canvas.node.{from}")), rect_of(&h, &format!("workspace.canvas.node.{to}")));
+        assert!(
+            !tips.is_empty() && tips.iter().all(|t| template.expand(1.0).contains(*t) && !bound.expand(1.0).contains(*t)),
+            "{theme:?}: the tip {tips:?} is on Repository {template:?}, not OrderRepository {bound:?}"
+        );
+        uml_of_mut(h.state_mut()).binding = None;
+        h.run();
+        assert!(accent_segments(&h).is_empty(), "{theme:?}: dropped, nothing drawn");
+    }
+}
+
+/// A card typed on is drawn grown by the new row, as its notation's draft says (AR-789): Catalog's
+/// card is drawn taller than its node while a new attribute is typed on it. In light and dark.
+#[test]
+fn the_canvas_draws_a_card_grown_by_the_row_typed_on_it() {
+    /// The tallest filled rectangle drawn from the node's top left corner, as wide: the card's
+    /// body.
+    fn drawn_height(h: &Harness<'static, Shell>, node: egui::Rect) -> f32 {
+        /// Raises `out` to the height of each such rectangle in `s` and the shapes it holds.
+        fn walk(s: &egui::Shape, node: egui::Rect, out: &mut f32) {
+            match s {
+                egui::Shape::Rect(r) if (r.rect.min - node.min).length() < 0.5 && (r.rect.width() - node.width()).abs() < 0.5 => {
+                    *out = out.max(r.rect.height());
+                }
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, node, out)),
+                _ => {}
+            }
+        }
+        let mut out = 0.0;
+        h.output().shapes.iter().for_each(|c| walk(&c.shape, node, &mut out));
+        out
+    }
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let id = format!("workspace.canvas.node.{}", nodes["Catalog"]);
+        let class = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let node = st.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
+            st.uuid(st.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap()
+        };
+        h.run();
+        let node = rect_of(&h, &id);
+        let plain = drawn_height(&h, node);
+        assert!((plain - node.height()).abs() < 0.5, "{theme:?}: drawn as its node, {plain} {node:?}");
+        assert!(crate::uml_inline::open(h.state_mut(), class, crate::uml_panel::MemberKind::Attribute, None), "{theme:?}");
+        h.run();
+        let grown = drawn_height(&h, rect_of(&h, &id));
+        assert!(grown > node.height() + 1.0, "{theme:?}: grown by the row, {grown} over {}", node.height());
+    }
+}
+
+/// A problem badge that offers a way out acts on a click as its notation says (AR-789): the badge
+/// of a many-to-many line drawn from Customer to Order says the way out on hover and opens ER's
+/// mapping table offer named after both; Order's badge, for its missing primary key, opens nothing.
+/// In light and dark.
+#[test]
+fn a_many_to_many_badge_opens_the_mapping_offer_and_another_badge_nothing() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let node_of = |h: &Harness<'static, Shell>, name: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let e = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY) && archforge_core::name_of(st, *o) == name).unwrap();
+            st.uuid(archforge_diagram::views_of(st, e).2[0]).unwrap()
+        };
+        let (customer, order) = (node_of(&h, "Customer"), node_of(&h, "Order"));
+        er_of_mut(h.state_mut()).relationship =
+            crate::connect::RelKind { from: archforge_er::Cardinality::ZeroOrMore, to: archforge_er::Cardinality::ZeroOrMore, identifying: false };
+        let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
+        crate::connect::connect(h.state_mut(), d, customer, order);
+        er_of_mut(h.state_mut()).mapping = None;
+        let edge = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let rel = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP) && archforge_er::rules::is_many_to_many(st, *o));
+            let edge = st.uuid(archforge_diagram::views_of(st, rel.unwrap()).1[0]).unwrap();
+            let order = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY) && archforge_core::name_of(st, *o) == "Order");
+            let order = st.uuid(order.unwrap()).unwrap().to_string();
+            s.execute("er.primary-key.remove", &serde_json::json!({ "entity": order })).unwrap();
+            edge
+        };
+        h.run();
+        let badge = |what: archforge_mof::Uuid| format!("workspace.canvas.problem.{what}");
+        // The line's badge says the way out while the pointer rests on it.
+        let hint = "Many to many · add a mapping table";
+        let before = painted(&h).iter().filter(|t| *t == hint).count();
+        h.event(egui::Event::PointerMoved(rect_of(&h, &badge(edge)).center()));
+        for _ in 0..40 {
+            h.step();
+        }
+        assert_eq!(painted(&h).iter().filter(|t| *t == hint).count(), before + 1, "{theme:?}: its tooltip");
+        let at = rect_of(&h, &badge(order)).center();
+        click(&mut h, at);
+        assert!(er_of(h.state()).mapping.is_none(), "{theme:?}: Order's badge offers nothing");
+        let at = rect_of(&h, &badge(edge)).center();
+        click(&mut h, at);
+        assert_eq!(er_of(h.state()).mapping.as_ref().map(|m| m.name.as_str()), Some("CustomerOrder"), "{theme:?}: the offer opens");
+    }
+}
+
+/// The words each notation's figures say reach the catalogue tests through that notation's own
+/// list (AR-789): ER's and UML's, and no longer the canvas's.
+#[test]
+fn each_notations_figure_words_are_its_own() {
+    assert!(archforge_er::figures::WORDS.iter().all(|w| crate::er_ui::texts().any(|t| t == *w)));
+    assert!(archforge_uml::WORDS.iter().all(|w| crate::uml_ui::texts().any(|t| t == *w)));
+    assert!(crate::canvas::texts().all(|t| t != "Entity · {schema}" && t != "Class · {package}"), "the canvas names neither");
 }
 
 /// UML starts an n-ary association's leg at its diamond's outline rather than where the route

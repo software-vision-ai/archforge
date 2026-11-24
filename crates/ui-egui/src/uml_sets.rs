@@ -18,7 +18,7 @@ use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::Shell;
-use crate::canvas::{Drawing, SetLabel, edge_points, element_of, refs};
+use crate::canvas::{Drawing, ExtraLabel, edge_points, element_of, refs};
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::panels::{FIELD, FieldOut, PAD, ROW, Subject, edit_field, menu, run, section};
@@ -987,8 +987,9 @@ pub(crate) fn set_place(routes: &[Vec<Pos2>], nth: usize, size: Vec2, placed: Op
 /// The generalization sets of the diagram's lines (AR-129): for each set with a member line here,
 /// a dashed line across its members' lines and its label, `name {complete, disjoint}`, beside it,
 /// worked out from the model each frame; muted, the accent while the set is selected. A label moved
-/// on this diagram sits where its node holds it. Gives the labels drawn, for the next frame's press.
-pub(crate) fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut crate::widgets::Registry, ui: &egui::Ui) -> Vec<SetLabel> {
+/// on this diagram sits where its node holds it. Gives the labels drawn, for the next frame's press,
+/// each saying "Generalization set" and its whole text on hover.
+pub(crate) fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut crate::widgets::Registry, ui: &egui::Ui) -> Vec<ExtraLabel> {
     let (p, store, z) = (d.p, d.store, d.view.zoom);
     let mut by_set: std::collections::BTreeMap<Obj, Vec<Obj>> = std::collections::BTreeMap::new();
     for e in refs(store, d.diagram, archforge_diagram::diagram::EDGE) {
@@ -1017,7 +1018,7 @@ pub(crate) fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut c
         let node = sets::label_node(store, d.diagram, s);
         let placed = node.map(|n| Rect::from_min_size(d.node_rect(n).min, size));
         let id = store.uuid(s).ok();
-        let placed = match (d.set_drag, id) {
+        let placed = match (d.label_drag, id) {
             (Some((dragged, by)), Some(id)) if dragged == id => {
                 set_place(&routes, k, size, placed, z).map(|at| Rect::from_min_size(at.label.min + by, size))
             }
@@ -1047,9 +1048,21 @@ pub(crate) fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut c
             Rect::from_two_pos(at.line[0], at.line[1]).expand(3.0),
         );
         let text = if name.is_empty() { braces } else { format!("{name} {braces}") };
-        out.push(SetLabel { set: id, rect: label, node: node.and_then(|n| store.uuid(n).ok()), text });
+        let hover = fmt(&tr("Generalization set {label}"), &[("label", &text)]);
+        out.push(ExtraLabel { element: id, rect: label, node: node.and_then(|n| store.uuid(n).ok()), hover });
     }
     out
+}
+
+/// A set's label that no node holds yet, let go on diagram `d` with its top left corner at
+/// `(x, y)`: placed there on this diagram alone, a node made to hold it, as one undo step
+/// (`uml.generalization-set.place`); a refusal is said at the canvas's top.
+pub(crate) fn place_label(shell: &mut Shell, d: Obj, set: Uuid, x: f64, y: f64) {
+    let Some(diagram) = shell.session.as_ref().and_then(|s| s.doc().uuid(d).ok()) else { return };
+    let params = json!({ "diagram": diagram.to_string(), "set": set.to_string(), "x": x.round(), "y": y.round() });
+    if let Err(e) = run(shell, "uml.generalization-set.place", params) {
+        shell.canvas.notice = Some(e);
+    }
 }
 
 /// Every text that reaches `tr` through a variable, for the catalogue tests.

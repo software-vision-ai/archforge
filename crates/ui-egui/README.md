@@ -5,15 +5,18 @@ workspace once a project is open (`workspace`: the project bar, the activity rai
 explorer over the session (`explorer`: each notation's rows, ER's schemas, tables, columns and
 skills; `+` adds what the selection's notation offers, a name is typed in place, Delete asks when
 other things go with it; `notation_ui::NotationUi` is what a notation brings to the tree, the
-search, the problems and Properties, how a row dropped on another runs, and what Delete and a
-chord of its own on the canvas do to its selected elements, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
+search, the problems and Properties, how a row dropped on another runs, what Delete and a
+chord of its own on the canvas do to its selected elements, what it draws over the canvas
+whatever diagram shows, each layer at its one place in the canvas's order (`notation_ui::Layer`:
+drafts, rows, menus, offers), and what a problem badge that offers a way out says and does, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
 `notation_ui::NotationState` is what a notation keeps between frames for its own editors, menus,
 drawings and tools, `er_state` ER's and `uml_state` UML's, which the shell holds, parks with the
 project, starts fresh with each project opened and each version shown, and asks only through that
 trait: whether something is being edited, which editors are open, what to drop, what to close,
 whether something of its own holds the canvas's keys (an open menu holds them without being an
 edit), whether a menu of its own takes the keys, to end a drawing under way when its project
-is set aside, and what of its own a press or Escape on the canvas closes; the shell keeps one open-menu slot, which holds a `panels::MenuId`: the shell's own
+is set aside, what of its own a press or Escape on the canvas closes, and the row typed in place
+on a card that the card is drawn with; the shell keeps one open-menu slot, which holds a `panels::MenuId`: the shell's own
 menus (Home's, the Versions panel's) in their scope, each notation's by its metamodel in its own,
 with a key and an index, so a notation opens, recognises and closes only its own (`er_state::menus`,
 `uml_state::menus`); and
@@ -28,7 +31,8 @@ toolbar, whose tools after Select and Pan are the open diagram kind's (`kinds::D
 tools, each placing or connecting, and the hooks the gestures run: place, connect, a line dropped
 on empty canvas, rename in place, open at a card's row, its adorner, its menu, the live line, a
 press and a right click it reads first, the keys a drawing under way takes, whether its popover's
-menu takes the keys, and what Select all takes in beside the boxes and lines; and
+menu takes the keys, what Select all takes in beside the boxes and lines, and where a label of
+its own figures is let go; and
 the hooks the canvas runs as it draws: before and after a diagram is drawn, where a line starts,
 what goes with a line, the figures of no one node or line, and the hint bar, through which UML
 draws its association classes' ties and names, its generalization sets, its n-ary legs and hint,

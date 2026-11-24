@@ -86,6 +86,9 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     strings.extend(crate::appearance::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::skill_tab::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::canvas::texts().map(|s| (String::new(), s.to_string())));
+    // The words of each notation's figures, which `tr` takes through the figures' descriptions.
+    strings.extend(crate::er_ui::texts().map(|s| (String::new(), s.to_string())));
+    strings.extend(crate::uml_ui::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::editing::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::connect::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::relation::texts().map(|s| (String::new(), s.to_string())));
