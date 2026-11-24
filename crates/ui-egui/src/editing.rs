@@ -16,10 +16,10 @@ use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_ROW, Tool, View};
-use crate::er_state::{er, er_mut};
+use crate::er_state::er;
 use crate::home::control;
 use crate::i18n::tr;
-use crate::uml_state::{uml, uml_mut};
+use crate::uml_state::uml;
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -135,9 +135,6 @@ pub(crate) enum Action {
     Commit,
     Place(&'static str, f64, f64),
     Menu(EntityMenu),
-    /// The context menu of generalization lines at a screen point, the line pressed selected
-    /// first when it was not (AR-129).
-    LineMenu(Pos2, Option<Uuid>),
     Rename(Uuid, Uuid),
     Open(Uuid, Option<usize>),
     PlaceNote(f64, f64),
@@ -147,14 +144,10 @@ pub(crate) enum Action {
     ResetRoute(Uuid),
     /// Something refused before it began, said at the canvas's top: a line the tool starts nowhere.
     Notice(String),
-    /// The armed N-ary association tool clicked on a card, double or not; or anywhere else, which
-    /// cancels the drawing (AR-128).
-    NaryEnd(Uuid, bool),
-    NaryCancel,
-    /// A card clicked while Add end waits: the association's new end at its class (AR-128).
-    NaryAddEnd(Uuid),
-    /// The context menu of an n-ary association, from its diamond or a leg (AR-128).
-    NaryMenu(Pos2, Uuid),
+    /// What the diagram's kind makes of the press ([`crate::kinds::DiagramKind::pointer`],
+    /// [`crate::kinds::DiagramKind::secondary_click`]), run on the shell once decided: a UML
+    /// n-ary association's next end, or a menu of its own opened.
+    Own(Box<dyn FnOnce(&mut Shell)>),
 }
 
 /// Whether a canvas action changes nothing, so that it stays on while a version shows.
@@ -168,7 +161,8 @@ pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Res
     crate::panels::run(shell, id, params)
 }
 
-fn select(shell: &mut Shell, ids: Vec<Uuid>) {
+/// Selects `ids`, as a click does; a refusal is said at the canvas's top.
+pub(crate) fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     let ids: Vec<String> = ids.iter().map(Uuid::to_string).collect();
     if let Err(e) = run(shell, "view.select", json!({ "ids": ids })) {
         shell.canvas.notice = Some(e);
@@ -176,17 +170,17 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
 }
 
 /// Selects what each box and line drawn on diagram `d` stands for, as a click on it would, boxes
-/// nested in others included, and each generalization set a line here belongs to, whose label is
-/// drawn whether a node holds it or not (AR-129); or the diagram itself when it draws nothing.
+/// nested in others included, and what the diagram's kind takes in beside them
+/// ([`crate::kinds::DiagramKind::also_selects`]: UML's generalization sets of its lines); or the
+/// diagram itself when it draws nothing.
 pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
-    use archforge_uml::generalization_sets as sets;
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
     let mut ids: Vec<Uuid> = Vec::new();
     let boxes =
         nodes_of(store, d).into_iter().flat_map(|top| archforge_diagram::node_tree(store, top)).map(|n| node_target(store, session.view(), n));
     let lines: Vec<Obj> = Grid::build(store, d).lines().map(|(e, _)| line_target(store, session.view(), e)).collect();
-    let labels: Vec<Obj> = lines.iter().filter(|g| sets::is_generalization(store, **g)).flat_map(|g| sets::sets_of(store, *g)).collect();
+    let labels = crate::kinds::kind_of(shell, store, d).map(|k| k.also_selects(store, &lines)).unwrap_or_default();
     for id in boxes.chain(lines).chain(labels).filter_map(|o| uuid(store, o)) {
         if !ids.contains(&id) {
             ids.push(id);
@@ -214,7 +208,8 @@ fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
     store.uuid(o).ok()
 }
 
-fn element_of(store: &Store, n: Obj) -> Option<Obj> {
+/// The element node `n` shows, while the store has it alive; none for a note.
+pub(crate) fn element_of(store: &Store, n: Obj) -> Option<Obj> {
     store.get(n, node::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|e| store.is_alive(*e))
 }
 
@@ -435,18 +430,35 @@ fn decide(
         }
         shell.canvas.set_labels.iter().rev().find(|l| l.rect.contains(pos)).cloned()
     };
+    let line_at = |pos: Pos2| {
+        let (x, y) = view.to_canvas(pos);
+        match hit(store, notations, grid, x, y) {
+            Some(Hit::Edge(e)) => Some(e),
+            _ => None,
+        }
+    };
+    // The press as the diagram's kind reads it.
+    let press = crate::kinds::Press {
+        at: pos,
+        clicked: resp.clicked(),
+        // A third click in a row reads as a double one too: egui counts it a triple.
+        double: resp.double_clicked() || resp.triple_clicked(),
+        store,
+        notations,
+        d,
+        selection,
+        node_at: &hit_node,
+        line_at: &line_at,
+    };
+    let own = |press: &crate::kinds::Press<'_>| kind.and_then(|k| k.pointer(shell, press));
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
-        // An n-ary association is drawn class by class, by clicks (AR-128).
-        Tool::Connect(tool) if crate::uml_nary::clicks(shell, tool) => match pos {
-            Some(pos) if resp.clicked() => match hit_node(pos).and_then(|n| uuid(store, n)) {
-                // A third click in a row reads as a double one too: egui counts it a triple.
-                Some(node) => Action::NaryEnd(node, resp.double_clicked() || resp.triple_clicked()),
-                None => Action::NaryCancel,
-            },
-            _ => Action::Nothing,
-        },
         Tool::Connect(tool) => {
+            // The kind's own clicks come first (UML's n-ary association, drawn class by class,
+            // AR-128).
+            if let Some(action) = own(&press) {
+                return action;
+            }
             if (resp.drag_stopped_by(egui::PointerButton::Primary) || released) && shell.canvas.gesture.is_some() {
                 return Action::Commit;
             }
@@ -517,12 +529,10 @@ fn decide(
                 return Action::Commit;
             }
             let Some(pos) = pos else { return Action::Nothing };
-            // Add end waits for a class: a click on a card gives it, anywhere else cancels (AR-128).
-            if crate::uml_nary::adding_end(shell).is_some() && resp.clicked() {
-                return match hit_node(pos).and_then(|n| uuid(store, n)) {
-                    Some(node) => Action::NaryAddEnd(node),
-                    None => Action::NaryCancel,
-                };
+            // The kind's own clicks come before a drag starts (UML's Add end, waiting on a class,
+            // AR-128).
+            if let Some(action) = own(&press) {
+                return action;
             }
             if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
                 // The gesture starts where the button went down, not where the pointer is now.
@@ -579,31 +589,12 @@ fn decide(
                     }
                 };
             }
-            // A right click on an n-ary association's diamond or leg opens its menu (AR-128).
-            if resp.secondary_clicked() {
-                let (x, y) = view.to_canvas(pos);
-                let shown = match hit_node(pos) {
-                    Some(n) => element_of(store, n),
-                    None => match hit(store, notations, grid, x, y) {
-                        Some(Hit::Edge(e)) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()),
-                        _ => None,
-                    },
-                };
-                let menu = shown.map(|e| notations.selects_as(store, e)).filter(|a| crate::uml_nary::has_menu(store, *a));
-                if let Some(a) = menu.and_then(|a| uuid(store, a)) {
-                    return Action::NaryMenu(pos, a);
-                }
-            }
-            // A right click on a generalization's line opens the set actions (AR-129).
+            // A right click means what the diagram's kind says first (UML's menus of an n-ary
+            // association and of generalization lines, AR-128, AR-129).
             if resp.secondary_clicked()
-                && hit_node(pos).is_none()
-                && let (x, y) = view.to_canvas(pos)
-                && let Some(Hit::Edge(e)) = hit(store, notations, grid, x, y)
-                && let Some(g) = store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref())
-                && archforge_uml::generalization_sets::is_generalization(store, g)
+                && let Some(action) = kind.and_then(|k| k.secondary_click(shell, &press))
             {
-                let chosen = crate::uml_sets::elements(store, selection).contains(&g);
-                return Action::LineMenu(pos, if chosen { None } else { uuid(store, g) });
+                return action;
             }
             if resp.secondary_clicked()
                 && kind.is_some_and(|k| k.menu())
@@ -728,21 +719,11 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
     if resp.clicked() || resp.drag_started() || resp.secondary_clicked() {
         shell.canvas.focused = true;
         shell.canvas.menu = None;
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
-            (uml.line_menu, uml.nary_menu) = (None, None);
-        }
+        shell.notation_states.canvas_pressed();
     }
     match if shell.looking_only() && !only_looks(&action) { Action::Nothing } else { action } {
         Action::Nothing => {}
-        Action::NaryEnd(node, double) => crate::uml_nary::click(shell, d, node, double),
-        Action::NaryCancel => crate::uml_nary::cancel(shell),
-        Action::NaryAddEnd(node) => crate::uml_nary::add_end(shell, node),
-        Action::NaryMenu(at, a) => {
-            select(shell, vec![a]);
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
-                uml.nary_menu = Some((at, a));
-            }
-        }
+        Action::Own(run) => run(shell),
         Action::Select(ids) => select(shell, ids),
         Action::Toggle(id) => {
             let mut ids: Vec<Uuid> =
@@ -768,14 +749,6 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
             }
         }
         Action::Menu(m) => shell.canvas.menu = Some(m),
-        Action::LineMenu(at, first) => {
-            if let Some(id) = first {
-                select(shell, vec![id]);
-            }
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
-                uml.line_menu = Some(at);
-            }
-        }
         Action::Rename(node, entity) => open_rename(shell, node, entity),
         Action::PlaceNote(x, y) => place_note(shell, d, x, y),
         Action::EditNote(node) => {
@@ -2148,10 +2121,12 @@ pub(crate) fn canvas_busy(shell: &Shell) -> bool {
         || shell.notation_states.menu_takes_keys(shell.panels.menu)
 }
 
-/// The keys while the canvas has them: Escape back to Select, Delete removes the selected nodes
-/// from the diagram (with Shift, asks before deleting from the model), the arrows nudge (plain or
-/// with Shift, never as part of a chord), ⌘↩ opens a new row on a card that takes one and ⇧⌘↩ its
-/// second kind of row, ⌥⌘G makes a generalization set; the chords are matched exactly.
+/// The keys while the canvas has them: a drawing under way on the diagram's kind takes its own
+/// first, then a notation's chord on the selection (UML's ⌥⌘G); Escape back to Select, Delete
+/// removes a notation's selected element its own way or the selected nodes from the diagram (with
+/// Shift, asks before deleting from the model), the arrows nudge (plain or with Shift, never as
+/// part of a chord), ⌘↩ opens a new row on a card that takes one and ⇧⌘↩ its second kind of row;
+/// the chords are matched exactly.
 fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if !shell.canvas.focused
         || shell.generate.is_some()
@@ -2170,13 +2145,15 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if ui.memory(|m| m.focused().is_some()) {
         return;
     }
-    // A drawing of an n-ary association, or Add end, takes Enter, Backspace and Escape (AR-128).
-    if crate::uml_nary::keys(shell, ui, d) {
+    // A drawing under way on the diagram's kind takes its keys first (UML's n-ary association, or
+    // Add end: Enter, Backspace and Escape, AR-128).
+    let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
+    if kind.is_some_and(|k| k.keys(shell, ui, d)) {
         return;
     }
-    // An open menu the keys walk (the classifier's kinds) takes the arrows and Enter itself; the
+    // An open menu the keys walk (UML's classifier kinds) takes the arrows and Enter itself; the
     // other popovers leave them to the canvas.
-    let menu = shell.canvas.popover.is_some_and(crate::uml_classifier::takes_keys);
+    let menu = crate::kinds::popover_takes_keys(shell);
     let (escape, delete, shift, add_row, add_second, left, right, up, down) = ui.input(|i| {
         let command = egui::Modifiers::COMMAND;
         (
@@ -2194,27 +2171,24 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if shell.looking_only() && !escape {
         return;
     }
-    // Escape in the classifier's menu of kinds closes the menu alone; the armed tool stays.
-    if escape && shell.canvas.popover.is_some_and(crate::uml_classifier::takes_keys) {
+    // Escape in a menu the keys walk closes the menu alone; the armed tool stays.
+    if escape && menu {
         shell.canvas.popover = None;
         shell.canvas.menu_focus = None;
         return;
     }
-    // ⌥⌘G (Ctrl Alt G): the selected generalizations into a new set (AR-129).
-    if ui.input(|i| crate::actions::chord_press(i, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::ALT)) && crate::uml_sets::shortcut(shell)
-    {
+    // A notation's chord on the selection (UML's ⌥⌘G makes a generalization set, AR-129).
+    let uis = shell.notation_uis;
+    if uis.iter().any(|u| u.canvas_keys(shell, ui)) {
         return;
     }
     if escape {
         shell.canvas.tool = Tool::Select;
         shell.canvas.gesture = None;
         shell.canvas.popover = None;
-        if let Some(er) = er_mut(&mut shell.notation_states) {
-            er.mapping = None;
-        }
+        shell.notation_states.canvas_escape();
         return;
     }
-    let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
     let selected: Vec<(Uuid, Option<Uuid>)> = match shell.session.as_ref() {
         Some(s) => {
             let store = s.doc();
@@ -2229,18 +2203,16 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     };
     // A selection that holds boxes, such as Select all's, takes the boxes off below: a set or a
     // line selected beside them is never deleted from the model on its own.
-    // A selected generalization set goes from the model, its generalizations kept (AR-129). Its
-    // label's node never counts as a box here: `selected` holds the diagram's own nodes alone, and
-    // a label's node is always nested in a classifier's, so a set selected by its label, moved or
-    // not, leaves `selected` empty (`delete_on_a_set_label_removes_the_set_and_keeps_its_lines`).
-    if delete && selected.is_empty() && crate::uml_sets::remove_selected_set(shell) {
+    // A notation removes one of its own selected elements its own way: UML a generalization set,
+    // its generalizations kept, with Shift too (AR-129); ER a relationship with its foreign key,
+    // without. A set's label's node never counts as a box here: `selected` holds the diagram's own
+    // nodes alone, and a label's node is always nested in a classifier's, so a set selected by its
+    // label, moved or not, leaves `selected` empty
+    // (`delete_on_a_set_label_removes_the_set_and_keeps_its_lines`).
+    if delete && selected.is_empty() && uis.iter().any(|u| u.canvas_delete(shell, shift)) {
         return;
     }
-    if delete
-        && !shift
-        && selected.is_empty()
-        && (remove_selected_link(shell) || crate::connect::remove_selected_relationship(shell) || remove_selected_line(shell))
-    {
+    if delete && !shift && selected.is_empty() && (remove_selected_link(shell) || remove_selected_line(shell)) {
         return;
     }
     if selected.is_empty() {

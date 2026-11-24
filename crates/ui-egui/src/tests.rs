@@ -9859,7 +9859,12 @@ fn models_follows_the_keyboard() {
 }
 
 fn table_harness() -> (Harness<'static, Shell>, String) {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    table_harness_in(ThemeKind::Light)
+}
+
+/// [`table_harness`] in `theme`.
+fn table_harness_in(theme: ThemeKind) -> (Harness<'static, Shell>, String) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
     let (schema, customer) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
@@ -10249,7 +10254,12 @@ fn a_skill_opens_in_its_own_tab_and_keeps_its_markdown() {
 /// The table harness with Order, the relationship `places` and an ER diagram of the schema
 /// showing both tables and the relationship, open in the centre: `(harness, customer, diagram)`.
 fn diagram_harness() -> (Harness<'static, Shell>, String, String) {
-    let (mut h, customer) = table_harness();
+    diagram_harness_in(ThemeKind::Light)
+}
+
+/// [`diagram_harness`] in `theme`.
+fn diagram_harness_in(theme: ThemeKind) -> (Harness<'static, Shell>, String, String) {
+    let (mut h, customer) = table_harness_in(theme);
     let diagram = {
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
@@ -17411,6 +17421,10 @@ impl crate::notation_ui::NotationUi for SketchUi {
     /// The sketch keeps nothing of its own between frames.
     fn new_state(&self) -> Box<dyn crate::notation_ui::NotationState> {
         Box::new(SketchState)
+    }
+    /// The sketch removes nothing its own way: Delete goes on to the shared removals.
+    fn canvas_delete(&self, _: &mut Shell, _: bool) -> bool {
+        false
     }
     fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
         (store.class_of(o).ok()? == archforge_uml::CLASS).then(|| {
@@ -31571,6 +31585,317 @@ fn recorded_alone(shell: &mut Shell, mut draw: impl FnMut(&mut Shell, &egui::Ui)
         out.textures_delta.clear();
     }
     ids
+}
+
+/// What `ask` gives for a press at one point of the diagram `shell` shows, with `node` and `line`
+/// under it and the primary button `clicked` or not, as the canvas hands a press to its kind.
+fn pressed_with<R>(
+    shell: &Shell,
+    node: Option<archforge_mof::Obj>,
+    line: Option<archforge_mof::Obj>,
+    clicked: bool,
+    ask: impl FnOnce(&crate::kinds::Press<'_>) -> R,
+) -> R {
+    let s = shell.session.as_ref().unwrap();
+    let store = s.doc();
+    let d = store.by_uuid(shell.canvas.active.unwrap()).unwrap();
+    let selection = s.view().selection.clone();
+    let node_at = move |_| node;
+    let line_at = move |_| line;
+    let at = Some(PRESSED_AT);
+    ask(&crate::kinds::Press {
+        at,
+        clicked,
+        double: false,
+        store,
+        notations: s.view(),
+        d,
+        selection: &selection,
+        node_at: &node_at,
+        line_at: &line_at,
+    })
+}
+
+/// Where [`pressed_with`] presses, on screen.
+const PRESSED_AT: egui::Pos2 = egui::pos2(300.0, 200.0);
+
+/// What a kind's answer to a press is, in a word: none left to the shared gestures, nothing taken,
+/// or an action of its own; any other is the shared gestures' own.
+fn answered(action: Option<crate::editing::Action>) -> (&'static str, Option<Box<dyn FnOnce(&mut Shell)>>) {
+    match action {
+        None => ("none", None),
+        Some(crate::editing::Action::Nothing) => ("nothing", None),
+        Some(crate::editing::Action::Own(run)) => ("own", Some(run)),
+        Some(_) => ("shared", None),
+    }
+}
+
+/// The node of the element `id` on the diagram `shell` shows.
+fn node_here(shell: &Shell, id: &str) -> archforge_mof::Obj {
+    let st = shell.session.as_ref().unwrap().doc();
+    let d = st.by_uuid(shell.canvas.active.unwrap()).unwrap();
+    let e = st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+    archforge_diagram::views_of(st, e).2.into_iter().find(|n| archforge_diagram::diagram_of(st, *n) == Some(d)).unwrap()
+}
+
+/// The diagram's kind reads a press of the primary button first (AR-789): with UML's N-ary
+/// association tool armed, a click on a card is the drawing's next end, a press that is no click
+/// is still the drawing's (no line starts), and a click on empty canvas cancels it; with Select
+/// while Add end waits, a click on a card gives the association its new end. With nothing of UML's
+/// under way, and from ER's kind always, the press is left to the shared gestures. In light and
+/// dark.
+#[test]
+fn the_kind_reads_a_press_first_and_ers_leaves_it() {
+    use crate::kinds::DiagramKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let shell = h.state_mut();
+        let customer = node_here(shell, &ids["Customer"]);
+        let ask =
+            |shell: &Shell, kind: &dyn DiagramKind, node, clicked| pressed_with(shell, node, None, clicked, |p| answered(kind.pointer(shell, p)));
+        assert_eq!(ask(shell, &crate::uml_ui::UmlKind, Some(customer), true).0, "none", "{theme:?}: nothing under way");
+        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        uml_of_mut(shell).relation = crate::uml_relate::Relate::NAry;
+        assert_eq!(ask(shell, &crate::er_kind::ErKind, Some(customer), true).0, "none", "{theme:?}: ER's kind leaves it");
+        assert_eq!(ask(shell, &crate::uml_ui::UmlKind, Some(customer), false).0, "nothing", "{theme:?}: no line starts");
+        let (word, run) = ask(shell, &crate::uml_ui::UmlKind, Some(customer), true);
+        assert_eq!(word, "own", "{theme:?}");
+        run.unwrap()(shell);
+        let ends = |shell: &Shell| match &uml_of(shell).nary {
+            Some(crate::uml_nary::Nary::Draft { ends, .. }) => ends.len(),
+            _ => 0,
+        };
+        assert_eq!(ends(shell), 1, "{theme:?}: Customer is the first end");
+        let (word, run) = ask(shell, &crate::uml_ui::UmlKind, None, true);
+        assert_eq!(word, "own", "{theme:?}");
+        run.unwrap()(shell);
+        assert!(uml_of(shell).nary.is_none() && shell.canvas.tool == crate::canvas::Tool::Select, "{theme:?}: empty canvas cancels");
+        // Add end waits on a class.
+        let st = shell.session.as_ref().unwrap().doc();
+        let association = st.alive().find(|o| archforge_uml::nary::is_nary(st, *o)).unwrap();
+        let (association, diagram) = (st.uuid(association).unwrap(), shell.canvas.active.unwrap());
+        uml_of_mut(shell).nary = Some(crate::uml_nary::Nary::AddEnd { diagram, association });
+        assert_eq!(ask(shell, &crate::er_kind::ErKind, Some(customer), true).0, "none", "{theme:?}: ER's kind leaves it");
+        assert_eq!(ask(shell, &crate::uml_ui::UmlKind, Some(customer), false).0, "none", "{theme:?}: a drag may start");
+        let (word, run) = ask(shell, &crate::uml_ui::UmlKind, Some(customer), true);
+        assert_eq!(word, "own", "{theme:?}");
+        run.unwrap()(shell);
+        let st = shell.session.as_ref().unwrap().doc();
+        let ends = archforge_uml::nary::ends(st, st.by_uuid(association).unwrap()).len();
+        assert_eq!((ends, uml_of(shell).nary.is_none()), (4, true), "{theme:?}: a fourth end, at Customer");
+    }
+}
+
+/// A right click means what the diagram's kind says first (AR-789): UML opens an n-ary
+/// association's menu from its diamond, the association selected, and the set actions from a
+/// generalization's line, the line selected first unless its generalization was; on a card it
+/// leaves the click to the element menu, and ER's kind leaves every right click to it. In light
+/// and dark.
+#[test]
+fn the_kind_reads_a_right_click_first_and_ers_leaves_it() {
+    use crate::kinds::DiagramKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let shell = h.state_mut();
+        let st = shell.session.as_ref().unwrap().doc();
+        let a = st.alive().find(|o| archforge_uml::nary::is_nary(st, *o)).unwrap();
+        let a_id = st.uuid(a).unwrap();
+        let diamond = node_here(shell, &a_id.to_string());
+        let customer = node_here(shell, &ids["Customer"]);
+        let ask =
+            |shell: &Shell, kind: &dyn DiagramKind, node, line| pressed_with(shell, node, line, false, |p| answered(kind.secondary_click(shell, p)));
+        assert_eq!(ask(shell, &crate::er_kind::ErKind, Some(diamond), None).0, "none", "{theme:?}: ER's kind leaves it");
+        assert_eq!(ask(shell, &crate::uml_ui::UmlKind, Some(customer), None).0, "none", "{theme:?}: a card's menu is the element menu");
+        let (word, run) = ask(shell, &crate::uml_ui::UmlKind, Some(diamond), None);
+        assert_eq!(word, "own", "{theme:?}");
+        run.unwrap()(shell);
+        assert_eq!(uml_of(shell).nary_menu, Some((PRESSED_AT, a_id)), "{theme:?}: its menu, where pressed");
+        let st = shell.session.as_ref().unwrap().doc();
+        assert_eq!(shell.session.as_ref().unwrap().view().selection, vec![st.by_uuid(a_id).unwrap()], "{theme:?}: the association selected");
+    }
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        h.run();
+        let shell = h.state_mut();
+        let st = shell.session.as_ref().unwrap().doc();
+        let g = st.by_uuid(archforge_mof::Uuid::parse(&gens[0]).unwrap()).unwrap();
+        let line = archforge_diagram::views_of(st, g).1[0];
+        let ask = |shell: &Shell, kind: &dyn DiagramKind| pressed_with(shell, None, Some(line), false, |p| answered(kind.secondary_click(shell, p)));
+        assert_eq!(ask(shell, &crate::er_kind::ErKind).0, "none", "{theme:?}: ER's kind leaves it");
+        let (word, run) = ask(shell, &crate::uml_ui::UmlKind);
+        assert_eq!(word, "own", "{theme:?}");
+        run.unwrap()(shell);
+        assert_eq!(uml_of(shell).line_menu, Some(PRESSED_AT), "{theme:?}: the set actions, where pressed");
+        assert_eq!(shell.session.as_ref().unwrap().view().selection, vec![g], "{theme:?}: the line selected first");
+        uml_of_mut(shell).line_menu = None;
+        shell.session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
+        ask(shell, &crate::uml_ui::UmlKind).1.unwrap()(shell);
+        assert_eq!(shell.session.as_ref().unwrap().view().selection.len(), 3, "{theme:?}: a selection holding it is kept");
+    }
+}
+
+/// What `read` gives when it reads once a frame of its own whose input holds `keys`, each pressed
+/// with `modifiers`, away from any window.
+fn keyed_alone(shell: &mut Shell, keys: &[egui::Key], modifiers: egui::Modifiers, mut read: impl FnMut(&mut Shell, &egui::Ui) -> bool) -> bool {
+    let events = keys.iter().map(|key| egui::Event::Key { key: *key, physical_key: None, pressed: true, repeat: false, modifiers }).collect();
+    let mut took = false;
+    let mut out = egui::Context::default().run_ui(egui::RawInput { events, ..Default::default() }, |ui| took = read(shell, ui));
+    // Nothing is shown: the fonts' textures go unused.
+    out.textures_delta.clear();
+    took
+}
+
+/// A drawing under way on the diagram's kind takes its keys first (AR-789): UML's n-ary
+/// association drawing takes Escape, which drops it; with nothing drawn UML leaves the keys to
+/// the canvas, and ER's kind always does. In light and dark.
+#[test]
+fn the_kind_takes_its_drawings_keys_first_and_ers_takes_none() {
+    use crate::kinds::DiagramKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, false);
+        let shell = h.state_mut();
+        let d = shell.session.as_ref().unwrap().doc().by_uuid(shell.canvas.active.unwrap()).unwrap();
+        let escape =
+            |shell: &mut Shell, kind: &dyn DiagramKind| keyed_alone(shell, &[egui::Key::Escape], egui::Modifiers::NONE, |s, ui| kind.keys(s, ui, d));
+        assert!(!escape(shell, &crate::uml_ui::UmlKind), "{theme:?}: nothing drawn");
+        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        uml_of_mut(shell).relation = crate::uml_relate::Relate::NAry;
+        let customer = node_here(shell, &ids["Customer"]);
+        let node = shell.session.as_ref().unwrap().doc().uuid(customer).unwrap();
+        crate::uml_nary::click(shell, d, node, false);
+        assert!(uml_of(shell).nary.is_some(), "{theme:?}: a drawing under way");
+        assert!(!escape(shell, &crate::er_kind::ErKind), "{theme:?}: ER's kind takes none");
+        assert!(uml_of(shell).nary.is_some(), "{theme:?}: and leaves the drawing");
+        assert!(escape(shell, &crate::uml_ui::UmlKind), "{theme:?}: UML takes Escape");
+        assert!(uml_of(shell).nary.is_none(), "{theme:?}: the drawing dropped");
+    }
+}
+
+/// A popover's menu holds the keys as the kind whose chevron it is says (AR-789): UML's
+/// classifier kinds do, its relationship kinds do not, ER's relationship types do not; every kind
+/// is asked, so the classifier kinds still hold the keys while an ER diagram shows, until the
+/// toolbar closes them. In light and dark.
+#[test]
+fn a_popover_holds_the_keys_as_its_kind_says() {
+    use crate::kinds::DiagramKind;
+    let (uml, er) = (crate::uml_ui::UmlKind, crate::er_kind::ErKind);
+    assert!(uml.popover_takes_keys(crate::uml_classifier::KINDS));
+    assert!(!uml.popover_takes_keys("relationship-kinds") && !uml.popover_takes_keys("relationship-types"));
+    assert!(!er.popover_takes_keys("relationship-types") && !er.popover_takes_keys(crate::uml_classifier::KINDS));
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let shell = h.state_mut();
+        assert!(!crate::kinds::popover_takes_keys(shell), "{theme:?}: none open");
+        shell.canvas.popover = Some("relationship-types");
+        assert!(!crate::kinds::popover_takes_keys(shell), "{theme:?}");
+        shell.canvas.popover = Some(crate::uml_classifier::KINDS);
+        assert!(crate::kinds::popover_takes_keys(shell), "{theme:?}: UML's, over an ER diagram");
+    }
+}
+
+/// Select all takes in what the diagram's kind adds beside its boxes and lines (AR-789): UML the
+/// generalization set its generalizations belong to, ER's kind nothing. In light and dark.
+#[test]
+fn select_all_takes_in_what_the_kind_adds() {
+    use crate::kinds::DiagramKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
+        assert!(crate::uml_sets::shortcut(h.state_mut()), "{theme:?}: a set made");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let set = st.alive().find(|o| archforge_uml::generalization_sets::is_set(st, *o)).unwrap();
+        let lines: Vec<archforge_mof::Obj> = gens.iter().map(|g| st.by_uuid(archforge_mof::Uuid::parse(g).unwrap()).unwrap()).collect();
+        let class = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS)).unwrap();
+        assert!(crate::er_kind::ErKind.also_selects(st, &lines).is_empty(), "{theme:?}: ER's kind adds nothing");
+        assert!(crate::uml_ui::UmlKind.also_selects(st, &[class]).is_empty(), "{theme:?}: no generalization, no set");
+        let added = crate::uml_ui::UmlKind.also_selects(st, &lines);
+        assert!(!added.is_empty() && added.iter().all(|o| *o == set), "{theme:?}: the set of its lines, {added:?}");
+    }
+}
+
+/// Delete removes a notation's own selected element its own way, whatever the diagram (AR-789): ER
+/// a relationship with its foreign key, without Shift; UML a generalization set, its
+/// generalizations kept, Shift held or not; each leaves the other's element to it. In light and
+/// dark.
+#[test]
+fn delete_removes_each_notations_own_selected_element_its_own_way() {
+    use crate::notation_ui::NotationUi;
+    let alive = |h: &Harness<'static, Shell>, o: archforge_mof::Obj| h.state().session.as_ref().unwrap().doc().is_alive(o);
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let (rel, fk) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let rel = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap();
+            let fk = st.referrers(rel).into_iter().find(|(_, p)| *p == archforge_er::foreign_key::RELATIONSHIP).map(|(f, _)| f).unwrap();
+            let id = st.uuid(rel).unwrap().to_string();
+            s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+            (rel, fk)
+        };
+        assert!(!crate::uml_ui::UmlUi.canvas_delete(h.state_mut(), false), "{theme:?}: UML leaves a relationship");
+        assert!(!crate::er_ui::ErUi.canvas_delete(h.state_mut(), true), "{theme:?}: Shift leaves it to the dialog");
+        assert!(alive(&h, rel), "{theme:?}");
+        assert!(crate::er_ui::ErUi.canvas_delete(h.state_mut(), false), "{theme:?}");
+        assert!(!alive(&h, rel) && !alive(&h, fk), "{theme:?}: with its foreign key");
+        assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("places removed"), "{theme:?}");
+    }
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
+        assert!(crate::uml_sets::shortcut(h.state_mut()), "{theme:?}: a set made, and selected");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let set = st.alive().find(|o| archforge_uml::generalization_sets::is_set(st, *o)).unwrap();
+        let g = st.by_uuid(archforge_mof::Uuid::parse(&gens[0]).unwrap()).unwrap();
+        assert!(!crate::er_ui::ErUi.canvas_delete(h.state_mut(), false), "{theme:?}: ER leaves a set");
+        assert!(alive(&h, set), "{theme:?}");
+        assert!(crate::uml_ui::UmlUi.canvas_delete(h.state_mut(), true), "{theme:?}: Shift held too");
+        assert!(!alive(&h, set) && alive(&h, g), "{theme:?}: its generalizations kept");
+    }
+}
+
+/// A notation's chord on the selection is its own (AR-789): ⌥⌘G with generalizations selected
+/// makes UML's set and takes the keys; ER's notation takes no chord; without the chord UML takes
+/// nothing. In light and dark.
+#[test]
+fn a_notations_chord_on_the_selection_is_its_own() {
+    use crate::notation_ui::NotationUi;
+    let chord = egui::Modifiers::COMMAND | egui::Modifiers::ALT;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
+        let sets = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().filter(|o| archforge_uml::generalization_sets::is_set(st, *o)).count()
+        };
+        let shell = h.state_mut();
+        assert!(!keyed_alone(shell, &[egui::Key::G], chord, |s, ui| crate::er_ui::ErUi.canvas_keys(s, ui)), "{theme:?}: ER takes none");
+        assert!(!keyed_alone(shell, &[egui::Key::G], egui::Modifiers::COMMAND, |s, ui| crate::uml_ui::UmlUi.canvas_keys(s, ui)), "{theme:?}");
+        assert_eq!(sets(&h), 0, "{theme:?}");
+        assert!(keyed_alone(h.state_mut(), &[egui::Key::G], chord, |s, ui| crate::uml_ui::UmlUi.canvas_keys(s, ui)), "{theme:?}: ⌥⌘G");
+        assert_eq!(sets(&h), 1, "{theme:?}: a set made");
+    }
+}
+
+/// What a press and Escape on the canvas close is each notation's own (AR-789): a press closes
+/// UML's menus of generalization lines and of an n-ary association, Escape ER's mapping table
+/// offer; neither closes the other's.
+#[test]
+fn a_press_and_escape_close_each_notations_own() {
+    use crate::notation_ui::NotationState;
+    let id = archforge_mof::Uuid([7; 16]);
+    let mut uml = crate::uml_state::UmlState { line_menu: Some(PRESSED_AT), nary_menu: Some((PRESSED_AT, id)), ..Default::default() };
+    let offer = || Some(crate::connect::MappingOffer { relationship: id, name: "CustomerOrder".into(), refused: None });
+    let mut er = crate::er_state::ErState { mapping: offer(), ..Default::default() };
+    uml.canvas_escape();
+    er.canvas_pressed();
+    assert!(uml.line_menu.is_some() && uml.nary_menu.is_some() && er.mapping.is_some(), "neither closes the other's");
+    uml.canvas_pressed();
+    er.canvas_escape();
+    assert!(uml.line_menu.is_none() && uml.nary_menu.is_none() && er.mapping.is_none());
 }
 
 /// UML starts an n-ary association's leg at its diamond's outline rather than where the route

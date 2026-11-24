@@ -267,10 +267,9 @@ fn only_looking_stays_on_the_canvas() {
         Action::EditNote(id),
         Action::ResetEnd(id, 0),
         Action::ResetRoute(id),
-        Action::NaryEnd(id, false),
-        Action::NaryAddEnd(id),
-        Action::NaryMenu(at, id),
-        Action::LineMenu(at, None),
+        // Whatever a diagram's kind makes of a press: a UML n-ary association's next end, Add end,
+        // or a menu of its own.
+        Action::Own(Box::new(|_| {})),
     ];
     assert!(!edits.iter().any(only_looks));
 }

@@ -276,4 +276,10 @@ impl NotationState for UmlState {
         self.nary = None;
         self.nary_menu = None;
     }
+
+    /// The menus of generalization lines and of an n-ary association close with any press on the
+    /// canvas (AR-128, AR-129).
+    fn canvas_pressed(&mut self) {
+        (self.line_menu, self.nary_menu) = (None, None);
+    }
 }

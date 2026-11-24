@@ -1,7 +1,7 @@
 //! What a notation brings to the shell's explorers, search, problems and panels: its rows in the
 //! Models tree and what `+` adds there, how a row dropped on another runs, its renames and what a
-//! removal takes with it, its entries
-//! in the project search, its problems, the heading and the body of Properties for its elements,
+//! removal takes with it, what Delete and a chord of its own on the canvas do to its selected
+//! elements, its entries in the project search, its problems, the heading and the body of Properties for its elements,
 //! its commands' refusals in the user's words, the words for the kinds of its elements, and the
 //! limits of their names and descriptions, and the state its own editors, menus and drawings keep
 //! between frames. The shells (the tree, the filter, the scroll, the search list, the sections, the
@@ -257,6 +257,20 @@ pub(crate) trait NotationUi: Sync {
     /// The most characters its elements take in a description.
     fn description_limit(&self) -> usize;
 
+    // The canvas's keys on its own selected elements: asked of every notation, whatever diagram
+    // the canvas shows, as the selection may hold elements it does not draw (an agent's, Models').
+
+    /// Delete on the canvas, with none of the diagram's boxes selected and Shift held or not
+    /// (`shift`): removes one of its own selected elements its own way and gives true; false
+    /// leaves the key to the next notation and then to the shared removals.
+    fn canvas_delete(&self, shell: &mut Shell, shift: bool) -> bool;
+    /// Reads a chord of its own on the selection, once the canvas has the keys and changes are
+    /// allowed (UML's ⌥⌘G); true when it took the keys this frame, false by default.
+    fn canvas_keys(&self, shell: &mut Shell, ui: &egui::Ui) -> bool {
+        let _ = (shell, ui);
+        false
+    }
+
     // Its own state.
 
     /// A fresh state for its own editors, menus and drawings, as a window or a project opened
@@ -304,6 +318,12 @@ pub(crate) trait NotationState: Any {
     /// Ends a drawing under way as the project it is on is set aside: it never outlives that
     /// project.
     fn set_aside(&mut self) {}
+    /// Closes what of its own a press on the canvas closes, whatever diagram it shows (UML's menus
+    /// of generalization lines and of an n-ary association); nothing by default.
+    fn canvas_pressed(&mut self) {}
+    /// Closes what of its own Escape on the canvas ends, whatever diagram it shows (ER's mapping
+    /// table offer); nothing by default.
+    fn canvas_escape(&mut self) {}
 }
 
 /// The state of each notation the shell knows, one each, in the order of the notations.
@@ -360,6 +380,16 @@ impl NotationStates {
     /// Ends every notation's drawing under way, as the project is set aside.
     pub(crate) fn set_aside(&mut self) {
         self.0.iter_mut().for_each(|s| s.set_aside());
+    }
+
+    /// Closes what of each notation's own a press on the canvas closes.
+    pub(crate) fn canvas_pressed(&mut self) {
+        self.0.iter_mut().for_each(|s| s.canvas_pressed());
+    }
+
+    /// Closes what of each notation's own Escape on the canvas ends.
+    pub(crate) fn canvas_escape(&mut self) {
+        self.0.iter_mut().for_each(|s| s.canvas_escape());
     }
 }
 

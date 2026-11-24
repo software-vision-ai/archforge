@@ -551,6 +551,12 @@ impl NotationUi for ErUi {
     fn new_state(&self) -> Box<dyn NotationState> {
         Box::new(crate::er_state::ErState::default())
     }
+
+    /// A selected relationship goes from the model with its foreign key and the key columns that
+    /// key brought, without Shift; with Shift, the shared removals ask about its line.
+    fn canvas_delete(&self, shell: &mut Shell, shift: bool) -> bool {
+        !shift && crate::connect::remove_selected_relationship(shell)
+    }
 }
 
 /// The ER classes `archforge_er`'s commands create, each with a kind word of its own.

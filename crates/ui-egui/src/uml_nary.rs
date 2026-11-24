@@ -28,8 +28,10 @@ use serde_json::json;
 
 use crate::Shell;
 use crate::canvas::{Tool, View};
+use crate::editing::Action;
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
+use crate::kinds::Press;
 use crate::panels::{FIELD, PAD, ROW, Subject, check, icon_button, run, section, select_field, text_field};
 use crate::uml_relate::Relate;
 use crate::uml_state::menus;
@@ -168,8 +170,53 @@ fn roles(store: &Store, classes: &[Obj]) -> Vec<String> {
 
 /// Whether a right click on a figure that selects `a` opens the n-ary association's menu: `a` is
 /// an n-ary association, its diamond or one of its legs having been clicked (AR-128).
-pub(crate) fn has_menu(store: &Store, a: Obj) -> bool {
+fn has_menu(store: &Store, a: Obj) -> bool {
     nary::is_nary(store, a)
+}
+
+/// What a press of the primary button means here first ([`crate::kinds::DiagramKind::pointer`]):
+/// with the N-ary association tool armed, any press is the drawing's, a click on a card its next
+/// end (a double click finishes) and a click anywhere else cancelling it; with Select while Add
+/// end waits, a click on a card gives the new end and anywhere else cancels. None otherwise.
+pub(crate) fn pointer(shell: &Shell, press: &Press<'_>) -> Option<Action> {
+    let card = |at: Pos2| (press.node_at)(at).and_then(|n| uuid(press.store, n));
+    match shell.canvas.tool {
+        Tool::Connect(tool) if clicks(shell, tool) => Some(match press.at {
+            Some(at) if press.clicked => match card(at) {
+                Some(node) => {
+                    let (d, double) = (press.d, press.double);
+                    Action::Own(Box::new(move |shell| click(shell, d, node, double)))
+                }
+                None => Action::Own(Box::new(cancel)),
+            },
+            _ => Action::Nothing,
+        }),
+        Tool::Select if press.clicked && adding_end(shell).is_some() => {
+            let at = press.at?;
+            Some(match card(at) {
+                Some(node) => Action::Own(Box::new(move |shell| add_end(shell, node))),
+                None => Action::Own(Box::new(cancel)),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// A right click on an n-ary association's diamond or one of its legs: the association selected
+/// and its menu opened there (AR-128); none for anything else.
+pub(crate) fn secondary_click(press: &Press<'_>) -> Option<Action> {
+    let (store, at) = (press.store, press.at?);
+    let shown = match (press.node_at)(at) {
+        Some(n) => crate::editing::element_of(store, n),
+        None => (press.line_at)(at).and_then(|e| store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref())),
+    };
+    let a = shown.map(|e| press.notations.selects_as(store, e)).filter(|a| has_menu(store, *a)).and_then(|a| uuid(store, a))?;
+    Some(Action::Own(Box::new(move |shell| {
+        crate::editing::select(shell, vec![a]);
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.nary_menu = Some((at, a));
+        }
+    })))
 }
 
 /// The n-ary association a node (its diamond) or a line (a leg) of the canvas shows, if any.
