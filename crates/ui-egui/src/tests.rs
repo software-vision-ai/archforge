@@ -9858,6 +9858,8 @@ fn models_follows_the_keyboard() {
     });
 }
 
+/// A project with the schema Shop and its table Customer (`customer_id`, `email`) selected, in
+/// light: the harness and the table's id.
 fn table_harness() -> (Harness<'static, Shell>, String) {
     table_harness_in(ThemeKind::Light)
 }
@@ -31877,6 +31879,57 @@ fn a_notations_chord_on_the_selection_is_its_own() {
         assert_eq!(sets(&h), 0, "{theme:?}");
         assert!(keyed_alone(h.state_mut(), &[egui::Key::G], chord, |s, ui| crate::uml_ui::UmlUi.canvas_keys(s, ui)), "{theme:?}: ⌥⌘G");
         assert_eq!(sets(&h), 1, "{theme:?}: a set made");
+    }
+}
+
+/// Escape on the canvas closes ER's mapping table offer, open over an ER diagram (AR-789); the
+/// offer reads Escape itself too, so this holds the outcome whichever of the two ends it. In light
+/// and dark.
+#[test]
+fn escape_on_the_canvas_closes_ers_mapping_offer() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let rel = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
+        };
+        crate::connect::offer_mapping(h.state_mut(), rel);
+        h.state_mut().canvas.focused = true;
+        h.run();
+        assert!(er_of(h.state()).mapping.is_some(), "{theme:?}: the offer is open");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(er_of(h.state()).mapping.is_none(), "{theme:?}: Escape closed it");
+    }
+}
+
+/// A press on the canvas away from UML's menu of generalization lines closes it (AR-789): opened by
+/// a right click on one of three selected lines, it goes with a click on another of them, though the
+/// selection that click leaves still holds a generalization the menu could act on. The menu reads a
+/// press outside it itself too, so this holds the outcome whichever of the two ends it. In light
+/// and dark.
+#[test]
+fn a_press_on_the_canvas_closes_umls_line_menu() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        h.state_mut().canvas.zoom = 0.75;
+        h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
+        h.run();
+        let edge = |h: &Harness<'static, Shell>, g: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(g).unwrap()).unwrap()).1[0]).unwrap()
+        };
+        let at = point_on_edge(&h, edge(&h, &gens[1]));
+        right_click(&mut h, at);
+        assert!(uml_of(h.state()).line_menu.is_some(), "{theme:?}: the menu opened");
+        let menu = ids(&h).iter().filter(|i| i.starts_with("workspace.canvas.contextMenu")).fold(egui::Rect::NOTHING, |r, i| r.union(rect_of(&h, i)));
+        let away = [&gens[0], &gens[2]].into_iter().map(|g| point_on_edge(&h, edge(&h, g))).find(|p| !menu.expand(8.0).contains(*p)).unwrap();
+        click(&mut h, away);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let held = h.state().session.as_ref().unwrap().view().selection.iter().any(|o| archforge_uml::generalization_sets::is_generalization(st, *o));
+        assert!(held, "{theme:?}: a generalization is still selected");
+        assert!(uml_of(h.state()).line_menu.is_none(), "{theme:?}: the menu closed");
     }
 }
 
