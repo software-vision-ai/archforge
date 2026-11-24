@@ -755,7 +755,10 @@ pub(crate) fn size_value(text: &str) -> Result<i64, String> {
 }
 
 /// Writes the column editor through the commands: add, or rename, type with its size, default,
-/// generation, collation and flags, each only when it changed.
+/// generation, collation and flags, each only when it changed. Every step keeps the column's
+/// generation rules, so an edit that changes the generation gives the old one up first (as None)
+/// and takes the new one last, after the type, default and flags it needs; the expression goes
+/// only with a computed generation, the field being hidden otherwise.
 fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
     let nullable = if edit.not_null { "no" } else { "yes" };
     let size = match (size_value(&edit.length), size_value(&edit.precision), size_value(&edit.scale)) {
@@ -766,6 +769,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
         }
     };
     let generation = archforge_er::commands::GENERATION_WORDS.iter().find(|(g, _)| *g == edit.generation).map(|(_, w)| *w).unwrap_or("none");
+    let expression = if is_computed(edit.generation) { edit.expression.trim() } else { "" };
     let outcome = match edit.target {
         None => crate::editing::run_growing(
             shell,
@@ -778,7 +782,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
                 "enum": edit.enum_type.map(|e| e.to_string()).unwrap_or_default(),
                 "length": size.0, "precision": size.1, "scale": size.2,
                 "default": if edit.domain.is_some() { "" } else { edit.default.trim() },
-                "generation": generation, "expression": edit.expression.trim(),
+                "generation": generation, "expression": expression,
                 "collation": if edit.domain.is_some() { "" } else { edit.collation.trim() },
                 "primary_key": edit.primary_key, "nullable": nullable, "unique": edit.unique,
             }),
@@ -809,6 +813,12 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
             if edit.name.trim() != old_name {
                 steps.push(("er.attribute.rename", json!({ "attribute": id, "name": edit.name.trim() })));
             }
+            // A generation left is given up before anything else changes: as None the column takes
+            // any type, default and nullability, and the new generation is checked last.
+            let leaves = old_generation != archforge_er::Generation::NoneKind && edit.generation != old_generation;
+            if leaves {
+                steps.push(("er.attribute.set-generation", json!({ "attribute": id, "generation": "none", "expression": "" })));
+            }
             let typed = edit.domain.is_some() || edit.enum_type.is_some();
             if (!typed && (edit.ty.trim() != old_type || size != old_size)) || edit.domain != old_domain || edit.enum_type != old_enum {
                 steps.push((
@@ -825,12 +835,6 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
             if edit.domain.is_none() && edit.default.trim() != old_default {
                 steps.push(("er.attribute.set-default", json!({ "attribute": id, "default": edit.default.trim() })));
             }
-            if edit.generation != old_generation || edit.expression.trim() != old_expression {
-                steps.push((
-                    "er.attribute.set-generation",
-                    json!({ "attribute": id, "generation": generation, "expression": edit.expression.trim() }),
-                ));
-            }
             if edit.domain.is_none() && edit.collation.trim() != old_collation {
                 steps.push(("er.attribute.set-collation", json!({ "attribute": id, "collation": edit.collation.trim() })));
             }
@@ -838,6 +842,16 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
                 "er.attribute.set-flags",
                 json!({ "attribute": id, "primary_key": edit.primary_key, "nullable": nullable, "unique": edit.unique }),
             ));
+            // The new generation last, once the type, default and flags it needs are in place; a
+            // generation given up for None is already where it ends.
+            let taken = if leaves {
+                edit.generation != archforge_er::Generation::NoneKind
+            } else {
+                edit.generation != old_generation || expression != old_expression
+            };
+            if taken {
+                steps.push(("er.attribute.set-generation", json!({ "attribute": id, "generation": generation, "expression": expression })));
+            }
             if steps.len() == 1 {
                 session.execute(steps[0].0, &steps[0].1).map(|_| ()).map_err(|e| refusal(&e))
             } else {

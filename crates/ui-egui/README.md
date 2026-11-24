@@ -61,7 +61,8 @@ canvas and its panel with Properties (`panels`: the body the selection's notatio
 while the selection moves within what its notation calls one page (a column and its table), a
 diagram's name and schema,
 the Problems section that lists what the rules find on the selection, and a description under
-every heading, the text DDL writes as a comment) and Skills (the skills on the
+the heading of every model element (a diagram's heading has none): an ER element's is the text DDL
+writes as its comment, a UML element's a Comment it owns) and Skills (the skills on the
 selection, the inherited ones, the skill editor) following the selection, the status bar), drawn
 from the design with its own palette, type and icons (`ux`); its colours are `ux::Colour` values, which only `ux` makes. Icons are drawn crisp: each is rasterised once per size into an alpha mask at the screen's own pixels, its
 strokes a whole number of pixels on the pixel grid (`ux::raster`), and drawn at a standard size by
@@ -121,7 +122,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |
 | `explorer::{State, ContextMenu, add, remove_selection, rows, fresh_name, Row, Tree}` | the Models explorer's state (a row's context menu among it, AR-132) and the actions the tests and the host drive |
-| `panels::{State, draw, retain_valid, SkillEdit, Applies, MenuId}` | the right panels' state and body; every change goes through the notations' and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not) |
+| `panels::{State, draw, retain_valid, SkillEdit, Applies, MenuId}` | the right panels' state and body; every change to the model goes through the shared commands (`diagram.rename`, `element.describe`), the notations' commands and the `skill.*` commands, and `view.select` selects the element a row names: a problem row whose problem is on another element than the one shown, and a row a Properties list shows (`select_element`); the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not) |
 | `diagrams::{State, RowMenu, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows, a row's menu and the New diagram dialog |
 | `versions::State` | the Versions explorer's state: what it has read, how its sections are folded, and what the keyboard has just moved to, which its list brings into view |
 | `save_version::Dialog` | the Save version dialog: the description typed, the revision its summary is of, and how its save went |

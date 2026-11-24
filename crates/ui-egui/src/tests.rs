@@ -14515,6 +14515,244 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     assert_eq!(archforge_er::rules::text_of(st, customer_obj, archforge_er::element::DESCRIPTION), "People who buy.");
 }
 
+/// `Customer.email` of [`table_harness_in`] given `steps` through the engine (its type, flags,
+/// default and generation as a test starts it), each with the column as its `attribute`.
+fn give_email(h: &mut Harness<'static, Shell>, steps: &[(&str, serde_json::Value)]) {
+    let s = h.state_mut().session.as_mut().unwrap();
+    let st = s.doc();
+    let email = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap()).unwrap().to_string();
+    for (cmd, params) in steps {
+        let mut params = params.clone();
+        params["attribute"] = serde_json::json!(email);
+        s.execute(cmd, &params).unwrap();
+    }
+}
+
+/// `Customer.email` of [`table_harness_in`] given `steps` first ([`give_email`]), then its column
+/// editor opened from its row, the generation numbered `generation` chosen in the select, `change`
+/// made to the rest of what is typed, and Apply clicked. Gives the column and the refusal the
+/// editor kept, if any.
+fn apply_email_edit(
+    h: &mut Harness<'static, Shell>,
+    steps: &[(&str, serde_json::Value)],
+    generation: usize,
+    change: impl FnOnce(&mut crate::er_table::ColumnEdit),
+) -> (archforge_mof::Obj, Option<String>) {
+    give_email(h, steps);
+    h.run();
+    let rows: Vec<String> = ids(h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+    let at = rect_of(h, &format!("{}.edit", rows[1])).center();
+    click(h, at);
+    let at = rect_of(h, "workspace.properties.column.generation").center();
+    click(h, at);
+    let at = rect_of(h, &format!("workspace.properties.column.generation.{generation}")).center();
+    click(h, at);
+    change(er_of_mut(h.state_mut()).column.as_mut().unwrap());
+    h.run();
+    let at = rect_of(h, "workspace.properties.column.apply").center();
+    click(h, at);
+    let refused = er_of(h.state()).column.as_ref().map(|c| c.refused.clone().unwrap_or_else(|| "the editor stayed open".into()));
+    let st = h.state().session.as_ref().unwrap().doc();
+    (st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap(), refused)
+}
+
+/// A computed or an identity column made a plain one with a default in one Apply of the column
+/// editor lands: the generation is given up before the default is set, and the computed column's
+/// expression, hidden once None is chosen, goes with it, for a saved plain column taken to
+/// Computed and back in its editor and for a column being added too. A default
+/// on a column that stays computed is still refused by its rule, and a new expression alone lands.
+/// In light and dark.
+#[test]
+fn the_column_editor_makes_a_computed_or_identity_column_plain_with_a_default() {
+    use archforge_er::{Generation, attribute, rules};
+    let computed = ("er.attribute.set-generation", serde_json::json!({ "generation": "computed-stored", "expression": "lower(name)" }));
+    let integer = ("er.attribute.set-type", serde_json::json!({ "type": "BIGINT" }));
+    let not_null = ("er.attribute.set-flags", serde_json::json!({ "primary_key": false, "nullable": "no", "unique": false }));
+    let identity = ("er.attribute.set-generation", serde_json::json!({ "generation": "identity-always" }));
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        // Computed, stored to None with a default.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 0, |c| c.default = "'none'".into());
+        assert_eq!(refused, None, "computed to plain with a default lands");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
+        assert_eq!(rules::text_of(st, email, attribute::DEFAULT), "'none'");
+        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "", "the hidden expression went with the generation");
+        // Computed, stored to None and nothing else.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 0, |_| {});
+        assert_eq!(refused, None, "computed to plain lands");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
+        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "");
+        // Identity, always to None with a default.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, &[integer.clone(), not_null.clone(), identity.clone()], 0, |c| c.default = "0".into());
+        assert_eq!(refused, None, "identity to plain with a default lands");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
+        assert_eq!(rules::text_of(st, email, attribute::DEFAULT), "0");
+        // A default on a column that stays computed is still refused, and nothing changes.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 3, |c| c.default = "'x'".into());
+        let said = crate::panels::said(&archforge_engine::Reason::Generation(archforge_engine::GenerationRule::ComputedTakesNoDefault));
+        assert_eq!(refused, said, "a computed column takes no default");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::ComputedStored);
+        assert_eq!(rules::text_of(st, email, attribute::DEFAULT), "");
+        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "lower(name)");
+        // A column that stays computed takes a new expression alone.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 3, |c| c.expression = "upper(name)".into());
+        assert_eq!(refused, None, "a new expression lands");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::ComputedStored);
+        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "upper(name)");
+        // A saved plain column made computed, given an expression and made plain again in its
+        // editor stays plain without an expression: the generation never changed in the model.
+        let (mut h, _) = table_harness_in(theme);
+        let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+        let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
+        click(&mut h, at);
+        for generation in [3, 0] {
+            let at = rect_of(&h, "workspace.properties.column.generation").center();
+            click(&mut h, at);
+            let at = rect_of(&h, &format!("workspace.properties.column.generation.{generation}")).center();
+            click(&mut h, at);
+            if generation == 3 {
+                er_of_mut(h.state_mut()).column.as_mut().unwrap().expression = "lower(name)".into();
+            }
+        }
+        let at = rect_of(&h, "workspace.properties.column.apply").center();
+        click(&mut h, at);
+        assert!(er_of(h.state()).column.is_none(), "the plain column's Apply lands: {:?}", er_of(h.state()).column);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
+        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
+        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "");
+        // A column being added that was made computed, given an expression and made plain again
+        // is added plain, without the expression its hidden field still holds.
+        let (mut h, customer) = table_harness_in(theme);
+        crate::er_table::open_column(h.state_mut(), archforge_mof::Uuid::parse(&customer).unwrap(), None);
+        h.run();
+        er_of_mut(h.state_mut()).column.as_mut().unwrap().name = "nickname".into();
+        er_of_mut(h.state_mut()).column.as_mut().unwrap().ty = "TEXT".into();
+        for generation in [3, 0] {
+            let at = rect_of(&h, "workspace.properties.column.generation").center();
+            click(&mut h, at);
+            let at = rect_of(&h, &format!("workspace.properties.column.generation.{generation}")).center();
+            click(&mut h, at);
+            if generation == 3 {
+                er_of_mut(h.state_mut()).column.as_mut().unwrap().expression = "lower(name)".into();
+            }
+        }
+        let at = rect_of(&h, "workspace.properties.column.apply").center();
+        click(&mut h, at);
+        assert!(er_of(h.state()).column.is_none(), "the new column is added: {:?}", er_of(h.state()).column);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let nickname = st.alive().find(|o| archforge_core::name_of(st, *o) == "nickname").unwrap();
+        assert_eq!(rules::generation_of(st, nickname), Generation::NoneKind);
+        assert_eq!(rules::text_of(st, nickname, attribute::EXPRESSION), "");
+    }
+}
+
+/// A column's type, nullability and generation changed together in one Apply of the column editor
+/// land whichever generation it leaves and takes: the old generation is given up first and the new
+/// one taken last, so no step meets a rule only the other generation has. An identity left
+/// nullable is still refused, a refusal after the old generation was given up rolls the whole
+/// Apply back, and the Apply that gives one generation up for another is one undo step. In light
+/// and dark.
+#[test]
+fn the_column_editor_changes_type_nullability_and_generation_in_one_apply() {
+    use archforge_er::{Generation, attribute, rules};
+    let integer = ("er.attribute.set-type", serde_json::json!({ "type": "BIGINT" }));
+    let not_null = ("er.attribute.set-flags", serde_json::json!({ "primary_key": false, "nullable": "no", "unique": false }));
+    let identity = ("er.attribute.set-generation", serde_json::json!({ "generation": "identity-always" }));
+    let computed = ("er.attribute.set-generation", serde_json::json!({ "generation": "computed-stored", "expression": "lower(name)" }));
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        // None (TEXT, nullable) to Identity, always with BIGINT and Not null.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, &[], 1, |c| {
+            c.ty = "BIGINT".into();
+            c.not_null = true;
+        });
+        assert_eq!(refused, None, "plain to identity with its type and Not null lands");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::IdentityAlways);
+        assert!(!rules::is_nullable(st, email));
+        // Identity, always (BIGINT, not null) to Computed, stored with TEXT, nullable.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, &[integer.clone(), not_null.clone(), identity.clone()], 3, |c| {
+            c.ty = "TEXT".into();
+            c.not_null = false;
+            c.expression = "lower(name)".into();
+        });
+        assert_eq!(refused, None, "identity to computed with another type and nullable lands");
+        let computed_state = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            (
+                rules::generation_of(st, email),
+                rules::type_of(st, email),
+                rules::is_nullable(st, email),
+                rules::text_of(st, email, attribute::EXPRESSION),
+            )
+        };
+        let after = (Generation::ComputedStored, "TEXT".to_string(), true, "lower(name)".to_string());
+        assert_eq!(computed_state(&h), after);
+        // The Apply is one step: one Undo brings the identity column back whole, one Redo the
+        // computed one.
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(computed_state(&h), (Generation::IdentityAlways, "BIGINT".to_string(), false, String::new()), "one undo");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        assert_eq!(computed_state(&h), after, "one redo");
+        // Identity, always (BIGINT, not null) to None with TEXT, nullable.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, &[integer.clone(), not_null.clone(), identity.clone()], 0, |c| {
+            c.ty = "TEXT".into();
+            c.not_null = false;
+        });
+        assert_eq!(refused, None, "identity to plain with another type and nullable lands");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
+        assert_eq!(rules::type_of(st, email), "TEXT");
+        assert!(rules::is_nullable(st, email));
+        // Computed, stored (TEXT) to Identity, by default with BIGINT and Not null.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 2, |c| {
+            c.ty = "BIGINT".into();
+            c.not_null = true;
+        });
+        assert_eq!(refused, None, "computed to identity with its type and Not null lands");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::IdentityByDefault);
+        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "");
+        // Identity left nullable is still refused, and the column keeps what it had.
+        let (mut h, _) = table_harness_in(theme);
+        let (email, refused) = apply_email_edit(&mut h, &[], 1, |c| c.ty = "BIGINT".into());
+        let said = crate::panels::said(&archforge_engine::Reason::Generation(archforge_engine::GenerationRule::IdentityNotNullable));
+        assert_eq!(refused, said, "an identity column cannot be nullable");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
+        assert_eq!(rules::type_of(st, email), "TEXT");
+        // A refusal after the old generation was given up rolls the whole Apply back: a computed
+        // column made Identity with BIGINT but left nullable keeps its type, generation and
+        // expression, and neither a step nor a change is added.
+        let (mut h, _) = table_harness_in(theme);
+        give_email(&mut h, std::slice::from_ref(&computed));
+        let session = h.state().session.as_ref().unwrap();
+        let before = (session.undo_label().map(str::to_string), session.revision());
+        let (email, refused) = apply_email_edit(&mut h, &[], 1, |c| c.ty = "BIGINT".into());
+        let said = crate::panels::said(&archforge_engine::Reason::Generation(archforge_engine::GenerationRule::IdentityNotNullable));
+        assert_eq!(refused, said, "an identity column cannot be nullable");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(rules::generation_of(st, email), Generation::ComputedStored);
+        assert_eq!(rules::type_of(st, email), "TEXT");
+        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "lower(name)");
+        let session = h.state().session.as_ref().unwrap();
+        assert_eq!((session.undo_label().map(str::to_string), session.revision()), before, "nothing landed");
+    }
+}
+
 /// A table's description typed and left by clicking another table's row in Models is kept on the
 /// table it was typed on, and the other table is left as it was. In light and dark.
 #[test]
