@@ -12,9 +12,10 @@ use egui::Rect;
 use serde_json::json;
 
 use crate::Shell;
+use crate::editing::Action;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, tr_ctx, trn};
-use crate::kinds::{DiagramKind, KindTool, ToolUse};
+use crate::kinds::{DiagramKind, KindTool, Press, ToolUse};
 use crate::notation_ui::{Added, Entry, NotationState, NotationUi, Offer, Words};
 use crate::panels::Subject;
 use crate::uml_classifier::Classifier;
@@ -394,6 +395,32 @@ impl DiagramKind for UmlKind {
     /// model.
     fn menu(&self) -> bool {
         true
+    }
+
+    /// An n-ary association drawn class by class, and Add end waiting on a class (AR-128).
+    fn pointer(&self, shell: &Shell, press: &Press<'_>) -> Option<Action> {
+        crate::uml_nary::pointer(shell, press)
+    }
+
+    /// The menu of an n-ary association from its diamond or a leg (AR-128), and the set actions
+    /// from a generalization's line (AR-129).
+    fn secondary_click(&self, _shell: &Shell, press: &Press<'_>) -> Option<Action> {
+        crate::uml_nary::secondary_click(press).or_else(|| crate::uml_sets::secondary_click(press))
+    }
+
+    /// An n-ary association's drawing, or Add end: Enter, Backspace and Escape (AR-128).
+    fn keys(&self, shell: &mut Shell, ui: &egui::Ui, d: Obj) -> bool {
+        crate::uml_nary::keys(shell, ui, d)
+    }
+
+    /// The classifier tool's menu of kinds.
+    fn popover_takes_keys(&self, key: &str) -> bool {
+        crate::uml_classifier::takes_keys(key)
+    }
+
+    /// The generalization sets of the diagram's generalizations (AR-129).
+    fn also_selects(&self, store: &Store, lines: &[Obj]) -> Vec<Obj> {
+        crate::uml_sets::sets_of_lines(store, lines)
     }
 
     /// A classifier from the tree (a primitive type a header's height), with its lines to the classifiers the
@@ -1145,6 +1172,17 @@ impl NotationUi for UmlUi {
     /// classifier tool at Class.
     fn new_state(&self) -> Box<dyn NotationState> {
         Box::new(crate::uml_state::UmlState::default())
+    }
+
+    /// A selected generalization set goes from the model, its generalizations kept, Shift held or
+    /// not (AR-129).
+    fn canvas_delete(&self, shell: &mut Shell, _shift: bool) -> bool {
+        crate::uml_sets::remove_selected_set(shell)
+    }
+
+    /// ⌥⌘G: the selected generalizations into a new set (AR-129).
+    fn canvas_keys(&self, shell: &mut Shell, ui: &egui::Ui) -> bool {
+        crate::uml_sets::chord_pressed(shell, ui)
     }
 }
 

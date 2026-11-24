@@ -176,6 +176,42 @@ pub(crate) fn shortcut(shell: &mut Shell) -> bool {
     true
 }
 
+/// ⌥⌘G (Ctrl Alt G elsewhere): the selected generalizations into a new set, or why they cannot
+/// form one at the canvas's top; true when pressed with a generalization selected, which takes the
+/// keys this frame.
+pub(crate) fn chord_pressed(shell: &mut Shell, ui: &egui::Ui) -> bool {
+    ui.input(|i| crate::actions::chord_press(i, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::ALT)) && shortcut(shell)
+}
+
+/// A right click on a generalization's line, away from any card: the set actions' menu opened
+/// there, the line selected first when the selection did not hold its generalization (AR-129);
+/// none for anything else.
+pub(crate) fn secondary_click(press: &crate::kinds::Press<'_>) -> Option<crate::editing::Action> {
+    let (store, at) = (press.store, press.at?);
+    if (press.node_at)(at).is_some() {
+        return None;
+    }
+    let g = (press.line_at)(at).and_then(|e| store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()))?;
+    if !sets::is_generalization(store, g) {
+        return None;
+    }
+    let first = if elements(store, press.selection).contains(&g) { None } else { store.uuid(g).ok() };
+    Some(crate::editing::Action::Own(Box::new(move |shell| {
+        if let Some(id) = first {
+            crate::editing::select(shell, vec![id]);
+        }
+        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            uml.line_menu = Some(at);
+        }
+    })))
+}
+
+/// The generalization sets the generalizations among `lines` belong to: what Select all takes in
+/// beside a diagram's lines, as a set's label is drawn whether a node holds it or not (AR-129).
+pub(crate) fn sets_of_lines(store: &Store, lines: &[Obj]) -> Vec<Obj> {
+    lines.iter().filter(|g| sets::is_generalization(store, **g)).flat_map(|g| sets::sets_of(store, *g)).collect()
+}
+
 /// The shortcut as the menu writes it.
 pub(crate) fn chord(ui: &egui::Ui) -> &'static str {
     if ui.ctx().os() == egui::os::OperatingSystem::Mac { "⌥⌘G" } else { "Ctrl Alt G" }

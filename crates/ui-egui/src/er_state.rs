@@ -177,4 +177,9 @@ impl NotationState for ErState {
             self.object_edit = None;
         }
     }
+
+    /// The mapping table offer ends with Escape on the canvas.
+    fn canvas_escape(&mut self) {
+        self.mapping = None;
+    }
 }

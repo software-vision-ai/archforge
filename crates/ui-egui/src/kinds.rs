@@ -1,17 +1,21 @@
 //! The tools and gestures of each diagram kind: a kind brings its toolbar
 //! tools, each placing an element or connecting two, and the hooks the canvas's gestures run on
 //! its elements: place, connect, a line dropped on empty canvas, renaming in place, opening an
-//! element's editor at a row of its card, a second adorner, and the live line while connecting;
-//! and the hooks the canvas runs as it draws one of its diagrams: before and after the drawing,
-//! where a line starts, what goes with a line, the figures of no one node or line, and the hint
-//! bar. Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows
+//! element's editor at a row of its card, a second adorner, the live line while connecting, a
+//! press and a right click it reads before the shared gestures, the keys a drawing under way
+//! takes, whether its popover's menu takes the keys, and what Select all takes in beside the boxes
+//! and lines; and the hooks the canvas runs as it draws one of its diagrams: before and after the
+//! drawing, where a line starts, what goes with a line, the figures of no one node or line, and the
+//! hint bar. Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows
 //! where a kind has marks (ER's key status).
 
+use archforge_diagram::ProjectView;
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke};
 
 use crate::Shell;
 use crate::canvas::{Drawing, LineDrawn, SetLabel, View};
+use crate::editing::Action;
 use crate::ux::{Icon, Palette};
 use crate::widgets::Registry;
 
@@ -37,6 +41,27 @@ pub(crate) struct KindTool {
     /// Twice as wide, so a face that draws what the tool makes reads (a relationship's line); an
     /// icon's face is as wide as any tool's.
     pub(crate) wide: bool,
+}
+
+/// A press on the canvas as a diagram kind reads it ([`DiagramKind::pointer`],
+/// [`DiagramKind::secondary_click`]): the shared gestures' own view of it, read once.
+pub(crate) struct Press<'a> {
+    /// Where the pointer is on screen, when it is on the canvas.
+    pub at: Option<Pos2>,
+    /// Whether the primary button clicked, and whether as a double click (a third click in a row
+    /// counts, as egui counts it a triple).
+    pub clicked: bool,
+    pub double: bool,
+    pub store: &'a Store,
+    pub notations: &'a ProjectView,
+    /// The diagram the canvas shows, and what is selected.
+    pub d: Obj,
+    pub selection: &'a [Obj],
+    /// The node under a screen point that takes the press: a card, or a package's tab, the one
+    /// drawn on top.
+    pub node_at: &'a dyn Fn(Pos2) -> Option<Obj>,
+    /// The line under a screen point, nodes aside.
+    pub line_at: &'a dyn Fn(Pos2) -> Option<Obj>,
 }
 
 /// What a diagram kind does with the canvas's tools and gestures.
@@ -161,6 +186,43 @@ pub(crate) trait DiagramKind: Sync {
     fn menu(&self) -> bool {
         false
     }
+    /// What a press of the primary button on diagram `press.d` means to the kind before the shared
+    /// gestures read it: with a Connect tool before any line starts, with Select once a gesture
+    /// under way had its chance to end and before a drag starts one. Some takes the press, even as
+    /// [`Action::Nothing`] (UML's n-ary association drawn by clicks, Add end waiting on a class);
+    /// none by default, leaving it to the shared gestures.
+    fn pointer(&self, shell: &Shell, press: &Press<'_>) -> Option<Action> {
+        let _ = (shell, press);
+        None
+    }
+    /// What a right click with Select at `press.at` means to the kind, before its element menu
+    /// opens (UML's menu of an n-ary association, and of generalization lines); none by default,
+    /// leaving the element menu to open where [`DiagramKind::menu`] says.
+    fn secondary_click(&self, shell: &Shell, press: &Press<'_>) -> Option<Action> {
+        let _ = (shell, press);
+        None
+    }
+    /// Reads the keys a drawing under way on diagram `d` takes before the canvas's own (UML's n-ary
+    /// association: Enter, Backspace and Escape); true when it took them this frame, false by
+    /// default.
+    fn keys(&self, shell: &mut Shell, ui: &egui::Ui, d: Obj) -> bool {
+        let _ = (shell, ui, d);
+        false
+    }
+    /// Whether the popover of its chevron `key` is a menu the arrow keys, Enter and Escape walk
+    /// while the canvas keeps the focus (UML's classifier kinds); false for any other key, another
+    /// kind's included, and by default.
+    fn popover_takes_keys(&self, key: &str) -> bool {
+        let _ = key;
+        false
+    }
+    /// What Select all takes in beside each box and line it draws, from the elements the lines of
+    /// the diagram stand for, `lines` (UML: the generalization sets those lines belong to, whose
+    /// labels are drawn whether a node holds them or not, AR-129); none by default.
+    fn also_selects(&self, store: &Store, lines: &[Obj]) -> Vec<Obj> {
+        let _ = (store, lines);
+        Vec::new()
+    }
     /// Runs before the canvas `r` draws diagram `d`: may take keys, follow the zoom made since the
     /// last drawing ([`crate::canvas::State::zoom_intent`]) and set the view, or open another diagram (UML's
     /// package navigation); nothing by default.
@@ -233,6 +295,13 @@ pub(crate) fn kind_of(shell: &Shell, store: &Store, d: Obj) -> Option<&'static d
 pub(crate) fn diagram_icon(kinds: &[&'static dyn DiagramKind], store: &Store, d: Obj) -> &'static Icon {
     let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
     kinds.iter().find(|k| k.kind() == kind).map_or(&crate::ux::icons::ER_DIAGRAM, |k| k.icon())
+}
+
+/// Whether the canvas's open popover is a menu the keys walk, as the kind whose chevron it is
+/// answers ([`DiagramKind::popover_takes_keys`]): every kind is asked, so one left open from a
+/// diagram of another kind still holds the keys until the toolbar closes it.
+pub(crate) fn popover_takes_keys(shell: &Shell) -> bool {
+    shell.canvas.popover.is_some_and(|key| shell.kinds.iter().any(|k| k.popover_takes_keys(key)))
 }
 
 /// The kind of the diagram the canvas shows.
