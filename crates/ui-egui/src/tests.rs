@@ -17225,12 +17225,25 @@ static SKETCH_TOOLS: &[crate::kinds::KindTool] = &[
     },
 ];
 
+/// The sketch kind's rows of the Model menu, a section for each of its tools.
+static SKETCH_ROWS: &[&[crate::actions::Action]] = &[
+    &[crate::model_menu::menu_row!(Some(SKETCH), "model.sketch-class", "Class".into(), |s| s.canvas.tool = crate::canvas::Tool::Place("class"))],
+    &[crate::model_menu::menu_row!(Some(SKETCH), "model.sketch-inherit", "Inherit".into(), |s| s.canvas.tool =
+        crate::canvas::Tool::Connect("inherit"))],
+];
+
 impl crate::kinds::DiagramKind for SketchKind {
+    /// The sketch kind, which no notation of the shell knows.
     fn kind(&self) -> &'static str {
         SKETCH
     }
+    /// Class and Inherit.
     fn tools(&self) -> &'static [crate::kinds::KindTool] {
         SKETCH_TOOLS
+    }
+    /// A row for each of its tools, each in a section of its own.
+    fn menu_rows(&self) -> &'static [&'static [crate::actions::Action]] {
+        SKETCH_ROWS
     }
     fn word(&self) -> String {
         "Sketch".into()

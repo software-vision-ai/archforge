@@ -1,16 +1,19 @@
 //! The ER diagram's tools and gestures: the Entity tool places a table named in
 //! place, the Relationship tool draws a relationship with the ends its popover sets, a line dropped
 //! on empty canvas makes a new table there, a table renames in place, a double click on a column
-//! opens its editor, the second adorner adds a column, and a right click opens the entity menu.
+//! opens its editor, the second adorner adds a column, and a right click opens the entity menu;
+//! the Model menu's Entity and Relationship rows arm the two tools.
 
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect};
 
 use crate::Shell;
-use crate::canvas::View;
+use crate::actions::Action;
+use crate::canvas::{Tool, View};
 use crate::er_state::er;
 use crate::i18n::tr;
 use crate::kinds::{DiagramKind, KindTool, ToolUse};
+use crate::model_menu::menu_row;
 use crate::ux::{Palette, icons};
 
 /// The ER diagram kind in the shell.
@@ -28,6 +31,15 @@ const TOOLS: &[KindTool] = &[
     },
 ];
 
+/// An ER diagram's rows of the Model menu, as its tools: Entity, then Relationship.
+static MENU_ROWS: &[&[Action]] = &[&[
+    menu_row!(KIND, "model.entity", tr("Entity"), |s| s.canvas.tool = Tool::Place("entity")),
+    menu_row!(KIND, "model.relationship", tr("Relationship"), |s| s.canvas.tool = Tool::Connect("relationship")),
+]];
+
+/// The kind its rows are of, as the Model menu's rows ask for it.
+const KIND: Option<&str> = Some(archforge_er::DIAGRAM_KIND);
+
 impl DiagramKind for ErKind {
     fn kind(&self) -> &'static str {
         archforge_er::DIAGRAM_KIND
@@ -35,6 +47,11 @@ impl DiagramKind for ErKind {
 
     fn tools(&self) -> &'static [KindTool] {
         TOOLS
+    }
+
+    /// Entity and Relationship, one row for each of its tools.
+    fn menu_rows(&self) -> &'static [&'static [Action]] {
+        MENU_ROWS
     }
 
     fn word(&self) -> String {

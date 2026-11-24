@@ -1,105 +1,57 @@
 //! The Model menu: a row for each thing the diagram tools make, arming the tool its toolbar button
 //! arms, so the canvas then makes it through the same commands. Note and Link note are for every
-//! diagram; the other rows are the open diagram's notation's. Rows answer as the table of actions does.
+//! diagram; the other rows are those the open diagram's kind answers
+//! ([`crate::kinds::DiagramKind::menu_rows`]). Rows answer as the table of actions does.
 
 use crate::Shell;
 use crate::actions::{Action, free};
 use crate::canvas::Tool;
 use crate::home::off_words;
 use crate::i18n::tr;
-use crate::kinds::active_kind;
+use crate::kinds::{DiagramKind, active_kind};
 use crate::state::Explorer;
-use crate::uml_classifier::{self, Classifier};
-use crate::uml_relate::Relate;
-use crate::uml_state::uml_mut;
 
-const ER: Option<&str> = Some(archforge_er::DIAGRAM_KIND);
-const UML: Option<&str> = Some(archforge_uml::STRUCTURE_DIAGRAM);
-
-/// A row of diagrams of `$kind` (any, for `None`) that arms a tool through `$set`.
-macro_rules! row {
+/// A row of diagrams of `$kind` (any, for `None`) that arms a tool through `$set`, labelled
+/// `$word`: a diagram kind's rows are made with it, as the shared ones are.
+macro_rules! menu_row {
     ($kind:expr, $id:literal, $word:expr, $set:expr) => {
-        Action { id: $id, label: |_| $word, available: |s| can_pick(s, $kind), run: |s| pick(s, $kind, $set), keys: None, search: None }
+        $crate::actions::Action {
+            id: $id,
+            label: |_| $word,
+            available: |s| $crate::model_menu::can_pick(s, $kind),
+            run: |s| $crate::model_menu::pick(s, $kind, $set),
+            keys: None,
+            search: None,
+        }
     };
 }
-
-/// A row that arms the classifier tool with `$kind`, as the tool's own menu does.
-macro_rules! classifier {
-    ($id:literal, $kind:ident) => {
-        row!(UML, $id, Classifier::$kind.word(), |s| {
-            if let Some(uml) = uml_mut(&mut s.notation_states) {
-                uml.classifier = Classifier::$kind;
-            }
-            s.canvas.tool = Tool::Place(uml_classifier::TOOL);
-        })
-    };
-}
-
-/// A row that arms the Relationship tool with `$kind`, as the tool's own menu does.
-macro_rules! relation {
-    ($id:literal, $kind:ident) => {
-        row!(UML, $id, tr(Relate::$kind.word()), |s| {
-            if let Some(uml) = uml_mut(&mut s.notation_states) {
-                uml.relation = Relate::$kind;
-            }
-            s.canvas.tool = Tool::Connect("relationship");
-        })
-    };
-}
+pub(crate) use menu_row;
 
 /// The rows of every diagram, last in the menu as they are on the toolbar.
 static SHARED: &[Action] = &[
-    row!(None, "model.note", tr("Note"), |s| s.canvas.tool = Tool::Note),
-    row!(None, "model.link", tr("Link note"), |s| s.canvas.tool = Tool::Link),
+    menu_row!(None, "model.note", tr("Note"), |s| s.canvas.tool = Tool::Note),
+    menu_row!(None, "model.link", tr("Link note"), |s| s.canvas.tool = Tool::Link),
 ];
 
-/// An ER diagram's rows.
-static ER_ROWS: &[&[Action]] = &[&[
-    row!(ER, "model.entity", tr("Entity"), |s| s.canvas.tool = Tool::Place("entity")),
-    row!(ER, "model.relationship", tr("Relationship"), |s| s.canvas.tool = Tool::Connect("relationship")),
-]];
-
-/// A class diagram's rows: the classifier tool's kinds and Package, then the Relationship tool's sections.
-static UML_ROWS: &[&[Action]] = &[
-    &[
-        classifier!("model.class", Class),
-        classifier!("model.interface", Interface),
-        classifier!("model.enumeration", Enumeration),
-        classifier!("model.data-type", DataType),
-        classifier!("model.primitive-type", PrimitiveType),
-        row!(UML, "model.package", tr("Package"), |s| s.canvas.tool = Tool::Place("package")),
-    ],
-    &[
-        relation!("model.relate.association", Association),
-        relation!("model.relate.directed", Directed),
-        relation!("model.relate.aggregation", Aggregation),
-        relation!("model.relate.composition", Composition),
-        relation!("model.relate.generalization", Generalization),
-        relation!("model.relate.dependency", Dependency),
-    ],
-    &[relation!("model.relate.realization", Realization), relation!("model.relate.association-class", AssociationClass)],
-    &[relation!("model.relate.n-ary", NAry), relation!("model.relate.template-binding", TemplateBinding)],
-];
-
-/// Every row of every kind.
-pub(crate) fn rows() -> impl Iterator<Item = &'static Action> {
-    [ER_ROWS, UML_ROWS].into_iter().flatten().flat_map(|section| section.iter()).chain(SHARED)
+/// Every row of every kind of `kinds` (a shell's, as the table of actions asks), then the shared ones.
+pub(crate) fn rows(kinds: &[&'static dyn DiagramKind]) -> impl Iterator<Item = &'static Action> {
+    kinds.iter().flat_map(|kind| kind.menu_rows().iter().copied().flatten()).chain(SHARED)
 }
 
-/// The ids of the menu's rows now, by section: the open diagram's notation's, then the shared ones.
+/// The rows of a diagram of `kind` (none: no diagram), by section: the kind's own, then the shared ones.
+fn sections_of(kind: Option<&dyn DiagramKind>) -> impl Iterator<Item = &'static [Action]> {
+    kind.map_or(&[][..], |k| k.menu_rows()).iter().copied().chain([SHARED])
+}
+
+/// The ids of the menu's rows now, by section: the open diagram's kind's, then the shared ones.
 pub fn sections(shell: &Shell) -> Vec<Vec<&'static str>> {
-    let own = match active_kind(shell).map(|k| k.kind()) {
-        kind if kind == ER => ER_ROWS,
-        kind if kind == UML => UML_ROWS,
-        _ => &[],
-    };
-    own.iter().copied().chain([SHARED]).map(|section| section.iter().map(|a| a.id).collect()).collect()
+    sections_of(active_kind(shell)).map(|section| section.iter().map(|a| a.id).collect()).collect()
 }
 
-/// The rows the menu can show at once, one list per notation, for the access letters' tests.
+/// The rows the menu can show at once, one list per kind, for the access letters' tests.
 #[cfg(test)]
 pub(crate) fn every_menu() -> Vec<Vec<&'static str>> {
-    [ER_ROWS, UML_ROWS].iter().map(|own| own.iter().copied().chain([SHARED]).flatten().map(|a| a.id).collect()).collect()
+    crate::kinds::KINDS.iter().map(|kind| sections_of(Some(*kind)).flatten().map(|a| a.id).collect()).collect()
 }
 
 /// Whether a version's details or a changed element covers the canvas.
@@ -109,14 +61,14 @@ pub(crate) fn covered(shell: &Shell) -> bool {
 
 /// Whether a tool can be armed: a diagram of `kind` (any, for `None`) on the canvas of a project
 /// that can change, with no version's details or changed element over it and nothing over the window.
-fn can_pick(shell: &Shell, kind: Option<&str>) -> bool {
+pub(crate) fn can_pick(shell: &Shell, kind: Option<&str>) -> bool {
     let shown = shell.active.is_some() && active_kind(shell).is_some_and(|k| kind.is_none_or(|wanted| k.kind() == wanted));
     shown && !covered(shell) && free(shell) && shell.session.as_ref().is_some_and(|s| !s.read_only())
 }
 
 /// Arms a tool through `set`, with the kind a notation's tool makes, closing the toolbar's popover.
 /// Asks again: a chosen row runs a frame later.
-fn pick(shell: &mut Shell, kind: Option<&str>, set: fn(&mut Shell)) {
+pub(crate) fn pick(shell: &mut Shell, kind: Option<&str>, set: fn(&mut Shell)) {
     if can_pick(shell, kind) {
         set(shell);
         shell.canvas.popover = None;

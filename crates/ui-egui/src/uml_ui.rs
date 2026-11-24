@@ -1,6 +1,7 @@
 //! What UML brings to the shell: the UML structure diagram's tools and gestures (the
 //! classifier tool places a class, an interface, an enumeration, a data type or a primitive type
-//! named in place, its card renames in place), and its packages and classifiers in the Models tree,
+//! named in place, its card renames in place; the Model menu's rows arm its tools with each kind
+//! they make), and its packages and classifiers in the Models tree,
 //! the search and Properties. An enumeration's literals are typed on its card and edited in
 //! Properties and Models, as a class's members are (AR-122); a data type's attributes and
 //! operations as a class's (AR-123); a primitive type has none (AR-124). The built-in types in the
@@ -12,14 +13,17 @@ use egui::Rect;
 use serde_json::json;
 
 use crate::Shell;
+use crate::canvas::Tool;
 use crate::editing::Action;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::kinds::{DiagramKind, KindTool, Press, ToolUse};
+use crate::model_menu::menu_row;
 use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
 use crate::panels::Subject;
 use crate::uml_classifier::Classifier;
 use crate::uml_panel::{MemberKind, member_of};
+use crate::uml_relate::Relate;
 use crate::uml_state::uml;
 use crate::ux::{Palette, icons};
 
@@ -94,6 +98,56 @@ const TOOLS: &[KindTool] = &[
     },
 ];
 
+/// The kind its rows of the Model menu are of.
+const KIND: Option<&str> = Some(archforge_uml::STRUCTURE_DIAGRAM);
+
+/// A row of the Model menu that arms the classifier tool with `$kind`, as the tool's own menu does.
+macro_rules! classifier_row {
+    ($id:literal, $kind:ident) => {
+        menu_row!(KIND, $id, Classifier::$kind.word(), |s| {
+            if let Some(uml) = crate::uml_state::uml_mut(&mut s.notation_states) {
+                uml.classifier = Classifier::$kind;
+            }
+            s.canvas.tool = Tool::Place(crate::uml_classifier::TOOL);
+        })
+    };
+}
+
+/// A row of the Model menu that arms the Relationship tool with `$kind`, as the tool's own menu does.
+macro_rules! relation_row {
+    ($id:literal, $kind:ident) => {
+        menu_row!(KIND, $id, tr(Relate::$kind.word()), |s| {
+            if let Some(uml) = crate::uml_state::uml_mut(&mut s.notation_states) {
+                uml.relation = Relate::$kind;
+            }
+            s.canvas.tool = Tool::Connect("relationship");
+        })
+    };
+}
+
+/// A class diagram's rows of the Model menu: the classifier tool's kinds and Package, then the
+/// Relationship tool's sections.
+static MENU_ROWS: &[&[crate::actions::Action]] = &[
+    &[
+        classifier_row!("model.class", Class),
+        classifier_row!("model.interface", Interface),
+        classifier_row!("model.enumeration", Enumeration),
+        classifier_row!("model.data-type", DataType),
+        classifier_row!("model.primitive-type", PrimitiveType),
+        menu_row!(KIND, "model.package", tr("Package"), |s| s.canvas.tool = Tool::Place("package")),
+    ],
+    &[
+        relation_row!("model.relate.association", Association),
+        relation_row!("model.relate.directed", Directed),
+        relation_row!("model.relate.aggregation", Aggregation),
+        relation_row!("model.relate.composition", Composition),
+        relation_row!("model.relate.generalization", Generalization),
+        relation_row!("model.relate.dependency", Dependency),
+    ],
+    &[relation_row!("model.relate.realization", Realization), relation_row!("model.relate.association-class", AssociationClass)],
+    &[relation_row!("model.relate.n-ary", NAry), relation_row!("model.relate.template-binding", TemplateBinding)],
+];
+
 impl DiagramKind for UmlKind {
     /// The diagram kind this shell part draws: the UML structure diagram.
     fn kind(&self) -> &'static str {
@@ -102,6 +156,11 @@ impl DiagramKind for UmlKind {
 
     fn tools(&self) -> &'static [KindTool] {
         TOOLS
+    }
+
+    /// The classifier tool's kinds and Package, then the Relationship tool's kinds in its sections.
+    fn menu_rows(&self) -> &'static [&'static [crate::actions::Action]] {
+        MENU_ROWS
     }
 
     /// Its card's name in the New diagram dialog: "UML structure diagram".
