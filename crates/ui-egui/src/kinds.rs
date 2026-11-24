@@ -1,16 +1,19 @@
 //! The tools and gestures of each diagram kind: a kind brings its toolbar
 //! tools, each placing an element or connecting two, and the hooks the canvas's gestures run on
 //! its elements: place, connect, a line dropped on empty canvas, renaming in place, opening an
-//! element's editor at a row of its card, a second adorner, and the live line while connecting.
-//! Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows where
-//! a kind has marks (ER's key status).
+//! element's editor at a row of its card, a second adorner, and the live line while connecting;
+//! and the hooks the canvas runs as it draws one of its diagrams: before and after the drawing,
+//! where a line starts, what goes with a line, the figures of no one node or line, and the hint
+//! bar. Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows
+//! where a kind has marks (ER's key status).
 
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke};
 
 use crate::Shell;
-use crate::canvas::View;
+use crate::canvas::{Drawing, LineDrawn, SetLabel, View};
 use crate::ux::{Icon, Palette};
+use crate::widgets::Registry;
 
 /// What a kind's tool does on the canvas.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,6 +160,48 @@ pub(crate) trait DiagramKind: Sync {
     /// Whether a right click opens the kind's element menu.
     fn menu(&self) -> bool {
         false
+    }
+    /// Runs before the canvas `r` draws diagram `d`: may take keys, follow the zoom made since the
+    /// last drawing ([`crate::canvas::State::zoom_intent`]) and set the view, or open another diagram (UML's
+    /// package navigation); nothing by default.
+    fn before_draw(&self, shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
+        let _ = (shell, ui, r, d);
+    }
+    /// Draws over the canvas `r` once diagram `d` and its gestures are drawn, under the toast, the
+    /// minimap and the toolbar (UML's path bar and a selected package's Open). Gives how much room
+    /// it takes at the canvas's top, for the hint bar to go below; none by default, drawing nothing.
+    fn after_draw(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
+        let _ = (shell, ui, p, r, d);
+        0.0
+    }
+    /// Where a line of the drawing `d` leaving the node `source` starts when not where its route
+    /// meets the node's border, at `tip`, heading for `next` (a UML n-ary association's leg at its
+    /// diamond's outline); none by default, the line starting at `tip`.
+    fn line_start(&self, d: &Drawing<'_>, source: Obj, tip: Pos2, next: Pos2) -> Option<Pos2> {
+        let _ = (d, source, tip, next);
+        None
+    }
+    /// Draws what goes with a line beyond what its notation's figure for it says, over the line,
+    /// recording each in `registry` (a UML association class's tie to its card, or its name while
+    /// the card is not on the diagram). Gives where it drew the line's name, for the line's
+    /// stereotypes to go above it; none by default, drawing nothing.
+    fn line_extras(&self, paint: &egui::Painter, d: &Drawing<'_>, line: &LineDrawn<'_>, registry: &mut Registry, ui: &egui::Ui) -> Option<Rect> {
+        let _ = (paint, d, line, registry, ui);
+        None
+    }
+    /// Draws the figures of the diagram that belong to no one node or line, over the lines and
+    /// under the cards, recording each in `registry` (UML's generalization sets across their
+    /// members' lines). Gives their labels, which take a press on the next frame; none by default,
+    /// drawing nothing.
+    fn draw_extras(&self, paint: &egui::Painter, d: &Drawing<'_>, registry: &mut Registry, ui: &egui::Ui) -> Vec<SetLabel> {
+        let _ = (paint, d, registry, ui);
+        Vec::new()
+    }
+    /// Draws the hint bar at the canvas `r`'s top, `below` the room the canvas's top already
+    /// takes: what a drawing under way has so far and what the keys do (a UML n-ary association's,
+    /// or what its Add end waits for); none by default.
+    fn hint_bar(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, below: f32) {
+        let _ = (shell, ui, p, r, below);
     }
     /// The line drawn from a node to the pointer while connecting; a plain line by default.
     #[allow(clippy::too_many_arguments, reason = "a live line is drawn from its node to the pointer over the view")]

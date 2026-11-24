@@ -3,7 +3,8 @@
 //! profile, an n-ary end and an association's ends, the refusals said under their sections, the
 //! Stereotypes section, a template binding before it is written and the type menus' choices; and
 //! on the canvas a member typed in place, the generalization lines' and n-ary associations' menus,
-//! an n-ary association being drawn, and what the Relationship and classifier tools make. The
+//! an n-ary association being drawn, what the Relationship and classifier tools make, and package
+//! navigation's ways back and landings. The
 //! shell holds it as one notation's state among others ([`crate::notation_ui::NotationState`]);
 //! UML's screens reach it through [`uml`] and [`uml_mut`].
 
@@ -153,6 +154,9 @@ pub(crate) struct UmlState {
     /// What a class diagram's classifier tool places: kept while the window lives, a new window
     /// starting at Class.
     pub classifier: crate::uml_classifier::Classifier,
+    /// Package navigation between a package's diagram and its parent's: each tab's way back and a
+    /// landing still to be shown (AR-95).
+    pub nav: crate::package_nav::Nav,
 }
 
 /// UML's state among the shell's; none while UML is not one of its notations.

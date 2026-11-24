@@ -12033,14 +12033,14 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
         let before = unchanged(&h);
         let history = h.state().session.as_ref().unwrap().history();
         let route = |h: &Harness<'static, Shell>, tab| -> Vec<(archforge_mof::Uuid, archforge_mof::Uuid)> {
-            h.state().canvas.nav.routes.get(&tab).map(|r| r.steps().map(|s| (s.source, s.destination)).collect()).unwrap_or_default()
+            uml_of(h.state()).nav.routes.get(&tab).map(|r| r.steps().map(|s| (s.source, s.destination)).collect()).unwrap_or_default()
         };
         crate::canvas::open(h.state_mut(), second);
         h.run();
         let left = (h.state().canvas.pan, h.state().canvas.zoom);
         crate::package_nav::enter(h.state_mut(), sales, 0.0);
         h.run();
-        let entry = h.state().canvas.nav.routes.get(&sales_d).and_then(|r| r.steps().next_back()).cloned().unwrap();
+        let entry = uml_of(h.state()).nav.routes.get(&sales_d).and_then(|r| r.steps().next_back()).cloned().unwrap();
         let expected = crate::nav_route::Step { source: second, destination: sales_d, source_name: "Second".into(), view: Some(left), history };
         assert_eq!(entry, expected, "{theme:?}: the step names what was left, its view and the history");
         assert_eq!(route(&h, second), vec![], "{theme:?}: the tab left had no route and still has none");
@@ -12923,7 +12923,7 @@ fn zoom_out_gesture(h: &mut Harness<'static, Shell>, ticks: usize, stop: bool) -
 
 /// The (source, destination) of each step on the route of `tab`'s tab, oldest first.
 fn route_of(h: &Harness<'static, Shell>, tab: archforge_mof::Uuid) -> Vec<(archforge_mof::Uuid, archforge_mof::Uuid)> {
-    h.state().canvas.nav.routes.get(&tab).map(|r| r.steps().map(|s| (s.source, s.destination)).collect()).unwrap_or_default()
+    uml_of(h.state()).nav.routes.get(&tab).map(|r| r.steps().map(|s| (s.source, s.destination)).collect()).unwrap_or_default()
 }
 
 /// Zooming out at 10 % returns to the diagram a package was entered from though it is in another
@@ -13136,6 +13136,101 @@ fn the_path_bar_and_command_up_follow_ownership_and_start_a_new_route() {
     }
 }
 
+/// Package navigation is UML's kind's (AR-788): before UML's kind draws a package's diagram it
+/// lands the entry still pending, at 100 % with the content centred, and after drawing it shows the
+/// path bar and gives the room it takes; ER's kind, which keeps the defaults, leaves the landing
+/// pending and the view as it is, draws no path bar and takes no room. In light and dark.
+#[test]
+fn package_navigation_is_umls_kinds_and_ers_does_none() {
+    use crate::kinds::DiagramKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (_, first, sales, sales_d) = first_and_sales(&mut h);
+        crate::canvas::open(h.state_mut(), first);
+        h.run();
+        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.5, egui::vec2(33.0, 44.0));
+        let shell = h.state_mut();
+        let d = shell.session.as_ref().unwrap().doc().by_uuid(sales_d).unwrap();
+        let p = crate::ux::palette(theme == ThemeKind::Dark);
+        let view = |shell: &Shell| (shell.canvas.zoom, shell.canvas.pan, uml_of(shell).nav.centre);
+        recorded_alone(shell, |shell, ui| crate::er_kind::ErKind.before_draw(shell, ui, CANVAS, d));
+        assert_eq!(view(shell), (0.5, egui::vec2(33.0, 44.0), true), "{theme:?}: the default lands nothing");
+        recorded_alone(shell, |shell, ui| crate::uml_ui::UmlKind.before_draw(shell, ui, CANVAS, d));
+        assert_eq!(view(shell), (crate::package_nav::LANDING, egui::Vec2::ZERO, false), "{theme:?}: UML lands the entry");
+        let mut room = (0.0, 0.0);
+        let er = recorded_alone(shell, |shell, ui| room.0 = crate::er_kind::ErKind.after_draw(shell, ui, p, CANVAS, d));
+        let uml = recorded_alone(shell, |shell, ui| room.1 = crate::uml_ui::UmlKind.after_draw(shell, ui, p, CANVAS, d));
+        assert!(er.is_empty() && room.0 == 0.0, "{theme:?}: the default draws nothing: {er:?}");
+        assert!(uml.iter().any(|i| i == "workspace.canvas.path") && room.1 > 0.0, "{theme:?}: UML's path bar: {uml:?} {room:?}");
+    }
+}
+
+/// A switch fades in over the canvas, whatever draws there (AR-788): the frame after a package is
+/// entered covers the canvas with its own colour, part see-through; once the fade has passed, the
+/// canvas is clear. In light and dark.
+#[test]
+fn a_switch_fades_in_over_the_canvas() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (_, first, sales, _) = first_and_sales(&mut h);
+        crate::canvas::open(h.state_mut(), first);
+        h.run();
+        let veiled = |h: &Harness<'static, Shell>| {
+            /// Every shape `s` holds, nested lists opened.
+            fn walk<'a>(s: &'a egui::Shape, out: &mut Vec<&'a egui::Shape>) {
+                match s {
+                    egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                    s => out.push(s),
+                }
+            }
+            let canvas = rect_of(h, "workspace.canvas");
+            let mut flat = Vec::new();
+            h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut flat));
+            flat.iter().any(|s| {
+                matches!(s, egui::Shape::Rect(f) if (1..255).contains(&f.fill.a()) && f.rect.min.distance(canvas.min) < 0.5 && f.rect.max.distance(canvas.max) < 0.5)
+            })
+        };
+        assert!(!veiled(&h), "{theme:?}: no fade before a switch");
+        let now = h.ctx.input(|i| i.time);
+        crate::package_nav::enter(h.state_mut(), sales, now);
+        h.step();
+        assert!(veiled(&h), "{theme:?}: the switch fades in");
+        h.run();
+        assert!(!veiled(&h), "{theme:?}: the fade has passed");
+    }
+}
+
+/// A row dropped in Models runs as its notation runs it (AR-788): UML moves a package dropped into
+/// another as Properties' Parent package does, with a toast offering Undo; ER's notation, which
+/// keeps the default, runs the same command plainly, with no toast. In light and dark.
+#[test]
+fn a_drop_in_models_runs_as_its_notation_runs_it() {
+    use crate::notation_ui::NotationUi;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut add =
+            |name: &str| s.execute("uml.package.add", &serde_json::json!({ "name": name })).unwrap().value["id"].as_str().unwrap().to_string();
+        let (sales, orders, billing) = (add("Sales"), add("Orders"), add("Billing"));
+        let parent = |shell: &Shell, package: &str| {
+            let st = shell.session.as_ref().unwrap().doc();
+            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(package).unwrap()).unwrap()).unwrap();
+            archforge_core::name_of(st, p)
+        };
+        let shell = h.state_mut();
+        let params = |package: &str| serde_json::json!({ "package": package, "to": sales });
+        crate::er_ui::ErUi.run_drop(shell, "uml.package.move", params(&orders)).unwrap();
+        assert_eq!((parent(shell, &orders).as_str(), shell.canvas.toast.is_none()), ("Sales", true), "{theme:?}: run plainly");
+        crate::uml_ui::UmlUi.run_drop(shell, "uml.package.move", params(&billing)).unwrap();
+        assert_eq!(parent(shell, &billing), "Sales", "{theme:?}");
+        assert_eq!(shell.canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Billing moved into Sales"), "{theme:?}: as Properties moves it");
+        assert_eq!(shell.session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}");
+        let refused = crate::uml_ui::UmlUi.run_drop(shell, "uml.package.move", serde_json::json!({ "package": sales, "to": billing }));
+        assert!(refused.is_err(), "{theme:?}: into a package it holds, refused in words: {refused:?}");
+    }
+}
+
 /// The root's class diagram First with the card of the package Sales, and Sales' own diagram:
 /// `(root, first, sales, sales_d)`.
 fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid) {
@@ -13165,7 +13260,7 @@ fn zoom_out_to(h: &mut Harness<'static, Shell>, to: archforge_mof::Uuid) {
         h.step();
     }
     assert_eq!(h.state().canvas.active, Some(to), "zoomed out to the diagram entered from");
-    assert!(h.state().canvas.nav.reveal.is_some(), "not drawn yet: the landing still pending");
+    assert!(uml_of(h.state()).nav.reveal.is_some(), "not drawn yet: the landing still pending");
 }
 
 /// The path bar restores a diagram as it was last left, however it was left (AR-666): First, left
@@ -13353,7 +13448,7 @@ fn a_pending_fit_or_restored_view_stays_on_its_tab_across_switches_in_one_frame(
             zoom_out_to(&mut h, first);
             let seen = |c: &crate::canvas::State| [0.0, 4200.0].iter().all(|x| (0.0..=c.size.x).contains(&(c.pan.x + x * c.zoom)));
             if case == "closed" {
-                let kept = h.state().canvas.nav.views.get(&sales_d).copied();
+                let kept = h.state().canvas.views.get(&sales_d).copied();
                 crate::canvas::close_tab(h.state_mut(), first);
                 h.run();
                 let c = &h.state().canvas;
@@ -13410,7 +13505,7 @@ fn a_landing_in_place_left_before_it_draws_keeps_no_view_never_drawn() {
         assert_eq!((h.state().canvas.active, h.state().canvas.zoom), (Some(sales_d), 1.0), "{theme:?}: landing in place");
         crate::package_nav::leave(h.state_mut(), archforge_mof::Uuid::parse(&root).unwrap(), 0.0);
         assert_eq!(h.state().canvas.active, Some(first), "{theme:?}");
-        let kept = h.state().canvas.nav.views.get(&sales_d).copied();
+        let kept = h.state().canvas.views.get(&sales_d).copied();
         assert!(kept.is_none() || kept == Some(drawn), "{theme:?}: Sales keeps no view it was never drawn with, {kept:?}");
     }
 }
@@ -13434,9 +13529,9 @@ fn a_new_gesture_after_a_pause_goes_up_though_no_idle_frame_was_drawn_between() 
     // Just above 10 %, the last switch and the last zoom long past, and still disarmed: as an idle
     // window leaves it, having drawn no frame since.
     let now = h.ctx.input(|i| i.time);
-    let nav = &mut h.state_mut().canvas.nav;
+    h.state_mut().canvas.switched = Some(now - 5.0);
+    let nav = &mut uml_of_mut(h.state_mut()).nav;
     nav.disarmed = true;
-    nav.switched = Some(now - 5.0);
     nav.last_zoom = Some(now - 5.0);
     h.state_mut().canvas.zoom = 0.11;
     // The new gesture's first frame reaches 10 % and goes up.
@@ -15543,16 +15638,32 @@ fn sketch_harness() -> (Harness<'static, Shell>, String, String, String, String)
     (h, d, a, b, e)
 }
 
-/// What drawing the diagram `d` of `session` paints and records, with no shell anywhere, over the
-/// area `width` wide and with `overrides` as a drag's preview.
+/// What drawing the diagram `d` of `session` paints and records, with no shell anywhere, as `kind`
+/// draws its own figures, over the area `width` wide and with `overrides` as a drag's preview: the
+/// texts, the ids recorded and the badges given back.
 fn drawn_alone(
     session: &archforge_notations::Session,
     d: &str,
+    kind: Option<&'static dyn crate::kinds::DiagramKind>,
     dark: bool,
     width: f32,
     overrides: &std::collections::BTreeMap<archforge_mof::Uuid, egui::Rect>,
     problems: &std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
 ) -> (Vec<String>, Vec<String>, usize) {
+    let (texts, recorded, badges) = drawn_alone_at(session, d, kind, dark, width, overrides, problems);
+    (texts, recorded.into_iter().map(|(id, _)| id).collect(), badges)
+}
+
+/// [`drawn_alone`], each id recorded with its rectangle.
+fn drawn_alone_at(
+    session: &archforge_notations::Session,
+    d: &str,
+    kind: Option<&'static dyn crate::kinds::DiagramKind>,
+    dark: bool,
+    width: f32,
+    overrides: &std::collections::BTreeMap<archforge_mof::Uuid, egui::Rect>,
+    problems: &std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
+) -> (Vec<String>, Vec<(String, egui::Rect)>, usize) {
     let store = session.doc();
     let diagram = store.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap();
     let grid = archforge_diagram::Grid::build(store, diagram);
@@ -15566,7 +15677,8 @@ fn drawn_alone(
             ui.ctx().set_fonts(crate::fonts::definitions());
             return;
         }
-        let scene = crate::canvas::Scene { p: crate::ux::palette(dark), store, notations: session.view(), diagram, view: &view, grid: &grid, area };
+        let scene =
+            crate::canvas::Scene { p: crate::ux::palette(dark), store, notations: session.view(), kind, diagram, view: &view, grid: &grid, area };
         let live = crate::canvas::Live {
             selection: &[],
             overrides,
@@ -15588,7 +15700,8 @@ fn drawn_alone(
     h.run();
     let texts = painted(&h);
     drop(h);
-    let ids = recorded.borrow().entries().iter().map(|e| e.id.clone()).collect();
+    let at = |r: [f32; 4]| egui::Rect::from_min_max(egui::pos2(r[0], r[1]), egui::pos2(r[2], r[3]));
+    let ids = recorded.borrow().entries().iter().map(|e| (e.id.clone(), at(e.rect))).collect();
     (texts, ids, badges.get())
 }
 
@@ -15607,7 +15720,7 @@ fn a_stores_diagram_draws_with_no_shell() {
     let element = crate::canvas::element_of(store, line, archforge_diagram::edge::ELEMENT).unwrap();
     let flagged = [(element, vec!["A problem".to_string()])].into_iter().collect();
     for dark in [false, true] {
-        let (texts, ids, badges) = drawn_alone(&session, &d, dark, 1000.0, &none, &clean);
+        let (texts, ids, badges) = drawn_alone(&session, &d, Some(&SketchKind), dark, 1000.0, &none, &clean);
         assert_eq!(badges, 0);
         for t in ["CLASS", "Party", "partyId", "rename", "Customer", "since", "specific"] {
             assert!(texts.iter().any(|x| x == t), "{t} is drawn: {texts:?}");
@@ -15617,13 +15730,63 @@ fn a_stores_diagram_draws_with_no_shell() {
         for id in [format!("workspace.canvas.node.{a}"), format!("workspace.canvas.node.{b}"), format!("workspace.canvas.edge.{e}")] {
             assert!(ids.contains(&id), "{id}: {ids:?}");
         }
-        let (.., badges) = drawn_alone(&session, &d, dark, 1000.0, &none, &flagged);
+        let (.., badges) = drawn_alone(&session, &d, Some(&SketchKind), dark, 1000.0, &none, &flagged);
         assert_eq!(badges, 1, "the line's badge");
-        let (texts, ..) = drawn_alone(&session, &d, dark, 400.0, &none, &clean);
+        let (texts, ..) = drawn_alone(&session, &d, Some(&SketchKind), dark, 400.0, &none, &clean);
         assert!(texts.iter().any(|x| x == "Party") && !texts.iter().any(|x| x == "Customer"), "out of view: {texts:?}");
         let dragged = [(archforge_mof::Uuid::parse(&b).unwrap(), egui::Rect::from_min_size(egui::pos2(20.0, 300.0), egui::vec2(240.0, 166.0)))];
-        let (texts, ..) = drawn_alone(&session, &d, dark, 400.0, &dragged.into_iter().collect(), &clean);
+        let (texts, ..) = drawn_alone(&session, &d, Some(&SketchKind), dark, 400.0, &dragged.into_iter().collect(), &clean);
         assert!(texts.iter().any(|x| x == "Customer"), "a drag brought it into view: {texts:?}");
+    }
+}
+
+/// A diagram's kind draws its own figures beyond what the notations describe (AR-788): UML's kind
+/// draws an association class's tie to its card, its name at its line's middle on a diagram without
+/// the card, and a generalization set's line and label across its member's line; ER's kind, which
+/// keeps the defaults, draws none of them on the same diagram, while the lines and cards stay. In
+/// light and dark.
+#[test]
+fn a_diagrams_kind_draws_its_own_figures_and_ers_draws_none() {
+    use crate::er_kind::ErKind;
+    use crate::uml_ui::UmlKind;
+    let mut r = reviews(ThemeKind::Light);
+    let (_, edge, card) = r.review();
+    let (d, customer, package) = (r.diagram.clone(), r.ids["Customer"].clone(), r.package.clone());
+    let s = r.h.state_mut().session.as_mut().unwrap();
+    let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+    let member = run("uml.class.add", serde_json::json!({ "package": package, "name": "Member" }));
+    run("diagram.place", serde_json::json!({ "diagram": d, "element": member, "x": 80, "y": 160, "width": 240, "height": 136 }));
+    let g = run("uml.generalization.add", serde_json::json!({ "specific": member, "general": customer }));
+    run("diagram.connect-all", serde_json::json!({ "diagram": d }));
+    let set = run("uml.generalization-set.add", serde_json::json!({ "generalizations": [g], "name": "Kinds" }));
+    let mut session = r.h.state_mut().session.take().unwrap();
+    drop(r);
+    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
+    let (tie, name) = (format!("workspace.canvas.edge.{edge}.tie"), format!("workspace.canvas.edge.{edge}.name"));
+    let sets = [format!("workspace.canvas.generalizationSet.{set}"), format!("workspace.canvas.generalizationSet.{set}.line")];
+    for dark in [false, true] {
+        let (texts, uml, _) = drawn_alone(&session, &d, Some(&UmlKind), dark, 1000.0, &none, &clean);
+        assert!(uml.contains(&tie) && !uml.contains(&name), "{dark}: UML ties the line to its card: {uml:?}");
+        assert!(sets.iter().all(|i| uml.contains(i)) && texts.iter().any(|t| t == "Kinds"), "{dark}: UML draws the set: {uml:?}");
+        let (texts, er, _) = drawn_alone(&session, &d, Some(&ErKind), dark, 1000.0, &none, &clean);
+        assert!(!er.contains(&tie) && !er.contains(&name) && sets.iter().all(|i| !er.contains(i)), "{dark}: the default draws none: {er:?}");
+        assert!(!texts.iter().any(|t| t == "Kinds"), "{dark}: no set label: {texts:?}");
+        assert!(er.contains(&format!("workspace.canvas.edge.{edge}")) && texts.iter().any(|t| t == "Review"), "{dark}: the line and card stay");
+    }
+    // Without its card the line goes too, and comes back alone.
+    session.execute("diagram.unplace", &serde_json::json!({ "nodes": [card] })).unwrap();
+    session.execute("diagram.connect-all", &serde_json::json!({ "diagram": d })).unwrap();
+    let (tie, name) = {
+        let st = session.doc();
+        let ac = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION_CLASS)).unwrap();
+        let edge = st.uuid(archforge_diagram::views_of(st, ac).1[0]).unwrap();
+        (format!("workspace.canvas.edge.{edge}.tie"), format!("workspace.canvas.edge.{edge}.name"))
+    };
+    for dark in [false, true] {
+        let (_, uml, _) = drawn_alone(&session, &d, Some(&UmlKind), dark, 1000.0, &none, &clean);
+        assert!(uml.contains(&name) && !uml.contains(&tie), "{dark}: UML names the line without its card: {uml:?}");
+        let (texts, er, _) = drawn_alone(&session, &d, Some(&ErKind), dark, 1000.0, &none, &clean);
+        assert!(!er.contains(&name) && !texts.iter().any(|t| t == "Review"), "{dark}: the default names nothing: {texts:?}");
     }
 }
 
@@ -31384,6 +31547,132 @@ fn selection(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
     h.state().session.as_ref().unwrap().view().selection.clone()
 }
 
+/// A canvas's area for a hook to draw in, away from any window.
+const CANVAS: egui::Rect = egui::Rect { min: egui::pos2(0.0, 0.0), max: egui::pos2(1200.0, 800.0) };
+
+/// What `draw` records in `shell`'s registry when it draws once with the window's fonts in a context
+/// of its own, away from any window: the ids, in order. The window's own registry is set aside
+/// meanwhile and put back.
+fn recorded_alone(shell: &mut Shell, mut draw: impl FnMut(&mut Shell, &egui::Ui)) -> Vec<String> {
+    let ctx = egui::Context::default();
+    let mut ids = Vec::new();
+    for _ in 0..2 {
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            // The window's fonts are the context's, in place a pass later.
+            if !ui.ctx().fonts(|f| f.definitions().families.contains_key(&egui::FontFamily::Name("ux-regular".into()))) {
+                ui.ctx().set_fonts(crate::fonts::definitions());
+                return;
+            }
+            let kept = std::mem::take(&mut shell.registry);
+            draw(shell, ui);
+            ids = std::mem::replace(&mut shell.registry, kept).entries().iter().map(|e| e.id.clone()).collect();
+        });
+        // Nothing is shown: the fonts' textures go unused.
+        out.textures_delta.clear();
+    }
+    ids
+}
+
+/// UML starts an n-ary association's leg at its diamond's outline rather than where the route
+/// meets the diamond's node, and leaves a class card's line where its route meets the card, without
+/// asking where the card is (AR-788). ER's default is held by
+/// `the_canvas_starts_n_ary_legs_where_umls_kind_says`. In light and dark.
+#[test]
+fn umls_legs_start_at_the_diamond() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (h, ids) = nary_sample(theme, true);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let node = |k: &str| st.by_uuid(archforge_mof::Uuid::parse(&ids[k]).unwrap()).unwrap();
+        let (diamond, customer) = (node("diamond"), node("customer"));
+        // A route leaving the node's left side at a quarter of its height: the diamond's outline is
+        // further in, halfway between the side and the middle.
+        let rect = egui::Rect::from_min_size(egui::pos2(100.0, 100.0), egui::vec2(40.0, 40.0));
+        let (tip, next) = (egui::pos2(100.0, 110.0), egui::pos2(60.0, 110.0));
+        let at = crate::uml_nary::leg_start(st, diamond, || rect, tip, next);
+        assert!(at.is_some_and(|p| (p - egui::pos2(110.0, 110.0)).length() < 1e-3), "{theme:?}: on the diamond's outline: {at:?}");
+        let card = crate::uml_nary::leg_start(st, customer, || panic!("a class card's place is not asked"), tip, next);
+        assert_eq!(card, None, "{theme:?}: a class's line starts at its card");
+    }
+}
+
+/// The canvas starts each line where the diagram's kind says (AR-788): drawn with UML's kind, an
+/// n-ary association's legs that leave the diamond's node away from a corner reach on to its outline, so each leg's drawn
+/// extent holds the one drawn with ER's kind, which starts lines at the node's border, and at least
+/// one leg reaches further. In light and dark.
+#[test]
+fn the_canvas_starts_n_ary_legs_where_umls_kind_says() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    let mut session = h.state_mut().session.take().unwrap();
+    drop(h);
+    // Customer moves under the diamond beside Catalog: their two legs share the diamond's lower
+    // side, spread along it, so they leave its node away from the diamond's corner.
+    session.execute("diagram.move", &serde_json::json!({ "nodes": [ids["customer"]], "dx": 0.0, "dy": 480.0 })).unwrap();
+    let legs: Vec<String> = {
+        let st = session.doc();
+        let diamond = st.by_uuid(archforge_mof::Uuid::parse(&ids["diamond"]).unwrap()).unwrap();
+        let d = st.by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
+        crate::canvas::refs(st, d, archforge_diagram::diagram::EDGE)
+            .into_iter()
+            .filter(|e| crate::canvas::element_of(st, *e, archforge_diagram::edge::SOURCE) == Some(diamond))
+            .map(|e| format!("workspace.canvas.edge.{}", st.uuid(e).unwrap()))
+            .collect()
+    };
+    assert_eq!(legs.len(), 3, "three legs");
+    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
+    for dark in [false, true] {
+        let leg_rects = |kind: &'static dyn crate::kinds::DiagramKind| {
+            let (_, at, _) = drawn_alone_at(&session, &ids["diagram"], Some(kind), dark, 1000.0, &none, &clean);
+            legs.iter().map(|l| at.iter().find(|(id, _)| id == l).map(|(_, r)| *r).unwrap()).collect::<Vec<_>>()
+        };
+        let (uml, er) = (leg_rects(&crate::uml_ui::UmlKind), leg_rects(&crate::er_kind::ErKind));
+        assert!(uml.iter().zip(&er).all(|(u, e)| u.contains_rect(*e)), "{dark}: {uml:?} hold {er:?}");
+        assert!(uml.iter().zip(&er).any(|(u, e)| u != e), "{dark}: a leg reaches on to the diamond: {uml:?} {er:?}");
+    }
+}
+
+/// The zoom the user makes is the diagram's kind's to follow once (AR-788): zooms made before a
+/// drawing add up, and once a diagram whose kind follows none has drawn, none is left over for the
+/// next. In light and dark.
+#[test]
+fn a_zoom_made_is_the_kinds_to_follow_once() {
+    let mut state = crate::canvas::State::default();
+    crate::canvas::zoom_by(&mut state, 1.25, egui::Vec2::ZERO);
+    crate::canvas::zoom_by(&mut state, 1.25, egui::Vec2::ZERO);
+    assert!((state.zoom_intent - 1.5625).abs() < 1e-6, "two zooms in one frame: {}", state.zoom_intent);
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ..) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        h.run();
+        let before = h.state().canvas.zoom;
+        h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
+        h.event(egui::Event::Zoom(1.25));
+        h.step();
+        assert!(h.state().canvas.zoom > before, "{theme:?}: the canvas zoomed");
+        assert_eq!(h.state().canvas.zoom_intent, 0.0, "{theme:?}: nothing left over for the next frame");
+    }
+}
+
+/// The n-ary hint bar is its diagram's kind's (AR-788): with an n-ary association being drawn, UML's
+/// kind draws it at the canvas's top; ER's kind, which keeps the default, draws none in the same
+/// state. In light and dark.
+#[test]
+fn the_n_ary_hint_bar_is_umls_kinds_and_ers_draws_none() {
+    use crate::kinds::DiagramKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, false);
+        arm_nary(&mut h);
+        let at = card(&h, &ids["customer"]);
+        click(&mut h, at);
+        let hinted = |kind: &dyn DiagramKind, shell: &mut Shell| {
+            let p = crate::ux::palette(theme == ThemeKind::Dark);
+            let ids = recorded_alone(shell, |shell, ui| kind.hint_bar(shell, ui, p, CANVAS, 0.0));
+            ids.iter().any(|i| i == "workspace.canvas.gestureHint")
+        };
+        assert!(hinted(&crate::uml_ui::UmlKind, h.state_mut()), "{theme:?}: UML's kind draws the hint");
+        assert!(!hinted(&crate::er_kind::ErKind, h.state_mut()), "{theme:?}: the default draws none");
+    }
+}
+
 /// The Relationship menu lists N-ary association after Association class, below a separator of
 /// its own, its sample a line with a small diamond; a pick arms the tool with it (AR-128, A2). In
 /// light and dark.
@@ -32618,7 +32907,7 @@ fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound(
                 let mut route = crate::nav_route::Route::default();
                 let history = h.state().session.as_ref().unwrap().history();
                 route.push(crate::nav_route::Step { source: top, destination: sales_d, source_name: "Top".into(), view: Some(view), history });
-                h.state_mut().canvas.nav.routes.insert(sales_d, route);
+                uml_of_mut(h.state_mut()).nav.routes.insert(sales_d, route);
             }
             rest(&mut h);
             assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?} {case}");
@@ -32781,7 +33070,7 @@ fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
                 crate::package_nav::enter(h.state_mut(), sales, 0.0);
             } else {
                 crate::canvas::open(h.state_mut(), sales_d);
-                assert!(h.state().canvas.nav.routes.get(&sales_d).is_none_or(|r| r == &crate::nav_route::Route::default()), "{theme:?}: no route");
+                assert!(uml_of(h.state()).nav.routes.get(&sales_d).is_none_or(|r| r == &crate::nav_route::Route::default()), "{theme:?}: no route");
             }
             h.run();
             h.state_mut().session.as_mut().unwrap().execute("diagram.unplace", &serde_json::json!({ "nodes": [card.to_string()] })).unwrap();

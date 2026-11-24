@@ -433,6 +433,50 @@ impl DiagramKind for UmlKind {
         let (width, _) = kind.size();
         crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
     }
+
+    /// On a package's diagram, package navigation: a landing after a switch, ⌘↓ and ⌘↑, the zoom
+    /// keys, and a zoom across a package's threshold (AR-95).
+    fn before_draw(&self, shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
+        crate::package_nav::before_draw(shell, ui, r, d);
+    }
+
+    /// On a package's diagram, the path bar and a selected package's Open (AR-95).
+    fn after_draw(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
+        crate::package_nav::after_draw(shell, ui, p, r, d)
+    }
+
+    /// An n-ary association's leg starts at its diamond's outline (AR-128).
+    fn line_start(&self, d: &crate::canvas::Drawing<'_>, source: Obj, tip: egui::Pos2, next: egui::Pos2) -> Option<egui::Pos2> {
+        crate::uml_nary::leg_start(d.store, source, || d.node_rect(source), tip, next)
+    }
+
+    /// An association class's tie to its card, or its name while the card is not here (AR-125).
+    fn line_extras(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> Option<Rect> {
+        crate::uml_relate::association_class_extras(paint, d, line, registry, ui)
+    }
+
+    /// The generalization sets across their members' lines (AR-129).
+    fn draw_extras(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> Vec<crate::canvas::SetLabel> {
+        crate::uml_sets::draw_sets(paint, d, registry, ui)
+    }
+
+    /// What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
+    fn hint_bar(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, below: f32) {
+        crate::uml_nary::hint_bar(shell, ui, p, r, below);
+    }
 }
 
 /// The Package tool: a package in the diagram's package, its card centred under the click, and the
@@ -795,6 +839,21 @@ impl NotationUi for UmlUi {
                 Some(("uml.package.move", json!({ "package": id(dragged)?, "to": id(to)? })))
             }
             _ => None,
+        }
+    }
+
+    /// A package dropped into another goes as Properties' Parent package moves it: one step with a
+    /// toast offering Undo, its cards kept where they are and none added to its new owner's diagram
+    /// (AR-568). Any other drop runs its command.
+    fn run_drop(&self, shell: &mut Shell, cmd: &'static str, params: serde_json::Value) -> Result<(), String> {
+        let moved = shell.session.as_ref().filter(|_| cmd == "uml.package.move").and_then(|s| {
+            let store = s.doc();
+            let of = |key: &str| store.by_uuid(Uuid::parse(params.get(key)?.as_str()?)?);
+            Some((of("package")?, of("to")?))
+        });
+        match moved {
+            Some((package, to)) => crate::package_nav::move_package(shell, package, to),
+            None => crate::panels::run(shell, cmd, params).map(|_| ()),
         }
     }
 

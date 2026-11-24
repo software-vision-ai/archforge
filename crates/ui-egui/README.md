@@ -5,7 +5,7 @@ workspace once a project is open (`workspace`: the project bar, the activity rai
 explorer over the session (`explorer`: each notation's rows, ER's schemas, tables, columns and
 skills; `+` adds what the selection's notation offers, a name is typed in place, Delete asks when
 other things go with it; `notation_ui::NotationUi` is what a notation brings to the tree, the
-search, the problems and Properties, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
+search, the problems and Properties, and how a row dropped on another runs, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
 `notation_ui::NotationState` is what a notation keeps between frames for its own editors, menus,
 drawings and tools, `er_state` ER's and `uml_state` UML's, which the shell holds, parks with the
 project, starts fresh with each project opened and each version shown, and asks only through that
@@ -25,7 +25,11 @@ with each notation's cards and lines as it describes them (`archforge_diagram::f
 table cards and crow's foot lines), notes, links and labels, pan and zoom, the minimap with the zoom control, the canvas
 toolbar, whose tools after Select and Pan are the open diagram kind's (`kinds::DiagramKind`: its
 tools, each placing or connecting, and the hooks the gestures run: place, connect, a line dropped
-on empty canvas, rename in place, open at a card's row, its adorner, its menu, the live line;
+on empty canvas, rename in place, open at a card's row, its adorner, its menu, the live line; and
+the hooks the canvas runs as it draws: before and after a diagram is drawn, where a line starts,
+what goes with a line, the figures of no one node or line, and the hint bar, through which UML
+draws its association classes' ties and names, its generalization sets, its n-ary legs and hint,
+and runs its package navigation, whose state is UML's own;
 `er_kind`: ER's); a click selects what it hits; `editing`: the Entity tool places a table named in place,
 Select drags, resizes, marquees, nudges and arranges nodes, the entity menu removes from the
 diagram or deletes from the model after the dialog, a node grows with its columns; `connect`: the

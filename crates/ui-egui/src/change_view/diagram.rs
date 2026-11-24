@@ -294,7 +294,8 @@ fn pane(
 /// own ids, as both sides hold the same boxes and lines.
 fn scene(shell: &mut Shell, clip: &egui::Ui, p: &Palette, (side, area, view): (&str, Rect, &View), on_it: &DiagramSide) {
     let (notations, none, clean) = (archforge_notations::view(), BTreeMap::new(), BTreeMap::new());
-    let scene = Scene { p, store: &on_it.store, notations: &notations, diagram: on_it.diagram, view, grid: &on_it.grid, area };
+    let kind = crate::kinds::kind_of(shell, &on_it.store, on_it.diagram);
+    let scene = Scene { p, store: &on_it.store, notations: &notations, kind, diagram: on_it.diagram, view, grid: &on_it.grid, area };
     let live = Live {
         selection: &[],
         overrides: &none,

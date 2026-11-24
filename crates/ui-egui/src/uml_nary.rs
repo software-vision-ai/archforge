@@ -351,6 +351,15 @@ fn leg_points(diamond: Rect, card: Rect) -> Vec<Pos2> {
     vec![from, pos2(c.x, m.y), pos2(c.x, if c.y < m.y { card.bottom() } else { card.top() })]
 }
 
+/// Where a leg leaves the node `source` when it is an n-ary association's diamond: where the leg
+/// from `tip`, on the node's border, towards `next` meets the diamond's outline in the node's
+/// rectangle on screen, which `rect` gives only then ([`onto_diamond`]); none for a node of
+/// anything else.
+pub(crate) fn leg_start(store: &Store, source: Obj, rect: impl FnOnce() -> Rect, tip: Pos2, next: Pos2) -> Option<Pos2> {
+    crate::canvas::element_of(store, source, archforge_diagram::node::ELEMENT).filter(|a| nary::is_nary(store, *a))?;
+    onto_diamond(rect(), tip, next)
+}
+
 /// Where an n-ary leg's end at its diamond `rect` meets the diamond's outline: `tip`, on the
 /// node's border, moved on along the leg into the node (`towards` is the leg's next point) until it
 /// reaches the diamond, so the leg touches the diamond wherever it leaves the node. None when the
