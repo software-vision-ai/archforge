@@ -1239,6 +1239,178 @@ fn a_package_holding_a_profile_goes_with_the_elements_named_with_it_that_use_it(
     assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: held, uses }))));
 }
 
+/// A class that goes takes the relationships that touch it along, so the stereotype applications
+/// on them strand nothing (AR-806): a nested package that applies a profile, removed with a class
+/// it holds, goes in one step with the application on that class's association, the other class
+/// handed up. A use on a relationship between classes it hands up is still refused with the same
+/// text, typed, changing nothing, and Models, asking about the package alone, which hands both
+/// associations up, names both.
+#[test]
+fn a_nested_package_goes_with_the_stereotype_applications_on_the_relationships_of_a_class_named_with_it() {
+    use archforge_engine::{EngineError, InUse, Reason, Used};
+    let mut s = session();
+    let [commerce, ..] = shop(&mut s);
+    let ledger = run(&mut s, "uml.package.add", json!({ "name": "Ledger", "parent": commerce }));
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit" }));
+    let trace = run(&mut s, "uml.stereotype.add", json!({ "profile": audit, "name": "Trace", "extends": ["Association"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": ledger, "profile": audit }));
+    let entry = run(&mut s, "uml.class.add", json!({ "package": ledger, "name": "Entry" }));
+    let account = run(&mut s, "uml.class.add", json!({ "package": ledger, "name": "Account" }));
+    let journal = run(&mut s, "uml.class.add", json!({ "package": ledger, "name": "Journal" }));
+    let posts = run(&mut s, "uml.association.add", json!({ "from": entry, "to": account, "name": "posts" }));
+    let files = run(&mut s, "uml.association.add", json!({ "from": account, "to": journal, "name": "files" }));
+    // «Trace» on posts, which goes with Entry: one step, its application going with it, Account
+    // and Journal handed up to Commerce.
+    let mut going = with_applications(&s, &[(&trace, &posts)]);
+    one_step(&mut going, "element.remove", json!({ "ids": [ledger, entry] }));
+    let st = going.doc();
+    for (gone, what) in [(&ledger, "Ledger"), (&entry, "Entry"), (&posts, "posts")] {
+        assert!(st.by_uuid(Uuid::parse(gone).unwrap()).is_none_or(|o| !st.is_alive(o)), "{what} went");
+    }
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_uml::INSTANCE_SPECIFICATION)), "no application left");
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_core::LINK)), "no link left");
+    for (handed, what) in [(&account, "Account"), (&journal, "Journal"), (&files, "files")] {
+        assert_eq!(st.container(obj(st, handed)).unwrap().map(|(p, _)| p), Some(obj(st, &commerce)), "{what} was handed up");
+    }
+    assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
+    // «Trace» on files too, which stays between Account and Journal: refused, naming files alone,
+    // typed, the history as it was.
+    let mut stays = with_applications(&s, &[(&trace, &posts), (&trace, &files)]);
+    run(&mut stays, "uml.class.add", json!({ "package": commerce, "name": "Line" }));
+    stays.undo().unwrap();
+    let history = |s: &S| (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string));
+    let before = history(&stays);
+    let ids = json!({ "ids": [ledger, entry] });
+    let why = refused(&mut stays, "element.remove", ids.clone());
+    assert!(why.contains("Ledger applies the profiles its elements use: «Trace» on files. Remove those first."), "{why}");
+    let Err(EngineError::Failed { error, .. }) = stays.execute("element.remove", &ids) else { panic!("refused") };
+    let applied = || Used::AppliedProfiles { package: "Ledger".to_string() };
+    let uses = vec![("Trace".to_string(), vec!["files".to_string()], 1)];
+    assert_eq!(error.reason, Some(Reason::InUse(Box::new(InUse { what: applied(), uses }))));
+    assert_eq!(history(&stays), before, "the history is as it was");
+    // Ledger alone, as Models asks before it removes it: Entry is handed up, and posts with it.
+    let alone = profiles::removal_problem(stays.doc(), obj(stays.doc(), &ledger)).and_then(|e| e.reason);
+    let Some(Reason::InUse(said)) = alone else { panic!("{alone:?}") };
+    let mut named = said.uses.iter().flat_map(|u| u.1.clone()).collect::<Vec<_>>();
+    named.sort();
+    assert_eq!((said.what, named), (applied(), vec!["files".to_string(), "posts".to_string()]));
+}
+
+/// A package with no parent takes along the relationships that touch the classes it holds,
+/// wherever they are kept, so the stereotype applications on them strand nothing (AR-806): one
+/// holding a profile used on an association and a generalization kept in another package, from a
+/// class there to one of its own, goes in one step with both applications, the class elsewhere
+/// staying, and Models, asking before it removes it, finds nothing to refuse. A use on that other
+/// class, which stays, is still refused by both with the same text, typed.
+#[test]
+fn a_package_with_no_parent_goes_with_the_stereotype_applications_on_the_relationships_of_what_it_holds() {
+    use archforge_engine::{EngineError, InUse, Reason, Used};
+    let mut s = session();
+    let [commerce, order, ..] = shop(&mut s);
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit", "package": commerce }));
+    let tracked =
+        run(&mut s, "uml.stereotype.add", json!({ "profile": audit, "name": "Tracked", "extends": ["Class", "Association", "Generalization"] }));
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let invoice = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Invoice" }));
+    run(&mut s, "uml.profile.apply", json!({ "package": sales, "profile": audit }));
+    let bills = run(&mut s, "uml.association.add", json!({ "from": invoice, "to": order, "name": "bills" }));
+    let kind = run(&mut s, "uml.generalization.add", json!({ "specific": invoice, "general": order }));
+    for (outside, what) in [(&bills, "bills"), (&kind, "the generalization")] {
+        assert!(!s.doc().contains(obj(s.doc(), &commerce), obj(s.doc(), outside)), "{what} is kept outside Commerce");
+    }
+    let mut top = at_top(&with_applications(&s, &[(&tracked, &bills), (&tracked, &kind)]), &commerce);
+    let asked = profiles::removal_problem(top.doc(), obj(top.doc(), &commerce)).map(|e| e.message);
+    assert_eq!(asked, None, "Models finds nothing to refuse");
+    one_step(&mut top, "element.remove", json!({ "ids": [commerce] }));
+    let st = top.doc();
+    for (gone, what) in [(&commerce, "Commerce"), (&audit, "Audit"), (&order, "Order"), (&bills, "bills"), (&kind, "the generalization")] {
+        assert!(st.by_uuid(Uuid::parse(gone).unwrap()).is_none_or(|o| !st.is_alive(o)), "{what} went");
+    }
+    for (kept, what) in [(&sales, "Sales"), (&invoice, "Invoice")] {
+        assert!(st.is_alive(obj(st, kept)), "{what}, held elsewhere, stays");
+    }
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_uml::INSTANCE_SPECIFICATION)), "no application left");
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_core::LINK)), "no link left");
+    assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
+    // «Tracked» on Invoice too, which stays: refused by the command and by Models alike, naming
+    // Invoice alone, typed, the history as it was.
+    let mut stays = at_top(&with_applications(&s, &[(&tracked, &bills), (&tracked, &invoice)]), &commerce);
+    run(&mut stays, "uml.class.add", json!({ "package": sales, "name": "Line" }));
+    stays.undo().unwrap();
+    let history = |s: &S| (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string));
+    let before = history(&stays);
+    let ids = json!({ "ids": [commerce] });
+    let why = refused(&mut stays, "element.remove", ids.clone());
+    assert!(why.contains("Commerce holds the profile Audit, which is in use: «Tracked» on Invoice. Remove those first."), "{why}");
+    let Err(EngineError::Failed { error, .. }) = stays.execute("element.remove", &ids) else { panic!("refused") };
+    let held = Used::HeldProfile { package: "Commerce".to_string(), profile: "Audit".to_string() };
+    let reason = Some(Reason::InUse(Box::new(InUse { what: held, uses: vec![("Tracked".to_string(), vec!["Invoice".to_string()], 1)] })));
+    assert_eq!(error.reason, reason);
+    assert_eq!(history(&stays), before, "the history is as it was");
+    assert_eq!(profiles::removal_problem(stays.doc(), obj(stays.doc(), &commerce)).and_then(|e| e.reason), reason, "as Models says it");
+}
+
+/// A profile, a stereotype or a stereotype's property removed with a class goes with the uses and
+/// values on the relationships that go with the class (AR-806): «Reference» on an association to
+/// Order, its value set, removed with Order, goes in one step, Customer, at its other end, staying.
+/// With a use and a value on an association between classes that stay too, each is refused, naming
+/// that association alone, typed, changing nothing.
+#[test]
+fn a_profile_stereotype_or_property_goes_with_the_uses_on_the_relationships_of_a_class_named_with_it() {
+    use archforge_engine::{EngineError, InUse, Reason, Used};
+    let mut s = session();
+    let [commerce, order, customer, _, persistence, _, _, reference] = applied_shop(&mut s);
+    run(&mut s, "uml.attribute.add", json!({ "class": reference, "name": "via", "type": "String" }));
+    let via = property(&mut s, &reference, "via");
+    let address = run(&mut s, "uml.class.add", json!({ "package": commerce, "name": "Address" }));
+    let places = run(&mut s, "uml.association.add", json!({ "from": customer, "to": order, "name": "places" }));
+    let lives = run(&mut s, "uml.association.add", json!({ "from": customer, "to": address, "name": "lives" }));
+    // «Reference» on each of `on`, its via set.
+    let with_values = |on: &[&str]| {
+        let uses: Vec<(&str, &str)> = on.iter().map(|e| (reference.as_str(), *e)).collect();
+        let mut t = with_applications(&s, &uses);
+        for e in on {
+            run(&mut t, "uml.stereotype.set-value", json!({ "element": e, "stereotype": reference, "property": "via", "values": ["mail"] }));
+        }
+        t
+    };
+    let history = |s: &S| (s.undo_label().map(str::to_string), s.undo_revision(), s.redo_label().map(str::to_string));
+    let in_use = |name: &str| {
+        let uses = vec![("Reference".to_string(), vec!["lives".to_string()], 1)];
+        Reason::InUse(Box::new(InUse { what: Used::Element(name.to_string()), uses }))
+    };
+    let removals = [
+        (&persistence, "Persistence is in use: «Reference» on lives. Remove those first.", in_use("Persistence")),
+        (&reference, "Reference is in use: «Reference» on lives. Remove those first.", in_use("Reference")),
+        (&via, "the values of via are set on 1 element; remove those first", Reason::ValuesSet { name: "via".into(), elements: 1 }),
+    ];
+    for (gone, english, reason) in removals {
+        // The use and the value on places, which goes with Order: one step, both going with it.
+        let mut going = with_values(&[&places]);
+        one_step(&mut going, "element.remove", json!({ "ids": [gone, order] }));
+        let st = going.doc();
+        for (went, what) in [(gone, "what was named"), (&order, "Order"), (&places, "places")] {
+            assert!(st.by_uuid(Uuid::parse(went).unwrap()).is_none_or(|o| !st.is_alive(o)), "{what} went, with {english}");
+        }
+        for class in [archforge_uml::INSTANCE_SPECIFICATION, archforge_uml::SLOT] {
+            assert!(st.alive().all(|o| st.class_of(o).ok() != Some(class)), "no application or value left, with {english}");
+        }
+        assert!(st.is_alive(obj(st, &customer)), "Customer stays");
+        // A use and a value on lives too, which stays: refused, naming lives alone, typed, the
+        // history as it was.
+        let mut stays = with_values(&[&places, &lives]);
+        run(&mut stays, "uml.class.add", json!({ "package": commerce, "name": "Line" }));
+        stays.undo().unwrap();
+        let before = history(&stays);
+        let ids = json!({ "ids": [gone, order] });
+        let why = refused(&mut stays, "element.remove", ids.clone());
+        assert!(why.contains(english), "{why}");
+        let Err(EngineError::Failed { error, .. }) = stays.execute("element.remove", &ids) else { panic!("refused") };
+        assert_eq!(error.reason, Some(reason));
+        assert_eq!(history(&stays), before, "the history is as it was");
+    }
+}
+
 /// `uml.profile.diagram` fills the profile's diagram as the window's Open profile diagram does:
 /// every metaclass in a row, every stereotype under them and every extension line, as one step;
 /// asked again it adds only what is missing, keeping what the diagram shows where it is.

@@ -650,20 +650,35 @@ pub fn moving_uses(store: &Store, moved: Obj, to: Obj) -> Uses {
 }
 
 /// Whether an element goes when `package` is removed with `going`: the package itself (AR-800), an
-/// element among `going`, a dependency at a package that goes (AR-698) or an element named in the
-/// same removal (AR-805), and what one of them holds, but for a nested package, which hands what it
-/// holds up rather than takes it along; a package with no parent takes it along (AR-804).
+/// element among `going`, a dependency at a package that goes (AR-698), a relationship of a
+/// classifier that goes (AR-806) or an element named in the same removal (AR-805), and what one of
+/// them holds, but for a nested package, which hands what it holds up rather than takes it along; a
+/// package with no parent takes it along (AR-804).
 fn goes_with<'a>(store: &'a Store, package: Obj, going: &'a [Obj]) -> impl Fn(Obj) -> bool + 'a {
     let hands_up = |g: Obj| store.class_of(g).ok() == Some(PACKAGE) && crate::commands::package_of(store, g).is_some();
-    move |e| std::iter::once(&package).chain(going).any(|g| *g == e || (!hands_up(*g) && store.contains(*g, e)))
+    // Indexed once, so an element asked costs the walk up from it, not a pass over all that goes,
+    // which holds every relationship of the classifiers that go (AR-806).
+    let named: std::collections::BTreeSet<Obj> = std::iter::once(package).chain(going.iter().copied()).collect();
+    let takes: std::collections::BTreeSet<Obj> = named.iter().copied().filter(|g| !hands_up(*g)).collect();
+    move |e| {
+        // The seen-set bounds the walk up, round a loop of containers that only a damaged store holds.
+        let (mut at, mut seen) = (e, std::collections::BTreeSet::new());
+        let mut up = std::iter::from_fn(|| {
+            let (c, _) = store.container(at).ok().flatten().filter(|(c, _)| seen.insert(*c))?;
+            at = c;
+            Some(c)
+        });
+        named.contains(&e) || up.any(|c| takes.contains(&c))
+    }
 }
 
 /// The uses removing `package` would strand: applications on elements it hands up to its parent
 /// whose profile only it applies there. Those on what goes with it strand nothing: on `package`
 /// itself (AR-800), on an element among `going`, or inside one that does not hand it up, a
-/// dependency at a package that goes, say ([`crate::commands::dependencies_going`], AR-698), or an
-/// element named in the same removal (AR-805), and on anything a package with no parent holds, as it
-/// hands nothing up (AR-804).
+/// dependency at a package that goes, say ([`crate::commands::dependencies_going`], AR-698), a
+/// relationship of a classifier that goes ([`crate::commands::going_along`], AR-806), or an element
+/// named in the same removal (AR-805), and on anything a package with no parent holds, as it hands
+/// nothing up (AR-804).
 pub fn removal_uses(store: &Store, package: Obj, going: &[Obj]) -> Uses {
     let goes = goes_with(store, package, going);
     let mut uses = Uses::default();
@@ -761,10 +776,10 @@ pub fn stranding(store: &Store, key: &str, moved: Obj, uses: &Uses) -> CommandEr
 }
 
 /// Why `o` may not be removed on its own for its uses, when that is so, as Models says before it
-/// asks: [`removal_problem_with`] with what goes with `o` alone
-/// ([`crate::commands::dependencies_going`]).
+/// asks: [`removal_problem_with`] with what goes along with `o` alone, as `element.remove` counts
+/// it ([`crate::commands::going_along`]).
 pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
-    removal_problem_with(store, o, &crate::commands::dependencies_going(store, &[o]))
+    removal_problem_with(store, o, &crate::commands::going_along(store, &[o]))
 }
 
 /// Why `o` may not be removed for its uses, when that is so: a profile or a stereotype whose

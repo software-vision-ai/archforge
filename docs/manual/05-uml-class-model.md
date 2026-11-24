@@ -1634,12 +1634,13 @@ extend are UML model elements of their own, saved with the model, not labels or 
   those first.* **Show the 5 uses** selects them. Renaming a profile or a stereotype keeps every
   use. Deleting a package refuses the same way when its elements would lose the profile that
   reaches them, and when it would take along a profile that is in use outside what goes with it.
-  Stereotypes on the package itself, on a dependency deleted with it, and on the other elements
-  deleted in the same step go with it and do not count. A package left beside the root package by
-  a project made before the root existed takes everything it holds along, so the stereotypes on
-  all of that go with it too. Deleting a stereotype, its profile or a property whose values are set
-  together with every element that uses it is not refused: those stereotypes and values go with
-  the elements.
+  Stereotypes on the package itself, on a dependency deleted with it, on the other elements
+  deleted in the same step, and on the relationships of a class deleted, which go with the class,
+  go with it and do not count. A package left beside the root package by a project made before the
+  root existed takes everything it holds along, the relationships of its classes wherever they are
+  kept included, so the stereotypes on all of that go with it too. Deleting a stereotype, its
+  profile or a property whose values are set together with every element that uses it is not
+  refused: those stereotypes and values go with the elements.
 - **Deleting a used element** itself, such as *Order*, asks first, from **Models** too, and the
   dialog names the stereotype applications that go with it and with what it takes along: *3
   stereotype applications go with it: «Entity» on Order, «Id» on id,

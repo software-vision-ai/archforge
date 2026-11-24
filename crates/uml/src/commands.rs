@@ -689,6 +689,17 @@ pub fn dependencies_going(store: &Store, objs: &[Obj]) -> Vec<Obj> {
     incident_to_packages(store, &packages, &[crate::DEPENDENCY])
 }
 
+/// What goes along when `objs` are removed, beside what they hold, worked out on the model as it is
+/// so the profile checks before anything goes know it: the dependencies at the packages that go
+/// ([`dependencies_going`], AR-698) and the relationships that go with the classifiers that go, those
+/// a package with no parent holds among them, wherever such a relationship is kept ([`going_with`],
+/// AR-806). The stereotype applications on any of it go with it and strand no use.
+pub fn going_along(store: &Store, objs: &[Obj]) -> Vec<Obj> {
+    let (classes, _) = going_for_constraints(store, objs);
+    let classes: Vec<Obj> = classes.into_iter().collect();
+    dependencies_going(store, objs).into_iter().chain(going_with(store, &classes)).collect()
+}
+
 /// Every classifier inside a package, at any depth, those nested in its classifiers among them
 /// (AR-132).
 pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
@@ -845,10 +856,14 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     if let Some(refused) = crate::templates::removals_problem(store, &params) {
         return Err(refused);
     }
-    // The dependencies at the packages that go go too (AR-698), and so does everything named here
-    // (AR-805), so the uses on any of it strand nothing.
+    // The dependencies at the packages that go go too (AR-698), as do the relationships of the
+    // classifiers that go (AR-806) and everything named here (AR-805), so the uses on any of it
+    // strand nothing: what goes along ([`going_along`]), its parts kept for what follows.
     let incident = dependencies_going(store, objs);
-    let named: Vec<Obj> = incident.iter().chain(objs).copied().collect();
+    let (gone_classes, gone_generalizations) = going_for_constraints(store, objs);
+    let classes: Vec<Obj> = gone_classes.iter().copied().collect();
+    let with = going_with(store, &classes);
+    let named: Vec<Obj> = incident.iter().chain(&with).chain(objs).copied().collect();
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
         if let Some(why) = crate::templates::parameter_element_problem(store, *o) {
@@ -897,14 +912,11 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     }
     // A surviving template parameter's default, or a binding's argument, that would no longer
     // specialize its constraint once what goes has gone is refused before anything goes (AR-130).
-    let (gone_classes, gone_generalizations) = going_for_constraints(store, objs);
     if let Some(why) = crate::templates::constraint_problem(store, &gone_classes, &gone_generalizations, &params) {
         return Err(refuse("ids", why));
     }
     // A classifier a binding that stays uses as an argument stays too (AR-131): the binding would
     // be left naming nothing for its parameter.
-    let classes: Vec<Obj> = gone_classes.iter().copied().collect();
-    let with = going_with(store, &classes);
     // Everything the removal takes along, whose bindings go with it (AR-578): each element with
     // what it holds, and the relationships that go with the classifiers that go, an association
     // class with what it holds, whose diagrams go too; a nested package goes alone, as it hands
