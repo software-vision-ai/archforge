@@ -1005,18 +1005,20 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
         return false;
     };
     let Some(id) = store.uuid(element).ok() else { return false };
-    let word = crate::notation_ui::of(shell.notation_uis, store, element).and_then(|ui| ui.words(store, element)).map(|w| w.word).unwrap_or_default();
-    // The generalization sets it alone made up go with it, and the toast says so (AR-129).
-    let gone = crate::uml_sets::emptied_names(store, &[element]);
-    let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
+    let ui = crate::notation_ui::of(shell.notation_uis, store, element);
+    let word = ui.and_then(|ui| ui.words(store, element)).map(|w| w.word).unwrap_or_default();
+    // What its notation says of the removal is worked out while the element is still there: UML
+    // names the generalization sets it alone made up, which go with it (AR-129). The one notation
+    // that gives the toast answers, so the toast names only what that notation worked out.
+    let removal = ui.map_or_else(crate::notation_ui::Removal::default, |ui| ui.before_removal(store, &[element]));
     let Some(session) = shell.session.as_mut() else { return false };
     let removed = session.execute("element.remove", &json!({ "ids": [id.to_string()] })).map_err(|e| crate::panels::refusal(&e));
     match removed {
         Ok(_) => {
-            let text = crate::uml_sets::removed_text(&word, &gone);
+            let text = ui.map_or_else(|| crate::i18n::fmt(&tr("{what} removed"), &[("what", &word)]), |ui| ui.removed_text(&word, &removal));
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
             shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
-            crate::uml_constraints::say_dropped(shell, said, "");
+            crate::notation_ui::say_after(shell, removal.after, "");
         }
         Err(e) => shell.canvas.notice = Some(e),
     }

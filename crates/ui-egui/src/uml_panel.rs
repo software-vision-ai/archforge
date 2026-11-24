@@ -1123,7 +1123,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                     uml.member = None;
                 }
                 reselect(shell, edit.class);
-                crate::uml_constraints::say_dropped(shell, said, &fmt(&tr("{name} deleted"), &[("name", &edit.name)]));
+                crate::notation_ui::say_after(shell, said, &fmt(&tr("{name} deleted"), &[("name", &edit.name)]));
             }
             Err(e) => refuse(shell, Some(e)),
         }

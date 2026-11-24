@@ -15,7 +15,7 @@ use serde_json::json;
 use crate::Shell;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, trn};
-use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Words};
+use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
 use crate::panels::{FIELD, Subject};
 use crate::problems::Problem;
 use crate::ux::{Palette, icons};
@@ -206,6 +206,19 @@ impl NotationUi for ErUi {
 
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         consequences(store, obj)
+    }
+
+    /// Nothing: what goes with an ER element is counted in the dialog before it goes
+    /// ([`NotationUi::consequences`]), and no rule of its own names what goes.
+    fn before_removal(&self, store: &Store, objs: &[Obj]) -> Removal {
+        let _ = (store, objs);
+        Removal::default()
+    }
+
+    /// `{what} removed`.
+    fn removed_text(&self, what: &str, removal: &Removal) -> String {
+        let _ = removal;
+        fmt(&tr("{what} removed"), &[("what", what)])
     }
 
     /// A schema's tables, types, sequences and views, a table's columns (slices S5 and S7).

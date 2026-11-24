@@ -5,7 +5,9 @@ workspace once a project is open (`workspace`: the project bar, the activity rai
 explorer over the session (`explorer`: each notation's rows, ER's schemas, tables, columns and
 skills; `+` adds what the selection's notation offers, a name is typed in place, Delete asks when
 other things go with it; `notation_ui::NotationUi` is what a notation brings to the tree, the
-search, the problems and Properties, how a row dropped on another runs, what Delete and a
+search, the problems and Properties, how a row dropped on another runs, what it says of a
+removal of its own elements, worked out before it runs and said in the toast after
+(`notation_ui::Removal`: the shared removals ask the element's notation), what Delete and a
 chord of its own on the canvas do to its selected elements, what it draws over the canvas
 whatever diagram shows, each layer at its one place in the canvas's order (`notation_ui::Layer`:
 drafts, rows, menus, offers), and what a problem badge that offers a way out says and does, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
