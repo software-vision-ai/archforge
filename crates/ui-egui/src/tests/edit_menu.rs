@@ -1072,8 +1072,8 @@ fn select_all_takes_a_generalization_set_whether_its_label_was_moved_or_not() {
             .to_string();
         h.state_mut().canvas.focused = true;
         h.run();
-        let label = h.state().canvas.set_labels.clone();
-        assert_eq!(label.iter().map(|l| (l.set.to_string(), l.node)).collect::<Vec<_>>(), [(set.clone(), None)], "{theme:?}: drawn, no node");
+        let label = h.state().canvas.extra_labels.clone();
+        assert_eq!(label.iter().map(|l| (l.element.to_string(), l.node)).collect::<Vec<_>>(), [(set.clone(), None)], "{theme:?}: drawn, no node");
         key(&mut h, Key::A, Modifiers::COMMAND);
         let unmoved = selection(&h);
         assert_eq!(unmoved.iter().filter(|id| **id == set).count(), 1, "{theme:?}: the set of an unmoved label");
@@ -1082,7 +1082,7 @@ fn select_all_takes_a_generalization_set_whether_its_label_was_moved_or_not() {
         s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
         s.execute("uml.generalization-set.place", &serde_json::json!({ "diagram": d, "set": set, "x": 40, "y": 40 })).unwrap();
         h.run();
-        assert!(h.state().canvas.set_labels.iter().all(|l| l.node.is_some()), "{theme:?}: a node holds the label now");
+        assert!(h.state().canvas.extra_labels.iter().all(|l| l.node.is_some()), "{theme:?}: a node holds the label now");
         key(&mut h, Key::A, Modifiers::COMMAND);
         assert_eq!(selection(&h), unmoved, "{theme:?}: the same selection with the label moved");
     }

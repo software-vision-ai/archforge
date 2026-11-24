@@ -19,7 +19,7 @@ use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_ROW, Tool, View};
 use crate::er_state::er;
 use crate::home::control;
 use crate::i18n::tr;
-use crate::uml_state::uml;
+use crate::notation_ui::{Layer, Overlaid};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -105,9 +105,10 @@ pub enum Gesture {
     /// element, whether it is the source end, the screen point of the end that stays, and the
     /// revision of the model the drag began on, which the drop changes only if it still holds (AR-697).
     Reconnect { element: Uuid, source: bool, fixed: Pos2, at: archforge_engine::Revision },
-    /// A generalization set's label dragged where no node holds it yet (AR-129): the set, the
-    /// screen point the drag started at and the label's rectangle then.
-    SetLabel { set: Uuid, from: Pos2, rect: Rect },
+    /// A label of the figures of no one node or line dragged where no node holds it yet (a UML
+    /// generalization set's, AR-129): the element it stands for, the screen point the drag started
+    /// at and the label's rectangle then.
+    ExtraLabel { element: Uuid, from: Pos2, rect: Rect },
 }
 
 /// The entity menu, open at a screen point.
@@ -119,8 +120,8 @@ pub struct EntityMenu {
 }
 
 /// What lies at diagram point `(x, y)`: the grid's topmost node or nearest line, looking through a
-/// node its notation says holds a label, a generalization set's (AR-129). A label takes a press
-/// only where the last frame drew it (`canvas.set_labels`), so one that draws nothing, its diagram
+/// node its notation says holds a label (a UML generalization set's, AR-129). A label takes a press
+/// only where the last frame drew it (`canvas.extra_labels`), so one that draws nothing, its diagram
 /// showing none of its set's lines, is never hit.
 pub(crate) fn hit(store: &Store, notations: &ProjectView, grid: &Grid, x: f64, y: f64) -> Option<Hit> {
     grid.hit_keeping(x, y, |n| !notations.node_is_label(store, n))
@@ -328,15 +329,16 @@ pub(crate) fn preview_rects(shell: &Shell, view: View, pointer: Option<Pos2>) ->
         | Gesture::EndText { .. }
         | Gesture::Segment { .. }
         | Gesture::Reconnect { .. }
-        | Gesture::SetLabel { .. } => {}
+        | Gesture::ExtraLabel { .. } => {}
     }
     out
 }
 
-/// A set's label being dragged where no node holds it yet: its set and how far it moved.
-pub(crate) fn set_label_preview(shell: &Shell, pointer: Option<Pos2>) -> Option<(Uuid, Vec2)> {
+/// A label of the figures of no one node or line being dragged where no node holds it yet: the
+/// element it stands for and how far it moved.
+pub(crate) fn label_preview(shell: &Shell, pointer: Option<Pos2>) -> Option<(Uuid, Vec2)> {
     match (shell.canvas.gesture.as_ref(), pointer.filter(|p| p.is_finite())) {
-        (Some(Gesture::SetLabel { set, from, .. }), Some(at)) => Some((*set, at - *from)),
+        (Some(Gesture::ExtraLabel { element, from, .. }), Some(at)) => Some((*element, at - *from)),
         _ => None,
     }
 }
@@ -423,12 +425,13 @@ fn decide(
         };
         on_top(shell, store, grid, card, pos)
     };
-    // A generalization set's label as the last frame drew it, where no card is over it (AR-129).
+    // A label of the figures of no one node or line as the last frame drew it, where no card is
+    // over it (a UML generalization set's, AR-129).
     let label_at = |pos: Pos2| {
         if hit_node(pos).is_some() {
             return None;
         }
-        shell.canvas.set_labels.iter().rev().find(|l| l.rect.contains(pos)).cloned()
+        shell.canvas.extra_labels.iter().rev().find(|l| l.rect.contains(pos)).cloned()
     };
     let line_at = |pos: Pos2| {
         let (x, y) = view.to_canvas(pos);
@@ -550,12 +553,12 @@ fn decide(
                 {
                     return Action::Start(Gesture::Resize { node: id, corner, base: unit_rect(store, n), from }, None);
                 }
-                // A set's label moves on this diagram alone: its node when it has one, else one is
-                // made where it is let go.
+                // Such a label moves on this diagram alone: its node when it has one, else the
+                // diagram's kind places it where it is let go.
                 if let Some(l) = label_at(from) {
                     return match l.node {
-                        Some(node) => Action::Start(Gesture::Move { nodes: vec![node], from }, Some(l.set)),
-                        None => Action::Start(Gesture::SetLabel { set: l.set, from, rect: l.rect }, Some(l.set)),
+                        Some(node) => Action::Start(Gesture::Move { nodes: vec![node], from }, Some(l.element)),
+                        None => Action::Start(Gesture::ExtraLabel { element: l.element, from, rect: l.rect }, Some(l.element)),
                     };
                 }
                 return match hit_node(from) {
@@ -674,7 +677,7 @@ fn decide(
             if resp.clicked()
                 && let Some(l) = label_at(pos)
             {
-                return if shift { Action::Toggle(l.set) } else { Action::Select(vec![l.set]) };
+                return if shift { Action::Toggle(l.element) } else { Action::Select(vec![l.element]) };
             }
             if resp.clicked() {
                 let (x, y) = view.to_canvas(pos);
@@ -898,16 +901,13 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 shell.canvas.tool = Tool::Select;
             }
         }
-        Gesture::SetLabel { set, from, rect } => {
+        Gesture::ExtraLabel { element, from, rect } => {
             if ((pointer - from) / view.zoom).length() < DRAG_MIN {
                 return;
             }
             let (x, y) = view.to_canvas(rect.min + (pointer - from));
-            let Some(diagram) = shell.session.as_ref().and_then(|s| s.doc().uuid(d).ok()) else { return };
-            let params = json!({ "diagram": diagram.to_string(), "set": set.to_string(), "x": x.round(), "y": y.round() });
-            if let Err(e) = run(shell, "uml.generalization-set.place", params) {
-                shell.canvas.notice = Some(e);
-            }
+            let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d)) else { return };
+            kind.place_label(shell, d, element, x, y);
         }
         Gesture::Reconnect { element, source, at, .. } => {
             let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d)) else { return };
@@ -1586,7 +1586,8 @@ fn ask_delete_of(shell: &mut Shell, node: Option<Uuid>, entity: Uuid) {
 }
 
 /// Draws what sits over the diagram: the marquee, a selected node's adorners, the Arrange bar,
-/// the name typed in place and the entity menu; then reads the keys.
+/// the name typed in place and the entity menu, with the notations' drafts, rows and menus each at
+/// its layer among them ([`crate::notation_ui::Layer`]); then reads the keys.
 pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, view: View, d: Obj, overrides: &BTreeMap<Uuid, Rect>) {
     let paint = ui.painter().with_clip_rect(r);
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
@@ -1623,16 +1624,10 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
             paint.rect_stroke(rect.expand(3.0), 6.0, Stroke::new(2.0, p.accent), StrokeKind::Outside);
         }
     }
-    // A template binding's draft (AR-131): dashed in the accent colour from the bound class to the
-    // template until Apply, nothing in the model yet.
-    if let Some((from, to)) = crate::uml_bindings::draft_line(shell, d)
-        && let Some(store) = shell.session.as_ref().map(|s| s.doc())
-    {
-        let rect = |id: Uuid| overrides.get(&id).copied().or_else(|| store.by_uuid(id).map(|n| view.rect(&bounds_of(store, n))));
-        if let (Some(a), Some(b)) = (rect(from), rect(to)) {
-            crate::uml_bindings::paint_draft(&paint, p, a, b, view.zoom);
-        }
-    }
+    // What the notations draw over the canvas, each at its place: a line drafted, not in the model
+    // yet; a row typed in place on a card; their own menus.
+    let on = Overlaid { p, r, view, d, overrides };
+    crate::notation_ui::overlays(shell, ui, Layer::Drafts, &on);
     if let Some(Gesture::Marquee { from }) = shell.canvas.gesture
         && let Some(to) = ui.input(|i| i.pointer.hover_pos())
     {
@@ -1689,7 +1684,7 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     if let Some(rect) = rename_rect {
         rename_field(shell, ui, p, rect, view.zoom);
     }
-    crate::uml_inline::row(shell, ui, p, view);
+    crate::notation_ui::overlays(shell, ui, Layer::Rows, &on);
     let note_rect = shell
         .session
         .as_ref()
@@ -1700,11 +1695,7 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     if let Some(menu) = shell.canvas.menu.clone() {
         entity_menu(shell, ui, p, r, &menu);
     }
-    if let Some(at) = uml(&shell.notation_states).and_then(|uml| uml.line_menu) {
-        crate::uml_sets::line_menu(shell, ui, p, r, at, d);
-    }
-    // An n-ary association's draft, its legs' end handles and its menu (AR-128).
-    crate::uml_nary::overlay(shell, ui, p, r, view, d);
+    crate::notation_ui::overlays(shell, ui, Layer::Menus, &on);
     keyboard(shell, ui, d);
 }
 

@@ -16,7 +16,7 @@ use crate::editing::Action;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::kinds::{DiagramKind, KindTool, Press, ToolUse};
-use crate::notation_ui::{Added, Entry, NotationState, NotationUi, Offer, Words};
+use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Words};
 use crate::panels::Subject;
 use crate::uml_classifier::Classifier;
 use crate::uml_panel::{MemberKind, member_of};
@@ -496,8 +496,13 @@ impl DiagramKind for UmlKind {
         d: &crate::canvas::Drawing<'_>,
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
-    ) -> Vec<crate::canvas::SetLabel> {
+    ) -> Vec<crate::canvas::ExtraLabel> {
         crate::uml_sets::draw_sets(paint, d, registry, ui)
+    }
+
+    /// A generalization set's label gets a node where it is let go, on this diagram alone (AR-129).
+    fn place_label(&self, shell: &mut Shell, d: Obj, element: Uuid, x: f64, y: f64) {
+        crate::uml_sets::place_label(shell, d, element, x, y);
     }
 
     /// What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
@@ -1184,6 +1189,30 @@ impl NotationUi for UmlUi {
     fn canvas_keys(&self, shell: &mut Shell, ui: &egui::Ui) -> bool {
         crate::uml_sets::chord_pressed(shell, ui)
     }
+
+    /// A template binding's draft (AR-131); the member typed in place on its card (AR-122); the
+    /// menu of generalization lines (AR-129), then an n-ary association's draft, its legs' end
+    /// handles and its menu (AR-128). Each closes itself on a diagram it does not belong to.
+    fn canvas_overlay(&self, shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
+        match layer {
+            Layer::Drafts => crate::uml_bindings::draw_draft(shell, ui, on),
+            Layer::Rows => crate::uml_inline::row(shell, ui, on.p, on.view),
+            Layer::Menus => {
+                if let Some(at) = uml(&shell.notation_states).and_then(|uml| uml.line_menu) {
+                    crate::uml_sets::line_menu(shell, ui, on.p, on.r, at, on.d);
+                }
+                crate::uml_nary::overlay(shell, ui, on.p, on.r, on.view, on.d);
+            }
+            Layer::Offers => {}
+        }
+    }
+}
+
+/// The words of UML's figures, which reach `tr` through the figures' descriptions, for the
+/// catalogue tests.
+#[cfg(test)]
+pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
+    archforge_uml::WORDS.iter().copied()
 }
 
 /// The UML classes `archforge_uml`'s commands create, each with a kind word of its own.

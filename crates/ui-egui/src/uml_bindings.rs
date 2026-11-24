@@ -15,6 +15,7 @@
 //! selectors, each written as one undo step when picked (`uml.template-binding.set`); another
 //! template opens the draft over the binding, its arguments to pick before Apply.
 
+use archforge_diagram::grid::bounds_of;
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::bindings;
 use archforge_uml::templates::{self, Kind};
@@ -117,9 +118,21 @@ pub(crate) fn draft_line(shell: &Shell, d: Obj) -> Option<(Uuid, Uuid)> {
     (draft.diagram == store.uuid(d).ok()).then_some(draft.nodes).flatten()
 }
 
+/// A new binding's draft over the canvas `on` (AR-131): dashed in the accent colour from the bound
+/// class to the template until Apply, nothing in the model yet; its nodes where a gesture under way
+/// previews them.
+pub(crate) fn draw_draft(shell: &Shell, ui: &egui::Ui, on: &crate::notation_ui::Overlaid<'_>) {
+    let Some((from, to)) = draft_line(shell, on.d) else { return };
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let rect = |id: Uuid| on.overrides.get(&id).copied().or_else(|| store.by_uuid(id).map(|n| on.view.rect(&bounds_of(store, n))));
+    if let (Some(a), Some(b)) = (rect(from), rect(to)) {
+        paint_draft(&ui.painter().with_clip_rect(on.r), on.p, a, b, on.view.zoom);
+    }
+}
+
 /// Draws the draft's line between the rectangles `from` and `to` on screen: dashed in the accent
 /// colour, an open arrow at the template, as the binding will draw once applied.
-pub(crate) fn paint_draft(paint: &egui::Painter, p: &Palette, from: Rect, to: Rect, z: f32) {
+fn paint_draft(paint: &egui::Painter, p: &Palette, from: Rect, to: Rect, z: f32) {
     let start = crate::canvas::exit_point(from, to.center());
     let end = crate::canvas::exit_point(to, from.center());
     let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), p.accent);

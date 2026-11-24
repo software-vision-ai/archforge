@@ -22,6 +22,7 @@ use serde_json::json;
 
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
+use crate::notation_ui::{Layer, Overlaid};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -174,8 +175,9 @@ pub struct State {
     pub package_tabs: Vec<PackageTab>,
     /// The owning paths the last frame drew under the packages' cards (AR-565).
     pub path_badges: Vec<PathBadge>,
-    /// The generalization sets' labels the last frame drew, which take a press (AR-129).
-    pub set_labels: Vec<SetLabel>,
+    /// The labels of the figures of no one node or line the last frame drew, which take a press
+    /// (a UML generalization set's, AR-129).
+    pub extra_labels: Vec<ExtraLabel>,
     /// The line ends the last frame moved out to a qualifier box's outer side (AR-127): where the
     /// route ended on its node, and where the line now starts, on screen; a selected line's end
     /// handle follows.
@@ -233,14 +235,17 @@ pub struct PathBadge {
     pub whole: String,
 }
 
-/// A generalization set's label as drawn (AR-129): its set, where it was on screen, the node that
-/// holds where it was moved to on this diagram, when it was moved, and its whole text.
+/// A label of the figures of no one node or line as its diagram's kind drew it
+/// ([`crate::kinds::DiagramKind::draw_extras`]; a UML generalization set's, AR-129): the element it
+/// stands for, where it was on screen, the node that holds where it was moved to on this diagram,
+/// when it was moved, and what it says while the pointer is on it, its whole text in its
+/// notation's words.
 #[derive(Debug, Clone, PartialEq)]
-pub struct SetLabel {
-    pub set: Uuid,
+pub struct ExtraLabel {
+    pub element: Uuid,
     pub rect: Rect,
     pub node: Option<Uuid>,
-    pub text: String,
+    pub hover: String,
 }
 
 impl Default for State {
@@ -275,7 +280,7 @@ impl Default for State {
             ends: Vec::new(),
             package_tabs: Vec::new(),
             path_badges: Vec::new(),
-            set_labels: Vec::new(),
+            extra_labels: Vec::new(),
             qualified_ends: Vec::new(),
             views: HashMap::new(),
             shown: None,
@@ -837,23 +842,23 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
                 }),
             end_drag: crate::editing::end_preview(shell, pointer),
             segment_drag: crate::editing::segment_preview(shell, view, pointer),
-            draft: crate::uml_inline::draft(shell, store),
+            draft: shell.notation_states.card_draft(store),
             rename_text: shell.canvas.rename.as_ref().map(|rn| rn.text.as_str()),
-            set_drag: crate::editing::set_label_preview(shell, pointer),
+            label_drag: crate::editing::label_preview(shell, pointer),
         };
         let scene = Scene { p, store, notations: session.view(), kind, diagram: d, view: &view, grid, area: r };
         let drawn = draw_scene(ui, &clip, &scene, live, &mut shell.registry);
         shell.canvas.ends = drawn.ends;
         shell.canvas.qualified_ends = drawn.qualified_ends;
-        shell.canvas.set_labels = drawn.set_labels;
+        shell.canvas.extra_labels = drawn.extra_labels;
         shell.canvas.package_tabs = drawn.package_tabs;
         shell.canvas.path_badges = drawn.path_badges;
-        // A set's label says its whole text while the pointer is on it.
+        // Such a label says its hover text while the pointer is on it.
         if let Some(at) = ui.input(|i| i.pointer.hover_pos())
             && shell.canvas.gesture.is_none()
-            && let Some(l) = shell.canvas.set_labels.iter().rev().find(|l| l.rect.contains(at))
+            && let Some(l) = shell.canvas.extra_labels.iter().rev().find(|l| l.rect.contains(at))
         {
-            let _ = resp.clone().on_hover_text_at_pointer(fmt(&tr("Generalization set {label}"), &[("label", &l.text)]));
+            let _ = resp.clone().on_hover_text_at_pointer(l.hover.as_str());
         }
         // A name its tab shows cut is shown whole while the pointer is on the tab.
         if let Some(at) = ui.input(|i| i.pointer.hover_pos())
@@ -889,7 +894,8 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     // fade of a switch over that.
     let below_path = kind.map_or(0.0, |k| k.after_draw(shell, ui, p, r, d));
     fade(shell, ui, p, r);
-    crate::connect::mapping_offer(shell, ui, p, r);
+    // What the notations offer over the canvas (ER's mapping table offer), under the toast.
+    crate::notation_ui::overlays(shell, ui, Layer::Offers, &Overlaid { p, r, view, d, overrides: &overrides });
     toast(shell, ui, p, r);
     if minimap_shown(shell, r) {
         minimap(shell, ui, p, r, bounds, &view);
@@ -929,24 +935,30 @@ fn fade(shell: &Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
 }
 
-/// A problem badge on the canvas: the problems on hover; for a many-to-many relationship a click
-/// opens the mapping table offer.
+/// A problem badge on the canvas: the problems on hover; one whose figure offers a way out of the
+/// problem (`resolvable`) says it and takes a click, as the element's notation answers
+/// ([`crate::notation_ui::NotationUi::resolve`]: ER's many-to-many relationship opens the mapping
+/// table offer).
 #[allow(clippy::too_many_arguments, reason = "a badge is drawn from its place, its control id, its element and its texts")]
-pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, control_id: Uuid, element: Uuid, texts: &[String], many_to_many: bool) {
+pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, control_id: Uuid, element: Uuid, texts: &[String], resolvable: bool) {
     let paint = ui.painter().clone();
     let b = Rect::from_center_size(at, Vec2::splat(18.0));
     paint.circle_filled(b.center(), 9.0, p.surface);
     paint.circle_stroke(b.center(), 9.0, Stroke::new(1.2, p.key_foreign));
-    if many_to_many {
+    let resolver =
+        shell.session.as_ref().filter(|_| resolvable).and_then(|s| crate::notation_ui::of(shell.notation_uis, s.doc(), s.doc().by_uuid(element)?));
+    if resolvable {
         ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(10.0)), &icons::PLUS, p.key_foreign);
     } else {
         let g = ux::galley(&paint, "!", types::CAPTION, p.key_foreign, None);
         paint.galley(b.center() - g.size() / 2.0, g, p.key_foreign.into());
     }
-    let hint = if many_to_many { tr("Many to many · add a mapping table") } else { texts.join("\n") };
-    // Live for its hover; only a many-to-many badge acts on a click.
-    if control(shell, ui, &format!("workspace.canvas.problem.{control_id}"), "badge", b, true).on_hover_text(hint).clicked() && many_to_many {
-        crate::connect::offer_mapping(shell, element);
+    let hint = resolver.and_then(|notation| notation.resolve_hint()).unwrap_or_else(|| texts.join("\n"));
+    // Live for its hover; only a badge that offers a way out acts on a click.
+    if control(shell, ui, &format!("workspace.canvas.problem.{control_id}"), "badge", b, true).on_hover_text(hint).clicked()
+        && let Some(notation) = resolver
+    {
+        notation.resolve(shell, element);
     }
 }
 
@@ -987,7 +999,7 @@ pub(crate) struct Live<'a> {
     pub(crate) segment_drag: Option<(Uuid, Vec<(f64, f64)>)>,
     pub(crate) draft: Option<(Obj, usize, Option<usize>)>,
     pub(crate) rename_text: Option<&'a str>,
-    pub(crate) set_drag: Option<(Uuid, Vec2)>,
+    pub(crate) label_drag: Option<(Uuid, Vec2)>,
 }
 
 /// A line as drawn this frame, for its diagram's kind to draw what goes with it
@@ -1005,7 +1017,7 @@ pub(crate) struct LineDrawn<'a> {
 pub(crate) struct Drawn {
     pub(crate) ends: Vec<EndText>,
     pub(crate) qualified_ends: Vec<(Pos2, Pos2)>,
-    pub(crate) set_labels: Vec<SetLabel>,
+    pub(crate) extra_labels: Vec<ExtraLabel>,
     pub(crate) package_tabs: Vec<PackageTab>,
     pub(crate) path_badges: Vec<PathBadge>,
     pub(crate) badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)>,
@@ -1056,7 +1068,7 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
         tabs: std::cell::RefCell::new(Vec::new()),
         paths: std::cell::RefCell::new(Vec::new()),
         led: std::cell::OnceCell::new(),
-        set_drag: live.set_drag,
+        label_drag: live.label_drag,
     };
     let mut badges = Vec::new();
     for e in &visible.edges {
@@ -1064,14 +1076,14 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
     }
     draw_constraint_links(clip, &draw);
     draw_nesting_lines(clip, &draw);
-    let set_labels = draw.kind.map(|k| k.draw_extras(clip, &draw, registry, ui)).unwrap_or_default();
+    let extra_labels = draw.kind.map(|k| k.draw_extras(clip, &draw, registry, ui)).unwrap_or_default();
     for n in &visible.nodes {
         badges.extend(draw_node(clip, &draw, *n, registry, ui));
     }
     Drawn {
         ends: draw.ends.take(),
         qualified_ends: draw.qualified_ends.take(),
-        set_labels,
+        extra_labels,
         package_tabs: draw.tabs.take(),
         path_badges: draw.paths.take(),
         badges,
@@ -1146,8 +1158,9 @@ pub(crate) struct Drawing<'a> {
     /// The diagram each element leads to, by the element: worked out once a frame, when a card
     /// first shows one (a package's own diagram, AR-113).
     led: std::cell::OnceCell<std::collections::HashMap<Obj, Obj>>,
-    /// A set's label being dragged where no node holds it yet: the set and how far it moved.
-    pub(crate) set_drag: Option<(Uuid, Vec2)>,
+    /// A label of the figures of no one node or line being dragged where no node holds it yet: the
+    /// element it stands for and how far it moved.
+    pub(crate) label_drag: Option<(Uuid, Vec2)>,
 }
 
 impl Drawing<'_> {
@@ -3199,6 +3212,4 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
         .map(|(_, _, hint)| *hint)
         .chain(["Key status", "Grid", "complete", "disjoint", "overlapping", "Arrange diagram"])
         .chain(crate::kinds::KINDS.iter().flat_map(|k| k.tools().iter().flat_map(|t| std::iter::once(t.hint).chain(t.chevron.map(|(_, hint)| hint)))))
-        .chain(archforge_er::figures::WORDS.iter().copied())
-        .chain(archforge_uml::WORDS.iter().copied())
 }

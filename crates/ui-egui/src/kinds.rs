@@ -3,18 +3,18 @@
 //! its elements: place, connect, a line dropped on empty canvas, renaming in place, opening an
 //! element's editor at a row of its card, a second adorner, the live line while connecting, a
 //! press and a right click it reads before the shared gestures, the keys a drawing under way
-//! takes, whether its popover's menu takes the keys, and what Select all takes in beside the boxes
-//! and lines; and the hooks the canvas runs as it draws one of its diagrams: before and after the
-//! drawing, where a line starts, what goes with a line, the figures of no one node or line, and the
-//! hint bar. Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows
-//! where a kind has marks (ER's key status).
+//! takes, whether its popover's menu takes the keys, what Select all takes in beside the boxes
+//! and lines, and where a label of its own figures is let go; and the hooks the canvas runs as it
+//! draws one of its diagrams: before and after the drawing, where a line starts, what goes with a
+//! line, the figures of no one node or line, and the hint bar. Select, Pan, Note, Link note, Grid
+//! and Arrange stay shared; the status marks toggle shows where a kind has marks (ER's key status).
 
 use archforge_diagram::ProjectView;
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke};
 
 use crate::Shell;
-use crate::canvas::{Drawing, LineDrawn, SetLabel, View};
+use crate::canvas::{Drawing, ExtraLabel, LineDrawn, View};
 use crate::editing::Action;
 use crate::ux::{Icon, Palette};
 use crate::widgets::Registry;
@@ -253,11 +253,18 @@ pub(crate) trait DiagramKind: Sync {
     }
     /// Draws the figures of the diagram that belong to no one node or line, over the lines and
     /// under the cards, recording each in `registry` (UML's generalization sets across their
-    /// members' lines). Gives their labels, which take a press on the next frame; none by default,
-    /// drawing nothing.
-    fn draw_extras(&self, paint: &egui::Painter, d: &Drawing<'_>, registry: &mut Registry, ui: &egui::Ui) -> Vec<SetLabel> {
+    /// members' lines). Gives their labels, which take a press on the next frame and say their
+    /// hover text; none by default, drawing nothing.
+    fn draw_extras(&self, paint: &egui::Painter, d: &Drawing<'_>, registry: &mut Registry, ui: &egui::Ui) -> Vec<ExtraLabel> {
         let _ = (paint, d, registry, ui);
         Vec::new()
+    }
+    /// Places a label of those figures that no node holds yet on diagram `d` alone, its top left
+    /// corner at `(x, y)`, as a drag lets it go there: `element` is the element the label stands
+    /// for (UML gives a generalization set's label a node there). A refusal is said at the
+    /// canvas's top. Nothing by default.
+    fn place_label(&self, shell: &mut Shell, d: Obj, element: Uuid, x: f64, y: f64) {
+        let _ = (shell, d, element, x, y);
     }
     /// Draws the hint bar at the canvas `r`'s top, `below` the room the canvas's top already
     /// takes: what a drawing under way has so far and what the keys do (a UML n-ary association's,

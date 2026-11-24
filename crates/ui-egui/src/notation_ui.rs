@@ -1,7 +1,8 @@
 //! What a notation brings to the shell's explorers, search, problems and panels: its rows in the
 //! Models tree and what `+` adds there, how a row dropped on another runs, its renames and what a
 //! removal takes with it, what Delete and a chord of its own on the canvas do to its selected
-//! elements, its entries in the project search, its problems, the heading and the body of Properties for its elements,
+//! elements, what it draws over the canvas whatever diagram shows and what a problem badge that
+//! offers a way out does, its entries in the project search, its problems, the heading and the body of Properties for its elements,
 //! its commands' refusals in the user's words, the words for the kinds of its elements, and the
 //! limits of their names and descriptions, and the state its own editors, menus and drawings keep
 //! between frames. The shells (the tree, the filter, the scroll, the search list, the sections, the
@@ -9,11 +10,13 @@
 //! of its metamodel.
 
 use std::any::Any;
+use std::collections::BTreeMap;
 
 use archforge_mof::{ClassId, Obj, Store, Uuid};
 use egui::Rect;
 
 use crate::Shell;
+use crate::canvas::View;
 use crate::explorer::{Row, Tree};
 use crate::panels::{Editor, MenuId, OpenEditor, Subject};
 use crate::problems::Problem;
@@ -62,6 +65,35 @@ pub(crate) struct Words {
     pub this: String,
     pub on_this: String,
     pub name: String,
+}
+
+/// Where among the canvas's own overlays a notation's go ([`NotationUi::canvas_overlay`]), each
+/// layer drawn at its one place in the canvas's order, every notation asked in turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Layer {
+    /// Over the lines being drawn and a line's end being moved, under the marquee and the
+    /// adorners: a line not in the model yet (UML's template binding's draft).
+    Drafts,
+    /// Over the name typed in a node, under a note's text being typed: a row typed in place on a
+    /// card (UML's member row).
+    Rows,
+    /// Over the element menu, before the canvas reads its keys: its own menus and what goes with
+    /// them (UML's menu of generalization lines, then an n-ary association's draft, its legs' end
+    /// handles and its menu).
+    Menus,
+    /// Over what the diagram's kind draws over the canvas and the fade of a switch, under the
+    /// toast: a card offered over the canvas (ER's mapping table offer).
+    Offers,
+}
+
+/// The canvas an overlay is drawn over: the palette, the canvas's rectangle, its view, the diagram
+/// it shows and where a gesture under way previews nodes, on screen.
+pub(crate) struct Overlaid<'a> {
+    pub p: &'a Palette,
+    pub r: Rect,
+    pub view: View,
+    pub d: Obj,
+    pub overrides: &'a BTreeMap<Uuid, Rect>,
 }
 
 /// What a notation brings to the shell.
@@ -271,6 +303,24 @@ pub(crate) trait NotationUi: Sync {
         false
     }
 
+    // What it draws over the canvas: asked of every notation, whatever diagram the canvas shows,
+    // as what it has open may outlive the diagram it was opened on; each closes its own there.
+
+    /// Draws what of its own goes over the canvas `on` at `layer`, from its own state: the drafts,
+    /// rows, menus and offers it has open; nothing at a layer it has nothing for.
+    fn canvas_overlay(&self, shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>);
+    /// What a problem badge on one of its elements says on hover when the badge offers a way out
+    /// of the problem, as the element's figure says it does (ER's many-to-many relationship: "Many
+    /// to many · add a mapping table"); none leaves the problems' own texts.
+    fn resolve_hint(&self) -> Option<String> {
+        None
+    }
+    /// A click on such a badge on its element `element`: ER opens the mapping table offer for the
+    /// relationship; nothing by default.
+    fn resolve(&self, shell: &mut Shell, element: Uuid) {
+        let _ = (shell, element);
+    }
+
     // Its own state.
 
     /// A fresh state for its own editors, menus and drawings, as a window or a project opened
@@ -324,6 +374,13 @@ pub(crate) trait NotationState: Any {
     /// Closes what of its own Escape on the canvas ends, whatever diagram it shows (ER's mapping
     /// table offer); nothing by default.
     fn canvas_escape(&mut self) {}
+    /// The row typed in place on a card, as the canvas draws the card with it: the card's element,
+    /// its compartment, and the row counted across the compartments (none for a new one); none
+    /// while no row of its own is typed, and by default.
+    fn card_draft(&self, store: &Store) -> Option<(Obj, usize, Option<usize>)> {
+        let _ = store;
+        None
+    }
 }
 
 /// The state of each notation the shell knows, one each, in the order of the notations.
@@ -390,6 +447,21 @@ impl NotationStates {
     /// Closes what of each notation's own Escape on the canvas ends.
     pub(crate) fn canvas_escape(&mut self) {
         self.0.iter_mut().for_each(|s| s.canvas_escape());
+    }
+
+    /// The row typed in place on a card, as the first notation with one answers
+    /// ([`NotationState::card_draft`]).
+    pub(crate) fn card_draft(&self, store: &Store) -> Option<(Obj, usize, Option<usize>)> {
+        self.0.iter().find_map(|s| s.card_draft(store))
+    }
+}
+
+/// Draws every notation's overlays at `layer` over the canvas `on`, in the order of the notations
+/// ([`NotationUi::canvas_overlay`]).
+pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
+    let uis = shell.notation_uis;
+    for notation in uis {
+        notation.canvas_overlay(shell, ui, layer, on);
     }
 }
 
