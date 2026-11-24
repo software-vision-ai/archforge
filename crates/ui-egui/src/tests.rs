@@ -6928,7 +6928,7 @@ fn a_value_refused_is_said_in_the_chosen_language() {
         );
         assert_eq!(refused(&mut h, "uml.attribute.set", json!({ "attribute": tags, "multiplicity": "0..1" })), narrower, "{theme:?}");
         let valued = refused(&mut h, "element.remove", json!({ "ids": [open] }));
-        assert_eq!(valued, "Das Literal open ist der Wert von state in «Entity» an Order. Setzen Sie dort zuerst einen anderen Wert.", "{theme:?}");
+        assert_eq!(valued, "Das Literal open ist der Wert von state in «Entity» auf Order. Setzen Sie dort zuerst einen anderen Wert.", "{theme:?}");
     }
     crate::i18n::set_language("en");
 }

@@ -1463,7 +1463,8 @@ str		This stereotype is in no profile.	Dieser Stereotyp liegt in keinem Profil.
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} ist das Erweiterungsende eines Stereotyps. Stattdessen die Metaklasse aus dem entfernen, was der Stereotyp erweitert.
 plural		{name} has values on {n} element. Remove those first.	{name} hat Werte an {n} Element. Diese zuerst entfernen.|{name} hat Werte an {n} Elementen. Diese zuerst entfernen.
 plural		Values on {n} element don't fit {name} [{bounds}].	Die Werte an {n} Element passen nicht zu {name} [{bounds}].|Die Werte an {n} Elementen passen nicht zu {name} [{bounds}].
-str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	Das Literal {literal} ist der Wert von {property} in «{stereotype}» an {element}. Setzen Sie dort zuerst einen anderen Wert.
+str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	Das Literal {literal} ist der Wert von {property} in «{stereotype}» auf {element}. Setzen Sie dort zuerst einen anderen Wert.
+str		The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.	Das Literal {literal} ist der Wert von {property} in «{stereotype}», das auf kein Element angewendet ist. Ändern Sie diesen Wert zuerst in der Datei.
 str		Stereotypes · {n}	Stereotypen · {n}
 str		Add stereotype	Stereotyp hinzufügen
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Noch keiner. Hier hinzufügen oder in Modelle ▸ Neu ▸ Stereotyp.

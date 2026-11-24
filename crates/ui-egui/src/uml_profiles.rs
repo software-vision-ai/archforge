@@ -1107,6 +1107,51 @@ mod tests {
         set_language("en");
     }
 
+    /// A literal a value names is refused naming the element its stereotype is applied to by its
+    /// name or, having none, by its kind, and an application on no element as on none, to be
+    /// changed in the file, in English and in French, and in German, with the preposition the
+    /// kind words take; never by an id or an empty name (AR-808).
+    #[test]
+    fn a_literal_valued_names_its_element_by_its_kind_or_none() {
+        use archforge_engine::{AppliedTo, LiteralValued};
+        let said = |element| {
+            let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Entity".into(), element };
+            crate::panels::said(&Reason::LiteralValued(Box::new(valued)))
+        };
+        let on = |element: &str, french: &str| {
+            (
+                format!("The literal lazy is the value of fetch in «Entity» on {element}. Set another value there first."),
+                format!("Le littéral lazy est la valeur de fetch dans «Entity» sur {french}. Donnez-y d’abord une autre valeur."),
+            )
+        };
+        let nowhere = (
+            "The literal lazy is the value of fetch in «Entity» on no element. Change that value in the file first.".to_string(),
+            "Le littéral lazy est la valeur de fetch dans «Entity», qui n’est appliqué à aucun élément. Modifiez d’abord cette valeur dans le fichier."
+                .to_string(),
+        );
+        let cases = [
+            (AppliedTo::from("Order"), on("Order", "Order")),
+            (AppliedTo::Element(Named::Unnamed { kind: "association" }), on("an association", "une association")),
+            (AppliedTo::Element(Named::Unnamed { kind: "untyped kind" }), on("an element", "un élément")),
+            (AppliedTo::Nothing, nowhere),
+        ];
+        for (element, (english, french)) in cases {
+            set_language("en");
+            assert_eq!(said(element.clone()), Some(english));
+            set_language("fr");
+            assert_eq!(said(element), Some(french));
+        }
+        set_language("de");
+        let german =
+            |element: &str| format!("Das Literal lazy ist der Wert von fetch in «Entity» auf {element}. Setzen Sie dort zuerst einen anderen Wert.");
+        assert_eq!(said(AppliedTo::from("Order")), Some(german("Order")));
+        assert_eq!(said(AppliedTo::Element(Named::Unnamed { kind: "association" })), Some(german("eine Assoziation")));
+        let nowhere =
+            "Das Literal lazy ist der Wert von fetch in «Entity», das auf kein Element angewendet ist. Ändern Sie diesen Wert zuerst in der Datei.";
+        assert_eq!(said(AppliedTo::Nothing), Some(nowhere.to_string()));
+        set_language("en");
+    }
+
     /// The delete dialog names a stereotype application on an element with no name by its kind
     /// (AR-807): deleting a class names «Trace» on its unnamed association, which goes with it, in
     /// English and in German.

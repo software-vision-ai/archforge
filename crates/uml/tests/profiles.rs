@@ -821,6 +821,43 @@ fn every_value_refused_carries_its_reason_typed() {
     check(&mut s, "element.remove", json!({ "ids": [lazy] }), "ids", valued, "the literal lazy is the value of fetch in «Entity» on Order");
 }
 
+/// A literal a value names, in an application on an element with no name, is refused naming that
+/// element by its kind, and in an application that traces to no element, as a project edited by
+/// hand may hold, saying it is on none and to change the value in the file: never by the element's
+/// id or an empty name, the reason typed alike (AR-808).
+#[test]
+fn a_literal_valued_on_an_unnamed_element_or_none_is_said_readably() {
+    use archforge_engine::{AppliedTo, EngineError, LiteralValued, Named, Reason};
+    let mut s = session();
+    let [commerce, order, customer, _, _, _, _, reference] = applied_shop(&mut s);
+    let fetch = run(&mut s, "uml.enumeration.add", json!({ "package": commerce, "name": "Fetch" }));
+    let lazy = run(&mut s, "uml.literal.add", json!({ "enumeration": fetch, "name": "lazy" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": reference, "name": "fetch", "type": fetch }));
+    let link = run(&mut s, "uml.association.add", json!({ "from": order, "to": customer }));
+    let instance = run(&mut s, "uml.stereotype.apply", json!({ "element": link, "stereotype": reference }));
+    run(&mut s, "uml.stereotype.set-value", json!({ "element": link, "stereotype": reference, "property": "fetch", "values": ["lazy"] }));
+    let check = |s: &mut S, element: AppliedTo, english: &str| {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute("element.remove", &json!({ "ids": [lazy] })) else { panic!("refused") };
+        let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Reference".into(), element };
+        assert_eq!((error.reason, error.key.as_deref()), (Some(Reason::LiteralValued(Box::new(valued))), Some("ids")), "{}", error.message);
+        assert_eq!(error.message, english);
+        assert_eq!(picture(s.doc()), before, "the refusal changed nothing");
+    };
+    let english = "the literal lazy is the value of fetch in «Reference» on an association; set another value there first";
+    check(&mut s, AppliedTo::Element(Named::Unnamed { kind: "association" }), english);
+    // The same application, its trace Link to the association gone.
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut st = store(1 << 52);
+    rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
+    let traced = st.referrers(obj(&st, &instance)).into_iter().find(|(_, p)| *p == archforge_core::link::SOURCE).unwrap().0;
+    st.destroy(traced).unwrap();
+    let mut s = session_over(st);
+    let english = "the literal lazy is the value of fetch in «Reference» on no element; change that value in the file first";
+    check(&mut s, AppliedTo::Nothing, english);
+}
+
 /// The applications' parameters refused carry their reason typed beside the unchanged English,
 /// under the parameter each is about: an id missing, as what the parameter takes, malformed or of
 /// no element, an element of the wrong kind, a stereotype not applied, a property not named or one

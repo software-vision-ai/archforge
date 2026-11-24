@@ -708,8 +708,26 @@ pub struct LiteralValued {
     pub property: String,
     /// The stereotype applied.
     pub stereotype: String,
-    /// The element the stereotype is applied to, by its name or, without one, its id.
-    pub element: String,
+    /// What the stereotype is applied to: an element, by its name or, having none, its kind, or no
+    /// element at all (AR-808).
+    pub element: AppliedTo,
+}
+
+/// What a stereotype application a refusal names is applied to (AR-808).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AppliedTo {
+    /// An element, by its name or, having none, its kind.
+    Element(Named),
+    /// No element: the application traces to none, as one in a project edited by hand may, so no
+    /// command reaches it to change its values.
+    Nothing,
+}
+
+impl From<&str> for AppliedTo {
+    /// The element named `name`.
+    fn from(name: &str) -> Self {
+        Self::Element(Named::from(name))
+    }
 }
 
 /// What a property's default is, by its type, in a [`Reason::DefaultUnread`].
