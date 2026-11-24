@@ -124,8 +124,9 @@ selected or none; `element.remove` (AR-698) takes a
 dependency whose client or supplier is a package that goes, named or taken along by a package with
 no parent, along in the same step, with its stereotype applications and its lines, never moving
 that end onto another element, while a nested package hands up the dependencies it holds whose
-ends both stay, the uses on what goes counting for no package's profile applications
-(`commands::dependencies_going`, `profiles::removal_problem_with`); `commands::incident_to_packages(store, packages, kinds)` finds the relationships
+ends both stay, the uses on what goes, the relationships of the classifiers that go among it
+(AR-806), counting for no package's profile applications (`commands::dependencies_going`,
+`commands::going_along`, `profiles::removal_problem_with`); `commands::incident_to_packages(store, packages, kinds)` finds the relationships
 of the given kinds that refer to a package, for imports and merges to go the same way; a dependency's new
 client takes it to the package that owns its dependencies in the same step, as a classifier client
 moved or nested elsewhere (`uml.*.move`, `uml.classifier.set-owner`) takes the dependencies it is the only client of; a
