@@ -9,387 +9,410 @@ use crate::uml_state::menus;
 use crate::uml_state::uml_mut;
 use crate::{Folder, Services, Shell};
 
-/// What a render shows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Screen {
-    Home,
+/// Declares [`Screen`] and [`SCREENS`] from one list, so every screen has its name and its place
+/// in the list.
+macro_rules! screens {
+    ($($(#[$doc:meta])* $name:literal => $screen:ident,)*) => {
+        /// What a render shows.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum Screen {
+            $($(#[$doc])* $screen,)*
+        }
+
+        /// Every screen with the name the snapshot example's `--screen`, `cargo xtask screens` and
+        /// the user manual's pictures take it by, in order.
+        pub const SCREENS: &[(&str, Screen)] = &[$(($name, Screen::$screen),)*];
+    };
+}
+
+// One row per screen, `"<name>" => <Screen>,`, under its doc comment: `cargo xtask screens` reads
+// the names here and refuses a row in any other shape.
+screens! {
+    "home" => Home,
     /// Home with a pinned folder and four recent projects, shown as a gallery.
-    HomeGallery,
+    "home-gallery" => HomeGallery,
     /// The same with its search open, nothing typed yet.
-    HomeSearch,
+    "home-search" => HomeSearch,
     /// Home with the Settings dialog open, a name entered.
-    HomeSettings,
+    "home-settings" => HomeSettings,
     /// Home with About Archforge open, its support destinations not set up yet.
-    HomeAbout,
+    "home-about" => HomeAbout,
     /// Settings → AI Agents with both programs found and nothing set up yet (A2).
-    SettingsAgentsEmpty,
+    "settings-ai-agents-empty" => SettingsAgentsEmpty,
     /// The same with Claude's program missing, its install steps shown, and Codex on an API key
     /// (A3), checked.
-    SettingsAgentsMissing,
+    "settings-ai-agents-missing" => SettingsAgentsMissing,
     /// The same ready: Claude's key saved, Codex signed in with ChatGPT, Chat allowed the model,
     /// checked (A4).
-    SettingsAgentsReady,
+    "settings-ai-agents-ready" => SettingsAgentsReady,
     /// The same with Claude's key refused by its provider and Codex's sign-in expired, checked
     /// (A5).
-    SettingsAgentsRefused,
+    "settings-ai-agents-refused" => SettingsAgentsRefused,
     /// The same with Codex signing in with a device code (A6).
-    SettingsAgentsDeviceCode,
+    "settings-ai-agents-device-code" => SettingsAgentsDeviceCode,
     /// The same on a system without a secure store: no key can be saved, Codex's ChatGPT sign-in
     /// still works (A7).
-    SettingsAgentsNoStore,
+    "settings-ai-agents-no-store" => SettingsAgentsNoStore,
     /// The same on a system agents do not run on yet (A8).
-    SettingsAgentsNotAvailable,
+    "settings-ai-agents-not-available" => SettingsAgentsNotAvailable,
     /// Home when no Dolt Archforge can use is found: the notice with Install Dolt and Look again.
-    HomeDoltMissing,
+    "home-dolt-missing" => HomeDoltMissing,
     /// The New project dialog over Home, a name typed and the usual folder.
-    NewProject,
+    "new-project" => NewProject,
     /// The same after a creation failed for want of Dolt.
-    NewProjectFailed,
+    "new-project-failed" => NewProjectFailed,
     /// The same with a folder chosen with Change… in place of the usual one.
-    NewProjectFolder,
+    "new-project-folder" => NewProjectFolder,
     /// The workspace of a project just created.
-    Workspace,
+    "workspace" => Workspace,
     /// The same after `+` added the first schema, its name open for typing.
-    WorkspaceSchema,
+    "workspace-schema" => WorkspaceSchema,
     /// A table with columns selected, its Properties shown.
-    WorkspaceTable,
+    "workspace-table" => WorkspaceTable,
     /// The same table with the Skills tab open on it, a skill on the schema inherited.
-    WorkspaceSkills,
+    "workspace-skills" => WorkspaceSkills,
     /// The table's naming skill open in its tab, its Markdown in Write.
-    WorkspaceSkillTab,
+    "workspace-skill-tab" => WorkspaceSkillTab,
     /// The same skill in Preview.
-    WorkspaceSkillPreview,
+    "workspace-skill-preview" => WorkspaceSkillPreview,
     /// The same Preview with a link clicked, its confirmation open.
-    WorkspaceSkillLink,
+    "workspace-skill-link" => WorkspaceSkillLink,
     /// A skill just made with the Skills panel's +: its tab, the template, the name selected.
-    WorkspaceSkillNew,
+    "workspace-skill-new" => WorkspaceSkillNew,
     /// The same table with the key editor open on its unique constraint.
-    WorkspaceKeyEditor,
+    "workspace-key-editor" => WorkspaceKeyEditor,
     /// The same table with the column editor open on its email column, More open.
-    WorkspaceColumnEditor,
+    "workspace-column-editor" => WorkspaceColumnEditor,
     /// The same table with the index editor open on its index, More open.
-    WorkspaceIndexEditor,
+    "workspace-index-editor" => WorkspaceIndexEditor,
     /// An empty diagram with Party and its subtypes Person and Company drawn, Party selected
     /// (slice S6).
-    WorkspaceSubtypes,
+    "workspace-subtypes" => WorkspaceSubtypes,
     /// The table's schema selected, with a domain and an enum type in its Types section and in
     /// the Models tree.
-    WorkspaceSchemaTypes,
+    "workspace-schema-types" => WorkspaceSchemaTypes,
     /// The table's schema selected, with a sequence owned by its key and a view in its Sequences
     /// and Views sections and in the Models tree (slice S7).
-    WorkspaceSchemaObjects,
+    "workspace-schema-objects" => WorkspaceSchemaObjects,
     /// The diagram of two tables with a table of the CRM schema placed beside them, dimmed and
     /// dashed, its relationship to Order drawn (slice S7).
-    WorkspaceCrossSchema,
+    "workspace-cross-schema" => WorkspaceCrossSchema,
     /// The diagram of two tables with Invoice and Product placed so that their lines from Customer
     /// would cross Order: right-angled lines go around it.
-    WorkspaceRouting,
+    "workspace-routing" => WorkspaceRouting,
     /// A class diagram of a package with three classes, the package open in the tree
     ///.
-    WorkspaceClassDiagram,
+    "workspace-class-diagram" => WorkspaceClassDiagram,
     /// The sample class model to read: members, every line kind and end.
-    WorkspaceClassDiagramRead,
+    "workspace-class-diagram-read" => WorkspaceClassDiagramRead,
     /// New diagram's first step: a card for each kind, Class diagram chosen.
-    WorkspaceNewDiagramKind,
+    "workspace-new-diagram-kind" => WorkspaceNewDiagramKind,
     /// New diagram's second step for a class diagram: its name and the root package.
-    WorkspaceNewDiagramDetails,
+    "workspace-new-diagram-details" => WorkspaceNewDiagramDetails,
     /// A class diagram of the root package with two packages on it, Sales selected with its Open.
-    WorkspacePackages,
+    "workspace-packages" => WorkspacePackages,
     /// Inside Sales: its classes, a package of its own, and the path bar back to the root.
-    WorkspaceInsidePackage,
+    "workspace-inside-package" => WorkspaceInsidePackage,
     /// The root's diagram with Sales selected and Properties' Parent package menu open (AR-102).
-    WorkspacePackageParent,
+    "workspace-package-parent" => WorkspacePackageParent,
     /// The root's diagram zoomed out to 10 %, its notice saying no package is above (AR-110).
-    WorkspacePackageTop,
+    "workspace-package-top" => WorkspacePackageTop,
     /// The root's diagram with packages of other branches beside Sales and Billing, each with its
     /// owning path under its card, a long one folded at its front (AR-565).
-    WorkspacePackagePaths,
+    "workspace-package-paths" => WorkspacePackagePaths,
     /// The root's diagram with a package's card placed over Customer, which is drawn in front of
     /// the card (AR-570).
-    WorkspacePackageOverlap,
+    "workspace-package-overlap" => WorkspacePackageOverlap,
     /// The Diagrams explorer with its groups: two class diagrams, one of a nested package and
     /// open, and an ER diagram.
-    WorkspaceDiagrams,
+    "workspace-diagrams" => WorkspaceDiagrams,
     /// The sample class model with Chat ready (B2): the intro, the context chips, the composer
     /// with Claude's badge, Allow changes off.
-    WorkspaceChat,
+    "workspace-chat" => WorkspaceChat,
     /// The same with no agent set up (B1): Configure agent.
-    WorkspaceChatEmpty,
+    "workspace-chat-empty" => WorkspaceChatEmpty,
     /// A reply streaming after two reads, Stop in the composer (B3).
-    WorkspaceChatStreaming,
+    "workspace-chat-streaming" => WorkspaceChatStreaming,
     /// A turn that read and changed five classes, its changes one undo step with Undo this turn's
     /// changes (B4).
-    WorkspaceChatChanges,
+    "workspace-chat-changes" => WorkspaceChatChanges,
     /// A reply stopped part way, kept (B5).
-    WorkspaceChatStopped,
+    "workspace-chat-stopped" => WorkspaceChatStopped,
     /// A turn the provider's rate limit stopped, with the time it can send again (B6a).
-    WorkspaceChatRateLimited,
+    "workspace-chat-rate-limited" => WorkspaceChatRateLimited,
     /// A turn whose connection was lost, its question back in the composer (B6b).
-    WorkspaceChatNetworkLost,
+    "workspace-chat-network-lost" => WorkspaceChatNetworkLost,
     /// A turn whose model is not available, Open Settings (B6c).
-    WorkspaceChatModelUnavailable,
+    "workspace-chat-model-unavailable" => WorkspaceChatModelUnavailable,
     /// The project's conversations, the open one marked (B7).
-    WorkspaceChatHistory,
+    "workspace-chat-history" => WorkspaceChatHistory,
     /// The history with the pointer on Review the checkout package: its bin, and its menu open with
     /// Delete conversation reached (B7a).
-    WorkspaceChatDeleteMenu,
+    "workspace-chat-delete-menu" => WorkspaceChatDeleteMenu,
     /// The confirmation of deleting Review the checkout package (B7b).
-    WorkspaceChatDeleteConfirm,
+    "workspace-chat-delete-confirm" => WorkspaceChatDeleteConfirm,
     /// Review the checkout package deleted: the history without it, and the toast with Undo (B7c).
-    WorkspaceChatDeleted,
+    "workspace-chat-deleted" => WorkspaceChatDeleted,
     /// A class diagram of three cards: a new class with its first operation at the default size, one
     /// grown to show its members, and two made short by hand saying the rows they hide.
-    WorkspaceClassSizing,
+    "workspace-class-sizing" => WorkspaceClassSizing,
     /// The sample class model with Order selected: its Properties, Abstract and its members
     ///.
-    WorkspaceClassMembers,
+    "workspace-class-members" => WorkspaceClassMembers,
     /// The same with Customer's operation rename open in its editor, its parameter on a row.
-    WorkspaceMemberEditor,
+    "workspace-member-editor" => WorkspaceMemberEditor,
     /// The sample class model with Catalog selected and a new attribute typed on its card.
-    WorkspaceInlineMember,
+    "workspace-inline-member" => WorkspaceInlineMember,
     /// The sample class model with the association "paid by" selected: its line's end handles and
     /// its Properties with both ends.
-    WorkspaceAssociation,
+    "workspace-association" => WorkspaceAssociation,
     /// The same with its Payment end's multiplicity presets open, the current one ticked.
-    WorkspaceMultiplicityPresets,
+    "workspace-multiplicity-presets" => WorkspaceMultiplicityPresets,
     /// The same with `5..2` typed into the Payment end's multiplicity and refused under it.
-    WorkspaceMultiplicityRefused,
+    "workspace-multiplicity-refused" => WorkspaceMultiplicityRefused,
     /// The sample class model with the Relationship tool active and its kinds' menu open.
-    WorkspaceRelateKinds,
+    "workspace-relate-kinds" => WorkspaceRelateKinds,
     /// A package of interfaces: Payable with its members, selected in Properties, Refundable
     /// specializing it, and Invoice associated with it.
-    WorkspaceInterface,
+    "workspace-interface" => WorkspaceInterface,
     /// A package of enumerations: OrderStatus with its four literals, selected in Properties and
     /// open in Models, Priority with none, and the class Order whose attributes they type.
-    WorkspaceEnumeration,
+    "workspace-enumeration" => WorkspaceEnumeration,
     /// A package of values: the data type Money with its attributes and operation, selected in
     /// Properties and open in Models, Price specializing it, and the class Order whose attribute
     /// and operation it types.
-    WorkspaceDataType,
+    "workspace-data-type" => WorkspaceDataType,
     /// A package of codes: the primitive types Sku and Gtin, Gtin specializing Sku, and the class
     /// Product whose attributes and operation they type; Sku selected in Properties, the package
     /// open in Models.
-    WorkspacePrimitiveType,
+    "workspace-primitive-type" => WorkspacePrimitiveType,
     /// The same at a working zoom with a literal's draft row open at the end of OrderStatus's
     /// card, "Returned" typed, Properties listing the literals with their pencils.
-    WorkspaceLiterals,
+    "workspace-literals" => WorkspaceLiterals,
     /// The same with the classifier tool's kinds menu open, Interface the current kind.
-    WorkspaceClassifierKinds,
+    "workspace-classifier-kinds" => WorkspaceClassifierKinds,
     /// Two classes, Order and Invoice, each realizing the interface Payable: Order's realization
     /// selected with its class and interface in Properties, and the Relationship tool showing
     /// Interface realization.
-    WorkspaceRealization,
+    "workspace-realization" => WorkspaceRealization,
     /// Two classes, Customer and Product, joined by the association class Review, its card with
     /// two attributes above its line's middle and tied to it: Review selected, its ends, attributes
     /// and operations in Properties, and the Relationship tool showing Association class.
-    WorkspaceAssociationClass,
+    "workspace-association-class" => WorkspaceAssociationClass,
     /// The class Order with its attributes' modifiers on its card (`{readOnly}`, a derived total
     /// with its default, a status defaulting to a literal, ordered lines) and its association to
     /// OrderLine whose end says `/items 0..* = none {ordered}`; Order selected with the attribute
     /// editor open on total, its modifiers in Properties (AR-126).
-    WorkspaceModifiers,
+    "workspace-modifiers" => WorkspaceModifiers,
     /// The sample class model with PricingService final, `{final}` after its name on its card, and
     /// Payment selected after No subclasses was refused on it: Properties names its subclass
     /// CardPayment and offers to select the generalization (AR-137).
-    WorkspaceFinal,
+    "workspace-final" => WorkspaceFinal,
     /// The sample class model with Order's total() leaf (`+ total() : Money {leaf}`) and
     /// PricingService final and leaf (`{final, leaf}` after its name), CardPayment's amount
     /// redefining Payment's; Payment selected with its attribute editor open on amount, No
     /// redefinition (leaf) refused there, naming CardPayment::amount (AR-138).
-    WorkspaceLeaf,
+    "workspace-leaf" => WorkspaceLeaf,
     /// The sample class model with BankTransfer and WalletPayment beside CardPayment, the three
     /// generalizations to Payment grouped in the set method {complete, disjoint}, its dashed line
     /// across them and its label beside it; the set selected, its Properties open (AR-129).
-    WorkspaceGeneralizationSets,
+    "workspace-generalization-sets" => WorkspaceGeneralizationSets,
     /// The sample class model with Order's composition to OrderLine named contains, its OrderLine
     /// end line at 0..1 and its Order end qualified by lineNo : Integer, the qualifier box drawn
     /// against Order; the association selected with the qualifier editor open on lineNo (AR-127).
-    WorkspaceQualifiers,
+    "workspace-qualifiers" => WorkspaceQualifiers,
     /// The same, a second qualifier lineNo : String applied on the Order end and refused in place:
     /// the name ringed and the reason in a tinted box, nothing written (AR-127).
-    WorkspaceQualifierRefused,
+    "workspace-qualifier-refused" => WorkspaceQualifierRefused,
     /// The sample class model with the enumeration Priority nested in Order: Models lists it under
     /// Order, `nested` after its name; on the diagram its card is tied to Order's by the line ending
     /// in ⊕ at Order; it is selected, Properties showing its Owner, Order (AR-132, D2).
-    WorkspaceNestedClassifiers,
+    "workspace-nested-classifiers" => WorkspaceNestedClassifiers,
     /// The sample class model with Repository a template of T : Class and Key : DataType =
     /// Integer, its signature box over its card's top-right corner; Repository selected with the
     /// template parameter editor open on Key (AR-130, C1).
-    WorkspaceTemplate,
+    "workspace-template" => WorkspaceTemplate,
     /// The same, the editor's Kind menu open: the supported kinds, Data type ticked, then Value and
     /// Operation disabled, saying not yet (AR-130, C4).
-    WorkspaceTemplateKinds,
+    "workspace-template-kinds" => WorkspaceTemplateKinds,
     /// The same, OrderRepository binding Key to Integer, and Key's removal refused under the rows
     /// with Show the binding (AR-130, C5).
-    WorkspaceTemplateInUse,
+    "workspace-template-in-use" => WorkspaceTemplateInUse,
     /// The sample class model with the profile Persistence beside Commerce, which applies it: its
     /// diagram open with the «stereotype» cards Entity, Id and Reference under the «metaclass» cards
     /// Class, Property and Association, joined by extensions; Models open on Persistence; Entity
     /// selected, its Properties showing Extends and its properties, the editor open on cached
     /// (AR-134, F1).
-    WorkspaceProfiles,
+    "workspace-profiles" => WorkspaceProfiles,
     /// The sample with Persistence applied to Commerce and used there: Commerce selected, Unapply
     /// refused under its Applied profiles, the five uses counted (AR-134, F6).
-    WorkspaceProfileRefused,
+    "workspace-profile-refused" => WorkspaceProfileRefused,
     /// OrderRepository binds Repository, T to Order and Key to Integer: its dashed line labelled
     /// `«bind» <T -> Order, Key -> Integer>` selected, Properties showing the binding and its
     /// substitutions (AR-131, C2).
-    WorkspaceTemplateBinding,
+    "workspace-template-binding" => WorkspaceTemplateBinding,
     /// A binding being drawn from OrderRepository to Repository: its draft in Properties, Key on its
     /// default, Apply pressed with T still without an argument and the refusal said (AR-131, C3).
-    WorkspaceTemplateBindingNew,
+    "workspace-template-binding-new" => WorkspaceTemplateBindingNew,
     /// The sample class model's diagram Recommendations, Customer and Product side by side and
     /// Catalog under them, the Relationship tool drawing an n-ary association: Customer and Product
     /// picked, the preview diamond between them, the pointer on Catalog, the gesture hint counting
     /// two ends and Properties showing the draft (AR-128, A3).
-    WorkspaceNaryDrawing,
+    "workspace-nary-drawing" => WorkspaceNaryDrawing,
     /// The same diagram with the n-ary association recommends drawn, selected, its diamond and legs
     /// in the accent, Properties showing its ends with the editor open on its Catalog end (AR-128,
     /// A4).
-    WorkspaceNary,
+    "workspace-nary" => WorkspaceNary,
     /// The same, the bin of the Catalog end pressed: Properties asks to keep three ends or make it
     /// binary, Keep 3 ends focused (AR-128, A5).
-    WorkspaceNaryBinary,
+    "workspace-nary-binary" => WorkspaceNaryBinary,
     /// The sample with Persistence applied and used: Commerce's diagram showing the stereotype
     /// values, Order selected, its Stereotypes section with «Entity», table set to orders and cached
     /// at its default, the cards reading «Entity», `«Id» + id : Integer` and «Reference» on places
     /// (AR-135, F3).
-    WorkspaceStereotypes,
+    "workspace-stereotypes" => WorkspaceStereotypes,
     /// The same, the Stereotypes picker open on Order: Entity applied and ticked, Auditable to
     /// apply, then Id, Reference and Tracked disabled with why (AR-135, F4).
-    WorkspaceStereotypePicker,
+    "workspace-stereotype-picker" => WorkspaceStereotypePicker,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
-    GuideClasses,
+    "workspace-guide-classes" => GuideClasses,
     /// The guide with Order's number and pay() typed, the Relationship tool active and its kinds'
     /// menu open, Association ticked.
-    GuideRelateKinds,
+    "workspace-guide-relate-kinds" => GuideRelateKinds,
     /// The guide with the association places drawn from Customer to Order, its ends set, selected
     /// with both ends in Properties.
-    GuideAssociation,
+    "workspace-guide-association" => GuideAssociation,
     /// The guide after the association, the classifier tool's kinds menu open: Class ticked, the
     /// keys on Enumeration.
-    GuideClassifierKinds,
+    "workspace-guide-classifier-kinds" => GuideClassifierKinds,
     /// The guide with the enumeration OrderStatus beside Order: three literals, a draft row at its
     /// end with "Cancelled" typed, its literals in Properties.
-    GuideLiterals,
+    "workspace-guide-literals" => GuideLiterals,
     /// The guide with the data type Money, which types Order's total, selected; Order's status
     /// typed by OrderStatus.
-    GuideDataType,
+    "workspace-guide-data-type" => GuideDataType,
     /// The guide with the primitive type Email, which types Customer's email, selected.
-    GuidePrimitiveType,
+    "workspace-guide-primitive-type" => GuidePrimitiveType,
     /// The guide with the interface Payable and Order's realization of it, the realization
     /// selected.
-    GuideRealization,
+    "workspace-guide-realization" => GuideRealization,
     /// The guide with the class Product and the association class OrderLine between Order and
     /// Product, OrderLine selected.
-    GuideAssociationClass,
+    "workspace-guide-association-class" => GuideAssociationClass,
     /// The guide with Order's number read only and its status defaulting to Placed, Order
     /// selected and the attribute editor open on status.
-    GuideModifiers,
+    "workspace-guide-modifiers" => GuideModifiers,
     /// The guide with Order's two constraints (AR-133): positiveNumber in braces under its card and
     /// paidInFull as a constraint note linked to Order and OrderStatus, Order selected and the
     /// constraint editor open on paidInFull.
-    GuideConstraints,
+    "workspace-guide-constraints" => GuideConstraints,
     /// The guide's finished model: the whole diagram, nothing selected, Properties folded away.
-    GuideResult,
+    "workspace-guide-result" => GuideResult,
     /// The user manual's further sections (AR-141), on the guide's finished model: Order's static
     /// operation nextNumber() underlined on its card, Order selected and the operation editor open
     /// on it, Static ticked.
-    GuideStatic,
+    "workspace-guide-static" => GuideStatic,
     /// The guide's association places qualified at Customer's end by number : Integer, Order's end
     /// at 0..1 per qualifier value; places selected with the qualifier editor open on number.
-    GuideQualifier,
+    "workspace-guide-qualifier" => GuideQualifier,
     /// The guide's diagram Recommendations: the n-ary association recommends joining Customer,
     /// Product and Catalog by a diamond, selected, the editor open on its Catalog end.
-    GuideNary,
+    "workspace-guide-nary" => GuideNary,
     /// The guide's diagram Payments: CardPayment, BankTransfer and WalletPayment specialising
     /// Payment, grouped in the generalization set method {complete, disjoint}, the set selected.
-    GuideGeneralizationSet,
+    "workspace-guide-generalization-set" => GuideGeneralizationSet,
     /// The same with CardPayment final and Payment's amount leaf: Payment selected and the
     /// attribute editor open on amount, No redefinition (leaf) ticked.
-    GuideFinalLeaf,
+    "workspace-guide-final-leaf" => GuideFinalLeaf,
     /// The guide's enumeration OrderStatus moved inside Order: its card tied to Order's by the line
     /// ending in ⊕, OrderStatus selected with its Owner, Models listing it under Order.
-    GuideNested,
+    "workspace-guide-nested" => GuideNested,
     /// The guide's diagram Storage: Repository a template of T : Class and Key : DataType = Integer
     /// with items : T [*] and find(key : Key) : T, selected, the parameter editor open on Key.
-    GuideTemplate,
+    "workspace-guide-template" => GuideTemplate,
     /// The same with OrderRepository binding Repository, T to Order and Key on its default: the
     /// binding selected, its substitutions in Properties.
-    GuideTemplateBinding,
+    "workspace-guide-template-binding" => GuideTemplateBinding,
     /// The guide's profile Persistence with the stereotype Entity, extending Class, with the
     /// property table : String: the profile's diagram open, Entity selected, Models open on
     /// Persistence.
-    GuideProfile,
+    "workspace-guide-profile" => GuideProfile,
     /// The guide's root package applying Persistence and Order carrying «Entity» with table set to
     /// orders: Commerce showing the stereotype values, Order selected, its Stereotypes section open.
-    GuideStereotype,
+    "workspace-guide-stereotype" => GuideStereotype,
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
     ///.
-    WorkspaceCloseAsk,
+    "workspace-close-ask" => WorkspaceCloseAsk,
     /// Versions over the chapter's example, two versions saved and email renamed contact and
     /// Customer moved since: Working changes, History, and the chip saying unsaved changes.
-    WorkspaceVersions,
+    "workspace-versions" => WorkspaceVersions,
     /// The same with the version chip's list open.
-    WorkspaceVersionList,
+    "workspace-version-list" => WorkspaceVersionList,
     /// The same with the details of Added email in the centre.
-    WorkspaceVersionDetails,
+    "workspace-version-details" => WorkspaceVersionDetails,
     /// The same viewing Added Customer: the banner, the tinted chip and Back to current work.
-    WorkspaceVersionViewing,
+    "workspace-version-viewing" => WorkspaceVersionViewing,
     /// email renamed contact alone, the attribute's two sides open from Working changes.
-    WorkspaceChangeElement,
+    "workspace-change-element" => WorkspaceChangeElement,
     /// Customer moved alone, the diagram's two sides open from Working changes.
-    WorkspaceChangeDiagram,
+    "workspace-change-diagram" => WorkspaceChangeDiagram,
     /// The same as Versions with the question Restore this version? asked of Added Customer.
-    WorkspaceRestoreAsk,
+    "workspace-restore-ask" => WorkspaceRestoreAsk,
     /// The same on the branch Contact details, where the rename is saved: Branches open with
     /// main, History with the divider above the versions shared with main.
-    WorkspaceBranches,
+    "workspace-branches" => WorkspaceBranches,
     /// The wiki's versions tutorial in the project Versions tryout: Added Customer saved alone, email
     /// added since, its two sides open from Working changes.
-    GuideVersionChange,
+    "workspace-guide-version-change" => GuideVersionChange,
     /// The same viewing Added Customer: the banner, the tinted chip and Back to current work.
-    GuideVersionViewing,
+    "workspace-guide-version-viewing" => GuideVersionViewing,
     /// The wiki's Before and After page: Added email saved too, email renamed contact since, the
     /// attribute's two sides open from Working changes.
-    GuideChangeElement,
+    "workspace-guide-change-element" => GuideChangeElement,
     /// The same with the rename saved as Renamed email: the Compare page with Added Customer as
     /// Before and Added email as After.
-    GuideCompare,
+    "workspace-guide-compare" => GuideCompare,
     /// The same with Customer's box moved since Renamed email, the diagram's two sides open from
     /// Working changes.
-    GuideChangeDiagram,
+    "workspace-guide-change-diagram" => GuideChangeDiagram,
     /// The routing sample with the top bar's search open on "order".
-    WorkspaceSearch,
+    "workspace-search" => WorkspaceSearch,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
     /// column selected: the owner's screen of 2026-10-31.
-    WorkspaceColumnSelected,
+    "workspace-column-selected" => WorkspaceColumnSelected,
     /// The diagram of two tables with a mapping table between Order and Tag selected: its
     /// Properties offer to collapse it, Order's key column shows its link mark.
-    WorkspaceMappingTable,
+    "workspace-mapping-table" => WorkspaceMappingTable,
     /// A first diagram of a schema, just created and open, empty.
-    WorkspaceDiagramEmpty,
+    "workspace-diagram-empty" => WorkspaceDiagramEmpty,
     /// A diagram of two tables and their relationship, the first table selected.
-    WorkspaceDiagram,
+    "workspace-diagram" => WorkspaceDiagram,
     /// The same with a removal's toast and its Undo, clear of the minimap.
-    WorkspaceToast,
+    "workspace-toast" => WorkspaceToast,
     /// The filled diagram with its schema selected, export skills on the project and the schema,
     /// and File → Generate… open over it.
-    WorkspaceGenerate,
+    "workspace-generate" => WorkspaceGenerate,
     /// The same with the Appearance panel open on the first table, its fill and border its own.
-    WorkspaceAppearance,
+    "workspace-appearance" => WorkspaceAppearance,
     /// The same with the relationship selected and its own width.
-    WorkspaceAppearanceLine,
+    "workspace-appearance-line" => WorkspaceAppearanceLine,
     /// The first table's Appearance with the picker open on its fill.
-    WorkspaceAppearancePicker,
+    "workspace-appearance-picker" => WorkspaceAppearancePicker,
     /// An empty diagram with its first entity just placed, its name open for typing.
-    WorkspaceEntityNew,
+    "workspace-entity-new" => WorkspaceEntityNew,
     /// The diagram of two tables with the Relationship tool active and the cardinality popover open.
-    WorkspaceCardinality,
+    "workspace-cardinality" => WorkspaceCardinality,
     /// The same diagram with the relationship selected, its Properties shown.
-    WorkspaceRelationship,
+    "workspace-relationship" => WorkspaceRelationship,
+}
+
+impl Screen {
+    /// The screen `name` names in [`SCREENS`], if any.
+    pub fn named(name: &str) -> Option<Screen> {
+        SCREENS.iter().find(|(n, _)| *n == name).map(|(_, screen)| *screen)
+    }
 }
 
 /// Renders Home at `width` by `height` logical pixels, `scale` pixels a point, in `theme`:
@@ -3049,150 +3072,6 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    /// Every screen, in the order `Screen` declares them; `every_screen_records_the_automation_ids_listed`
-    /// holds it to the screens the snapshot example names.
-    const EVERY: [Screen; 139] = [
-        Screen::Home,
-        Screen::HomeGallery,
-        Screen::HomeSearch,
-        Screen::HomeSettings,
-        Screen::HomeAbout,
-        Screen::SettingsAgentsEmpty,
-        Screen::SettingsAgentsMissing,
-        Screen::SettingsAgentsReady,
-        Screen::SettingsAgentsRefused,
-        Screen::SettingsAgentsDeviceCode,
-        Screen::SettingsAgentsNoStore,
-        Screen::SettingsAgentsNotAvailable,
-        Screen::HomeDoltMissing,
-        Screen::NewProject,
-        Screen::NewProjectFailed,
-        Screen::NewProjectFolder,
-        Screen::Workspace,
-        Screen::WorkspaceSchema,
-        Screen::WorkspaceTable,
-        Screen::WorkspaceSkills,
-        Screen::WorkspaceSkillTab,
-        Screen::WorkspaceSkillPreview,
-        Screen::WorkspaceSkillLink,
-        Screen::WorkspaceSkillNew,
-        Screen::WorkspaceKeyEditor,
-        Screen::WorkspaceColumnEditor,
-        Screen::WorkspaceIndexEditor,
-        Screen::WorkspaceSubtypes,
-        Screen::WorkspaceSchemaTypes,
-        Screen::WorkspaceSchemaObjects,
-        Screen::WorkspaceCrossSchema,
-        Screen::WorkspaceRouting,
-        Screen::WorkspaceClassDiagram,
-        Screen::WorkspaceClassDiagramRead,
-        Screen::WorkspaceNewDiagramKind,
-        Screen::WorkspaceNewDiagramDetails,
-        Screen::WorkspacePackages,
-        Screen::WorkspaceInsidePackage,
-        Screen::WorkspacePackageParent,
-        Screen::WorkspacePackageTop,
-        Screen::WorkspacePackagePaths,
-        Screen::WorkspacePackageOverlap,
-        Screen::WorkspaceDiagrams,
-        Screen::WorkspaceChat,
-        Screen::WorkspaceChatEmpty,
-        Screen::WorkspaceChatStreaming,
-        Screen::WorkspaceChatChanges,
-        Screen::WorkspaceChatStopped,
-        Screen::WorkspaceChatRateLimited,
-        Screen::WorkspaceChatNetworkLost,
-        Screen::WorkspaceChatModelUnavailable,
-        Screen::WorkspaceChatHistory,
-        Screen::WorkspaceChatDeleteMenu,
-        Screen::WorkspaceChatDeleteConfirm,
-        Screen::WorkspaceChatDeleted,
-        Screen::WorkspaceClassSizing,
-        Screen::WorkspaceClassMembers,
-        Screen::WorkspaceMemberEditor,
-        Screen::WorkspaceInlineMember,
-        Screen::WorkspaceAssociation,
-        Screen::WorkspaceMultiplicityPresets,
-        Screen::WorkspaceMultiplicityRefused,
-        Screen::WorkspaceRelateKinds,
-        Screen::WorkspaceInterface,
-        Screen::WorkspaceEnumeration,
-        Screen::WorkspaceDataType,
-        Screen::WorkspacePrimitiveType,
-        Screen::WorkspaceLiterals,
-        Screen::WorkspaceClassifierKinds,
-        Screen::WorkspaceRealization,
-        Screen::WorkspaceAssociationClass,
-        Screen::WorkspaceModifiers,
-        Screen::WorkspaceFinal,
-        Screen::WorkspaceLeaf,
-        Screen::WorkspaceGeneralizationSets,
-        Screen::WorkspaceQualifiers,
-        Screen::WorkspaceQualifierRefused,
-        Screen::WorkspaceNestedClassifiers,
-        Screen::WorkspaceTemplate,
-        Screen::WorkspaceTemplateKinds,
-        Screen::WorkspaceTemplateInUse,
-        Screen::WorkspaceProfiles,
-        Screen::WorkspaceProfileRefused,
-        Screen::WorkspaceTemplateBinding,
-        Screen::WorkspaceTemplateBindingNew,
-        Screen::WorkspaceNaryDrawing,
-        Screen::WorkspaceNary,
-        Screen::WorkspaceNaryBinary,
-        Screen::WorkspaceStereotypes,
-        Screen::WorkspaceStereotypePicker,
-        Screen::GuideClasses,
-        Screen::GuideRelateKinds,
-        Screen::GuideAssociation,
-        Screen::GuideClassifierKinds,
-        Screen::GuideLiterals,
-        Screen::GuideDataType,
-        Screen::GuidePrimitiveType,
-        Screen::GuideRealization,
-        Screen::GuideAssociationClass,
-        Screen::GuideModifiers,
-        Screen::GuideConstraints,
-        Screen::GuideResult,
-        Screen::GuideStatic,
-        Screen::GuideQualifier,
-        Screen::GuideNary,
-        Screen::GuideGeneralizationSet,
-        Screen::GuideFinalLeaf,
-        Screen::GuideNested,
-        Screen::GuideTemplate,
-        Screen::GuideTemplateBinding,
-        Screen::GuideProfile,
-        Screen::GuideStereotype,
-        Screen::WorkspaceCloseAsk,
-        Screen::WorkspaceVersions,
-        Screen::WorkspaceVersionList,
-        Screen::WorkspaceVersionDetails,
-        Screen::WorkspaceVersionViewing,
-        Screen::WorkspaceChangeElement,
-        Screen::WorkspaceChangeDiagram,
-        Screen::WorkspaceRestoreAsk,
-        Screen::WorkspaceBranches,
-        Screen::GuideVersionChange,
-        Screen::GuideVersionViewing,
-        Screen::GuideChangeElement,
-        Screen::GuideCompare,
-        Screen::GuideChangeDiagram,
-        Screen::WorkspaceSearch,
-        Screen::WorkspaceColumnSelected,
-        Screen::WorkspaceMappingTable,
-        Screen::WorkspaceDiagramEmpty,
-        Screen::WorkspaceDiagram,
-        Screen::WorkspaceToast,
-        Screen::WorkspaceGenerate,
-        Screen::WorkspaceAppearance,
-        Screen::WorkspaceAppearanceLine,
-        Screen::WorkspaceAppearancePicker,
-        Screen::WorkspaceEntityNew,
-        Screen::WorkspaceCardinality,
-        Screen::WorkspaceRelationship,
-    ];
-
     /// The user manual's guide screens, the walkthrough's twelve and Going further's ten.
     const GUIDE: [Screen; 22] = [
         Screen::GuideClasses,
@@ -3236,10 +3115,10 @@ mod tests {
     }
 
     /// Every screen records, in both appearances, the automation ids `offscreen/automation-ids.tsv`
-    /// lists for it, with the same kinds and in the same order, and each id's toolkit id is the id
-    /// salted with "automation": moving the registry, or a screen's code, keeps every id agents and
-    /// tests find controls by. The screens are the snapshot example's, so a screen added there and
-    /// left out here fails too.
+    /// lists under its name, with the same kinds and in the same order, and each id's toolkit id is
+    /// the id salted with "automation": moving the registry, or a screen's code, keeps every id
+    /// agents and tests find controls by. The list holds every screen of [`SCREENS`] by its name, and
+    /// nothing else.
     #[test]
     fn every_screen_records_the_automation_ids_listed() {
         let mut listed: std::collections::BTreeMap<&str, Vec<(&str, &str)>> = std::collections::BTreeMap::new();
@@ -3248,26 +3127,21 @@ mod tests {
             let [screen, kind, id] = cells[..] else { panic!("a row is a screen, a kind and an id: {line:?}") };
             listed.entry(screen).or_default().push((kind, id));
         }
-        let every: std::collections::BTreeSet<String> = EVERY.iter().map(|s| format!("{s:?}")).collect();
-        let named: std::collections::BTreeSet<String> = include_str!("../examples/snapshot.rs")
-            .split("=> Screen::")
-            .skip(1)
-            .filter_map(|rest| rest.split(',').next())
-            .map(|name| name.trim().to_string())
-            .collect();
-        assert_eq!(named, every, "EVERY lists the screens the snapshot example names");
-        assert_eq!(listed.keys().map(|s| s.to_string()).collect::<std::collections::BTreeSet<_>>(), every, "the fixture lists every screen");
-        for screen in EVERY {
-            let want = &listed[format!("{screen:?}").as_str()];
+        let names: std::collections::BTreeSet<&str> = SCREENS.iter().map(|(name, _)| *name).collect();
+        assert_eq!(names.len(), SCREENS.len(), "every screen has a name of its own");
+        assert_eq!(listed.keys().copied().collect::<std::collections::BTreeSet<_>>(), names, "the fixture lists every screen by its name");
+        for (name, screen) in SCREENS.iter().copied() {
+            assert_eq!(Screen::named(name), Some(screen), "{name} names {screen:?} alone");
+            let want = &listed[name];
             for theme in [ThemeKind::Light, ThemeKind::Dark] {
-                let h = drawn(1440.0, 900.0, 1.0, theme, screen).unwrap_or_else(|e| panic!("{screen:?} in {theme:?}: {e}"));
+                let h = drawn(1440.0, 900.0, 1.0, theme, screen).unwrap_or_else(|e| panic!("{name} in {theme:?}: {e}"));
                 let recorded: Vec<(&str, &str)> = h.state().widgets().iter().map(|w| (w.kind, w.id.as_str())).collect();
                 if recorded != *want {
-                    let rows: Vec<String> = recorded.iter().map(|(kind, id)| format!("{screen:?}\t{kind}\t{id}")).collect();
-                    panic!("{screen:?} in {theme:?} records other automation ids than the fixture lists; it records:\n{}", rows.join("\n"));
+                    let rows: Vec<String> = recorded.iter().map(|(kind, id)| format!("{name}\t{kind}\t{id}")).collect();
+                    panic!("{name} in {theme:?} records other automation ids than the fixture lists; it records:\n{}", rows.join("\n"));
                 }
                 for (_, id) in recorded {
-                    assert_eq!(crate::widgets::egui_id(id), egui::Id::unique(("automation", id)), "{screen:?} in {theme:?}: the toolkit id of {id}");
+                    assert_eq!(crate::widgets::egui_id(id), egui::Id::unique(("automation", id)), "{name} in {theme:?}: the toolkit id of {id}");
                 }
             }
         }

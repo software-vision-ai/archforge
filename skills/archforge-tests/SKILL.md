@@ -11,7 +11,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - every offscreen screen's automation ids, in both appearances: the `tests` module in
     `crates/ui-egui/src/offscreen.rs`, against `crates/ui-egui/src/offscreen/automation-ids.tsv`;
     a change that renames, adds or removes an id on purpose updates the screen's rows from the
-    listing the failing test prints, and a new screen gets its rows and its place in `EVERY`
+    listing the failing test prints, and a new screen, a row of the `screens!` list in the same
+    file (its one list of screens, `offscreen::SCREENS`), gets its rows under its name
   - translations: `crates/ui-egui/src/i18n/tests.rs`
   - the desktop app (arguments, preferences, graphics): the `tests` module in `apps/archforge/src/main.rs`
   - the native menu bar's queue, wake and items: the `tests` module in

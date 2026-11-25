@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn the_manual_names_only_screens_that_exist_and_links_only_to_files_that_do() {
         let root = util::root();
-        let snapshot = std::fs::read_to_string(root.join("crates/ui-egui/examples/snapshot.rs")).unwrap();
+        let named = crate::screens::screens(&std::fs::read_to_string(root.join(crate::screens::LIST)).unwrap()).unwrap();
         let dir = root.join("docs/manual");
         let files = chapters(&dir).unwrap();
         assert!(files.len() >= 3, "the manual has its chapters");
@@ -141,7 +141,7 @@ mod tests {
             let text = std::fs::read_to_string(&chapter).unwrap();
             let (_, pictures) = build(&text).unwrap_or_else(|e| panic!("{}: {e}", chapter.display()));
             for p in pictures {
-                assert!(snapshot.contains(&format!("Some(\"{}\")", p.screen)), "{}: no snapshot screen {:?}", chapter.display(), p.screen);
+                assert!(named.contains(&p.screen), "{}: no snapshot screen {:?}", chapter.display(), p.screen);
             }
             for target in text.split("](").skip(1).filter_map(|rest| rest.split(')').next()) {
                 let target = target.split('#').next().unwrap_or_default();
