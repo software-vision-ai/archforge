@@ -3,8 +3,9 @@
 //!
 //! Renders each screen the shell crate's `snapshot` example knows, in the light and the dark
 //! appearance, into the ignored `plan/screens/`, and writes beside them one contact sheet per
-//! appearance (`light.html`, `dark.html`) with every picture under its screen's name. The list of
-//! screens is read from the snapshot example itself, so a screen added there is rendered here too.
+//! appearance (`light.html`, `dark.html`) with every picture under its screen's name. The names are
+//! read from the shell crate's one list of screens (`offscreen::SCREENS`, written as the `screens!`
+//! list in `offscreen.rs`), so a screen added there is rendered here too.
 //! `--gallery <dir>` renders the README's gallery and the wiki's guide screens alone, as the release
 //! workflow does to attach them to every release. The pictures are never committed; a picture is compared by eye, not by pixel, so a font or
 //! theme change never breaks the gate.
@@ -64,10 +65,49 @@ pub const WIKI_GALLERY: [(&str, &str); 33] = [
     ("workspace-guide-change-diagram", "guide-change-diagram"),
 ];
 
-/// The screens the snapshot example's `--screen` takes, in its order: each `Some("<name>") =>
-/// Screen::…` arm of its match.
-pub fn screens(snapshot: &str) -> Vec<String> {
-    snapshot.lines().filter_map(|line| line.trim().strip_prefix("Some(\"")?.split_once("\") => Screen::").map(|(name, _)| name.to_string())).collect()
+/// The file of the shell crate that holds its one list of screens, `offscreen::SCREENS`.
+pub const LIST: &str = "crates/ui-egui/src/offscreen.rs";
+
+/// The screens the snapshot example's `--screen` takes, in order: the names of the `screens!` list
+/// in `offscreen` (the text of [`LIST`]), one `"<name>" => <Screen>,` row each under its doc
+/// comment. The task runner cannot depend on the shell crate, which would build the whole interface
+/// before every task, so it reads the list's text; a row in any other shape is refused, never
+/// skipped, so no screen is left out unseen.
+pub fn screens(offscreen: &str) -> Result<Vec<String>, String> {
+    // `lines` ends a line at LF or CRLF, so the list reads the same from a checkout of either.
+    let mut lines = offscreen.lines().skip_while(|line| *line != "screens! {");
+    if lines.next().is_none() {
+        return Err(format!("{LIST} has no `screens! {{ … }}` list"));
+    }
+    let mut names = Vec::new();
+    let mut closed = false;
+    for (n, line) in lines.enumerate() {
+        if line == "}" {
+            closed = true;
+            break;
+        }
+        let row = line.trim();
+        if row.is_empty() || row.starts_with("//") {
+            continue;
+        }
+        let name = row.strip_prefix('"').and_then(|rest| rest.split_once("\" => ")).and_then(|(name, screen)| {
+            let screen = screen.strip_suffix(',')?;
+            let named = !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+            let typed = screen.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && screen.chars().all(|c| c.is_ascii_alphanumeric());
+            (named && typed).then_some(name)
+        });
+        let Some(name) = name else {
+            return Err(format!("{LIST}: line {} of the `screens!` list is not `\"<name>\" => <Screen>,`: {row:?}", n + 1));
+        };
+        names.push(name.to_string());
+    }
+    if !closed {
+        return Err(format!("{LIST}: the `screens!` list has no closing `}}`"));
+    }
+    if names.is_empty() {
+        return Err(format!("{LIST}: the `screens!` list names no screen"));
+    }
+    Ok(names)
 }
 
 fn render(screen: &str, theme: &str, out: &Path) -> Result<(), String> {
@@ -126,6 +166,9 @@ pub fn gallery(out: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// `cargo xtask screens`: renders every screen of the shell's list in both appearances under
+/// `plan/screens`, with a contact sheet for each; `--gallery <dir>` renders the published galleries
+/// there instead.
 pub fn run(args: &[String]) -> Result<(), String> {
     match args {
         [] => {}
@@ -133,12 +176,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
         _ => return Err(format!("{args:?}: usage: cargo xtask screens [--gallery <dir>]")),
     }
     let root = util::root();
-    let snapshot = root.join("crates/ui-egui/examples/snapshot.rs");
-    let text = std::fs::read_to_string(&snapshot).map_err(|e| format!("{}: {e}", snapshot.display()))?;
-    let screens = screens(&text);
-    if screens.is_empty() {
-        return Err(format!("{} names no screen", snapshot.display()));
-    }
+    let list = root.join(LIST);
+    let text = std::fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?;
+    let screens = screens(&text)?;
     let out = root.join("plan/screens");
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     for theme in THEMES {
@@ -156,6 +196,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// A gallery directory given as a relative path is taken from where the command ran, not from
+    /// the repository root.
     #[test]
     fn a_relative_gallery_directory_is_taken_from_where_the_command_ran() {
         let dir = resolved(Path::new("pictures")).unwrap();
@@ -163,10 +205,27 @@ mod tests {
         assert_eq!(dir, std::env::current_dir().unwrap().join("pictures"));
     }
 
+    /// The names are read from the `screens!` list, doc comments between them, and a row in any
+    /// other shape is refused with its line, never skipped.
     #[test]
-    fn the_screens_are_read_from_the_snapshot_examples_match() {
-        let text = "    let screen = match x {\n        Some(\"home\") => Screen::Home,\n        Some(\"new-project\") => Screen::NewProject,\n        None => Screen::Home,\n";
-        assert_eq!(screens(text), ["home", "new-project"]);
+    fn the_screens_are_read_from_the_shells_list_and_an_unread_row_is_refused() {
+        let list = |rows: &str| format!("macro_rules! screens {{\n}}\n\nscreens! {{\n{rows}}}\n\nimpl Screen {{}}\n");
+        let text = list("    \"home\" => Home,\n    /// The New project dialog.\n    \"new-project\" => NewProject,\n");
+        assert_eq!(screens(&text).unwrap(), ["home", "new-project"]);
+        for row in [
+            "\"new-screen\" => { Screen::NewScreen },",
+            "\"new-screen\" => NewScreen",
+            "\"New screen\" => NewScreen,",
+            "NewScreen,",
+            "\"new-screen\" => newScreen,",
+        ] {
+            let refused = screens(&list(&format!("    \"home\" => Home,\n    {row}\n"))).unwrap_err();
+            assert!(refused.contains("line 2 of the `screens!` list") && refused.contains(&format!("{row:?}")), "{row}: {refused}");
+        }
+        assert!(screens("pub enum Screen { Home }").unwrap_err().contains("has no `screens! { … }` list"));
+        assert!(screens("screens! {\n    \"home\" => Home,\n").unwrap_err().contains("has no closing `}`"));
+        assert_eq!(screens(&text.replace('\n', "\r\n")).unwrap(), ["home", "new-project"], "a CRLF checkout reads the same");
+        assert!(screens(&list("    /// Nothing yet.\n")).unwrap_err().contains("names no screen"));
         let page = sheet(&["home".into()], "dark");
         assert!(page.contains("home-dark.png") && page.contains("<figcaption>home</figcaption>") && page.contains("(1)"));
     }
@@ -175,8 +234,7 @@ mod tests {
     /// command renders them all.
     #[test]
     fn every_screen_of_the_gallery_is_one_the_snapshot_example_names() {
-        let snapshot = std::fs::read_to_string(util::root().join("crates/ui-egui/examples/snapshot.rs")).unwrap();
-        let named = screens(&snapshot);
+        let named = screens(&std::fs::read_to_string(util::root().join(LIST)).unwrap()).unwrap();
         for (screen, _) in GALLERY {
             assert!(named.iter().any(|n| n == screen), "the gallery's {screen} is no screen of the snapshot example");
         }
@@ -196,8 +254,7 @@ mod tests {
     /// under its own name, apart from the README's.
     #[test]
     fn every_screen_of_the_wiki_gallery_is_one_the_snapshot_example_names() {
-        let snapshot = std::fs::read_to_string(util::root().join("crates/ui-egui/examples/snapshot.rs")).unwrap();
-        let named = screens(&snapshot);
+        let named = screens(&std::fs::read_to_string(util::root().join(LIST)).unwrap()).unwrap();
         for (screen, _) in WIKI_GALLERY {
             assert!(named.iter().any(|n| n == screen), "the wiki gallery's {screen} is no screen of the snapshot example");
         }
@@ -275,26 +332,15 @@ mod tests {
         }
     }
 
+    /// The shell's list of screens reads whole, every row in its one shape, and names every screen
+    /// once.
     #[test]
-    fn every_screen_the_renderer_draws_is_rendered() {
-        let root = util::root();
-        let snapshot = std::fs::read_to_string(root.join("crates/ui-egui/examples/snapshot.rs")).unwrap();
-        let offscreen = std::fs::read_to_string(root.join("crates/ui-egui/src/offscreen.rs")).unwrap();
-        let named = screens(&snapshot);
-        let variants: Vec<&str> = offscreen
-            .split("pub enum Screen {")
-            .nth(1)
-            .and_then(|rest| rest.split("\n}").next())
-            .unwrap()
-            .lines()
-            .map(str::trim)
-            .filter(|l| l.ends_with(',') && l.chars().next().is_some_and(|c| c.is_ascii_uppercase()))
-            .map(|l| l.trim_end_matches(','))
-            .collect();
-        assert!(!variants.is_empty());
-        for v in &variants {
-            assert!(snapshot.contains(&format!("=> Screen::{v},")), "the snapshot example names no screen for Screen::{v}");
-        }
-        assert_eq!(named.len(), variants.len(), "one name per screen: {named:?}");
+    fn the_shells_list_of_screens_reads_whole() {
+        let named = screens(&std::fs::read_to_string(util::root().join(LIST)).unwrap()).unwrap();
+        let mut unique = named.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), named.len(), "every screen has a name of its own: {named:?}");
+        assert!(named.iter().any(|n| n == "home"), "{named:?}");
     }
 }

@@ -5,9 +5,9 @@ description: "Use when adding or changing anything Archforge draws or says: a sc
 
 # The interface and its text
 
-The interface is `crates/ui-egui`, the only library crate that may use the toolkit. It draws the
-design: when the design changes, the code follows it, and a correction the owner makes to the look
-goes into the design first. `crates/ui-egui/README.md` lists the crate's public items. The
+The interface is `crates/ui-egui`, the shell, over its interfaces in `crates/shell-api`; the two are
+the only library crates that may use the toolkit. It draws the design: when the design changes, the
+code follows it, and a correction the owner makes to the look goes into the design first. `crates/ui-egui/README.md` lists the crate's public items. The
 decisions taken so far about how it looks and behaves are in `skills/archforge-design/SKILL.md`.
 
 ## Draw through `ux`
@@ -43,9 +43,9 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
 
 ## Controls
 - Every interactive control is registered with an automation id, its kind and its rectangle, as
-  `control` in `crates/ui-egui/src/home.rs` does through `crates/ui-egui/src/widgets.rs`. Ids are
-  dotted, lower-case and stable: `<screen>.<area>.<thing>`, such as `strip.home`. The tests find
-  controls by id, never by position.
+  `control` in `crates/ui-egui/src/home.rs` does through the automation registry,
+  `crates/shell-api/src/widgets.rs`. Ids are dotted, lower-case and stable:
+  `<screen>.<area>.<thing>`, such as `strip.home`. The tests find controls by id, never by position.
 - A control whose screen does not exist yet says "Not available yet" on hover. A canvas tool that
   is not built is left out of the toolbar instead.
 - The interface never touches the file system: what it needs from the host comes through

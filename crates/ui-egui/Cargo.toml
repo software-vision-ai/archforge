@@ -21,6 +21,7 @@ archforge-notations.workspace = true
 archforge-uml.workspace = true
 archforge-mof.workspace = true
 archforge-names.workspace = true
+archforge-shell-api.workspace = true
 egui.workspace = true
 egui_kittest = { workspace = true, optional = true, features = ["wgpu"] }
 serde.workspace = true

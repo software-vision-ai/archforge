@@ -58,7 +58,8 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   A new kind gets its row in `xtask/diagram-kinds.tsv`, which a notations test holds to the kinds
   registered.
 - The user interface never touches the file system or the operating system itself: the host
-  injects `Services`. Only `crates/ui-egui` and the application may use the toolkit.
+  injects `Services`. Only `crates/ui-egui`, the shell, `crates/shell-api`, its interfaces, and the
+  application may use the toolkit.
 - The interface draws through `ux`: no literal colour, font or icon outside it, and every control
   has an automation id.
 - Every string the user sees goes through the catalogues, with a row in every one.
