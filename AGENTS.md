@@ -75,23 +75,23 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 ## Pull requests and the `deep-review` label
 
 Every pull request gets one PR-Agent review when it opens (`CONTRIBUTING.md`, "Code review").
-CodeRabbit reviews only pull requests labelled `deep-review`.
+CodeRabbit reviews only pull requests labelled `deep-review`, and its reviews are few, so the label
+goes by what a change does, not by which files it touches.
 
-- Apply `deep-review` when you create the pull request (`gh pr create --label deep-review`) if it
-  touches any of these paths:
-  - core architecture: `crates/mof/`, `crates/engine/`, `crates/core/`, `crates/diagram/`,
-    `crates/notations/`, `crates/ui-egui/src/kinds.rs`, `crates/ui-egui/src/notation_ui.rs`,
-    `Cargo.toml`, `xtask/src/layers.rs`;
-  - public API, what agents call: `crates/control/`, `crates/mcp/`, `apps/archforge-cli/`,
-    `crates/*/src/commands.rs`;
-  - security and authentication: `crates/secrets/`, `crates/agents/`, `deny.toml`,
-    `.github/workflows/`, `packaging/macos/entitlements.plist`;
-  - persistence and data formats: `crates/project/`, `crates/dolt/`, `crates/*/*.xmi`,
-    `crates/*/src/generated/`, `crates/ui-egui/src/chat_store.rs`;
-  - concurrency: `crates/dolt/`, `crates/agents/`, `crates/control/`.
-- Don't apply it to scaffolding, documentation, test-only changes, renames, dependency bumps or
-  exploratory work, even when those touch a path above.
-- On a labelled pull request, gather commits and push once each time it is ready for review:
+- Apply `deep-review` when you create the pull request (`gh pr create --label deep-review`) only if
+  it changes behaviour across one of these boundaries:
+  - a saved format: project files, the database schema, chat storage, or a metamodel change that
+    alters what a project stores;
+  - a security boundary: the control channel's token and server, secrets, how agent programs are
+    started, what files the application may touch, or a workflow's permissions or secrets;
+  - the contract agents use: a command, a parameter or an MCP tool added, renamed or removed, or
+    what a refusal means changed;
+  - the life of processes: starting and stopping Dolt servers, their locks and watchdog, and the
+    supervision of agent programs.
+- Don't apply it to a refactor that keeps behaviour (code moved, hooks added, names changed, proven
+  by tests and snapshots), to interface work and wording, to a fix inside one notation's rules, or
+  to scaffolding, documentation, test-only changes, dependency bumps or exploratory work.
+- On a labelled pull request, gather the fixes and push once each time it is ready for review:
   CodeRabbit reviews a push only when asked (`@coderabbitai review`).
 
 ## Working on something: read its skill first
