@@ -118,7 +118,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           if [ $((PR_NUMBER % 3)) -eq 0 ]; then
-            provider=openai model=gpt-6.2-sol
+            provider=openai model=openai/gpt-6.2-sol
           else
             provider=anthropic model=anthropic/claude-sonnet-5-5
           fi
@@ -144,10 +144,11 @@ jobs:
           CONFIG.MODEL: ${{ steps.provider.outputs.model }}
           ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
 
-      # gpt-6.2-sol is not in PR-Agent 0.50.0's model list, so its input ceiling (922,000 tokens,
-      # as for the other Sol-tier GPT-6 models) and temperature (1, the only value a GPT-6 reasoning
-      # model takes) are set here. If a call to it fails, PR-Agent retries on gpt-6.1-sol, which it
-      # knows: same provider, same price.
+      # gpt-6.2-sol is in neither PR-Agent 0.50.0's model list nor its LiteLLM's, so it is named with
+      # its provider (`openai/`; the bare name fails with "LLM Provider NOT provided", seen on #603),
+      # and its input ceiling (922,000 tokens, as for the other Sol-tier GPT-6 models) and temperature
+      # (1, the only value a GPT-6 reasoning model takes) are set here. If a call to it fails,
+      # PR-Agent retries on gpt-6.1-sol, which it knows: same provider, same price.
       - name: PR-Agent review (OpenAI)
         if: steps.provider.outputs.provider == 'openai'
         uses: docker://pragent/pr-agent@sha256:548e894a88071180832b2f4233f734d0acd0db1a879e2fcbaa70bac8b8372ebe
