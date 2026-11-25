@@ -176,7 +176,7 @@ impl DiagramKind for ErKind {
                 .collect();
             store.uuid(*columns.get(row)?).ok()
         });
-        crate::panels::open_column(shell, element, column);
+        crate::er_table::open_column(shell, element, column);
         shell.state.show_panel(crate::state::Panel::Properties);
     }
 

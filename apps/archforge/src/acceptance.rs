@@ -279,7 +279,7 @@ fn count(h: &H, class: archforge_mof::ClassId) -> usize {
 /// table's primary key, then Apply.
 fn add_column(h: &mut H, name: &str, ty: &str, primary_key: bool) {
     click_on(h, "workspace.properties.columns.add");
-    let edit = archforge_ui_egui::panels::column_edit_mut(h.state_mut()).unwrap_or_else(|| panic!("{name}: the column editor opens"));
+    let edit = archforge_ui_egui::er_table::column_edit_mut(h.state_mut()).unwrap_or_else(|| panic!("{name}: the column editor opens"));
     edit.name = name.into();
     edit.ty = ty.into();
     edit.primary_key = primary_key;
@@ -287,7 +287,7 @@ fn add_column(h: &mut H, name: &str, ty: &str, primary_key: bool) {
     h.run();
     click_on(h, "workspace.properties.column.apply");
     assert!(
-        archforge_ui_egui::panels::column_edit(h.state()).is_none(),
+        archforge_ui_egui::er_table::column_edit(h.state()).is_none(),
         "{name}: Apply writes the column and closes the editor: {:?}",
         h.state().panels.notice
     );

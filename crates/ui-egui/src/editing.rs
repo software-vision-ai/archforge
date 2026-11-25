@@ -2077,7 +2077,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
             select(shell, vec![menu.entity]);
         }
         "add-column" => {
-            crate::panels::open_column(shell, menu.entity, None);
+            crate::er_table::open_column(shell, menu.entity, None);
             shell.state.show_panel(crate::state::Panel::Properties);
         }
         "add-row" => {

@@ -15,9 +15,10 @@ use serde_json::json;
 use crate::checks::badge;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
+use crate::er_table::{number, size_value};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, check, ghost_button, icon_button, menu, number, run, section, size_value, text_field};
+use crate::panels::{FIELD, PAD, check, ghost_button, icon_button, menu, run, section, text_field};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
