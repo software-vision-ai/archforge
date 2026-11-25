@@ -8,6 +8,10 @@ description: "Use when writing, placing or running tests in Archforge: a regress
 ## Placement
 - A test goes into the existing test file of its area, never a new file named after the bug:
   - the shell and its screens: `crates/ui-egui/src/tests.rs`
+  - every offscreen screen's automation ids, in both appearances: the `tests` module in
+    `crates/ui-egui/src/offscreen.rs`, against `crates/ui-egui/src/offscreen/automation-ids.tsv`;
+    a change that renames, adds or removes an id on purpose updates the screen's rows from the
+    listing the failing test prints, and a new screen gets its rows and its place in `EVERY`
   - translations: `crates/ui-egui/src/i18n/tests.rs`
   - the desktop app (arguments, preferences, graphics): the `tests` module in `apps/archforge/src/main.rs`
   - the native menu bar's queue, wake and items: the `tests` module in
@@ -52,7 +56,7 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   harness that does not.
 - A screen test scrolls to a control before it presses it, at the design's window height, and never
   makes the window taller to reach it. A panel's scrolled body lists a control only while part of it
-  is inside the body (`record_visible` in `crates/ui-egui/src/widgets.rs`), so a control under the
+  is inside the body (`record_visible` in `crates/shell-api/src/widgets.rs`), so a control under the
   fold or scrolled out above is not found, and one an edge cuts is found with a centre no press
   reaches. What a click
   adds above a control (a refusal under a field) moves it too: find it again after every press.

@@ -434,6 +434,10 @@ dependencies = [
 [[package]]
 name = "archforge-shell-api"
 version = "0.14.0"
+dependencies = [
+ "egui",
+ "serde",
+]
 
 [[package]]
 name = "archforge-ui-egui"
@@ -446,6 +450,7 @@ dependencies = [
  "archforge-mof",
  "archforge-names",
  "archforge-notations",
+ "archforge-shell-api",
  "archforge-uml",
  "craft-i18n",
  "egui",

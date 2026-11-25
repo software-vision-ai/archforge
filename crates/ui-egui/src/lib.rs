@@ -1,4 +1,5 @@
-//! The user interface: the only library crate that may use the toolkit.
+//! The user interface: with its interfaces (`archforge-shell-api`), the only library crates that may
+//! use the toolkit.
 //!
 //! `Shell` owns the host's injected `Services`, the serialisable `UiState` and what Home lists.
 //! Each frame `logic` takes in the installed fonts and applies the appearance; `ui` draws Home,
@@ -96,9 +97,10 @@ mod version_load;
 pub mod versions;
 pub mod view_menu;
 mod viewing;
-pub mod widgets;
 pub mod workspace;
 
+/// The automation registry, from the shell's interfaces, under the path the shell's code names it by.
+pub use archforge_shell_api::widgets;
 pub use fonts::{FontEntry, FontSource};
 pub use notation_ui::open_repair;
 pub use state::UiState;

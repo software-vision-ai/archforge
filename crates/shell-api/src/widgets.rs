@@ -35,6 +35,7 @@ impl Registry {
         self.measuring = false;
     }
 
+    /// Records the control `id` of `kind` at `rect` in the frame in progress.
     pub fn record(&mut self, id: &str, kind: &'static str, rect: Rect) {
         self.current.push(Entry { id: id.to_string(), kind, rect: [rect.min.x, rect.min.y, rect.max.x, rect.max.y] });
     }
