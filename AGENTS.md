@@ -72,6 +72,30 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   `assets/app-icon/icon.png`, is the exception); every file under `assets/` has its
   row in `ATTRIBUTION.toml`.
 
+## Pull requests and the `deep-review` label
+
+PR-Agent reviews a pull request from this repository once, when it is opened, reopened or marked
+ready for review, unless it changes no code file (`CONTRIBUTING.md`, "Code review"); pull requests
+from forks get no PR-Agent review.
+CodeRabbit reviews only pull requests labelled `deep-review`, and its reviews are few, so the label
+goes by what a change does, not by which files it touches.
+
+- Apply `deep-review` when you create the pull request (`gh pr create --label deep-review`) only if
+  it changes behaviour across one of these boundaries:
+  - a saved format: project files, the database schema, chat storage, or a metamodel change that
+    alters what a project stores;
+  - a security boundary: the control channel's token and server, secrets, how agent programs are
+    started, what files the application may touch, or a workflow's permissions or secrets;
+  - the contract agents use: a command, a parameter or an MCP tool added, renamed or removed, or
+    what a refusal means changed;
+  - the life of processes: starting and stopping Dolt servers, their locks and watchdog, and the
+    supervision of agent programs.
+- Don't apply it to a refactor that keeps behaviour (code moved, hooks added, names changed, proven
+  by tests and snapshots), to interface work and wording, to a fix inside one notation's rules, or
+  to scaffolding, documentation, test-only changes, dependency bumps or exploratory work.
+- On a labelled pull request, gather the fixes and push once each time it is ready for review:
+  CodeRabbit reviews a push only when asked (`@coderabbitai review`).
+
 ## Working on something: read its skill first
 
 | Working on | Read |

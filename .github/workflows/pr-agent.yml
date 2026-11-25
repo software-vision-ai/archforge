@@ -1,0 +1,159 @@
+# PR-Agent: the first of two review tiers (CONTRIBUTING.md, "Code review"). It reviews every pull
+# request once, when it is opened, reopened or marked ready for review. It does not run on later
+# pushes. A collaborator can ask for a new review by commenting `/review` on the pull request.
+# The second tier, CodeRabbit, reviews only pull requests labelled `deep-review` (.coderabbit.yaml).
+#
+# PR-Agent runs only its review tool: describe and improve are off, it adds no labels, and it
+# leaves the title and the description alone. It posts or updates one review comment and nothing
+# else. Non-code files are left out of the review (IGNORE.GLOB below, beside PR-Agent's own list
+# of lockfile, image, tsv, Markdown and text extensions). A pull request with no code file left
+# after that gets no review and no comment.
+#
+# The model is chosen per pull request: a number divisible by 3 runs on OpenAI, every other on
+# Anthropic. That makes two Anthropic reviews for each OpenAI review, needs no stored state, and a
+# `/review` on the same pull request uses the same provider again. Only the chosen provider's key
+# and model reach PR-Agent. No model of the other provider is ever a fallback, so a failure on one
+# side never moves the cost to the other; OpenAI's gpt-6.2-sol falls back to OpenAI's gpt-6.1-sol
+# only. The job summary names the provider and the model.
+#
+# Pull requests from forks get no PR-Agent review, neither on open nor on a `/review` comment. The
+# event is `pull_request`, never `pull_request_target`, so a fork's run would have no secrets; and an
+# `issue_comment` run has the repository's secrets, so the job checks the pull request's head
+# repository first and stops for a fork.
+name: PR-Agent
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  review:
+    # An opened, reopened or ready pull request from this repository that is not a draft; or a
+    # comment on a pull request that starts with /review, from the owner, a member or a collaborator
+    # (the first step stops it when that pull request comes from a fork).
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/review') &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    runs-on: ubuntu-latest
+    # One review at a time per pull request; a newer run replaces a running one. The group sits on
+    # the job, so a comment that is not a /review (its job skipped) never cancels a running review.
+    concurrency:
+      group: pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Only the review tool.
+      GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+      GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
+      GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "false"
+      GITHUB_ACTION_CONFIG.PR_ACTIONS: '["opened", "reopened", "ready_for_review"]'
+      GITHUB_ACTION_CONFIG.HANDLE_PUSH_TRIGGER: "false"
+      # No fallback model by default: a failure stays on the chosen provider (OpenAI's step names
+      # its own OpenAI fallback).
+      CONFIG.FALLBACK_MODELS: "[]"
+      # Findings on the changed code only: bugs, security and correctness. No effort estimate, no
+      # ticket compliance, no "can this be split", no tests checklist, no score, and no labels.
+      PR_REVIEWER.REQUIRE_ESTIMATE_EFFORT_TO_REVIEW: "false"
+      PR_REVIEWER.REQUIRE_TICKET_ANALYSIS_REVIEW: "false"
+      PR_REVIEWER.REQUIRE_CAN_BE_SPLIT_REVIEW: "false"
+      PR_REVIEWER.REQUIRE_TESTS_REVIEW: "false"
+      PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
+      PR_REVIEWER.REQUIRE_ESTIMATE_CONTRIBUTION_TIME_COST: "false"
+      PR_REVIEWER.REQUIRE_SECURITY_REVIEW: "true"
+      PR_REVIEWER.ENABLE_REVIEW_LABELS_SECURITY: "false"
+      PR_REVIEWER.ENABLE_REVIEW_LABELS_EFFORT: "false"
+      PR_REVIEWER.ENABLE_HELP_TEXT: "false"
+      # Later reviews update the one review comment, with no separate "updated" notice.
+      PR_REVIEWER.PERSISTENT_COMMENT: "true"
+      PR_REVIEWER.FINAL_UPDATE_MESSAGE: "false"
+      PR_REVIEWER.EXTRA_INSTRUCTIONS: >-
+        Review only the lines this pull request adds or changes, and the behaviour they alter.
+        Report bugs, security problems and incorrect behaviour; do not comment on code the diff
+        does not change.
+      # Non-code files of this repository: documentation and Markdown, licences, the lockfile,
+      # generated code, build output, assets, recorded test data and translations. `*` matches
+      # across `/` here.
+      IGNORE.GLOB: >-
+        ["*.md", "docs/**", "licenses/**", "LICENSE-*", "NOTICE", "ATTRIBUTION.*",
+        ".github/ISSUE_TEMPLATE/**", ".github/FUNDING.yml",
+        "Cargo.lock", "*.lock",
+        "crates/*/src/generated/**",
+        "target/**", "target-*/**", "dist/**", "plan/**",
+        "assets/**", "*.png", "*.ico", "*.icns", "*.svg", "*.rtf", "*.ttf", "*.otf",
+        "crates/agents/tests/fixtures/**", "crates/agents/schema/**", "*.jsonl",
+        "crates/ui-egui/src/i18n/*.tsv", "*.txt"]
+    steps:
+      # A comment's event does not say where the pull request comes from; the API does.
+      - name: Stop for a pull request from a fork
+        id: origin
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          head_repo=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.repo.full_name // ""')
+          if [ "$head_repo" = "$REPO" ]; then
+            echo "fork=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "fork=true" >> "$GITHUB_OUTPUT"
+            from=${head_repo:-a deleted repository}
+            echo "PR-Agent skipped #$PR_NUMBER: it comes from a fork ($from)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Choose the provider
+        id: provider
+        if: steps.origin.outputs.fork != 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          if [ $((PR_NUMBER % 3)) -eq 0 ]; then
+            provider=openai model=gpt-6.2-sol
+          else
+            provider=anthropic model=anthropic/claude-sonnet-5-5
+          fi
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
+          echo "model=$model" >> "$GITHUB_OUTPUT"
+          {
+            echo "### PR-Agent review of #$PR_NUMBER"
+            echo ""
+            echo "| Provider | Model |"
+            echo "|---|---|"
+            echo "| $provider | \`$model\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The official image of release v0.50.0 (tag 0.50.0-github_action), pinned by digest. The
+      # action's own repository at v0.50.0 (e673a02076ce09a4726c3d0c3cc85780e59ca52b) builds from
+      # the rolling pragent/pr-agent:github_action tag, so pinning the action's commit alone would
+      # not pin the code that runs; the digest does (PR-Agent's docs, "Enhanced Security with
+      # Docker Digest").
+      - name: PR-Agent review (Anthropic)
+        if: steps.provider.outputs.provider == 'anthropic'
+        uses: docker://pragent/pr-agent@sha256:548e894a88071180832b2f4233f734d0acd0db1a879e2fcbaa70bac8b8372ebe
+        env:
+          CONFIG.MODEL: ${{ steps.provider.outputs.model }}
+          ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
+
+      # gpt-6.2-sol is not in PR-Agent 0.50.0's model list, so its input ceiling (922,000 tokens,
+      # as for the other Sol-tier GPT-6 models) and temperature (1, the only value a GPT-6 reasoning
+      # model takes) are set here. If a call to it fails, PR-Agent retries on gpt-6.1-sol, which it
+      # knows: same provider, same price.
+      - name: PR-Agent review (OpenAI)
+        if: steps.provider.outputs.provider == 'openai'
+        uses: docker://pragent/pr-agent@sha256:548e894a88071180832b2f4233f734d0acd0db1a879e2fcbaa70bac8b8372ebe
+        env:
+          CONFIG.MODEL: ${{ steps.provider.outputs.model }}
+          CONFIG.FALLBACK_MODELS: '["gpt-6.1-sol"]'
+          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "922000"
+          CONFIG.TEMPERATURE: "1"
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
