@@ -74,7 +74,9 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 
 ## Pull requests and the `deep-review` label
 
-Every pull request gets one PR-Agent review when it opens (`CONTRIBUTING.md`, "Code review").
+PR-Agent reviews a pull request from this repository once, when it is opened, reopened or marked
+ready for review, unless it changes no code file (`CONTRIBUTING.md`, "Code review"); pull requests
+from forks get no PR-Agent review.
 CodeRabbit reviews only pull requests labelled `deep-review`, and its reviews are few, so the label
 goes by what a change does, not by which files it touches.
 
