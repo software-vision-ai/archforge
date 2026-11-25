@@ -73,9 +73,15 @@ mod tests {
         assert!(offenders.is_empty(), "platform code outside the seams:\n{}", offenders.join("\n"));
     }
 
+    /// The portable set holds the shell and its interfaces and no host service, which sit above
+    /// the shell.
     #[test]
     fn the_portable_set_ends_with_the_shell() {
         let set = portable_crates();
         assert!(set.iter().any(|c| c.ends_with(layers::SHELL)));
+        assert!(set.contains(&format!("{}{}", layers::PREFIX, layers::SHELL_API)), "{set:?}");
+        for host in ["dolt", "project", "control", "secrets", "agents", "mcp"] {
+            assert!(!set.contains(&format!("{}{host}", layers::PREFIX)), "{host} in {set:?}");
+        }
     }
 }

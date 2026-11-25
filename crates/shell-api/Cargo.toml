@@ -1,0 +1,12 @@
+[package]
+name = "archforge-shell-api"
+description = "The shell's interfaces: what a notation's screens implement and may use from the shell"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true

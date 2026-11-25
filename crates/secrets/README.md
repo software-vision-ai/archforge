@@ -5,8 +5,8 @@ the keychain on macOS, the Credential Manager on Windows, the Secret Service on 
 plaintext fallback anywhere: on a system without a secure store a key cannot be saved, and every
 call answers `SecretError::NoSecureStore`, which the interface shows. Nothing is written to a file.
 
-**Layer.** 9, a host service beside `control` and `dolt`: it talks to the operating system, so the
-shell never depends on it and it is never built for the portable target.
+**Layer.** 12, a host service beside `control` and `dolt`, above the shell (11): it talks to the
+operating system, so the shell never depends on it and it is never built for the portable target.
 
 **Public API.**
 

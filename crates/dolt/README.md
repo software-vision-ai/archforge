@@ -118,8 +118,8 @@ cannot be set aside (its lock held, too many set aside before it, or the move it
 fails the opening as well. A start that fails for a lost port tries again only when the record's
 name is free.
 
-**Layer.** Host services, layer 9: the application uses it, the interface never depends on it, and
-the portable-target check leaves it out. No toolkit.
+**Layer.** Host services, layer 12, above the shell (11): the application uses it, the interface
+never depends on it, and the portable-target check leaves it out. No toolkit.
 
 **Binding rules.** Every helper program runs by absolute path in a cleared environment with a
 budget (but the watchdog, whose work is to wait); dolt runs in Archforge's own private dolt home with usage metrics and the online version

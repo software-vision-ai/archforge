@@ -21,7 +21,7 @@ craft-mcp-server's `check_arguments`: an unknown or missing key, a wrong type or
 choices is a tool result with `isError` naming the tool, and a required key set to `null` counts as
 missing. An integer written as a float without a fraction (`3.0`) passes, as the engine takes it.
 
-**Layer.** 10, above `control`, which it reaches the application through. It uses craft-mcp-server
+**Layer.** 13, above `control`, which it reaches the application through. It uses craft-mcp-server
 (craft-libs) for the argument check only; the protocol serving is its own.
 
 **Public API.**

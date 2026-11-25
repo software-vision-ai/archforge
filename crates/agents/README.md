@@ -6,7 +6,7 @@ supervised child processes in private folders. Archforge never bundles them. The
 speak each runtime's protocol (AR-201, AR-202) build on this crate; the AR-196 spike's note records
 how the runtimes behave.
 
-**Layer.** 10, a host service above `secrets`, whose `Secret` carries the keys, and `control`, whose
+**Layer.** 13, a host service above `secrets`, whose `Secret` carries the keys, and `control`, whose
 origin label check the Claude adapter shares with `archforge-cli`: it starts processes and makes
 folders, so the shell never depends on it and it is never built for the portable target.
 

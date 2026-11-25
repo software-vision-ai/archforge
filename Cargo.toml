@@ -12,6 +12,7 @@ repository = "https://github.com/software-vision-ai/archforge"
 
 [workspace.dependencies]
 # Internal crates: members say `name.workspace = true` and never repeat a version or a path.
+archforge-shell-api = { path = "crates/shell-api" }
 archforge-ui-egui = { path = "crates/ui-egui" }
 archforge-dolt = { path = "crates/dolt" }
 archforge-names = { path = "crates/names" }
