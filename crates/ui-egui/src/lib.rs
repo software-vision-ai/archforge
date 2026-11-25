@@ -29,6 +29,7 @@ mod edit_menu;
 pub mod editing;
 mod engine_said;
 mod er_kind;
+pub mod er_place;
 mod er_said;
 mod er_state;
 pub mod er_table;
@@ -1584,7 +1585,7 @@ impl Shell {
                 let source = source.clone();
                 let ids = Box::new(move || source());
                 match rows {
-                    Some(rows) => archforge_notations::session_from_rows_repaired(rows, ids, editing::fit_tables).map(|mut s| {
+                    Some(rows) => archforge_notations::session_from_rows_repaired(rows, ids, er_place::fit_tables).map(|mut s| {
                         if project.unsaved {
                             s.mark_unsaved();
                         }

@@ -771,7 +771,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
     let generation = archforge_er::commands::GENERATION_WORDS.iter().find(|(g, _)| *g == edit.generation).map(|(_, w)| *w).unwrap_or("none");
     let expression = if is_computed(edit.generation) { edit.expression.trim() } else { "" };
     let outcome = match edit.target {
-        None => crate::editing::run_growing(
+        None => crate::er_place::run_growing(
             shell,
             &tr("Add column"),
             "er.attribute.add",

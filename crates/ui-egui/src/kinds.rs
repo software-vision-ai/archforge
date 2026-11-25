@@ -1,10 +1,11 @@
 //! The tools and gestures of each diagram kind: a kind brings its toolbar
 //! tools, each placing an element or connecting two, and the hooks the canvas's gestures run on
 //! its elements: place, connect, a line dropped on empty canvas, renaming in place, opening an
-//! element's editor at a row of its card, a second adorner, the live line while connecting, a
-//! press and a right click it reads before the shared gestures, the keys a drawing under way
-//! takes, whether its popover's menu takes the keys, what Select all takes in beside the boxes
-//! and lines, and where a label of its own figures is let go; and the hooks the canvas runs as it
+//! element's editor at a row of its card, a second adorner, the rows its element menu adds with
+//! what each does, the live line while connecting, a press and a right click it reads before the
+//! shared gestures, the keys a drawing under way takes, whether its popover's menu takes the keys,
+//! what Select all takes in beside the boxes and lines, and where a label of its own figures is
+//! let go; and the hooks the canvas runs as it
 //! draws one of its diagrams: before and after the drawing, where a line starts, what goes with a
 //! line, the figures of no one node or line, and the hint bar; and its rows of the Model menu.
 //! Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows where
@@ -16,7 +17,7 @@ use egui::{Pos2, Rect, Stroke};
 
 use crate::Shell;
 use crate::canvas::{Drawing, ExtraLabel, LineDrawn, View};
-use crate::editing::Action;
+use crate::editing::{Action, EntityMenu};
 use crate::ux::{Icon, Palette};
 use crate::widgets::Registry;
 
@@ -42,6 +43,24 @@ pub(crate) struct KindTool {
     /// Twice as wide, so a face that draws what the tool makes reads (a relationship's line); an
     /// icon's face is as wide as any tool's.
     pub(crate) wide: bool,
+}
+
+/// A row a diagram kind adds to its elements' menu ([`DiagramKind::menu`]), with what it does when
+/// picked.
+pub(crate) struct MenuRow {
+    /// Its automation key (`workspace.canvas.menu.{key}`).
+    pub(crate) key: &'static str,
+    /// Its name, in the catalogue.
+    pub(crate) label: &'static str,
+    /// The keys it shows at its right, empty for none.
+    pub(crate) keys: &'static str,
+    /// Whether it acts: a row that does not is drawn muted and takes no click.
+    pub(crate) live: bool,
+    /// Whether it goes first, in a section of its own above Open in Models; otherwise it follows
+    /// Open in Models, before Generate….
+    pub(crate) first: bool,
+    /// What it does when picked, on the menu's node and element.
+    pub(crate) run: fn(&mut Shell, &EntityMenu),
 }
 
 /// A press on the canvas as a diagram kind reads it ([`DiagramKind::pointer`],
@@ -189,10 +208,12 @@ pub(crate) trait DiagramKind: Sync {
     fn card_controls(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, element: Uuid) {
         let _ = (shell, ui, p, clip, rect, element);
     }
-    /// Whether a right click opens the kind's element menu.
-    fn menu(&self) -> bool {
-        false
-    }
+    /// The rows a right click's menu on `element` adds to the shared ones (Open in Models, Generate…,
+    /// Remove from this diagram, Delete from the model…), in order, each with what it does when
+    /// picked; `mac` spells their keys as the Mac does. None: a right click opens no menu on it.
+    /// Every kind answers: whether its elements take a menu and what that menu does is the kind's
+    /// own, and a kind left without an answer would have no menu with no word of it.
+    fn menu(&self, store: &Store, element: Obj, mac: bool) -> Option<Vec<MenuRow>>;
     /// What a press of the primary button on diagram `press.d` means to the kind before the shared
     /// gestures read it: with a Connect tool before any line starts, with Select once a gesture
     /// under way had its chance to end and before a drag starts one. Some takes the press, even as

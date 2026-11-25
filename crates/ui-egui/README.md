@@ -31,7 +31,8 @@ with each notation's cards and lines as it describes them (`archforge_diagram::f
 table cards and crow's foot lines), notes, links and labels, pan and zoom, the minimap with the zoom control, the canvas
 toolbar, whose tools after Select and Pan are the open diagram kind's (`kinds::DiagramKind`: its
 tools, each placing or connecting, and the hooks the gestures run: place, connect, a line dropped
-on empty canvas, rename in place, open at a card's row, its adorner, its menu, the live line, a
+on empty canvas, rename in place, open at a card's row, its adorner, the rows its element menu adds
+with what each does, the live line, a
 press and a right click it reads first, the keys a drawing under way takes, whether its popover's
 menu takes the keys, what Select all takes in beside the boxes and lines, and where a label of
 its own figures is let go; and
@@ -40,9 +41,12 @@ what goes with a line, the figures of no one node or line, and the hint bar, thr
 draws its association classes' ties and names, its generalization sets, its n-ary legs and hint,
 and runs its package navigation, whose state is UML's own; and its rows of the Model menu, from
 which `model_menu` builds the menu, Note and Link note after them;
-`er_kind`: ER's); a click selects what it hits; `editing`: the Entity tool places a table named in place,
-Select drags, resizes, marquees, nudges and arranges nodes, the entity menu removes from the
-diagram or deletes from the model after the dialog, a node grows with its columns; `connect`: the
+`er_kind`: ER's, whose entity menu adds a table's related tables, new column and collapse); a click
+selects what it hits; `editing`, shared by every kind: Select drags, resizes, marquees, nudges and
+arranges nodes, the element menu opens in Models, hands the element to an agent, removes it from
+the diagram or deletes it from the model after the dialog; `er_place`: the Entity tool places a
+table named in place, a relationship dropped on empty canvas makes a new table, a table dragged
+from Models lands with its lines, and a table's boxes grow with its columns; `connect`: the
 Relationship tool and the connect adorner drag a line from table to table with the cardinality
 popover's ends, the relationship, its edge and its label as one step and the foreign key when the
 parent has a key, lines coloured by key status, a mapping table offered for many to many, Delete
@@ -127,7 +131,8 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `versions::State` | the Versions explorer's state: what it has read, how its sections are folded, and what the keyboard has just moved to, which its list brings into view |
 | `save_version::Dialog` | the Save version dialog: the description typed, the revision its summary is of, and how its save went |
 | `canvas::{State, Tool, Toast, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool, the toggles and the editing state (what a notation types, draws and opens there is its own state); the toast with Undo at the canvas's foot; `open` shows a diagram through `view.open-diagram` |
-| `editing::{add_entity, run_growing, content_height, fit_tables, diagrams_showing, NodeRename, Gesture, EntityMenu}` | canvas editing: a table added (and placed on an open diagram) as one step, a column command that grows the table's nodes with it, the gesture and menu state |
+| `editing::{diagrams_showing, NodeRename, Gesture, EntityMenu}` | canvas editing: how many diagrams show an element, the name typed in place, the gesture and the element menu's state |
+| `er_place::{add_entity, run_growing, content_height, fit_tables}` | ER's tables on its diagrams: a table added (and placed on an open diagram) as one step, a column command that grows the table's nodes with it, the height that shows a table's columns, and the boxes grown to show them when a project opens |
 | `connect::{RelKind, MappingOffer, connect, offer_mapping, has_foreign_key, remove_selected_relationship}` | relationships drawn on the canvas: the ends a new line gets, the mapping table offer |
 | `relation::RoleEdit` | a relationship's Properties state, ER's own: a role being typed; the body itself is drawn by `panels` |
 | `keys::{KeyEdit, KeyRow, rows, open}` | a table's keys and the key editor's state |
