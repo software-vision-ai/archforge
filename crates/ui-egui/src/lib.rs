@@ -100,6 +100,7 @@ pub mod widgets;
 pub mod workspace;
 
 pub use fonts::{FontEntry, FontSource};
+pub use notation_ui::open_repair;
 pub use state::UiState;
 
 /// Host functions the shell may call; each is optional, and a missing one degrades rather than
@@ -1585,7 +1586,7 @@ impl Shell {
                 let source = source.clone();
                 let ids = Box::new(move || source());
                 match rows {
-                    Some(rows) => archforge_notations::session_from_rows_repaired(rows, ids, er_place::fit_tables).map(|mut s| {
+                    Some(rows) => archforge_notations::session_from_rows_repaired(rows, ids, open_repair).map(|mut s| {
                         if project.unsaved {
                             s.mark_unsaved();
                         }
@@ -1608,15 +1609,10 @@ impl Shell {
                 if read {
                     self.written = Some(s.revision());
                 }
-                // A project from before the model's root package: its top-level packages go into
-                // the root, named after the project, as one step that is written and can be undone
-                // (owner, 2026-11-04).
-                let store = s.doc();
-                if !archforge_uml::commands::packages(store).is_empty()
-                    && archforge_uml::commands::root_package(store).is_none()
-                    && let Err(e) = s.execute("uml.model.root", &serde_json::json!({}))
-                {
-                    log::warn!("the model's packages could not be put under its root package: {e}");
+                // A shape an earlier version saved is brought up to date by its notation, each
+                // change one step that is written and can be undone.
+                for failed in archforge_notations::open_steps(&mut s) {
+                    log::warn!("{failed}");
                 }
                 self.session = Some(s);
                 self.session_replaced();

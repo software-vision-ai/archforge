@@ -242,8 +242,8 @@ fn keep_changes(shell: &mut Shell) {
     let (tx, rx) = std::sync::mpsc::channel();
     let compare = move || {
         let after = frozen.rows(&tables, &junctions).map_err(|e| e.to_string());
-        let found = after
-            .and_then(|after| archforge_notations::differences::classified(&before, &after, crate::er_place::fit_tables).map_err(|e| e.to_string()));
+        let found =
+            after.and_then(|after| archforge_notations::differences::classified(&before, &after, crate::open_repair).map_err(|e| e.to_string()));
         let _ = tx.send(found);
     };
     match std::thread::Builder::new().name("archforge-working-changes".into()).spawn(compare) {

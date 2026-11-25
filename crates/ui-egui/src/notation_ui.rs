@@ -351,6 +351,16 @@ pub(crate) trait NotationUi: Sync {
         let _ = (shell, element);
     }
 
+    // As a project opens.
+
+    /// Puts right, in `store`, a project's model read as it opens and before its session starts, a
+    /// layout of its own elements that depends on what its screens draw: ER grows a table box an
+    /// earlier version left too short for its columns. No undo step; it is written with the next
+    /// change. Nothing by default, for a notation whose boxes show what they hold at any size.
+    fn open_repair(&self, store: &mut Store) {
+        let _ = store;
+    }
+
     // Its own state.
 
     /// A fresh state for its own editors, menus and drawings, as a window or a project opened
@@ -530,6 +540,17 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &
 
 /// The notations the shell knows.
 pub(crate) static UIS: &[&dyn NotationUi] = &[&crate::er_ui::ErUi, &crate::uml_ui::UmlUi];
+
+/// What an opening does to a project's model before its session starts: every notation of `UIS`
+/// puts its own layout right (`NotationUi::open_repair`), in the order of the notations. The
+/// shell opens, restores and compares models with it, and hands it to the host for a restore. It
+/// reads `UIS` itself rather than a shell's `notation_uis`: the host and the comparisons' threads
+/// take it as a plain function, and one opening must repair a model the same way wherever it runs.
+pub fn open_repair(store: &mut Store) {
+    for notation in UIS {
+        notation.open_repair(store);
+    }
+}
 
 /// The notation of `obj`, when the shell knows it.
 pub(crate) fn of(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<&'static dyn NotationUi> {

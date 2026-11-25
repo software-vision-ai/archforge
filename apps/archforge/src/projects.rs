@@ -3908,7 +3908,7 @@ mod tests {
     /// A restore of `commit`, repaired as an opening repairs a model.
     fn restoring(commit: &str) -> RestoreRequest {
         let (saved_at, before_at) = (SAVED_AT.into(), BEFORE_AT.into());
-        RestoreRequest { commit: commit.into(), saved_at, before_at, by: nobody(), repair: archforge_ui_egui::er_place::fit_tables }
+        RestoreRequest { commit: commit.into(), saved_at, before_at, by: nobody(), repair: archforge_ui_egui::open_repair }
     }
 
     /// The commit of the `n`th newest version of the open project.
@@ -4080,7 +4080,7 @@ mod tests {
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 })).unwrap();
         let (tables, junctions) = archforge_notations::storage();
         let short = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
-        let fitted = archforge_notations::session_from_rows_repaired(&short, counted_ids(), archforge_ui_egui::er_place::fit_tables).unwrap();
+        let fitted = archforge_notations::session_from_rows_repaired(&short, counted_ids(), archforge_ui_egui::open_repair).unwrap();
         let fitted = archforge_mof::rows::snapshot(fitted.doc(), &tables, &junctions).unwrap();
         assert_ne!(short, fitted, "the repair changes the box");
         (short, fitted)
@@ -4430,14 +4430,8 @@ mod tests {
         switched(&host.inner, &path);
         assert!(matches!(ran(&(stale.run)()), Err(JobFailure::Failed(why)) if why == not_going_ahead()));
         assert_eq!(sandbox.messages(), messages);
-        let fresh = ProjectHost::restore_job(
-            &**host,
-            &path,
-            old.clone(),
-            (SAVED_AT.into(), BEFORE_AT.into()),
-            nobody(),
-            archforge_ui_egui::er_place::fit_tables,
-        );
+        let fresh =
+            ProjectHost::restore_job(&**host, &path, old.clone(), (SAVED_AT.into(), BEFORE_AT.into()), nobody(), archforge_ui_egui::open_repair);
         assert!(matches!(ran(&(fresh.run)()), Ok(())), "a job asked for now runs");
         assert_eq!(work(host), model("a"));
         assert_eq!(close(host, &path), Ok(()));

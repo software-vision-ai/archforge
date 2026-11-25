@@ -10,7 +10,9 @@ removal of its own elements, worked out before it runs and said in the toast aft
 (`notation_ui::Removal`: the shared removals ask the element's notation), what Delete and a
 chord of its own on the canvas do to its selected elements, what it draws over the canvas
 whatever diagram shows, each layer at its one place in the canvas's order (`notation_ui::Layer`:
-drafts, rows, menus, offers), and what a problem badge that offers a way out says and does, `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
+drafts, rows, menus, offers), what a problem badge that offers a way out says and does, and what an
+opening puts right in its own layout before the session starts (`open_repair`, which runs every
+notation's in turn), `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
 `notation_ui::NotationState` is what a notation keeps between frames for its own editors, menus,
 drawings and tools, `er_state` ER's and `uml_state` UML's, which the shell holds, parks with the
 project, starts fresh with each project opened and each version shown, and asks only through that
@@ -132,7 +134,8 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `save_version::Dialog` | the Save version dialog: the description typed, the revision its summary is of, and how its save went |
 | `canvas::{State, Tool, Toast, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool, the toggles and the editing state (what a notation types, draws and opens there is its own state); the toast with Undo at the canvas's foot; `open` shows a diagram through `view.open-diagram` |
 | `editing::{diagrams_showing, NodeRename, Gesture, EntityMenu}` | canvas editing: how many diagrams show an element, the name typed in place, the gesture and the element menu's state |
-| `er_place::{add_entity, run_growing, content_height, fit_tables}` | ER's tables on its diagrams: a table added (and placed on an open diagram) as one step, a column command that grows the table's nodes with it, the height that shows a table's columns, and the boxes grown to show them when a project opens |
+| `er_place::{add_entity, run_growing, content_height, fit_tables}` | ER's tables on its diagrams: a table added (and placed on an open diagram) as one step, a column command that grows the table's nodes with it, the height that shows a table's columns, and the boxes grown to show them when a project opens (ER's `NotationUi::open_repair`) |
+| `open_repair` | what an opening does to a project's model before its session starts: every notation's own layout put right (`NotationUi::open_repair`, nothing by default), in the order of the notations, without an undo step; the shell opens, restores and compares models with it and hands it to the host for a restore |
 | `connect::{RelKind, MappingOffer, connect, offer_mapping, has_foreign_key, remove_selected_relationship}` | relationships drawn on the canvas: the ends a new line gets, the mapping table offer |
 | `relation::RoleEdit` | a relationship's Properties state, ER's own: a role being typed; the body itself is drawn by `panels` |
 | `keys::{KeyEdit, KeyRow, rows, open}` | a table's keys and the key editor's state |

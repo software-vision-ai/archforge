@@ -139,7 +139,7 @@ fn start_read(shell: &mut Shell) {
     let frozen = session.doc().freeze();
     let (tx, rx) = channel();
     let read = move || {
-        let repair = crate::er_place::fit_tables;
+        let repair = crate::open_repair;
         let sides = frozen.rows(&tables, &junctions).map_err(|e| e.to_string()).and_then(|after| {
             match area {
                 Area::Model | Area::Skill => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),

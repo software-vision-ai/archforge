@@ -234,7 +234,7 @@ and a test:
 | `keep_view` (`:1005`) | Would keep the preview's tabs as the ones to resume |
 | `retain_valid` calls (`:1424-1429`) | Would drop your selection against the old document unless set aside |
 | `control::engine` and `save` (`control.rs:249`, `:301`) | Agents would write into the preview |
-| `uml.model.root` on adopting (`lib.rs:965-970`) | Adopting edits on open, so a preview does not adopt |
+| Each notation's open step on adopting (`archforge_notations::open_steps`: UML's `uml.model.root`) | Adopting edits on open, so a preview does not adopt |
 
 One read of a version runs at a time, for a step or an entry alike, with the newest version wanted
 behind it, and only that one applies; the version in view stays until the next has arrived. An

@@ -1106,3 +1106,51 @@ fn a_new_replacement_whose_commit_is_refused_is_taken_back_whole() {
     let kept = s.execute("diagram.remove", &remove(&s, "Sales map")).unwrap().value;
     assert_eq!((&kept["diagram"], &kept["created"]), (&json!(d), &json!(true)));
 }
+
+/// A commit check for the test alone: it keeps no change.
+fn nothing_kept(_: &Store, _: &archforge_mof::Delta) -> Result<(), CommandError> {
+    Err(CommandError::new("nothing is kept"))
+}
+
+/// AR-790: the steps a project takes as it opens are each notation's own, taken through the
+/// registry: a model from before the root package gets its packages put into the root as one step
+/// that can be undone, a model that needs none gets no step, and a refused step changes nothing
+/// and is said in English, with the reason.
+#[test]
+fn each_notation_takes_its_own_step_as_a_project_opens_and_a_refused_one_is_said() {
+    // Two packages at the top level, no root package: as older projects saved them.
+    let older = |registry| {
+        let mut st = store(ids(0)).unwrap();
+        let model = st.create(archforge_core::MODEL).unwrap();
+        st.set(model, archforge_core::named_element::NAME, Value::str("Shop")).unwrap();
+        for name in ["Sales", "Billing"] {
+            let p = st.create(archforge_uml::PACKAGE).unwrap();
+            st.set(p, archforge_uml::named_element::NAME, Value::str(name)).unwrap();
+            st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
+        }
+        Session::with_view(registry, st, 1, Options::default(), archforge_notations::view())
+    };
+    let mut s = older(registry().unwrap());
+    assert_eq!(archforge_notations::open_steps(&mut s), Vec::<String>::new());
+    let root = archforge_uml::commands::root_package(s.doc()).expect("the root is made");
+    assert_eq!(archforge_core::name_of(s.doc(), root), "Shop");
+    let held: Vec<String> = archforge_uml::commands::subpackages(s.doc(), root).into_iter().map(|p| archforge_core::name_of(s.doc(), p)).collect();
+    assert_eq!(held, ["Sales", "Billing"]);
+    assert_eq!(s.undo_label(), Some("Make the root package"), "one step, to be undone");
+    // Once there is a root, and in a model with no package, no step is taken.
+    let revision = s.revision();
+    assert_eq!(archforge_notations::open_steps(&mut s), Vec::<String>::new());
+    assert_eq!(s.revision(), revision);
+    let mut fresh = new_project_session("Shop", ids(1 << 40)).unwrap();
+    let revision = fresh.revision();
+    assert_eq!(archforge_notations::open_steps(&mut fresh), Vec::<String>::new());
+    assert_eq!((fresh.revision(), fresh.undo_label()), (revision, None));
+    // A refused step leaves the model as it was and says what it could not do, and why.
+    let mut refused = older(archforge_notations::registry_checked(nothing_kept).unwrap());
+    let said = archforge_notations::open_steps(&mut refused);
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].starts_with("the model's packages could not be put under its root package: "), "{said:?}");
+    assert!(said[0].contains("nothing is kept"), "{said:?}");
+    assert_eq!((archforge_uml::commands::root_package(refused.doc()), refused.undo_label()), (None, None));
+    assert_eq!(archforge_uml::commands::packages(refused.doc()).len(), 2);
+}

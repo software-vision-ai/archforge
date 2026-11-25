@@ -306,7 +306,7 @@ fn compare(before: Got, after: Got) -> std::io::Result<Receiver<Answer>> {
         };
         let found = rows(before)
             .and_then(|before| Ok((before, rows(after)?)))
-            .and_then(|(before, after)| classified(&before, &after, crate::er_place::fit_tables).map_err(failure));
+            .and_then(|(before, after)| classified(&before, &after, crate::open_repair).map_err(failure));
         // Model elements come first, then diagrams, then skills, each in the order found.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);
