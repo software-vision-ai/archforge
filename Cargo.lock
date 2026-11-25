@@ -1079,7 +1079,7 @@ dependencies = [
 [[package]]
 name = "craft-atomic"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?branch=main#52fc6b5b3d2179239664136e84543231f8576f8d"
+source = "git+https://github.com/storytold/craft-libs?branch=main#05b99ee5dcd64f2c954a693ef361301214ddc3c7"
 dependencies = [
  "rustix 1.1.6",
 ]
@@ -1087,7 +1087,7 @@ dependencies = [
 [[package]]
 name = "craft-dialogs"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?branch=main#52fc6b5b3d2179239664136e84543231f8576f8d"
+source = "git+https://github.com/storytold/craft-libs?branch=main#05b99ee5dcd64f2c954a693ef361301214ddc3c7"
 dependencies = [
  "block2 0.6.2",
  "objc2 0.6.5",
@@ -1100,7 +1100,7 @@ dependencies = [
 [[package]]
 name = "craft-i18n"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?branch=main#52fc6b5b3d2179239664136e84543231f8576f8d"
+source = "git+https://github.com/storytold/craft-libs?branch=main#05b99ee5dcd64f2c954a693ef361301214ddc3c7"
 dependencies = [
  "fixed_decimal",
  "icu_decimal",
@@ -1123,7 +1123,7 @@ dependencies = [
 [[package]]
 name = "craft-mcp-server"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?branch=main#52fc6b5b3d2179239664136e84543231f8576f8d"
+source = "git+https://github.com/storytold/craft-libs?branch=main#05b99ee5dcd64f2c954a693ef361301214ddc3c7"
 dependencies = [
  "serde_json",
 ]
@@ -1131,7 +1131,7 @@ dependencies = [
 [[package]]
 name = "craft-testkit"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?branch=main#52fc6b5b3d2179239664136e84543231f8576f8d"
+source = "git+https://github.com/storytold/craft-libs?branch=main#05b99ee5dcd64f2c954a693ef361301214ddc3c7"
 
 [[package]]
 name = "crc32fast"
