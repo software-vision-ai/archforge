@@ -32,8 +32,8 @@ Pull requests get AI review in two tiers:
   the changed code. Documentation, the lockfile, generated code, assets and other non-code files
   are left out, and a pull request without code gets no review. It does not review later pushes.
   The owner, a member or a collaborator can ask for a new review by commenting `/review` on the
-  pull request. Pull requests from forks get no PR-Agent review, because workflows from forks
-  receive no secrets.
+  pull request. Pull requests from forks get no PR-Agent review, neither when they open nor on a
+  `/review` comment.
 - **CodeRabbit** reviews only pull requests labelled `deep-review`, once (`.coderabbit.yaml`).
   `AGENTS.md` says which changes take the label. Later pushes are reviewed when someone comments
   `@coderabbitai review`. That comment is also the way to start a review if adding the label to

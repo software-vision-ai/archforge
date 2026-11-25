@@ -16,8 +16,10 @@
 # side never moves the cost to the other; OpenAI's gpt-6.2-sol falls back to OpenAI's gpt-6.1-sol
 # only. The job summary names the provider and the model.
 #
-# The event is `pull_request`, never `pull_request_target`: a pull request from a fork gets no
-# secrets, so it gets no PR-Agent review. That is accepted.
+# Pull requests from forks get no PR-Agent review, neither on open nor on a `/review` comment. The
+# event is `pull_request`, never `pull_request_target`, so a fork's run would have no secrets; and an
+# `issue_comment` run has the repository's secrets, so the job checks the pull request's head
+# repository first and stops for a fork.
 name: PR-Agent
 
 on:
@@ -33,10 +35,12 @@ permissions:
 
 jobs:
   review:
-    # An opened, reopened or ready pull request that is not a draft; or a comment on a pull request
-    # that starts with /review, from the owner, a member or a collaborator.
+    # An opened, reopened or ready pull request from this repository that is not a draft; or a
+    # comment on a pull request that starts with /review, from the owner, a member or a collaborator
+    # (the first step stops it when that pull request comes from a fork).
     if: >-
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
        startsWith(github.event.comment.body, '/review') &&
        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
@@ -69,7 +73,9 @@ jobs:
       PR_REVIEWER.ENABLE_REVIEW_LABELS_SECURITY: "false"
       PR_REVIEWER.ENABLE_REVIEW_LABELS_EFFORT: "false"
       PR_REVIEWER.ENABLE_HELP_TEXT: "false"
+      # Later reviews update the one review comment, with no separate "updated" notice.
       PR_REVIEWER.PERSISTENT_COMMENT: "true"
+      PR_REVIEWER.FINAL_UPDATE_MESSAGE: "false"
       PR_REVIEWER.EXTRA_INSTRUCTIONS: >-
         Review only the lines this pull request adds or changes, and the behaviour they alter.
         Report bugs, security problems and incorrect behaviour; do not comment on code the diff
@@ -87,8 +93,27 @@ jobs:
         "crates/agents/tests/fixtures/**", "crates/agents/schema/**", "*.jsonl",
         "crates/ui-egui/src/i18n/*.tsv", "*.txt"]
     steps:
+      # A comment's event does not say where the pull request comes from; the API does.
+      - name: Stop for a pull request from a fork
+        id: origin
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          head_repo=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.repo.full_name // ""')
+          if [ "$head_repo" = "$REPO" ]; then
+            echo "fork=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "fork=true" >> "$GITHUB_OUTPUT"
+            from=${head_repo:-a deleted repository}
+            echo "PR-Agent skipped #$PR_NUMBER: it comes from a fork ($from)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Choose the provider
         id: provider
+        if: steps.origin.outputs.fork != 'true'
         env:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
