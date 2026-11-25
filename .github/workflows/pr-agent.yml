@@ -12,8 +12,9 @@
 # The model is chosen per pull request: a number divisible by 3 runs on OpenAI, every other on
 # Anthropic. That makes two Anthropic reviews for each OpenAI review, needs no stored state, and a
 # `/review` on the same pull request uses the same provider again. Only the chosen provider's key
-# and model reach PR-Agent, and no fallback model is set, so a failure on one side never moves
-# the cost to the other. The job summary names the provider and the model.
+# and model reach PR-Agent. No model of the other provider is ever a fallback, so a failure on one
+# side never moves the cost to the other; OpenAI's gpt-6.2-sol falls back to OpenAI's gpt-6.1-sol
+# only. The job summary names the provider and the model.
 #
 # The event is `pull_request`, never `pull_request_target`: a pull request from a fork gets no
 # secrets, so it gets no PR-Agent review. That is accepted.
@@ -53,7 +54,8 @@ jobs:
       GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "false"
       GITHUB_ACTION_CONFIG.PR_ACTIONS: '["opened", "reopened", "ready_for_review"]'
       GITHUB_ACTION_CONFIG.HANDLE_PUSH_TRIGGER: "false"
-      # No fallback model: a failure stays on the chosen provider.
+      # No fallback model by default: a failure stays on the chosen provider (OpenAI's step names
+      # its own OpenAI fallback).
       CONFIG.FALLBACK_MODELS: "[]"
       # Findings on the changed code only: bugs, security and correctness. No effort estimate, no
       # ticket compliance, no "can this be split", no tests checklist, no score, and no labels.
@@ -91,7 +93,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           if [ $((PR_NUMBER % 3)) -eq 0 ]; then
-            provider=openai model=gpt-6.1-sol
+            provider=openai model=gpt-6.2-sol
           else
             provider=anthropic model=anthropic/claude-sonnet-5-5
           fi
@@ -117,9 +119,16 @@ jobs:
           CONFIG.MODEL: ${{ steps.provider.outputs.model }}
           ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
 
+      # gpt-6.2-sol is not in PR-Agent 0.50.0's model list, so its input ceiling (922,000 tokens,
+      # as for the other Sol-tier GPT-6 models) and temperature (1, the only value a GPT-6 reasoning
+      # model takes) are set here. If a call to it fails, PR-Agent retries on gpt-6.1-sol, which it
+      # knows: same provider, same price.
       - name: PR-Agent review (OpenAI)
         if: steps.provider.outputs.provider == 'openai'
         uses: docker://pragent/pr-agent@sha256:548e894a88071180832b2f4233f734d0acd0db1a879e2fcbaa70bac8b8372ebe
         env:
           CONFIG.MODEL: ${{ steps.provider.outputs.model }}
+          CONFIG.FALLBACK_MODELS: '["gpt-6.1-sol"]'
+          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "922000"
+          CONFIG.TEMPERATURE: "1"
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
