@@ -23,6 +23,22 @@ come one at a time. Small, focused changes are the easiest to review.
    screenshots for interface changes. The Gate workflow (`.github/workflows/gate.yml`) runs the
    same `cargo xtask ci` on the pull request, and a pull request merges only when that run is green.
 
+## Code review
+
+Pull requests get AI review in two tiers:
+
+- **PR-Agent** reviews every pull request once, when it is opened, reopened or marked ready for
+  review, with the project's own model keys (`.github/workflows/pr-agent.yml`). It looks only at
+  the changed code. Documentation, the lockfile, generated code, assets and other non-code files
+  are left out, and a pull request without code gets no review. It does not review later pushes.
+  The owner, a member or a collaborator can ask for a new review by commenting `/review` on the
+  pull request. Pull requests from forks get no PR-Agent review, because workflows from forks
+  receive no secrets.
+- **CodeRabbit** reviews only pull requests labelled `deep-review`, once (`.coderabbit.yaml`).
+  `AGENTS.md` says which changes take the label. Later pushes are reviewed when someone comments
+  `@coderabbitai review`. That comment is also the way to start a review if adding the label to
+  an open pull request does not start one.
+
 ## The Rust version
 
 The Rust version lives in one place: `rust-toolchain.toml` at the repository's root, with the

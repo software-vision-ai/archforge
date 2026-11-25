@@ -72,6 +72,28 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   `assets/app-icon/icon.png`, is the exception); every file under `assets/` has its
   row in `ATTRIBUTION.toml`.
 
+## Pull requests and the `deep-review` label
+
+Every pull request gets one PR-Agent review when it opens (`CONTRIBUTING.md`, "Code review").
+CodeRabbit reviews only pull requests labelled `deep-review`.
+
+- Apply `deep-review` when you create the pull request (`gh pr create --label deep-review`) if it
+  touches any of these paths:
+  - core architecture: `crates/mof/`, `crates/engine/`, `crates/core/`, `crates/diagram/`,
+    `crates/notations/`, `crates/ui-egui/src/kinds.rs`, `crates/ui-egui/src/notation_ui.rs`,
+    `Cargo.toml`, `xtask/src/layers.rs`;
+  - public API, what agents call: `crates/control/`, `crates/mcp/`, `apps/archforge-cli/`,
+    `crates/*/src/commands.rs`;
+  - security and authentication: `crates/secrets/`, `crates/agents/`, `deny.toml`,
+    `.github/workflows/`, `packaging/macos/entitlements.plist`;
+  - persistence and data formats: `crates/project/`, `crates/dolt/`, `crates/*/*.xmi`,
+    `crates/*/src/generated/`, `crates/ui-egui/src/chat_store.rs`;
+  - concurrency: `crates/dolt/`, `crates/agents/`, `crates/control/`.
+- Don't apply it to scaffolding, documentation, test-only changes, renames, dependency bumps or
+  exploratory work, even when those touch a path above.
+- On a labelled pull request, gather commits and push once each time it is ready for review:
+  CodeRabbit reviews a push only when asked (`@coderabbitai review`).
+
 ## Working on something: read its skill first
 
 | Working on | Read |
