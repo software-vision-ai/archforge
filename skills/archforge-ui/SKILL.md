@@ -11,20 +11,27 @@ code follows it, and a correction the owner makes to the look goes into the desi
 decisions taken so far about how it looks and behaves are in `skills/archforge-design/SKILL.md`.
 
 ## Draw through `ux`
-- Colours come from the palette, `ux::palette(dark)` (`crates/ui-egui/src/ux/mod.rs`): `LIGHT` and
-  `DARK`, one field per role. No literal colour outside that file; a new role is a new field in
+- `ux` is the shell's interfaces' design (`crates/shell-api/src/ux/mod.rs`), which the shell
+  re-exports as `crate::ux` (`crates/ui-egui/src/ux/mod.rs`) with what needs the shell: the app
+  icon, the installing of the design's fonts, and the icons only one notation draws.
+- Colours come from the palette, `ux::palette(dark)` (`crates/shell-api/src/ux/mod.rs`): `LIGHT`
+  and `DARK`, one field per role. No literal colour outside that file; a new role is a new field in
   both appearances.
 - A colour is a `ux::Colour`: its value is private, so only `ux` makes one (a palette role, a
   named colour such as `ux::CLEAR`, or `ux::data_colour` for a colour the document holds). A
   screen passes it on as `ux::Colour`. egui takes it where it takes `impl Into<Color32>`; where
   an egui call or field wants its own colour type (`Painter::galley`, `TextFormat`, the theme's
   `Visuals`), the colour gets `.into()` right there. A test reading a frame back compares what
-  was painted, as `ux::drawn(..)`, with the palette's values or with a colour's own bytes.
+  was painted, as the `Color32` egui holds, with the palette's values turned into it
+  (`Color32::from(p.accent)`) or with a colour's own bytes; nothing turns a painted colour back
+  into a `ux::Colour`, not even in a test.
 - Text uses the design's styles, `ux::types::*`, drawn with `ux::text`, `ux::galley` or
   `ux::galley_rows`, which place a line box's top-left corner as the design does. No raw `FontId`
   in a screen. A screen checks `ux::ready` before its first text.
-- Icons are strokes in `crates/ui-egui/src/ux/icons.rs`, drawn with `ux::icon` or `ux::icon_in` at
-  the design's stroke weight.
+- Icons are strokes in `crates/shell-api/src/ux/icons.rs` when the shell or both notations draw
+  them, and in `crates/ui-egui/src/ux/icons.rs` when only ER or only UML does, until that
+  notation's screens crate takes them; both are drawn with `ux::icon` or `ux::icon_in` at the
+  design's stroke weight.
 - `crates/ui-egui/src/theme.rs` gives the toolkit's own visuals (tooltips, scroll bars) the same
   palette. Everything else is drawn by the screen itself.
 - On macOS the title strip is the window's title bar: keep clear of `Shell::top_inset`.

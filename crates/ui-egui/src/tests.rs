@@ -3454,7 +3454,7 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
     // It holds unsaved changes, so it asks: Save, its label white on the accent, and once
     // saved it closes.
     let save = rect_of(&h, "close-ask.save");
-    assert_eq!(label_colours(&h, "Save", save), [crate::ux::palette(false).on_accent]);
+    assert_eq!(label_colours(&h, "Save", save), [egui::Color32::from(crate::ux::palette(false).on_accent)]);
     let at = save.center();
     click(&mut h, at);
     h.run_steps(2);
@@ -11730,7 +11730,7 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
             /// at least 2 points wide.
             fn walk(s: &egui::Shape, accent: crate::ux::Colour, target: egui::Rect) -> bool {
                 match s {
-                    egui::Shape::Rect(r) => crate::ux::drawn(r.stroke.color) == accent && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
+                    egui::Shape::Rect(r) => r.stroke.color == egui::Color32::from(accent) && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
                     egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent, target)),
                     _ => false,
                 }
@@ -15962,12 +15962,12 @@ static SKETCHED: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotati
 
 /// Every text the last frame painted.
 /// The colours the text `label` is laid out in, where it is painted inside `within`.
-fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<crate::ux::Colour> {
+fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<egui::Color32> {
     /// Collects the colours of every text `label` painted inside `within` under `s`.
-    fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<crate::ux::Colour>) {
+    fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<egui::Color32>) {
         match s {
             egui::Shape::Text(t) if t.galley.text() == label && within.contains(t.pos) => {
-                out.extend(t.galley.job.sections.iter().map(|section| crate::ux::drawn(section.format.color)));
+                out.extend(t.galley.job.sections.iter().map(|section| section.format.color));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, label, within, out)),
             _ => {}
@@ -17620,8 +17620,8 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
     h.run();
     assert_eq!(look(&h, aobj).fill, crate::canvas::colour("#A0C4FF"));
     // Read against the code's own bytes, not through the parser the canvas uses.
-    let own = |fill: crate::ux::Colour| [fill.r(), fill.g(), fill.b(), fill.a()] == [0xA0, 0xC4, 0xFF, 0xFF];
-    let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if own(crate::ux::drawn(r.fill))));
+    let own = |fill: egui::Color32| [fill.r(), fill.g(), fill.b(), fill.a()] == [0xA0, 0xC4, 0xFF, 0xFF];
+    let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if own(r.fill)));
     assert!(filled, "the card is filled in its own colour");
 }
 
@@ -18425,7 +18425,7 @@ fn painted_accent(h: &Harness<'static, Shell>) -> bool {
     /// Whether `s`, or a shape it holds, is a path stroked in `accent`.
     fn walk(s: &egui::Shape, accent: crate::ux::Colour) -> bool {
         match s {
-            egui::Shape::Path(p) => matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == accent),
+            egui::Shape::Path(p) => matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if c == egui::Color32::from(accent)),
             egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent)),
             _ => false,
         }
@@ -18722,11 +18722,11 @@ fn text_boxes(h: &Harness<'static, Shell>) -> Vec<(String, egui::Rect)> {
 }
 
 /// Every rectangle the last frame painted, with its fill and its stroke's colour.
-fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)> {
+fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, egui::Color32, egui::Color32)> {
     /// Collects every rectangle under `s` with its fill and its stroke's colour.
-    fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, crate::ux::Colour, crate::ux::Colour)>) {
+    fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, egui::Color32, egui::Color32)>) {
         match s {
-            egui::Shape::Rect(r) => out.push((r.rect, crate::ux::drawn(r.fill), crate::ux::drawn(r.stroke.color))),
+            egui::Shape::Rect(r) => out.push((r.rect, r.fill, r.stroke.color)),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
         }
@@ -18901,12 +18901,12 @@ fn a_class_cards_compartments_are_padded_so_no_row_sits_on_a_dividing_line() {
 
 /// Every level line segment the last frame painted: its left and right ends, its height, its
 /// thickness and its colour.
-fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, crate::ux::Colour)> {
+fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, egui::Color32)> {
     /// Collects every level line segment under `s`.
-    fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, crate::ux::Colour)>) {
+    fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, egui::Color32)>) {
         match s {
             egui::Shape::LineSegment { points: [a, b], stroke } if (a.y - b.y).abs() < 0.01 => {
-                out.push((a.x.min(b.x), a.x.max(b.x), a.y, stroke.width, crate::ux::drawn(stroke.color)));
+                out.push((a.x.min(b.x), a.x.max(b.x), a.y, stroke.width, stroke.color));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
@@ -18956,7 +18956,7 @@ fn a_static_members_row_is_underlined_on_its_card() {
             let card = rect_of(&h, &format!("workspace.canvas.node.{}", node_of(&h, order)));
             for row in ["+ number : Integer", "+ pay() : Boolean"] {
                 let (_, _, _, width, colour) = under(&h, card, row).unwrap_or_else(|| panic!("{theme:?} at {zoom}: {row} is underlined"));
-                assert_eq!(colour, p.text, "{theme:?} at {zoom}: {row} in the text's ink");
+                assert_eq!(colour, egui::Color32::from(p.text), "{theme:?} at {zoom}: {row} in the text's ink");
                 assert!(width >= 1.0, "{theme:?} at {zoom}: {row} at least a pixel thick");
             }
             assert!(under(&h, card, "+ total : Money").is_none(), "{theme:?} at {zoom}: a plain row has no underline");
@@ -19006,8 +19006,10 @@ fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_
             uml_of_mut(h.state_mut()).inline.as_mut().unwrap().edit.name = "Returned".into();
             h.run();
             // Its ring: the accent's outline round the tinted row, a row's height, not a card's.
-            let tinted: Vec<egui::Rect> = rect_shapes(&h).into_iter().filter(|(_, fill, _)| *fill == p.accent_tint).map(|(r, _, _)| r).collect();
-            let ring = rect_shapes(&h).into_iter().find(|(r, _, stroke)| *stroke == p.accent && tinted.contains(r)).map(|(r, _, _)| r);
+            let tinted: Vec<egui::Rect> =
+                rect_shapes(&h).into_iter().filter(|(_, fill, _)| *fill == egui::Color32::from(p.accent_tint)).map(|(r, _, _)| r).collect();
+            let ring =
+                rect_shapes(&h).into_iter().find(|(r, _, stroke)| *stroke == egui::Color32::from(p.accent) && tinted.contains(r)).map(|(r, _, _)| r);
             let ring = ring.unwrap_or_else(|| panic!("{theme:?}: {kind:?}'s draft ringed"));
             let boxes = text_boxes(&h);
             let card = rect_of(&h, &format!("workspace.canvas.node.{}", node_of(&h, class)));
@@ -19020,7 +19022,9 @@ fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_
             assert!((pitch - crate::canvas::ENTITY_ROW).abs() < 1.0, "{theme:?}: {kind:?}'s draft a pitch under {over}, not {pitch}");
             // Its ⋯ on the surface at the ring's right.
             assert!(
-                rect_shapes(&h).iter().any(|(r, fill, _)| *fill == p.surface && ring.contains_rect(*r) && r.right() > ring.right() - 24.0),
+                rect_shapes(&h)
+                    .iter()
+                    .any(|(r, fill, _)| *fill == egui::Color32::from(p.surface) && ring.contains_rect(*r) && r.right() > ring.right() - 24.0),
                 "{theme:?}: {kind:?}'s ⋯ on the surface"
             );
             rings.push((ring.top() - above.bottom(), ring.height()));
@@ -20404,7 +20408,7 @@ mod chat_keys {
     /// Whether the transcript's focus ring is painted, in the focus colour just inside its edge.
     fn ringed(h: &Harness<'static, Shell>) -> bool {
         let (focus, area) = (crate::ux::palette(h.state().state.theme.is_dark()).focus, h.state().chat_panel.area.unwrap());
-        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if crate::ux::drawn(r.stroke.color) == focus && r.rect == area.shrink(2.0));
+        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if r.stroke.color == egui::Color32::from(focus) && r.rect == area.shrink(2.0));
         h.output().shapes.iter().any(|c| ring(&c.shape))
     }
 
@@ -22992,7 +22996,7 @@ fn icon_boxes(h: &Harness<'static, Shell>, color: crate::ux::Colour) -> Vec<egui
     /// Collects the box of every mesh under `s` tinted `color` throughout.
     fn walk(s: &egui::Shape, color: crate::ux::Colour, out: &mut Vec<egui::Rect>) {
         match s {
-            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| crate::ux::drawn(v.color) == color) => {
+            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| v.color == egui::Color32::from(color)) => {
                 out.push(egui::Rect::from_points(&m.vertices.iter().map(|v| v.pos).collect::<Vec<_>>()));
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, color, out)),
@@ -23115,7 +23119,7 @@ fn a_selected_lines_end_handles_sit_past_its_end_marks() {
             let accent = crate::ux::palette(false).accent;
             let squares = rect_shapes(&h)
                 .iter()
-                .filter(|(r, _, stroke)| *stroke == accent && (r.width() - 6.0).abs() < 0.01 && (r.height() - 6.0).abs() < 0.01)
+                .filter(|(r, _, stroke)| *stroke == egui::Color32::from(accent) && (r.width() - 6.0).abs() < 0.01 && (r.height() - 6.0).abs() < 0.01)
                 .count();
             let unmoved = ends
                 .iter()
@@ -28485,11 +28489,11 @@ fn points(h: &mut Harness<'static, Shell>, id: &str) -> bool {
 }
 
 /// The fill and stroke colours of the rectangles the last frame painted exactly over `id`.
-fn painted_over(h: &Harness<'static, Shell>, id: &str) -> Vec<(crate::ux::Colour, crate::ux::Colour)> {
+fn painted_over(h: &Harness<'static, Shell>, id: &str) -> Vec<(egui::Color32, egui::Color32)> {
     /// Collects every rectangle over `r` under `s`.
-    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(crate::ux::Colour, crate::ux::Colour)>) {
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(egui::Color32, egui::Color32)>) {
         match s {
-            egui::Shape::Rect(x) if x.rect == r => out.push((crate::ux::drawn(x.fill), crate::ux::drawn(x.stroke.color))),
+            egui::Shape::Rect(x) if x.rect == r => out.push((x.fill, x.stroke.color)),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
             _ => {}
         }
@@ -28560,13 +28564,16 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         assert!(HOME_OPENINGS.iter().all(|id| !points(&mut h, id)), "{theme:?}: Home's openings off while the pick waits");
         let p = crate::ux::palette(theme.is_dark());
         assert!(
-            !points(&mut h, "home.recent.0") && !painted_over(&h, "home.recent.0").iter().any(|(fill, _)| *fill == p.surface),
+            !points(&mut h, "home.recent.0") && !painted_over(&h, "home.recent.0").iter().any(|(fill, _)| *fill == egui::Color32::from(p.surface)),
             "{theme:?}: no hover look"
         );
         h.state_mut().state.recent_view = crate::state::RecentView::Gallery;
         h.run();
         assert!(!points(&mut h, "home.recent.0"), "{theme:?}: and a recent card");
-        assert!(!painted_over(&h, "home.recent.0").iter().any(|(_, stroke)| *stroke == p.border_hover), "{theme:?}: no hover border");
+        assert!(
+            !painted_over(&h, "home.recent.0").iter().any(|(_, stroke)| *stroke == egui::Color32::from(p.border_hover)),
+            "{theme:?}: no hover border"
+        );
         h.state_mut().state.recent_view = crate::state::RecentView::List;
         h.run();
         h.state_mut().pin_from_picker();
@@ -28582,7 +28589,7 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         assert!(crate::actions::available(h.state(), "home.pin-folder") && h.state().can_open_project(), "{theme:?}: both pickers back");
         assert!(HOME_OPENINGS.iter().all(|id| points(&mut h, id)), "{theme:?}: and Home's openings");
         assert!(
-            points(&mut h, "home.recent.0") && painted_over(&h, "home.recent.0").iter().any(|(fill, _)| *fill == p.surface),
+            points(&mut h, "home.recent.0") && painted_over(&h, "home.recent.0").iter().any(|(fill, _)| *fill == egui::Color32::from(p.surface)),
             "{theme:?}: hover look back"
         );
         h.state_mut().pin_from_picker();
@@ -29134,14 +29141,14 @@ fn enter_in_homes_search_runs_the_row_last_shown_while_it_is_still_listed() {
 }
 
 /// The colour the last frame painted `text` in, the first time it painted it whole.
-fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<crate::ux::Colour> {
+fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<egui::Color32> {
     /// The colour of `text` under `s`, if `s` paints it.
-    fn walk(s: &egui::Shape, text: &str) -> Option<crate::ux::Colour> {
+    fn walk(s: &egui::Shape, text: &str) -> Option<egui::Color32> {
         match s {
             egui::Shape::Text(t) if t.galley.job.text == text => {
                 let colour = t.galley.job.sections.first().map_or(t.fallback_color, |s| s.format.color);
-                let laid_out = if crate::ux::drawn(colour) == crate::ux::PLACEHOLDER_INK { t.fallback_color } else { colour };
-                Some(crate::ux::drawn(t.override_text_color.unwrap_or(laid_out)))
+                let laid_out = if colour == egui::Color32::from(crate::ux::PLACEHOLDER_INK) { t.fallback_color } else { colour };
+                Some(t.override_text_color.unwrap_or(laid_out))
             }
             egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, text)),
             _ => None,
@@ -29151,12 +29158,12 @@ fn text_colour(h: &Harness<'static, Shell>, text: &str) -> Option<crate::ux::Col
 }
 
 /// The tints of the meshes the last frame painted inside `id`: its icons, drawn as textures.
-fn icons_in(h: &Harness<'static, Shell>, id: &str) -> Vec<crate::ux::Colour> {
+fn icons_in(h: &Harness<'static, Shell>, id: &str) -> Vec<egui::Color32> {
     /// Collects the tint of every mesh inside `r` under `s`.
-    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<crate::ux::Colour>) {
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<egui::Color32>) {
         match s {
             egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| r.contains(v.pos)) => {
-                out.extend(m.vertices.first().map(|v| crate::ux::drawn(v.color)))
+                out.extend(m.vertices.first().map(|v| v.color))
             }
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
             _ => {}
@@ -29178,19 +29185,19 @@ fn an_opening_waiting_for_the_hold_turns_the_strips_open_project_off() {
         h.run();
         let p = crate::ux::palette(theme.is_dark());
         assert!(points(&mut h, "strip.open-project"), "{theme:?}: Open project live in the project");
-        assert_eq!(text_colour(&h, "Open project…"), Some(p.text), "{theme:?}");
-        assert_eq!(icons_in(&h, "strip.open-project"), [p.text_secondary], "{theme:?}: its plus");
+        assert_eq!(text_colour(&h, "Open project…"), Some(egui::Color32::from(p.text)), "{theme:?}");
+        assert_eq!(icons_in(&h, "strip.open-project"), [egui::Color32::from(p.text_secondary)], "{theme:?}: its plus");
         h.state_mut().begin_hold().unwrap();
         h.state_mut().open_path(std::path::Path::new("/tmp/Later.archforge"));
         assert!(!points(&mut h, "strip.open-project"), "{theme:?}: off while the opening waits for the hold");
-        assert_eq!(text_colour(&h, "Open project…"), Some(p.text_muted), "{theme:?}: and drawn muted");
-        assert_eq!(icons_in(&h, "strip.open-project"), [p.text_muted], "{theme:?}: its plus too");
+        assert_eq!(text_colour(&h, "Open project…"), Some(egui::Color32::from(p.text_muted)), "{theme:?}: and drawn muted");
+        assert_eq!(icons_in(&h, "strip.open-project"), [egui::Color32::from(p.text_muted)], "{theme:?}: its plus too");
         end_hold(&mut h, Shell::end_hold);
         let (path, answer) = host.opens.lock().unwrap().pop().expect("the opening runs after the hold");
         answer.send(Ok(crate::Opened { name: "Later".into(), path, ..Default::default() })).unwrap();
         h.run();
         assert!(points(&mut h, "strip.open-project"), "{theme:?}: and back once it has opened");
-        assert_eq!(text_colour(&h, "Open project…"), Some(p.text), "{theme:?}: drawn as live");
+        assert_eq!(text_colour(&h, "Open project…"), Some(egui::Color32::from(p.text)), "{theme:?}: drawn as live");
     }
 }
 
@@ -31065,11 +31072,11 @@ fn chat_workspace(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<
 }
 
 /// The fill colours of the filled circles drawn in the last frame.
-fn painted_dots(h: &Harness<'static, Shell>) -> Vec<crate::ux::Colour> {
+fn painted_dots(h: &Harness<'static, Shell>) -> Vec<egui::Color32> {
     /// Collects the fill of every filled circle under `s`.
-    fn walk(s: &egui::Shape, out: &mut Vec<crate::ux::Colour>) {
+    fn walk(s: &egui::Shape, out: &mut Vec<egui::Color32>) {
         match s {
-            egui::Shape::Circle(c) => out.push(crate::ux::drawn(c.fill)),
+            egui::Shape::Circle(c) => out.push(c.fill),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
             _ => {}
         }
@@ -31107,14 +31114,17 @@ fn the_status_bar_says_whether_chat_holds_agent_access_and_opens_ai_agents() {
         let p = crate::ux::palette(theme.is_dark());
         // Off: the purple dot and its words, one state at a time.
         assert!(painted_has(&h, "Agent access off") && !painted_has(&h, "Chat is using the model"), "{theme:?}");
-        assert!(painted_dots(&h).contains(&p.purple), "{theme:?}: the purple dot");
+        assert!(painted_dots(&h).contains(&egui::Color32::from(p.purple)), "{theme:?}: the purple dot");
         assert!(ids(&h).iter().any(|i| i == "workspace.status.agent"));
         // Held: the accent dot and "Chat is using the model".
         assert!(f.access(true));
         h.run();
         assert!(h.state().chats.holds_access());
         assert!(painted_has(&h, "Chat is using the model") && !painted_has(&h, "Agent access off"), "{theme:?}");
-        assert!(painted_dots(&h).contains(&p.accent) && !painted_dots(&h).contains(&p.purple), "{theme:?}: the accent dot alone");
+        assert!(
+            painted_dots(&h).contains(&egui::Color32::from(p.accent)) && !painted_dots(&h).contains(&egui::Color32::from(p.purple)),
+            "{theme:?}: the accent dot alone"
+        );
         // A control: the pointer over it shows the hand and says where it leads.
         let at = rect_of(&h, "workspace.status.agent").center();
         h.event(egui::Event::PointerMoved(at));
@@ -31443,7 +31453,7 @@ fn accent_path_in(h: &Harness<'static, Shell>, theme: ThemeKind, within: egui::R
     fn walk(s: &egui::Shape, accent: crate::ux::Colour, within: egui::Rect) -> bool {
         match s {
             egui::Shape::Path(p) => {
-                matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == accent)
+                matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if c == egui::Color32::from(accent))
                     && !p.points.is_empty()
                     && p.points.iter().all(|at| within.contains(*at))
             }
@@ -33647,7 +33657,7 @@ fn package_clicks_sample(theme: ThemeKind) -> (Harness<'static, Shell>, String, 
 /// `card`, as a selected card is drawn.
 fn card_ringed(h: &Harness<'static, Shell>, theme: ThemeKind, card: egui::Rect) -> bool {
     let accent = crate::ux::palette(theme == ThemeKind::Dark).accent;
-    rect_shapes(h).iter().any(|(r, _, stroke)| *stroke == accent && r.contains(card.center()) && r.width() >= card.width() - 4.0)
+    rect_shapes(h).iter().any(|(r, _, stroke)| *stroke == egui::Color32::from(accent) && r.contains(card.center()) && r.width() >= card.width() - 4.0)
 }
 
 /// What a click on a node selects is its notation's answer, on every way a node is selected (a

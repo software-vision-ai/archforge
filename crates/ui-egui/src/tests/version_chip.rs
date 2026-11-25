@@ -1080,7 +1080,7 @@ fn amber_dots(h: &Harness<'static, Shell>, area: egui::Rect) -> Vec<egui::Pos2> 
     /// Adds the centre of every circle filled `amber` under `s` to `out`.
     fn walk(s: &egui::Shape, amber: crate::ux::Colour, out: &mut Vec<egui::Pos2>) {
         match s {
-            egui::Shape::Circle(c) if crate::ux::drawn(c.fill) == amber => out.push(c.center),
+            egui::Shape::Circle(c) if c.fill == egui::Color32::from(amber) => out.push(c.center),
             egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, amber, out)),
             _ => {}
         }
@@ -1093,11 +1093,11 @@ fn amber_dots(h: &Harness<'static, Shell>, area: egui::Rect) -> Vec<egui::Pos2> 
 }
 
 /// The colour the last frame painted `words` in.
-fn ink_of(h: &Harness<'static, Shell>, words: &str) -> Option<crate::ux::Colour> {
+fn ink_of(h: &Harness<'static, Shell>, words: &str) -> Option<egui::Color32> {
     /// The colour of the first text under `s` that reads `words`, if any does.
-    fn walk(s: &egui::Shape, words: &str) -> Option<crate::ux::Colour> {
+    fn walk(s: &egui::Shape, words: &str) -> Option<egui::Color32> {
         match s {
-            egui::Shape::Text(t) if t.galley.text() == words => Some(crate::ux::drawn(t.galley.job.sections[0].format.color)),
+            egui::Shape::Text(t) if t.galley.text() == words => Some(t.galley.job.sections[0].format.color),
             egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, words)),
             _ => None,
         }
@@ -1120,10 +1120,10 @@ fn a_refused_step_is_the_toast_over_the_toolbar() {
         assert_eq!(card.size(), egui::vec2(440.0, 40.0));
         assert_eq!((card.center().x, card.bottom()), (canvas.center().x, canvas.bottom() - 80.0));
         assert!(card.bottom() < rect_of(&h, "workspace.tools.arrange").top(), "above the toolbar");
-        assert!(rect_shapes(&h).iter().any(|(r, fill, _)| *r == card && *fill == p.surface), "the card");
+        assert!(rect_shapes(&h).iter().any(|(r, fill, _)| *r == card && *fill == egui::Color32::from(p.surface)), "the card");
         assert_eq!(amber_dots(&h, card), vec![egui::pos2(card.left() + 17.0, card.center().y)]);
         let words = box_of(&h, EDITING);
-        assert_eq!((words.left(), ink_of(&h, EDITING)), (card.left() + 30.0, Some(p.text)));
+        assert_eq!((words.left(), ink_of(&h, EDITING)), (card.left() + 30.0, Some(egui::Color32::from(p.text))));
         assert!(card.contains_rect(words), "{words:?} in {card:?}");
         let status = h.get_by_label(EDITING);
         assert_eq!(status.accesskit_node().role(), egui::accesskit::Role::Status);
@@ -1244,7 +1244,7 @@ fn what_is_said_after_a_refused_step_stays_the_caption() {
         h.state_mut().canvas.notice = Some(SAID.into());
         h.run_steps(2);
         let caption = rect_of(&h, NOTICE);
-        assert_eq!((caption.left(), ink_of(&h, SAID)), (canvas.left() + 16.0, Some(p.amber)));
+        assert_eq!((caption.left(), ink_of(&h, SAID)), (canvas.left() + 16.0, Some(egui::Color32::from(p.amber))));
         assert!(caption.bottom() < canvas.center().y && amber_dots(&h, canvas).is_empty(), "{caption:?}");
         h.state_mut().canvas.notice = None;
         h.run_steps(2);
@@ -1697,7 +1697,7 @@ fn icon_dot(h: &Harness<'static, Shell>, chip: egui::Rect) -> bool {
     /// Whether a 3-point circle of `fill` is drawn at `at` under `s`.
     fn walk(s: &egui::Shape, at: egui::Pos2, fill: crate::ux::Colour) -> bool {
         match s {
-            egui::Shape::Circle(c) => c.center.distance(at) < 0.5 && crate::ux::drawn(c.fill) == fill && (c.radius - 3.0).abs() < 0.01,
+            egui::Shape::Circle(c) => c.center.distance(at) < 0.5 && c.fill == egui::Color32::from(fill) && (c.radius - 3.0).abs() < 0.01,
             egui::Shape::Vec(v) => v.iter().any(|s| walk(s, at, fill)),
             _ => false,
         }
@@ -1738,11 +1738,11 @@ fn the_narrow_viewing_chip_names_the_version_it_shows() {
         shown(&mut h, &host, "h2");
         let icon = chip_at(&mut h, 640.0);
         assert_eq!(icon.size(), egui::vec2(32.0, 32.0));
-        assert!(rect_shapes(&h).iter().any(|(r, fill, _)| *r == icon && *fill == p.surface), "untinted");
-        assert!(!rect_shapes(&h).iter().any(|(r, fill, _)| *r == icon && *fill == p.accent_tint));
+        assert!(rect_shapes(&h).iter().any(|(r, fill, _)| *r == icon && *fill == egui::Color32::from(p.surface)), "untinted");
+        assert!(!rect_shapes(&h).iter().any(|(r, fill, _)| *r == icon && *fill == egui::Color32::from(p.accent_tint)));
         assert!(versions_clock_at(&h, icon.center()), "the clock with its counter-clockwise arrow");
         assert!(!icon_dot(&h, icon), "nothing is unsaved");
-        let band = rect_shapes(&h).into_iter().find(|(r, fill, _)| *fill == p.accent_tint && r.height() == 44.0).unwrap().0;
+        let band = rect_shapes(&h).into_iter().find(|(r, fill, _)| *fill == egui::Color32::from(p.accent_tint) && r.height() == 44.0).unwrap().0;
         assert!(versions_clock_at(&h, egui::pos2(band.left() + 20.0, band.center().y)), "the banner's clock is the same one");
         assert!(!ids(&h).iter().any(|i| i == "workspace.header.version.back" || i == "workspace.header.version.older"), "one icon, no steps");
         let read_only = |h: &Harness<'static, Shell>| {
