@@ -172,7 +172,7 @@ impl NotationUi for ErUi {
                 let Some(name) = fresh_name("Table", taken, false) else { return no_name() };
                 let schema_id = store.uuid(schema).ok()?;
                 parents.push(schema_id);
-                crate::editing::add_entity(shell, schema_id, &name).map(|id| json!({ "id": id.to_string() }))
+                crate::er_place::add_entity(shell, schema_id, &name).map(|id| json!({ "id": id.to_string() }))
             }
             "column" => {
                 let entity = sel.and_then(|o| match class(store, o) {
@@ -186,7 +186,7 @@ impl NotationUi for ErUi {
                 parents.extend(r::schema_of(store, entity).and_then(|s| store.uuid(s).ok()));
                 parents.push(entity_id);
                 let params = json!({ "entity": entity_id.to_string(), "name": name, "type": "TEXT" });
-                crate::editing::run_growing(shell, &tr("Add column"), "er.attribute.add", params, entity_id)
+                crate::er_place::run_growing(shell, &tr("Add column"), "er.attribute.add", params, entity_id)
             }
             _ => return None,
         };

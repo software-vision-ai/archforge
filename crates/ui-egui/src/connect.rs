@@ -273,7 +273,7 @@ pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
         let edge = e.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
         b.execute("diagram.label", &json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
         // The key columns the foreign key added stay in sight.
-        crate::editing::grow_to_fit(b, &[from_id, to_id])
+        crate::er_place::grow_to_fit(b, &[from_id, to_id])
     });
     match out {
         Ok(o) => {

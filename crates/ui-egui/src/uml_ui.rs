@@ -17,7 +17,7 @@ use crate::canvas::Tool;
 use crate::editing::Action;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, tr_ctx, trn};
-use crate::kinds::{DiagramKind, KindTool, Press, ToolUse};
+use crate::kinds::{DiagramKind, KindTool, MenuRow, Press, ToolUse};
 use crate::model_menu::menu_row;
 use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
 use crate::panels::Subject;
@@ -450,10 +450,19 @@ impl DiagramKind for UmlKind {
         crate::uml_inline::add_buttons(shell, ui, p, clip, rect, element);
     }
 
-    /// A class's menu: open in Models, add an attribute, remove from the diagram, delete from the
-    /// model.
-    fn menu(&self) -> bool {
-        true
+    /// A class's menu adds its new row after Open in Models, as its second adorner names it (an
+    /// attribute, an enumeration's literal), typed in place as ⌘↩ opens it; a primitive type's adds
+    /// none.
+    fn menu(&self, store: &Store, element: Obj, mac: bool) -> Option<Vec<MenuRow>> {
+        let row = self.adorner(store, element).map(|(_, label)| MenuRow {
+            key: "add-row",
+            label,
+            keys: crate::editing::new_row_keys(mac),
+            live: true,
+            first: false,
+            run: |shell, menu| UmlKind.open(shell, menu.entity, None),
+        });
+        Some(row.into_iter().collect())
     }
 
     /// An n-ary association drawn class by class, and Add end waiting on a class (AR-128).

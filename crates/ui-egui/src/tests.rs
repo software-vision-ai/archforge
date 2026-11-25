@@ -3210,7 +3210,7 @@ fn a_table_box_saved_too_short_for_its_columns_opens_grown_without_an_undo_step(
     let session = h.state().session.as_ref().expect("the model read opens");
     let st = session.doc();
     let node = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::NODE)).unwrap();
-    assert_eq!(archforge_diagram::grid::bounds_of(st, node).height, crate::editing::content_height(2), "the box shows both columns");
+    assert_eq!(archforge_diagram::grid::bounds_of(st, node).height, crate::er_place::content_height(2), "the box shows both columns");
     assert_eq!(session.undo_label(), None, "growing it is no step of the user's");
     assert!(!session.is_dirty(), "nor a change to save");
     assert!(host.written.lock().unwrap().is_empty());
@@ -13788,6 +13788,122 @@ fn the_entity_menu_removes_from_the_diagram_and_the_dialog_deletes_from_the_mode
     assert!(!st.alive().any(|o| archforge_core::name_of(st, o) == "Customer"));
 }
 
+/// A table's menu as ER answers it: Show related tables first, in a section of its own and off,
+/// then after Open in Models Add column and, on a pure mapping table alone, Collapse into a
+/// relationship; Add column opens the table's new column in Properties and Collapse brings the
+/// line back. Its keys are the platform's (⌘↩ on the Mac), and nothing but a table takes ER's menu.
+#[test]
+fn a_tables_menu_adds_its_own_rows_and_runs_them() {
+    use crate::kinds::DiagramKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _customer, diagram) = diagram_harness_in(theme);
+        let mapping = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+            let st = s.doc();
+            let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+            let order = st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap();
+            let order_node = st.uuid(archforge_diagram::views_of(st, order).2[0]).unwrap().to_string();
+            let order = st.uuid(order).unwrap().to_string();
+            let tag = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Tag" })).unwrap().value);
+            s.execute("er.attribute.add", &serde_json::json!({ "entity": tag, "name": "tag_id", "type": "INT", "primary_key": true })).unwrap();
+            let line = id(s
+                .execute(
+                    "er.relationship.add",
+                    &serde_json::json!({ "from": order, "to": tag, "from_end": "zero-or-more", "to_end": "zero-or-more" }),
+                )
+                .unwrap()
+                .value);
+            let t = id(s
+                .execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": tag, "x": 900, "y": 400, "width": 240, "height": 120 }))
+                .unwrap()
+                .value);
+            s.execute("diagram.connect", &serde_json::json!({ "diagram": diagram, "element": line, "source": order_node, "target": t })).unwrap();
+            id(s.execute("er.relationship.resolve", &serde_json::json!({ "relationship": line })).unwrap().value)
+        };
+        h.run();
+        let node_of = |h: &Harness<'static, Shell>, element: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let e = st.alive().find(|o| archforge_core::name_of(st, *o) == element || st.uuid(*o).is_ok_and(|u| u.to_string() == element)).unwrap();
+            format!("workspace.canvas.node.{}", st.uuid(archforge_diagram::views_of(st, e).2[0]).unwrap())
+        };
+        // ER answers for its tables alone, in the platform's keys.
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let order = st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap();
+            let column = st.alive().find(|o| archforge_core::name_of(st, *o) == "order_id").unwrap();
+            let own: Vec<_> = crate::er_kind::ErKind.menu(st, order, false).unwrap().iter().map(|r| (r.key, r.label, r.live, r.first)).collect();
+            assert_eq!(own, [("related", "Show related tables", false, true), ("add-column", "Add column", true, false)], "{theme:?}");
+            let keys = |mac: bool| crate::er_kind::ErKind.menu(st, order, mac).unwrap().iter().map(|r| r.keys).collect::<Vec<_>>();
+            assert_eq!((keys(true), keys(false)), (vec!["R", "⌘↩"], vec!["R", "Ctrl Enter"]), "{theme:?}");
+            assert!(crate::er_kind::ErKind.menu(st, column, false).is_none(), "{theme:?}: a column takes no menu");
+        }
+        // Order: no collapse, as it is no mapping table.
+        let at = rect_of(&h, &node_of(&h, "Order")).center();
+        right_click(&mut h, at);
+        let rows = |h: &Harness<'static, Shell>| menu_drawn(h).into_iter().map(|(key, gap)| format!("{key} {gap}")).collect::<Vec<_>>();
+        assert_eq!(rows(&h), ["related 0", "open 1", "add-column 0", "generate 0", "remove 1", "delete 0"], "{theme:?}");
+        let texts = painted(&h);
+        assert!(["Show related tables", "R", "Add column", "Ctrl Enter"].iter().all(|t| texts.iter().any(|p| p == t)), "{theme:?}: {texts:?}");
+        // Show related tables is off: its click runs nothing and falls to the canvas, which closes the menu.
+        let at = rect_of(&h, "workspace.canvas.menu.related").center();
+        click(&mut h, at);
+        assert!(h.state().canvas.menu.is_none() && er_of(h.state()).column.is_none(), "{theme:?}: Show related tables is off");
+        let at = rect_of(&h, &node_of(&h, "Order")).center();
+        right_click(&mut h, at);
+        let at = rect_of(&h, "workspace.canvas.menu.add-column").center();
+        click(&mut h, at);
+        assert!(h.state().canvas.menu.is_none(), "{theme:?}: the menu closed");
+        let order = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap()).unwrap()
+        };
+        assert!(
+            er_of(h.state()).column.as_ref().is_some_and(|c| c.target.is_none() && c.entity == order),
+            "{theme:?}: {:?}",
+            er_of(h.state()).column
+        );
+        assert_eq!(h.state().state.panel, crate::state::Panel::Properties, "{theme:?}");
+        // The mapping table: Collapse after Add column, and its click brings the line back.
+        er_of_mut(h.state_mut()).column = None;
+        h.run();
+        let at = rect_of(&h, &node_of(&h, &mapping)).center();
+        right_click(&mut h, at);
+        assert_eq!(rows(&h), ["related 0", "open 1", "add-column 0", "collapse 0", "generate 0", "remove 1", "delete 0"], "{theme:?}");
+        assert!(painted(&h).iter().any(|t| t == "Collapse into a relationship"), "{theme:?}");
+        let at = rect_of(&h, "workspace.canvas.menu.collapse").center();
+        click(&mut h, at);
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(
+            st.by_uuid(archforge_mof::Uuid::parse(&mapping).unwrap()).is_none_or(|m| !st.is_alive(m)),
+            "{theme:?}: {:?}",
+            h.state().canvas.notice
+        );
+        assert!(h.state().canvas.menu.is_none(), "{theme:?}");
+    }
+}
+
+/// A UML card's menu as UML answers it: its new row after Open in Models, named as its second
+/// adorner names it (a class's attribute, an enumeration's literal), in the platform's keys; a
+/// primitive type's adds none.
+#[test]
+fn a_uml_cards_menu_adds_the_row_its_adorner_names() {
+    use crate::kinds::DiagramKind;
+    let mut st = archforge_notations::store(Box::new({
+        let ids = test_ids();
+        move || ids()
+    }))
+    .unwrap();
+    let [class, enumeration, primitive] =
+        [archforge_uml::CLASS, archforge_uml::ENUMERATION, archforge_uml::PRIMITIVE_TYPE].map(|c| st.create(c).unwrap());
+    let rows =
+        |e, mac| crate::uml_ui::UmlKind.menu(&st, e, mac).unwrap().iter().map(|r| (r.key, r.label, r.keys, r.live, r.first)).collect::<Vec<_>>();
+    assert_eq!(rows(class, true), [("add-row", "Add attribute", "⌘↩", true, false)]);
+    assert_eq!(rows(class, false), [("add-row", "Add attribute", "Ctrl Enter", true, false)]);
+    assert_eq!(rows(enumeration, false), [("add-row", "Add literal", "Ctrl Enter", true, false)]);
+    assert!(rows(primitive, false).is_empty(), "a primitive type's menu adds nothing");
+}
+
 #[test]
 fn a_table_added_in_models_is_placed_on_the_open_diagram_and_grows_with_its_columns() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -13803,11 +13919,11 @@ fn a_table_added_in_models_is_placed_on_the_open_diagram_and_grows_with_its_colu
     // Its node starts at the empty height and grows with the first column.
     let new_node = node_ids(&h).into_iter().max_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap();
     let id = new_node.trim_start_matches("workspace.canvas.node.").to_string();
-    assert!((node_bounds(&h, &id).height - crate::editing::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
+    assert!((node_bounds(&h, &id).height - crate::er_place::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
     crate::explorer::add(h.state_mut(), "column");
     h.run();
     assert!(
-        (node_bounds(&h, &id).height - crate::editing::content_height(1)).abs() < 0.01,
+        (node_bounds(&h, &id).height - crate::er_place::content_height(1)).abs() < 0.01,
         "{:?} notice {:?} undo {:?}",
         node_bounds(&h, &id),
         h.state().explorer.notice,
@@ -13817,7 +13933,7 @@ fn a_table_added_in_models_is_placed_on_the_open_diagram_and_grows_with_its_colu
     let s = h.state_mut().session.as_mut().unwrap();
     s.execute("edit.undo", &serde_json::Value::Null).unwrap();
     h.run();
-    assert!((node_bounds(&h, &id).height - crate::editing::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
+    assert!((node_bounds(&h, &id).height - crate::er_place::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
 }
 
 fn drag_by(h: &mut Harness<'static, Shell>, button: egui::PointerButton, from: egui::Pos2, to: egui::Pos2) {
@@ -15521,7 +15637,7 @@ fn key_columns_a_line_adds_grow_the_table_to_show_them_in_the_same_step() {
             .unwrap();
         st.uuid(n).unwrap().to_string()
     };
-    let snug = crate::editing::content_height(1);
+    let snug = crate::er_place::content_height(1);
     h.state_mut()
         .session
         .as_mut()
@@ -15539,7 +15655,7 @@ fn key_columns_a_line_adds_grow_the_table_to_show_them_in_the_same_step() {
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(crate::connect::has_foreign_key(st, rels[0]), "both tables have columns and Customer its key: the key comes on");
     let grown = node_bounds(&h, &order_node).height;
-    assert_eq!(grown, crate::editing::content_height(2), "Order grew to show its new key column");
+    assert_eq!(grown, crate::er_place::content_height(2), "Order grew to show its new key column");
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     h.run_steps(2);
     assert_eq!(node_bounds(&h, &order_node).height, snug, "one undo takes the line and the growth back");
@@ -17605,8 +17721,89 @@ impl crate::kinds::DiagramKind for SketchKind {
         SKETCH_CALLS.lock().unwrap().push(format!("rename {name}"));
         Ok(())
     }
+    /// Writes down the row it was asked to open at.
     fn open(&self, _: &mut Shell, _: archforge_mof::Uuid, row: Option<usize>) {
         SKETCH_CALLS.lock().unwrap().push(format!("open {row:?}"));
+    }
+    /// Party's menu: a first row that is off, then one after Open in Models that writes down what
+    /// it was picked on; Customer takes none.
+    fn menu(&self, store: &archforge_mof::Store, element: archforge_mof::Obj, mac: bool) -> Option<Vec<crate::kinds::MenuRow>> {
+        let first = crate::kinds::MenuRow {
+            key: "sketch-first",
+            label: "Sketch first",
+            keys: "F",
+            live: false,
+            first: true,
+            run: |_, _| SKETCH_CALLS.lock().unwrap().push("menu first".into()),
+        };
+        let own = crate::kinds::MenuRow {
+            key: "sketch-own",
+            label: "Sketch own",
+            keys: if mac { "⌥S" } else { "Alt S" },
+            live: true,
+            first: false,
+            run: |shell, menu| {
+                let name = shell.session.as_ref().and_then(|s| s.doc().by_uuid(menu.entity).map(|e| archforge_core::name_of(s.doc(), e)));
+                SKETCH_CALLS.lock().unwrap().push(format!("menu own {}", name.unwrap_or_default()));
+            },
+        };
+        (archforge_core::name_of(store, element) == "Party").then(|| vec![first, own])
+    }
+}
+
+/// The element menu's rows as drawn, top to bottom: each key, with the gap above it from the row
+/// before (a section's rule adds a point).
+fn menu_drawn(h: &Harness<'static, Shell>) -> Vec<(String, f32)> {
+    let mut rows: Vec<(String, egui::Rect)> = ids(h)
+        .into_iter()
+        .filter_map(|i| i.strip_prefix("workspace.canvas.menu.").map(str::to_string))
+        .map(|key| {
+            let r = rect_of(h, &format!("workspace.canvas.menu.{key}"));
+            (key, r)
+        })
+        .collect();
+    rows.sort_by(|a, b| a.1.top().total_cmp(&b.1.top()));
+    let mut above = None;
+    rows.into_iter()
+        .map(|(key, r)| {
+            let gap = above.map_or(0.0, |b: f32| (r.top() - b).round());
+            above = Some(r.bottom());
+            (key, gap)
+        })
+        .collect()
+}
+
+/// The element menu builds from what the diagram's kind answers, a kind it never names included:
+/// the sketch's first row in a section of its own above Open in Models, its other row after it with
+/// its keys, then Generate…, and Remove and Delete in a section of their own; a row that is off
+/// runs nothing (its click falls to the canvas, which closes the menu), a row that is on runs what
+/// the kind gave it on the menu's element and closes the menu; on what the kind answers no menu
+/// for, a right click opens none.
+#[test]
+fn the_element_menu_builds_from_the_kinds_answer() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _d, a, b, _e) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        h.run();
+        SKETCH_CALLS.lock().unwrap().clear();
+        let (party, customer) = (rect_of(&h, &format!("workspace.canvas.node.{a}")), rect_of(&h, &format!("workspace.canvas.node.{b}")));
+        right_click(&mut h, customer.center());
+        assert!(h.state().canvas.menu.is_none(), "{theme:?}: Customer takes no menu");
+        right_click(&mut h, party.center());
+        assert!(h.state().canvas.menu.is_some(), "{theme:?}: Party's menu opened");
+        let drawn = menu_drawn(&h);
+        let expected = [("sketch-first", 0.0), ("open", 1.0), ("sketch-own", 0.0), ("generate", 0.0), ("remove", 1.0), ("delete", 0.0)];
+        assert_eq!(drawn, expected.map(|(k, g)| (k.to_string(), g)), "{theme:?}");
+        let texts = painted(&h);
+        assert!(["Sketch first", "F", "Sketch own", "Alt S"].iter().all(|t| texts.iter().any(|p| p == t)), "{theme:?}: {texts:?}");
+        let at = rect_of(&h, "workspace.canvas.menu.sketch-first").center();
+        click(&mut h, at);
+        assert!(h.state().canvas.menu.is_none() && SKETCH_CALLS.lock().unwrap().is_empty(), "{theme:?}: a row that is off runs nothing");
+        right_click(&mut h, party.center());
+        let at = rect_of(&h, "workspace.canvas.menu.sketch-own").center();
+        click(&mut h, at);
+        assert!(h.state().canvas.menu.is_none(), "{theme:?}: the menu closed");
+        assert_eq!(*SKETCH_CALLS.lock().unwrap(), ["menu own Party"], "{theme:?}");
     }
 }
 

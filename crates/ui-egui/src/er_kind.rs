@@ -1,8 +1,9 @@
 //! The ER diagram's tools and gestures: the Entity tool places a table named in
 //! place, the Relationship tool draws a relationship with the ends its popover sets, a line dropped
 //! on empty canvas makes a new table there, a table renames in place, a double click on a column
-//! opens its editor, the second adorner adds a column, and a right click opens the entity menu;
-//! the Model menu's Entity and Relationship rows arm the two tools.
+//! opens its editor, the second adorner adds a column, and a right click opens the entity menu,
+//! which adds a table's related tables, its new column and its collapse to the shared rows; the
+//! Model menu's Entity and Relationship rows arm the two tools.
 
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect};
@@ -12,7 +13,7 @@ use crate::actions::Action;
 use crate::canvas::{Tool, View};
 use crate::er_state::er;
 use crate::i18n::tr;
-use crate::kinds::{DiagramKind, KindTool, ToolUse};
+use crate::kinds::{DiagramKind, KindTool, MenuRow, ToolUse};
 use crate::model_menu::menu_row;
 use crate::ux::{Palette, icons};
 
@@ -39,6 +40,40 @@ static MENU_ROWS: &[&[Action]] = &[&[
 
 /// The kind its rows are of, as the Model menu's rows ask for it.
 const KIND: Option<&str> = Some(archforge_er::DIAGRAM_KIND);
+
+/// The entity menu's first row, in a section of its own: a table's related tables, not built yet.
+const RELATED: MenuRow = MenuRow { key: "related", label: "Show related tables", keys: "R", live: false, first: true, run: |_, _| {} };
+
+/// The entity menu's row that collapses a pure mapping table into the relationship it stands for.
+const COLLAPSE: MenuRow = MenuRow {
+    key: "collapse",
+    label: "Collapse into a relationship",
+    keys: "",
+    live: true,
+    first: false,
+    run: |shell, menu| {
+        // The command selects the relationship it makes.
+        if let Err(e) = crate::editing::run(shell, "er.relationship.collapse", serde_json::json!({ "entity": menu.entity.to_string() })) {
+            shell.canvas.notice = Some(e);
+        }
+    },
+};
+
+/// The entity menu's row that opens a new column's editor, as the second adorner does, with the
+/// keys `mac` spells.
+fn add_column(mac: bool) -> MenuRow {
+    MenuRow {
+        key: "add-column",
+        label: "Add column",
+        keys: crate::editing::new_row_keys(mac),
+        live: true,
+        first: false,
+        run: |shell, menu| {
+            crate::er_table::open_column(shell, menu.entity, None);
+            shell.state.show_panel(crate::state::Panel::Properties);
+        },
+    }
+}
 
 impl DiagramKind for ErKind {
     fn kind(&self) -> &'static str {
@@ -146,16 +181,18 @@ impl DiagramKind for ErKind {
         store.class_of(element).ok() == Some(archforge_er::ENTITY)
     }
 
+    /// The Entity tool: a table placed there, its name open for typing.
     fn place(&self, shell: &mut Shell, _tool: &'static str, d: Obj, x: f64, y: f64) {
-        crate::editing::place_entity(shell, d, x, y);
+        crate::er_place::place_entity(shell, d, x, y);
     }
 
     fn connect(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid) {
         crate::connect::connect(shell, d, from_node, to_node);
     }
 
+    /// A relationship dropped on empty canvas: a new table there, joined to the first.
     fn connect_to_new(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64) {
-        crate::editing::connect_to_new(shell, d, from_node, x, y);
+        crate::er_place::connect_to_new(shell, d, from_node, x, y);
     }
 
     fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String> {
@@ -185,15 +222,31 @@ impl DiagramKind for ErKind {
         Some(("add-column", "Add column"))
     }
 
+    /// A table dragged from Models, placed with its lines to the tables the diagram shows.
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
-        crate::editing::place_dropped(shell, d, element, at);
+        crate::er_place::place_dropped(shell, d, element, at);
     }
 
-    fn menu(&self) -> bool {
-        true
+    /// A table's menu: its related tables first, then after Open in Models its new column and,
+    /// for a pure mapping table, its collapse into a relationship. Nothing else of ER takes one.
+    fn menu(&self, store: &Store, element: Obj, mac: bool) -> Option<Vec<MenuRow>> {
+        if !self.takes_part(store, element) {
+            return None;
+        }
+        let mut rows = vec![RELATED, add_column(mac)];
+        if archforge_er::rules::collapse_problem(store, element).is_none() {
+            rows.push(COLLAPSE);
+        }
+        Some(rows)
     }
 
     fn live_line(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, view: View, from_node: Uuid, pointer: Pos2, target: Option<Rect>) {
         crate::connect::live_line(shell, paint, p, view, from_node, pointer, target);
     }
+}
+
+/// The entity menu's rows to translate, for the catalogue tests.
+#[cfg(test)]
+pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
+    ["Show related tables", "Add column", "Collapse into a relationship"].into_iter()
 }
