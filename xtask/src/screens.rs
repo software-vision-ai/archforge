@@ -74,13 +74,18 @@ pub const LIST: &str = "crates/ui-egui/src/offscreen.rs";
 /// before every task, so it reads the list's text; a row in any other shape is refused, never
 /// skipped, so no screen is left out unseen.
 pub fn screens(offscreen: &str) -> Result<Vec<String>, String> {
-    let body = offscreen
-        .split("\nscreens! {\n")
-        .nth(1)
-        .and_then(|rest| rest.split("\n}\n").next())
-        .ok_or(format!("{LIST} has no `screens! {{ … }}` list"))?;
+    // `lines` ends a line at LF or CRLF, so the list reads the same from a checkout of either.
+    let mut lines = offscreen.lines().skip_while(|line| *line != "screens! {");
+    if lines.next().is_none() {
+        return Err(format!("{LIST} has no `screens! {{ … }}` list"));
+    }
     let mut names = Vec::new();
-    for (n, line) in body.lines().enumerate() {
+    let mut closed = false;
+    for (n, line) in lines.enumerate() {
+        if line == "}" {
+            closed = true;
+            break;
+        }
         let row = line.trim();
         if row.is_empty() || row.starts_with("//") {
             continue;
@@ -95,6 +100,9 @@ pub fn screens(offscreen: &str) -> Result<Vec<String>, String> {
             return Err(format!("{LIST}: line {} of the `screens!` list is not `\"<name>\" => <Screen>,`: {row:?}", n + 1));
         };
         names.push(name.to_string());
+    }
+    if !closed {
+        return Err(format!("{LIST}: the `screens!` list has no closing `}}`"));
     }
     if names.is_empty() {
         return Err(format!("{LIST}: the `screens!` list names no screen"));
@@ -158,6 +166,9 @@ pub fn gallery(out: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// `cargo xtask screens`: renders every screen of the shell's list in both appearances under
+/// `plan/screens`, with a contact sheet for each; `--gallery <dir>` renders the published galleries
+/// there instead.
 pub fn run(args: &[String]) -> Result<(), String> {
     match args {
         [] => {}
@@ -185,6 +196,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// A gallery directory given as a relative path is taken from where the command ran, not from
+    /// the repository root.
     #[test]
     fn a_relative_gallery_directory_is_taken_from_where_the_command_ran() {
         let dir = resolved(Path::new("pictures")).unwrap();
@@ -210,6 +223,8 @@ mod tests {
             assert!(refused.contains("line 2 of the `screens!` list") && refused.contains(&format!("{row:?}")), "{row}: {refused}");
         }
         assert!(screens("pub enum Screen { Home }").unwrap_err().contains("has no `screens! { … }` list"));
+        assert!(screens("screens! {\n    \"home\" => Home,\n").unwrap_err().contains("has no closing `}`"));
+        assert_eq!(screens(&text.replace('\n', "\r\n")).unwrap(), ["home", "new-project"], "a CRLF checkout reads the same");
         assert!(screens(&list("    /// Nothing yet.\n")).unwrap_err().contains("names no screen"));
         let page = sheet(&["home".into()], "dark");
         assert!(page.contains("home-dark.png") && page.contains("<figcaption>home</figcaption>") && page.contains("(1)"));
