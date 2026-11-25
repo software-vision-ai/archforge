@@ -1,16 +1,18 @@
-//! The shell's part of the layer check: the interface crate (`ui-egui`) holds no process or network
-//! code (agent-control-surfaces CS-17), so the window can never start a program or open a socket
-//! itself; the host does, through `Services`.
+//! The interface's part of the layer check: the crates on the interface's layers (the shell
+//! `ui-egui`, its interfaces `shell-api` and the notations' screens; `layers::interface_crates`)
+//! hold no process or network code (agent-control-surfaces CS-17), so the window can never start a
+//! program or open a socket itself; the host does, through `Services`.
 //!
-//! Two rules. A process or network crate is refused as a dependency of the shell ([`IO_CRATES`]).
-//! And every Rust source under the shell's `src` is scanned: with its string and character literals
+//! Two rules. A process or network crate is refused as a dependency of any of them
+//! ([`IO_CRATES`]). And every Rust source under each one's `src` is scanned: with its string and character literals
 //! and its comments blanked, any path through `std::process`, `std::net` or `std::os::unix::net`
 //! (written out, or inside a grouped import such as `use std::{io, net::TcpStream}`), and any of the
 //! socket types by name ([`SOCKETS`]), is a finding with its file and line.
 
 use std::path::{Path, PathBuf};
 
-/// Crates that start processes or talk over a network, refused as dependencies of the shell.
+/// Crates that start processes or talk over a network, refused as dependencies of the interface's
+/// crates.
 pub const IO_CRATES: &[&str] = &[
     "async-std",
     "attohttpc",
@@ -379,7 +381,9 @@ pub fn scan(dir: &Path) -> Result<Vec<String>, String> {
         let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
         let rel = file.strip_prefix(dir).unwrap_or(&file).display().to_string();
         out.extend(
-            findings(&text).into_iter().map(|f| format!("{rel} {f}: the shell holds no process or network code; the host does it through Services")),
+            findings(&text)
+                .into_iter()
+                .map(|f| format!("{rel} {f}: the interface holds no process or network code; the host does it through Services")),
         );
     }
     Ok(out)
@@ -496,10 +500,12 @@ mod tests {
         }
     }
 
-    /// The shell as it stands holds no process or network code.
+    /// Every crate on the interface's layers as it stands, the shell and its interfaces among them,
+    /// holds no process or network code.
     #[test]
-    fn the_shell_holds_no_process_or_network_code() {
-        let shell = crate::util::root().join("crates").join(crate::layers::SHELL).join("src");
-        assert_eq!(scan(&shell).unwrap(), Vec::<String>::new());
+    fn the_interface_holds_no_process_or_network_code() {
+        let crates = crate::layers::interface_crates();
+        assert!(crates.contains(&crate::layers::SHELL) && crates.contains(&crate::layers::SHELL_API), "{crates:?}");
+        assert_eq!(crate::layers::interface_findings(&crate::util::root().join("crates")).unwrap(), Vec::<String>::new());
     }
 }

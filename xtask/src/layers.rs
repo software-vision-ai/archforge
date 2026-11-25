@@ -2,10 +2,10 @@
 //!
 //! Reads `cargo metadata`, strips the application prefix from each package name, classifies the
 //! remainder through `TABLE`, walks normal, build and development edges between workspace crates,
-//! checks toolkit crates against their minimum layer, refuses process and network crates as the
-//! shell's dependencies and scans the shell's sources for process and network code
-//! (`shell_io`), reports every violation and prints the table. Applications under `apps/` and the
-//! task runner are exempt.
+//! checks toolkit crates against their minimum layer, refuses process and network crates as
+//! dependencies of the interface's crates (the shell, its interfaces and the notations' screens)
+//! and scans their sources for process and network code (`shell_io`), reports every violation and
+//! prints the table. Applications under `apps/` and the task runner are exempt.
 
 use std::collections::BTreeMap;
 
@@ -50,25 +50,34 @@ pub const TABLE: &[(&str, Class)] = &[
     // The notations a project holds, composed into one store, one command table and one set of
     // tables: the one crate above the notations that names them all.
     ("notations", Class::Layer(8)),
-    ("ui-egui", Class::Layer(9)),
-    // Host services, for the desktop only: the application uses them and the shell never depends on
-    // them, so the portable-target check, which builds the layers below the shell, leaves them out.
-    ("dolt", Class::Layer(9)),
-    ("project", Class::Layer(10)),
+    // The interface's layers, 9 to 11, which hold no process or network code (`shell_io`). The
+    // shell's interfaces: what a notation's screens implement and may use from the shell (ADR 0003).
+    ("shell-api", Class::Layer(9)),
+    // Layer 10 is the notations' screens crates' (ADR 0002), each above the shell's interfaces.
+    ("ui-egui", Class::Layer(11)),
+    // Host services, for the desktop only: the application uses them and they sit above the shell,
+    // so the shell never depends on them and the portable-target check, which builds the layers
+    // below the shell, leaves them out.
+    ("dolt", Class::Layer(12)),
+    ("project", Class::Layer(13)),
     // Agent access: the control channel's token, loopback server and client, and the MCP server
     // bridged to it. Host services like the two above, never built for the portable target.
-    ("control", Class::Layer(9)),
+    ("control", Class::Layer(12)),
     // API keys in the system's credential store, never in a file. A host service like the ones
     // above, never built for the portable target.
-    ("secrets", Class::Layer(9)),
+    ("secrets", Class::Layer(12)),
     // The agent runtimes a person installs: found, version-checked, run and supervised as child
     // processes with keys from `secrets`. A host service, never built for the portable target.
-    ("agents", Class::Layer(10)),
-    ("mcp", Class::Layer(10)),
+    ("agents", Class::Layer(13)),
+    ("mcp", Class::Layer(13)),
 ];
 
-/// The shell crate: the highest crate the portable-target check builds.
+/// The shell crate: the highest crate the portable-target check builds, and the top of the
+/// interface's layers.
 pub const SHELL: &str = "ui-egui";
+
+/// The shell's interfaces crate: the bottom of the interface's layers.
+pub const SHELL_API: &str = "shell-api";
 
 /// Toolkit crates (exact names or prefixes ending in `*`) and the minimum layer that may use them.
 pub const TOOLKIT: &[&str] = &["egui", "egui-*", "egui_*", "eframe", "winit", "wgpu", "wgpu-*"];
@@ -84,6 +93,24 @@ fn layer(c: Class) -> Option<u8> {
         Class::Standalone => Some(0),
         Class::Exempt => None,
     }
+}
+
+/// The interface's layers: from the shell's interfaces up to the shell. A crate on them holds no
+/// process or network code; the host does that through `Services`. Read from `TABLE`; when either
+/// end is missing there, every layer counts, so the check refuses more, never less.
+pub fn interface_layers() -> std::ops::RangeInclusive<u8> {
+    let at = |name: &str| class_of(name).and_then(layer);
+    at(SHELL_API).unwrap_or(0)..=at(SHELL).unwrap_or(u8::MAX)
+}
+
+/// Whether a crate of class `class` sits on the interface's layers.
+pub fn is_interface(class: Class) -> bool {
+    matches!(class, Class::Layer(n) if interface_layers().contains(&n))
+}
+
+/// The library crates on the interface's layers, by short name, as `TABLE` lists them.
+pub fn interface_crates() -> Vec<&'static str> {
+    TABLE.iter().filter(|(_, class)| is_interface(*class)).map(|(name, _)| *name).collect()
 }
 
 fn is_toolkit(name: &str) -> bool {
@@ -135,8 +162,8 @@ pub fn violations(packages: &[Package]) -> Vec<String> {
                 }
             } else if is_toolkit(dep) && here < TOOLKIT_MIN_LAYER {
                 out.push(format!("{} (layer {here}) uses the toolkit crate {dep}, allowed from layer {TOOLKIT_MIN_LAYER}", p.short));
-            } else if p.short == SHELL && crate::shell_io::is_io_crate(dep) {
-                out.push(format!("{SHELL} uses the process or network crate {dep} ({kind}); the host does that through Services"));
+            } else if is_interface(class) && crate::shell_io::is_io_crate(dep) {
+                out.push(format!("{} uses the process or network crate {dep} ({kind}); the host does that through Services", p.short));
             }
         }
     }
@@ -175,6 +202,16 @@ pub fn packages() -> Result<Vec<Package>, String> {
     Ok(result)
 }
 
+/// The process and network uses in the sources of every crate on the interface's layers, each
+/// crate's `src` under `crates`, each finding named with its crate.
+pub fn interface_findings(crates: &std::path::Path) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for name in interface_crates() {
+        out.extend(crate::shell_io::scan(&crates.join(name).join("src"))?.into_iter().map(|f| format!("{name}: {f}")));
+    }
+    Ok(out)
+}
+
 pub fn run() -> Result<(), String> {
     let packages = packages()?;
     println!("{:<12} class", "crate");
@@ -182,7 +219,7 @@ pub fn run() -> Result<(), String> {
         println!("{:<12} {:?}", p.short, p.class);
     }
     let mut v = violations(&packages);
-    v.extend(crate::shell_io::scan(&util::root().join("crates").join(SHELL).join("src"))?);
+    v.extend(interface_findings(&util::root().join("crates"))?);
     if v.is_empty() {
         println!("layers: {} crates, no violation", packages.len());
         Ok(())
@@ -219,23 +256,44 @@ mod tests {
         assert!(v.contains("stray is missing"), "{v}");
     }
 
-    /// A process or network crate is refused as the shell's dependency of any kind; a host service may use one.
+    /// A process or network crate is refused as a dependency of any kind of every crate on the
+    /// interface's layers (the shell, its interfaces, a notation's screens); a host service may use one.
     #[test]
-    fn the_shell_may_not_depend_on_a_process_or_network_crate() {
-        let packages = vec![pkg("ui-egui", Some(Class::Layer(9)), &[("egui", "normal"), ("tokio", "normal"), ("socket2", "dev")])];
+    fn no_interface_crate_may_depend_on_a_process_or_network_crate() {
+        let packages = vec![pkg(SHELL, class_of(SHELL), &[("egui", "normal"), ("tokio", "normal"), ("socket2", "dev")])];
         let v = violations(&packages).join("\n");
-        assert!(v.contains("process or network crate tokio (normal)") && v.contains("socket2 (dev)"), "{v}");
-        let host = vec![pkg("control", Some(Class::Layer(9)), &[("rustix", "normal")])];
+        assert!(v.contains("ui-egui uses the process or network crate tokio (normal)") && v.contains("socket2 (dev)"), "{v}");
+        for (short, class) in [(SHELL_API, class_of(SHELL_API)), ("uml-ui", Some(Class::Layer(10)))] {
+            let packages = vec![pkg(short, class, &[("egui", "normal"), ("mio", "build")])];
+            let v = violations(&packages).join("\n");
+            assert!(v.contains(&format!("{short} uses the process or network crate mio (build)")), "{short}: {v}");
+        }
+        let host = vec![pkg("control", class_of("control"), &[("rustix", "normal")])];
         assert_eq!(violations(&host), Vec::<String>::new(), "a host service may");
     }
 
-    /// The host services that start programs or open sockets sit at the shell's layer or above, so
-    /// the shell can depend on none of them.
+    /// The host services that start programs or open sockets sit above the shell, so neither the
+    /// shell nor its interfaces can depend on any of them.
     #[test]
-    fn the_shell_may_not_depend_on_a_host_service() {
+    fn the_interface_may_not_depend_on_a_host_service() {
         for host in ["control", "secrets", "agents", "mcp", "dolt", "project"] {
-            let packages = vec![pkg(SHELL, class_of(SHELL), &[(host, "normal")]), pkg(host, class_of(host), &[])];
-            assert!(!violations(&packages).is_empty(), "{host}");
+            for interface in [SHELL, SHELL_API] {
+                let packages = vec![pkg(interface, class_of(interface), &[(host, "normal")]), pkg(host, class_of(host), &[])];
+                assert!(violations(&packages).join("\n").contains("an upward normal edge"), "{interface} -> {host}");
+            }
+        }
+    }
+
+    /// The interface's layers run from the shell's interfaces (9) to the shell (11), with the
+    /// notations' screens between; the notations sit below them and every host service above.
+    #[test]
+    fn the_interface_layers_run_from_the_shell_interfaces_to_the_shell() {
+        assert_eq!(interface_layers(), 9..=11);
+        assert_eq!(interface_crates(), vec![SHELL_API, SHELL]);
+        assert!(!is_interface(Class::Layer(8)) && is_interface(Class::Layer(10)) && !is_interface(Class::Layer(12)));
+        assert!(!is_interface(Class::Standalone) && !is_interface(Class::Exempt));
+        for host in ["control", "secrets", "agents", "mcp", "dolt", "project"] {
+            assert!(class_of(host).and_then(layer).is_some_and(|n| n > *interface_layers().end()), "{host}");
         }
     }
 
@@ -250,8 +308,27 @@ mod tests {
         assert_eq!(violations(&packages), Vec::<String>::new());
     }
 
+    /// The source scan reads every crate on the interface's layers, the shell's interfaces as well
+    /// as the shell, and names the crate of each finding.
+    #[test]
+    fn the_source_scan_reads_every_interface_crate() {
+        let tree = util::Scratch::new("interface-scan").unwrap();
+        tree.file("ui-egui/src/lib.rs", "pub fn draw() {}\nuse std::net::Ipv4Addr;\n").unwrap();
+        tree.file("shell-api/src/lib.rs", "pub fn quit() {\n    std::process::exit(0)\n}\n").unwrap();
+        tree.file("dolt/src/lib.rs", "use std::net::TcpStream;\n").unwrap();
+        let said = ": the interface holds no process or network code; the host does it through Services";
+        assert_eq!(
+            interface_findings(&tree.path).unwrap(),
+            vec![format!("shell-api: lib.rs line 2: std::process::exit{said}"), format!("ui-egui: lib.rs line 2: std::net::Ipv4Addr{said}")],
+            "every interface crate is read, a host service is not"
+        );
+    }
+
+    /// The shell and its interfaces have their rows on the layers the ticket gives them; the
+    /// layer check itself fails on any library crate without a row.
     #[test]
     fn every_library_crate_of_the_repository_is_in_the_table() {
-        assert_eq!(class_of(SHELL), Some(Class::Layer(9)));
+        assert_eq!(class_of(SHELL), Some(Class::Layer(11)));
+        assert_eq!(class_of(SHELL_API), Some(Class::Layer(9)));
     }
 }

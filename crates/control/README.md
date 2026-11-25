@@ -9,7 +9,8 @@ steps the request makes with it); replies `{id, ok, result | error}`. The origin
 request, not of its parameters, so whoever chooses the parameters cannot choose it. A first line that is not a well-formed request with the right
 token closes the connection without a word.
 
-**Layer.** 9, a host service beside `dolt`: network and files, never built for the portable target.
+**Layer.** 12, a host service beside `dolt`, above the shell (11): network and files, never built
+for the portable target.
 
 **Public API.**
 

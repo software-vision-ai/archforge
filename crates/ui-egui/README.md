@@ -78,8 +78,10 @@ chevrons 8); rows, fields and bars centre their content on their middle line (`u
 78 pt in, clear of the traffic lights. An open project has an in-memory ER session (`Shell::session`); nothing reaches the
 project's database yet, and the status bar says so once there is something unsaved.
 
-**Layer.** 9, over `archforge-notations` (8), `archforge-er` (7), `archforge-diagram` (6), `archforge-core` (5), `archforge-mof` (4), `archforge-engine` (3) and
-`archforge-names`; the only library crate that may use the toolkit (egui). The shell never reads
+**Layer.** 11, the top of the interface's layers, above the shell's interfaces
+(`archforge-shell-api`, 9) and the notations' screens (10); over `archforge-notations` (8),
+`archforge-er` (7), `archforge-diagram` (6), `archforge-core` (5), `archforge-mof` (4),
+`archforge-engine` (3) and `archforge-names`; the only library crate that may use the toolkit (egui). The shell never reads
 the clock or the file system: the ids of a model's elements come from the host (`Services::ids`).
 
 **Binding rules.** The shell rules, the localisation rules (`i18n/`), and the layering rule that

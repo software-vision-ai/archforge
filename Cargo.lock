@@ -432,6 +432,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "archforge-shell-api"
+version = "0.14.0"
+
+[[package]]
 name = "archforge-ui-egui"
 version = "0.14.0"
 dependencies = [

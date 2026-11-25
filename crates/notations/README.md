@@ -9,7 +9,8 @@ So one universe, one store, one database, one view and one command table hold th
 by side. The shell, the host and the agent's tools make projects here and name no
 notation for it.
 
-**Layer.** 8, the one crate above the notations (7) that names them all; below the shell (9).
+**Layer.** 8, the one crate above the notations (7) that names them all; below the shell's
+interfaces (9) and the shell (11).
 Pure, builds for the portable target.
 
 **Binding rules.** The tables are stored in the order of `PARTS`, and the project's fingerprint
