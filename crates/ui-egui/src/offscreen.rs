@@ -3049,6 +3049,150 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// Every screen, in the order `Screen` declares them; `every_screen_records_the_automation_ids_listed`
+    /// holds it to the screens the snapshot example names.
+    const EVERY: [Screen; 139] = [
+        Screen::Home,
+        Screen::HomeGallery,
+        Screen::HomeSearch,
+        Screen::HomeSettings,
+        Screen::HomeAbout,
+        Screen::SettingsAgentsEmpty,
+        Screen::SettingsAgentsMissing,
+        Screen::SettingsAgentsReady,
+        Screen::SettingsAgentsRefused,
+        Screen::SettingsAgentsDeviceCode,
+        Screen::SettingsAgentsNoStore,
+        Screen::SettingsAgentsNotAvailable,
+        Screen::HomeDoltMissing,
+        Screen::NewProject,
+        Screen::NewProjectFailed,
+        Screen::NewProjectFolder,
+        Screen::Workspace,
+        Screen::WorkspaceSchema,
+        Screen::WorkspaceTable,
+        Screen::WorkspaceSkills,
+        Screen::WorkspaceSkillTab,
+        Screen::WorkspaceSkillPreview,
+        Screen::WorkspaceSkillLink,
+        Screen::WorkspaceSkillNew,
+        Screen::WorkspaceKeyEditor,
+        Screen::WorkspaceColumnEditor,
+        Screen::WorkspaceIndexEditor,
+        Screen::WorkspaceSubtypes,
+        Screen::WorkspaceSchemaTypes,
+        Screen::WorkspaceSchemaObjects,
+        Screen::WorkspaceCrossSchema,
+        Screen::WorkspaceRouting,
+        Screen::WorkspaceClassDiagram,
+        Screen::WorkspaceClassDiagramRead,
+        Screen::WorkspaceNewDiagramKind,
+        Screen::WorkspaceNewDiagramDetails,
+        Screen::WorkspacePackages,
+        Screen::WorkspaceInsidePackage,
+        Screen::WorkspacePackageParent,
+        Screen::WorkspacePackageTop,
+        Screen::WorkspacePackagePaths,
+        Screen::WorkspacePackageOverlap,
+        Screen::WorkspaceDiagrams,
+        Screen::WorkspaceChat,
+        Screen::WorkspaceChatEmpty,
+        Screen::WorkspaceChatStreaming,
+        Screen::WorkspaceChatChanges,
+        Screen::WorkspaceChatStopped,
+        Screen::WorkspaceChatRateLimited,
+        Screen::WorkspaceChatNetworkLost,
+        Screen::WorkspaceChatModelUnavailable,
+        Screen::WorkspaceChatHistory,
+        Screen::WorkspaceChatDeleteMenu,
+        Screen::WorkspaceChatDeleteConfirm,
+        Screen::WorkspaceChatDeleted,
+        Screen::WorkspaceClassSizing,
+        Screen::WorkspaceClassMembers,
+        Screen::WorkspaceMemberEditor,
+        Screen::WorkspaceInlineMember,
+        Screen::WorkspaceAssociation,
+        Screen::WorkspaceMultiplicityPresets,
+        Screen::WorkspaceMultiplicityRefused,
+        Screen::WorkspaceRelateKinds,
+        Screen::WorkspaceInterface,
+        Screen::WorkspaceEnumeration,
+        Screen::WorkspaceDataType,
+        Screen::WorkspacePrimitiveType,
+        Screen::WorkspaceLiterals,
+        Screen::WorkspaceClassifierKinds,
+        Screen::WorkspaceRealization,
+        Screen::WorkspaceAssociationClass,
+        Screen::WorkspaceModifiers,
+        Screen::WorkspaceFinal,
+        Screen::WorkspaceLeaf,
+        Screen::WorkspaceGeneralizationSets,
+        Screen::WorkspaceQualifiers,
+        Screen::WorkspaceQualifierRefused,
+        Screen::WorkspaceNestedClassifiers,
+        Screen::WorkspaceTemplate,
+        Screen::WorkspaceTemplateKinds,
+        Screen::WorkspaceTemplateInUse,
+        Screen::WorkspaceProfiles,
+        Screen::WorkspaceProfileRefused,
+        Screen::WorkspaceTemplateBinding,
+        Screen::WorkspaceTemplateBindingNew,
+        Screen::WorkspaceNaryDrawing,
+        Screen::WorkspaceNary,
+        Screen::WorkspaceNaryBinary,
+        Screen::WorkspaceStereotypes,
+        Screen::WorkspaceStereotypePicker,
+        Screen::GuideClasses,
+        Screen::GuideRelateKinds,
+        Screen::GuideAssociation,
+        Screen::GuideClassifierKinds,
+        Screen::GuideLiterals,
+        Screen::GuideDataType,
+        Screen::GuidePrimitiveType,
+        Screen::GuideRealization,
+        Screen::GuideAssociationClass,
+        Screen::GuideModifiers,
+        Screen::GuideConstraints,
+        Screen::GuideResult,
+        Screen::GuideStatic,
+        Screen::GuideQualifier,
+        Screen::GuideNary,
+        Screen::GuideGeneralizationSet,
+        Screen::GuideFinalLeaf,
+        Screen::GuideNested,
+        Screen::GuideTemplate,
+        Screen::GuideTemplateBinding,
+        Screen::GuideProfile,
+        Screen::GuideStereotype,
+        Screen::WorkspaceCloseAsk,
+        Screen::WorkspaceVersions,
+        Screen::WorkspaceVersionList,
+        Screen::WorkspaceVersionDetails,
+        Screen::WorkspaceVersionViewing,
+        Screen::WorkspaceChangeElement,
+        Screen::WorkspaceChangeDiagram,
+        Screen::WorkspaceRestoreAsk,
+        Screen::WorkspaceBranches,
+        Screen::GuideVersionChange,
+        Screen::GuideVersionViewing,
+        Screen::GuideChangeElement,
+        Screen::GuideCompare,
+        Screen::GuideChangeDiagram,
+        Screen::WorkspaceSearch,
+        Screen::WorkspaceColumnSelected,
+        Screen::WorkspaceMappingTable,
+        Screen::WorkspaceDiagramEmpty,
+        Screen::WorkspaceDiagram,
+        Screen::WorkspaceToast,
+        Screen::WorkspaceGenerate,
+        Screen::WorkspaceAppearance,
+        Screen::WorkspaceAppearanceLine,
+        Screen::WorkspaceAppearancePicker,
+        Screen::WorkspaceEntityNew,
+        Screen::WorkspaceCardinality,
+        Screen::WorkspaceRelationship,
+    ];
+
     /// The user manual's guide screens, the walkthrough's twelve and Going further's ten.
     const GUIDE: [Screen; 22] = [
         Screen::GuideClasses,
@@ -3087,6 +3231,44 @@ mod tests {
                 let shell = h.state();
                 assert!(shell.session.is_some() && shell.canvas.active.is_some(), "{screen:?} in {theme:?} opens a diagram");
                 assert_eq!(shell.canvas.notice, None, "{screen:?} in {theme:?} draws without a refusal");
+            }
+        }
+    }
+
+    /// Every screen records, in both appearances, the automation ids `offscreen/automation-ids.tsv`
+    /// lists for it, with the same kinds and in the same order, and each id's toolkit id is the id
+    /// salted with "automation": moving the registry, or a screen's code, keeps every id agents and
+    /// tests find controls by. The screens are the snapshot example's, so a screen added there and
+    /// left out here fails too.
+    #[test]
+    fn every_screen_records_the_automation_ids_listed() {
+        let mut listed: std::collections::BTreeMap<&str, Vec<(&str, &str)>> = std::collections::BTreeMap::new();
+        for line in include_str!("offscreen/automation-ids.tsv").lines().filter(|l| !l.starts_with('#')) {
+            let cells: Vec<&str> = line.split('\t').collect();
+            let [screen, kind, id] = cells[..] else { panic!("a row is a screen, a kind and an id: {line:?}") };
+            listed.entry(screen).or_default().push((kind, id));
+        }
+        let every: std::collections::BTreeSet<String> = EVERY.iter().map(|s| format!("{s:?}")).collect();
+        let named: std::collections::BTreeSet<String> = include_str!("../examples/snapshot.rs")
+            .split("=> Screen::")
+            .skip(1)
+            .filter_map(|rest| rest.split(',').next())
+            .map(|name| name.trim().to_string())
+            .collect();
+        assert_eq!(named, every, "EVERY lists the screens the snapshot example names");
+        assert_eq!(listed.keys().map(|s| s.to_string()).collect::<std::collections::BTreeSet<_>>(), every, "the fixture lists every screen");
+        for screen in EVERY {
+            let want = &listed[format!("{screen:?}").as_str()];
+            for theme in [ThemeKind::Light, ThemeKind::Dark] {
+                let h = drawn(1440.0, 900.0, 1.0, theme, screen).unwrap_or_else(|e| panic!("{screen:?} in {theme:?}: {e}"));
+                let recorded: Vec<(&str, &str)> = h.state().widgets().iter().map(|w| (w.kind, w.id.as_str())).collect();
+                if recorded != *want {
+                    let rows: Vec<String> = recorded.iter().map(|(kind, id)| format!("{screen:?}\t{kind}\t{id}")).collect();
+                    panic!("{screen:?} in {theme:?} records other automation ids than the fixture lists; it records:\n{}", rows.join("\n"));
+                }
+                for (_, id) in recorded {
+                    assert_eq!(crate::widgets::egui_id(id), egui::Id::unique(("automation", id)), "{screen:?} in {theme:?}: the toolkit id of {id}");
+                }
             }
         }
     }
