@@ -232,6 +232,9 @@ a `Diagnosis`, ordered by the owner's id and then the binding's. UML's `open_pro
 in that order as a project opens, as the diagram crate's `OpenProblem` every notation reports in
 (AR-782): the element it concerns, a code (`default_diagram_missing`, `_duplicate`, `_dead_target`,
 `_wrong_kind`, `_wrong_owner`), the bindings and the diagram it names, and its English words.
+UML's `open_step` brings a model from before the root package up to date as a project opens
+(owner, 2026-11-04): while it holds packages and no root package, `uml.model.root`, which puts its
+top-level packages into the root named after the project as one step that can be undone.
 A package's first class diagram is bound as its default as it is made (AR-579): UML's
 `binds_default` holds for a package's, never a profile's, so `diagram.add` makes the binding with
 the diagram in one undo step; a second diagram, and one of a package that has class diagrams but no

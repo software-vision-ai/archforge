@@ -29817,6 +29817,66 @@ fn a_project_from_before_the_root_package_opens_with_its_packages_in_the_root_as
     assert_eq!(archforge_uml::commands::packages(st).len(), 2);
 }
 
+/// AR-790: a project saved before each notation answered its own open-time steps, holding both
+/// shapes an opening puts right (a table box too short for its two columns, and two packages from
+/// before the root package), opens to the very model, boxes and history the shell made of it
+/// before: ER's boxes grown as the rows are read, then UML's root package as one step that can be
+/// undone.
+#[test]
+fn a_project_saved_before_the_open_time_hooks_opens_to_the_same_model_and_boxes() {
+    // Ids of their own while the older project is made, so none is given again as it opens.
+    let ids = |at: u64| -> Box<dyn FnMut() -> archforge_mof::Uuid + Send> {
+        let mut n: u64 = 0;
+        Box::new(move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            archforge_mof::Uuid::v7(at, r)
+        })
+    };
+    let (tables, junctions) = archforge_notations::storage();
+    let snap = |s: &archforge_notations::Session| archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut made = archforge_notations::new_project_session("Commerce platform", ids(1_761_670_700_000)).unwrap();
+    let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+    let schema = id(made.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
+    let account = id(made.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Account" })).unwrap().value);
+    for name in ["employee_id", "employee_id_2"] {
+        made.execute("er.attribute.add", &serde_json::json!({ "entity": account, "name": name, "type": "UUID" })).unwrap();
+    }
+    let diagram =
+        id(made.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap().value);
+    made.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": account, "x": 0, "y": 0, "width": 240, "height": 72 }))
+        .unwrap();
+    // The packages as older projects saved them: at the top level, with no root package.
+    let older = archforge_notations::session_from_rows_repaired(&snap(&made), ids(1_761_670_710_000), |st| {
+        let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+        for name in ["Commerce", "Billing"] {
+            let p = st.create(archforge_uml::PACKAGE).unwrap();
+            st.set(p, archforge_uml::named_element::NAME, archforge_mof::Value::str(name)).unwrap();
+            st.push(model, archforge_core::model::MEMBER, archforge_mof::Value::Ref(p)).unwrap();
+        }
+    })
+    .unwrap();
+    let rows = snap(&older);
+    // What the shell made of it before: the boxes fitted as the rows were read, then the root.
+    // The shell's ids are the harness's, from the first.
+    let shells = test_ids();
+    let mut before = archforge_notations::session_from_rows_repaired(&rows, Box::new(move || shells()), crate::er_place::fit_tables).unwrap();
+    before.execute("uml.model.root", &serde_json::json!({})).unwrap();
+    let opened = crate::Opened { model: Some(std::sync::Arc::new(rows)), ..commerce() };
+    let (h, _host) = saving_harness(Some(opened), None);
+    let session = h.state().session.as_ref().expect("the older project opens");
+    assert_eq!(snap(session), snap(&before), "the same model and the same boxes");
+    assert_eq!((session.undo_label(), session.is_dirty()), (before.undo_label(), true), "the root package is one step, to be written");
+    // Both steps were taken: the box shows both columns, and the packages sit in the root.
+    let st = session.doc();
+    let node = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::NODE)).unwrap();
+    assert_eq!(archforge_diagram::grid::bounds_of(st, node).height, crate::er_place::content_height(2));
+    let root = archforge_uml::commands::root_package(st).expect("the root is made on opening");
+    let held: Vec<String> = archforge_uml::commands::subpackages(st, root).into_iter().map(|p| archforge_core::name_of(st, p)).collect();
+    assert_eq!(held, ["Commerce", "Billing"]);
+}
+
 #[test]
 fn the_activity_rail_puts_diagrams_above_models_in_its_look_and_its_keyboard_order() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {

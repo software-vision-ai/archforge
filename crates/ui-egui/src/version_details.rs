@@ -106,7 +106,7 @@ fn compare(before: Receiver<VersionRead>, after: Receiver<VersionRead>) -> Recei
         let found = old
             .and_then(|old| Ok((old, new?)))
             .map_err(|e| e.to_string())
-            .and_then(|(old, new)| classified(&old, &new, crate::er_place::fit_tables).map_err(|e| e.to_string()));
+            .and_then(|(old, new)| classified(&old, &new, crate::open_repair).map_err(|e| e.to_string()));
         // The model's root is no change of its own; model elements come first, then diagrams, then skills.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);

@@ -595,6 +595,12 @@ impl NotationUi for ErUi {
     fn resolve(&self, shell: &mut Shell, element: Uuid) {
         crate::connect::offer_mapping(shell, element);
     }
+
+    /// Every table box too short for its table's columns grows to show them all
+    /// ([`crate::er_place::fit_tables`]).
+    fn open_repair(&self, store: &mut Store) {
+        crate::er_place::fit_tables(store);
+    }
 }
 
 /// The words of ER's figures, which reach `tr` through the figures' descriptions, for the

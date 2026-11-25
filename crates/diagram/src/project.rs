@@ -193,6 +193,14 @@ pub trait Notation: Send + Sync + 'static {
         let _ = store;
         Vec::new()
     }
+    /// The change the notation makes to `store`, its project's model just opened, to bring a shape
+    /// an earlier version saved up to date ([`OpenStep`]): a command of its own, which the shell
+    /// runs as one step that is written and can be undone. None when the model needs none; none
+    /// by default, for a notation whose saved shape every version reads as it is.
+    fn open_step(&self, store: &Store) -> Option<OpenStep> {
+        let _ = store;
+        None
+    }
 }
 
 /// Whether no diagram node shows `element`: whether a selected line of it shows its end handles,
@@ -216,6 +224,18 @@ pub struct OpenProblem {
     pub objects: Vec<Obj>,
     /// The problem in English, for the command line; an interface says it in its own words.
     pub message: String,
+}
+
+/// A change a notation makes to a project's model as it opens ([`Notation::open_step`]): the
+/// command, its parameters, and what it does, in English, for the log when it is refused.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OpenStep {
+    /// The id of one of the notation's commands.
+    pub command: &'static str,
+    pub params: Json,
+    /// What could not be done when the command is refused, such as "the model's packages could
+    /// not be put under its root package".
+    pub failed: &'static str,
 }
 
 /// What a notation's removal took away and handed up (AR-675), which `element.remove` answers

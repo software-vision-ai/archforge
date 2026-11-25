@@ -104,6 +104,22 @@ pub fn open_problems(store: &Store) -> Vec<OpenProblem> {
     NOTATIONS.iter().flat_map(|n| n.open_problems(store)).collect()
 }
 
+/// Takes, on `session`, its project's model just opened, the step each notation of [`NOTATIONS`]
+/// makes to bring a shape an earlier version saved up to date ([`Notation::open_step`]), in the
+/// order of the notations, each asked of the model the steps before it left: each one step that is
+/// written with the next change and can be undone. What a refused step could not do, in English
+/// with the reason, one line each; a refused step changes nothing and the others are still taken.
+pub fn open_steps(session: &mut Session) -> Vec<String> {
+    let mut failed = Vec::new();
+    for notation in NOTATIONS {
+        let Some(step) = notation.open_step(session.doc()) else { continue };
+        if let Err(e) = session.execute(step.command, &step.params) {
+            failed.push(format!("{}: {e}", step.failed));
+        }
+    }
+    failed
+}
+
 /// A view of a project holding every notation.
 pub fn view() -> ProjectView {
     ProjectView::new(NOTATIONS)

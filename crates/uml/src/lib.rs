@@ -384,6 +384,17 @@ impl Notation for UmlNotation {
         };
         defaults::problems(store).into_iter().map(report).collect()
     }
+
+    /// A model from before the root package (owner, 2026-11-04): its top-level packages go into
+    /// the root, named after the project, through `uml.model.root`. None once there is a root, or
+    /// while the model holds no package.
+    fn open_step(&self, store: &Store) -> Option<archforge_diagram::OpenStep> {
+        (!commands::packages(store).is_empty() && commands::root_package(store).is_none()).then(|| archforge_diagram::OpenStep {
+            command: "uml.model.root",
+            params: serde_json::json!({}),
+            failed: "the model's packages could not be put under its root package",
+        })
+    }
 }
 
 /// A project's notations when it holds UML alone.
