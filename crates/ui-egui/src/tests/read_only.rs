@@ -210,6 +210,7 @@ fn the_banner_says_what_shows_and_goes_back() {
         assert_eq!(painted(&h).iter().filter(|t| t.contains("Viewing an earlier version · Read only")).count(), 2, "the banner and the status bar");
         assert!(painted(&h).iter().any(|t| t == "Read only"), "the badge");
         assert_eq!(crate::home::off_words(h.state()), "Read only while viewing a version");
+        assert!(h.state_mut().cx(|cx| cx.looking_only && cx.cx_ref().looking_only), "the narrow context and its twin know it");
         let at = rect_of(&h, "workspace.tools.pan").center();
         click(&mut h, at);
         assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Pan);
@@ -226,6 +227,7 @@ fn the_banner_says_what_shows_and_goes_back() {
         click(&mut h, at);
         h.run_steps(2);
         assert_eq!(h.state().viewing(), None);
+        assert!(!h.state_mut().cx(|cx| cx.looking_only), "the narrow context knows it no more");
         assert!(!painted_has(&h, "Viewing an earlier version"));
     });
 }

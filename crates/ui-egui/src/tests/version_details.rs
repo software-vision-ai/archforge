@@ -306,6 +306,22 @@ fn details_give_way_to_the_canvas() {
     });
 }
 
+/// Opening through the narrow context runs the centre's half at once and leaves the details only once
+/// the call returns, a refused opening too, as the shell's way in does.
+#[test]
+fn details_give_way_to_an_opening_once_the_call_returns() {
+    in_both(|h, _| {
+        opened(h, "c3");
+        let none = archforge_mof::Uuid::v7(0, [0; 10]);
+        h.state_mut().cx(|cx| {
+            crate::canvas::open_cx(cx, none);
+            assert!(cx.canvas.notice.is_some(), "the centre's half ran at once: no such diagram");
+            assert_eq!(cx.requests, [crate::cx::Request::HideVersionDetails], "the details wait for the call to return");
+        });
+        assert!(h.state().versions.details.is_none(), "what was opened would be hidden");
+    });
+}
+
 /// The cards say what changed from the version before to this one: the model's elements first,
 /// then diagrams, then skills, and the first version reads nothing. The later version lacks what was
 /// added, so only the details say Removed; the skill's id sorts first and the diagram's before the schema's.

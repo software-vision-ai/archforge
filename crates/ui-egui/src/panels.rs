@@ -17,6 +17,7 @@ use serde_json::json;
 pub use archforge_shell_api::notation_ui::MenuId;
 pub(crate) use archforge_shell_api::notation_ui::{Editor, OpenEditor, Subject};
 
+use crate::cx::{Ctx, CtxRef, Request};
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx};
 use crate::notation_ui::Words;
@@ -120,16 +121,21 @@ pub(crate) fn editing(s: &State, notations: &crate::notation_ui::NotationStates)
     s.name.is_some() || notations.editing()
 }
 
+/// [`reveal_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, editor: Editor, card: Rect) {
+    shell.cx(|cx| reveal_cx(cx, ui, editor, card))
+}
+
 /// Brings the card of `editor`, once drawn, into the body's view when [`to_reveal`] asks: an opened
 /// card's foot if it fits, else its top; a refused card's foot, with its Apply, Cancel and refusal,
 /// also when the card is taller than the body. A card drawn after another's reveal counts the scroll
 /// that one moved, so the last reveal of a draw is the one in view.
-pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, editor: Editor, card: Rect) {
-    let Some(body) = shell.panels.body else { return };
-    let Some(at) = shell.panels.reveal.iter().position(|(e, _)| *e == editor) else { return };
-    let (_, refused) = shell.panels.reveal.remove(at);
+pub(crate) fn reveal_cx(cx: &mut Ctx, ui: &egui::Ui, editor: Editor, card: Rect) {
+    let Some(body) = cx.panels.body else { return };
+    let Some(at) = cx.panels.reveal.iter().position(|(e, _)| *e == editor) else { return };
+    let (_, refused) = cx.panels.reveal.remove(at);
     let part = if refused { Rect::from_min_max(pos2(card.left(), card.top().max(card.bottom() - body.height() + 16.0)), card.max) } else { card };
-    shell.panels.scroll += into_view(body, part.translate(vec2(0.0, shell.panels.drawn - shell.panels.scroll)));
+    cx.panels.scroll += into_view(body, part.translate(vec2(0.0, cx.panels.drawn - cx.panels.scroll)));
     ui.ctx().request_repaint();
 }
 
@@ -223,10 +229,15 @@ fn subject(shell: &Shell, project: &str) -> Subject {
     }
 }
 
+/// [`run_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    shell.cx(|cx| run_cx(cx, id, params))
+}
+
 /// Runs a command on the open project's session; a refusal comes back as the panel says it
 /// ([`refusal`]).
-pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
+pub(crate) fn run_cx(cx: &mut Ctx, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    let Some(session) = cx.session.as_mut() else { return Err(tr("The model could not be opened")) };
     session.execute(id, &params).map(|o| o.value).map_err(|e| refusal(&e))
 }
 
@@ -420,16 +431,21 @@ pub fn retain_valid(state: &mut State, store: &Store) {
 
 // Shared drawing.
 
+/// [`section_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn section(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, title: &str, add: Option<(&str, &str)>) -> Option<f32> {
+    shell.cx(|cx| section_cx(cx, ui, p, r, y, title, add))
+}
+
 /// A section's full-width top line and its title row with an optional `+`; gives the y under it,
 /// or none when the `+` was clicked this frame.
-pub(crate) fn section(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, title: &str, add: Option<(&str, &str)>) -> Option<f32> {
+pub(crate) fn section_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, title: &str, add: Option<(&str, &str)>) -> Option<f32> {
     let paint = ui.painter();
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), 1.0)), 0.0, p.border);
     ux::text(paint, pos2(r.left() + PAD, y + 17.0), title, types::UI, p.text, Some((r.width() - 2.0 * PAD - 40.0).max(0.0)));
     if let Some((id, hint)) = add {
         let b = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
         ux::icon_in(paint, Rect::from_center_size(b.center(), Vec2::splat(16.0)), &icons::PLUS, p.text_secondary);
-        if control(shell, ui, id, "button", b, true).on_hover_text(tr(hint)).clicked() {
+        if control_cx(cx, ui, id, "button", b, true).on_hover_text(tr(hint)).clicked() {
             return None;
         }
     }
@@ -446,8 +462,7 @@ pub(crate) enum FieldOut {
     Cancel,
 }
 
-/// A label over a filled text field that commits on Enter, and when it loses the keyboard if
-/// `commit_on_blur`; gives whether it was committed this frame ([`edit_field`] says more).
+/// [`text_field_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn text_field(
     shell: &mut Shell,
     ui: &mut egui::Ui,
@@ -461,7 +476,25 @@ pub(crate) fn text_field(
     take_focus: bool,
     commit_on_blur: bool,
 ) -> bool {
-    edit_field(shell, ui, p, at, width, id, label, text, limit, take_focus, commit_on_blur) == FieldOut::Commit
+    shell.cx(|cx| text_field_cx(cx, ui, p, at, width, id, label, text, limit, take_focus, commit_on_blur))
+}
+
+/// A label over a filled text field that commits on Enter, and when it loses the keyboard if
+/// `commit_on_blur`; gives whether it was committed this frame ([`edit_field_cx`] says more).
+pub(crate) fn text_field_cx(
+    cx: &mut Ctx,
+    ui: &mut egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    text: &mut String,
+    limit: usize,
+    take_focus: bool,
+    commit_on_blur: bool,
+) -> bool {
+    edit_field_cx(cx, ui, p, at, width, id, label, text, limit, take_focus, commit_on_blur) == FieldOut::Commit
 }
 
 /// Records which widget held the keyboard as each frame begins, before the toolkit takes it away
@@ -489,10 +522,27 @@ pub(crate) fn keys_at_start(ui: &egui::Ui) -> Option<egui::Id> {
     ui.data(|d| d.get_temp::<Option<egui::Id>>(widgets::egui_id("archforge.keys-at-start"))).flatten()
 }
 
-/// [`text_field`], saying what it asked for. One that commits on blur is written in place, as in
-/// Models: Enter or leaving it commits, Escape gives the edit up (AR-417); others leave Escape be.
+/// [`edit_field_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn edit_field(
     shell: &mut Shell,
+    ui: &mut egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    text: &mut String,
+    limit: usize,
+    take_focus: bool,
+    commit_on_blur: bool,
+) -> FieldOut {
+    shell.cx(|cx| edit_field_cx(cx, ui, p, at, width, id, label, text, limit, take_focus, commit_on_blur))
+}
+
+/// [`text_field_cx`], saying what it asked for. One that commits on blur is written in place, as in
+/// Models: Enter or leaving it commits, Escape gives the edit up (AR-417); others leave Escape be.
+pub(crate) fn edit_field_cx(
+    cx: &mut Ctx,
     ui: &mut egui::Ui,
     p: &Palette,
     at: egui::Pos2,
@@ -508,7 +558,7 @@ pub(crate) fn edit_field(
     ux::text(&paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
     paint.rect_filled(field, 6.0, p.field);
-    widgets::record_visible(ui, &mut shell.registry, id, "field", field);
+    widgets::record_visible(ui, cx.registry, id, "field", field);
     let inner = field_inner(ui, field);
     let eid = widgets::egui_id(id);
     // Escape stays with a field that commits on blur and cancels there (checklist 118).
@@ -558,9 +608,24 @@ pub(crate) fn field_inner(ui: &egui::Ui, field: Rect) -> Rect {
     )
 }
 
-/// A filled select showing `value`; a click opens or closes `menu`.
+/// [`select_field_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn select_field(
     shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    value: &str,
+    menu: MenuId,
+) -> Rect {
+    shell.cx(|cx| select_field_cx(cx, ui, p, at, width, id, label, value, menu))
+}
+
+/// A filled select showing `value`; a click opens or closes `menu`.
+pub(crate) fn select_field_cx(
+    cx: &mut Ctx,
     ui: &egui::Ui,
     p: &Palette,
     at: egui::Pos2,
@@ -577,17 +642,32 @@ pub(crate) fn select_field(
     ux::text_mid(paint, field.left() + 8.0, field.center().y, value, types::SMALL, p.text, Some((width - 36.0).max(0.0)));
     ux::icon_mid(paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
     // Its label and what it shows, for assistive technology.
-    if control(shell, ui, id, "select", field, true).accessible_name(format!("{label}: {value}")).clicked() {
-        shell.panels.menu = if shell.panels.menu == Some(menu) { None } else { Some(menu) };
+    if control_cx(cx, ui, id, "select", field, true).accessible_name(format!("{label}: {value}")).clicked() {
+        cx.panels.menu = if cx.panels.menu == Some(menu) { None } else { Some(menu) };
     }
     field
 }
 
-/// [`select_field`] for a package's path, its names from the top in `parts` (`Commerce platform
-/// › Orders`): too long for the field, it is cut from its front, so the package's own name shows
-/// (`… › Orders`); the whole path is its tooltip and accessible name.
+/// [`path_select_field_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn path_select_field(
     shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    parts: &[String],
+    menu: MenuId,
+) -> Rect {
+    shell.cx(|cx| path_select_field_cx(cx, ui, p, at, width, id, label, parts, menu))
+}
+
+/// [`select_field_cx`] for a package's path, its names from the top in `parts` (`Commerce platform
+/// › Orders`): too long for the field, it is cut from its front, so the package's own name shows
+/// (`… › Orders`); the whole path is its tooltip and accessible name.
+pub(crate) fn path_select_field_cx(
+    cx: &mut Ctx,
     ui: &egui::Ui,
     p: &Palette,
     at: egui::Pos2,
@@ -604,10 +684,10 @@ pub(crate) fn path_select_field(
     paint.rect_filled(field, 6.0, p.field);
     ux::text_mid_front(paint, field.left() + 8.0, field.center().y, parts, PATH_SEP, types::SMALL, p.text, (width - 36.0).max(0.0));
     ux::icon_mid(paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
-    let resp = control(shell, ui, id, "select", field, true).accessible_name(format!("{label}: {path}"));
+    let resp = control_cx(cx, ui, id, "select", field, true).accessible_name(format!("{label}: {path}"));
     let resp = if path.is_empty() { resp } else { resp.on_hover_text(&path) };
     if resp.clicked() {
-        shell.panels.menu = if shell.panels.menu == Some(menu) { None } else { Some(menu) };
+        cx.panels.menu = if cx.panels.menu == Some(menu) { None } else { Some(menu) };
     }
     field
 }
@@ -659,11 +739,7 @@ fn combo_height(n: usize) -> f32 {
     n as f32 * 30.0 + 78.0
 }
 
-/// A label over a filled field that takes typing, with a chevron that opens its options above or
-/// under it. The keys go to the menu while it is open (the arrows move, Enter picks, Escape
-/// closes it) and to the field otherwise (Alt+Down opens the menu, Enter commits, Escape cancels).
-/// A refused field is ringed in the danger colour and its reason is the field's description;
-/// the caller draws the reason under it. Leaving the field closes its menu.
+/// [`editable_select_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn editable_select(
     shell: &mut Shell,
     ui: &mut egui::Ui,
@@ -673,18 +749,27 @@ pub(crate) fn editable_select(
     text: &mut String,
     c: &Combo,
 ) -> ComboOut {
+    shell.cx(|cx| editable_select_cx(cx, ui, p, at, width, text, c))
+}
+
+/// A label over a filled field that takes typing, with a chevron that opens its options above or
+/// under it. The keys go to the menu while it is open (the arrows move, Enter picks, Escape
+/// closes it) and to the field otherwise (Alt+Down opens the menu, Enter commits, Escape cancels).
+/// A refused field is ringed in the danger colour and its reason is the field's description;
+/// the caller draws the reason under it. Leaving the field closes its menu.
+pub(crate) fn editable_select_cx(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, text: &mut String, c: &Combo) -> ComboOut {
     let paint = ui.painter().clone();
     ux::text(&paint, at, c.label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
     paint.rect_filled(field, 6.0, p.field);
-    widgets::record_visible(ui, &mut shell.registry, c.id, "field", field);
+    widgets::record_visible(ui, cx.registry, c.id, "field", field);
     let eid = widgets::egui_id(c.id);
     let rows = c.options.len() + 1;
     // The menu is as wide as the design's, or wider when its hint needs it (a longer language).
     let hint_w = ux::galley(&paint, c.hint, types::CAPTION, p.text_secondary, None).size().x;
     let list_w = (hint_w + 24.0).clamp(COMBO_W, COMBO_MAX_W);
     let list = ux::drop_rect(ui, field, field.right() - list_w, vec2(list_w, combo_height(c.options.len())));
-    let was_open = shell.panels.menu == Some(c.menu);
+    let was_open = cx.panels.menu == Some(c.menu);
     let focused = ui.memory(|m| m.has_focus(eid));
     let mut out = ComboOut::Idle;
     // The keys first, before the text field takes them. The open menu's arrows and Escape act pressed
@@ -692,25 +777,25 @@ pub(crate) fn editable_select(
     // keeps Shift and Alt on purpose, as the field would end its input on them too.
     if was_open {
         if ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::ArrowDown)) {
-            shell.panels.highlight = Some(shell.panels.highlight.map_or(0, |h| (h + 1).min(rows - 1)));
+            cx.panels.highlight = Some(cx.panels.highlight.map_or(0, |h| (h + 1).min(rows - 1)));
         }
         if ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::ArrowUp)) {
-            shell.panels.highlight = Some(shell.panels.highlight.map_or(0, |h| h.saturating_sub(1)));
+            cx.panels.highlight = Some(cx.panels.highlight.map_or(0, |h| h.saturating_sub(1)));
         }
         if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
-            out = shell.panels.highlight.map_or(ComboOut::Commit, ComboOut::Pick);
-            shell.panels.menu = None;
+            out = cx.panels.highlight.map_or(ComboOut::Commit, ComboOut::Pick);
+            cx.panels.menu = None;
         }
         if ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::Escape)) {
-            shell.panels.menu = None;
+            cx.panels.menu = None;
         }
     } else if focused {
         // Alt+Down exactly (`consume_key` lets Shift through): with Shift more the press stays
         // for the field, which selects to its end, as Shift with Down does.
         let open = crate::actions::Keys { modifiers: egui::Modifiers::ALT, key: egui::Key::ArrowDown };
         if ui.input_mut(|i| crate::actions::take(i, &open)) {
-            shell.panels.menu = Some(c.menu);
-            shell.panels.highlight = c.current;
+            cx.panels.menu = Some(c.menu);
+            cx.panels.highlight = c.current;
         } else if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             out = ComboOut::Cancel;
             ui.memory_mut(|m| m.surrender_focus(eid));
@@ -733,13 +818,13 @@ pub(crate) fn editable_select(
         .desired_width(inner.width());
     let resp = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner))).response;
     // Typing takes over from the row the keys reached: Enter then writes the typing.
-    if resp.changed() && shell.panels.menu == Some(c.menu) {
-        shell.panels.highlight = None;
+    if resp.changed() && cx.panels.menu == Some(c.menu) {
+        cx.panels.highlight = None;
     }
     // The row the keys reached is the field's active descendant, so a screen reader says which
     // one Enter picks as the arrows move.
-    let open = shell.panels.menu == Some(c.menu);
-    let reached = shell.panels.highlight.filter(|_| open).map(|h| {
+    let open = cx.panels.menu == Some(c.menu);
+    let reached = cx.panels.highlight.filter(|_| open).map(|h| {
         let row = if h < c.options.len() { format!("{}.menu.{h}", c.id) } else { format!("{}.menu.clear", c.id) };
         widgets::egui_id(&row).accesskit_id()
     });
@@ -767,28 +852,28 @@ pub(crate) fn editable_select(
         } else {
             // Left another way (a click elsewhere, Tab): its menu goes too, so its keys stop.
             out = ComboOut::Commit;
-            if shell.panels.menu == Some(c.menu) {
-                shell.panels.menu = None;
+            if cx.panels.menu == Some(c.menu) {
+                cx.panels.menu = None;
             }
         }
     }
-    let ring = if c.refused.is_some() { Some(p.danger) } else { (resp.has_focus() || shell.panels.menu == Some(c.menu)).then_some(p.focus) };
+    let ring = if c.refused.is_some() { Some(p.danger) } else { (resp.has_focus() || cx.panels.menu == Some(c.menu)).then_some(p.focus) };
     if let Some(ink) = ring {
         paint.rect_stroke(field, 6.0, Stroke::new(1.0, ink), StrokeKind::Inside);
     }
     ux::icon_mid(&paint, pos2(field.right() - 16.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
-    if control(shell, ui, &format!("{}.menu", c.id), "button", chevron, true).on_hover_text(c.pick).accessible_name(c.pick_name).clicked() {
-        if shell.panels.menu == Some(c.menu) {
-            shell.panels.menu = None;
+    if control_cx(cx, ui, &format!("{}.menu", c.id), "button", chevron, true).on_hover_text(c.pick).accessible_name(c.pick_name).clicked() {
+        if cx.panels.menu == Some(c.menu) {
+            cx.panels.menu = None;
         } else {
-            shell.panels.menu = Some(c.menu);
-            shell.panels.highlight = c.current;
+            cx.panels.menu = Some(c.menu);
+            cx.panels.highlight = c.current;
             // The field keeps the keyboard, so the keys reach the menu and not the canvas.
             ui.memory_mut(|m| m.request_focus(eid));
         }
     }
-    if shell.panels.menu == Some(c.menu)
-        && let Some(k) = ux::overlay(ui, widgets::egui_id(&format!("{}.menu.layer", c.id)), list, |ui| combo_menu(shell, ui, p, field, list, c))
+    if cx.panels.menu == Some(c.menu)
+        && let Some(k) = ux::overlay(ui, widgets::egui_id(&format!("{}.menu.layer", c.id)), list, |ui| combo_menu(cx, ui, p, field, list, c))
     {
         out = ComboOut::Pick(k);
     }
@@ -797,7 +882,7 @@ pub(crate) fn editable_select(
 
 /// The editable select's open menu over `r`: its options, the current one ticked, the hint, then
 /// Clear; gives the row picked and closes on a pick or a press elsewhere.
-fn combo_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, c: &Combo) -> Option<usize> {
+fn combo_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, c: &Combo) -> Option<usize> {
     let paint = ui.painter();
     ux::shadow(paint, r, 8.0, p.shadow);
     paint.rect_filled(r, 8.0, p.surface);
@@ -808,15 +893,15 @@ fn combo_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Re
     let mut picked = None;
     for (i, word, top, id) in rows.chain([clear]) {
         let row = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + top), vec2(r.width() - 8.0, 30.0));
-        let resp = control(shell, ui, &id, "menu-item", row, true).accessible_name(word.as_str());
+        let resp = control_cx(cx, ui, &id, "menu-item", row, true).accessible_name(word.as_str());
         let on = c.current == Some(i);
         ui.ctx().accesskit_node_builder(resp.id, |node| node.set_selected(on));
         if on {
             paint.rect_filled(row, 5.0, p.accent_tint);
-        } else if resp.hovered() || shell.panels.highlight == Some(i) {
+        } else if resp.hovered() || cx.panels.highlight == Some(i) {
             paint.rect_filled(row, 5.0, p.page);
         }
-        if on && shell.panels.highlight == Some(i) {
+        if on && cx.panels.highlight == Some(i) {
             paint.rect_stroke(row, 5.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
         }
         ux::text(paint, row.min + vec2(10.0, 7.5), &word, types::SMALL, p.text, Some((row.width() - 40.0).max(0.0)));
@@ -830,21 +915,23 @@ fn combo_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Re
     ux::text(paint, pos2(r.left() + 12.0, r.top() + 4.0 + n as f32 * 30.0 + 10.0), c.hint, types::CAPTION, p.text_secondary, Some(r.width() - 24.0));
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| r.contains(pos) || anchor.contains(pos)));
     if picked.is_some() || outside {
-        shell.panels.menu = None;
+        cx.panels.menu = None;
     }
     picked
 }
 
-/// A menu under `anchor` with `items`; gives the index picked, closing the menu on a pick or a
-/// click elsewhere.
+/// [`menu_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String]) -> Option<usize> {
-    menu_frame(shell, ui, p, anchor, id, MenuRows { items, notes: &[], item_parts: &[], note_parts: &[] }, 0.0)
+    shell.cx(|cx| menu_cx(cx, ui, p, anchor, id, items))
 }
 
-/// [`menu`] with a muted note after an item's text where `notes` has one (empty for none), such as
-/// the package that tells two types of one name apart; the note joins the row's accessible name.
-/// `note_parts` holds a note's parts when it is a package's path: too long for its row, it folds
-/// from its front (`… › Orders › EU`) and the row's tooltip says it whole.
+/// A menu under `anchor` with `items`; gives the index picked, closing the menu on a pick or a
+/// click elsewhere.
+pub(crate) fn menu_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String]) -> Option<usize> {
+    menu_frame(cx, ui, p, anchor, id, MenuRows { items, notes: &[], item_parts: &[], note_parts: &[] }, 0.0)
+}
+
+/// [`menu_noted_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn menu_noted(
     shell: &mut Shell,
     ui: &egui::Ui,
@@ -855,21 +942,43 @@ pub(crate) fn menu_noted(
     notes: &[String],
     note_parts: &[Vec<String>],
 ) -> Option<usize> {
-    let width = noted_width(ui, p, items, notes);
-    menu_frame(shell, ui, p, anchor, id, MenuRows { items, notes, item_parts: &[], note_parts }, width)
+    shell.cx(|cx| menu_noted_cx(cx, ui, p, anchor, id, items, notes, note_parts))
 }
 
-/// [`menu`] of package paths, each given by its names from the top (`paths`): as wide as the
+/// [`menu_cx`] with a muted note after an item's text where `notes` has one (empty for none), such as
+/// the package that tells two types of one name apart; the note joins the row's accessible name.
+/// `note_parts` holds a note's parts when it is a package's path: too long for its row, it folds
+/// from its front (`… › Orders › EU`) and the row's tooltip says it whole.
+pub(crate) fn menu_noted_cx(
+    cx: &mut Ctx,
+    ui: &egui::Ui,
+    p: &Palette,
+    anchor: Rect,
+    id: &str,
+    items: &[String],
+    notes: &[String],
+    note_parts: &[Vec<String>],
+) -> Option<usize> {
+    let width = noted_width(ui, p, items, notes);
+    menu_frame(cx, ui, p, anchor, id, MenuRows { items, notes, item_parts: &[], note_parts }, width)
+}
+
+/// [`menu_paths_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn menu_paths(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, paths: &[Vec<String>]) -> Option<usize> {
+    shell.cx(|cx| menu_paths_cx(cx, ui, p, anchor, id, paths))
+}
+
+/// [`menu_cx`] of package paths, each given by its names from the top (`paths`): as wide as the
 /// longest needs, inside the window; a path still too long folds from its front, so the packages
 /// at its end, the ones that tell it apart, show (`… › Orders › EU`), and its row's tooltip says
 /// it whole.
-pub(crate) fn menu_paths(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, paths: &[Vec<String>]) -> Option<usize> {
+pub(crate) fn menu_paths_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, paths: &[Vec<String>]) -> Option<usize> {
     let items: Vec<String> = paths.iter().map(|parts| parts.join(PATH_SEP)).collect();
     let width = {
         let paint = ui.painter();
         items.iter().take(MAX_MEASURED).map(|t| 8.0 + 10.0 + ux::galley(paint, t, types::SMALL, p.text, None).size().x + 10.0).fold(0.0, f32::max)
     };
-    menu_frame(shell, ui, p, anchor, id, MenuRows { items: &items, notes: &[], item_parts: paths, note_parts: &[] }, width)
+    menu_frame(cx, ui, p, anchor, id, MenuRows { items: &items, notes: &[], item_parts: paths, note_parts: &[] }, width)
 }
 
 /// What a menu's rows show: each item, its muted note (empty for none), and, where the item or the
@@ -885,7 +994,7 @@ struct MenuRows<'a> {
 /// The open menu under `anchor`, at least `wanted` wide and as wide as the anchor, inside the
 /// window: under the field, else above it; longer than either side has room for, it takes the
 /// side with more and its rows scroll.
-fn menu_frame(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, rows: MenuRows<'_>, wanted: f32) -> Option<usize> {
+fn menu_frame(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, rows: MenuRows<'_>, wanted: f32) -> Option<usize> {
     let full = 8.0 + rows.items.len() as f32 * MENU_ROW;
     let window = ui.ctx().content_rect();
     let (below, above) = (window.bottom() - 8.0 - (anchor.bottom() + 4.0), anchor.top() - 4.0 - (window.top() + 8.0));
@@ -897,7 +1006,7 @@ fn menu_frame(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &
         let height = full.min(above.max(8.0 + MENU_ROW));
         Rect::from_min_size(pos2(left, anchor.top() - 4.0 - height), vec2(width, height))
     };
-    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), r, |ui| menu_body(shell, ui, p, anchor, r, id, rows))
+    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), r, |ui| menu_body(cx, ui, p, anchor, r, id, rows))
 }
 
 /// A menu row's height.
@@ -950,7 +1059,7 @@ pub struct TypeChoices {
 /// after its text where `notes` has one; the wheel and the arrow keys scroll, Enter or a click
 /// picks, Escape or a press elsewhere closes.
 #[allow(clippy::too_many_arguments, reason = "a menu is drawn for its anchor, frame, id, items and notes")]
-fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, rows_of: MenuRows<'_>) -> Option<usize> {
+fn menu_body(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, rows_of: MenuRows<'_>) -> Option<usize> {
     let MenuRows { items, notes, item_parts, note_parts } = rows_of;
     let paint = ui.painter();
     ux::shadow(paint, r, 8.0, p.shadow);
@@ -958,7 +1067,7 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     paint.rect_stroke(r, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     // Its rows scroll with the wheel over it, as far as the last.
     let most = (8.0 + items.len() as f32 * MENU_ROW - r.height()).max(0.0);
-    let mut offset = shell.panels.menu_scroll.as_ref().filter(|(of, _)| of == id).map_or(0.0, |(_, o)| *o);
+    let mut offset = cx.panels.menu_scroll.as_ref().filter(|(of, _)| of == id).map_or(0.0, |(_, o)| *o);
     if ui.input(|i| i.pointer.hover_pos().is_some_and(|at| r.contains(at))) {
         offset -= ui.input(|i| i.smooth_scroll_delta.y);
     }
@@ -970,12 +1079,12 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     fn as_key(k: &(String, String)) -> (&str, &str) {
         (k.0.as_str(), k.1.as_str())
     }
-    let drawn = shell.panels.menu_reached_rows.clone().filter(|d| d.menu == id);
-    let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == id).map(|(_, i)| *i);
+    let drawn = cx.panels.menu_reached_rows.clone().filter(|d| d.menu == id);
+    let mut reached = cx.panels.menu_reached.as_ref().filter(|(of, _)| of == id).map(|(_, i)| *i);
     // When the rows change, a reach whose text and note more than one row shares, before or after,
     // is dropped: a twin come in may stand where it was. Unchanged rows keep it, twins and all.
     let fingerprint = egui::Id::unique((id, items, notes)).value();
-    let before = shell.panels.menu_ordinals.as_ref().filter(|o| o.menu == id && o.rows != fingerprint);
+    let before = cx.panels.menu_ordinals.as_ref().filter(|o| o.menu == id && o.rows != fingerprint);
     if let (Some(before), Some(d)) = (before, &drawn) {
         let twin_before = before.twins.iter().any(|twin| as_key(twin) == as_key(&d.row));
         let twin_now = (0..items.len()).filter(|k| key_of(*k) == Some(as_key(&d.row))).nth(1).is_some();
@@ -1032,13 +1141,13 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
             _ => true,
         };
     let owned = |(text, note): (&str, &str)| (text.to_string(), note.to_string());
-    shell.panels.menu_reached = reached.map(|i| (id.to_string(), i));
-    shell.panels.menu_reached_rows = reached.and_then(|i| {
+    cx.panels.menu_reached = reached.map(|i| (id.to_string(), i));
+    cx.panels.menu_reached_rows = reached.and_then(|i| {
         let (above, below) = (i.checked_sub(1).and_then(key_of).map(owned), i.checked_add(1).and_then(key_of).map(owned));
         Some(ReachedRows { menu: id.to_string(), row: owned(key_of(i)?), above, below })
     });
     let offset = offset.clamp(0.0, most);
-    shell.panels.menu_scroll = Some((id.to_string(), offset));
+    cx.panels.menu_scroll = Some((id.to_string(), offset));
     let rows = r.shrink2(vec2(0.0, 4.0));
     let paint = paint.with_clip_rect(rows);
     let mut picked = None;
@@ -1053,10 +1162,10 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     // by a screen reader still reading the rows before, and the menu stays for a click on what now
     // shows. A press held over the change is released on such a row for nothing too.
     let (now, held, released) = ui.input(|i| (i.time, i.pointer.primary_down(), i.pointer.primary_released()));
-    let kept = shell.panels.menu_unsure.take().filter(|(of, _, until)| of == id && (held || released || now < *until));
+    let kept = cx.panels.menu_unsure.take().filter(|(of, _, until)| of == id && (held || released || now < *until));
     let mut until = kept.as_ref().map_or(now, |(.., until)| *until);
     let mut unsure: Vec<(String, String)> = kept.map(|(_, twins, _)| twins).unwrap_or_default();
-    if shell.panels.menu_ordinals.as_ref().is_none_or(|o| o.menu != id || o.rows != fingerprint) {
+    if cx.panels.menu_ordinals.as_ref().is_none_or(|o| o.menu != id || o.rows != fingerprint) {
         let mut nth_of: std::collections::HashMap<(&str, &str), usize> = std::collections::HashMap::new();
         let nth = (0..items.len())
             .filter_map(key_of)
@@ -1068,17 +1177,17 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
             .collect::<Vec<_>>();
         let twins: Vec<(String, String)> =
             nth_of.into_iter().filter(|(_, n)| *n > 1).map(|((text, note), _)| (text.to_string(), note.to_string())).collect();
-        if let Some(before) = shell.panels.menu_ordinals.take().filter(|o| o.menu == id) {
+        if let Some(before) = cx.panels.menu_ordinals.take().filter(|o| o.menu == id) {
             unsure.extend(before.twins.into_iter().chain(twins.iter().cloned()));
             until = now + TWIN_HOLD;
         }
-        shell.panels.menu_ordinals = Some(MenuOrdinals { menu: id.to_string(), rows: fingerprint, nth, twins });
+        cx.panels.menu_ordinals = Some(MenuOrdinals { menu: id.to_string(), rows: fingerprint, nth, twins });
     }
     if !unsure.is_empty() && (held || now < until) {
-        shell.panels.menu_unsure = Some((id.to_string(), unsure.clone(), until));
+        cx.panels.menu_unsure = Some((id.to_string(), unsure.clone(), until));
     }
     let shown = first..first.saturating_add(in_sight).min(items.len());
-    let nths = shell.panels.menu_ordinals.as_ref().and_then(|o| o.nth.get(shown)).map(<[usize]>::to_vec).unwrap_or_default();
+    let nths = cx.panels.menu_ordinals.as_ref().and_then(|o| o.nth.get(shown)).map(<[usize]>::to_vec).unwrap_or_default();
     for (i, item) in items.iter().enumerate().skip(first).take(in_sight) {
         let key = key_of(i).unwrap_or((item.as_str(), ""));
         let nth = nths.get(i.saturating_sub(first)).copied().unwrap_or(0);
@@ -1090,7 +1199,7 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
         // Automation finds the row by its place; the toolkit knows it by its text, so a press, a
         // release or a screen reader's click meant for a row that moved or went (Open, as a folder
         // pick ends or starts) never lands on the row now in its place (AR-749).
-        widgets::record_visible(ui, &mut shell.registry, &format!("{id}.{i}"), "menu-item", row.intersect(rows));
+        widgets::record_visible(ui, cx.registry, &format!("{id}.{i}"), "menu-item", row.intersect(rows));
         let resp = ui.interact(row.intersect(rows), menu_row_id(id, key, nth), egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
         let resp = match note {
             Some(n) => resp.accessible_name(fmt(&tr("{name} · {where}"), &[("name", item), ("where", n)])),
@@ -1141,10 +1250,10 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| r.contains(pos) || anchor.contains(pos)));
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.menu = None;
-        shell.panels.menu_reached = None;
-        shell.panels.menu_reached_rows = None;
-        shell.panels.menu_unsure = None;
+        cx.panels.menu = None;
+        cx.panels.menu_reached = None;
+        cx.panels.menu_reached_rows = None;
+        cx.panels.menu_unsure = None;
     }
     picked
 }
@@ -1155,8 +1264,26 @@ pub(crate) fn menu_row_id(id: &str, key: (&str, &str), nth: usize) -> egui::Id {
     widgets::egui_id(id).with(("row", key, nth))
 }
 
-/// A check box with its label; a click flips `on`.
+/// A control's hit area, recorded for automation. A control whose screen is not built yet says so
+/// on hover and its click is never taken.
+pub(crate) fn control_cx(cx: &mut Ctx, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> egui::Response {
+    widgets::record_visible(ui, cx.registry, id, kind, rect);
+    let resp = ui.interact(rect, widgets::egui_id(id), if live { egui::Sense::click() } else { egui::Sense::hover() });
+    if live { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp.on_hover_text(off_words_cx(&cx.cx_ref())) }
+}
+
+/// What a control that is off says.
+pub(crate) fn off_words_cx(cx: &CtxRef) -> String {
+    if cx.looking_only { tr("Read only while viewing a version") } else { tr("Not available yet") }
+}
+
+/// [`check_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn check(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, id: &str, label: &str, on: &mut bool) -> f32 {
+    shell.cx(|cx| check_cx(cx, ui, p, at, id, label, on))
+}
+
+/// A check box with its label; a click flips `on`.
+pub(crate) fn check_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: egui::Pos2, id: &str, label: &str, on: &mut bool) -> f32 {
     let paint = ui.painter();
     let b = Rect::from_min_size(at, Vec2::splat(16.0));
     paint.rect_filled(b, 4.0, if *on { p.accent_fill } else { p.surface });
@@ -1166,15 +1293,30 @@ pub(crate) fn check(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos
     }
     let g = ux::text(paint, at + vec2(24.0, -1.0), label, types::SMALL, p.text, None);
     let hit = Rect::from_min_max(b.min, pos2(g.right(), b.bottom()));
-    if control(shell, ui, id, "check", hit, true).accessible_name(label).clicked() {
+    if control_cx(cx, ui, id, "check", hit, true).accessible_name(label).clicked() {
         *on = !*on;
     }
     g.right() + 20.0
 }
 
-/// An icon button of 28 px: quiet, bordered or primary.
+/// [`icon_button_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn icon_button(
     shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    id: &str,
+    icon: &ux::Icon,
+    ink: ux::Colour,
+    fill: Option<ux::Colour>,
+    hint: &str,
+) -> bool {
+    shell.cx(|cx| icon_button_cx(cx, ui, p, at, id, icon, ink, fill, hint))
+}
+
+/// An icon button of 28 px: quiet, bordered or primary.
+pub(crate) fn icon_button_cx(
+    cx: &mut Ctx,
     ui: &egui::Ui,
     p: &Palette,
     at: egui::Pos2,
@@ -1195,17 +1337,22 @@ pub(crate) fn icon_button(
         }
     }
     ux::icon_in(paint, Rect::from_center_size(b.center(), Vec2::splat(14.0)), icon, ink);
-    control(shell, ui, id, "button", b, true).on_hover_text(tr(hint)).clicked()
+    control_cx(cx, ui, id, "button", b, true).on_hover_text(tr(hint)).clicked()
+}
+
+/// [`ghost_button_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn ghost_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, id: &str, icon: &ux::Icon, label: &str) -> bool {
+    shell.cx(|cx| ghost_button_cx(cx, ui, p, at, id, icon, label))
 }
 
 /// A quiet button of an icon and a label (the design's Button / Ghost); gives whether it was clicked.
-pub(crate) fn ghost_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, id: &str, icon: &ux::Icon, label: &str) -> bool {
+pub(crate) fn ghost_button_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: egui::Pos2, id: &str, icon: &ux::Icon, label: &str) -> bool {
     let paint = ui.painter();
     let g = ux::galley(paint, label, types::UI, p.text, None);
     let b = Rect::from_min_size(at, vec2(6.0 + 14.0 + 7.0 + g.size().x + 8.0, 24.0));
     ux::icon_in(paint, Rect::from_min_size(b.min + vec2(6.0, 5.0), Vec2::splat(14.0)), icon, p.text);
     paint.galley(b.min + vec2(27.0, 2.5), g, p.text.into());
-    let resp = control(shell, ui, id, "button", b, true);
+    let resp = control_cx(cx, ui, id, "button", b, true);
     if resp.hovered() {
         paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     }
@@ -1271,12 +1418,17 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     }
 }
 
+/// [`problems_section_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn problems_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: Obj) -> f32 {
+    shell.cx(|cx| problems_section_cx(cx, ui, p, r, y, subject))
+}
+
 /// The Problems section for a selection, when the rules find any; gives the y under it.
-pub(crate) fn problems_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: Obj) -> f32 {
+pub(crate) fn problems_section_cx(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: Obj) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let problems: Vec<(Option<Uuid>, String)> = match shell.session.as_ref() {
-        Some(s) => crate::problems::of(shell.notation_uis, s.doc(), &shell.problems, subject)
+    let problems: Vec<(Option<Uuid>, String)> = match cx.session.as_ref() {
+        Some(s) => crate::problems::of(cx.notation_uis, s.doc(), cx.problems, subject)
             .into_iter()
             .map(|pr| (s.doc().uuid(pr.element).ok(), pr.text))
             .collect(),
@@ -1286,12 +1438,12 @@ pub(crate) fn problems_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
         return y;
     }
     let title = fmt(&tr("Problems · {n}"), &[("n", &problems.len().to_string())]);
-    y = section(shell, ui, p, r, y, &title, None).unwrap_or(y + 50.0) - 6.0;
-    let own = shell.session.as_ref().and_then(|s| s.doc().uuid(subject).ok());
+    y = section_cx(cx, ui, p, r, y, &title, None).unwrap_or(y + 50.0) - 6.0;
+    let own = cx.session.as_ref().and_then(|s| s.doc().uuid(subject).ok());
     for (i, (element, text)) in problems.iter().enumerate() {
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 28.0));
         let live = element.is_some() && *element != own;
-        let resp = control(shell, ui, &format!("workspace.properties.problem.{i}"), "row", row, live);
+        let resp = control_cx(cx, ui, &format!("workspace.properties.problem.{i}"), "row", row, live);
         if resp.hovered() && live {
             paint.rect_filled(row, 6.0, p.page);
         }
@@ -1301,13 +1453,18 @@ pub(crate) fn problems_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
         if resp.clicked()
             && live
             && let Some(id) = element
-            && let Err(e) = run(shell, "view.select", json!({ "ids": [id.to_string()] }))
+            && let Err(e) = run_cx(cx, "view.select", json!({ "ids": [id.to_string()] }))
         {
-            shell.panels.notice = Some(e);
+            cx.panels.notice = Some(e);
         }
         y += 28.0;
     }
     y + 8.0
+}
+
+/// [`refuse_empty_name_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn refuse_empty_name(shell: &mut Shell, cmd: &str, name: &str) -> bool {
+    shell.cx(|cx| refuse_empty_name_cx(cx, cmd, name))
 }
 
 /// Refuses a name of nothing but spaces for an element that needs one, before anything is sent:
@@ -1315,39 +1472,44 @@ pub(crate) fn problems_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
 /// name, as may what a notation's rename command `cmd` leaves unnamed
 /// ([`NotationUi::may_be_unnamed`](crate::notation_ui::NotationUi::may_be_unnamed)). Gives whether
 /// it refused.
-pub(crate) fn refuse_empty_name(shell: &mut Shell, cmd: &str, name: &str) -> bool {
+pub(crate) fn refuse_empty_name_cx(cx: &mut Ctx, cmd: &str, name: &str) -> bool {
     let may_be_unnamed = cmd == "diagram.rename" || crate::notation_ui::UIS.iter().any(|ui| ui.may_be_unnamed(cmd));
     let refused = name.trim().is_empty() && !may_be_unnamed;
     if refused {
-        shell.panels.notice = Some(tr("A name can't be empty."));
+        cx.panels.notice = Some(tr("A name can't be empty."));
     }
     refused
 }
 
+/// [`name_field_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject, cmd: &str, key: &str) {
+    shell.cx(|cx| name_field_cx(cx, ui, p, at, width, subject, cmd, key))
+}
+
 /// The name field of an element, committed through its rename command on Enter or when it is
 /// left; Escape brings the name back, and an empty name is refused before it is sent.
-pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject, cmd: &str, key: &str) {
+pub(crate) fn name_field_cx(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject, cmd: &str, key: &str) {
     let Some(id) = subject.id else { return };
-    let mut text = match &shell.panels.name {
+    let mut text = match &cx.panels.name {
         Some(n) if n.target == id => n.text.clone(),
         _ => subject.name.clone(),
     };
-    let limit = crate::notation_ui::name_limit_of(shell, id);
-    let out = edit_field(shell, ui, p, at, width, "workspace.properties.name", &tr("Name"), &mut text, limit, false, true);
+    let limit = crate::notation_ui::name_limit_of_cx(&cx.cx_ref(), id);
+    let out = edit_field_cx(cx, ui, p, at, width, "workspace.properties.name", &tr("Name"), &mut text, limit, false, true);
     if out == FieldOut::Cancel {
-        shell.panels.name = None;
+        cx.panels.name = None;
     } else if out == FieldOut::Commit {
-        shell.panels.name = None;
-        if text.trim() != subject.name && !refuse_empty_name(shell, cmd, &text) {
-            match run(shell, cmd, json!({ key: id.to_string(), "name": text.trim() })) {
-                Ok(_) => shell.panels.notice = None,
-                Err(e) => shell.panels.notice = Some(e),
+        cx.panels.name = None;
+        if text.trim() != subject.name && !refuse_empty_name_cx(cx, cmd, &text) {
+            match run_cx(cx, cmd, json!({ key: id.to_string(), "name": text.trim() })) {
+                Ok(_) => cx.panels.notice = None,
+                Err(e) => cx.panels.notice = Some(e),
             }
         }
     } else if text != subject.name {
-        shell.panels.name = Some(NameEdit { target: id, text });
-    } else if shell.panels.name.as_ref().is_some_and(|n| n.target == id) {
-        shell.panels.name = None;
+        cx.panels.name = Some(NameEdit { target: id, text });
+    } else if cx.panels.name.as_ref().is_some_and(|n| n.target == id) {
+        cx.panels.name = None;
     }
 }
 
@@ -1377,11 +1539,16 @@ fn write_description(shell: &mut Shell, target: Uuid, text: String) {
     }
 }
 
+/// [`refused_on_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn refused_on(shell: &Shell, target: Uuid, why: String) -> String {
+    refused_on_cx(&shell.cx_ref(), target, why)
+}
+
 /// A refusal `why` of what was typed on `target`, as the panel's notice: when `target` is not the
 /// element selected, as when its draft is written because the selection moved on, it names the
 /// element, so it is not read as about the one shown (AR-417).
-pub(crate) fn refused_on(shell: &Shell, target: Uuid, why: String) -> String {
-    let Some(s) = shell.session.as_ref() else { return why };
+pub(crate) fn refused_on_cx(cx: &CtxRef, target: Uuid, why: String) -> String {
+    let Some(s) = cx.session.as_ref() else { return why };
     let store = s.doc();
     let Some(o) = store.by_uuid(target).filter(|o| s.view().selection.first() != Some(o)) else { return why };
     match archforge_core::name_of(store, o) {
@@ -1450,32 +1617,48 @@ fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui
     }
 }
 
-/// The first selected element's id, which a list in Properties marks.
+/// [`selected_id_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn selected_id(shell: &Shell) -> Option<Uuid> {
-    let s = shell.session.as_ref()?;
+    selected_id_cx(&shell.cx_ref())
+}
+
+/// The first selected element's id, which a list in Properties marks.
+pub(crate) fn selected_id_cx(cx: &CtxRef) -> Option<Uuid> {
+    let s = cx.session.as_ref()?;
     s.view().selection.first().and_then(|o| s.doc().uuid(*o).ok())
+}
+
+/// [`select_element_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn select_element(shell: &mut Shell, id: Uuid) {
+    shell.cx(|cx| select_element_cx(cx, id))
 }
 
 /// Selects an element a Properties row lists, so the Models tree and the canvas mark it as they
 /// would for a click there; the rows it sits under open in the tree, as its notation says
-/// ([`NotationUi::parents`](crate::notation_ui::NotationUi::parents)), so its row shows.
-pub(crate) fn select_element(shell: &mut Shell, id: Uuid) {
-    if let Some(store) = shell.session.as_ref().map(|s| s.doc())
+/// ([`NotationUi::parents`](crate::notation_ui::NotationUi::parents)), so its row shows: the shell
+/// opens them once the call returns ([`Request::ExpandRows`]).
+pub(crate) fn select_element_cx(cx: &mut Ctx, id: Uuid) {
+    if let Some(store) = cx.session.as_ref().map(|s| s.doc())
         && let Some(o) = store.by_uuid(id)
-        && let Some(ui) = crate::notation_ui::of(shell.notation_uis, store, o)
+        && let Some(ui) = crate::notation_ui::of(cx.notation_uis, store, o)
     {
-        shell.explorer.expanded.extend(ui.parents(store, o).into_iter().filter_map(|p| store.uuid(p).ok()));
+        cx.requests.push(Request::ExpandRows(ui.parents(store, o).into_iter().filter_map(|p| store.uuid(p).ok()).collect()));
     }
-    if let Err(e) = run(shell, "view.select", json!({ "ids": [id.to_string()] })) {
-        shell.panels.notice = Some(e);
+    if let Err(e) = run_cx(cx, "view.select", json!({ "ids": [id.to_string()] })) {
+        cx.panels.notice = Some(e);
     }
+}
+
+/// [`edit_button_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn edit_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, row: Rect, id: &str, row_hovered: bool) -> bool {
+    shell.cx(|cx| edit_button_cx(cx, ui, p, row, id, row_hovered))
 }
 
 /// A list row's edit button at its right end. Only it, or a double click on the row, opens the
 /// row's editor: selecting an element never does. True when it was pressed.
-pub(crate) fn edit_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, row: Rect, id: &str, row_hovered: bool) -> bool {
+pub(crate) fn edit_button_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, row: Rect, id: &str, row_hovered: bool) -> bool {
     let at = Rect::from_center_size(pos2(row.right() - 16.0, row.center().y), vec2(24.0, 24.0));
-    let resp = control(shell, ui, &format!("{id}.edit"), "button", at, true).on_hover_text(tr("Edit"));
+    let resp = control_cx(cx, ui, &format!("{id}.edit"), "button", at, true).on_hover_text(tr("Edit"));
     let paint = ui.painter();
     if resp.hovered() {
         paint.rect_filled(at, 6.0, p.border);

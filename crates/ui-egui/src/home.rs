@@ -15,12 +15,12 @@
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use ux::Colour;
 
+use crate::Shell;
 use crate::i18n::tr;
 use crate::panels::MenuId;
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{self, Palette, icons, types};
-use crate::{Shell, widgets};
 
 /// The title strip's height: on macOS the strip is the title bar, and at 32 points the traffic
 /// lights sit on its middle line.
@@ -168,17 +168,15 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     });
 }
 
-/// What a control that is off says.
+/// What a control that is off says ([`crate::panels::off_words_cx`]).
 pub(crate) fn off_words(shell: &Shell) -> String {
-    if shell.looking_only() { tr("Read only while viewing a version") } else { tr("Not available yet") }
+    crate::panels::off_words_cx(&shell.cx_ref())
 }
 
-/// A control's hit area, recorded for automation. A control whose screen is not built yet says so
-/// on hover and its click is never taken.
+/// A control's hit area, recorded for automation, for the shell's own screens: the core over the
+/// narrow context ([`crate::panels::control_cx`]) over the whole shell.
 pub(crate) fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> egui::Response {
-    widgets::record_visible(ui, &mut shell.registry, id, kind, rect);
-    let resp = ui.interact(rect, widgets::egui_id(id), if live { Sense::click() } else { Sense::hover() });
-    if live { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp.on_hover_text(off_words(shell)) }
+    shell.cx(|cx| crate::panels::control_cx(cx, ui, id, kind, rect, live))
 }
 
 /// The title strip: the active Home button and Open project at the left, beside the traffic

@@ -17,6 +17,7 @@ use egui::Rect;
 pub(crate) use archforge_shell_api::notation_ui::{Added, Entry, Inside, Layer, Offer, Overlaid, Removal, Words};
 
 use crate::Shell;
+use crate::cx::{Ctx, CtxRef};
 use crate::explorer::{Row, Tree};
 use crate::panels::{Editor, MenuId, OpenEditor, Subject};
 use crate::problems::Problem;
@@ -434,17 +435,22 @@ pub(crate) fn before_removal(uis: &[&'static dyn NotationUi], store: &Store, obj
     out
 }
 
+/// [`say_after_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn say_after(shell: &mut Shell, after: Option<String>, lead: &str) {
+    shell.cx(|cx| say_after_cx(cx, after, lead));
+}
+
 /// Says what a removal that went through changed beyond what it removed (`after`, from
 /// [`Removal::after`]): after the toast it made while that toast still shows, or in a toast of
 /// its own led by `lead` (`Payment deleted`), with Undo; nothing when it changed nothing else.
-pub(crate) fn say_after(shell: &mut Shell, after: Option<String>, lead: &str) {
+pub(crate) fn say_after_cx(cx: &mut Ctx, after: Option<String>, lead: &str) {
     let Some(after) = after else { return };
-    let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-    let text = match shell.canvas.toast.take() {
-        Some(t) if t.until > shell.frames => format!("{} · {after}", t.text),
+    let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+    let text = match cx.canvas.toast.take() {
+        Some(t) if t.until > cx.frames => format!("{} · {after}", t.text),
         _ => format!("{lead} · {after}"),
     };
-    shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(400), undo_label });
+    cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(400), undo_label });
 }
 
 /// Draws every notation's overlays at `layer` over the canvas `on`, in the order of the notations
@@ -491,11 +497,16 @@ pub(crate) fn name_limit(uis: &[&'static dyn NotationUi], store: &Store, obj: Ob
     of(uis, store, obj).map_or_else(|| longest_name(uis), |ui| ui.name_limit())
 }
 
+/// [`name_limit_of_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn name_limit_of(shell: &Shell, id: Uuid) -> usize {
+    name_limit_of_cx(&shell.cx_ref(), id)
+}
+
 /// The most characters a name field takes for the element or diagram `id` of the shell's model
 /// ([`name_limit`]); for one not there, the most any name takes ([`longest_name`]).
-pub(crate) fn name_limit_of(shell: &Shell, id: Uuid) -> usize {
-    let uis = shell.notation_uis;
-    shell.session.as_ref().and_then(|s| s.doc().by_uuid(id).map(|o| name_limit(uis, s.doc(), o))).unwrap_or_else(|| longest_name(uis))
+pub(crate) fn name_limit_of_cx(cx: &CtxRef, id: Uuid) -> usize {
+    let uis = cx.notation_uis;
+    cx.session.as_ref().and_then(|s| s.doc().by_uuid(id).map(|o| name_limit(uis, s.doc(), o))).unwrap_or_else(|| longest_name(uis))
 }
 
 /// The most characters any name takes, a diagram's or an element's of any notation: the filter of
