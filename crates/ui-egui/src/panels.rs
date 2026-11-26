@@ -15,7 +15,7 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 pub use archforge_shell_api::notation_ui::MenuId;
-pub(crate) use archforge_shell_api::notation_ui::{Editor, OpenEditor};
+pub(crate) use archforge_shell_api::notation_ui::{Editor, OpenEditor, Subject};
 
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx};
@@ -183,22 +183,6 @@ pub struct DescriptionDraft {
     pub refused: bool,
 }
 
-/// The selection the panels describe.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Subject {
-    pub obj: Option<Obj>,
-    pub id: Option<Uuid>,
-    pub class: Option<archforge_mof::ClassId>,
-    pub name: String,
-    /// The kind line under the heading and the word for the selection.
-    pub(crate) kind: String,
-    pub(crate) word: String,
-    /// "This table": the selection itself, as the applies-to choice and the own skill rows say it.
-    pub(crate) this: String,
-    /// "On this table · {n}": the title of the own skills section.
-    pub(crate) on_this: String,
-}
-
 fn subject(shell: &Shell, project: &str) -> Subject {
     let Some(s) = shell.session.as_ref() else {
         return Subject::root(project);
@@ -236,27 +220,6 @@ fn subject(shell: &Shell, project: &str) -> Subject {
             Subject::of(o, store.uuid(o).ok(), class, words)
         }
         None => Subject::root(project),
-    }
-}
-
-impl Subject {
-    /// The subject `o` of `class`, as its words name it.
-    pub(crate) fn of(o: Obj, id: impl Into<Option<Uuid>>, class: impl Into<Option<archforge_mof::ClassId>>, words: Words) -> Subject {
-        let Words { kind, word, this, on_this, name } = words;
-        Subject { obj: Some(o), id: id.into(), class: class.into(), name, kind, word, this, on_this }
-    }
-    /// The model root, which the project's name names.
-    fn root(project: &str) -> Subject {
-        Subject {
-            obj: None,
-            id: None,
-            class: None,
-            name: project.to_string(),
-            kind: tr("Model · the project's root"),
-            word: tr("Model"),
-            this: tr("This model"),
-            on_this: tr("On this model · {n}"),
-        }
     }
 }
 

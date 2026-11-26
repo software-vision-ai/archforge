@@ -1,18 +1,21 @@
 //! The data types the interfaces `NotationUi` and `NotationState` hand between the shell and a
 //! notation, which name no shell: what `+` in Models adds, what an addition gives back, what New
-//! inside ▸ offers, a row of the Models tree, a project search entry, a problem, Properties' words,
-//! what is said of a removal, an overlay's layer and the canvas it is drawn over, a Properties
+//! inside ▸ offers, a row of the Models tree and what a notation's rows are made with (the filter,
+//! the rows opened, the skills by subject), a project search entry, a problem, Properties' words
+//! and the selection they describe, what is said of a removal, an overlay's layer and the canvas it is drawn over, a Properties
 //! editor's card and where it edits, and a menu of the shell's one open-menu slot. The traits
 //! themselves stay in the shell until they no longer hand a notation the whole `Shell`
 //! (`archforge_ui_egui::notation_ui`, `explorer`, `problems` and `panels` re-export these under
 //! their old paths).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use archforge_mof::{Obj, Uuid};
+use archforge_mof::{Obj, Store, Uuid};
 use egui::Rect;
 
 use crate::canvas::View;
+use crate::i18n::tr;
+use crate::search::Typed;
 use crate::ux::{self, Icon, Palette};
 
 /// Something `+` in the Models tree can add: its automation key and its word.
@@ -58,6 +61,43 @@ pub struct Words {
     pub this: String,
     pub on_this: String,
     pub name: String,
+}
+
+/// The selection the panels describe.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Subject {
+    pub obj: Option<Obj>,
+    pub id: Option<Uuid>,
+    pub class: Option<archforge_mof::ClassId>,
+    pub name: String,
+    /// The kind line under the heading and the word for the selection.
+    pub kind: String,
+    pub word: String,
+    /// "This table": the selection itself, as the applies-to choice and the own skill rows say it.
+    pub this: String,
+    /// "On this table · {n}": the title of the own skills section.
+    pub on_this: String,
+}
+
+impl Subject {
+    /// The subject `o` of `class`, as its words name it.
+    pub fn of(o: Obj, id: impl Into<Option<Uuid>>, class: impl Into<Option<archforge_mof::ClassId>>, words: Words) -> Subject {
+        let Words { kind, word, this, on_this, name } = words;
+        Subject { obj: Some(o), id: id.into(), class: class.into(), name, kind, word, this, on_this }
+    }
+    /// The model root, which the project's name names.
+    pub fn root(project: &str) -> Subject {
+        Subject {
+            obj: None,
+            id: None,
+            class: None,
+            name: project.to_string(),
+            kind: tr("Model · the project's root"),
+            word: tr("Model"),
+            this: tr("This model"),
+            on_this: tr("On this model · {n}"),
+        }
+    }
 }
 
 /// What a notation works out about a removal of its own elements before it runs, while they are
@@ -123,6 +163,73 @@ pub struct Row {
     pub draggable: bool,
 }
 
+/// What a notation's rows are made with: the filter, the rows opened and the skills by subject.
+pub struct Tree<'a> {
+    store: &'a Store,
+    filter: Typed,
+    expanded: &'a BTreeSet<Uuid>,
+    skills: BTreeMap<Obj, Vec<Obj>>,
+    none: Vec<Obj>,
+}
+
+impl<'a> Tree<'a> {
+    /// The rows' makings for `store`: the Models filter as typed, trimmed ([`Typed::trimmed`]),
+    /// the rows opened, and the skills by the element they sit on, read once.
+    pub fn new(store: &'a Store, filter: &str, expanded: &'a BTreeSet<Uuid>) -> Tree<'a> {
+        Tree { store, filter: Typed::trimmed(filter), expanded, skills: skills_by_subject(store), none: Vec::new() }
+    }
+}
+
+impl Tree<'_> {
+    /// Whether a filter narrows the rows: then every row with a match under it is open.
+    pub fn filtering(&self) -> bool {
+        !self.filter.is_empty()
+    }
+
+    /// Whether a name holds the filter, whatever its capitals and accents.
+    pub fn matches(&self, label: &str) -> bool {
+        self.filter.in_any(&[label])
+    }
+
+    /// Whether the row of `obj` is open.
+    pub fn open(&self, obj: Obj) -> bool {
+        self.filtering() || self.store.uuid(obj).ok().is_some_and(|id| self.expanded.contains(&id))
+    }
+
+    /// The skills that sit on `obj`.
+    pub fn skills(&self, obj: Obj) -> &[Obj] {
+        self.skills.get(&obj).unwrap_or(&self.none)
+    }
+
+    /// A row of `obj`, closed, without a detail.
+    pub fn row(&self, obj: Obj, depth: u8, kind: &'static str, icon: &'static ux::Icon, label: String) -> Option<Row> {
+        let id = self.store.uuid(obj).ok()?;
+        Some(Row { id, obj, depth, kind, icon, muted: false, label, detail: None, note: None, expandable: false, expanded: false, draggable: false })
+    }
+
+    /// The rows of the skills on `obj` whose names hold the filter.
+    pub fn skill_rows(&self, obj: Obj, depth: u8) -> Vec<Row> {
+        self.skills(obj)
+            .iter()
+            .filter_map(|s| {
+                let label = archforge_core::skills::name_of(self.store, *s);
+                if self.matches(&label) { self.row(*s, depth, "skill", &ux::icons::SKILL, label) } else { None }
+            })
+            .collect()
+    }
+}
+
+/// The skills by the element they sit on, read once per frame.
+fn skills_by_subject(store: &Store) -> BTreeMap<Obj, Vec<Obj>> {
+    let mut out: BTreeMap<Obj, Vec<Obj>> = BTreeMap::new();
+    for s in archforge_core::skills::skills(store) {
+        if let Some(subject) = archforge_core::skills::subject_of(store, s) {
+            out.entry(subject).or_default().push(s);
+        }
+    }
+    out
+}
+
 /// One problem, on the element it sits on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem {
@@ -185,5 +292,69 @@ impl MenuId {
     /// whatever its index; none for any other menu.
     pub fn index_in(self, kind: MenuId) -> Option<usize> {
         (self.scope == kind.scope && self.key == kind.key).then_some(self.index)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use archforge_core::{FOLDER, MODEL, SKILL, model, named_element, skill};
+    use archforge_mof::{CompositeSlabs, Value};
+
+    use super::*;
+
+    /// A store of the core alone: the model, two folders and three skills, two of them on the
+    /// first folder and one on the whole model.
+    fn store() -> (Store, [Obj; 2], [Obj; 3]) {
+        let mut n = 0u64;
+        let ids = Box::new(move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            Uuid::v7(1_761_670_800_000, r)
+        });
+        let slabs = CompositeSlabs::new().with(archforge_core::INDEX, Box::new(archforge_core::CoreSlabs::default())).unwrap();
+        let mut st = Store::new(archforge_core::universe_with(Vec::new()).unwrap(), Box::new(slabs), ids);
+        let m = st.create(MODEL).unwrap();
+        let named = |st: &mut Store, class, name: &str, list| {
+            let o = st.create(class).unwrap();
+            st.set(o, named_element::NAME, Value::str(name)).unwrap();
+            st.push(m, list, Value::Ref(o)).unwrap();
+            o
+        };
+        let folders = [named(&mut st, FOLDER, "Sales", model::MEMBER), named(&mut st, FOLDER, "Billing", model::MEMBER)];
+        let skills = [
+            named(&mut st, SKILL, "Review", model::SKILL),
+            named(&mut st, SKILL, "Audit", model::SKILL),
+            named(&mut st, SKILL, "Style", model::SKILL),
+        ];
+        for s in &skills[..2] {
+            st.set(*s, skill::SUBJECT, Value::Ref(folders[0])).unwrap();
+        }
+        (st, folders, skills)
+    }
+
+    /// The tree's makings: the skills by the element they sit on, the rows opened, and the filter
+    /// as typed into Models, folded and trimmed as one piece, so the spaces around it go and a
+    /// space inside it stays.
+    #[test]
+    fn a_tree_is_made_with_the_skills_by_subject_the_rows_opened_and_the_filter_trimmed() {
+        let (st, [sales, billing], [review, audit, _style]) = store();
+        let none = BTreeSet::new();
+        let t = Tree::new(&st, "", &none);
+        assert!(!t.filtering());
+        assert_eq!((t.skills(sales), t.skills(billing)), (&[review, audit][..], &[][..]));
+        assert!(!t.open(sales) && !t.open(billing));
+        let labels = |t: &Tree<'_>| t.skill_rows(sales, 2).into_iter().map(|r| (r.label, r.kind, r.depth)).collect::<Vec<_>>();
+        assert_eq!(labels(&t), [("Review".to_string(), "skill", 2), ("Audit".to_string(), "skill", 2)]);
+
+        let opened = BTreeSet::from([st.uuid(sales).unwrap()]);
+        let t = Tree::new(&st, "", &opened);
+        assert!(t.open(sales) && !t.open(billing));
+
+        let t = Tree::new(&st, " \u{200B} REV ", &none);
+        assert!(t.filtering() && t.open(billing), "a filter opens every row");
+        assert_eq!(labels(&t), [("Review".to_string(), "skill", 2)]);
+        assert!(!Tree::new(&st, "\u{200B} ", &none).filtering(), "spaces alone are no filter");
+        assert!(labels(&Tree::new(&st, "rev iew", &none)).is_empty(), "one piece, not each word apart");
     }
 }

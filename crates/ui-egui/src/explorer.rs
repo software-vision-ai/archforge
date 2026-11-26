@@ -18,6 +18,7 @@ use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 pub use archforge_shell_api::notation_ui::Row;
+pub(crate) use archforge_shell_api::notation_ui::Tree;
 
 use crate::home::control;
 use crate::home_search::Typed;
@@ -250,54 +251,6 @@ pub struct Delete {
     pub hands_to: Option<(String, bool)>,
 }
 
-/// What a notation's rows are made with: the filter, the rows opened and the skills by subject.
-pub(crate) struct Tree<'a> {
-    store: &'a Store,
-    filter: Typed,
-    expanded: &'a BTreeSet<Uuid>,
-    skills: std::collections::BTreeMap<Obj, Vec<Obj>>,
-    none: Vec<Obj>,
-}
-
-impl Tree<'_> {
-    /// Whether a filter narrows the rows: then every row with a match under it is open.
-    pub(crate) fn filtering(&self) -> bool {
-        !self.filter.is_empty()
-    }
-
-    /// Whether a name holds the filter, whatever its capitals and accents.
-    pub(crate) fn matches(&self, label: &str) -> bool {
-        self.filter.in_any(&[label])
-    }
-
-    /// Whether the row of `obj` is open.
-    pub(crate) fn open(&self, obj: Obj) -> bool {
-        self.filtering() || uuid_of(self.store, obj).is_some_and(|id| self.expanded.contains(&id))
-    }
-
-    /// The skills that sit on `obj`.
-    pub(crate) fn skills(&self, obj: Obj) -> &[Obj] {
-        self.skills.get(&obj).unwrap_or(&self.none)
-    }
-
-    /// A row of `obj`, closed, without a detail.
-    pub(crate) fn row(&self, obj: Obj, depth: u8, kind: &'static str, icon: &'static ux::Icon, label: String) -> Option<Row> {
-        let id = uuid_of(self.store, obj)?;
-        Some(Row { id, obj, depth, kind, icon, muted: false, label, detail: None, note: None, expandable: false, expanded: false, draggable: false })
-    }
-
-    /// The rows of the skills on `obj` whose names hold the filter.
-    pub(crate) fn skill_rows(&self, obj: Obj, depth: u8) -> Vec<Row> {
-        self.skills(obj)
-            .iter()
-            .filter_map(|s| {
-                let label = archforge_core::skills::name_of(self.store, *s);
-                if self.matches(&label) { self.row(*s, depth, "skill", &icons::SKILL, label) } else { None }
-            })
-            .collect()
-    }
-}
-
 fn uuid_of(store: &Store, obj: Obj) -> Option<Uuid> {
     store.uuid(obj).ok()
 }
@@ -319,21 +272,10 @@ fn children_of(store: &Store, obj: Obj, prop: archforge_mof::PropId) -> Vec<Obj>
     store.list(obj, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|o| store.is_alive(*o)).collect()
 }
 
-/// The skills by the element they sit on, read once per frame.
-fn skills_by_subject(store: &Store) -> std::collections::BTreeMap<Obj, Vec<Obj>> {
-    let mut out: std::collections::BTreeMap<Obj, Vec<Obj>> = std::collections::BTreeMap::new();
-    for s in archforge_core::skills::skills(store) {
-        if let Some(subject) = archforge_core::skills::subject_of(store, s) {
-            out.entry(subject).or_default().push(s);
-        }
-    }
-    out
-}
-
 /// The tree's rows for the store, the opened rows and the filter: a filter shows the rows whose
 /// name holds it and their ancestors, all open.
 pub(crate) fn rows(uis: &[&'static dyn NotationUi], store: &Store, state: &State) -> Vec<Row> {
-    let t = Tree { store, filter: Typed::trimmed(&state.filter), expanded: &state.expanded, skills: skills_by_subject(store), none: Vec::new() };
+    let t = Tree::new(store, &state.filter, &state.expanded);
     let mut out = Vec::new();
     for (top, ui) in tops(uis, store) {
         out.extend(ui.tree(store, top, &t));
