@@ -80,9 +80,10 @@ after every visible change, in both appearances, beside the design.
   never at the end of the file. A key is in a language's catalogues once (a `str` row by context
   and key, a `plural` row by key alone): check that the row is not there already, in the shell's
   table or a notation's, as the coverage test refuses a second one.
-- `crates/ui-egui/src/tests/catalogue-rows.tsv` holds every row of every catalogue as it was
-  before ER's and UML's rows left the shell's catalogues (AR-816); a change to a catalogue's rows
-  changes it in the same commit, as `the_catalogues_together_hold_the_rows_at_base` says.
+- `every_row_finds_its_text_in_every_language` looks every row of every table up through the
+  shell's `tr_ctx` and `trn`, in every language, so a row a table lacks in one language, or a
+  table the shell does not register, fails it. It reads the texts from the catalogues
+  themselves, so a translation fix or a new row needs no change to it.
 - Translate the whole sentence with its punctuation; placeholders such as `{n}` may move. A row a
   model translated says so, as the catalogue header records its provenance.
 - The catalogue screen test refuses hidden characters, addresses and instructions in a row.

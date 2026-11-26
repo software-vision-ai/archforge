@@ -2,9 +2,8 @@
 //! source, and every start card text, has a row in every complete language, in the shell's
 //! catalogue or a notation's; every row is read, and no key is in a language's catalogues twice; a
 //! partial catalogue reports its gaps without failing. The catalogues are screened for hidden
-//! characters, addresses and instructions, and together they hold the rows they held before ER's
-//! and UML's rows left the shell's catalogues (AR-816), each found by its key. The machinery's own
-//! tests are in `archforge_shell_api::i18n`.
+//! characters, addresses and instructions, and every row of every table is found by its key in
+//! every language. The machinery's own tests are in `archforge_shell_api::i18n`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -937,63 +936,34 @@ fn every_catalogue_in_the_folder_is_registered() {
     assert_eq!((names.len(), codes.len()), (LANGUAGES.len(), LANGUAGES.len()), "each language has a code and a name of its own");
 }
 
-/// Every row of every catalogue before ER's and UML's rows left the shell's catalogues (AR-816),
-/// by language: language, kind, context, key, text.
-const AT_BASE: &str = include_str!("../tests/catalogue-rows.tsv");
-
-/// The rows of `AT_BASE` of the language `code`.
-fn at_base(code: &str) -> Rows {
-    rows(&AT_BASE.lines().filter_map(|l| l.strip_prefix(code)?.strip_prefix('\t')).collect::<Vec<_>>().join("\n"))
-}
-
-/// For every language, the rows the shell's and the notations' catalogues hold together are the
-/// rows at base, none lost, none added, none changed, and none in two of them.
+/// Every row of every catalogue, the shell's and each notation's, is found through the shell's
+/// lookups in every language: each key of a table's English catalogue has its row in that table's
+/// catalogue of every complete language, and each row gives its own text, a `str` row by its
+/// context and key, a `plural` row in the form each edge count picks. No test registers a table
+/// itself, so this also proves that the shell registers every notation's catalogues before its
+/// first lookup.
 #[test]
-fn the_catalogues_together_hold_the_rows_at_base() {
-    for lang in LANGUAGES {
-        let base = at_base(lang.code);
-        assert!(!base.is_empty(), "the fixture has no rows of {}", lang.code);
-        let mut together = Rows::new();
-        let mut count = 0;
-        for catalogue in catalogues_of(lang) {
-            let one = rows(catalogue.text);
-            count += one.len();
-            together.extend(one);
-        }
-        assert_eq!(count, together.len(), "{}: a row is in two catalogues", lang.code);
-        let lost: Vec<String> = base.iter().filter(|(k, v)| together.get(*k) != Some(*v)).map(|(k, v)| format!("{k:?} {v:?}")).collect();
-        let added: Vec<String> = together.iter().filter(|(k, v)| base.get(*k) != Some(*v)).map(|(k, v)| format!("{k:?} {v:?}")).collect();
-        assert!(
-            lost.is_empty() && added.is_empty(),
-            "{}: {} row(s) at base no catalogue holds:\n{}\n{} row(s) not at base:\n{}",
-            lang.code,
-            lost.len(),
-            lost.join("\n"),
-            added.len(),
-            added.join("\n")
-        );
-    }
-    assert_eq!(
-        AT_BASE.lines().filter(|l| !l.starts_with('#')).count(),
-        LANGUAGES.iter().map(|l| at_base(l.code).len()).sum::<usize>(),
-        "every row of the fixture is of a language"
-    );
-}
-
-/// Every key at base finds its text through the shell's lookups in every language: a `str` row by
-/// its context and key, a `plural` row in the form each edge count picks.
-#[test]
-fn every_key_finds_its_text_at_base() {
-    for lang in LANGUAGES {
-        set_language(lang.code);
-        for ((kind, context, key), text) in at_base(lang.code) {
-            if kind == "plural" {
-                let forms: Vec<&str> = text.split('|').collect();
-                for n in EDGES {
-                    assert_eq!(trn(&key, &key, n), forms[(lang.plural)(n)].replace("{n}", &n.to_string()), "{} plural {key:?} at {n}", lang.code);
+fn every_row_finds_its_text_in_every_language() {
+    for table in tables() {
+        let english = rows(table.first().expect("a table has its English catalogue").text);
+        for (lang, catalogue) in LANGUAGES.iter().zip(table) {
+            assert_eq!(catalogue.code, lang.code, "{} is in the languages' order", catalogue.catalogue);
+            let own = rows(catalogue.text);
+            if lang.complete {
+                let missing: Vec<_> = english.keys().filter(|k| !own.contains_key(*k)).collect();
+                assert!(missing.is_empty(), "{} has no row for {missing:?}", catalogue.catalogue);
+            }
+            set_language(lang.code);
+            for ((kind, context, key), text) in &own {
+                if kind == "plural" {
+                    let forms: Vec<&str> = text.split('|').collect();
+                    for n in EDGES {
+                        let form = forms[(lang.plural)(n)].replace("{n}", &n.to_string());
+                        assert_eq!(trn(key, key, n), form, "{} plural {key:?} at {n}", catalogue.catalogue);
+                    }
+                } else {
+                    assert_eq!(&tr_ctx(context, key), text, "{} str {context:?} {key:?}", catalogue.catalogue);
                 }
-            } else {
-                assert_eq!(tr_ctx(&context, &key), text, "{} str {context:?} {key:?}", lang.code);
             }
         }
     }

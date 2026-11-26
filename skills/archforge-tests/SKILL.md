@@ -13,9 +13,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     a change that renames, adds or removes an id on purpose updates the screen's rows from the
     listing the failing test prints, and a new screen, a row of the `screens!` list in the same
     file (its one list of screens, `offscreen::SCREENS`), gets its rows under its name
-  - translations: the shell's and the notations' catalogues in `crates/ui-egui/src/i18n/tests.rs`,
-    against `crates/ui-egui/src/tests/catalogue-rows.tsv` for the rows at base; the machinery
-    (lookups, plural rules, registering, the build-time row check) in
+  - translations: the shell's and the notations' catalogues in `crates/ui-egui/src/i18n/tests.rs`;
+    the machinery (lookups, plural rules, registering, the build-time row check) in
     `crates/shell-api/src/i18n/tests.rs`
   - the desktop app (arguments, preferences, graphics): the `tests` module in `apps/archforge/src/main.rs`
   - the native menu bar's queue, wake and items: the `tests` module in
