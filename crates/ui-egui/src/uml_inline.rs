@@ -18,10 +18,10 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
 use crate::canvas::{DETAIL_ZOOM, ENTITY_ROW, View};
-use crate::home::control;
+use crate::cx::{Ctx, Request};
 use crate::i18n::{fmt, tr};
+use crate::panels::control_cx;
 use crate::uml_panel::{MemberEdit, MemberKind};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
@@ -66,8 +66,8 @@ fn compartment(kind: MemberKind) -> usize {
 }
 
 /// The node of class `class` on the open diagram, when it has one.
-fn card_node(shell: &Shell, store: &Store, class: Obj) -> Option<Obj> {
-    let d = store.by_uuid(shell.canvas.active?)?;
+fn card_node(cx: &Ctx, store: &Store, class: Obj) -> Option<Obj> {
+    let d = store.by_uuid(cx.canvas.active?)?;
     archforge_diagram::views_of(store, class).2.into_iter().find(|n| archforge_diagram::diagram_of(store, *n) == Some(d))
 }
 
@@ -104,16 +104,16 @@ fn resolve(store: &Store, inline: &InlineMember) -> Result<String, String> {
 /// false when the card cannot hold one (no card of the class on the diagram, the diagram drawn
 /// below the zoom at which cards show their rows, or, for a new member, a card that lists only
 /// some of its rows, whose end is not the members' end); the caller opens Properties' editor then.
-pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Option<Uuid>) -> bool {
-    if shell.canvas.zoom < DETAIL_ZOOM {
+pub(crate) fn open(cx: &mut Ctx, class: Uuid, kind: MemberKind, target: Option<Uuid>) -> bool {
+    if cx.canvas.zoom < DETAIL_ZOOM {
         return false;
     }
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return false };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return false };
     let Some(c) = store.by_uuid(class) else { return false };
-    let Some(n) = card_node(shell, store, c) else { return false };
+    let Some(n) = card_node(cx, store, c) else { return false };
     // A card that leaves rows out has its draft's place among them, not at the members' end.
     let capped = || {
-        let card = shell.session.as_ref().and_then(|s| s.view().of_element(store, c)?.card(store, c, archforge_diagram::diagram_of(store, n)?));
+        let card = cx.session.as_ref().and_then(|s| s.view().of_element(store, c)?.card(store, c, archforge_diagram::diagram_of(store, n)?));
         card.is_some_and(|card| card.hidden > 0)
     };
     if target.is_none() && capped() {
@@ -121,16 +121,16 @@ pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Opt
     }
     let edit = crate::uml_panel::edit_of(Some(store), class, kind, target);
     let ty = type_text(store, &edit.ty);
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.inline = Some(InlineMember { edit, ty, field: InlineField::Name, focus: true, refused: None });
     }
     // One draft at a time: Properties' editor closes.
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.member = None;
     }
-    shell.panels.menu = None;
-    if let Err(e) = crate::editing::run(shell, "view.select", json!({ "ids": [class.to_string()] })) {
-        shell.canvas.notice = Some(e);
+    cx.panels.menu = None;
+    if let Err(e) = crate::panels::run_cx(cx, "view.select", json!({ "ids": [class.to_string()] })) {
+        cx.canvas.notice = Some(e);
     }
     true
 }
@@ -163,11 +163,11 @@ pub(crate) fn retain_valid(inline: &mut Option<InlineMember>, store: &Store) {
 
 /// The card of class `c` on the open diagram, as drawn with the row typed: its screen rectangle
 /// and the top of the row in units below the card's.
-fn row_place(shell: &Shell, store: &Store, view: View, c: Obj) -> Option<(Rect, f32)> {
-    let n = card_node(shell, store, c)?;
+fn row_place(cx: &Ctx, store: &Store, view: View, c: Obj) -> Option<(Rect, f32)> {
+    let n = card_node(cx, store, c)?;
     let d = archforge_diagram::diagram_of(store, n)?;
-    let mut card = shell.session.as_ref()?.view().of_element(store, c)?.card(store, c, d)?;
-    let (_, compartment, row) = draft(uml(&shell.notation_states)?.inline.as_ref()?, store)?;
+    let mut card = cx.session.as_ref()?.view().of_element(store, c)?.card(store, c, d)?;
+    let (_, compartment, row) = draft(uml(cx.notation_states)?.inline.as_ref()?, store)?;
     crate::canvas::with_draft(&mut card, compartment, row);
     let index = match row {
         Some(i) => i,
@@ -183,15 +183,15 @@ fn row_place(shell: &Shell, store: &Store, view: View, c: Obj) -> Option<(Rect, 
 /// The row over its card, when one is typed: its fields, the type menu, the details button, the
 /// refusal under it, and the keys. A literal's row holds its name alone, from where a row's text
 /// starts to the details button.
-pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View) {
-    let Some(mut inline) = uml(&shell.notation_states).and_then(|uml| uml.inline.clone()) else { return };
-    let place = shell.session.as_ref().and_then(|s| {
+pub(crate) fn row(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, view: View) {
+    let Some(mut inline) = uml(cx.notation_states).and_then(|uml| uml.inline.clone()) else { return };
+    let place = cx.session.as_ref().and_then(|s| {
         let store = s.doc();
         let c = store.by_uuid(inline.edit.class)?;
-        row_place(shell, store, view, c)
+        row_place(cx, store, view, c)
     });
     let Some((card, top)) = place else {
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.inline = None;
         }
         return;
@@ -247,9 +247,9 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
         inline.focus = true;
         switched = true;
     }
-    widgets::record_visible(ui, &mut shell.registry, NAME_ID, "field", name_rect);
+    widgets::record_visible(ui, cx.registry, NAME_ID, "field", name_rect);
     if !literal {
-        widgets::record_visible(ui, &mut shell.registry, TYPE_ID, "field", type_rect);
+        widgets::record_visible(ui, cx.registry, TYPE_ID, "field", type_rect);
     }
     let field = |ui: &mut egui::Ui, text: &mut String, id: egui::Id, rect: Rect, hint: String, limit: usize| {
         let edit = egui::TextEdit::singleline(text)
@@ -280,16 +280,16 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     }
     if !literal {
         ux::icon_in(&paint, chevron.shrink(3.0 * z), &icons::CHEVRON_SMALL, p.text_secondary);
-        let menu_open = shell.panels.menu == Some(menus::INLINE_TYPE);
-        if control(shell, ui, "workspace.canvas.member.type.menu", "button", chevron, true).on_hover_text(type_hint_of(operation)).clicked() {
-            shell.panels.menu = if menu_open { None } else { Some(menus::INLINE_TYPE) };
+        let menu_open = cx.panels.menu == Some(menus::INLINE_TYPE);
+        if control_cx(cx, ui, "workspace.canvas.member.type.menu", "button", chevron, true).on_hover_text(type_hint_of(operation)).clicked() {
+            cx.panels.menu = if menu_open { None } else { Some(menus::INLINE_TYPE) };
         }
     }
     // The details button on the surface, as the type field is, so its ⋯ reads on every row.
     paint.rect_filled(details, 3.0 * z, p.surface);
     ux::icon_in(&paint, details, &icons::MORE, details_ink(p));
     let to_details =
-        control(shell, ui, "workspace.canvas.member.details", "button", details, true).on_hover_text(tr("More details in Properties")).clicked();
+        control_cx(cx, ui, "workspace.canvas.member.details", "button", details, true).on_hover_text(tr("More details in Properties")).clicked();
     if let Some(refused) = inline.refused.clone() {
         let g = ux::galley(&paint, &refused, types::CAPTION, p.danger, Some(row.width().max(0.0) - 8.0));
         let back = Rect::from_min_size(pos2(row.left(), row.bottom() + 2.0), g.size() + vec2(8.0, 4.0));
@@ -298,21 +298,21 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     }
     // The type menu, under the type field: a pick sets the type and gives the field the keyboard.
     let mut picked = false;
-    if shell.panels.menu == Some(menus::INLINE_TYPE) && !literal {
-        let choices = shell.cx(|cx| crate::uml_panel::choices_for_menu(cx, Some(inline.edit.class)));
-        let chosen = crate::panels::menu_noted(shell, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes, &choices.note_parts);
+    if cx.panels.menu == Some(menus::INLINE_TYPE) && !literal {
+        let choices = crate::uml_panel::choices_for_menu(cx, Some(inline.edit.class));
+        let chosen = crate::panels::menu_noted_cx(cx, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes, &choices.note_parts);
         let value = chosen.map(|i| choices.values.get(i).cloned().unwrap_or_default());
-        shell.cx(|cx| crate::uml_panel::keep_choices(cx, choices));
+        crate::uml_panel::keep_choices(cx, choices);
         if let Some(value) = value {
             // The pick is kept by what it is, its name shown.
-            inline.ty = shell.session.as_ref().map(|s| type_text(s.doc(), &value)).unwrap_or_default();
+            inline.ty = cx.session.as_ref().map(|s| type_text(s.doc(), &value)).unwrap_or_default();
             inline.edit.ty = value;
             inline.field = InlineField::Type;
             inline.focus = true;
             picked = true;
         }
     }
-    let menu_open = shell.panels.menu == Some(menus::INLINE_TYPE);
+    let menu_open = cx.panels.menu == Some(menus::INLINE_TYPE);
     // A press on the row itself (its chevron, its details) is no click away.
     let pressed = ui.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos()).flatten());
     let pressed_on_row = pressed.is_some_and(|pos| row.contains(pos));
@@ -322,22 +322,22 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     let has_focus = name_resp.has_focus() || type_resp.as_ref().is_some_and(|t| t.has_focus());
     let lost = name_resp.lost_focus() || type_resp.as_ref().is_some_and(|t| t.lost_focus());
     let (enter, escape) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.inline = Some(inline);
     }
     // The in-window Edit menu takes a field's keyboard, by a press away, for its rows to act on it:
     // neither its leaving nor the press commits while the bar holds the field.
-    let left = crate::menu_bar::ends(shell, ui.ctx(), name_eid, name_resp.lost_focus(), name_resp.has_focus())
-        | type_resp.as_ref().is_some_and(|t| crate::menu_bar::ends(shell, ui.ctx(), type_eid, t.lost_focus(), t.has_focus()));
-    let held = shell.menu_bar.held.is_some_and(|h| h == name_eid || h == type_eid);
+    let left = crate::menu_bar::ends_cx(cx, ui.ctx(), name_eid, name_resp.lost_focus(), name_resp.has_focus())
+        | type_resp.as_ref().is_some_and(|t| crate::menu_bar::ends_cx(cx, ui.ctx(), type_eid, t.lost_focus(), t.has_focus()));
+    let held = cx.menu_bar.held.is_some_and(|h| h == name_eid || h == type_eid);
     if to_details {
-        to_properties(shell);
+        to_properties(cx);
     } else if escape && !menu_open && (has_focus || lost || ui.memory(|m| m.focused().is_none())) {
-        cancel(shell);
+        cancel(cx);
     } else if enter && (has_focus || lost) && !menu_open {
-        commit(shell, true);
+        commit(cx, true);
     } else if ((left && !switched && !pressed_on_row) || (pressed_away && !held)) && !has_focus && !menu_open && !enter {
-        commit(shell, false);
+        commit(cx, false);
     }
 }
 
@@ -352,54 +352,54 @@ fn type_hint_of(operation: bool) -> String {
 }
 
 /// Drops the row; the class stays selected and the canvas takes the keys again.
-fn cancel(shell: &mut Shell) {
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+fn cancel(cx: &mut Ctx) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.inline = None;
     }
-    shell.panels.menu = None;
-    shell.canvas.focused = true;
+    cx.panels.menu = None;
+    cx.canvas.focused = true;
 }
 
 /// Writes the row's member. With `next`, a new member's row opens again empty in the same
 /// compartment; a row without a name or a type is only dropped, and a refusal keeps the row with
 /// what was typed.
-fn commit(shell: &mut Shell, next: bool) {
-    let Some(mut inline) = uml(&shell.notation_states).and_then(|uml| uml.inline.clone()) else { return };
+fn commit(cx: &mut Ctx, next: bool) {
+    let Some(mut inline) = uml(cx.notation_states).and_then(|uml| uml.inline.clone()) else { return };
     if inline.edit.target.is_none() && inline.edit.name.trim().is_empty() && inline.ty.trim().is_empty() {
-        cancel(shell);
+        cancel(cx);
         return;
     }
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     match resolve(store, &inline) {
         Ok(ty) => inline.edit.ty = ty,
         Err(e) => {
             inline.refused = Some(e);
             inline.field = InlineField::Type;
             inline.focus = true;
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.inline = Some(inline);
             }
             return;
         }
     }
     let (cmd, params) = crate::uml_panel::command_of(&inline.edit);
-    match shell.cx(|cx| crate::uml_panel::write_in_sight(cx, &inline.edit, cmd, params)) {
+    match crate::uml_panel::write_in_sight(cx, &inline.edit, cmd, params) {
         Ok(_) => {
-            shell.canvas.notice = None;
+            cx.canvas.notice = None;
             if next && inline.edit.target.is_none() {
                 let (class, kind) = (inline.edit.class, inline.edit.kind);
-                if !open(shell, class, kind, None) {
-                    cancel(shell);
+                if !open(cx, class, kind, None) {
+                    cancel(cx);
                 }
             } else {
-                cancel(shell);
+                cancel(cx);
             }
         }
         Err(e) => {
             inline.refused = Some(e);
             inline.field = InlineField::Name;
             inline.focus = true;
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.inline = Some(inline);
             }
         }
@@ -409,46 +409,46 @@ fn commit(shell: &mut Shell, next: bool) {
 /// Takes the row to Properties' editor, with what was typed, for what the row does not show; a
 /// type that does not resolve keeps the row, its reason under it, rather than going over as
 /// another type.
-fn to_properties(shell: &mut Shell) {
-    let Some(mut inline) = uml(&shell.notation_states).and_then(|uml| uml.inline.clone()) else { return };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+fn to_properties(cx: &mut Ctx) {
+    let Some(mut inline) = uml(cx.notation_states).and_then(|uml| uml.inline.clone()) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     match resolve(store, &inline) {
         Ok(ty) => inline.edit.ty = ty,
         Err(e) => {
             inline.refused = Some(e);
             inline.field = InlineField::Type;
             inline.focus = true;
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.inline = Some(inline);
             }
             return;
         }
     }
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.inline = None;
     }
     let mut edit = inline.edit;
     edit.refused = None;
     edit.opened = true;
-    shell.panels.menu = None;
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    cx.panels.menu = None;
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.member = Some(edit);
     }
-    shell.state.show_panel(crate::state::Panel::Properties);
+    cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
 }
 
 /// The + at the right of each compartment of a selected class's card, which opens a new row there;
 /// an enumeration's one + is its Literals compartment's, shown while it has none too.
-pub(crate) fn add_buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, class: Uuid) {
-    let z = shell.canvas.zoom;
+pub(crate) fn add_buttons(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, class: Uuid) {
+    let z = cx.canvas.zoom;
     // While a row is typed on the card, its own keys add the next.
-    if z < DETAIL_ZOOM || uml(&shell.notation_states).and_then(|uml| uml.inline.as_ref()).is_some_and(|i| i.edit.class == class) {
+    if z < DETAIL_ZOOM || uml(cx.notation_states).and_then(|uml| uml.inline.as_ref()).is_some_and(|i| i.edit.class == class) {
         return;
     }
-    let card = shell.session.as_ref().and_then(|s| {
+    let card = cx.session.as_ref().and_then(|s| {
         let store = s.doc();
         let c = store.by_uuid(class)?;
-        let n = card_node(shell, store, c)?;
+        let n = card_node(cx, store, c)?;
         let card = s.view().of_element(store, c)?.card(store, c, archforge_diagram::diagram_of(store, n)?)?;
         Some((card, store.class_of(c).ok() == Some(archforge_uml::ENUMERATION)))
     });
@@ -478,14 +478,14 @@ pub(crate) fn add_buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: R
         if !clip.intersects(b) {
             continue;
         }
-        let resp = control(shell, ui, &format!("workspace.canvas.{key}"), "button", b, true).on_hover_text(tr(hint)).accessible_name(tr(hint));
+        let resp = control_cx(cx, ui, &format!("workspace.canvas.{key}"), "button", b, true).on_hover_text(tr(hint)).accessible_name(tr(hint));
         if resp.hovered() {
             paint.rect_filled(b, 4.0, p.field);
         }
         ux::icon_in(&paint, b.shrink(3.0), &icons::PLUS, p.text_secondary);
-        if resp.clicked() && !open(shell, class, kind, None) {
-            shell.cx(|cx| crate::uml_panel::open(cx, class, kind, None));
-            shell.state.show_panel(crate::state::Panel::Properties);
+        if resp.clicked() && !open(cx, class, kind, None) {
+            crate::uml_panel::open(cx, class, kind, None);
+            cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
         }
     }
 }

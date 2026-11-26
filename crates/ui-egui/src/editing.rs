@@ -1068,21 +1068,6 @@ pub(crate) fn on_diagram(store: &Store, d: Obj, e: Obj) -> bool {
     nodes_of(store, d).into_iter().any(|n| element_of(store, n) == Some(e))
 }
 
-/// [`place_with_lines_cx`] over the whole shell, for code not on the narrow context yet.
-#[allow(clippy::too_many_arguments, reason = "a drop is placed with its size, its lines and its step's name")]
-pub(crate) fn place_with_lines(
-    shell: &mut Shell,
-    d: Obj,
-    e: Obj,
-    at: (f64, f64),
-    size: (f64, f64),
-    links: &[Obj],
-    notation: &dyn archforge_diagram::Notation,
-    label: &str,
-) {
-    shell.cx(|cx| place_with_lines_cx(cx, d, e, at, size, links, notation, label));
-}
-
 /// Places element `e` dropped on diagram `d`, centred on `at` at `size`, with those of `links`
 /// that join it to an element the diagram shows, as one undo step named `label`; then selects it.
 #[allow(clippy::too_many_arguments, reason = "a drop is placed with its size, its lines and its step's name")]

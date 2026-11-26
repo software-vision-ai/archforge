@@ -91,11 +91,11 @@ tree's rows opened over a selected element, the centre leaving a version's detai
 opened (`canvas::open` opens at once), a panel of the right side shown, an explorer of the left
 side shown, a new element's name opened for typing in Models, and the delete dialog opened on a
 removal. ER's screens take the context, and so do UML's leaf screens (`package_nav`,
-`uml_classifier`, `uml_bindings`, `uml_constraints`, `uml_nesting`, `uml_sets`, `uml_templates`)
-and its panel screens (`uml_panel`, `uml_relate`, `uml_profiles`, `uml_stereotypes`, `uml_nary`,
-`uml_qualifiers`); ER's kind and Properties (`er_kind`, `er_ui`) still take the shell from the
-interfaces and build the context once in each method, and UML's entry screens (`uml_ui`,
-`uml_inline`) build it around each call into the other UML screens. The controls that take it end in `_cx` (`panels::section_cx`,
+`uml_classifier`, `uml_bindings`, `uml_constraints`, `uml_nesting`, `uml_sets`, `uml_templates`),
+its panel screens (`uml_panel`, `uml_relate`, `uml_profiles`, `uml_stereotypes`, `uml_nary`,
+`uml_qualifiers`) and its member typed in place on a card (`uml_inline`); ER's and UML's kinds and
+Properties (`er_kind`, `er_ui`, `uml_ui`) still take the shell from the interfaces and build the
+context once in each method. The controls that take it end in `_cx` (`panels::section_cx`,
 `panels::control_cx`, `menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old
 names over the whole shell forward to them until every caller has moved, and `home::control`
 stays the shell's own way to `panels::control_cx`.
