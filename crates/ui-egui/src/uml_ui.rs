@@ -12,6 +12,7 @@ use archforge_uml::commands::{classifiers, package_of, packages};
 use egui::Rect;
 use serde_json::json;
 
+#[cfg(any(test, feature = "snapshot"))]
 use crate::Shell;
 use crate::canvas::Tool;
 use crate::cx::{Ctx, CtxRef, Request};
