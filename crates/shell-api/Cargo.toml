@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 archforge-diagram.workspace = true
+archforge-mof.workspace = true
 egui.workspace = true
 serde.workspace = true
 
