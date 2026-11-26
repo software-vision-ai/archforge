@@ -17,11 +17,11 @@ use archforge_uml::generalization_sets as sets;
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
 use crate::canvas::{Drawing, ExtraLabel, edge_points, element_of, refs};
-use crate::home::control;
+use crate::cx::{Ctx, CtxRef, Request};
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, FieldOut, PAD, ROW, Subject, edit_field, menu, run, section};
+use crate::panels::{FIELD, FieldOut, PAD, ROW, Subject, control_cx, edit_field_cx, menu_cx, run_cx, section_cx};
+use crate::state::Panel;
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
@@ -106,8 +106,8 @@ pub(crate) fn and_list(items: &[String]) -> String {
 
 /// The selection's elements, when it holds a generalization: what the menu, the shortcut and
 /// Properties' selection panel act on.
-pub(crate) fn selected(shell: &Shell) -> Option<Vec<Obj>> {
-    let s = shell.session.as_ref()?;
+pub(crate) fn selected(cx: &CtxRef) -> Option<Vec<Obj>> {
+    let s = cx.session.as_ref()?;
     let store = s.doc();
     let all = elements(store, &s.view().selection);
     all.iter().any(|o| sets::is_generalization(store, *o)).then_some(all)
@@ -119,8 +119,8 @@ fn ids(store: &Store, objs: &[Obj]) -> Vec<String> {
 
 /// Groups `gens`, generalizations to one class, into a new set with a fresh name, as one undo step;
 /// the set is selected and Properties opens with its name ready for typing.
-pub(crate) fn create(shell: &mut Shell, gens: &[Obj], general: Obj) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn create(cx: &mut Ctx, gens: &[Obj], general: Obj) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let taken: Vec<String> = archforge_uml::nesting::home_package(store, general)
         .map(|pkg| {
             store
@@ -135,43 +135,43 @@ pub(crate) fn create(shell: &mut Shell, gens: &[Obj], general: Obj) {
         .unwrap_or_default();
     let Some(fresh) = crate::explorer::fresh_name("GeneralizationSet", taken.into_iter(), false) else { return };
     let params = json!({ "generalizations": ids(store, gens), "name": fresh });
-    match run(shell, "uml.generalization-set.add", params) {
+    match run_cx(cx, "uml.generalization-set.add", params) {
         Ok(out) => {
-            shell.canvas.notice = None;
-            shell.state.show_panel(crate::state::Panel::Properties);
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            cx.canvas.notice = None;
+            cx.requests.push(Request::ShowPanel(Panel::Properties));
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.set_name_focus = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse);
             }
         }
-        Err(e) => shell.canvas.notice = Some(e),
+        Err(e) => cx.canvas.notice = Some(e),
     }
 }
 
 /// Adds `gens` to the set `set`, as one undo step.
-pub(crate) fn add_to(shell: &mut Shell, set: Obj, gens: &[Obj]) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn add_to(cx: &mut Ctx, set: Obj, gens: &[Obj]) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let (Ok(id), gens) = (store.uuid(set), ids(store, gens)) else { return };
-    if let Err(e) = run(shell, "uml.generalization-set.set", json!({ "set": id.to_string(), "add": gens })) {
-        shell.canvas.notice = Some(e);
+    if let Err(e) = run_cx(cx, "uml.generalization-set.set", json!({ "set": id.to_string(), "add": gens })) {
+        cx.canvas.notice = Some(e);
     }
 }
 
 /// Takes `g` out of the set `set`, as one undo step; a set left with no member goes with it.
-fn remove_from(shell: &mut Shell, set: Obj, g: Obj) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+fn remove_from(cx: &mut Ctx, set: Obj, g: Obj) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let (Ok(s), Ok(g)) = (store.uuid(set), store.uuid(g)) else { return };
-    if let Err(e) = run(shell, "uml.generalization-set.set", json!({ "set": s.to_string(), "remove": [g.to_string()] })) {
-        shell.panels.notice = Some(e);
+    if let Err(e) = run_cx(cx, "uml.generalization-set.set", json!({ "set": s.to_string(), "remove": [g.to_string()] })) {
+        cx.panels.notice = Some(e);
     }
 }
 
 /// ⌥⌘G (Ctrl Alt G): the selection's generalizations into a new set, or why not at the canvas's top.
-pub(crate) fn shortcut(shell: &mut Shell) -> bool {
-    let Some(all) = selected(shell) else { return false };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return false };
+pub(crate) fn shortcut(cx: &mut Ctx) -> bool {
+    let Some(all) = selected(&cx.cx_ref()) else { return false };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return false };
     match grouping(store, &all) {
-        Grouping::Shared { general, gens } => create(shell, &gens, general),
-        Grouping::Refused { why, .. } => shell.canvas.notice = Some(why),
+        Grouping::Shared { general, gens } => create(cx, &gens, general),
+        Grouping::Refused { why, .. } => cx.canvas.notice = Some(why),
     }
     true
 }
@@ -179,8 +179,8 @@ pub(crate) fn shortcut(shell: &mut Shell) -> bool {
 /// ⌥⌘G (Ctrl Alt G elsewhere): the selected generalizations into a new set, or why they cannot
 /// form one at the canvas's top; true when pressed with a generalization selected, which takes the
 /// keys this frame.
-pub(crate) fn chord_pressed(shell: &mut Shell, ui: &egui::Ui) -> bool {
-    ui.input(|i| crate::actions::chord_press(i, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::ALT)) && shortcut(shell)
+pub(crate) fn chord_pressed(cx: &mut Ctx, ui: &egui::Ui) -> bool {
+    ui.input(|i| crate::actions::chord_press(i, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::ALT)) && shortcut(cx)
 }
 
 /// A right click on a generalization's line, away from any card: the set actions' menu opened
@@ -219,18 +219,18 @@ pub(crate) fn chord(ui: &egui::Ui) -> &'static str {
 
 /// The selected set, removed from the model with Delete, its generalizations kept, with a toast
 /// offering Undo; false when no set is selected.
-pub(crate) fn remove_selected_set(shell: &mut Shell) -> bool {
-    let Some(session) = shell.session.as_ref() else { return false };
+pub(crate) fn remove_selected_set(cx: &mut Ctx) -> bool {
+    let Some(session) = cx.session.as_ref() else { return false };
     let store = session.doc();
     let Some(set) = session.view().selection.iter().copied().find(|o| sets::is_set(store, *o)) else { return false };
     let (Ok(id), said) = (store.uuid(set), name(store, set)) else { return false };
-    match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
+    match run_cx(cx, "element.remove", json!({ "ids": [id.to_string()] })) {
         Ok(_) => {
             let text = fmt(&tr("{name} removed; its generalizations stay"), &[("name", &said)]);
-            let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
+            let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+            cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
         }
-        Err(e) => shell.canvas.notice = Some(e),
+        Err(e) => cx.canvas.notice = Some(e),
     }
     true
 }
@@ -291,14 +291,14 @@ enum Act {
 /// generalization set…, Add to set ▸ each set of their class, Remove from this diagram and Delete
 /// from the model. A mixed selection shows the set actions disabled with the reason, and the
 /// reason in full on the danger tint under the menu.
-pub(crate) fn line_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, at: Pos2, d: Obj) {
-    let Some(all) = selected(shell) else {
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+pub(crate) fn line_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, at: Pos2, d: Obj) {
+    let Some(all) = selected(&cx.cx_ref()) else {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.line_menu = None;
         }
         return;
     };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let paint = ui.painter().with_clip_rect(r);
     let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
     let n = u64::try_from(all.len()).unwrap_or(u64::MAX);
@@ -391,10 +391,10 @@ pub(crate) fn line_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, 
         }
         let row = Rect::from_min_size(pos2(m.left() + 4.0, ry), vec2(MENU_WIDTH - 8.0, MENU_ROW));
         let resp = if item.live {
-            control(shell, ui, &item.id, "menu-item", row, true).accessible_name(item.label.as_str())
+            control_cx(cx, ui, &item.id, "menu-item", row, true).accessible_name(item.label.as_str())
         } else {
             // Disabled, it says why on hover and to a screen reader.
-            crate::widgets::record_visible(ui, &mut shell.registry, &item.id, "menu-item", row);
+            crate::widgets::record_visible(ui, cx.registry, &item.id, "menu-item", row);
             let resp = ui.interact(row, crate::widgets::egui_id(&item.id), Sense::hover());
             let why = if item.detail.is_empty() { item.label.clone() } else { format!("{}: {}", item.label, item.detail) };
             ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&item.id), |node| {
@@ -430,17 +430,17 @@ pub(crate) fn line_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, 
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(card.left() + 10.0, card.top() + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
         paint.galley(pos2(card.left() + 32.0, card.top() + 10.0), text, p.text.into());
-        crate::widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.contextMenu.generalizationSet.reason", "text", card);
+        crate::widgets::record_visible(ui, cx.registry, "workspace.canvas.contextMenu.generalizationSet.reason", "text", card);
         area = area.union(card);
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| area.contains(pos)));
     if (outside || ui.input(|i| i.key_pressed(egui::Key::Escape)))
-        && let Some(uml) = uml_mut(&mut shell.notation_states)
+        && let Some(uml) = uml_mut(cx.notation_states)
     {
         uml.line_menu = None;
     }
     let Some(act) = picked else { return };
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.line_menu = None;
     }
     let gens = match &grouping {
@@ -448,24 +448,24 @@ pub(crate) fn line_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, 
         Grouping::Refused { .. } => Vec::new(),
     };
     match (act, &grouping) {
-        (Act::Create, Grouping::Shared { general, .. }) => create(shell, &gens, *general),
-        (Act::Add(s), _) => add_to(shell, s, &gens),
-        (Act::Remove, _) => remove_lines(shell, d, &all),
-        (Act::Delete, _) => delete(shell, &all),
+        (Act::Create, Grouping::Shared { general, .. }) => create(cx, &gens, *general),
+        (Act::Add(s), _) => add_to(cx, s, &gens),
+        (Act::Remove, _) => remove_lines(cx, d, &all),
+        (Act::Delete, _) => delete(cx, &all),
         _ => {}
     }
 }
 
 /// Removes the lines of `elements` from diagram `d`, as one undo step, the model untouched.
-fn remove_lines(shell: &mut Shell, d: Obj, elements: &[Obj]) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+fn remove_lines(cx: &mut Ctx, d: Obj, elements: &[Obj]) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let edges: Vec<String> = elements
         .iter()
         .flat_map(|e| archforge_diagram::views_of(store, *e).1)
         .filter(|e| archforge_diagram::diagram_of(store, *e) == Some(d))
         .filter_map(|e| store.uuid(e).ok().map(|u| u.to_string()))
         .collect();
-    let Some(session) = shell.session.as_mut() else { return };
+    let Some(session) = cx.session.as_mut() else { return };
     let out = session.batch(&tr("Remove from this diagram"), |b| {
         for edge in &edges {
             b.execute("diagram.disconnect", &json!({ "edge": edge }))?;
@@ -473,29 +473,29 @@ fn remove_lines(shell: &mut Shell, d: Obj, elements: &[Obj]) {
         Ok(())
     });
     if let Err(e) = out {
-        shell.canvas.notice = Some(crate::panels::refusal(&e));
+        cx.canvas.notice = Some(crate::panels::refusal(&e));
     }
 }
 
 /// Deletes `elements` from the model, as one undo step, with a toast offering Undo that names the
 /// sets left empty, which went with them.
-fn delete(shell: &mut Shell, elements: &[Obj]) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+fn delete(cx: &mut Ctx, elements: &[Obj]) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let gone = emptied_names(store, elements);
     let n = u64::try_from(elements.len()).unwrap_or(u64::MAX);
     let word = trn("{n} element", "{n} elements", n);
     let what = match elements {
-        [one] => crate::notation_ui::of(shell.notation_uis, store, *one).and_then(|ui| ui.words(store, *one)).map(|w| w.word).unwrap_or(word),
+        [one] => crate::notation_ui::of(cx.notation_uis, store, *one).and_then(|ui| ui.words(store, *one)).map(|w| w.word).unwrap_or(word),
         _ => word,
     };
     let ids = ids(store, elements);
-    match run(shell, "element.remove", json!({ "ids": ids })) {
+    match run_cx(cx, "element.remove", json!({ "ids": ids })) {
         Ok(_) => {
             let text = removed_text(&what, &gone);
-            let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
+            let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+            cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
         }
-        Err(e) => shell.canvas.notice = Some(e),
+        Err(e) => cx.canvas.notice = Some(e),
     }
 }
 
@@ -516,16 +516,7 @@ pub(crate) fn removed_text(what: &str, gone: &[String]) -> String {
 /// `{id}.{second key}`; a click or the arrow keys while it has the keyboard flip it. Gives the new
 /// value when it changed.
 #[allow(clippy::too_many_arguments, reason = "a segmented control is drawn with its label, choices and ids")]
-fn segmented(
-    shell: &mut Shell,
-    ui: &egui::Ui,
-    p: &Palette,
-    at: Pos2,
-    id: &str,
-    label: &str,
-    choices: [(&str, String); 2],
-    first: bool,
-) -> Option<bool> {
+fn segmented(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: Pos2, id: &str, label: &str, choices: [(&str, String); 2], first: bool) -> Option<bool> {
     let paint = ui.painter().clone();
     ux::text(&paint, at, label, types::CAPTION, p.text_secondary, None);
     let galleys = choices.clone().map(|(_, w)| ux::galley(&paint, &w, types::SMALL, p.text, None));
@@ -538,7 +529,7 @@ fn segmented(
         let on = (i == 0) == first;
         let b = Rect::from_min_size(pos2(x, frame.top() + 2.0), vec2(g.size().x + 24.0, FIELD - 4.0));
         let sid = format!("{id}.{key}");
-        let resp = control(shell, ui, &sid, "toggle", b, true).accessible_name(format!("{label}: {word}"));
+        let resp = control_cx(cx, ui, &sid, "toggle", b, true).accessible_name(format!("{label}: {word}"));
         ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&sid), |node| {
             node.set_role(egui::accesskit::Role::RadioButton);
             node.set_toggled(if on { egui::accesskit::Toggled::True } else { egui::accesskit::Toggled::False });
@@ -583,17 +574,17 @@ fn help(ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, text: &str) -> f32 {
 
 /// A row of a list in Properties with its text, its edit button and a remove button; gives what was
 /// pressed: (edit, remove).
-fn list_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, row: Rect, id: &str, text: &str, remove_hint: &str) -> (bool, bool) {
+fn list_row(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, row: Rect, id: &str, text: &str, remove_hint: &str) -> (bool, bool) {
     let paint = ui.painter().clone();
-    let resp = control(shell, ui, id, "row", row, true).accessible_name(text);
+    let resp = control_cx(cx, ui, id, "row", row, true).accessible_name(text);
     if resp.contains_pointer() {
         paint.rect_filled(row, 6.0, p.page);
     }
     ux::text(&paint, pos2(row.left() + 10.0, row.top() + 9.0), text, types::UI, p.text, Some((row.width() - 76.0).max(0.0)));
     let edit_row = Rect::from_min_max(row.min, pos2(row.right() - 28.0, row.bottom()));
-    let edit = crate::panels::edit_button(shell, ui, p, edit_row, id, resp.contains_pointer()) || resp.double_clicked();
+    let edit = crate::panels::edit_button_cx(cx, ui, p, edit_row, id, resp.contains_pointer()) || resp.double_clicked();
     let b = Rect::from_center_size(pos2(row.right() - 14.0, row.center().y), vec2(24.0, 24.0));
-    let r = control(shell, ui, &format!("{id}.remove"), "button", b, true).on_hover_text(tr(remove_hint)).accessible_name(tr(remove_hint));
+    let r = control_cx(cx, ui, &format!("{id}.remove"), "button", b, true).on_hover_text(tr(remove_hint)).accessible_name(tr(remove_hint));
     if r.hovered() {
         paint.rect_filled(b, 6.0, p.border);
     }
@@ -603,9 +594,9 @@ fn list_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, row: Rect, id: &str, 
 
 /// A set's Properties (B2): Name and its General class, Completeness and Disjointness with what they
 /// mean, then its members with `+` and, per member, edit (its generalization) and remove.
-pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
+pub(crate) fn set_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let (Some(s), Some(id)) = (subject.obj, subject.id) else { return };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
     let half = ((width - 8.0) / 2.0).max(0.0);
@@ -622,14 +613,14 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         members.iter().filter_map(|g| Some((*g, store.uuid(*g).ok()?, sets::generalization_name(store, *g)))).collect();
     // Name, written on Enter or leaving the field, given up on Escape, never sent empty; the name
     // field takes the keyboard when the set was just made.
-    let focus = uml_mut(&mut shell.notation_states).and_then(|uml| uml.set_name_focus.take()) == Some(id);
-    let mut text = match &shell.panels.name {
+    let focus = uml_mut(cx.notation_states).and_then(|uml| uml.set_name_focus.take()) == Some(id);
+    let mut text = match &cx.panels.name {
         Some(n) if n.target == id => n.text.clone(),
         _ => subject.name.clone(),
     };
     let set = "uml.generalization-set.set";
-    let out = edit_field(
-        shell,
+    let out = edit_field_cx(
+        cx,
         ui,
         p,
         pos2(left, y),
@@ -642,19 +633,19 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         true,
     );
     if out == FieldOut::Cancel {
-        shell.panels.name = None;
+        cx.panels.name = None;
     } else if out == FieldOut::Commit {
-        shell.panels.name = None;
-        if text.trim() != subject.name && !crate::panels::refuse_empty_name(shell, set, &text) {
-            match run(shell, set, json!({ "set": id.to_string(), "name": text.trim() })) {
-                Ok(_) => shell.panels.notice = None,
-                Err(e) => shell.panels.notice = Some(e),
+        cx.panels.name = None;
+        if text.trim() != subject.name && !crate::panels::refuse_empty_name_cx(cx, set, &text) {
+            match run_cx(cx, set, json!({ "set": id.to_string(), "name": text.trim() })) {
+                Ok(_) => cx.panels.notice = None,
+                Err(e) => cx.panels.notice = Some(e),
             }
         }
     } else if text != subject.name {
-        shell.panels.name = Some(crate::panels::NameEdit { target: id, text });
-    } else if shell.panels.name.as_ref().is_some_and(|n| n.target == id) {
-        shell.panels.name = None;
+        cx.panels.name = Some(crate::panels::NameEdit { target: id, text });
+    } else if cx.panels.name.as_ref().is_some_and(|n| n.target == id) {
+        cx.panels.name = None;
     }
     // Its general class, read only: it follows the members.
     let paint = ui.painter().clone();
@@ -663,22 +654,22 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(half, FIELD));
     paint.rect_filled(field, 6.0, p.field);
     ux::text_mid(&paint, field.left() + 8.0, field.center().y, &general_name, types::SMALL, p.text_secondary, Some((half - 16.0).max(0.0)));
-    control(shell, ui, "workspace.properties.generalizationSet.general", "field", field, false)
+    control_cx(cx, ui, "workspace.properties.generalizationSet.general", "field", field, false)
         .accessible_name(format!("{}: {general_name}", tr("General class")));
     y += 17.0 + FIELD + 14.0;
-    let set_flag = |shell: &mut Shell, key: &str, v: bool| {
-        if let Err(e) = run(shell, "uml.generalization-set.set", json!({ "set": id.to_string(), key: v })) {
-            shell.panels.notice = Some(e);
+    let set_flag = |cx: &mut Ctx, key: &str, v: bool| {
+        if let Err(e) = run_cx(cx, "uml.generalization-set.set", json!({ "set": id.to_string(), key: v })) {
+            cx.panels.notice = Some(e);
         }
     };
     let choices = [("complete", tr("Complete")), ("incomplete", tr("Incomplete"))];
-    if let Some(v) = segmented(shell, ui, p, pos2(left, y), "workspace.properties.generalizationSet", &tr("Completeness"), choices, complete) {
-        set_flag(shell, "complete", v);
+    if let Some(v) = segmented(cx, ui, p, pos2(left, y), "workspace.properties.generalizationSet", &tr("Completeness"), choices, complete) {
+        set_flag(cx, "complete", v);
     }
     y += 17.0 + FIELD + 12.0;
     let choices = [("disjoint", tr("Disjoint")), ("overlapping", tr("Overlapping"))];
-    if let Some(v) = segmented(shell, ui, p, pos2(left, y), "workspace.properties.generalizationSet", &tr("Disjointness"), choices, disjoint) {
-        set_flag(shell, "disjoint", v);
+    if let Some(v) = segmented(cx, ui, p, pos2(left, y), "workspace.properties.generalizationSet", &tr("Disjointness"), choices, disjoint) {
+        set_flag(cx, "disjoint", v);
     }
     y += 17.0 + FIELD + 12.0;
     y = help(ui, p, pos2(left, y), width, &meaning(&braces, &general_name, complete, disjoint)) + 18.0;
@@ -686,32 +677,32 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     let title = fmt(&tr("Members · {n}"), &[("n", &member_rows.len().to_string())]);
     let add_id = "workspace.properties.generalizationSet.members.add";
     let plus = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
-    match section(shell, ui, p, r, y, &title, Some((add_id, "Add member"))) {
+    match section_cx(cx, ui, p, r, y, &title, Some((add_id, "Add member"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = Some(menus::SET_MEMBER);
+            cx.panels.menu = Some(menus::SET_MEMBER);
             y += 44.0;
         }
     }
-    if shell.panels.menu == Some(menus::SET_MEMBER) {
+    if cx.panels.menu == Some(menus::SET_MEMBER) {
         let items = if candidate_names.is_empty() {
             vec![fmt(&tr("No other generalization to {general}"), &[("general", &general_name)])]
         } else {
             candidate_names.clone()
         };
-        if let Some(i) = menu(shell, ui, p, plus, add_id, &items)
+        if let Some(i) = menu_cx(cx, ui, p, plus, add_id, &items)
             && let Some(g) = candidates.get(i)
         {
-            add_to(shell, s, &[*g]);
+            add_to(cx, s, &[*g]);
         }
     }
     for (g, gid, text) in &member_rows {
         let row = Rect::from_min_size(pos2(left, y), vec2(width, ROW));
-        let (edit, remove) = list_row(shell, ui, p, row, &format!("workspace.properties.generalizationSet.member.{gid}"), text, "Remove from set");
+        let (edit, remove) = list_row(cx, ui, p, row, &format!("workspace.properties.generalizationSet.member.{gid}"), text, "Remove from set");
         if remove {
-            remove_from(shell, s, *g);
+            remove_from(cx, s, *g);
         } else if edit {
-            crate::panels::select_element(shell, *gid);
+            crate::panels::select_element_cx(cx, *gid);
         }
         y += ROW;
     }
@@ -724,7 +715,7 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     let bottom = help(ui, p, pos2(left, y + 16.0), width, &said);
     crate::widgets::record_visible(
         ui,
-        &mut shell.registry,
+        cx.registry,
         "workspace.properties.generalizationSet.help",
         "text",
         Rect::from_min_max(pos2(left, y), pos2(left + width, bottom)),
@@ -735,8 +726,8 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
 /// this generalization, or another set of its general class to join), a row per set with its
 /// braces, edit (the set) and remove (out of the set); a refused reconnection on the danger tint.
 /// Gives the y under it.
-pub(crate) fn generalization_section(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, mut y: f32, g: Obj, gid: Uuid) -> f32 {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+pub(crate) fn generalization_section(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, mut y: f32, g: Obj, gid: Uuid) -> f32 {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
     let in_sets: Vec<(Obj, Uuid, String)> =
@@ -749,21 +740,21 @@ pub(crate) fn generalization_section(shell: &mut Shell, ui: &egui::Ui, p: &Palet
     let title = fmt(&tr("Generalization sets · {n}"), &[("n", &in_sets.len().to_string())]);
     let add_id = "workspace.properties.generalization.sets.add";
     let plus = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
-    match section(shell, ui, p, r, y, &title, Some((add_id, "Add to a generalization set"))) {
+    match section_cx(cx, ui, p, r, y, &title, Some((add_id, "Add to a generalization set"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = Some(menus::SET_JOIN);
+            cx.panels.menu = Some(menus::SET_JOIN);
             y += 44.0;
         }
     }
-    if shell.panels.menu == Some(menus::SET_JOIN)
-        && let Some(i) = menu(shell, ui, p, plus, add_id, &offers)
+    if cx.panels.menu == Some(menus::SET_JOIN)
+        && let Some(i) = menu_cx(cx, ui, p, plus, add_id, &offers)
     {
         match i.checked_sub(1).and_then(|k| joinable.get(k)) {
-            Some(s) => add_to(shell, *s, &[g]),
+            Some(s) => add_to(cx, *s, &[g]),
             None => {
                 if let Some(general) = general {
-                    create(shell, &[g], general);
+                    create(cx, &[g], general);
                 }
             }
         }
@@ -774,21 +765,19 @@ pub(crate) fn generalization_section(shell: &mut Shell, ui: &egui::Ui, p: &Palet
     }
     for (s, sid, text) in &in_sets {
         let row = Rect::from_min_size(pos2(left, y), vec2(width, ROW));
-        let (edit, remove) = list_row(shell, ui, p, row, &format!("workspace.properties.generalization.set.{sid}"), text, "Remove from set");
+        let (edit, remove) = list_row(cx, ui, p, row, &format!("workspace.properties.generalization.set.{sid}"), text, "Remove from set");
         if remove {
-            remove_from(shell, *s, g);
+            remove_from(cx, *s, g);
         } else if edit {
-            crate::panels::select_element(shell, *sid);
+            crate::panels::select_element_cx(cx, *sid);
         }
         y += ROW;
     }
     y += 6.0;
     y = help(ui, p, pos2(left, y), width, &tr("Membership is listed here for every set, and each set draws its own line and label on the canvas."))
         + 14.0;
-    if let Some(why) = uml(&shell.notation_states)
-        .and_then(|uml| uml.set_refused.as_ref())
-        .filter(|(of, _)| *of == gid && !in_sets.is_empty())
-        .map(|(_, w)| w.clone())
+    if let Some(why) =
+        uml(cx.notation_states).and_then(|uml| uml.set_refused.as_ref()).filter(|(of, _)| *of == gid && !in_sets.is_empty()).map(|(_, w)| w.clone())
     {
         let paint = ui.painter().clone();
         let text = ux::galley_rows(&paint, &why, types::SMALL, p.text, Some((width - 42.0).max(0.0)), 8);
@@ -796,7 +785,7 @@ pub(crate) fn generalization_section(shell: &mut Shell, ui: &egui::Ui, p: &Palet
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
         paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-        crate::widgets::record_visible(ui, &mut shell.registry, "workspace.properties.generalization.sets.refusal", "text", card);
+        crate::widgets::record_visible(ui, cx.registry, "workspace.properties.generalization.sets.refusal", "text", card);
         y = card.bottom() + 12.0;
     }
     if !in_sets.is_empty() {
@@ -813,8 +802,8 @@ pub(crate) fn generalization_section(shell: &mut Shell, ui: &egui::Ui, p: &Palet
 
 /// Properties for a selection holding generalizations (B1): its heading, how they relate, and the
 /// set actions as buttons, reachable from the keyboard, disabled with the reason for a mixed one.
-pub(crate) fn selection_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, all: &[Obj]) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn selection_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, all: &[Obj]) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
@@ -844,19 +833,19 @@ pub(crate) fn selection_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
     ux::text(&paint, r.min + vec2(PAD, y), &heading, types::CARD_TITLE, p.text, Some(width));
     ux::text(&paint, r.min + vec2(PAD, y + 26.0), &kind, types::CAPTION, p.text_secondary, Some(width));
     let mut y = r.top() + y + 51.0;
-    y = section(shell, ui, p, r, y, &tr("Generalization sets"), None).unwrap_or(y + 50.0);
+    y = section_cx(cx, ui, p, r, y, &tr("Generalization sets"), None).unwrap_or(y + 50.0);
     let line = if in_any { tr("Some of these are in a set already.") } else { tr("None of these is in a set yet.") };
     ux::text(&paint, pos2(left, y), &line, types::UI, p.text, Some(width));
     y += 30.0;
-    let button = |shell: &mut Shell, at: Pos2, id: &str, label: &str, live: bool| {
+    let button = |cx: &mut Ctx, at: Pos2, id: &str, label: &str, live: bool| {
         let g = ux::galley(&paint, label, types::UI, if live { p.text } else { p.text_muted }, None);
         let b = Rect::from_min_size(at, vec2((g.size().x + 24.0).min(width), FIELD));
         paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, if live { p.text.into() } else { p.text_muted.into() });
         let resp = if live {
-            control(shell, ui, id, "button", b, true)
+            control_cx(cx, ui, id, "button", b, true)
         } else {
-            crate::widgets::record_visible(ui, &mut shell.registry, id, "button", b);
+            crate::widgets::record_visible(ui, cx.registry, id, "button", b);
             let resp = ui.interact(b, crate::widgets::egui_id(id), Sense::hover());
             let reason = why.clone().unwrap_or_default();
             ui.ctx().accesskit_node_builder(crate::widgets::egui_id(id), |node| {
@@ -868,17 +857,17 @@ pub(crate) fn selection_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         };
         (resp.accessible_name(label).clicked() && live, b.bottom())
     };
-    let (clicked, bottom) = button(shell, pos2(left, y), PANEL_CREATE_ID, &tr("Create set from selection"), live);
+    let (clicked, bottom) = button(cx, pos2(left, y), PANEL_CREATE_ID, &tr("Create set from selection"), live);
     y = bottom + 8.0;
     if clicked && let Some(general) = general {
-        create(shell, &gens, general);
+        create(cx, &gens, general);
         return;
     }
     for (i, (s, label, all_in)) in own.iter().enumerate() {
-        let (clicked, bottom) = button(shell, pos2(left, y), &format!("workspace.properties.selection.addToGeneralizationSet.{i}"), label, !all_in);
+        let (clicked, bottom) = button(cx, pos2(left, y), &format!("workspace.properties.selection.addToGeneralizationSet.{i}"), label, !all_in);
         y = bottom + 8.0;
         if clicked {
-            add_to(shell, *s, &gens);
+            add_to(cx, *s, &gens);
             return;
         }
     }
@@ -889,7 +878,7 @@ pub(crate) fn selection_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
         paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-        crate::widgets::record_visible(ui, &mut shell.registry, "workspace.properties.selection.generalizationSet.reason", "text", card);
+        crate::widgets::record_visible(ui, cx.registry, "workspace.properties.selection.generalizationSet.reason", "text", card);
         y = card.bottom() + 12.0;
     }
     #[rustfmt::skip]
@@ -1057,11 +1046,11 @@ pub(crate) fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut c
 /// A set's label that no node holds yet, let go on diagram `d` with its top left corner at
 /// `(x, y)`: placed there on this diagram alone, a node made to hold it, as one undo step
 /// (`uml.generalization-set.place`); a refusal is said at the canvas's top.
-pub(crate) fn place_label(shell: &mut Shell, d: Obj, set: Uuid, x: f64, y: f64) {
-    let Some(diagram) = shell.session.as_ref().and_then(|s| s.doc().uuid(d).ok()) else { return };
+pub(crate) fn place_label(cx: &mut Ctx, d: Obj, set: Uuid, x: f64, y: f64) {
+    let Some(diagram) = cx.session.as_ref().and_then(|s| s.doc().uuid(d).ok()) else { return };
     let params = json!({ "diagram": diagram.to_string(), "set": set.to_string(), "x": x.round(), "y": y.round() });
-    if let Err(e) = run(shell, "uml.generalization-set.place", params) {
-        shell.canvas.notice = Some(e);
+    if let Err(e) = run_cx(cx, "uml.generalization-set.place", params) {
+        cx.canvas.notice = Some(e);
     }
 }
 

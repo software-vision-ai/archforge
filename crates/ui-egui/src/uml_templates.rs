@@ -21,10 +21,9 @@ use archforge_uml::templates::{self, Kind};
 use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
-use crate::home::control;
+use crate::cx::Ctx;
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, PAD, ROW, icon_button, run, section, select_field, text_field};
+use crate::panels::{FIELD, PAD, ROW, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx, text_field_cx};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
@@ -102,7 +101,7 @@ pub(crate) fn kind_word(kind: Kind) -> String {
 }
 
 /// Opens the editor on parameter `target`, or on a new one of `classifier`.
-pub(crate) fn open(shell: &mut Shell, classifier: Uuid, target: Option<Uuid>) {
+pub(crate) fn open(cx: &mut Ctx, classifier: Uuid, target: Option<Uuid>) {
     let mut edit = TemplateEdit {
         classifier,
         target,
@@ -114,7 +113,7 @@ pub(crate) fn open(shell: &mut Shell, classifier: Uuid, target: Option<Uuid>) {
         refused_at: None,
         opened: true,
     };
-    if let Some(store) = shell.session.as_ref().map(|s| s.doc())
+    if let Some(store) = cx.session.as_ref().map(|s| s.doc())
         && let Some(p) = target.and_then(|t| store.by_uuid(t))
     {
         edit.name = templates::parameter_name(store, p);
@@ -122,11 +121,11 @@ pub(crate) fn open(shell: &mut Shell, classifier: Uuid, target: Option<Uuid>) {
         edit.constraint = value_of(store, templates::constraint_of(store, p));
         edit.default = value_of(store, templates::default_of(store, p));
     }
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.template = Some(edit);
         uml.template_in_use = None;
     }
-    shell.panels.menu = None;
+    cx.panels.menu = None;
 }
 
 /// The ids of parameter row `k`'s controls (and its editor's fields).
@@ -204,53 +203,52 @@ fn help(store: &Store, edit: &TemplateEdit) -> String {
 
 /// The section `Template parameters · n` of classifier `c` (`c_id`) at `y`, with its rows, the
 /// editor and a refused removal; gives the y under it.
-pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, c: Obj, c_id: Uuid) -> f32 {
+pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, c: Obj, c_id: Uuid) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
     let rows: Vec<(Uuid, String)> =
         templates::parameters(store, c).into_iter().filter_map(|q| Some((store.uuid(q).ok()?, templates::parameter_text(store, q)))).collect();
     let title = fmt(&tr("Template parameters · {n}"), &[("n", &rows.len().to_string())]);
-    let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.class.templateParameters.add", "Add template parameter")))
+    let Some(next) = section_cx(cx, ui, p, r, y, &title, Some(("workspace.properties.class.templateParameters.add", "Add template parameter")))
     else {
-        open(shell, c_id, None);
+        open(cx, c_id, None);
         return y + 50.0;
     };
     y = next - 6.0;
-    let editing =
-        |shell: &Shell| uml(&shell.notation_states).and_then(|uml| uml.template.as_ref()).filter(|e| e.classifier == c_id).map(|e| e.target);
-    let in_use = uml(&shell.notation_states).and_then(|uml| uml.template_in_use.clone()).filter(|u| rows.iter().any(|(id, _)| *id == u.parameter));
+    let editing = |cx: &Ctx| uml(cx.notation_states).and_then(|uml| uml.template.as_ref()).filter(|e| e.classifier == c_id).map(|e| e.target);
+    let in_use = uml(cx.notation_states).and_then(|uml| uml.template_in_use.clone()).filter(|u| rows.iter().any(|(id, _)| *id == u.parameter));
     for (k, (id, text)) in rows.iter().enumerate() {
-        if editing(shell) == Some(Some(*id)) {
-            y = editor(shell, ui, p, r, y, k);
+        if editing(cx) == Some(Some(*id)) {
+            y = editor(cx, ui, p, r, y, k);
             continue;
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, ROW));
         let key = row_key(k);
-        let resp = control(shell, ui, &key, "row", row, true).accessible_name(text.as_str()).on_hover_text(text.as_str());
+        let resp = control_cx(cx, ui, &key, "row", row, true).accessible_name(text.as_str()).on_hover_text(text.as_str());
         if in_use.as_ref().is_some_and(|u| u.parameter == *id) {
             paint.rect_filled(row, 6.0, p.accent_tint);
         } else if resp.contains_pointer() {
             paint.rect_filled(row, 6.0, p.page);
         }
         ux::text(&paint, pos2(row.left() + 10.0, row.top() + 9.0), text, types::UI, p.text, Some((width - 50.0).max(0.0)));
-        if crate::panels::edit_button(shell, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
-            open(shell, c_id, Some(*id));
+        if crate::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
+            open(cx, c_id, Some(*id));
         }
         y += ROW;
     }
-    if editing(shell) == Some(None) {
-        y = editor(shell, ui, p, r, y, rows.len());
+    if editing(cx) == Some(None) {
+        y = editor(cx, ui, p, r, y, rows.len());
     }
     if let Some(u) = in_use {
-        y = in_use_box(shell, ui, p, r, y + 4.0, &u);
+        y = in_use_box(cx, ui, p, r, y + 4.0, &u);
     }
     y + 10.0
 }
 
 /// The refusal of a removal a binding stands in the way of (C5): the reason on the danger tint,
 /// Show the binding under it, and what may still change; gives the y under it.
-fn in_use_box(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, u: &InUse) -> f32 {
+fn in_use_box(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, u: &InUse) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
@@ -259,23 +257,23 @@ fn in_use_box(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
     paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-    crate::widgets::record_visible(ui, &mut shell.registry, &format!("{ID}.refusal"), "text", card);
+    crate::widgets::record_visible(ui, cx.registry, &format!("{ID}.refusal"), "text", card);
     y = card.bottom() + 12.0;
     let label = tr("Show the binding");
     let g = ux::galley(&paint, &label, types::UI, p.text, None);
     let b = Rect::from_min_size(pos2(left, y), vec2((g.size().x + 24.0).min(width), FIELD));
     paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text.into());
-    if control(shell, ui, &format!("{ID}.showBinding"), "button", b, true).accessible_name(label).clicked()
+    if control_cx(cx, ui, &format!("{ID}.showBinding"), "button", b, true).accessible_name(label).clicked()
         && let Some(binding) = u.binding
     {
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.template_in_use = None;
         }
-        crate::panels::select_element(shell, binding);
+        crate::panels::select_element_cx(cx, binding);
     }
     y = b.bottom() + 12.0;
-    let name = shell.session.as_ref().and_then(|s| s.doc().by_uuid(u.parameter).map(|o| templates::parameter_name(s.doc(), o))).unwrap_or_default();
+    let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(u.parameter).map(|o| templates::parameter_name(s.doc(), o))).unwrap_or_default();
     let renaming = fmt(&tr("Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name."), &[("name", &name)]);
     let said = format!("{} {renaming}", tr("Show the binding selects it, on the canvas and in Properties."));
     let g = ux::galley_rows(&paint, &said, types::CAPTION, p.text_muted, Some(width), 5);
@@ -304,10 +302,10 @@ fn label_of(store: &Store, value: &str, empty: &str) -> String {
 
 /// The parameter editor card for the parameter at place `k` (their count for a new one); gives the
 /// y under it.
-fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k: usize) -> f32 {
+fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k: usize) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.template.clone()) else { return y };
+    let Some(mut edit) = uml(cx.notation_states).and_then(|uml| uml.template.clone()) else { return y };
     let background = paint.add(egui::Shape::Noop);
     let left = r.left() + PAD;
     let inner = (width - 24.0).max(0.0);
@@ -320,9 +318,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     let mut enter = false;
     let typed = (edit.name.clone(), edit.kind, edit.constraint.clone(), edit.default.clone());
     let name_id = format!("{key}.name");
-    enter |= text_field(shell, ui, p, at(0.0, cy), half, &name_id, &tr("Name"), &mut edit.name, archforge_uml::commands::MAX_NAME, take, false);
+    enter |= text_field_cx(cx, ui, p, at(0.0, cy), half, &name_id, &tr("Name"), &mut edit.name, archforge_uml::commands::MAX_NAME, take, false);
     let kind_id = format!("{key}.kind");
-    let kind_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &kind_id, &tr("Kind"), &kind_word(edit.kind), menus::TEMPLATE_KIND);
+    let kind_field = select_field_cx(cx, ui, p, at(half + 8.0, cy), half, &kind_id, &tr("Kind"), &kind_word(edit.kind), menus::TEMPLATE_KIND);
     let ring = |field: &str, x: f32, top: f32| {
         if edit.refused_at == Some(field) {
             paint.rect_stroke(Rect::from_min_size(at(x, top + 17.0), vec2(half, FIELD)), 6.0, Stroke::new(1.0, p.danger), StrokeKind::Inside);
@@ -331,19 +329,19 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     ring("name", 0.0, cy);
     ring("kind", half + 8.0, cy);
     cy += row;
-    let store = shell.session.as_ref().map(|s| s.doc());
+    let store = cx.session.as_ref().map(|s| s.doc());
     let (c_label, d_label) =
         store.map(|st| (label_of(st, &edit.constraint, &tr("Any")), label_of(st, &edit.default, &tr("None")))).unwrap_or_default();
     let c_id = format!("{key}.constraint");
-    let c_field = select_field(shell, ui, p, at(0.0, cy), half, &c_id, &tr("Constrained to"), &c_label, menus::TEMPLATE_CONSTRAINT);
+    let c_field = select_field_cx(cx, ui, p, at(0.0, cy), half, &c_id, &tr("Constrained to"), &c_label, menus::TEMPLATE_CONSTRAINT);
     let d_id = format!("{key}.default");
-    let d_field = select_field(shell, ui, p, at(half + 8.0, cy), half, &d_id, &tr("Default"), &d_label, menus::TEMPLATE_DEFAULT);
+    let d_field = select_field_cx(cx, ui, p, at(half + 8.0, cy), half, &d_id, &tr("Default"), &d_label, menus::TEMPLATE_DEFAULT);
     ring("constraint", 0.0, cy);
     ring("default", half + 8.0, cy);
     cy += row;
     if let (Some(why), Some(_)) = (edit.refused.clone(), edit.refused_at) {
         cy += refusal_box(&paint, p, at(0.0, cy - 4.0), inner, &why) + 8.0;
-    } else if let Some(said) = shell.session.as_ref().map(|s| help(s.doc(), &edit)) {
+    } else if let Some(said) = cx.session.as_ref().map(|s| help(s.doc(), &edit)) {
         let g = ux::galley_rows(&paint, &said, types::CAPTION, p.text_secondary, Some(inner), 5);
         let h = g.size().y;
         paint.galley(at(0.0, cy - 4.0), g, p.text_secondary.into());
@@ -351,13 +349,13 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     }
     let (mut remove, mut up, mut down) = (false, false, false);
     if edit.target.is_some() {
-        remove = icon_button(shell, ui, p, at(0.0, cy), &format!("{key}.remove"), &icons::TRASH, p.danger, None, "Remove");
-        up = icon_button(shell, ui, p, at(FIELD + 8.0, cy), &format!("{key}.up"), &icons::MOVE_UP, p.text_secondary, None, "Move up");
-        down = icon_button(shell, ui, p, at(2.0 * (FIELD + 8.0), cy), &format!("{key}.down"), &icons::MOVE_DOWN, p.text_secondary, None, "Move down");
+        remove = icon_button_cx(cx, ui, p, at(0.0, cy), &format!("{key}.remove"), &icons::TRASH, p.danger, None, "Remove");
+        up = icon_button_cx(cx, ui, p, at(FIELD + 8.0, cy), &format!("{key}.up"), &icons::MOVE_UP, p.text_secondary, None, "Move up");
+        down = icon_button_cx(cx, ui, p, at(2.0 * (FIELD + 8.0), cy), &format!("{key}.down"), &icons::MOVE_DOWN, p.text_secondary, None, "Move down");
     }
     let cancel =
-        icon_button(shell, ui, p, at(inner - 2.0 * FIELD - 8.0, cy), &format!("{key}.cancel"), &icons::CLOSE, p.text_secondary, None, "Cancel");
-    let apply = icon_button(shell, ui, p, at(inner - FIELD, cy), &format!("{key}.apply"), &icons::TICK, p.on_accent, Some(p.accent_fill), "Apply");
+        icon_button_cx(cx, ui, p, at(inner - 2.0 * FIELD - 8.0, cy), &format!("{key}.cancel"), &icons::CLOSE, p.text_secondary, None, "Cancel");
+    let apply = icon_button_cx(cx, ui, p, at(inner - FIELD, cy), &format!("{key}.apply"), &icons::TICK, p.on_accent, Some(p.accent_fill), "Apply");
     cy += FIELD + 12.0;
     if let Some(why) = edit.refused.as_ref().filter(|_| edit.refused_at.is_none()) {
         let g = ux::galley_rows(&paint, why, types::CAPTION, p.amber, Some(inner), 4);
@@ -368,15 +366,15 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::uml_state::TEMPLATE, card);
+    crate::panels::reveal_cx(cx, ui, crate::uml_state::TEMPLATE, card);
     // The menus last, over the card; Escape with one open closes the menu alone.
-    let menu_open = shell.panels.menu.is_some();
-    if shell.panels.menu == Some(menus::TEMPLATE_KIND)
-        && let Some(kind) = kind_menu(shell, ui, p, kind_field, &kind_id, edit.kind)
+    let menu_open = cx.panels.menu.is_some();
+    if cx.panels.menu == Some(menus::TEMPLATE_KIND)
+        && let Some(kind) = kind_menu(cx, ui, p, kind_field, &kind_id, edit.kind)
     {
         edit.kind = kind;
         // A constraint or a default of another kind no longer fits it.
-        if let Some(st) = shell.session.as_ref().map(|s| s.doc()) {
+        if let Some(st) = cx.session.as_ref().map(|s| s.doc()) {
             if !constraint_choices(st, kind).iter().any(|(_, v)| *v == edit.constraint) {
                 edit.constraint.clear();
             }
@@ -385,24 +383,24 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
             }
         }
     }
-    if shell.panels.menu == Some(menus::TEMPLATE_CONSTRAINT)
-        && let Some(choices) = shell.session.as_ref().map(|s| constraint_choices(s.doc(), edit.kind))
+    if cx.panels.menu == Some(menus::TEMPLATE_CONSTRAINT)
+        && let Some(choices) = cx.session.as_ref().map(|s| constraint_choices(s.doc(), edit.kind))
     {
         let items: Vec<String> = choices.iter().map(|(l, _)| l.clone()).collect();
-        if let Some(v) = crate::panels::menu(shell, ui, p, c_field, &c_id, &items).and_then(|i| choices.get(i)) {
+        if let Some(v) = crate::panels::menu_cx(cx, ui, p, c_field, &c_id, &items).and_then(|i| choices.get(i)) {
             edit.constraint = v.1.clone();
-            if let Some(st) = shell.session.as_ref().map(|s| s.doc())
+            if let Some(st) = cx.session.as_ref().map(|s| s.doc())
                 && !default_choices(st, edit.kind, &edit.constraint).iter().any(|(_, d)| *d == edit.default)
             {
                 edit.default.clear();
             }
         }
     }
-    if shell.panels.menu == Some(menus::TEMPLATE_DEFAULT)
-        && let Some(choices) = shell.session.as_ref().map(|s| default_choices(s.doc(), edit.kind, &edit.constraint))
+    if cx.panels.menu == Some(menus::TEMPLATE_DEFAULT)
+        && let Some(choices) = cx.session.as_ref().map(|s| default_choices(s.doc(), edit.kind, &edit.constraint))
     {
         let items: Vec<String> = choices.iter().map(|(l, _)| l.clone()).collect();
-        if let Some(v) = crate::panels::menu(shell, ui, p, d_field, &d_id, &items).and_then(|i| choices.get(i)) {
+        if let Some(v) = crate::panels::menu_cx(cx, ui, p, d_field, &d_id, &items).and_then(|i| choices.get(i)) {
             edit.default = v.1.clone();
         }
     }
@@ -411,19 +409,19 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
         edit.refused = None;
         edit.refused_at = None;
     }
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.template = Some(edit.clone());
     }
     if cancel || (!menu_open && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.template = None;
         }
     } else if remove {
-        remove_parameter(shell, &edit);
+        remove_parameter(cx, &edit);
     } else if up || down {
-        move_parameter(shell, &edit, up);
+        move_parameter(cx, &edit, up);
     } else if apply || enter {
-        commit(shell, &edit);
+        commit(cx, &edit);
     }
     card.bottom() + 8.0
 }
@@ -432,7 +430,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
 /// ticked, then, after a line, Value and Operation, disabled and saying "not yet"; gives the kind
 /// picked. The arrows walk the kinds that may be picked, Enter picks, Escape or a press elsewhere
 /// closes it.
-fn kind_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, current: Kind) -> Option<Kind> {
+fn kind_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, current: Kind) -> Option<Kind> {
     let supported: Vec<Kind> = Kind::ALL.into_iter().filter(|k| k.supported()).collect();
     let heading = 28.0;
     let height = 8.0 + heading + Kind::ALL.len() as f32 * 30.0 + 9.0;
@@ -453,7 +451,7 @@ fn kind_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &st
         paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         let eyebrow = crate::canvas::eyebrow_case(&tr("Parameter kind"));
         ux::text(&paint, pos2(m.left() + 14.0, m.top() + 12.0), &eyebrow, types::EYEBROW, p.text_muted, Some(m.width() - 28.0));
-        let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == id).map(|(_, i)| *i);
+        let mut reached = cx.panels.menu_reached.as_ref().filter(|(of, _)| of == id).map(|(_, i)| *i);
         let (down, up, enter) = ui.input_mut(|i| {
             (
                 i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
@@ -469,7 +467,7 @@ fn kind_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &st
                 Some(i) => i.saturating_sub(1),
             });
         }
-        shell.panels.menu_reached = reached.map(|i| (id.to_string(), i));
+        cx.panels.menu_reached = reached.map(|i| (id.to_string(), i));
         let mut picked = None;
         let mut y = m.top() + 4.0 + heading;
         for (i, kind) in Kind::ALL.into_iter().enumerate() {
@@ -483,11 +481,11 @@ fn kind_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &st
             let word = kind_word(kind);
             let live = kind.supported();
             let resp = if live {
-                control(shell, ui, &item, "menu-item", r, true).accessible_name(word.as_str())
+                control_cx(cx, ui, &item, "menu-item", r, true).accessible_name(word.as_str())
             } else {
                 // Named, disabled and saying why, never taken for another kind.
                 let why = fmt(&tr("{kind} template parameters are not supported yet."), &[("kind", &word)]);
-                crate::widgets::record_visible(ui, &mut shell.registry, &item, "menu-item", r);
+                crate::widgets::record_visible(ui, cx.registry, &item, "menu-item", r);
                 let resp = ui.interact(r, crate::widgets::egui_id(&item), Sense::hover());
                 ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&item), |node| {
                     node.set_role(egui::accesskit::Role::MenuItem);
@@ -523,16 +521,16 @@ fn kind_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &st
     });
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || field.contains(pos)));
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.menu = None;
-        shell.panels.menu_reached = None;
+        cx.panels.menu = None;
+        cx.panels.menu_reached = None;
     }
     picked
 }
 
 /// Shows `why` on the open template parameter editor's card, with `at` naming the field it is said
 /// under; the editor stays open with what was typed.
-fn refuse(shell: &mut Shell, why: String, at: Option<&'static str>) {
-    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.template.as_mut()) {
+fn refuse(cx: &mut Ctx, why: String, at: Option<&'static str>) {
+    if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.template.as_mut()) {
         e.refused = Some(why);
         e.refused_at = at;
     }
@@ -576,43 +574,45 @@ fn last_in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
 
 /// The bin: removes the parameter, or, while a binding substitutes it, closes the editor and says
 /// why under the rows, with the way to the binding (C5); nothing is written.
-fn remove_parameter(shell: &mut Shell, edit: &TemplateEdit) {
+fn remove_parameter(cx: &mut Ctx, edit: &TemplateEdit) {
     let Some(target) = edit.target else { return };
-    let refused = shell.session.as_ref().and_then(|s| s.doc().by_uuid(target).and_then(|o| in_use(s.doc(), o)));
+    let refused = cx.session.as_ref().and_then(|s| s.doc().by_uuid(target).and_then(|o| in_use(s.doc(), o)));
     if let Some((why, binding)) = refused {
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.template = None;
             uml.template_in_use = Some(InUse { parameter: target, why, binding });
         }
         return;
     }
-    match run(shell, "element.remove", json!({ "ids": [target.to_string()] })) {
+    match run_cx(cx, "element.remove", json!({ "ids": [target.to_string()] })) {
         Ok(_) => {
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.template = None;
             }
         }
-        Err(e) => refuse(shell, e, None),
+        Err(e) => refuse(cx, e, None),
     }
 }
 
-fn move_parameter(shell: &mut Shell, edit: &TemplateEdit, up: bool) {
+/// Moves the edited parameter one place `up` or down among its template's parameters; at either
+/// end nothing happens. A move made clears what the editor said; a refusal is said there.
+fn move_parameter(cx: &mut Ctx, edit: &TemplateEdit, up: bool) {
     let Some(target) = edit.target else { return };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(q) = store.by_uuid(target) else { return };
     let Some(c) = templates::template_of(store, q) else { return };
     let all = templates::parameters(store, c);
     let Some(i) = all.iter().position(|x| *x == q) else { return };
     let to = if up { i.checked_sub(1) } else { Some(i + 1).filter(|j| *j < all.len()) };
     let Some(to) = to else { return };
-    match run(shell, "uml.template-parameter.move", json!({ "parameter": target.to_string(), "at": to })) {
+    match run_cx(cx, "uml.template-parameter.move", json!({ "parameter": target.to_string(), "at": to })) {
         Ok(_) => {
-            if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.template.as_mut()) {
+            if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.template.as_mut()) {
                 e.refused = None;
                 e.refused_at = None;
             }
         }
-        Err(e) => refuse(shell, e, None),
+        Err(e) => refuse(cx, e, None),
     }
 }
 
@@ -663,9 +663,9 @@ pub(crate) fn refusal(store: &Store, edit: &TemplateEdit) -> Option<(String, &'s
 
 /// Writes the editor as one undo step, or says why not, leaving the model and its history as
 /// they were.
-fn commit(shell: &mut Shell, edit: &TemplateEdit) {
-    if let Some((why, at)) = shell.session.as_ref().and_then(|s| refusal(s.doc(), edit)) {
-        refuse(shell, why, Some(at));
+fn commit(cx: &mut Ctx, edit: &TemplateEdit) {
+    if let Some((why, at)) = cx.session.as_ref().and_then(|s| refusal(s.doc(), edit)) {
+        refuse(cx, why, Some(at));
         return;
     }
     let (cmd, params) = match edit.target {
@@ -684,24 +684,26 @@ fn commit(shell: &mut Shell, edit: &TemplateEdit) {
             }),
         ),
     };
-    match run(shell, cmd, params) {
+    match run_cx(cx, cmd, params) {
         Ok(_) => {
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.template = None;
             }
-            shell.panels.notice = None;
+            cx.panels.notice = None;
         }
-        Err(e) => refuse(shell, e, None),
+        Err(e) => refuse(cx, e, None),
     }
 }
 
 /// The open editor's bin pressed, as a sample to look at: the removal refused while a binding
 /// uses the parameter.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn remove_sample(shell: &mut Shell) {
-    if let Some(edit) = uml(&shell.notation_states).and_then(|uml| uml.template.clone()) {
-        remove_parameter(shell, &edit);
-    }
+pub(crate) fn remove_sample(shell: &mut crate::Shell) {
+    shell.cx(|cx| {
+        if let Some(edit) = uml(cx.notation_states).and_then(|uml| uml.template.clone()) {
+            remove_parameter(cx, &edit);
+        }
+    });
 }
 
 /// Drops an editor, or a refused removal, whose classifier or parameter is gone.

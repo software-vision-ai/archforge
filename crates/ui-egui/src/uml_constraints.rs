@@ -16,10 +16,9 @@ use archforge_uml::constraints::{self, Form};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
-use crate::home::control;
+use crate::cx::{Ctx, CtxRef};
 use crate::i18n::{fmt, tr};
-use crate::panels::{Combo, ComboOut, FIELD, PAD, ROW, icon_button, section, text_field};
+use crate::panels::{Combo, ComboOut, FIELD, PAD, ROW, control_cx, icon_button_cx, section_cx, text_field_cx};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
@@ -58,9 +57,9 @@ fn name_of(store: &Store, o: Obj) -> String {
 }
 
 /// The class diagram open in the centre.
-fn open_diagram(shell: &Shell) -> Option<Obj> {
-    let store = shell.session.as_ref()?.doc();
-    let d = store.by_uuid(shell.canvas.active?)?;
+fn open_diagram(cx: &Ctx) -> Option<Obj> {
+    let store = cx.session.as_ref()?.doc();
+    let d = store.by_uuid(cx.canvas.active?)?;
     let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string));
     (store.is_alive(d) && kind.as_deref() == Some(archforge_uml::STRUCTURE_DIAGRAM)).then_some(d)
 }
@@ -73,10 +72,10 @@ fn fresh_name(store: &Store, context: Obj) -> String {
 }
 
 /// Opens the editor on `target`, or on a new constraint of `context`.
-pub(crate) fn open(shell: &mut Shell, context: Uuid, target: Option<Uuid>) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn open(cx: &mut Ctx, context: Uuid, target: Option<Uuid>) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(ctx) = store.by_uuid(context) else { return };
-    let d = open_diagram(shell);
+    let d = open_diagram(cx);
     let mut edit = ConstraintEdit {
         target,
         context,
@@ -103,10 +102,10 @@ pub(crate) fn open(shell: &mut Shell, context: Uuid, target: Option<Uuid>) {
             None => edit.form = constraints::suggested_form(store, c),
         }
     }
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.constraint = Some(edit);
     }
-    shell.panels.menu = None;
+    cx.panels.menu = None;
 }
 
 /// The row a constraint reads as: its name and its expression in braces, on one line.
@@ -118,45 +117,44 @@ pub(crate) fn row_text(store: &Store, c: Obj) -> String {
 
 /// The section `Constraints · n` of `context`'s panel at `y`, with its rows and the editor; gives
 /// the y under it.
-pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, context: Obj, context_id: Uuid) -> f32 {
+pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, context: Obj, context_id: Uuid) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
     let rows: Vec<(Uuid, String)> =
         constraints::constraints_of(store, context).into_iter().filter_map(|c| Some((store.uuid(c).ok()?, row_text(store, c)))).collect();
     let title = fmt(&tr("Constraints · {n}"), &[("n", &rows.len().to_string())]);
-    let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.constraints.add", "Add constraint"))) else {
-        open(shell, context_id, None);
+    let Some(next) = section_cx(cx, ui, p, r, y, &title, Some(("workspace.properties.constraints.add", "Add constraint"))) else {
+        open(cx, context_id, None);
         return y + 50.0;
     };
     y = next - 6.0;
-    let editing =
-        |shell: &Shell| uml(&shell.notation_states).and_then(|uml| uml.constraint.as_ref()).filter(|e| e.context == context_id).map(|e| e.target);
-    let chosen = crate::panels::selected_id(shell);
+    let editing = |cx: &Ctx| uml(cx.notation_states).and_then(|uml| uml.constraint.as_ref()).filter(|e| e.context == context_id).map(|e| e.target);
+    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
     for (id, text) in &rows {
-        if editing(shell) == Some(Some(*id)) {
-            y = editor(shell, ui, p, r, y);
+        if editing(cx) == Some(Some(*id)) {
+            y = editor(cx, ui, p, r, y);
             continue;
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, ROW));
         let key = format!("workspace.properties.constraint.{id}");
-        let resp = control(shell, ui, &key, "row", row, true).accessible_name(text.as_str()).on_hover_text(text.as_str());
+        let resp = control_cx(cx, ui, &key, "row", row, true).accessible_name(text.as_str()).on_hover_text(text.as_str());
         if Some(*id) == chosen {
             paint.rect_filled(row, 6.0, p.accent_tint);
         } else if resp.contains_pointer() {
             paint.rect_filled(row, 6.0, p.page);
         }
         ux::text(&paint, pos2(row.left() + 10.0, row.top() + 9.0), text, types::UI, p.text, Some((width - 50.0).max(0.0)));
-        if crate::panels::edit_button(shell, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
-            crate::panels::select_element(shell, *id);
-            open(shell, context_id, Some(*id));
+        if crate::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
+            crate::panels::select_element_cx(cx, *id);
+            open(cx, context_id, Some(*id));
         } else if resp.clicked() {
-            crate::panels::select_element(shell, *id);
+            crate::panels::select_element_cx(cx, *id);
         }
         y += ROW;
     }
-    if editing(shell) == Some(None) {
-        y = editor(shell, ui, p, r, y);
+    if editing(cx) == Some(None) {
+        y = editor(cx, ui, p, r, y);
     }
     y + 10.0
 }
@@ -205,7 +203,7 @@ fn kind_word(store: &Store, o: Obj) -> String {
 }
 
 /// A field of several lines with its label; gives whether it has the keyboard.
-fn expression_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, text: &mut String, refused: bool) -> f32 {
+fn expression_field(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, text: &mut String, refused: bool) -> f32 {
     let paint = ui.painter().clone();
     let id = "workspace.properties.constraint.expression";
     ux::text(&paint, at, &tr("Expression"), types::CAPTION, p.text_secondary, Some(width.max(0.0)));
@@ -213,7 +211,7 @@ fn expression_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui:
     let height = (lines * 17.0 + 16.0).max(56.0);
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), height));
     paint.rect_filled(field, 6.0, p.field);
-    widgets::record_visible(ui, &mut shell.registry, id, "field", field);
+    widgets::record_visible(ui, cx.registry, id, "field", field);
     let inner = field.shrink2(vec2(8.0, 8.0));
     let label = tr("Expression");
     let out = egui::TextEdit::multiline(text)
@@ -237,10 +235,10 @@ fn expression_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui:
 
 /// The constrained elements' chips, each with its ✕ while more than one is left, and the `+` that
 /// opens the element menu; gives the height drawn and the `+`'s rectangle.
-fn chips(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, edit: &mut ConstraintEdit) -> (f32, Rect) {
+fn chips(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, edit: &mut ConstraintEdit) -> (f32, Rect) {
     let paint = ui.painter().clone();
     ux::text(&paint, at, &tr("Constrained elements"), types::CAPTION, p.text_secondary, Some(width.max(0.0)));
-    let labels: Vec<String> = shell
+    let labels: Vec<String> = cx
         .session
         .as_ref()
         .map(|s| {
@@ -262,12 +260,12 @@ fn chips(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f
         paint.rect_filled(chip, 6.0, p.field);
         let text_y = chip.center().y - g.size().y / 2.0;
         paint.galley(pos2(chip.left() + 8.0, text_y), g, p.text.into());
-        widgets::record_visible(ui, &mut shell.registry, &format!("workspace.properties.constraint.element.{i}"), "chip", chip);
+        widgets::record_visible(ui, cx.registry, &format!("workspace.properties.constraint.element.{i}"), "chip", chip);
         if removable {
             let b = Rect::from_center_size(pos2(chip.right() - 11.0, chip.center().y), Vec2::splat(16.0));
             ux::icon_in(&paint, b.shrink(4.0), &icons::CLOSE, p.text_secondary);
             let hint = fmt(&tr("Remove {name} from the constrained elements"), &[("name", label)]);
-            if control(shell, ui, &format!("workspace.properties.constraint.element.{i}.remove"), "button", b, true)
+            if control_cx(cx, ui, &format!("workspace.properties.constraint.element.{i}.remove"), "button", b, true)
                 .on_hover_text(hint.as_str())
                 .accessible_name(hint.as_str())
                 .clicked()
@@ -287,18 +285,18 @@ fn chips(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f
     let add = Rect::from_min_size(pos2(x, y), Vec2::splat(FIELD));
     ux::icon_in(&paint, Rect::from_center_size(add.center(), Vec2::splat(14.0)), &icons::PLUS, p.text_secondary);
     let hint = tr("Add a constrained element");
-    if control(shell, ui, "workspace.properties.constraint.elements.add", "button", add, true)
+    if control_cx(cx, ui, "workspace.properties.constraint.elements.add", "button", add, true)
         .on_hover_text(hint.as_str())
         .accessible_name(hint.as_str())
         .clicked()
     {
-        shell.panels.menu = if shell.panels.menu == Some(menus::CONSTRAINT_ELEMENT) { None } else { Some(menus::CONSTRAINT_ELEMENT) };
+        cx.panels.menu = if cx.panels.menu == Some(menus::CONSTRAINT_ELEMENT) { None } else { Some(menus::CONSTRAINT_ELEMENT) };
     }
     (y + FIELD - at.y, add)
 }
 
 /// The segmented control of how the open diagram shows the constraint; gives its height.
-fn presentation(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, edit: &mut ConstraintEdit) -> f32 {
+fn presentation(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, edit: &mut ConstraintEdit) -> f32 {
     let paint = ui.painter().clone();
     ux::text(&paint, at, &tr("On this diagram"), types::CAPTION, p.text_secondary, Some(width.max(0.0)));
     let words = [(Form::Note, tr("Linked note"), "note"), (Form::Braces, tr("Braces"), "braces")];
@@ -315,7 +313,7 @@ fn presentation(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, w
             paint.rect_stroke(seg, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         }
         ux::text_mid(&paint, seg.left() + 11.0, seg.center().y, word, types::SMALL, if on { p.text } else { p.text_secondary }, None);
-        let resp = control(shell, ui, &format!("workspace.properties.constraint.show.{key}"), "radio", seg, true).accessible_name(word.as_str());
+        let resp = control_cx(cx, ui, &format!("workspace.properties.constraint.show.{key}"), "radio", seg, true).accessible_name(word.as_str());
         ui.ctx().accesskit_node_builder(resp.id, |node| node.set_selected(on));
         if resp.clicked() {
             edit.form = *form;
@@ -341,10 +339,10 @@ fn refusal_box(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, w
 }
 
 /// The constraint editor card; gives the y under it.
-fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
+fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.constraint.clone()) else { return y };
+    let Some(mut edit) = uml(cx.notation_states).and_then(|uml| uml.constraint.clone()) else { return y };
     let background = paint.add(egui::Shape::Noop);
     let left = r.left() + PAD;
     let inner = (width - 24.0).max(0.0);
@@ -354,8 +352,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let half = ((inner - 8.0) / 2.0).max(0.0);
     let mut cy = 12.0;
     let mut enter = false;
-    enter |= text_field(
-        shell,
+    enter |= text_field_cx(
+        cx,
         ui,
         p,
         at(0.0, cy),
@@ -386,19 +384,19 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         menu: menus::CONSTRAINT_LANGUAGE,
         limit: MAX_LANGUAGE,
     };
-    match crate::panels::editable_select(shell, ui, p, at(half + 8.0, cy), half, &mut edit.language, &combo) {
+    match crate::panels::editable_select_cx(cx, ui, p, at(half + 8.0, cy), half, &mut edit.language, &combo) {
         ComboOut::Pick(i) => edit.language = LANGUAGES.get(i).map(|l| (*l).to_string()).unwrap_or_default(),
         ComboOut::Commit => {}
         _ => {}
     }
     cy += row;
     let refused_here = edit.refused_at == Some("expression");
-    cy += expression_field(shell, ui, p, at(0.0, cy), inner, &mut edit.expression, refused_here) + 10.0;
+    cy += expression_field(cx, ui, p, at(0.0, cy), inner, &mut edit.expression, refused_here) + 10.0;
     if refused_here && constraints::expression_problem(&edit.expression).is_none() {
         edit.refused = None;
         edit.refused_at = None;
     }
-    let (chips_height, add) = chips(shell, ui, p, at(0.0, cy), inner, &mut edit);
+    let (chips_height, add) = chips(cx, ui, p, at(0.0, cy), inner, &mut edit);
     cy += chips_height + 12.0;
     if let (Some(why), Some("expression")) = (edit.refused.clone(), edit.refused_at) {
         cy += refusal_box(&paint, p, at(0.0, cy), inner, &why) + 12.0;
@@ -407,9 +405,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     if !edit.form_chosen {
         edit.form = constraints::form_for(&edit.expression, edit.elements.len());
     }
-    let diagram = open_diagram(shell);
+    let diagram = open_diagram(cx);
     if diagram.is_some() {
-        cy += presentation(shell, ui, p, at(0.0, cy), inner, &mut edit) + 10.0;
+        cy += presentation(cx, ui, p, at(0.0, cy), inner, &mut edit) + 10.0;
         if let (Some(why), Some("show")) = (edit.refused.clone(), edit.refused_at) {
             cy += refusal_box(&paint, p, at(0.0, cy), inner, &why) + 10.0;
         }
@@ -440,10 +438,10 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     }
     let (mut remove, mut up, mut down) = (false, false, false);
     if edit.target.is_some() {
-        remove = icon_button(shell, ui, p, at(0.0, cy), "workspace.properties.constraint.remove", &icons::TRASH, p.danger, None, "Remove");
-        up = icon_button(shell, ui, p, at(FIELD + 8.0, cy), "workspace.properties.constraint.up", &icons::MOVE_UP, p.text_secondary, None, "Move up");
-        down = icon_button(
-            shell,
+        remove = icon_button_cx(cx, ui, p, at(0.0, cy), "workspace.properties.constraint.remove", &icons::TRASH, p.danger, None, "Remove");
+        up = icon_button_cx(cx, ui, p, at(FIELD + 8.0, cy), "workspace.properties.constraint.up", &icons::MOVE_UP, p.text_secondary, None, "Move up");
+        down = icon_button_cx(
+            cx,
             ui,
             p,
             at(2.0 * (FIELD + 8.0), cy),
@@ -454,8 +452,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             "Move down",
         );
     }
-    let cancel = icon_button(
-        shell,
+    let cancel = icon_button_cx(
+        cx,
         ui,
         p,
         at(inner - 2.0 * FIELD - 8.0, cy),
@@ -465,8 +463,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         None,
         "Cancel",
     );
-    let apply = icon_button(
-        shell,
+    let apply = icon_button_cx(
+        cx,
         ui,
         p,
         at(inner - FIELD, cy),
@@ -484,87 +482,91 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::uml_state::CONSTRAINT, card);
+    crate::panels::reveal_cx(cx, ui, crate::uml_state::CONSTRAINT, card);
     // The element menu last, over the card.
-    if shell.panels.menu == Some(menus::CONSTRAINT_ELEMENT)
-        && let Some(store) = shell.session.as_ref().map(|s| s.doc())
+    if cx.panels.menu == Some(menus::CONSTRAINT_ELEMENT)
+        && let Some(store) = cx.session.as_ref().map(|s| s.doc())
     {
         let choices = offered(store, &edit.elements);
         let items: Vec<String> = choices.iter().map(|(_, l, _)| l.clone()).collect();
         let notes: Vec<String> = choices.iter().map(|(_, _, k)| k.clone()).collect();
         if items.is_empty() {
-            shell.panels.menu = None;
-        } else if let Some(i) = crate::panels::menu_noted(shell, ui, p, add, "workspace.properties.constraint.elements.menu", &items, &notes, &[])
+            cx.panels.menu = None;
+        } else if let Some(i) = crate::panels::menu_noted_cx(cx, ui, p, add, "workspace.properties.constraint.elements.menu", &items, &notes, &[])
             && let Some((id, _, _)) = choices.get(i)
         {
             edit.elements.push(*id);
         }
     }
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.constraint = Some(edit.clone());
     }
     // Enter in the name writes; in the expression it is a new line.
-    if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if cancel || (cx.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.constraint = None;
         }
     } else if remove {
-        remove_constraint(shell, &edit);
+        remove_constraint(cx, &edit);
     } else if up || down {
-        move_constraint(shell, &edit, up);
+        move_constraint(cx, &edit, up);
     } else if apply || enter {
-        commit(shell, &edit);
+        commit(cx, &edit);
     }
     card.bottom() + 8.0
 }
 
 /// Shows `why` on the open constraint editor's card, with `at` naming the field it is said
 /// under; the editor stays open with what was typed.
-fn refuse(shell: &mut Shell, why: String, at: Option<&'static str>) {
-    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.constraint.as_mut()) {
+fn refuse(cx: &mut Ctx, why: String, at: Option<&'static str>) {
+    if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.constraint.as_mut()) {
         e.refused = Some(why);
         e.refused_at = at;
     }
 }
 
 /// Selects the context again once the editor has done its work.
-fn reselect(shell: &mut Shell, context: Uuid) {
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+fn reselect(cx: &mut Ctx, context: Uuid) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.constraint = None;
     }
-    let _ = crate::panels::run(shell, "view.select", json!({ "ids": [context.to_string()] }));
+    let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [context.to_string()] }));
 }
 
-fn remove_constraint(shell: &mut Shell, edit: &ConstraintEdit) {
+/// The editor's bin: removes the constraint and selects its context again, or says why not in the
+/// editor.
+fn remove_constraint(cx: &mut Ctx, edit: &ConstraintEdit) {
     let target = edit.target.map(|t| t.to_string()).unwrap_or_default();
-    match crate::panels::run(shell, "element.remove", json!({ "ids": [target] })) {
-        Ok(_) => reselect(shell, edit.context),
-        Err(e) => refuse(shell, e, None),
+    match crate::panels::run_cx(cx, "element.remove", json!({ "ids": [target] })) {
+        Ok(_) => reselect(cx, edit.context),
+        Err(e) => refuse(cx, e, None),
     }
 }
 
-fn move_constraint(shell: &mut Shell, edit: &ConstraintEdit, up: bool) {
+/// Moves the edited constraint one place `up` or down among its context's constraints; at either
+/// end nothing happens, and a refusal is said in the editor.
+fn move_constraint(cx: &mut Ctx, edit: &ConstraintEdit, up: bool) {
     let Some(target) = edit.target else { return };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let (Some(c), Some(ctx)) = (store.by_uuid(target), store.by_uuid(edit.context)) else { return };
     let all = constraints::constraints_of(store, ctx);
     let Some(i) = all.iter().position(|x| *x == c) else { return };
     let to = if up { i.checked_sub(1) } else { Some(i + 1).filter(|j| *j < all.len()) };
     let Some(to) = to else { return };
-    if let Err(e) = crate::panels::run(shell, "uml.constraint.move", json!({ "constraint": target.to_string(), "at": to })) {
-        refuse(shell, e, None);
+    if let Err(e) = crate::panels::run_cx(cx, "uml.constraint.move", json!({ "constraint": target.to_string(), "at": to })) {
+        refuse(cx, e, None);
     }
 }
 
 /// Writes the editor as one undo step: the constraint, and how the open diagram shows it (a new
 /// one always, one already there or one whose form was picked), or says why not.
-fn commit(shell: &mut Shell, edit: &ConstraintEdit) {
+fn commit(cx: &mut Ctx, edit: &ConstraintEdit) {
     if constraints::expression_problem(&edit.expression).is_some() {
-        refuse(shell, tr("Type an expression. A constraint without one states no rule."), Some("expression"));
+        refuse(cx, tr("Type an expression. A constraint without one states no rule."), Some("expression"));
         return;
     }
-    let d = open_diagram(shell);
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let d = open_diagram(cx);
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let shown = edit.target.and_then(|t| store.by_uuid(t)).zip(d).and_then(|(c, d)| constraints::shown_on(store, d, c));
     let show = d.filter(|_| edit.target.is_none() || shown.is_some() || edit.form_chosen).and_then(|d| store.uuid(d).ok());
     let elements: Vec<String> = edit.elements.iter().map(Uuid::to_string).collect();
@@ -576,7 +578,7 @@ fn commit(shell: &mut Shell, edit: &ConstraintEdit) {
     });
     let (target, context, form) = (edit.target, edit.context, edit.form);
     let label = if target.is_some() { tr("Edit constraint") } else { tr("Add constraint") };
-    let Some(session) = shell.session.as_mut() else { return };
+    let Some(session) = cx.session.as_mut() else { return };
     let result = session.batch(&label, |b| {
         let mut params = fields.clone();
         let id = match target {
@@ -596,11 +598,11 @@ fn commit(shell: &mut Shell, edit: &ConstraintEdit) {
         Ok(())
     });
     match result {
-        Ok(_) => reselect(shell, context),
+        Ok(_) => reselect(cx, context),
         Err(e) => {
             // Braces with nothing to sit by are said under the form's buttons, any other refusal under Apply.
             let braces = matches!(&e, EngineError::Failed { error, .. } if error.reason == Some(Reason::BracesNoElement));
-            refuse(shell, crate::panels::refusal(&e), braces.then_some("show"));
+            refuse(cx, crate::panels::refusal(&e), braces.then_some("show"));
         }
     }
 }
@@ -641,8 +643,8 @@ pub(crate) fn said_of_removal(store: &Store, objs: &[Obj]) -> Option<String> {
 
 /// The ids a removal names, as `element.remove` takes them, worked out into what it does to the
 /// constraints ([`said_of_removal`]).
-pub(crate) fn before_removal(shell: &Shell, ids: &[String]) -> Option<String> {
-    let store = shell.session.as_ref()?.doc();
+pub(crate) fn before_removal(cx: &CtxRef, ids: &[String]) -> Option<String> {
+    let store = cx.session.as_ref()?.doc();
     let objs: Vec<Obj> = ids.iter().filter_map(|i| Uuid::parse(i).and_then(|u| store.by_uuid(u))).collect();
     said_of_removal(store, &objs)
 }

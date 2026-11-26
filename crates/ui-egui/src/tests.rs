@@ -9012,11 +9012,11 @@ fn an_empty_name_is_refused_unless_the_rename_may_leave_it_unnamed() {
     crate::i18n::set_language("en");
     let mut shell = Shell::new(Services::default());
     for cmd in ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"] {
-        assert!(!crate::panels::refuse_empty_name(&mut shell, cmd, "  "), "{cmd} may leave its element unnamed");
+        assert!(!shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, cmd, "  ")), "{cmd} may leave its element unnamed");
         assert_eq!(shell.panels.notice, None, "{cmd}");
     }
     for cmd in ["er.schema.rename", "uml.class.rename"] {
-        assert!(crate::panels::refuse_empty_name(&mut shell, cmd, "  "), "{cmd} needs a name");
+        assert!(shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, cmd, "  ")), "{cmd} needs a name");
         assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."), "{cmd}");
     }
 }
@@ -11996,7 +11996,7 @@ fn the_path_bar_opens_the_parents_default_not_the_diagram_it_was_entered_from() 
         };
         crate::canvas::open(h.state_mut(), second);
         h.run();
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         h.run();
         rest(&mut h);
         let at = rect_of(&h, "workspace.canvas.path.0").center();
@@ -12049,7 +12049,7 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
         crate::canvas::open(h.state_mut(), second);
         h.run();
         let left = (h.state().canvas.pan, h.state().canvas.zoom);
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         h.run();
         let entry = uml_of(h.state()).nav.routes.get(&sales_d).and_then(|r| r.steps().next_back()).cloned().unwrap();
         let expected = crate::nav_route::Step { source: second, destination: sales_d, source_name: "Second".into(), view: Some(left), history };
@@ -12057,7 +12057,7 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
         assert_eq!(route(&h, second), vec![], "{theme:?}: the tab left had no route and still has none");
         // Sales > Orders: the Orders tab carries the way into Sales too; Sales keeps its own.
         rest(&mut h);
-        crate::package_nav::enter(h.state_mut(), orders, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, orders, 0.0));
         h.run();
         assert_eq!(route(&h, orders_d), vec![(second, sales_d), (sales_d, orders_d)], "{theme:?}");
         assert_eq!(route(&h, sales_d), vec![(second, sales_d)], "{theme:?}: Sales' tab keeps its own route");
@@ -12068,11 +12068,11 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
         click(&mut h, at);
         assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}");
         rest(&mut h);
-        crate::package_nav::enter(h.state_mut(), root, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, root, 0.0));
         h.run();
         assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: the root's default");
         rest(&mut h);
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         h.run();
         assert_eq!(route(&h, sales_d), vec![(sales_d, first), (first, sales_d)], "{theme:?}");
         rest(&mut h);
@@ -12974,7 +12974,7 @@ fn zooming_out_returns_across_branches_to_the_diagram_entered_from_without_a_bou
         let before = unchanged(&h);
         crate::canvas::open(h.state_mut(), overview);
         h.run();
-        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, archive, 0.0));
         h.run();
         assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}");
         // The path bar follows ownership, not the way in: the root, Operations, Archive.
@@ -13023,7 +13023,7 @@ fn zooming_out_walks_repeated_visits_back_one_step_a_gesture_then_follows_owners
         crate::canvas::open(h.state_mut(), a);
         h.run();
         for package in [archive, commerce, archive] {
-            crate::package_nav::enter(h.state_mut(), package, 0.0);
+            h.state_mut().cx(|cx| crate::package_nav::enter(cx, package, 0.0));
             h.run();
             rest(&mut h);
         }
@@ -13070,7 +13070,7 @@ fn zooming_out_past_a_removed_way_in_opens_the_owning_parents_default() {
         };
         crate::canvas::open(h.state_mut(), overview);
         h.run();
-        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, archive, 0.0));
         h.run();
         h.state_mut().session.as_mut().unwrap().execute("diagram.remove", &serde_json::json!({ "diagram": overview.to_string() })).unwrap();
         h.run();
@@ -13119,13 +13119,13 @@ fn the_path_bar_and_command_up_follow_ownership_and_start_a_new_route() {
             // Operations' tab first comes from the overview; then Archive is entered from it too.
             crate::canvas::open(h.state_mut(), overview);
             h.run();
-            crate::package_nav::enter(h.state_mut(), operations, 0.0);
+            h.state_mut().cx(|cx| crate::package_nav::enter(cx, operations, 0.0));
             h.run();
             assert_eq!(route_of(&h, operations_d), vec![(overview, operations_d)], "{theme:?}");
             rest(&mut h);
             crate::canvas::open(h.state_mut(), overview);
             h.run();
-            crate::package_nav::enter(h.state_mut(), archive, 0.0);
+            h.state_mut().cx(|cx| crate::package_nav::enter(cx, archive, 0.0));
             h.run();
             assert_eq!(route_of(&h, archive_d), vec![(overview, archive_d)], "{theme:?}");
             rest(&mut h);
@@ -13159,7 +13159,7 @@ fn package_navigation_is_umls_kinds_and_ers_does_none() {
         let (_, first, sales, sales_d) = first_and_sales(&mut h);
         crate::canvas::open(h.state_mut(), first);
         h.run();
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.5, egui::vec2(33.0, 44.0));
         let shell = h.state_mut();
         let d = shell.session.as_ref().unwrap().doc().by_uuid(sales_d).unwrap();
@@ -13204,7 +13204,7 @@ fn a_switch_fades_in_over_the_canvas() {
         };
         assert!(!veiled(&h), "{theme:?}: no fade before a switch");
         let now = h.ctx.input(|i| i.time);
-        crate::package_nav::enter(h.state_mut(), sales, now);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, now));
         h.step();
         assert!(veiled(&h), "{theme:?}: the switch fades in");
         h.run();
@@ -13285,7 +13285,7 @@ fn the_path_bar_restores_the_view_a_diagram_was_last_left_with_by_a_tab_switch_o
             let (_, first, sales, sales_d) = first_and_sales(&mut h);
             crate::canvas::open(h.state_mut(), first);
             h.run();
-            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
             h.run();
             rest(&mut h);
             let carried = (h.state().canvas.pan, h.state().canvas.zoom);
@@ -13325,7 +13325,7 @@ fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
         let shown = (egui::vec2(-37.0, 52.0), 0.5);
         (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = shown;
         h.run();
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         if at_once {
             crate::canvas::open(h.state_mut(), first);
         } else {
@@ -13386,7 +13386,7 @@ fn a_landing_pending_for_one_tab_never_places_another() {
             if case == "out, reopened" {
                 crate::canvas::close_tab(h.state_mut(), support);
             }
-            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
             if case != "in, Support" {
                 h.run();
                 rest(&mut h);
@@ -13453,7 +13453,7 @@ fn a_pending_fit_or_restored_view_stays_on_its_tab_across_switches_in_one_frame(
                 (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = *view;
                 h.run();
             }
-            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
             h.run();
             rest(&mut h);
             zoom_out_to(&mut h, first);
@@ -13512,9 +13512,9 @@ fn a_landing_in_place_left_before_it_draws_keeps_no_view_never_drawn() {
         let drawn = (egui::vec2(-37.0, 52.0), 0.5);
         (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = drawn;
         h.run();
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         assert_eq!((h.state().canvas.active, h.state().canvas.zoom), (Some(sales_d), 1.0), "{theme:?}: landing in place");
-        crate::package_nav::leave(h.state_mut(), archforge_mof::Uuid::parse(&root).unwrap(), 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::leave(cx, archforge_mof::Uuid::parse(&root).unwrap(), 0.0));
         assert_eq!(h.state().canvas.active, Some(first), "{theme:?}");
         let kept = h.state().canvas.views.get(&sales_d).copied();
         assert!(kept.is_none() || kept == Some(drawn), "{theme:?}: Sales keeps no view it was never drawn with, {kept:?}");
@@ -18259,6 +18259,47 @@ fn the_narrow_context_shows_the_panel_asked_last() {
     shell.state.panel_collapsed = true;
     shell.cx(|_| ());
     assert!(shell.state.panel_collapsed, "a request runs once");
+}
+
+/// An explorer the narrow context asks for shows, unfolded, once the call returns; of two asked in
+/// one call the one asked last shows, as the requests run in the order asked, and a new call asks
+/// nothing again.
+#[test]
+fn the_narrow_context_shows_the_explorer_asked_last() {
+    use crate::cx::Request;
+    use crate::state::Explorer;
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let shell = h.state_mut();
+    (shell.state.explorer, shell.state.explorer_collapsed) = (Explorer::Diagrams, true);
+    shell.cx(|cx| cx.requests.push(Request::ShowExplorer(Explorer::Models)));
+    assert_eq!((shell.state.explorer, shell.state.explorer_collapsed), (Explorer::Models, false), "Models shows, unfolded");
+    shell.cx(|cx| {
+        cx.requests.push(Request::ShowExplorer(Explorer::SourceControl));
+        cx.requests.push(Request::ShowExplorer(Explorer::Diagrams));
+    });
+    assert_eq!(shell.state.explorer, Explorer::Diagrams, "the explorer asked last shows");
+    shell.state.explorer_collapsed = true;
+    shell.cx(|_| ());
+    assert!(shell.state.explorer_collapsed, "a request runs once");
+}
+
+/// A name the narrow context asks Models to open for typing opens once the call returns: the filter
+/// goes, so the row is listed, the name is selected whole, so typing replaces it, and Models has
+/// the keyboard; a new call asks nothing again.
+#[test]
+fn the_narrow_context_opens_a_new_name_in_models() {
+    use crate::cx::Request;
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let shell = h.state_mut();
+    let made = archforge_mof::Uuid([9; 16]);
+    (shell.explorer.filter, shell.explorer.rename, shell.explorer.focused) = ("order".into(), None, false);
+    shell.cx(|cx| cx.requests.push(Request::NameInModels(made, "Enumeration 1".into())));
+    assert_eq!(shell.explorer.filter, "", "the filter goes");
+    assert_eq!(shell.explorer.rename, Some(crate::explorer::Rename::fresh(made, "Enumeration 1".into())), "the name is open, selected whole");
+    assert!(shell.explorer.focused, "Models has the keyboard");
+    (shell.explorer.filter, shell.explorer.rename, shell.explorer.focused) = ("order".into(), None, false);
+    shell.cx(|_| ());
+    assert_eq!((shell.explorer.filter.as_str(), &shell.explorer.rename, shell.explorer.focused), ("order", &None, false), "a request runs once");
 }
 
 /// The shared removals ask the removed element's notation what to say (AR-789): Delete on a line
@@ -23882,7 +23923,8 @@ fn point_on_edge(h: &Harness<'static, Shell>, edge: archforge_mof::Uuid) -> egui
 
 /// Generalization sets (AR-129, design page 08, B1 to B4), in light and dark: three generalizations
 /// to Payment selected, a right click on one of their lines opens the set actions, Create
-/// generalization set… makes one undo step and selects the set, its name ready, its label `name
+/// generalization set… makes one undo step and selects the set, its name ready in Properties, which
+/// shows unfolded, its label `name
 /// {incomplete, overlapping}` drawn beside the lines; Properties' Completeness and Disjointness
 /// write in one step each, undone and redone, the label following; a member is taken out; ⌥⌘G
 /// makes a second set; the generalization in both lists both; a mixed selection disables Create in
@@ -23938,9 +23980,12 @@ fn generalization_sets_are_made_from_the_menu_the_shortcut_and_properties() {
         ] {
             assert!(ids(&h).iter().any(|i| i == id), "{id}");
         }
+        // Another panel, folded away, gives way to the new set's Properties.
+        (h.state_mut().state.panel, h.state_mut().state.panel_collapsed) = (crate::state::Panel::Skills, true);
         let at = rect_of(&h, CREATE_ID).center();
         click(&mut h, at);
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Create generalization set"));
+        assert_eq!((h.state().state.panel, h.state().state.panel_collapsed), (crate::state::Panel::Properties, false), "{theme:?}: Properties shows");
         let made = all_sets(&h);
         assert_eq!(made.len(), 1);
         let set = made[0];
@@ -31767,10 +31812,37 @@ fn a_new_nested_classifier_takes_a_name_free_of_its_owners_members() {
         .unwrap()
         .execute("uml.attribute.add", &serde_json::json!({ "class": order.to_string(), "name": "enumeration 1" }))
         .unwrap();
-    let made = crate::uml_nesting::add_nested(h.state_mut(), order, crate::uml_classifier::Classifier::Enumeration).expect("made");
+    let made = h.state_mut().cx(|cx| crate::uml_nesting::add_nested(cx, order, crate::uml_classifier::Classifier::Enumeration)).expect("made");
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_core::name_of(st, st.by_uuid(made).unwrap()), "Enumeration 2", "the next name the owner leaves free");
     assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Enumeration 2"));
+}
+
+/// A nested classifier made through the narrow context asks Models, in this order, to open the
+/// rows above it, to open its name for typing and to show itself, and Models does all three once
+/// the call returns (AR-132, D1).
+#[test]
+fn a_new_nested_classifier_is_named_in_models_once_the_call_returns() {
+    use crate::cx::Request;
+    use crate::state::Explorer;
+    let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+    let shell = h.state_mut();
+    shell.explorer.expanded.clear();
+    (shell.explorer.filter, shell.explorer.rename, shell.explorer.focused) = ("zzz".into(), None, false);
+    (shell.state.explorer, shell.state.explorer_collapsed) = (Explorer::Diagrams, true);
+    let (made, asked) = shell.cx(|cx| {
+        let made = crate::uml_nesting::add_nested(cx, order, crate::uml_classifier::Classifier::Enumeration).expect("made");
+        (made, cx.requests.clone())
+    });
+    let [Request::ExpandRows(rows), Request::NameInModels(named, name), Request::ShowExplorer(Explorer::Models)] = &asked[..] else {
+        panic!("the rows, the name, then Models: {asked:?}")
+    };
+    assert!(rows.contains(&order) && *named == made && name == "Enumeration 1", "{asked:?}");
+    assert!(rows.iter().all(|row| shell.explorer.expanded.contains(row)), "the rows above it open");
+    assert_eq!(shell.explorer.rename, Some(crate::explorer::Rename::fresh(made, "Enumeration 1".into())), "its name open for typing");
+    assert!(shell.explorer.filter.is_empty() && shell.explorer.focused, "listed, with the keyboard");
+    assert_eq!((shell.state.explorer, shell.state.explorer_collapsed), (Explorer::Models, false), "Models shows, unfolded");
 }
 
 /// Repository, Order and Entity (Order specializes it) in the package Shop, on two class diagrams,
@@ -32057,7 +32129,7 @@ fn bindings_in(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
 }
 
 /// A template binding is drawn from OrderRepository to Repository (design page 08, C3): releasing it
-/// opens the draft in Properties and writes nothing; Apply with T still to pick is refused naming
+/// opens the draft in Properties, which shows unfolded, and writes nothing; Apply with T still to pick is refused naming
 /// it, the draft kept; Cancel, and Escape, leave the model and its history as they were; with T
 /// picked, Apply adds the binding, its line and its label as one undo step and selects it, Key on
 /// its default. In light and dark.
@@ -32073,14 +32145,17 @@ fn a_template_binding_is_drawn_and_applied_from_its_draft() {
             crate::uml_relate::connect(h.state_mut(), d, from, to);
             h.run();
         };
+        // Another panel, folded away, gives way to the draft in Properties.
+        (h.state_mut().state.panel, h.state_mut().state.panel_collapsed) = (crate::state::Panel::Skills, true);
         draw(&mut h);
+        assert_eq!((h.state().state.panel, h.state().state.panel_collapsed), (crate::state::Panel::Properties, false), "{theme:?}: Properties shows");
         assert!(bindings_in(&h).is_empty(), "{theme:?}: nothing in the model while drawing");
         assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo);
         let shown = painted(&h);
         assert!(shown.iter().any(|t| t == "New template binding") && shown.iter().any(|t| t == "Choose a class"), "{shown:?}");
         assert!(shown.iter().any(|t| t == "default"), "Key shows its default");
         let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(crate::uml_bindings::draft_line(h.state(), st.by_uuid(d).unwrap()), Some((from, to)), "the draft's line is drawn");
+        assert_eq!(crate::uml_bindings::draft_line(&h.state().cx_ref(), st.by_uuid(d).unwrap()), Some((from, to)), "the draft's line is drawn");
         for id in ["bound", "template", "substitution.0.argument", "substitution.1.argument", "apply", "cancel"] {
             assert!(ids(&h).iter().any(|i| *i == format!("workspace.properties.templateBinding.{id}")), "{id}");
         }
@@ -32639,7 +32714,7 @@ fn select_all_takes_in_what_the_kind_adds() {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        assert!(crate::uml_sets::shortcut(h.state_mut()), "{theme:?}: a set made");
+        assert!(h.state_mut().cx(crate::uml_sets::shortcut), "{theme:?}: a set made");
         let st = h.state().session.as_ref().unwrap().doc();
         let set = st.alive().find(|o| archforge_uml::generalization_sets::is_set(st, *o)).unwrap();
         let lines: Vec<archforge_mof::Obj> = gens.iter().map(|g| st.by_uuid(archforge_mof::Uuid::parse(g).unwrap()).unwrap()).collect();
@@ -32681,7 +32756,7 @@ fn delete_removes_each_notations_own_selected_element_its_own_way() {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        assert!(crate::uml_sets::shortcut(h.state_mut()), "{theme:?}: a set made, and selected");
+        assert!(h.state_mut().cx(crate::uml_sets::shortcut), "{theme:?}: a set made, and selected");
         let st = h.state().session.as_ref().unwrap().doc();
         let set = st.alive().find(|o| archforge_uml::generalization_sets::is_set(st, *o)).unwrap();
         let g = st.by_uuid(archforge_mof::Uuid::parse(&gens[0]).unwrap()).unwrap();
@@ -34477,7 +34552,7 @@ fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound(
             h.run();
             (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
             h.run();
-            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
             h.run();
             if let Some(view) = saved {
                 let mut route = crate::nav_route::Route::default();
@@ -34528,7 +34603,7 @@ fn a_return_by_zoom_measures_the_saved_view_on_the_window_it_returns_to() {
             h.run();
             let before = share(&h);
             assert!(before > 0.0 && before < crate::package_nav::ENTER_COVER, "{theme:?} {case}: Sales covers {before} when left");
-            crate::package_nav::enter(h.state_mut(), sales, 0.0);
+            h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
             h.run();
             h.set_size(egui::vec2(1000.0, 700.0));
             h.run();
@@ -34611,7 +34686,7 @@ fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
         let (archive_share, sales_share) = (share(archive_card), share(card));
         assert!(archive_share >= crate::package_nav::ENTER_COVER, "{theme:?}: Archive covers {archive_share} at {:?}", (c.pan, c.zoom));
         assert!(sales_share > 0.0, "{theme:?}: Sales' card partly in view, {sales_share}");
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         h.run();
         rest(&mut h);
         assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
@@ -34643,7 +34718,7 @@ fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
             (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(-50.0, 30.0), 0.6);
             h.run();
             if routed {
-                crate::package_nav::enter(h.state_mut(), sales, 0.0);
+                h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
             } else {
                 crate::canvas::open(h.state_mut(), sales_d);
                 assert!(uml_of(h.state()).nav.routes.get(&sales_d).is_none_or(|r| r == &crate::nav_route::Route::default()), "{theme:?}: no route");
@@ -34691,7 +34766,7 @@ fn a_return_by_zoom_rejects_a_view_at_exactly_the_entry_threshold() {
         let covered = rect_of(&h, &format!("workspace.canvas.node.{card}")).intersect(canvas);
         let share = covered.width() * covered.height() / (canvas.width() * canvas.height());
         assert_eq!(share, crate::package_nav::ENTER_COVER, "{theme:?}: Sales covers exactly the threshold, {covered:?}");
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         h.run();
         rest(&mut h);
         assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
@@ -34726,7 +34801,7 @@ fn returns_restore_the_view_each_visit_was_left_with() {
         for (package, view) in [archive, commerce, archive].into_iter().zip(views) {
             (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
             h.run();
-            crate::package_nav::enter(h.state_mut(), package, 0.0);
+            h.state_mut().cx(|cx| crate::package_nav::enter(cx, package, 0.0));
             h.run();
             rest(&mut h);
         }
@@ -34759,9 +34834,9 @@ fn a_return_past_a_removed_diagram_fits_the_one_it_lands_on() {
         let left = (egui::vec2(-50.0, 30.0), 0.6);
         (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
         h.run();
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         h.run();
-        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, archive, 0.0));
         h.run();
         assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
         // Sales' diagram is its default: removing it makes Sales a new, empty one.
@@ -34835,9 +34910,9 @@ fn a_return_landing_at_the_least_zoom_goes_back_on_the_next_zoom_out() {
         let archive_d = own_diagram(s, archive);
         crate::canvas::open(h.state_mut(), top);
         h.run();
-        crate::package_nav::enter(h.state_mut(), sales, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, sales, 0.0));
         h.run();
-        crate::package_nav::enter(h.state_mut(), archive, 0.0);
+        h.state_mut().cx(|cx| crate::package_nav::enter(cx, archive, 0.0));
         h.run();
         assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
         let p = serde_json::json!({ "nodes": [archive_card.to_string()] });

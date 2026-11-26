@@ -78,7 +78,12 @@ pub fn open_at(shell: &mut Shell, section: Section) {
 
 /// A control of the dialog, recorded under `id`; one that is not `live` only shows its tooltip.
 pub(crate) fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> Response {
-    widgets::record_visible(ui, &mut shell.registry, id, kind, rect);
+    control_in(&mut shell.registry, ui, id, kind, rect, live)
+}
+
+/// [`control`] recorded in `registry`, the one part of the shell it reaches.
+fn control_in(registry: &mut widgets::Registry, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> Response {
+    widgets::record_visible(ui, registry, id, kind, rect);
     let resp = ui.interact(rect, widgets::egui_id(id), if live { Sense::click() } else { Sense::hover() });
     if live { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp }
 }
@@ -106,10 +111,26 @@ pub(crate) fn button(
     live: bool,
     hover: Option<&str>,
 ) -> (Rect, Response) {
+    button_in(&mut shell.registry, ui, p, id, at, label, look, live, hover)
+}
+
+/// [`button`] recorded in `registry`, the one part of the shell it reaches, for screens on the
+/// narrow context ([`crate::cx::Ctx::registry`]).
+pub(crate) fn button_in(
+    registry: &mut widgets::Registry,
+    ui: &egui::Ui,
+    p: &Palette,
+    id: &str,
+    at: Pos2,
+    label: &str,
+    look: Look,
+    live: bool,
+    hover: Option<&str>,
+) -> (Rect, Response) {
     let paint = ui.painter().clone();
     let g = ux::galley(&paint, label, types::UI, p.text, None);
     let r = Rect::from_min_size(at, vec2((g.size().x + 20.0).ceil(), 28.0));
-    let mut resp = control(shell, ui, id, "button", r, live);
+    let mut resp = control_in(registry, ui, id, "button", r, live);
     if let Some(h) = hover {
         resp = resp.on_hover_text(h);
     }

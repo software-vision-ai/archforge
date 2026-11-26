@@ -274,7 +274,7 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     let (rename, key) = kind.rename_command();
     crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, rename, key);
     // Its owner, a package or a classifier: a pick moves it there (AR-132, D2 and D3).
-    let field = crate::uml_nesting::owner_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, class);
+    let field = shell.cx(|cx| crate::uml_nesting::owner_field(cx, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, class));
     let mut y = y + 17.0 + FIELD + 12.0;
     // A nested classifier's owner explained under it (D2).
     if let Some(help) = shell.session.as_ref().and_then(|s| crate::uml_nesting::owner_help(s.doc(), class)) {
@@ -303,11 +303,11 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     y = crate::uml_stereotypes::section_for(shell, ui, p, r, y, class);
     // The classifiers it nests, a class's or an interface's (AR-132, D1).
     if shell.session.as_ref().is_some_and(|s| crate::uml_nesting::owns(s.doc(), class)) {
-        y = crate::uml_nesting::nested_section(shell, ui, p, r, y, class, class_id);
+        y = shell.cx(|cx| crate::uml_nesting::nested_section(cx, ui, p, r, y, class, class_id));
     }
     // Its template parameters, a class's, an interface's or a data type's (AR-130, C1).
     if shell.session.as_ref().is_some_and(|s| s.doc().class_of(class).is_ok_and(archforge_uml::templates::can_be_template)) {
-        y = crate::uml_templates::section_of(shell, ui, p, r, y, class, class_id);
+        y = shell.cx(|cx| crate::uml_templates::section_of(cx, ui, p, r, y, class, class_id));
     }
     if kind == Classifier::Enumeration {
         y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
@@ -318,10 +318,10 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     }
     // Its constraints, a built-in type's aside (AR-133).
     if shell.session.as_ref().is_some_and(|s| archforge_uml::constraints::is_context(s.doc(), class)) {
-        crate::uml_constraints::section_of(shell, ui, p, r, y + 4.0, class, class_id);
+        shell.cx(|cx| crate::uml_constraints::section_of(cx, ui, p, r, y + 4.0, class, class_id));
     }
     // The owner menu last, over the sections.
-    crate::uml_nesting::owner_menu(shell, ui, p, field, class, class_id);
+    shell.cx(|cx| crate::uml_nesting::owner_menu(cx, ui, p, field, class, class_id));
 }
 
 /// The id of No subclasses (final), the design's own (AR-137).
@@ -584,7 +584,7 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
     if let Some(id) = subject.id {
         let below = crate::uml_stereotypes::section_for(shell, ui, p, r, field.bottom() + 16.0, package);
         let below = crate::uml_profiles::applied_section(shell, ui, p, r, below, package, id);
-        crate::uml_constraints::section_of(shell, ui, p, r, below, package, id);
+        shell.cx(|cx| crate::uml_constraints::section_of(cx, ui, p, r, below, package, id));
     }
     if shell.panels.menu == Some(menus::PACKAGE_PARENT) {
         let paths: Vec<Vec<String>> = choices.iter().map(|(_, n)| n.clone()).collect();
@@ -594,7 +594,7 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
             // As a drop in Models moves it: its cards stay, none is added to its new owner's diagram.
             let to = shell.session.as_ref().and_then(|s| s.doc().by_uuid(*to));
             if let Some(to) = to {
-                shell.panels.notice = crate::package_nav::move_package(shell, package, to).err();
+                shell.panels.notice = shell.cx(|cx| crate::package_nav::move_package(cx, package, to)).err();
             }
         }
     }
@@ -1116,7 +1116,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         shell.explorer.delete = Some(asked);
     } else if remove {
         let target = edit.target.map(|t| t.to_string()).unwrap_or_default();
-        let said = crate::uml_constraints::before_removal(shell, std::slice::from_ref(&target));
+        let said = crate::uml_constraints::before_removal(&shell.cx_ref(), std::slice::from_ref(&target));
         match run(shell, "element.remove", json!({ "ids": [target] })) {
             Ok(_) => {
                 if let Some(uml) = uml_mut(&mut shell.notation_states) {

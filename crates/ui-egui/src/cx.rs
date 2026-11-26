@@ -14,7 +14,7 @@ use archforge_mof::{Obj, Uuid};
 use archforge_notations::Session;
 
 use crate::notation_ui::{NotationStates, NotationUi};
-use crate::state::Panel;
+use crate::state::{Explorer, Panel};
 use crate::{Shell, canvas, menu_bar, panels, widgets};
 
 /// The shell's parts a notation's screens and the shared controls change, each borrowed apart, so
@@ -67,6 +67,12 @@ pub(crate) enum Request {
     HideVersionDetails,
     /// The right side shows this panel, unfolded.
     ShowPanel(Panel),
+    /// The left side shows this explorer, unfolded.
+    ShowExplorer(Explorer),
+    /// Models opens the name of this element, just made with the name given, for typing in place:
+    /// its filter goes, so the row is listed, the name is selected whole, so typing replaces it, and
+    /// the keyboard goes to Models.
+    NameInModels(Uuid, String),
 }
 
 impl Ctx<'_> {
@@ -112,6 +118,12 @@ impl Shell {
                 Request::ExpandRows(rows) => self.explorer.expanded.extend(rows),
                 Request::HideVersionDetails => (self.versions.details, self.versions.element) = (None, None),
                 Request::ShowPanel(panel) => self.state.show_panel(panel),
+                Request::ShowExplorer(explorer) => self.state.show_explorer(explorer),
+                Request::NameInModels(id, name) => {
+                    self.explorer.filter.clear();
+                    self.explorer.rename = Some(crate::explorer::Rename::fresh(id, name));
+                    self.explorer.focused = true;
+                }
             }
         }
     }
