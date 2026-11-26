@@ -53,5 +53,6 @@ notations a press on the canvas carries.
 
 **Non-goals.** Installing fonts and the app icon, which stay in the shell, as do the icons only one
 notation draws until its screens crate takes them; the catalogues, which each crate that brings
-text keeps, embeds and registers (the shell's are in `crates/ui-egui/src/i18n/`); anything that
+text keeps, embeds and registers (the shell's are in `crates/ui-egui/src/i18n/`, ER's and UML's in
+its `er/` and `uml/` folders until their screens crates take them); anything that
 touches the file system or the operating system, which the host does through `Services`.

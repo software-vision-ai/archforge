@@ -70,16 +70,25 @@ after every visible change, in both appearances, beside the design.
   catalogues registered). Pass the English text as a literal: the coverage test reads the
   literals in `crates/ui-egui/src`, `crates/shell-api/src` and `apps/archforge/src`. Text from a
   table goes through a function the test calls, as `home::start_texts` does.
-- The catalogues are `crates/ui-egui/src/i18n/<code>.tsv`, keyed by the English text, four
-  tab-separated columns: kind, context, key, text. All seven are complete, so a new string needs
-  its row in every one. Rows go beside related entries, never at the end of the file. A key is in
-  a catalogue once (a `str` row by context and key, a `plural` row by key alone): check that the
-  row is not there already, as the coverage test refuses a second one.
+- The catalogues are `crates/ui-egui/src/i18n/<code>.tsv`, the shell's, and one table per
+  notation, `crates/ui-egui/src/i18n/er/<code>.tsv` and `crates/ui-egui/src/i18n/uml/<code>.tsv`,
+  which the notation hands over (`NotationUi::catalogues`) and the shell registers with its own
+  before the first lookup. A row only one notation's screens name goes in that notation's table;
+  a row the shell names, or both notations, goes in the shell's. Each is keyed by the English
+  text, four tab-separated columns: kind, context, key, text. All seven languages are complete,
+  so a new string needs its row in every language of its table. Rows go beside related entries,
+  never at the end of the file. A key is in a language's catalogues once (a `str` row by context
+  and key, a `plural` row by key alone): check that the row is not there already, in the shell's
+  table or a notation's, as the coverage test refuses a second one.
+- `crates/ui-egui/src/tests/catalogue-rows.tsv` holds every row of every catalogue as it was
+  before ER's and UML's rows left the shell's catalogues (AR-816); a change to a catalogue's rows
+  changes it in the same commit, as `the_catalogues_together_hold_the_rows_at_base` says.
 - Translate the whole sentence with its punctuation; placeholders such as `{n}` may move. A row a
   model translated says so, as the catalogue header records its provenance.
 - The catalogue screen test refuses hidden characters, addresses and instructions in a row.
-- A new language is a catalogue plus a row in `LANGUAGES` (`crates/shell-api/src/i18n/mod.rs`)
-  and in the shell's `CATALOGUES` (`crates/ui-egui/src/i18n/mod.rs`);
+- A new language is a catalogue in every table plus a row in `LANGUAGES`
+  (`crates/shell-api/src/i18n/mod.rs`), in the shell's `CATALOGUES`
+  (`crates/ui-egui/src/i18n/mod.rs`) and in each notation's (`er_ui.rs`, `uml_ui.rs`);
   `every_catalogue_in_the_folder_is_registered` fails without the rows. Japanese and Chinese draw with an installed family
   (`crates/ui-egui/src/fonts.rs`).
 - Wording is plain and UK English: colour, licence, catalogue.

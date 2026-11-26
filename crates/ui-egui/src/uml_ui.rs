@@ -16,7 +16,7 @@ use crate::Shell;
 use crate::canvas::Tool;
 use crate::editing::Action;
 use crate::explorer::{Row, Tree, fresh_name};
-use crate::i18n::{fmt, tr, tr_ctx, trn};
+use crate::i18n::{Rows, fmt, tr, tr_ctx, trn};
 use crate::kinds::{DiagramKind, KindTool, MenuRow, Press, ToolUse};
 use crate::model_menu::menu_row;
 use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
@@ -692,6 +692,18 @@ pub(crate) fn members_height(attributes: usize, operations: usize) -> f64 {
 /// UML in the shell's explorers, search and panels.
 pub(crate) struct UmlUi;
 
+/// UML's own catalogue of each language, in the order of `LANGUAGES`, embedded: the rows only
+/// UML's screens name ([`NotationUi::catalogues`]).
+static CATALOGUES: &[Rows] = &[
+    Rows { code: "en", catalogue: "uml/en.tsv", text: include_str!("i18n/uml/en.tsv") },
+    Rows { code: "de", catalogue: "uml/de.tsv", text: include_str!("i18n/uml/de.tsv") },
+    Rows { code: "es", catalogue: "uml/es.tsv", text: include_str!("i18n/uml/es.tsv") },
+    Rows { code: "fr", catalogue: "uml/fr.tsv", text: include_str!("i18n/uml/fr.tsv") },
+    Rows { code: "pt-PT", catalogue: "uml/pt-PT.tsv", text: include_str!("i18n/uml/pt-PT.tsv") },
+    Rows { code: "ja", catalogue: "uml/ja.tsv", text: include_str!("i18n/uml/ja.tsv") },
+    Rows { code: "zh-Hans", catalogue: "uml/zh-Hans.tsv", text: include_str!("i18n/uml/zh-Hans.tsv") },
+];
+
 impl NotationUi for UmlUi {
     fn metamodel(&self) -> u16 {
         archforge_uml::INDEX
@@ -1212,6 +1224,11 @@ impl NotationUi for UmlUi {
     /// A relationship may lose its name, which leaves it unnamed.
     fn may_be_unnamed(&self, cmd: &str) -> bool {
         cmd == "uml.relationship.rename"
+    }
+
+    /// UML's own catalogues ([`CATALOGUES`]).
+    fn catalogues(&self) -> &'static [Rows] {
+        CATALOGUES
     }
 
     /// Every class it creates, those its classifier tool and defaults pick through a variable

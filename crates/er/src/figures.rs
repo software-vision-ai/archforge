@@ -168,6 +168,6 @@ pub fn slot_text(store: &Store, element: Obj, slot: &str) -> String {
     }
 }
 
-/// The words the descriptions say, for the shell's catalogue: the texts, and the plural.
+/// The words the descriptions say, for the catalogues: the texts, and the plural.
 pub const WORDS: &[&str] = &["Entity", "Entity · {schema}", "complete", "disjoint", "overlapping"];
 pub const PLURALS: &[&str] = &["+ {n} more column"];

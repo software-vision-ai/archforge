@@ -14,7 +14,7 @@ use serde_json::json;
 
 use crate::Shell;
 use crate::explorer::{Row, Tree, fresh_name};
-use crate::i18n::{fmt, tr, trn};
+use crate::i18n::{Rows, fmt, tr, trn};
 use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
 use crate::panels::{FIELD, Subject};
 use crate::problems::Problem;
@@ -22,6 +22,18 @@ use crate::ux::{Palette, icons};
 
 /// ER in the shell.
 pub(crate) struct ErUi;
+
+/// ER's own catalogue of each language, in the order of `LANGUAGES`, embedded: the rows only
+/// ER's screens name ([`NotationUi::catalogues`]).
+static CATALOGUES: &[Rows] = &[
+    Rows { code: "en", catalogue: "er/en.tsv", text: include_str!("i18n/er/en.tsv") },
+    Rows { code: "de", catalogue: "er/de.tsv", text: include_str!("i18n/er/de.tsv") },
+    Rows { code: "es", catalogue: "er/es.tsv", text: include_str!("i18n/er/es.tsv") },
+    Rows { code: "fr", catalogue: "er/fr.tsv", text: include_str!("i18n/er/fr.tsv") },
+    Rows { code: "pt-PT", catalogue: "er/pt-PT.tsv", text: include_str!("i18n/er/pt-PT.tsv") },
+    Rows { code: "ja", catalogue: "er/ja.tsv", text: include_str!("i18n/er/ja.tsv") },
+    Rows { code: "zh-Hans", catalogue: "er/zh-Hans.tsv", text: include_str!("i18n/er/zh-Hans.tsv") },
+];
 
 fn name(store: &Store, o: Obj) -> String {
     archforge_core::name_of(store, o)
@@ -526,6 +538,11 @@ impl NotationUi for ErUi {
     /// A relationship may lose its name, which leaves it unnamed.
     fn may_be_unnamed(&self, cmd: &str) -> bool {
         cmd == "er.relationship.rename"
+    }
+
+    /// ER's own catalogues ([`CATALOGUES`]).
+    fn catalogues(&self) -> &'static [Rows] {
+        CATALOGUES
     }
 
     /// Every class its commands create ([`CREATED`]).

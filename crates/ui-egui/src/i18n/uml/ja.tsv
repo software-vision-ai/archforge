@@ -1,0 +1,648 @@
+# UML · 日本語カタログ。列: kind、context、key、text（i18n/mod.rs を参照）。行は関連する項目の隣に置きます。
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
+str		built-in	組み込み
+str		New UML structure diagram	新しいUML構造図
+str		Classes, packages and the relationships between them.	クラス、パッケージ、およびそれらの間の関係。
+str		{what} cannot depend on itself.	{what}は自分自身に依存できません。
+str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
+str		The model's root package holds all the other packages, so it stays where it is.	モデルのルートパッケージは他のすべてのパッケージを含むため、今の場所から移動しません。
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	{types} パッケージは組み込み型を保持しています。保持している間は名前を変えず、ルートパッケージの下に残ります。
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	組み込み型を保持する {types} パッケージがすでにあります。その隣に 2 つ目を置くことはできません。
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	このパッケージには {name} という名前の{what}があります。これは組み込み型の名前で、{types} ではその型を意味することになります。先に {name} の名前を変更してください。
+str		There is no package yet.	パッケージはまだありません。
+str		There is no class, interface, enumeration, data type or primitive type yet.	クラス、インターフェース、列挙、データ型、プリミティブ型はまだありません。
+str		There is no class yet.	クラスはまだありません。
+str		There is no enumeration yet.	列挙はまだありません。
+str		There is no class or interface yet.	クラスやインターフェースはまだありません。
+str		There is no association or association class yet.	関連や関連クラスはまだありません。
+str		There is no n-ary association yet.	多項関連はまだありません。
+str		There is no generalization yet.	汎化はまだありません。
+str		There is no generalization set yet.	汎化セットはまだありません。
+str		There is no class, interface, enumeration, data type, primitive type, association class or package yet.	クラス、インターフェース、列挙、データ型、プリミティブ型、関連クラス、パッケージはまだありません。
+str		There is no constraint yet.	制約はまだありません。
+str		There is no class, interface or data type yet.	クラス、インターフェース、データ型はまだありません。
+str		There is no template parameter yet.	テンプレートパラメーターはまだありません。
+str		There is no template yet: give a class, an interface or a data type a template parameter first.	テンプレートはまだありません。先にクラス、インターフェース、データ型のいずれかにテンプレートパラメーターを付けてください。
+str		There is no template binding yet.	テンプレートバインディングはまだありません。
+str		There is no profile yet.	プロファイルはまだありません。
+str		There is no stereotype yet.	ステレオタイプはまだありません。
+str		No stereotype is applied yet.	適用されたステレオタイプはまだありません。
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	このパッケージにはクラス図がありますが、既定の図になっているものはありません。そのいずれかを既定の図として選んでください。
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	このパッケージには既定の図が複数あります。既定の図として残すクラス図を選んでください。
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	このパッケージの既定の図はもう存在しません。そのクラス図のいずれかを既定の図として選んでください。
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	このパッケージの既定の図はクラス図ではありません。そのクラス図のいずれかを既定の図として選んでください。
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	このパッケージの既定の図は別の要素のものです。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
+str		This connection already exists: the dependency {dependency}. Select the existing relationship.	この接続はすでに存在します（依存 {dependency}）。既存のリレーションシップを選択してください。
+str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	選択したリレーションシップはこの 2 つの要素を結んでいないか、もう結んでいません。結んでいるものの中からもう一度選択してください。何も変更されていません。
+str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	選択したリレーションシップはこの 2 つの要素を結んでいないか、もう結んでおらず、現在結んでいるものはありません。何も変更されていません。
+str		Several dependencies already join these two elements in this direction, so none was added.	この 2 つの要素はこの方向ですでに複数の依存で結ばれているため、何も追加されませんでした。
+str		No package is given. Give its id.	パッケージが指定されていません。その ID を指定してください。
+str		{name} is not a package.	{name} はパッケージではありません。
+str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} は {package} のクラス図ではありません。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
+str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} にはまだクラス図がないため、開くものがありません。先にクラス図を作成してください。
+str		{parent} has no diagram yet to take this package's diagrams. Create one for it first. Nothing was changed.	{parent} にはこのパッケージの図を受け入れる図がまだありません。先に {parent} の図を作成してください。何も変更されていません。
+str		{parent} has no valid default diagram to take this package's diagrams. Choose its default first. Nothing was changed.	{parent} にはこのパッケージの図を受け入れる有効な既定の図がありません。先に既定の図を選んでください。何も変更されていません。
+str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	この要素は {max} 個以上のコメントを所有しているため、説明を見つけられません。先にファイルでいくつか削除してください。
+str	refusal	a class	クラス
+str	refusal	an association class	関連クラス
+str	refusal	an association	関連
+str	refusal	a generalization	汎化
+str	refusal	an interface	インターフェース
+str	refusal	an enumeration	列挙
+str	refusal	a data type	データ型
+str	refusal	a primitive type	プリミティブ型
+str	refusal	a package	パッケージ
+str	refusal	a profile	プロファイル
+str	refusal	a stereotype	ステレオタイプ
+str	refusal	an attribute	属性
+str	refusal	an operation	操作
+str	refusal	a literal	リテラル
+str	refusal	a qualifier	限定子
+str	refusal	a template parameter	テンプレートパラメーター
+str	refusal	a generalization set	汎化セット
+str	refusal	an association end	関連端
+str		Literals carry no skills	リテラルはスキルを持ちません
+str		Built-in types carry no skills	組み込み型はスキルを持ちません
+str		Types keeps the built-in types, so it stays while it holds them	Types は組み込み型を保持しているため、保持している間は残ります
+str		Generalization sets carry no skills	汎化セットはスキルを持ちません
+str		Add class	クラスを追加
+str		Add interface	インターフェースを追加
+str		Add enumeration	列挙を追加
+str		Add data type	データ型を追加
+str		Add primitive type	プリミティブ型を追加
+str		Add association class	関連クラスを追加
+str		«interface»	«interface»
+str		«enumeration»	«enumeration»
+str		«dataType»	«dataType»
+str		«stereotype»	«stereotype»
+str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
+str		«primitive»	«primitive»
+str		Classifier	分類子
+str		UML structure diagram	UML構造図
+str		UML structure diagrams	UML構造図
+str		Class · model, in every diagram	クラス · モデル、すべての図に
+str		Interface · model, in every diagram	インターフェース · モデル、すべての図に
+str		Enumeration · model, in every diagram	列挙 · モデル、すべての図に
+str		Data type · model, in every diagram	データ型 · モデル、すべての図に
+str		Primitive type · model, in every diagram	プリミティブ型 · モデル、すべての図に
+str		Association class · model, in every diagram	関連クラス · モデル、すべての図に
+str		New package	新しいパッケージ
+str		On this class · {n}	このクラスに · {n}
+str		On this interface · {n}	このインターフェースに · {n}
+str		On this enumeration · {n}	この列挙に · {n}
+str		On this data type · {n}	このデータ型に · {n}
+str		On this primitive type · {n}	このプリミティブ型に · {n}
+str		On this package · {n}	このパッケージに · {n}
+str		Package · model	パッケージ · モデル
+str		The diagram is of no package	この図はどのパッケージにも属していません
+str		This class	このクラス
+str		This interface	このインターフェース
+str		This enumeration	この列挙
+str		This data type	このデータ型
+str		This primitive type	このプリミティブ型
+str		This package	このパッケージ
+plural		+ {n} more member	+ 他 {n} メンバー
+plural		+ {n} more literal	+ 他 {n} リテラル
+plural		{n} constraint changed	{n} 件の制約が変わりました
+plural		+ {n} more line	+ 他 {n} 行
+plural		+ {n} more element	+ 他 {n} 要素
+str		Abstract	抽象
+str		No subclasses (final)	サブクラスなし (final)
+str		Nothing may specialise {name}. Shown as {final} after its name.	{name} を特化することはできません。名前の後に {final} と表示されます。
+plural		{name} has {n} subclass: {subclasses}.	{name} には {n} 個のサブクラスがあります: {subclasses}。
+plural		Remove that generalization before making it final.	final にする前に、それらの汎化を削除してください。
+str		{names} and {last}	{names} と {last}
+plural		Select the generalization	{n} 個の汎化を選択
+str		No redefinition (leaf)	再定義なし (leaf)
+str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}.	サブクラスは継承先で {name} を再定義できません。{leaf} と表示されます。
+str		A subclass could not redefine this member. Shown as {leaf} after it.	サブクラスはこのメンバーを再定義できません。後ろに {leaf} と表示されます。
+plural		{names} redefines it. Remove that redefinition first.	{names} がこれを再定義しています。先にその再定義を削除してください。
+str		Add attribute	属性を追加
+str		Add property	プロパティを追加
+str		Add operation	操作を追加
+str		Add literal	リテラルを追加
+str		More details in Properties	詳細はプロパティで
+str		There is no type named {name}.	{name} という名前の型はありません。
+str		There is a literal named {name} already.	{name} という名前のリテラルはすでにあります。
+str		An enumeration holds at most {n} literals.	列挙が持てるリテラルは最大 {n} 個です。
+str		Several types are named {name}; pick one from the menu.	{name} という名前の型が複数あります。メニューから 1 つ選んでください。
+str		Add parameter	パラメーターを追加
+str		Attribute	属性
+str		Literal	リテラル
+str		Attribute · model	属性 · モデル
+str		Literal · model	リテラル · モデル
+str		Attributes · {n}	属性 · {n}
+str		Literals · {n}	リテラル · {n}
+str		Owner	所有者
+str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者はパッケージまたは分類子です。変更しても {name} の同一性、メンバー、リレーションシップ、それを使うすべての型は保たれます。
+str		{kind} · nested in {owner} · model, in every diagram	{kind} · {owner} の中に入れ子 · モデル、すべての図で
+str		Nested classifiers · {n}	入れ子の分類子 · {n}
+str		Add nested classifier	入れ子の分類子を追加
+str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	まだありません。ここか、モデル ▸ {name} の中に新規作成から追加します。どちらも同じ種類を提供します。
+str		New	新規
+str		New in {name}	{name} に新規
+str	uml	Profile	プロファイル
+str		profile	プロファイル
+str		extends {metaclasses}	{metaclasses} を拡張
+str		extends nothing yet	まだ何も拡張していません
+str		applies {profiles}	{profiles} を適用
+str		Profile · model	プロファイル · モデル
+str		This profile	このプロファイル
+str		On this profile · {n}	このプロファイル上 · {n}
+str		Stereotype · in profile {profile} · model	ステレオタイプ · プロファイル {profile} 内 · モデル
+str		This stereotype	このステレオタイプ
+str		On this stereotype · {n}	このステレオタイプ上 · {n}
+str		Metaclass · UML	メタクラス · UML
+str		Metaclass	メタクラス
+str		This metaclass	このメタクラス
+str		On this metaclass · {n}	このメタクラス上 · {n}
+str		Metaclasses carry no skills	メタクラスにはスキルを付けられません
+str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	ステレオタイプが拡張する UML のメタクラスです。これは UML 自身のもので、モデルや型メニューには表示されず、変更されることもありません。
+str		The UML library holds the metaclasses that stereotypes extend. It never changes.	UML ライブラリには、ステレオタイプが拡張するメタクラスが入っています。変更されることはありません。
+str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} は UML ライブラリにある UML のメタクラスです。変更されることはありません。
+str		{package} applies {profile} already.	{package} はすでに {profile} を適用しています。
+str		{package} does not apply {profile}.	{package} は {profile} を適用していません。
+str		A profile holds at most {max} stereotypes.	プロファイルが持てるステレオタイプは最大 {max} 個です。
+str		A stereotype extends at most {max} metaclasses.	ステレオタイプが拡張できるメタクラスは最大 {max} 個です。
+str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} は Archforge がまだ描画しない UML のメタクラスです。ステレオタイプが拡張できるのは {metaclasses} です。
+str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} は Archforge が描画するメタクラスではありません。ステレオタイプが拡張できるのは {metaclasses} です。
+str		{name} is named twice. Name each metaclass once.	{name} が 2 回指定されています。メタクラスはそれぞれ 1 回だけ指定してください。
+str		Give the metaclasses as a list of names.	メタクラスは名前のリストで指定してください。
+str		This stereotype is in no profile.	このステレオタイプはどのプロファイルにも入っていません。
+str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} はステレオタイプの拡張端です。代わりに、ステレオタイプが拡張するものからそのメタクラスを外してください。
+plural		{name} has values on {n} element. Remove those first.	{name} には {n} 個の要素で値が設定されています。先にそれらを外してください。
+plural		Values on {n} element don't fit {name} [{bounds}].	{n} 個の要素の値が {name} [{bounds}] に合いません。
+str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	リテラル {literal} は {element} の «{stereotype}» にある {property} の値です。先にそこへ別の値を設定してください。
+str		The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.	リテラル {literal} は、どの要素にも適用されていない «{stereotype}» にある {property} の値です。先にファイルでその値を変更してください。
+str		Stereotypes · {n}	ステレオタイプ · {n}
+str		Add stereotype	ステレオタイプを追加
+str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	まだありません。ここか、モデル ▸ 新規 ▸ ステレオタイプから追加できます。
+str		Open profile diagram	プロファイル図を開く
+str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	パッケージはプロパティの「適用済みプロファイル」でプロファイルを適用します。その要素はプロファイルのステレオタイプを使えるようになります。
+str		Extends · {n}	拡張 · {n}
+str		Add extended metaclass	拡張するメタクラスを追加
+str		{name} extends	{name} の拡張先
+str		extended	拡張済み
+str		Extended already	すでに拡張しています
+str		not drawn by Archforge yet	Archforge ではまだ描画されません
+str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	選べるのは Archforge が描画するメタクラスです。その他のメタクラスは、Archforge ではまだ描画されないものとして無効の状態で表示されます。
+str		Properties · {n}	プロパティ · {n}
+str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	型: モデルのプリミティブ型、列挙型、データ型。{name} の名前を変えても適用はすべて保たれます。要素が使っている間は削除できません。
+str		Applied profiles · {n}	適用済みプロファイル · {n}
+str		Apply profile	プロファイルを適用
+str		Apply to {name}	{name} に適用
+str		applied	適用済み
+str		Applied already	すでに適用されています
+str		No profile yet	まだプロファイルはありません
+str		Make one with New ▸ Profile in Models.	モデルの 新規 ▸ プロファイル で作成できます。
+str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	{name} とその中のパッケージの要素は、適用済みプロファイルのステレオタイプを使えます。適用は 1 回の取り消し操作で、それだけではステレオタイプは付きません。
+str		Unapply profile	プロファイルの適用を解除
+str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} は {package} で使われています: {uses}。先にそれらを外してください。
+str		{name} is in use: {uses}. Remove those first.	{name} は使われています: {uses}。先にそれらを外してください。
+str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} は要素が使うプロファイルを適用しています: {uses}。先にそれらを外してください。
+str		Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.	{name} をそこへ移動すると、ステレオタイプがそのプロファイルを適用しているパッケージの外に出ます: {uses}。先に移動先でプロファイルを適用してください。
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} には使われているプロファイル {profile} があります: {uses}。先にそれらを外してください。
+str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
+str		«{stereotype}» on {elements}	{elements} に «{stereotype}»
+plural		Show the use	{n} 件の使用箇所を表示
+str		A stereotype is shown on its profile's diagram	ステレオタイプはそのプロファイルの図に表示されます
+str		Place stereotype	ステレオタイプを配置
+str		Stereotypes of {name} · {n}	{name} のステレオタイプ · {n}
+str		Stereotypes of this end · {n}	この端のステレオタイプ · {n}
+str		Apply stereotype	ステレオタイプを適用
+str		Remove «{stereotype}» from {name}	{name} から «{stereotype}» を外す
+str	value	default	既定
+str		{value} (default)	{value}（既定）
+str		Default ({value})	既定（{value}）
+str		No value	値なし
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	設定した値は {name} に保存されます。既定値は変更するまでタグが付きます。外すと {name} から «{stereotype}» が外れ、その定義は残ります。
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	まだ適用されていません。+ では、{package} またはそれを囲むパッケージに適用されたプロファイルのステレオタイプを選べます。
+str		Show stereotype values on this diagram	この図にステレオタイプの値を表示
+str		Filter: {text}	絞り込み：{text}
+str		No stereotype matches.	一致するステレオタイプはありません。
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	まだステレオタイプがありません。モデル ▸ 新規 ▸ ステレオタイプからプロファイルに作成してください。
+str		{kinds} only	{kinds} のみ
+str		classes	クラス
+str		interfaces	インターフェース
+str		enumerations	列挙型
+str		data types	データ型
+str		properties	プロパティ
+str		operations	操作
+str		associations	関連
+str		generalizations	汎化
+str		packages	パッケージ
+str		{profile} not applied	{profile} は未適用
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» は {metaclass} を拡張しません。拡張するのは {metaclasses} です。
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» はまだどのメタクラスも拡張していません。
+str		Its profile {profile} is not applied to {package} or a package around it.	プロファイル {profile} は {package} にもそれを囲むパッケージにも適用されていません。
+str		A stereotype application takes no stereotype. Stereotypes apply to the model's elements.	ステレオタイプの適用にはステレオタイプを付けられません。ステレオタイプはモデルの要素に適用します。
+str		This is no element of the model, so no stereotype applies to it.	これはモデルの要素ではないため、ステレオタイプを適用できません。
+str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} はプロファイルに属しています。プロファイルはステレオタイプを定義するもので、ステレオタイプは付けられません。
+str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} にはステレオタイプを付けられません。ステレオタイプが拡張するのは {metaclasses} です。
+str		«{stereotype}» is applied to {name} already.	«{stereotype}» はすでに {name} に適用されています。
+str		«{stereotype}» is not applied to {name}.	«{stereotype}» は {name} に適用されていません。
+str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» にはプロパティ {name} がありません。あるのは {properties} です。
+str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» にはプロパティ {name} がありません。プロパティはまだありません。
+str		{name} is not a stereotype.	{name} はステレオタイプではありません。
+str		{name} is not a class diagram.	{name} はクラス図ではありません。
+str		Give the values as a list of texts.	値はテキストのリストで指定してください。
+str		No stereotype is given. Give its id.	ステレオタイプが指定されていません。その ID を指定してください。
+str		No class diagram is given. Give its id.	クラス図が指定されていません。その ID を指定してください。
+str		No property is given. Give its name or id.	プロパティが指定されていません。その名前か ID を指定してください。
+str		This element is gone.	この要素はもうありません。
+str		{name} is a template parameter of {template} and types only its members.	{name} は {template} のテンプレートパラメーターで、そのメンバーの型にだけ使えます。
+str		An element carries at most {max} stereotypes.	1 つの要素に付けられるステレオタイプは最大 {max} 個です。
+str		{value} is no value of {name}. {accepted}	{value} は {name} の値ではありません。{accepted}
+str		A whole number, such as 42 or -7.	42 や -7 のような整数です。
+str		A number, such as 2.5 or -1e3.	2.5 や -1e3 のような数値です。
+str		true or false.	true または false です。
+str		A whole number of 0 or more, or *.	0 以上の整数、または * です。
+str		Any text.	任意のテキストです。
+str		One of {literals}.	{literals} のいずれかです。
+str		The enumeration {name} has no literals yet.	列挙 {name} にはまだリテラルがありません。
+str		{name} holds at most {n} values.	{name} が持てる値は最大 {n} 個です。
+str		{name} holds each value once, and {value} is there twice.	{name} は各値を一度だけ持ちますが、{value} が二度あります。
+str		A value is empty. Clear the field to show the default.	空の値があります。既定値を表示するにはフィールドを空にしてください。
+str		A value is longer than {n} characters.	{n} 文字を超える値があります。
+plural		{name} holds [{bounds}] values; {n} is given.	{name} が持つ値は [{bounds}] 個ですが、{n} 個が指定されています。
+str		nested	入れ子
+str		package	パッケージ
+str		class	クラス
+str		interface	インターフェース
+str		enumeration	列挙
+str		data type	データ型
+str		primitive type	プリミティブ型
+str		association class	関連クラス
+str		attribute	属性
+str		operation	操作
+str		constraint	制約
+str		element	要素
+str		itself	自分自身
+str		inside it	その中
+str		owns none	所有しない
+str		{kind} {name} already holds that name	{kind} {name} がすでにその名前です
+str		kept for a built-in type	組み込み型用に予約
+str		built-in type	組み込み型
+str		{name} cannot own itself.	{name} は自分自身を所有できません。
+str		{owner} is inside {name}: owning {name} would make a cycle.	{owner} は {name} の中にあります。{name} を所有すると循環になります。
+str		{owner} owns no classifiers: only a package, a class, an interface or an association class does.	{owner} は分類子を所有しません。所有できるのはパッケージ、クラス、インターフェース、関連クラスだけです。
+str		{name} stays in a package: a primitive type or an association class is never nested in a classifier.	{name} はパッケージに留まります。プリミティブ型や関連クラスは分類子の中に入れ子にしません。
+str		{owner} already owns a member named {name}.	{owner} にはすでに {name} という名前のメンバーがあります。
+str		The package {owner} keeps the name {name} for a built-in type.	パッケージ {owner} は名前 {name} を組み込み型用に予約しています。
+str		{name} is a built-in type and stays in Types.	{name} は組み込み型で、Types に留まります。
+str		{name} is a built-in type, which is never made leaf.	{name} は組み込み型のため、leaf にはできません。
+str		Constraints · {n}	制約 · {n}
+str		Add constraint	制約を追加
+str		Edit constraint	制約を編集
+str		Describe the rule…	ルールを記述…
+str		Constrained elements	制約される要素
+str		Remove {name} from the constrained elements	制約される要素から {name} を外す
+str		Add a constrained element	制約される要素を追加
+str		On this diagram	この図では
+str		Linked note	リンクされたノート
+str		Braces	波括弧
+str		Language	言語
+str		Plain text	プレーンテキスト
+str		Pick a language	言語を選ぶ
+str		Pick the constraint's language	制約の言語を選ぶ
+str		Or type any language	または任意の言語を入力
+str		Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.	書いたとおりに保存されます。テキストとその参照は Archforge が保持しますが、評価はしません。モデルに対して何も検査されません。
+str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	長い制約や複数の要素にまたがる制約は、リンクされたノートにすると読みやすくなります。選択は図ごとです。
+str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	波括弧は制約される要素のそばに置かれますが、この図にはそのどれも表示されていません。リンクされたノートとして表示してください。
+str		Only a classifier of the model's own or a package owns constraints.	制約を所有できるのは、モデル自身の分類子かパッケージだけです。
+str		A constraint names only elements of this model.	制約が指定できるのは、このモデルの要素だけです。
+str		A constraint names at most {max} elements.	制約が指定できる要素は最大 {max} 個です。
+str		No constraint is given. Give its id.	制約が指定されていません。その ID を指定してください。
+str		{name} is not a constraint of this model.	{name} はこのモデルの制約ではありません。
+str		This constraint is among no element's constraints.	この制約は、どの要素の制約にも含まれていません。
+str		There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.	制約の中に位置 {at} はありません。0 から {last} までの位置か、最後を表す -1 を指定してください。
+str		Give both x and y, or neither to place it where it reads.	x と y を両方指定するか、読みやすい位置に置く場合はどちらも指定しないでください。
+str		a constraint	制約
+str		{constraint} constrained nothing else and went with it	{constraint} はほかに何も制約していなかったため、一緒に削除されました
+str		{constraint} now constrains {elements} only	{constraint} が制約するのは {elements} だけになりました
+str		Constraint · model, not evaluated	制約 · モデル、評価されない
+str		This constraint	この制約
+str		On this constraint · {n}	この制約に · {n}
+str		Qualifier · model	限定子 · モデル
+str		Qualifier	限定子
+str		This qualifier	この限定子
+str		On this qualifier · {n}	この限定子に · {n}
+str		Constraint · not evaluated	制約 · 評価されない
+str		No literals yet	リテラルはまだありません
+str		Move down	下へ移動
+str		Move up	上へ移動
+str		Multiplicity	多重度
+str		On this attribute · {n}	この属性に · {n}
+str		On this literal · {n}	このリテラルに · {n}
+str		On this operation · {n}	この操作に · {n}
+str		Operation · model	操作 · モデル
+str		Operations · {n}	操作 · {n}
+str		Parameters	パラメーター
+str		Remove parameter	パラメーターを削除
+str		Return type	戻り値の型
+str		Static	静的
+str		Modifiers	修飾子
+str		Default value	既定値
+str		Derived	派生
+str		Subsets	サブセット
+str		Redefines	再定義
+str		No property to subset	サブセットにできるプロパティはありません
+str		No property to redefine	再定義できるプロパティはありません
+str		The default value {value} does not fit {type}; change or clear it first.	既定値 {value} は {type} に合いません。先に変更するか消去してください。
+str		A property chosen here is gone; choose again.	ここで選んだプロパティはもうありません。選び直してください。
+str		A property subsets at most {max} properties.	プロパティがサブセット元にできるプロパティは最大 {max} 個です。
+str		A property redefines at most {max} properties.	プロパティが再定義できるプロパティは最大 {max} 個です。
+str		Give the properties as a list of ids.	プロパティは ID のリストで指定してください。
+str		An item in the list has no id. Give each property's id.	リストの項目に ID がありません。各プロパティの ID を指定してください。
+str		{key} is not a key here. An item holds an id and a name.	{key} はここで使えるキーではありません。項目には ID と名前を指定します。
+str		A default value is at most {n} characters.	既定値は {n} 文字までです。
+str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} は整数ではありません（Integer の既定値は 42 のような整数です）。
+str		{value} is not a number, which a Real's default is, such as 2.5.	{value} は数値ではありません（Real の既定値は 2.5 のような数値です）。
+str		{value} is neither true nor false, which a Boolean's default is.	{value} は true でも false でもありません（Boolean の既定値はそのどちらかです）。
+str		{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.	{value} は 0 以上の整数でも * でもありません（UnlimitedNatural の既定値はそのどちらかです）。
+str		{value} cannot be read as a default.	{value} は既定値として読み取れません。
+str		A property without a name cannot be named here.	名前のないプロパティはここで指定できません。
+str		{name} is not a property this one can subset.	{name} はこのプロパティのサブセット元にできるプロパティではありません。
+str		{name} is not a property this one can redefine.	{name} はこのプロパティが再定義できるプロパティではありません。
+str		{name} has this property's name; a subset takes another.	{name} はこのプロパティと同じ名前です。サブセットには別の名前が必要です。
+str		{name} subsets this property already.	{name} はすでにこのプロパティのサブセットです。
+str		The moved ends no longer subset or redefine {names}, so those were dropped.	移動した端は {names} のサブセットでも再定義でもなくなったため、それらを外しました。
+str		{name} has a type this property's type does not conform to.	{name} の型に、このプロパティの型は適合しません。
+str		{name} holds fewer values than this property.	{name} が持てる値はこのプロパティより少ないです。
+str		This property's multiplicity does not lie within {name}'s.	このプロパティの多重度は {name} の多重度の範囲内にありません。
+str		{name} is composite; only a composite end redefines it.	{name} はコンポジションです。再定義できるのはコンポジションの端だけです。
+str		{name} is leaf: nothing may redefine it. Clear "No redefinition" on it first.	{name} は leaf です。何もこれを再定義できません。先にその「再定義なし」をオフにしてください。
+str		This attribute	この属性
+str		This literal	このリテラル
+str		This operation	この操作
+str		Place class	クラスを配置
+str		Place interface	インターフェースを配置
+str		Place enumeration	列挙を配置
+str		Place data type	データ型を配置
+str		Place primitive type	プリミティブ型を配置
+str		Place association class	関連クラスを配置
+str		Add package	パッケージを追加
+str		Place package	パッケージを配置
+str		Parent package	親パッケージ
+str		A bound can be at most {max}.	境界は最大 {max} までです。
+str		A class realizes only an interface	クラスが実現できるのはインターフェースだけです
+str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
+str		An association class does not join itself	関連クラスは自分自身を結びません
+str		This association class has an attribute named {name}; an end's role takes another name.	この関連クラスには {name} という属性があります。端のロールには別の名前を付けてください。
+str		An end of this association class has the role {name}; an attribute takes another name.	この関連クラスの端にはロール {name} があります。属性には別の名前を付けてください。
+str		An enumeration is a data type and joins no association	列挙はデータ型であり、関連には加わりません
+str		A data type joins no association	データ型は関連には加わりません
+str		A primitive type joins no association	プリミティブ型は関連には加わりません
+str		An association class joins only classes	関連クラスはクラスどうしだけを結びます
+str		An interface specializes only an interface	インターフェースはインターフェースだけを特化します
+str		A class cannot specialize an interface	クラスはインターフェースを特化できません
+str		An enumeration specializes only an enumeration	列挙は列挙だけを特化します
+str		Only an enumeration specializes an enumeration	列挙を特化できるのは列挙だけです
+str		A data type specializes only a data type	データ型はデータ型だけを特化します
+str		Only a data type specializes a data type	データ型を特化できるのはデータ型だけです
+str		A primitive type specializes only a primitive type	プリミティブ型はプリミティブ型だけを特化します
+str		Only a primitive type specializes a primitive type	プリミティブ型を特化できるのはプリミティブ型だけです
+str		A built-in type specializes nothing	組み込み型は何も特化しません
+str		Nothing specializes an association class	関連クラスを特化するものはありません
+str		A classifier cannot specialize itself	分類子は自分自身を特化できません
+str		This one specializes that one already	これはすでにそれを特化しています
+str		That one specializes this one already, which would make a cycle	それはすでにこれを特化しており、循環になります
+str		{name} is final: nothing may specialise it. Clear "No subclasses" in its Properties first.	{name} は final です。特化することはできません。先にプロパティで「サブクラスなし」をオフにしてください。
+str		Add association	関連を追加
+str		Add dependency	依存を追加
+str		Add generalization	汎化を追加
+str		Add interface realization	インターフェース実現を追加
+str		Association · model	関連 · モデル
+str		Clear	クリア
+str		Client	クライアント
+str		Composition	コンポジション
+str		The other end has an aggregation already: only the part's end has one.	もう一方の端にはすでに集約があります。集約を持てるのは部分側の端だけです。
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	コンポジションの全体側は最大 1 つしか許しません。先にもう一方の端の多重度を 1 または 0..1 にしてください。
+str		This end is a composition's whole, which allows one at most.	この端はコンポジションの全体側で、最大 1 つしか許しません。
+str		The whole's end of an aggregation or composition is not navigable.	集約やコンポジションの全体側の端はナビゲーション可能にできません。
+str		Dependency · model	依存 · モデル
+str		Directed association	有向関連
+str		Drag a line end onto another class.	線の端を別のクラスへドラッグします。
+str		Drag the class end onto another class, the interface end onto another interface.	クラス側の端を別のクラスへ、インターフェース側の端を別のインターフェースへドラッグします。
+str		End at {class}	{class} 側の端
+str		Qualifiers · {n}	限定子 · {n}
+str		Add qualifier	限定子を追加
+str		Qualified end: the qualifier box is drawn here, against {class}.	限定された端: 限定子の枠は {class} に接してここに描かれます。
+str		Per qualifier value	限定子の値ごと
+str		Counted per qualifier value of the other end; shown next to {class}.	もう一方の端の限定子の値ごとに数えます。{class} の横に表示されます。
+str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	1 つの {owner} と 1 つの {qualifiers} で {target} を {multiplicity} 選びます。
+str		Type a name: a qualifier without one picks nothing.	名前を入力してください。名前のない限定子は何も選びません。
+str		This end already has a qualifier named {name}. Pick another name.	この端には {name} という名前の限定子がすでにあります。別の名前を選んでください。
+str		Template parameters · {n}	テンプレートパラメーター · {n}
+str		Add template parameter	テンプレートパラメーターを追加
+str		Constrained to	制約
+str		Any	任意
+str		Parameter kind	パラメーターの種類
+str		not yet	未対応
+str		{kind} template parameters are not supported yet.	{kind} のテンプレートパラメーターはまだサポートされていません。
+str		this parameter	このパラメーター
+str		Arguments for {name} must be {constraint} or specialise it.	{name} の引数は {constraint} か、それを特化したものでなければなりません。
+str		Arguments for {name} must be classes.	{name} の引数はクラスでなければなりません。
+str		Arguments for {name} must be interfaces.	{name} の引数はインターフェースでなければなりません。
+str		Arguments for {name} must be data types.	{name} の引数はデータ型でなければなりません。
+str		Arguments for {name} must be enumerations.	{name} の引数は列挙型でなければなりません。
+str		Arguments for {name} must be primitive types.	{name} の引数はプリミティブ型でなければなりません。
+str		Bindings that leave it out use {default}.	これを省略するバインディングは {default} を使います。
+str		Renaming or reordering keeps every binding.	名前の変更や並べ替えをしてもすべてのバインディングは保たれます。
+str		Show the binding	バインディングを表示
+str		Show the binding selects it, on the canvas and in Properties.	「バインディングを表示」はバインディングそのものをキャンバスとプロパティで選択します。
+str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	{name} の名前の変更や既定値の変更はできます。バインディングは名前ではなくパラメーターに従います。
+str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} は {name} -> {actual} とバインドしています。先にそのバインディングを変更または削除してから {name} を削除してください。
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} は {template} をバインドしており、{name} はその最後のパラメーターです。先にそのバインディングを削除してから {name} を削除してください。
+plural		{n} more binding uses it too.	ほかに {n} 件のバインディングもこれを使っています。
+str		Type a name: a template parameter without one stands for nothing.	名前を入力してください。名前のないテンプレートパラメーターは何も表しません。
+str		{template} already has a template parameter named {name}. Pick another name.	{template} には {name} という名前のテンプレートパラメーターがすでにあります。別の名前を選んでください。
+str		{default} does not fit {name}: pick a default its arguments could be.	{default} は {name} に合いません。その引数になりうる既定値を選んでください。
+str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} は {name} -> {actual} とバインドしており、合わなくなります。先にそのバインディングを変更または削除してください。
+str		A template has at most {max} parameters.	テンプレートが持てるパラメーターは最大 {max} 個です。
+str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} は {template} をバインドしていますが {name} に引数を与えていないため、{name} には既定値が必要です。
+str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	その組み込み型が置かれる {types} パッケージに、{name} という名前の{what}があります。組み込み型を使うには {name} の名前を変更してください。
+str		template parameter	テンプレートパラメーター
+str		template	テンプレート
+plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · テンプレート、パラメーター {n} 個 · モデル、すべての図
+str		Template binding: from the bound class to its template	テンプレートバインディング：バインドするクラスからそのテンプレートへ
+str		«bind»	«bind»
+str		Add template binding	テンプレートバインディングを追加
+str		This template binding	このテンプレートバインディング
+str		On this template binding · {n}	このテンプレートバインディング上 · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	バインディング · {bound} が {template} をバインド · モデル、すべての図
+str		binds {template}	{template} をバインド
+str		Binding	バインディング
+str		Bound element	バインドする要素
+str		Template	テンプレート
+str		Substitutions · {n}	置換 · {n}
+str		default	既定
+str		Default ({name})	既定値（{name}）
+str		Choose a class	クラスを選択
+str		Choose an interface	インターフェースを選択
+str		Choose a data type	データ型を選択
+str		Choose an enumeration	列挙型を選択
+str		Choose a primitive type	プリミティブ型を選択
+str		{name} needs an argument: pick a class.	{name} には引数が必要です。クラスを選んでください。
+str		{name} needs an argument: pick an interface.	{name} には引数が必要です。インターフェースを選んでください。
+str		{name} needs an argument: pick a data type.	{name} には引数が必要です。データ型を選んでください。
+str		{name} needs an argument: pick an enumeration.	{name} には引数が必要です。列挙型を選んでください。
+str		{name} needs an argument: pick a primitive type.	{name} には引数が必要です。プリミティブ型を選んでください。
+str		{name} ({kind})	{name}（{kind}）
+str		{names} have no default, so each needs an argument.	{names} には既定値がないため、それぞれに引数が必要です。
+plural		{names} can keep its default.	{names} は既定値のままにできます。
+str		New template binding	新しいテンプレートバインディング
+str		Drawing · not in the model until you apply	描画中 · 適用するまでモデルには入りません
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	テンプレート上で線を離すとこれが開きます。適用するまで線はアクセントカラーの破線のままです。適用すると、1 回の取り消し単位でバインディングとその引数が追加されます。キャンセルまたは Esc で下書きは消え、何も残りません。
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	別のテンプレートには独自の引数があります。引数を選んでから適用してください。キャンセルまたは Esc でバインディングはそのままです。
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	各セレクターには、そのパラメーターに合う引数だけが並びます。種類と、制約またはそれを特化するものです。既定値のままのパラメーターはテンプレートの既定値に従います。
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	線には «bind» と各パラメーターとその引数が書かれ、テンプレートを指します。バインディングは引数をモデルに保持します。依存でも実現でもありません。
+str		Only a class, an interface or a data type binds a template	テンプレートをバインドできるのはクラス、インターフェース、データ型だけです
+str		A binding ends at a template: a class, an interface or a data type with template parameters	バインディングの終点はテンプレート、つまりテンプレートパラメーターを持つクラス、インターフェース、データ型です
+str		A template is bound by a classifier of its own kind	テンプレートをバインドするのは同じ種類の分類子です
+str		A template does not bind itself	テンプレートは自分自身をバインドしません
+str		This one binds that template already	これはすでにそのテンプレートをバインドしています
+str		That template binds this one already, which would make a cycle	そのテンプレートはすでにこれをバインドしているため、循環になります
+str		Pick another template in the binding's Properties, where its arguments are chosen.	別のテンプレートは、引数を選べるバインディングのプロパティで選んでください。
+str		N-ary association	多項関連
+str		this n-ary association	この多項関連
+str		N-ary association: click each class in turn, then press Enter	多項関連: 各クラスを順にクリックしてから Enter を押します
+str		An n-ary association is drawn by clicking each class in turn	多項関連は各クラスを順にクリックして描きます
+str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	3 つ以上で Enter で完了 · Backspace で最後を取り消し · Esc でキャンセル
+str		Click a class for the new end	新しい端のクラスをクリックしてください
+str		Esc cancels	Esc でキャンセル
+str		An n-ary association joins classes and interfaces	多項関連はクラスとインターフェースを結びます
+str		An association takes at most {n} ends	関連の端は最大 {n} 個です
+str		An n-ary association needs three ends or more.	多項関連には 3 つ以上の端が必要です。
+str		An n-ary association needs three ends or more: click another class	多項関連には 3 つ以上の端が必要です。別のクラスをクリックしてください
+str		Add n-ary association	多項関連を追加
+str		New n-ary association	新しい多項関連
+str		Drawing · not in the model until you finish	描画中 · 完了するまでモデルには入りません
+str		Ends so far · {n}	これまでの端 · {n}
+str		Next: click a class on the canvas	次: キャンバス上のクラスをクリック
+str		Next: click a class on the canvas, or press Enter to finish	次: キャンバス上のクラスをクリック、または Enter で完了
+str		Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.	端が 3 つ以上になったら、Enter または最後のクラスのダブルクリックで完了します。関連、そのひし形、各端が 1 回の取り消し単位で追加されます。
+str		Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.	Esc、ツールの切り替え、空のキャンバスのクリックでキャンセルし、モデルには何も残りません。最後の端は Backspace で取り除きます。
+str		New ends are named after their class and start at *; change them after finishing.	新しい端はクラス名にちなんで命名され、* から始まります。完了後に変更してください。
+str		Ends · {n}	端 · {n}
+str		Add end	端を追加
+str		Draws a new leg	新しい脚を描きます
+str		Reconnect end	端をつなぎ直す
+str		Drag a leg end	脚の端をドラッグ
+str		Open a class diagram to pick the new end's class	新しい端のクラスを選ぶには、クラス図を開いてください
+str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	多項関連の端は集約ではないため、集約は表示されません。ロールが異なる場合は、2 つの端に同じ型を使えます。
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	多項関連の端は集約になりません。全体と部分を持つのは二項関連だけです。
+str		Another end has the role {role} already. Pick another role.	別の端がすでにロール {role} を持っています。別のロールを選んでください。
+str		Set association end	関連の端を設定
+str		End {role} removed	端 {role} を削除しました
+str		Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.	ひし形またはいずれかの脚を選択すると、1 つの関連が選択されます。この図から削除はここで非表示にし、モデルから削除は関連とその端をすべての場所から削除します。
+str		Two ends would remain	端が 2 つだけ残ります
+str		An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.	多項関連には 3 つ以上の端が必要です。{role} がなくなると、{first} と {second} だけが残ります。
+str		Keep 3 ends	3 つの端を保つ
+str		Make it binary	二項にする
+str		Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	二項にすると、両方の端を保ったまま {first} と {second} の間の通常の関連になります。1 回の取り消し単位です。3 つの端を保つ、または Esc では何も変わりません。
+str		Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	二項にすると、{name} は名前と両方の端を保ったまま {first} と {second} の間の通常の関連になります。1 回の取り消し単位です。3 つの端を保つ、または Esc では何も変わりません。
+plural		N-ary association · {n} end · model, in every diagram	多項関連 · 端 {n} 個 · モデル、すべての図
+plural		N-ary association · {n} end — click a class for the next end	多項関連 · 端 {n} 個 — 次の端のクラスをクリック
+str		General	一般
+str		Generalization · model	汎化 · モデル
+str		Implementing class	実装クラス
+str		Interface realization · model	インターフェース実現 · モデル
+str		A set groups generalizations of one class.	セットは 1 つのクラスへの汎化をまとめます。
+str		A set groups at least one generalization.	セットには少なくとも 1 つの汎化が必要です。
+plural		A set groups at most {n} generalization.	セットにまとめられる汎化は最大 {n} 個です。
+str		Add member	メンバーを追加
+str		Add member offers only generalizations to {general}. Edit opens that generalization.	メンバーを追加は {general} への汎化だけを示します。編集でその汎化を開きます。
+str		Add to a generalization set	汎化セットに追加
+str		Add to set	セットに追加
+str		Add to set ▸ {name}	セットに追加 ▸ {name}
+str		Add to {name}	{name} に追加
+str		Completeness	完全性
+str		Create generalization set…	汎化セットを作成…
+str		Create set from selection	選択からセットを作成
+str		Delete from the model	モデルから削除
+str		New inside {name}	{name} の中に新規作成
+str		not inside a class	クラスの中には不可
+str		{name} is {kind}, which owns no classifiers: only a class, an interface or an association class does.	{name} は{kind}で、分類子を所有しません。所有できるのはクラス、インターフェース、関連クラスだけです。
+str		a class	クラス
+str		an interface	インターフェース
+str		an enumeration	列挙
+str		a data type	データ型
+str		a primitive type	プリミティブ型
+str		an association class	関連クラス
+str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	セットを削除しても汎化は残り、グループ化だけがなくなります。セットの線はメンバーを横切って描かれます。ラベルをドラッグすると移動でき、図だけの変更です。
+str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	この汎化を削除すると同じ取り消し手順でセットから外れ、メンバーがいなくなったセットも削除されます。
+str		Disjointness	排他性
+str		General class	一般クラス
+str		Generalization set {label}	汎化セット {label}
+str		Generalization set · model, in every diagram	汎化セット · モデル、すべての図
+str		Generalization sets	汎化セット
+str		Generalization sets · {n}	汎化セット · {n}
+str		Incomplete	不完全
+str		Members · {n}	メンバー · {n}
+str		Membership is listed here for every set, and each set draws its own line and label on the canvas.	所属するセットはすべてここに表示され、各セットはキャンバスに自分の線とラベルを描きます。
+str		New set from this generalization	この汎化から新しいセット
+str		No other generalization to {general}	{general} への他の汎化はありません
+str		None of these is in a set yet.	どれもまだセットに属していません。
+str		Not in a set yet.	まだどのセットにも属していません。
+str		On this generalization set · {n}	この汎化セット · {n}
+str		Overlapping	重複
+str		Remove from set	セットから外す
+str		Same action as the context menu's Create generalization set… ({chord}). Only generalizations to one class form a set; a mixed selection disables it and says why.	コンテキストメニューの 汎化セットを作成…（{chord}）と同じ操作です。1 つのクラスへの汎化だけがセットになり、混在した選択では無効になり理由を示します。
+str		Select generalizations to one class first.	まず 1 つのクラスへの汎化を選択してください。
+str		Selection · all specialise {general}	選択 · すべて {general} を特化
+str		Selection · mixed	選択 · 混在
+str		Set	セット
+str		Shown beside the lines as {braces}: a {general} is at most one of these kinds.	線の横に {braces} と表示: {general} はこれらの種類の多くとも 1 つです。
+str		Shown beside the lines as {braces}: a {general} may be any number of these kinds.	線の横に {braces} と表示: {general} はこれらの種類をいくつでも兼ねられます。
+str		Shown beside the lines as {braces}: every {general} is at least one of these kinds.	線の横に {braces} と表示: すべての {general} はこれらの種類の少なくとも 1 つです。
+str		Shown beside the lines as {braces}: every {general} is exactly one of these kinds.	線の横に {braces} と表示: すべての {general} はこれらの種類のちょうど 1 つです。
+str		Some of these are in a set already.	一部はすでにセットに属しています。
+str		Something selected	選択した要素
+str		This generalization set	この汎化セット
+str		already in it	追加済み
+str		generalization set	汎化セット
+str		no shared parent	共通の親なし
+str		none for {general} yet	{general} にはまだなし
+str		not all generalizations	汎化以外を含む
+str		nothing selected	選択なし
+str		parents differ	親が異なる
+str		{generalization} is in {sets}, which group the specialisations of {general}. Remove it from those sets before reconnecting it to {target}.	{generalization} は {general} の特化をまとめる {sets} に属しています。{target} に接続し直す前にそれらのセットから外してください。
+str		{generalization} is in {sets}, which groups the specialisations of {general}. Remove it from the set before reconnecting it to {target}.	{generalization} は {general} の特化をまとめる {sets} に属しています。{target} に接続し直す前にセットから外してください。
+str		{name} is not a generalization.	{name} は汎化ではありません。
+str		{name} removed; its generalizations stay	{name} を削除しました。汎化は残ります
+str		{specific} specialises {general}	{specific} は {general} を特化します
+plural		{n} generalization	{n} 個の汎化
+plural		{n} generalization · to {general}	{n} 個の汎化 · {general} へ
+plural		{sets} had no other member and went too	{sets} にはほかのメンバーがなく、一緒に削除されました
+str		Interface realization: from the implementing class to its interface	インターフェース実現：実装クラスからそのインターフェースへ
+str		Association class: between two classes, with a card of its own	関連クラス：2 つのクラスの間に、専用のカードを持つ
+str		Navigable	ナビゲーション可能
+str		On this association · {n}	この関連に · {n}
+str		On this association class · {n}	この関連クラスに · {n}
+str		On this dependency · {n}	この依存に · {n}
+str		On this generalization · {n}	この汎化に · {n}
+str		On this interface realization · {n}	このインターフェース実現に · {n}
+str		Only a class implements an interface	インターフェースを実装できるのはクラスだけです
+str		Or type a number or range	または数値か範囲を入力
+str		Pick a multiplicity	多重度を選ぶ
+str		Realized interface	実現されるインターフェース
+str		Specific	特化
+str		Supplier	サプライヤー
+str		The lower bound cannot be *.	下限を * にはできません。
+str		The upper bound must be at least {lower}.	上限は {lower} 以上にしてください。
+str		This association	この関連
+str		This association class	この関連クラス
+str		This class realizes that interface already	このクラスはそのインターフェースをすでに実現しています
+str		This dependency	この依存
+str		This generalization	この汎化
+str		This interface realization	このインターフェース実現
+str		To	終点
+str		Type a whole number, a range such as 2..5, or *.	整数、2..5 のような範囲、または * を入力してください。
+str		Class · {package}	クラス · {package}
+str		«interface» · {package}	«interface» · {package}
+str		«enumeration» · {package}	«enumeration» · {package}
+str		«dataType» · {package}	«dataType» · {package}
+str		«primitive» · {package}	«primitive» · {package}
+str		Association class · {package}	関連クラス · {package}

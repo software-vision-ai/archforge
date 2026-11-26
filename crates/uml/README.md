@@ -198,7 +198,7 @@ subsets_candidates, redefines_candidates, redefines_leaf, subsets_problem, redef
 property's default value read by its type, derived, read only, ordered, unique, and the properties
 it subsets and redefines, set by `uml.attribute.add`/`set` and `uml.association.set-end`, checked
 against UML's rules before anything changes, every default and target refused typed for an interface to say (AR-466, AR-475); the card's and the line's notation, `figures::end_role`
-and `figures::end_text`), `RELATIONSHIPS`, `is_relationship` and `is_association`, and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
+and `figures::end_text`), `RELATIONSHIPS`, `is_relationship` and `is_association`, and the card's `WORDS` and `PLURALS` for the catalogues. Where an association's two
 ends pair a derived end with a stored one, the generator gives neither an opposite: a derived end
 keeps no field to keep in step.
 

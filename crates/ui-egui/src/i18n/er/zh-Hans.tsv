@@ -1,0 +1,255 @@
+# ER · 简体中文目录。列：kind、context、key、text（参见 i18n/mod.rs）。各行与相关条目放在一起。
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
+str		Table	表
+str		Column	列
+str		Schema · model	架构 · 模型
+str		Table · model, in every diagram	表 · 模型，出现在每张图中
+str		Column · model	列 · 模型
+str		Domain · model	域 · 模型
+str		This domain	此域
+str		On this domain · {n}	此域上 · {n}
+str		Enum type · model	枚举类型 · 模型
+str		This enum type	此枚举类型
+str		On this enum type · {n}	此枚举类型上 · {n}
+str		Subtype · {sub} is a {super}	子类型 · {sub} 是一种 {super}
+str		Subtype	子类型
+str		This subtype	此子类型
+str		On this subtype · {n}	此子类型上 · {n}
+str		Columns · {n}	列 · {n}
+str		Keys · {n}	键 · {n}
+str		Add a column	添加一列
+str		Add unique constraint	添加唯一约束
+str		Columns, in key order	按键顺序的列
+str		Types · {n}	类型 · {n}
+plural		{n} check	{n} 个检查约束
+str		Add type	添加类型
+str		Checks	检查约束
+str		Add a check	添加检查约束
+str		Literals, in order	按顺序排列的字面量
+str		Subtypes · {n}	子类型 · {n}
+str		Add subtype	添加子类型
+str		Discriminator	鉴别列
+str		Mapping	映射
+str		key on {columns}	键在 {columns}
+str		Add a literal	添加字面量
+plural		{n} column takes {name}: {columns}. Retype it first.	{n} 个列使用 {name}：{columns}。请先更改它们的类型。
+str		Give the literals as a list of names.	请以名称列表的形式给出字面量。
+str		An enum type needs at least one literal.	枚举类型至少需要一个字面量。
+str		An enum type has at most {max} literals.	一个枚举类型最多有 {max} 个字面量。
+str		A literal can't be empty.	字面量不能为空。
+str		The literal "{name}" is not a valid name. {why}	字面量“{name}”不是有效的名称。{why}
+str		The literal "{name}" is given twice. Give each literal once.	字面量“{name}”出现了两次。每个字面量只能给出一次。
+str		Sequences · {n}	序列 · {n}
+str		Add sequence	添加序列
+str		Sequence · model	序列 · 模型
+str		This sequence	此序列
+str		On this sequence · {n}	此序列上 · {n}
+str		from {start} by {increment}	从 {start} 起，步长 {increment}
+str		cycles	循环
+str		owned by {column}	属于 {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} 是另一个架构的列。序列的所属列须是其所在架构的列。
+str		The column {column} belongs to no table.	列 {column} 不属于任何表。
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} 没有类型。序列的所属列须为整数类型。
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} 的类型为 {type}。序列的所属列须为整数类型。
+str		The increment can't be 0. A sequence moves by at least 1.	增量不能为 0。序列每次至少前进 1。
+str		The minimum "{value}" is not a whole number between {min} and {max}.	最小值“{value}”不是介于 {min} 与 {max} 之间的整数。
+str		The maximum "{value}" is not a whole number between {min} and {max}.	最大值“{value}”不是介于 {min} 与 {max} 之间的整数。
+str		The maximum {maximum} is not greater than the minimum {minimum}.	最大值 {maximum} 不大于最小值 {minimum}。
+str		The start {start} is below the minimum {minimum}.	起始值 {start} 低于最小值 {minimum}。
+str		The start {start} is above the maximum {maximum}.	起始值 {start} 高于最大值 {maximum}。
+str	sequence	Start	起始值
+str		Owned by	所属列
+plural		{n} more column, not listed	另有 {n} 列未列出
+str		{field} takes a whole number	{field} 须为整数
+str		Views · {n}	视图 · {n}
+str		Add view	添加视图
+str		View · model	视图 · 模型
+str		This view	此视图
+str		On this view · {n}	此视图上 · {n}
+str		view	视图
+str		materialized	物化
+str		Pick a type	选择类型
+str		domain	域
+str		enum	枚举
+str		not null	非空
+str		Checks · {n}	检查约束 · {n}
+str		Indexes · {n}	索引 · {n}
+str		Add check constraint	添加检查约束
+str		Add index	添加索引
+str		Columns, in index order	按索引顺序的列
+str		An expression	表达式
+str		Nulls default	空值默认顺序
+str		Nulls first	空值在前
+str		Nulls last	空值在后
+str		lacks its table or its key	缺少其表或其键
+str		{column} is a key column and may be null	{column} 是键列但允许为空
+str		{from} to {to} is many to many	{from} 到 {to} 是多对多
+str		Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.	每个 {one} 至少有一个 {many}，这只在图中成立：数据库键无法强制这一点。如果 {one} 可以没有，请选择“零或多个”。
+str		{name} has no primary key	{name} 没有主键
+str		{name} has subtypes but no primary key to share	{name} 有子类型，但没有可共享的主键
+str		{name} removed · {keys} went with it	已删除 {name} · {keys} 随之删除
+str		Add column	添加列
+str		Edit column	编辑列
+str		Mapping table	映射表
+str		Follows {target}	跟随 {target}
+str		Unlink	取消链接
+str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} 只包含它的两个键，因此可以重新成为 {from} 与 {to} 之间的多对多连线。
+str		Collapse into a relationship	折叠为关系
+str		Only a many-to-many relationship becomes a mapping table.	只有多对多关系才会成为映射表。
+str		The relationship lacks one of its two tables.	该关系缺少其两张表中的一张。
+str		A mapping table has exactly two foreign keys.	映射表恰好有两个外键。
+str		The foreign key {foreign_key} stands for no relationship.	外键 {foreign_key} 不代表任何关系。
+str		The foreign key {foreign_key} points at no key.	外键 {foreign_key} 没有指向任何键。
+str		The table has a relationship of its own, so it does not collapse into a relationship.	该表有自己的关系，因此不能折叠为关系。
+str		The table has columns of its own, so it does not collapse into a relationship.	该表有自己的列，因此不能折叠为关系。
+str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	该表的列并非都在其主键中，因此不能折叠为关系。
+str		The table has a unique constraint, so it does not collapse into a relationship.	该表有唯一约束，因此不能折叠为关系。
+str		The table has a check, so it does not collapse into a relationship.	该表有检查约束，因此不能折叠为关系。
+str		The table has an index, so it does not collapse into a relationship.	该表有索引，因此不能折叠为关系。
+str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} 的主键中没有外键。映射表需要两个。
+str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} 的主键中只有一个外键。映射表需要两个。
+str		The size {value} is not between 1 and 65535.	大小 {value} 不在 1 到 65535 之间。
+str		A column without a type name of its own takes no size.	没有自身类型名的列不能指定大小。
+str		{type} takes no length.	{type} 不能指定长度。
+str		{type} takes no precision.	{type} 不能指定精度。
+str		{type} takes no scale.	{type} 不能指定小数位数。
+str		A BINARY holds at most 255 bytes, not {value}.	BINARY 最多容纳 255 字节，而不是 {value}。
+str		The scale {value} is more than the precision.	小数位数 {value} 大于精度。
+str		A scale needs a precision.	小数位数需要精度。
+str		A type name holds no size; give the length, precision or scale instead.	类型名不能包含大小；请改为指定长度、精度或小数位数。
+str		{text} is not a number	{text} 不是数字
+str		Identity, always	标识列，始终
+str		Identity, by default	标识列，默认
+str		Computed, stored	计算列，存储
+str		Computed, virtual	计算列，虚拟
+str		New ER diagram	新建ER图
+str		Tables, their columns and keys, and the relationships between them.	表及其列和键，以及表之间的关系。
+str		ER diagram	ER图
+str		ER diagrams	ER图
+str		New schema	新架构
+str		No id is given. Give the id of {what}.	未给出 ID。请给出{what}的 ID。
+str		{name} is not {what}.	{name} 不是{what}。
+str		Give the key's columns as a list of ids.	请以 ID 列表的形式给出键的列。
+str		A key holds at most {max} columns.	一个键最多包含 {max} 列。
+str		A key needs at least one column.	一个键至少需要一列。
+str		{column} is not a column of {table}.	{column} 不是 {table} 的列。
+str		{name} may be null, which a primary key column never is.	{name} 允许为空，而主键列绝不允许为空。
+str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	外键 {foreign_key} 指向 {table} 的这个键。请先更改或删除该外键。
+str		{table} has no primary key.	{table} 没有主键。
+str		The key is not one of {table}'s keys.	该键不是 {table} 的键。
+str		The key of {table} has no columns to refer to.	{table} 的键没有可引用的列。
+str		Identifying relationships would run in a cycle between {child} and {parent}.	标识关系将在 {child} 和 {parent} 之间形成循环。
+str		Only a relationship with its foreign key points at a key.	只有带外键的关系才指向键。
+str		A many-to-many relationship takes no foreign key. Add a mapping table instead.	多对多关系不带外键。请改为添加映射表。
+str		A relationship of a table with itself needs a role at the end its key points to, such as parent.	表与自身的关系需要在其键所指向的一端设置角色，例如 parent。
+str		A role needs a letter or a digit, since it names key columns.	角色需要一个字母或数字，因为它用于命名键列。
+str		A table cannot be a subtype of itself.	表不能是其自身的子类型。
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	两个表位于不同的架构中。子类型须位于其超类型的架构中。
+str		{table} has a supertype already. A table has one supertype.	{table} 已有超类型。一个表只有一个超类型。
+str		The supertype is a subtype of this table already, which would close a circle.	超类型已是此表的子类型，这将形成循环。
+str		Subtypes would run deeper than {max} levels here.	此处子类型将超过 {max} 层。
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	这是子类型键的一部分。请改为删除该子类型，或更改超类型的子类型映射。
+str		The foreign key points at this key already. Name the columns to change them.	外键已指向此键。要更改，请指定列。
+str		A foreign key needs at least one column.	外键至少需要一列。
+str		A foreign key holds at most {max} columns.	外键最多包含 {max} 列。
+str		{name} appears twice in the foreign key.	{name} 在外键中出现了两次。
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	外键需要与 {table} 的键相同数量的列，即 {n} 列。
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} 的类型是 {type}，但 {target} 的类型是 {target_type}。
+str		{column} has no type, but {target} is of type {target_type}.	{column} 没有类型，但 {target} 的类型是 {target_type}。
+str		{column} is of type {type}, but {target} has no type.	{column} 的类型是 {type}，但 {target} 没有类型。
+str		Set null needs nullable columns, but {column} may never be null.	“设为空”需要允许为空的列，但 {column} 绝不允许为空。
+str		The relationship does not join {table} and {references}.	该关系并未连接 {table} 和 {references}。
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	标识关系的外键列属于主键，而 {column} 不属于。
+str		The key {name} would break: {why}	键 {name} 将失效：{why}
+str		The foreign key {name} would break: {why}	外键 {name} 将失效：{why}
+str		Keys built on each other run deeper than {max} levels here, or in a loop.	此处相互构建的键超过了 {max} 层，或形成了循环。
+str		This element is removed where it is edited.	此元素需在编辑它的地方删除。
+str		This is part of a subtype's key, which goes only with its subtype.	这是子类型键的一部分，只能随其子类型一起删除。
+str		Only a computed column takes an expression.	只有计算列才能有表达式。
+str		A computed column needs an expression.	计算列需要表达式。
+str		A computed column takes no default.	计算列不能有默认值。
+str		An identity column needs an integer type.	标识列需要整数类型。
+str		An identity column may never be null.	标识列绝不允许为空。
+str		An identity column takes no default.	标识列不能有默认值。
+str		An identity column takes no expression.	标识列不能有表达式。
+str		A key or identity column may never be null.	键列或标识列绝不允许为空。
+str		The column {name} would break: {why}	列 {name} 将失效：{why}
+str		A column takes a domain or an enum type, not both.	列只能使用域或枚举类型之一，不能同时使用两者。
+str		A column on a domain takes the domain's type.	基于域的列使用域的类型。
+str		A column on a domain takes the domain's size.	基于域的列使用域的大小。
+str		The table {name} would break: {why}	表 {name} 将失效：{why}
+str		A column on a domain takes the domain's default.	基于域的列使用域的默认值。
+str		A column on a domain takes the domain's collation.	基于域的列使用域的排序规则。
+str		A column of an enum type takes no type name of its own.	枚举类型的列不能有自身的类型名。
+str		A column of an enum type takes no size.	枚举类型的列不能指定大小。
+str		{name} follows no column.	{name} 未跟随任何列。
+plural		The table has {n} column.	该表有 {n} 个列。
+str		There is no schema yet.	还没有架构。
+str		There is no entity yet.	还没有表。
+str	refusal	a schema	架构
+str	refusal	a table	表
+str	refusal	a column	列
+str	refusal	a relationship	关系
+str	refusal	a domain	域
+str	refusal	an enum type	枚举类型
+str	refusal	a sequence	序列
+str	refusal	a view	视图
+str	refusal	a key	键
+str	refusal	a primary key	主键
+str	refusal	a unique constraint	唯一约束
+str	refusal	a foreign key	外键
+str	refusal	a check	检查约束
+str	refusal	an index	索引
+str	refusal	a subtype	子类型
+str	refusal	a key column	键列
+str		Entity · {schema}	实体 · {schema}
+str		Add table	添加表
+str		Place table	放置表
+str		Show related tables	显示相关表
+str		The diagram is of no schema	此图不属于任何架构
+str		A relationship joins two tables	关系连接两张表
+str		Add relationship	添加关系
+str		Cardinality	基数
+str		Presets	预设
+str		End	终点
+str		Identifying needs the parent's primary key; drawn as not identifying	标识关系需要父表的主键；已按非标识绘制
+str		Many to many · add a mapping table	多对多 · 添加映射表
+str		Many to many · {from} and {to}	多对多 · {from} 和 {to}
+str		Add mapping table	添加映射表
+str		Keep the line	保留连线
+str		Remove relationship	删除关系
+str		Relationship removed	已删除关系
+plural		+ {n} more column	+ 另 {n} 列
+str		This schema	此架构
+str		This table	此表
+str		This column	此列
+str		On this schema · {n}	此架构上 · {n}
+str		On this table · {n}	此表上 · {n}
+str		On this column · {n}	此列上 · {n}
+str		Relationship · {from} to {to}	关系 · {from} 到 {to}
+str		This relationship	此关系
+str		On this relationship · {n}	此关系上 · {n}
+str		Add foreign key	添加外键
+str		Remove foreign key	移除外键
+str		Add id column	添加 id 列
+str		Choose key columns	选择键列
+str		Ends	端点
+str		{entity} end	{entity} 端
+str		An identifying relationship needs its foreign key; turn the switch on first	标识关系需要外键；请先打开开关
+str		Points to	指向
+str		Existing columns of {entity}	{entity} 的现有列
+str		{type} · type differs	{type} · 类型不同
+str		Yes – checked at once	是 – 立即检查
+str		Yes – checked at commit	是 – 提交时检查
+str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} 还没有主键，因此 {child} 中没有可指向的内容。
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}：{word} 不是可选项。可选项有 {words}。
+str		{field}: no choice is given. The choices are {words}.	{field}：未给出选项。可选项有 {words}。
+str		Give at most {max} checks.	最多给出 {max} 个检查约束。
+str		Two checks are named {name}. Give each check its own name.	有两个检查约束都名为 {name}。请为每个检查约束取不同的名称。
+str		Give each check as text, or as an object with an expression and a name.	请将每个检查约束写成文本，或写成包含表达式和名称的对象。
+str		An index needs at least one column.	一个索引至少需要一列。
+str		An index holds at most {max} columns.	一个索引最多包含 {max} 列。
+str		{name} is in the index twice. Give each column once.	{name} 在索引中出现了两次。每列只需给出一次。
+str		Give each index column as a column's id, or as an object with an attribute or an expression.	请将每个索引列写成列的 ID，或写成包含属性或表达式的对象。
+str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} 同时给出了表达式。索引列按一列或按一个表达式排序。
+str		An index column needs a column or an expression to sort by.	索引列需要一列或一个表达式作为排序依据。

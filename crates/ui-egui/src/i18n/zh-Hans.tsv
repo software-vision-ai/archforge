@@ -141,8 +141,6 @@ str		No schemas yet	还没有架构
 str		Add	添加
 str		Schema	架构
 str		Folder	文件夹
-str		Table	表
-str		Column	列
 str		Skill	技能
 str		Nothing matches the filter	没有与筛选匹配的内容
 str		Expand all	全部展开
@@ -160,146 +158,40 @@ plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
 plural		{n} nested classifier goes with it: {names}.	{n} 个嵌套分类器将一并删除：{names}。
 plural		{n} stereotype application goes with it: {names}.	{n} 个构造型应用将一并删除：{names}。
 str		Delete	删除
-str		Schema · model	架构 · 模型
-str		Table · model, in every diagram	表 · 模型，出现在每张图中
-str		Column · model	列 · 模型
-str		Domain · model	域 · 模型
-str		This domain	此域
-str		On this domain · {n}	此域上 · {n}
-str		Enum type · model	枚举类型 · 模型
-str		This enum type	此枚举类型
-str		On this enum type · {n}	此枚举类型上 · {n}
-str		Subtype · {sub} is a {super}	子类型 · {sub} 是一种 {super}
-str		Subtype	子类型
-str		This subtype	此子类型
-str		On this subtype · {n}	此子类型上 · {n}
 str		Element · model	元素 · 模型
 str		Skill · model	技能 · 模型
-str		Columns · {n}	列 · {n}
-str		Keys · {n}	键 · {n}
-str		Add a column	添加一列
-str		Add unique constraint	添加唯一约束
-str		Columns, in key order	按键顺序的列
 str		Nulls distinct	空值视为不同
-str		Types · {n}	类型 · {n}
-plural		{n} check	{n} 个检查约束
 plural		{n} literal	{n} 个字面量
-str		Add type	添加类型
 str		Domain	域
 str		Enum type	枚举类型
 str		Base type	基础类型
-str		Checks	检查约束
-str		Add a check	添加检查约束
-str		Literals, in order	按顺序排列的字面量
-str		Subtypes · {n}	子类型 · {n}
-str		Add subtype	添加子类型
 str		Complete	完全
 str		Disjoint	互斥
-str		Discriminator	鉴别列
-str		Mapping	映射
 str		Table per type	每类型一表
 str		Single table	单表
 str		Table per concrete type	每具体类型一表
-str		key on {columns}	键在 {columns}
 str		complete	完全
 str		disjoint	互斥
 str		overlapping	重叠
-str		Add a literal	添加字面量
-plural		{n} column takes {name}: {columns}. Retype it first.	{n} 个列使用 {name}：{columns}。请先更改它们的类型。
-str		Give the literals as a list of names.	请以名称列表的形式给出字面量。
-str		An enum type needs at least one literal.	枚举类型至少需要一个字面量。
-str		An enum type has at most {max} literals.	一个枚举类型最多有 {max} 个字面量。
-str		A literal can't be empty.	字面量不能为空。
-str		The literal "{name}" is not a valid name. {why}	字面量“{name}”不是有效的名称。{why}
-str		The literal "{name}" is given twice. Give each literal once.	字面量“{name}”出现了两次。每个字面量只能给出一次。
-str		Sequences · {n}	序列 · {n}
-str		Add sequence	添加序列
 str		Sequence	序列
-str		Sequence · model	序列 · 模型
-str		This sequence	此序列
-str		On this sequence · {n}	此序列上 · {n}
-str		from {start} by {increment}	从 {start} 起，步长 {increment}
-str		cycles	循环
-str		owned by {column}	属于 {column}
-str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} 是另一个架构的列。序列的所属列须是其所在架构的列。
-str		The column {column} belongs to no table.	列 {column} 不属于任何表。
-str		{column} has no type. A sequence's owner has a whole-number type.	{column} 没有类型。序列的所属列须为整数类型。
-str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} 的类型为 {type}。序列的所属列须为整数类型。
-str		The increment can't be 0. A sequence moves by at least 1.	增量不能为 0。序列每次至少前进 1。
-str		The minimum "{value}" is not a whole number between {min} and {max}.	最小值“{value}”不是介于 {min} 与 {max} 之间的整数。
-str		The maximum "{value}" is not a whole number between {min} and {max}.	最大值“{value}”不是介于 {min} 与 {max} 之间的整数。
-str		The maximum {maximum} is not greater than the minimum {minimum}.	最大值 {maximum} 不大于最小值 {minimum}。
-str		The start {start} is below the minimum {minimum}.	起始值 {start} 低于最小值 {minimum}。
-str		The start {start} is above the maximum {maximum}.	起始值 {start} 高于最大值 {maximum}。
-str	sequence	Start	起始值
 str		Increment	增量
 str		Minimum	最小值
 str		Maximum	最大值
 str		Cycle	循环
-str		Owned by	所属列
-plural		{n} more column, not listed	另有 {n} 列未列出
-str		{field} takes a whole number	{field} 须为整数
-str		Views · {n}	视图 · {n}
-str		Add view	添加视图
 str		View	视图
-str		View · model	视图 · 模型
-str		This view	此视图
-str		On this view · {n}	此视图上 · {n}
-str		view	视图
-str		materialized	物化
 str		Materialized	物化
 str		Query	查询
-str		Pick a type	选择类型
-str		domain	域
-str		enum	枚举
-str		not null	非空
-str		Checks · {n}	检查约束 · {n}
-str		Indexes · {n}	索引 · {n}
-str		Add check constraint	添加检查约束
-str		Add index	添加索引
-str		Columns, in index order	按索引顺序的列
-str		An expression	表达式
 str		Where	Where
 str		Method	方法
 str		Ascending	升序
 str		Descending	降序
-str		Nulls default	空值默认顺序
-str		Nulls first	空值在前
-str		Nulls last	空值在后
 str		Problems · {n}	问题 · {n}
-str		lacks its table or its key	缺少其表或其键
-str		{column} is a key column and may be null	{column} 是键列但允许为空
-str		{from} to {to} is many to many	{from} 到 {to} 是多对多
-str		Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.	每个 {one} 至少有一个 {many}，这只在图中成立：数据库键无法强制这一点。如果 {one} 可以没有，请选择“零或多个”。
 str		{key}: {problem}	{key}: {problem}
-str		{name} has no primary key	{name} 没有主键
-str		{name} has subtypes but no primary key to share	{name} 有子类型，但没有可共享的主键
-str		{name} removed · {keys} went with it	已删除 {name} · {keys} 随之删除
-str		Add column	添加列
 str		Link to a table or a relationship	链接到表或关系
 str		Drop the link on a table or a relationship's line	请将链接放在表或关系的线上
-str		Edit column	编辑列
 str		Add skill	添加技能
 str		Kind	种类
 str		Regular	常规
-str		Mapping table	映射表
-str		Follows {target}	跟随 {target}
-str		Unlink	取消链接
-str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} 只包含它的两个键，因此可以重新成为 {from} 与 {to} 之间的多对多连线。
-str		Collapse into a relationship	折叠为关系
-str		Only a many-to-many relationship becomes a mapping table.	只有多对多关系才会成为映射表。
-str		The relationship lacks one of its two tables.	该关系缺少其两张表中的一张。
-str		A mapping table has exactly two foreign keys.	映射表恰好有两个外键。
-str		The foreign key {foreign_key} stands for no relationship.	外键 {foreign_key} 不代表任何关系。
-str		The foreign key {foreign_key} points at no key.	外键 {foreign_key} 没有指向任何键。
-str		The table has a relationship of its own, so it does not collapse into a relationship.	该表有自己的关系，因此不能折叠为关系。
-str		The table has columns of its own, so it does not collapse into a relationship.	该表有自己的列，因此不能折叠为关系。
-str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	该表的列并非都在其主键中，因此不能折叠为关系。
-str		The table has a unique constraint, so it does not collapse into a relationship.	该表有唯一约束，因此不能折叠为关系。
-str		The table has a check, so it does not collapse into a relationship.	该表有检查约束，因此不能折叠为关系。
-str		The table has an index, so it does not collapse into a relationship.	该表有索引，因此不能折叠为关系。
-str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} 的主键中没有外键。映射表需要两个。
-str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} 的主键中只有一个外键。映射表需要两个。
 str		Type	类型
 str		Primary key	主键
 str		Not null	非空
@@ -307,27 +199,12 @@ str		Unique	唯一
 str		Length	长度
 str		Precision	精度
 str		Scale	小数位数
-str		The size {value} is not between 1 and 65535.	大小 {value} 不在 1 到 65535 之间。
-str		A column without a type name of its own takes no size.	没有自身类型名的列不能指定大小。
-str		{type} takes no length.	{type} 不能指定长度。
-str		{type} takes no precision.	{type} 不能指定精度。
-str		{type} takes no scale.	{type} 不能指定小数位数。
-str		A BINARY holds at most 255 bytes, not {value}.	BINARY 最多容纳 255 字节，而不是 {value}。
-str		The scale {value} is more than the precision.	小数位数 {value} 大于精度。
-str		A scale needs a precision.	小数位数需要精度。
-str		A type name holds no size; give the length, precision or scale instead.	类型名不能包含大小；请改为指定长度、精度或小数位数。
 str		Default	默认值
 str		Generation	生成方式
 str		Expression	表达式
 str		Collation	排序规则
 str		Description	描述
-str		{text} is not a number	{text} 不是数字
 str		None	无
-str		built-in	内置
-str		Identity, always	标识列，始终
-str		Identity, by default	标识列，默认
-str		Computed, stored	计算列，存储
-str		Computed, virtual	计算列，虚拟
 str		Remove	移除
 str		Edit	编辑
 str		Apply	应用
@@ -382,16 +259,9 @@ str		Back	返回
 str		Step 1 of 2 · Choose what the diagram shows	第 1 步，共 2 步 · 选择图要显示的内容
 str		Step 2 of 2 · Name it and say what it is of	第 2 步，共 2 步 · 为图命名并指定其对象
 str		Diagram name	图名称
-str		New ER diagram	新建ER图
-str		New UML structure diagram	新建UML结构图
-str		Tables, their columns and keys, and the relationships between them.	表及其列和键，以及表之间的关系。
-str		Classes, packages and the relationships between them.	类、包以及它们之间的关系。
 str		Customer	客户
 str		Order	订单
 str		Create	创建
-str		ER diagram	ER图
-str		ER diagrams	ER图
-str		New schema	新架构
 str		Name the diagram	请为图命名
 str		Saving…	正在保存…
 str		Opening…	正在打开…
@@ -678,69 +548,6 @@ str		Enter a name.	请输入名称。
 str		A name has to be one line.	名称必须只有一行。
 str		A name can't be empty.	名称不能为空。
 str		There is {what} named {name} already.	已有名为 {name} 的{what}。
-str		{what} cannot depend on itself.	{what}不能依赖自身。
-str		No id is given. Give the id of {what}.	未给出 ID。请给出{what}的 ID。
-str		{name} is not {what}.	{name} 不是{what}。
-str		Give the key's columns as a list of ids.	请以 ID 列表的形式给出键的列。
-str		A key holds at most {max} columns.	一个键最多包含 {max} 列。
-str		A key needs at least one column.	一个键至少需要一列。
-str		{column} is not a column of {table}.	{column} 不是 {table} 的列。
-str		{name} may be null, which a primary key column never is.	{name} 允许为空，而主键列绝不允许为空。
-str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	外键 {foreign_key} 指向 {table} 的这个键。请先更改或删除该外键。
-str		{table} has no primary key.	{table} 没有主键。
-str		The key is not one of {table}'s keys.	该键不是 {table} 的键。
-str		The key of {table} has no columns to refer to.	{table} 的键没有可引用的列。
-str		Identifying relationships would run in a cycle between {child} and {parent}.	标识关系将在 {child} 和 {parent} 之间形成循环。
-str		Only a relationship with its foreign key points at a key.	只有带外键的关系才指向键。
-str		A many-to-many relationship takes no foreign key. Add a mapping table instead.	多对多关系不带外键。请改为添加映射表。
-str		A relationship of a table with itself needs a role at the end its key points to, such as parent.	表与自身的关系需要在其键所指向的一端设置角色，例如 parent。
-str		A role needs a letter or a digit, since it names key columns.	角色需要一个字母或数字，因为它用于命名键列。
-str		A table cannot be a subtype of itself.	表不能是其自身的子类型。
-str		The two tables are in different schemas. A subtype is in its supertype's schema.	两个表位于不同的架构中。子类型须位于其超类型的架构中。
-str		{table} has a supertype already. A table has one supertype.	{table} 已有超类型。一个表只有一个超类型。
-str		The supertype is a subtype of this table already, which would close a circle.	超类型已是此表的子类型，这将形成循环。
-str		Subtypes would run deeper than {max} levels here.	此处子类型将超过 {max} 层。
-str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	这是子类型键的一部分。请改为删除该子类型，或更改超类型的子类型映射。
-str		The foreign key points at this key already. Name the columns to change them.	外键已指向此键。要更改，请指定列。
-str		A foreign key needs at least one column.	外键至少需要一列。
-str		A foreign key holds at most {max} columns.	外键最多包含 {max} 列。
-str		{name} appears twice in the foreign key.	{name} 在外键中出现了两次。
-str		The foreign key needs as many columns as the key of {table}, which has {n}.	外键需要与 {table} 的键相同数量的列，即 {n} 列。
-str		{column} is of type {type}, but {target} is of type {target_type}.	{column} 的类型是 {type}，但 {target} 的类型是 {target_type}。
-str		{column} has no type, but {target} is of type {target_type}.	{column} 没有类型，但 {target} 的类型是 {target_type}。
-str		{column} is of type {type}, but {target} has no type.	{column} 的类型是 {type}，但 {target} 没有类型。
-str		Set null needs nullable columns, but {column} may never be null.	“设为空”需要允许为空的列，但 {column} 绝不允许为空。
-str		The relationship does not join {table} and {references}.	该关系并未连接 {table} 和 {references}。
-str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	标识关系的外键列属于主键，而 {column} 不属于。
-str		The key {name} would break: {why}	键 {name} 将失效：{why}
-str		The foreign key {name} would break: {why}	外键 {name} 将失效：{why}
-str		Keys built on each other run deeper than {max} levels here, or in a loop.	此处相互构建的键超过了 {max} 层，或形成了循环。
-str		This element is removed where it is edited.	此元素需在编辑它的地方删除。
-str		This is part of a subtype's key, which goes only with its subtype.	这是子类型键的一部分，只能随其子类型一起删除。
-str		Only a computed column takes an expression.	只有计算列才能有表达式。
-str		A computed column needs an expression.	计算列需要表达式。
-str		A computed column takes no default.	计算列不能有默认值。
-str		An identity column needs an integer type.	标识列需要整数类型。
-str		An identity column may never be null.	标识列绝不允许为空。
-str		An identity column takes no default.	标识列不能有默认值。
-str		An identity column takes no expression.	标识列不能有表达式。
-str		A key or identity column may never be null.	键列或标识列绝不允许为空。
-str		The column {name} would break: {why}	列 {name} 将失效：{why}
-str		A column takes a domain or an enum type, not both.	列只能使用域或枚举类型之一，不能同时使用两者。
-str		A column on a domain takes the domain's type.	基于域的列使用域的类型。
-str		A column on a domain takes the domain's size.	基于域的列使用域的大小。
-str		The table {name} would break: {why}	表 {name} 将失效：{why}
-str		A column on a domain takes the domain's default.	基于域的列使用域的默认值。
-str		A column on a domain takes the domain's collation.	基于域的列使用域的排序规则。
-str		A column of an enum type takes no type name of its own.	枚举类型的列不能有自身的类型名。
-str		A column of an enum type takes no size.	枚举类型的列不能指定大小。
-str		{name} follows no column.	{name} 未跟随任何列。
-plural		The table has {n} column.	该表有 {n} 个列。
-str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
-str		The model's root package holds all the other packages, so it stays where it is.	模型的根包包含所有其他包，因此它会留在原处。
-str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	{types} 包存放内置类型：在存放它们期间，它保留名称并留在根包之下。
-str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	已有存放内置类型的 {types} 包；不能在它旁边再放第二个。
-str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	该包中有名为 {name} 的{what}，这是内置类型的名称，在 {types} 中会表示该类型。请先重命名 {name}。
 str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
 str		There is nothing to undo.	没有可撤销的操作。
 str		There is nothing to redo.	没有可重做的操作。
@@ -748,97 +555,27 @@ str		The project has no model root yet.	项目还没有模型根。
 str		There is no skill yet.	还没有技能。
 str		There is no diagram yet.	还没有图。
 str		There is nothing to remove or describe yet.	还没有可移除或描述的内容。
-str		There is no schema yet.	还没有架构。
-str		There is no entity yet.	还没有表。
-str		There is no package yet.	还没有包。
-str		There is no class, interface, enumeration, data type or primitive type yet.	还没有类、接口、枚举、数据类型或基本类型。
-str		There is no class yet.	还没有类。
-str		There is no enumeration yet.	还没有枚举。
-str		There is no class or interface yet.	还没有类或接口。
-str		There is no association or association class yet.	还没有关联或关联类。
-str		There is no n-ary association yet.	还没有多元关联。
-str		There is no generalization yet.	还没有泛化。
-str		There is no generalization set yet.	还没有泛化集。
-str		There is no class, interface, enumeration, data type, primitive type, association class or package yet.	还没有类、接口、枚举、数据类型、基本类型、关联类或包。
-str		There is no constraint yet.	还没有约束。
-str		There is no class, interface or data type yet.	还没有类、接口或数据类型。
-str		There is no template parameter yet.	还没有模板参数。
-str		There is no template yet: give a class, an interface or a data type a template parameter first.	还没有模板：请先给一个类、接口或数据类型添加模板参数。
-str		There is no template binding yet.	还没有模板绑定。
-str		There is no profile yet.	还没有配置文件。
-str		There is no stereotype yet.	还没有构造型。
-str		No stereotype is applied yet.	还没有应用任何构造型。
 str		Another change is still under way. Try again once it ends.	另一项更改仍在进行中。请在其结束后重试。
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	失败后无法将模型恢复原状。请重新打开项目以继续。
 str		Undo and redo cannot run as part of another change.	撤销和重做不能作为其他更改的一部分运行。
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	模型在读取后已更改，或读取的是另一个项目。请重新读取，然后再试一次。未作任何更改。
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	此更改未说明它针对的是模型的哪个修订版本。请读取模型，然后再试一次。未作任何更改。
-str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	该包有类图，但没有一个是它的默认图。请从中选择一个作为默认图。
-str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	该包有多个默认图。请选择保留为其默认图的那个类图。
-str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	该包的默认图已不存在。请选择它的一个类图作为默认图。
-str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	该包的默认图不是类图。请选择它的一个类图作为默认图。
-str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	该包的默认图属于另一个元素。请选择它自己的一个类图作为默认图。
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	此图是 {package} 的默认图。请先选择另一个类图作为 {package} 的默认图。
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} 将另一个元素的图作为其默认图，因此该图会保留。请先选择 {package} 自己的一个类图。
-str		This connection already exists: the dependency {dependency}. Select the existing relationship.	此连接已存在：依赖 {dependency}。请选择现有的关系。
-str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	所选的关系未连接这两个元素，或已不再连接。请在连接它们的关系中重新选择。未做任何更改。
-str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	所选的关系未连接这两个元素，或已不再连接，目前也没有任何关系连接它们。未做任何更改。
-str		Several dependencies already join these two elements in this direction, so none was added.	已有多个依赖按此方向连接这两个元素，因此未添加任何依赖。
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	图在删除时不能替换自身。请选择另一个图作为替换。
 str		Choose either an existing diagram or a new one as the replacement, not both.	请选择现有的图或新图作为替换，不能同时选择两者。
 str		A name has to be text.	名称必须是文本。
 str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} 不是默认图，因此删除时无需替换。
 str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} 不是 {package} 的另一个同类图，因此无法替换要删除的图。
-str		No package is given. Give its id.	未给出包。请给出其 ID。
-str		{name} is not a package.	{name} 不是包。
-str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} 不是 {package} 的类图。请选择它自己的一个类图作为默认图。
-str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} 还没有类图，因此没有可打开的内容。请先为它创建一个类图。
-str		{parent} has no diagram yet to take this package's diagrams. Create one for it first. Nothing was changed.	{parent} 还没有任何图，无法接收此包的图。请先为它创建一个图。未作任何更改。
-str		{parent} has no valid default diagram to take this package's diagrams. Choose its default first. Nothing was changed.	{parent} 没有有效的默认图，无法接收此包的图。请先选择它的默认图。未作任何更改。
 str		This could not be done because of an internal error. Nothing was changed.	由于内部错误，无法完成此操作。未作任何更改。
 str		The text can't be empty.	文本不能为空。
 str		It can't be longer than {max} characters.	最多只能有 {max} 个字符。
 str		It can't hold a control or hidden character.	不能包含控制字符或隐藏字符。
 str		It can't start or end with a space.	不能以空格开头或结尾。
 str		This element takes no description.	此元素不能有描述。
-str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	此元素拥有 {max} 条或更多注释，因此找不到它的描述。请先在文件中删除一些。
-str	refusal	a class	类
-str	refusal	an association class	关联类
-str	refusal	an association	关联
-str	refusal	a generalization	泛化
-str	refusal	an interface	接口
-str	refusal	an enumeration	枚举
-str	refusal	a data type	数据类型
-str	refusal	a primitive type	基本类型
-str	refusal	a package	包
-str	refusal	a profile	配置文件
-str	refusal	a stereotype	构造型
 str	refusal	an element	元素
-str	refusal	a schema	架构
-str	refusal	an attribute	属性
-str	refusal	an operation	操作
-str	refusal	a literal	字面量
-str	refusal	a qualifier	限定符
-str	refusal	a template parameter	模板参数
-str	refusal	a generalization set	泛化集
-str	refusal	a table	表
-str	refusal	a column	列
-str	refusal	a relationship	关系
-str	refusal	a domain	域
-str	refusal	an enum type	枚举类型
-str	refusal	a sequence	序列
-str	refusal	a view	视图
 str	refusal	a constraint	约束
-str	refusal	a key	键
-str	refusal	a primary key	主键
-str	refusal	a unique constraint	唯一约束
-str	refusal	a foreign key	外键
-str	refusal	a check	检查约束
-str	refusal	an index	索引
-str	refusal	a subtype	子类型
-str	refusal	a key column	键列
 str	refusal	a skill	技能
-str	refusal	an association end	关联端
 str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录
@@ -978,7 +715,6 @@ str		No diagrams yet	还没有图
 str		Select	选择
 str		Pan	平移
 str		Entity	实体
-str		Entity · {schema}	实体 · {schema}
 str		Relationship	关系
 str		Relationship types	关系类型
 str		Note	备注
@@ -1119,8 +855,6 @@ str		The code comes from the codex program, which keeps the sign-in itself. Arch
 str		API key saved · ends in {last4}	API 密钥已保存 · 末尾为 {last4}
 str		Kept in {store}, never in the project, and handed to codex only when Chat runs it.	保存在{store}中，从不保存在项目里，只在聊天运行 codex 时交给它。
 str		Done	完成
-str		Add table	添加表
-str		Place table	放置表
 str		Already on this diagram	已在此图中
 str		Resize	调整大小
 str		Arrange	排列
@@ -1130,26 +864,12 @@ str		Align centres	居中对齐
 str		Align right	右对齐
 str		Distribute horizontally	水平分布
 str		Stack vertically	垂直堆叠
-str		Show related tables	显示相关表
 str		Open in Models	在模型中打开
 str		Remove from this diagram	从此图中移除
 str		Delete from the model…	从模型中删除…
-str		The diagram is of no schema	此图不属于任何架构
-str		A relationship joins two tables	关系连接两张表
-str		Add relationship	添加关系
-str		Cardinality	基数
-str		Presets	预设
 str		Start	起点
-str		End	终点
 str		Identifying	标识
-str		Identifying needs the parent's primary key; drawn as not identifying	标识关系需要父表的主键；已按非标识绘制
-str		Many to many · add a mapping table	多对多 · 添加映射表
-str		Many to many · {from} and {to}	多对多 · {from} 和 {to}
-str		Add mapping table	添加映射表
-str		Keep the line	保留连线
 str		Columns	列
-str		Remove relationship	删除关系
-str		Relationship removed	已删除关系
 str		{name} removed	已删除 {name}
 str		Undo	撤销
 str		Redo	重做
@@ -1159,7 +879,6 @@ str		Paste	粘贴
 str		Select all	全选
 str		Select All	全选
 str		Nothing to act on here	这里没有可操作的内容
-plural		+ {n} more column	+ 另 {n} 列
 str		Minimap	缩略图
 str		Hide minimap	隐藏缩略图
 str		Show minimap	显示缩略图
@@ -1289,43 +1008,20 @@ str		Help & shortcuts	帮助与快捷键
 str		Switch to the dark appearance	切换到深色外观
 str		Switch to the light appearance	切换到浅色外观
 str		This model	此模型
-str		This schema	此架构
-str		This table	此表
-str		This column	此列
 str		This skill	此技能
 str		This element	此元素
 str		On this model · {n}	此模型上 · {n}
-str		On this schema · {n}	此架构上 · {n}
-str		On this table · {n}	此表上 · {n}
-str		On this column · {n}	此列上 · {n}
 str		On this skill · {n}	此技能上 · {n}
 str		On this element · {n}	此元素上 · {n}
-str		Literals carry no skills	字面量不带技能
-str		Built-in types carry no skills	内置类型不带技能
-str		Types keeps the built-in types, so it stays while it holds them	Types 存放内置类型，因此在存放它们期间会保留
 str		Relationships carry no skills	关系不带技能
-str		Generalization sets carry no skills	泛化集不带技能
 str		This element carries no skills	此元素不带技能
 str		Diagram	图
 str		Default diagram	默认图
 str		Diagram · of {schema}	图 · 属于 {schema}
 str		This diagram	此图
 str		On this diagram · {n}	此图上 · {n}
-str		Relationship · {from} to {to}	关系 · {from} 到 {to}
-str		This relationship	此关系
-str		On this relationship · {n}	此关系上 · {n}
-str		Add foreign key	添加外键
-str		Remove foreign key	移除外键
-str		Add id column	添加 id 列
-str		Choose key columns	选择键列
-str		Ends	端点
-str		{entity} end	{entity} 端
 str		Role	角色
 str		Foreign key	外键
-str		An identifying relationship needs its foreign key; turn the switch on first	标识关系需要外键；请先打开开关
-str		Points to	指向
-str		Existing columns of {entity}	{entity} 的现有列
-str		{type} · type differs	{type} · 类型不同
 str		On delete	删除时
 str		On update	更新时
 str		No action	无操作
@@ -1336,213 +1032,26 @@ str		Set default	设为默认
 str		More	更多
 str		Deferrable	可延迟
 str		No	否
-str		Yes – checked at once	是 – 立即检查
-str		Yes – checked at commit	是 – 提交时检查
 str		Match	匹配
 str		Simple	简单
 str		Full	完全
 str		Partial	部分
-str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} 还没有主键，因此 {child} 中没有可指向的内容。
 # 类图
-str		Add class	添加类
-str		Add interface	添加接口
-str		Add enumeration	添加枚举
-str		Add data type	添加数据类型
-str		Add primitive type	添加基本类型
-str		Add association class	添加关联类
 str		Class	类
 str		Interface	接口
-str		«interface»	«interface»
 str		Enumeration	枚举
-str		«enumeration»	«enumeration»
 str		Data type	数据类型
 str		Primitive type	基本类型
-str		«dataType»	«dataType»
-str		«stereotype»	«stereotype»
-str		«metaclass»	«metaclass»
-str		{keywords} · {package}	{keywords} · {package}
-str		«primitive»	«primitive»
 str		Association class	关联类
-str		Classifier	分类器
 str		Classifier kinds	分类器类型
-str		UML structure diagram	UML结构图
-str		UML structure diagrams	UML结构图
-str		Class · model, in every diagram	类 · 模型，在每个图中
-str		Interface · model, in every diagram	接口 · 模型，在每个图中
-str		Enumeration · model, in every diagram	枚举 · 模型，在每个图中
-str		Data type · model, in every diagram	数据类型 · 模型，在每个图中
-str		Primitive type · model, in every diagram	基本类型 · 模型，在每个图中
-str		Association class · model, in every diagram	关联类 · 模型，在每个图中
-str		New package	新包
-str		On this class · {n}	此类上 · {n}
-str		On this interface · {n}	此接口上 · {n}
-str		On this enumeration · {n}	在此枚举上 · {n}
-str		On this data type · {n}	在此数据类型上 · {n}
-str		On this primitive type · {n}	在此基本类型上 · {n}
-str		On this package · {n}	此包上 · {n}
 str		Package	包
-str		Package · model	包 · 模型
-str		The diagram is of no package	该图不属于任何包
-str		This class	此类
-str		This interface	此接口
-str		This enumeration	此枚举
-str		This data type	此数据类型
-str		This primitive type	此基本类型
-str		This package	此包
-plural		+ {n} more member	+ 另 {n} 个成员
-plural		+ {n} more literal	+ 另 {n} 个字面量
-plural		{n} constraint changed	{n} 个约束已更改
-plural		+ {n} more line	+ 另外 {n} 行
-plural		+ {n} more element	+ 另 {n} 个元素
 # 属性面板中的类成员
-str		Abstract	抽象
-str		No subclasses (final)	无子类 (final)
-str		Nothing may specialise {name}. Shown as {final} after its name.	任何类型都不能特化 {name}。在名称后显示为 {final}。
-plural		{name} has {n} subclass: {subclasses}.	{name} 有 {n} 个子类：{subclasses}。
-plural		Remove that generalization before making it final.	设为 final 前，请先移除这些泛化。
-str		{names} and {last}	{names} 和 {last}
-plural		Select the generalization	选择 {n} 个泛化
-str		No redefinition (leaf)	无重定义 (leaf)
-str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}.	子类在继承 {name} 处不能重定义它。显示为 {leaf}。
-str		A subclass could not redefine this member. Shown as {leaf} after it.	子类不能重定义此成员。在其后显示为 {leaf}。
-plural		{names} redefines it. Remove that redefinition first.	{names} 重定义了它。请先移除该重定义。
-str		Add attribute	添加属性
-str		Add property	添加属性
-str		Add operation	添加操作
-str		Add literal	添加字面量
-str		More details in Properties	在属性中查看更多详细信息
-str		There is no type named {name}.	没有名为 {name} 的类型。
-str		There is a literal named {name} already.	已有名为 {name} 的字面量。
-str		An enumeration holds at most {n} literals.	一个枚举最多包含 {n} 个字面量。
-str		Several types are named {name}; pick one from the menu.	有多个名为 {name} 的类型；请从菜单中选择一个。
-str		Add parameter	添加参数
-str		Attribute	属性
-str		Literal	字面量
-str		Attribute · model	属性 · 模型
-str		Literal · model	字面量 · 模型
-str		Attributes · {n}	属性 · {n}
-str		Literals · {n}	字面量 · {n}
-str		Owner	所有者
 str		Owner: {path}	所有者：{path}
-str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者是包或分类器。更改它会保留 {name} 的标识、成员、关系以及使用它的每个类型。
-str		{kind} · nested in {owner} · model, in every diagram	{kind} · 嵌套于 {owner} · 模型，所有图中
-str		Nested classifiers · {n}	嵌套分类器 · {n}
-str		Add nested classifier	添加嵌套分类器
-str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	暂无。可在此处或从“模型 ▸ 在 {name} 中新建”添加；两者提供相同的种类。
-str		New	新建
-str		New in {name}	在 {name} 中新建
-str	uml	Profile	配置文件
-str		profile	配置文件
 str		Stereotype	构造型
-str		extends {metaclasses}	扩展 {metaclasses}
-str		extends nothing yet	尚未扩展任何元类
-str		applies {profiles}	应用 {profiles}
-str		Profile · model	配置文件 · 模型
-str		This profile	此配置文件
-str		On this profile · {n}	此配置文件上 · {n}
-str		Stereotype · in profile {profile} · model	构造型 · 位于配置文件 {profile} · 模型
-str		This stereotype	此构造型
-str		On this stereotype · {n}	此构造型上 · {n}
-str		Metaclass · UML	元类 · UML
-str		Metaclass	元类
-str		This metaclass	此元类
-str		On this metaclass · {n}	此元类上 · {n}
-str		Metaclasses carry no skills	元类不带技能
-str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	构造型所扩展的 UML 元类。它属于 UML 本身，不出现在模型和类型菜单中，也从不改变。
-str		The UML library holds the metaclasses that stereotypes extend. It never changes.	UML 库包含构造型所扩展的元类。它从不改变。
-str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} 是 UML 元类，保存在 UML 库中。它从不改变。
-str		{package} applies {profile} already.	{package} 已应用 {profile}。
-str		{package} does not apply {profile}.	{package} 未应用 {profile}。
-str		A profile holds at most {max} stereotypes.	一个配置文件最多包含 {max} 个构造型。
-str		A stereotype extends at most {max} metaclasses.	一个构造型最多扩展 {max} 个元类。
-str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} 是 Archforge 尚未绘制的 UML 元类。构造型可扩展 {metaclasses}。
-str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} 不是 Archforge 绘制的元类。构造型可扩展 {metaclasses}。
-str		{name} is named twice. Name each metaclass once.	{name} 被指定了两次。每个元类只指定一次。
-str		Give the metaclasses as a list of names.	请以名称列表的形式给出元类。
-str		This stereotype is in no profile.	此构造型不在任何配置文件中。
-str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} 是构造型的扩展端。请改为从该构造型扩展的内容中去掉这个元类。
-plural		{name} has values on {n} element. Remove those first.	{name} 在 {n} 个元素上设有值。请先移除这些值。
-plural		Values on {n} element don't fit {name} [{bounds}].	{n} 个元素上的值不符合 {name} [{bounds}]。
-str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	字面量 {literal} 是 {element} 上 «{stereotype}» 中 {property} 的值。请先在那里设置另一个值。
-str		The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.	字面量 {literal} 是未应用于任何元素的 «{stereotype}» 中 {property} 的值。请先在文件中更改该值。
-str		Stereotypes · {n}	构造型 · {n}
-str		Add stereotype	添加构造型
-str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	尚无。可在此处或通过 模型 ▸ 新建 ▸ 构造型 添加。
-str		Open profile diagram	打开配置文件图
-str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	包可通过其属性中的“已应用配置文件”应用该配置文件；其元素随后即可使用该配置文件的构造型。
-str		Extends · {n}	扩展 · {n}
-str		Add extended metaclass	添加扩展的元类
-str		{name} extends	{name} 扩展
-str		extended	已扩展
-str		Extended already	已扩展
-str		not drawn by Archforge yet	Archforge 尚未绘制
-str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	可选：Archforge 绘制的元类。其他元类会以禁用状态列出，标明 Archforge 尚未绘制。
-str		Properties · {n}	属性 · {n}
-str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	类型：模型的基本类型、枚举和数据类型。重命名 {name} 会保留所有应用；只要仍有元素使用它，就拒绝删除。
-str		Applied profiles · {n}	已应用的配置文件 · {n}
-str		Apply profile	应用配置文件
-str		Apply to {name}	应用到 {name}
-str		applied	已应用
-str		Applied already	已应用
-str		No profile yet	尚无配置文件
-str		Make one with New ▸ Profile in Models.	可在模型中通过 新建 ▸ 配置文件 创建。
-str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	{name} 及其包中的元素可以使用已应用配置文件的构造型。应用是一个撤销步骤；它本身不会添加任何构造型。
-str		Unapply profile	取消应用配置文件
-str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} 在 {package} 中正在使用：{uses}。请先移除这些使用。
-str		{name} is in use: {uses}. Remove those first.	{name} 正在使用：{uses}。请先移除这些使用。
-str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} 应用了其元素所使用的配置文件：{uses}。请先移除这些使用。
-str		Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.	将 {name} 移到那里会使构造型脱离应用其配置文件的包：{uses}。请先在那里应用该配置文件。
-str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} 包含正在使用的配置文件 {profile}：{uses}。请先移除这些使用。
-str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} 上的 «{stereotype}» 正在使用：{uses}。请先移除这些使用。
-str		«{stereotype}» on {elements}	{elements} 上的 «{stereotype}»
 str		{first} and {second}	{first} 和 {second}
 str		{first}, {second} and {third}	{first}、{second} 和 {third}
-plural		Show the use	显示 {n} 处使用
-str		A stereotype is shown on its profile's diagram	构造型显示在其配置文件的图中
-str		Place stereotype	放置构造型
 # Stereotypes applied (AR-135)
-str		Stereotypes of {name} · {n}	{name} 的构造型 · {n}
-str		Stereotypes of this end · {n}	此端的构造型 · {n}
-str		Apply stereotype	应用构造型
-str		Remove «{stereotype}» from {name}	从 {name} 移除 «{stereotype}»
-str	value	default	默认
-str		{value} (default)	{value}（默认）
-str		Default ({value})	默认（{value}）
-str		No value	无值
-str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	您设置的值保存在 {name} 上；默认值在您更改之前会显示标签。移除会从 {name} 上取下 «{stereotype}»，并保留其定义。
-str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	尚未应用。+ 提供应用于 {package} 或其外层包的配置文件中的构造型。
-str		Show stereotype values on this diagram	在此图中显示构造型值
-str		Filter: {text}	筛选：{text}
-str		No stereotype matches.	没有匹配的构造型。
-str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	尚无构造型。请通过 模型 ▸ 新建 ▸ 构造型 在配置文件中创建。
-str		{kinds} only	仅{kinds}
-str		classes	类
-str		interfaces	接口
-str		enumerations	枚举
-str		data types	数据类型
-str		properties	属性
-str		operations	操作
-str		associations	关联
-str		generalizations	泛化
-str		packages	包
-str		{profile} not applied	{profile} 未应用
-str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» 不扩展 {metaclass}：它扩展 {metaclasses}。
-str		«{stereotype}» extends no metaclass yet.	«{stereotype}» 尚未扩展任何元类。
-str		Its profile {profile} is not applied to {package} or a package around it.	其配置文件 {profile} 未应用于 {package} 或其外层包。
-str		A stereotype application takes no stereotype. Stereotypes apply to the model's elements.	构造型应用不能再带构造型。构造型应用于模型的元素。
-str		This is no element of the model, so no stereotype applies to it.	这不是模型的元素，因此不能对它应用构造型。
-str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} 属于某个配置文件；配置文件用来定义构造型，本身不带构造型。
-str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} 不能带构造型。构造型扩展 {metaclasses}。
-str		«{stereotype}» is applied to {name} already.	«{stereotype}» 已应用于 {name}。
-str		«{stereotype}» is not applied to {name}.	«{stereotype}» 未应用于 {name}。
-str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» 没有属性 {name}。它有 {properties}。
-str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» 没有属性 {name}。它还没有任何属性。
-str		{name} is not a stereotype.	{name} 不是构造型。
-str		{name} is not a class diagram.	{name} 不是类图。
-str		Give the values as a list of texts.	请以文本列表的形式给出值。
 str		No element is given. Give its id.	未给出元素。请给出其 ID。
-str		No stereotype is given. Give its id.	未给出构造型。请给出其 ID。
-str		No class diagram is given. Give its id.	未给出类图。请给出其 ID。
 str		No diagram is given. Give its id.	未给出图。请给出其 ID。
 str		No box is given. Give its id.	未给出框。请给出其 ID。
 str		No line is given. Give its id.	未给出线。请给出其 ID。
@@ -1594,464 +1103,56 @@ str		{word} is not a diagram kind. The kinds are {kinds}.	{word} 不是图类型
 str		This project holds no notation, so it knows no diagram kind.	此项目不含任何表示法，因此不知道任何图类型。
 str		This line has no label text {word}. It has {slots}.	这条线没有标签文本 {word}。它有 {slots}。
 str		This line has no label text {word}. It has none.	这条线没有标签文本 {word}。它没有标签文本。
-str		No property is given. Give its name or id.	未给出属性。请给出其名称或 ID。
-str		This element is gone.	此元素已不存在。
-str		{name} is a template parameter of {template} and types only its members.	{name} 是 {template} 的模板参数，只能作为其成员的类型。
-str		An element carries at most {max} stereotypes.	一个元素最多带 {max} 个构造型。
-str		{value} is no value of {name}. {accepted}	{value} 不是 {name} 的值。{accepted}
-str		A whole number, such as 42 or -7.	整数，例如 42 或 -7。
-str		A number, such as 2.5 or -1e3.	数字，例如 2.5 或 -1e3。
-str		true or false.	true 或 false。
-str		A whole number of 0 or more, or *.	0 或更大的整数，或 *。
-str		Any text.	任意文本。
-str		One of {literals}.	{literals} 之一。
-str		The enumeration {name} has no literals yet.	枚举 {name} 尚无字面量。
-str		{name} holds at most {n} values.	{name} 最多包含 {n} 个值。
-str		{name} holds each value once, and {value} is there twice.	{name} 每个值只能出现一次，而 {value} 出现了两次。
-str		A value is empty. Clear the field to show the default.	有一个值为空。清空该字段即可显示默认值。
-str		A value is longer than {n} characters.	有一个值超过 {n} 个字符。
-plural		{name} holds [{bounds}] values; {n} is given.	{name} 包含 [{bounds}] 个值；给出了 {n} 个。
-str		nested	嵌套
-str		package	包
-str		class	类
-str		interface	接口
-str		enumeration	枚举
-str		data type	数据类型
-str		primitive type	基本类型
-str		association class	关联类
-str		attribute	属性
-str		operation	操作
-str		constraint	约束
-str		element	元素
-str		itself	自身
-str		inside it	在其内部
-str		owns none	不拥有
-str		{kind} {name} already holds that name	{kind} {name} 已使用该名称
-str		kept for a built-in type	保留给内置类型
-str		built-in type	内置类型
-str		{name} cannot own itself.	{name} 不能拥有自身。
-str		{owner} is inside {name}: owning {name} would make a cycle.	{owner} 位于 {name} 内部：拥有 {name} 会形成循环。
-str		{owner} owns no classifiers: only a package, a class, an interface or an association class does.	{owner} 不拥有分类器：只有包、类、接口或关联类可以拥有。
-str		{name} stays in a package: a primitive type or an association class is never nested in a classifier.	{name} 留在包中：基本类型或关联类从不嵌套在分类器中。
-str		{owner} already owns a member named {name}.	{owner} 已拥有名为 {name} 的成员。
-str		The package {owner} keeps the name {name} for a built-in type.	包 {owner} 将名称 {name} 保留给内置类型。
-str		{name} is a built-in type and stays in Types.	{name} 是内置类型，留在 Types 中。
-str		{name} is a built-in type, which is never made leaf.	{name} 是内置类型，永远不会设为 leaf。
-str		Constraints · {n}	约束 · {n}
-str		Add constraint	添加约束
-str		Edit constraint	编辑约束
 str		Constraint	约束
-str		Describe the rule…	描述规则…
-str		Constrained elements	受约束的元素
-str		Remove {name} from the constrained elements	从受约束的元素中移除 {name}
-str		Add a constrained element	添加受约束的元素
-str		On this diagram	在此图中
-str		Linked note	链接的注释
-str		Braces	花括号
-str		Language	语言
-str		Plain text	纯文本
-str		Pick a language	选择语言
-str		Pick the constraint's language	选择约束的语言
-str		Or type any language	或输入任意语言
-str		Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.	按原样保存：文本及其引用由 Archforge 保留，但不对其求值：不会对照模型检查任何内容。
-str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	较长或涉及多个元素的约束最好显示为链接的注释；此选择按图而定。
 str		Type an expression. A constraint without one states no rule.	请输入表达式。没有表达式的约束不陈述任何规则。
-str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	花括号位于受约束的元素旁边，而此图未显示其中任何一个。请将其显示为链接的注释。
-str		Only a classifier of the model's own or a package owns constraints.	只有模型自有的分类器或包可以拥有约束。
-str		A constraint names only elements of this model.	约束只能指定此模型中的元素。
-str		A constraint names at most {max} elements.	一个约束最多指定 {max} 个元素。
-str		No constraint is given. Give its id.	未给出约束。请给出其 ID。
-str		{name} is not a constraint of this model.	{name} 不是此模型的约束。
 str		Give the elements as a list of ids.	请以 ID 列表的形式给出元素。
-str		This constraint is among no element's constraints.	此约束不在任何元素的约束之中。
-str		There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.	约束中没有位置 {at}。请给出 0 到 {last} 之间的位置，或用 -1 表示最后一个。
-str		Give both x and y, or neither to place it where it reads.	请同时给出 x 和 y，或者都不给出，以便放在易读的位置。
 str		The {axis} is not a number.	{axis} 的值不是数字。
 str		The {axis} is farther than {max} from the origin.	{axis} 的值离原点超过 {max}。
 str		An element is named twice. Name each element once.	有元素被指定了两次。每个元素只指定一次。
-str		{field}: {word} is not one of the choices. The choices are {words}.	{field}：{word} 不是可选项。可选项有 {words}。
-str		{field}: no choice is given. The choices are {words}.	{field}：未给出选项。可选项有 {words}。
-str		a constraint	一个约束
-str		{constraint} constrained nothing else and went with it	{constraint} 不约束其他任何元素，已一并删除
-str		{constraint} now constrains {elements} only	{constraint} 现在只约束 {elements}
 str		{name} deleted	已删除 {name}
-str		Constraint · model, not evaluated	约束 · 模型，不求值
-str		This constraint	此约束
-str		On this constraint · {n}	在此约束上 · {n}
-str		Qualifier · model	限定符 · 模型
-str		Qualifier	限定符
-str		This qualifier	此限定符
-str		On this qualifier · {n}	在此限定符上 · {n}
-str		Constraint · not evaluated	约束 · 不求值
 str		Parameter	参数
-str		No literals yet	尚无字面量
-str		Move down	下移
-str		Move up	上移
-str		Multiplicity	多重性
-str		On this attribute · {n}	在此属性上 · {n}
-str		On this literal · {n}	在此字面量上 · {n}
-str		On this operation · {n}	在此操作上 · {n}
 str		Operation	操作
-str		Operation · model	操作 · 模型
-str		Operations · {n}	操作 · {n}
-str		Parameters	参数
 str		Private	私有
 str		Protected	受保护
 str		Public	公共
-str		Remove parameter	移除参数
-str		Return type	返回类型
-str		Static	静态
-str		Modifiers	修饰符
-str		Default value	默认值
-str		Derived	派生
 str		Read only	只读
 str		Ordered	有序
-str		Subsets	子集
-str		Redefines	重定义
-str		No property to subset	没有可作为子集来源的属性
-str		No property to redefine	没有可重定义的属性
-str		The default value {value} does not fit {type}; change or clear it first.	默认值 {value} 不符合 {type}；请先修改或清除它。
-str		A property chosen here is gone; choose again.	此处选择的属性已不存在；请重新选择。
-str		A property subsets at most {max} properties.	一个属性最多可作为 {max} 个属性的子集。
-str		A property redefines at most {max} properties.	一个属性最多重定义 {max} 个属性。
-str		Give the properties as a list of ids.	请以 ID 列表的形式给出属性。
-str		An item in the list has no id. Give each property's id.	列表中有一项没有 ID。请给出每个属性的 ID。
-str		{key} is not a key here. An item holds an id and a name.	{key} 在此处不是有效的键。每一项包含一个 ID 和一个名称。
-str		Give at most {max} checks.	最多给出 {max} 个检查约束。
-str		Two checks are named {name}. Give each check its own name.	有两个检查约束都名为 {name}。请为每个检查约束取不同的名称。
-str		Give each check as text, or as an object with an expression and a name.	请将每个检查约束写成文本，或写成包含表达式和名称的对象。
 str		An item takes no {key}. It takes {takes}.	条目不接受 {key}。它接受 {takes}。
 str		An item holds a key without a name. It takes {takes}.	条目包含一个没有名称的键。它接受 {takes}。
-str		An index needs at least one column.	一个索引至少需要一列。
-str		An index holds at most {max} columns.	一个索引最多包含 {max} 列。
-str		{name} is in the index twice. Give each column once.	{name} 在索引中出现了两次。每列只需给出一次。
-str		Give each index column as a column's id, or as an object with an attribute or an expression.	请将每个索引列写成列的 ID，或写成包含属性或表达式的对象。
-str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} 同时给出了表达式。索引列按一列或按一个表达式排序。
-str		An index column needs a column or an expression to sort by.	索引列需要一列或一个表达式作为排序依据。
 str		There is no element with the id {id}.	不存在 ID 为 {id} 的元素。
-str		A default value is at most {n} characters.	默认值最多 {n} 个字符。
-str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} 不是整数；Integer 的默认值是整数，例如 42。
-str		{value} is not a number, which a Real's default is, such as 2.5.	{value} 不是数字；Real 的默认值是数字，例如 2.5。
-str		{value} is neither true nor false, which a Boolean's default is.	{value} 既不是 true 也不是 false；Boolean 的默认值是二者之一。
-str		{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.	{value} 既不是 0 或更大的整数也不是 *；UnlimitedNatural 的默认值是二者之一。
 str		{value} is not a literal of {enumeration}.	{value} 不是 {enumeration} 的字面量。
-str		{value} cannot be read as a default.	{value} 无法读作默认值。
-str		A property without a name cannot be named here.	没有名称的属性无法在此指定。
-str		{name} is not a property this one can subset.	{name} 不是此属性可以作为其子集的属性。
-str		{name} is not a property this one can redefine.	{name} 不是此属性可以重定义的属性。
-str		{name} has this property's name; a subset takes another.	{name} 与此属性同名；子集需要另一个名称。
-str		{name} subsets this property already.	{name} 已是此属性的子集。
-str		The moved ends no longer subset or redefine {names}, so those were dropped.	移动后的端不再是 {names} 的子集或重定义，因此已移除。
-str		{name} has a type this property's type does not conform to.	此属性的类型不符合 {name} 的类型。
-str		{name} holds fewer values than this property.	{name} 容纳的值比此属性少。
-str		This property's multiplicity does not lie within {name}'s.	此属性的多重性不在 {name} 的范围内。
-str		{name} is composite; only a composite end redefines it.	{name} 是组合；只有组合端可以重定义它。
-str		{name} is leaf: nothing may redefine it. Clear "No redefinition" on it first.	{name} 是 leaf：任何元素都不能重定义它。请先在其上取消“无重定义”。
-str		This attribute	此属性
-str		This literal	此字面量
-str		This operation	此操作
 str		Visibility	可见性
-str		Place class	放置类
-str		Place interface	放置接口
-str		Place enumeration	放置枚举
-str		Place data type	放置数据类型
-str		Place primitive type	放置基本类型
-str		Place association class	放置关联类
-str		Add package	添加包
-str		Place package	放置包
 str		Move package	移动包
-str		Parent package	上级包
 str		{what} moved into {where}	已将 {what} 移入 {where}
 str		Open this package's diagram	打开此包的图
 str		Open this package's diagram (⌘↓)	打开此包的图 (⌘↓)
 str		This is the top package: zooming out goes no further	这是最上层的包：继续缩小不会再向上
 # 关联类
-str		A bound can be at most {max}.	界限最多为 {max}。
-str		A class realizes only an interface	类只能实现接口
-str		A relationship joins two classes or interfaces	关系连接两个类或接口
-str		An association class does not join itself	关联类不连接自身
-str		This association class has an attribute named {name}; an end's role takes another name.	此关联类已有名为 {name} 的属性；端的角色需使用其他名称。
-str		An end of this association class has the role {name}; an attribute takes another name.	此关联类的一端已有角色 {name}；属性需使用其他名称。
-str		An enumeration is a data type and joins no association	枚举是数据类型，不参与任何关联
-str		A data type joins no association	数据类型不参与任何关联
-str		A primitive type joins no association	基本类型不参与任何关联
-str		An association class joins only classes	关联类只连接类
-str		An interface specializes only an interface	接口只能特化接口
-str		A class cannot specialize an interface	类不能特化接口
-str		An enumeration specializes only an enumeration	枚举只能特化枚举
-str		Only an enumeration specializes an enumeration	只有枚举能特化枚举
-str		A data type specializes only a data type	数据类型只能特化数据类型
-str		Only a data type specializes a data type	只有数据类型能特化数据类型
-str		A primitive type specializes only a primitive type	基本类型只能特化基本类型
-str		Only a primitive type specializes a primitive type	只有基本类型能特化基本类型
-str		A built-in type specializes nothing	内置类型不特化任何类型
-str		Nothing specializes an association class	任何类型都不能特化关联类
-str		A classifier cannot specialize itself	分类器不能特化自身
-str		This one specializes that one already	此项已特化该项
-str		That one specializes this one already, which would make a cycle	该项已特化此项，这会形成循环
-str		{name} is final: nothing may specialise it. Clear "No subclasses" in its Properties first.	{name} 是 final：任何类型都不能特化它。请先在其属性中取消勾选“无子类”。
-str		Add association	添加关联
-str		Add dependency	添加依赖
-str		Add generalization	添加泛化
-str		Add interface realization	添加接口实现
 str		Aggregation	聚合
 str		Association	关联
-str		Association · model	关联 · 模型
-str		Clear	清除
-str		Client	客户
 str		Composite	组合
-str		Composition	组合
-str		The other end has an aggregation already: only the part's end has one.	另一端已有聚合：只有部分一端才有聚合。
-str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	组合的整体一端最多只允许一个：请先把另一端的多重性设为 1 或 0..1。
-str		This end is a composition's whole, which allows one at most.	此端是组合的整体，最多只允许一个。
-str		The whole's end of an aggregation or composition is not navigable.	聚合或组合中整体一端不可导航。
 str		Dependency	依赖
-str		Dependency · model	依赖 · 模型
-str		Directed association	有向关联
-str		Drag a line end onto another class.	将线的一端拖到另一个类上。
 str		Drag onto another class to move this end	拖到另一个类上以移动此端
-str		Drag the class end onto another class, the interface end onto another interface.	将类一端拖到另一个类上，将接口一端拖到另一个接口上。
-str		End at {class}	{class} 端
-str		Qualifiers · {n}	限定符 · {n}
-str		Add qualifier	添加限定符
-str		Qualified end: the qualifier box is drawn here, against {class}.	受限定端：限定符框画在此处，紧贴 {class}。
-str		Per qualifier value	每个限定符值
-str		Counted per qualifier value of the other end; shown next to {class}.	按另一端的每个限定符值计数；显示在 {class} 旁。
-str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	一个 {owner} 和一个 {qualifiers} 选出 {multiplicity} 个 {target}。
-str		Type a name: a qualifier without one picks nothing.	请输入名称：没有名称的限定符什么也选不出。
-str		This end already has a qualifier named {name}. Pick another name.	此端已有名为 {name} 的限定符。请另选一个名称。
 # Templates (AR-130)
-str		Template parameters · {n}	模板参数 · {n}
-str		Add template parameter	添加模板参数
-str		Constrained to	约束为
-str		Any	任意
 str		Value	值
-str		Parameter kind	参数种类
-str		not yet	暂不支持
-str		{kind} template parameters are not supported yet.	{kind} 模板参数暂不支持。
-str		this parameter	此参数
-str		Arguments for {name} must be {constraint} or specialise it.	{name} 的实参必须是 {constraint} 或其特化。
-str		Arguments for {name} must be classes.	{name} 的实参必须是类。
-str		Arguments for {name} must be interfaces.	{name} 的实参必须是接口。
-str		Arguments for {name} must be data types.	{name} 的实参必须是数据类型。
-str		Arguments for {name} must be enumerations.	{name} 的实参必须是枚举。
-str		Arguments for {name} must be primitive types.	{name} 的实参必须是基本类型。
-str		Bindings that leave it out use {default}.	省略它的绑定使用 {default}。
-str		Renaming or reordering keeps every binding.	重命名或重新排序会保留所有绑定。
-str		Show the binding	显示绑定
-str		Show the binding selects it, on the canvas and in Properties.	“显示绑定”会选中绑定本身，在画布和属性中均可见。
-str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	可以重命名 {name} 或更改其默认值：绑定跟随参数，而不是其名称。
-str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} 将 {name} 绑定为 -> {actual}。请先更改或删除该绑定，再删除 {name}。
-str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} 绑定了 {template}，而 {name} 是它的最后一个参数。请先删除该绑定，再删除 {name}。
-plural		{n} more binding uses it too.	另有 {n} 个绑定也在使用它。
-str		Type a name: a template parameter without one stands for nothing.	请输入名称：没有名称的模板参数不代表任何内容。
-str		{template} already has a template parameter named {name}. Pick another name.	{template} 已有名为 {name} 的模板参数。请换一个名称。
-str		{default} does not fit {name}: pick a default its arguments could be.	{default} 不适合 {name}：请选择可以作为其实参的默认值。
-str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} 将 {name} 绑定为 -> {actual}，修改后将不再适合。请先更改或删除该绑定。
-str		A template has at most {max} parameters.	一个模板最多有 {max} 个参数。
-str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} 绑定了 {template}，但没有为 {name} 提供实参，因此 {name} 需要一个默认值。
-str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	存放该内置类型的 {types} 包中已有名为 {name} 的{what}：请重命名 {name} 以使用内置类型。
-str		template parameter	模板参数
-str		template	模板
-plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · 模板，{n} 个参数 · 模型，在所有图中
 # Template bindings (AR-131)
 str		Template binding	模板绑定
-str		Template binding: from the bound class to its template	模板绑定：从绑定的类指向其模板
-str		«bind»	«bind»
-str		Add template binding	添加模板绑定
-str		This template binding	此模板绑定
-str		On this template binding · {n}	在此模板绑定上 · {n}
-str		Binding · {bound} binds {template} · model, in every diagram	绑定 · {bound} 绑定 {template} · 模型，在每个图中
-str		binds {template}	绑定 {template}
-str		Binding	绑定
-str		Bound element	绑定元素
-str		Template	模板
-str		Substitutions · {n}	替换 · {n}
-str		default	默认
-str		Default ({name})	默认值（{name}）
-str		Choose a class	选择一个类
-str		Choose an interface	选择一个接口
-str		Choose a data type	选择一个数据类型
-str		Choose an enumeration	选择一个枚举
-str		Choose a primitive type	选择一个基本类型
-str		{name} needs an argument: pick a class.	{name} 需要一个实参：请选择一个类。
-str		{name} needs an argument: pick an interface.	{name} 需要一个实参：请选择一个接口。
-str		{name} needs an argument: pick a data type.	{name} 需要一个实参：请选择一个数据类型。
-str		{name} needs an argument: pick an enumeration.	{name} 需要一个实参：请选择一个枚举。
-str		{name} needs an argument: pick a primitive type.	{name} 需要一个实参：请选择一个基本类型。
-str		{name} ({kind})	{name}（{kind}）
-str		{names} have no default, so each needs an argument.	{names} 都没有默认值，因此每个都需要一个实参。
-plural		{names} can keep its default.	{names} 可以保留默认值。
-str		New template binding	新建模板绑定
-str		Drawing · not in the model until you apply	正在绘制 · 应用之前不在模型中
-str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	在模板上松开线会打开此处。在应用之前，线保持为强调色虚线；应用后，一个撤销步骤会添加绑定及其实参。取消或 Esc 会移除草稿，不留下任何内容。
-str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	另一个模板需要自己的实参：先选择它们，再应用。取消或 Esc 会保持绑定不变。
-str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	每个选择器只列出适合其参数的实参：参数的种类，以及其约束或特化该约束的类型。使用默认值的参数会跟随模板的默认值。
-str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	线上写着 «bind» 以及每个参数和它的实参，并指向模板。绑定在模型中保存其实参；它既不是依赖，也不是实现。
-str		Only a class, an interface or a data type binds a template	只有类、接口或数据类型才能绑定模板
-str		A binding ends at a template: a class, an interface or a data type with template parameters	绑定的终点是模板：带有模板参数的类、接口或数据类型
-str		A template is bound by a classifier of its own kind	模板只能由同种类的分类器绑定
-str		A template does not bind itself	模板不能绑定自身
-str		This one binds that template already	它已经绑定了该模板
-str		That template binds this one already, which would make a cycle	该模板已经绑定了它，这会形成循环
-str		Pick another template in the binding's Properties, where its arguments are chosen.	请在绑定的属性中选择另一个模板，在那里选择它的实参。
-str		N-ary association	多元关联
-str		this n-ary association	此多元关联
-str		N-ary association: click each class in turn, then press Enter	多元关联：依次点击每个类，然后按 Enter
-str		An n-ary association is drawn by clicking each class in turn	多元关联通过依次点击每个类来绘制
-str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	满 3 个后按 Enter 完成 · Backspace 去掉最后一个 · Esc 取消
-str		Click a class for the new end	点击一个类作为新的端
-str		Esc cancels	Esc 取消
-str		An n-ary association joins classes and interfaces	多元关联连接类和接口
-str		An association takes at most {n} ends	一个关联最多有 {n} 个端
-str		An n-ary association needs three ends or more.	多元关联需要三个或更多的端。
-str		An n-ary association needs three ends or more: click another class	多元关联需要三个或更多的端：请再点击一个类
-str		Add n-ary association	添加多元关联
-str		New n-ary association	新建多元关联
-str		Drawing · not in the model until you finish	绘制中 · 完成前不进入模型
-str		Ends so far · {n}	目前的端 · {n}
-str		Next: click a class on the canvas	下一步：点击画布上的类
-str		Next: click a class on the canvas, or press Enter to finish	下一步：点击画布上的类，或按 Enter 完成
-str		Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.	有 3 个或更多端后，按 Enter 或双击最后一个类即可完成。一个撤销步骤会添加关联、其菱形和每个端。
-str		Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.	按 Esc、切换工具或点击空白画布会取消，模型中不留下任何内容。按 Backspace 会去掉最后一个端。
-str		New ends are named after their class and start at *; change them after finishing.	新的端以其类命名，并从 * 开始；完成后再修改。
-str		Ends · {n}	端 · {n}
-str		Add end	添加端
-str		Draws a new leg	绘制一条新分支
-str		Reconnect end	重新连接端
-str		Drag a leg end	拖动分支的端点
-str		Open a class diagram to pick the new end's class	请打开一个类图以选择新端的类
-str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	多元关联的端不是聚合，因此不提供聚合。角色不同时，两个端可以使用同一类型。
-str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	多元关联的端不是聚合：只有二元关联才有整体和部分。
-str		Another end has the role {role} already. Pick another role.	另一个端已有角色 {role}。请另选一个角色。
-str		Set association end	设置关联端
-str		End {role} removed	已移除端 {role}
-str		Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.	选择菱形或任一分支即选择这一个关联。从此图中移除只在此处隐藏它；从模型中删除会在所有地方删除它及其端。
-str		Two ends would remain	将只剩两个端
-str		An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.	多元关联需要三个或更多的端。去掉 {role} 后，只剩 {first} 和 {second}。
-str		Keep 3 ends	保留 3 个端
-str		Make it binary	改为二元
-str		Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	改为二元会把它变成 {first} 与 {second} 之间的普通关联，保留两个端，作为一个撤销步骤。保留 3 个端或按 Esc 不做任何更改。
-str		Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	改为二元会把 {name} 变成 {first} 与 {second} 之间的普通关联，保留其名称和两个端，作为一个撤销步骤。保留 3 个端或按 Esc 不做任何更改。
-plural		N-ary association · {n} end · model, in every diagram	多元关联 · {n} 个端 · 模型，在每个图中
-plural		N-ary association · {n} end — click a class for the next end	多元关联 · {n} 个端 — 点击一个类作为下一个端
 str		From	从
-str		General	一般
 str		Generalization	泛化
-str		Generalization · model	泛化 · 模型
-str		Implementing class	实现类
 str		Interface realization	接口实现
-str		Interface realization · model	接口实现 · 模型
 # 泛化集 (AR-129)
-str		A set groups generalizations of one class.	一个集合只归组同一个类的泛化。
-str		A set groups at least one generalization.	一个集合至少归组一个泛化。
-plural		A set groups at most {n} generalization.	一个集合最多归组 {n} 个泛化。
-str		Add member	添加成员
-str		Add member offers only generalizations to {general}. Edit opens that generalization.	添加成员只提供指向 {general} 的泛化。编辑会打开该泛化。
-str		Add to a generalization set	添加到泛化集
-str		Add to set	添加到集合
-str		Add to set ▸ {name}	添加到集合 ▸ {name}
-str		Add to {name}	添加到 {name}
-str		Completeness	完整性
-str		Create generalization set…	创建泛化集…
-str		Create set from selection	从所选创建集合
-str		Delete from the model	从模型中删除
 str		Rename	重命名
 str		Show in diagram	在图中显示
 str		No diagram shows it yet	尚无图显示它
 str		Delete from model	从模型中删除
 str		Delete diagram	删除图
 str		A skill is removed from its tab	技能在其标签页中删除
-str		New inside {name}	在 {name} 中新建
-str		not inside a class	不能在类中
-str		{name} is {kind}, which owns no classifiers: only a class, an interface or an association class does.	{name} 是{kind}，不拥有分类器：只有类、接口或关联类可以拥有。
-str		a class	类
-str		an interface	接口
-str		an enumeration	枚举
-str		a data type	数据类型
-str		a primitive type	基本类型
-str		an association class	关联类
-str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	删除集合会保留其泛化，只去掉分组。集合线横穿其成员；拖动其标签可移动它，这只是图上的改动。
-str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	删除此泛化会在同一撤销步骤中将其移出所属集合；没有成员的集合也会随之删除。
-str		Disjointness	互斥性
-str		General class	一般类
 str		Generalization set	泛化集
-str		Generalization set {label}	泛化集 {label}
-str		Generalization set · model, in every diagram	泛化集 · 模型，所有图中
-str		Generalization sets	泛化集
-str		Generalization sets · {n}	泛化集 · {n}
-str		Incomplete	不完全
-str		Members · {n}	成员 · {n}
-str		Membership is listed here for every set, and each set draws its own line and label on the canvas.	此处列出所属的每个集合，每个集合在画布上画出自己的线和标签。
-str		New set from this generalization	用此泛化新建集合
-str		No other generalization to {general}	没有其他指向 {general} 的泛化
-str		None of these is in a set yet.	这些都尚未属于任何集合。
-str		Not in a set yet.	尚未属于任何集合。
-str		On this generalization set · {n}	此泛化集上 · {n}
-str		Overlapping	重叠
-str		Remove from set	从集合中移除
-str		Same action as the context menu's Create generalization set… ({chord}). Only generalizations to one class form a set; a mixed selection disables it and says why.	与上下文菜单中的 创建泛化集…（{chord}）相同。只有指向同一个类的泛化才能组成集合；混合选择会禁用它并说明原因。
-str		Select generalizations to one class first.	请先选择指向同一个类的泛化。
-str		Selection · all specialise {general}	所选 · 全部特化 {general}
-str		Selection · mixed	所选 · 混合
-str		Set	集合
-str		Shown beside the lines as {braces}: a {general} is at most one of these kinds.	在线旁显示为 {braces}：一个 {general} 至多是这些种类之一。
-str		Shown beside the lines as {braces}: a {general} may be any number of these kinds.	在线旁显示为 {braces}：一个 {general} 可以是这些种类中的任意多个。
-str		Shown beside the lines as {braces}: every {general} is at least one of these kinds.	在线旁显示为 {braces}：每个 {general} 至少是这些种类之一。
-str		Shown beside the lines as {braces}: every {general} is exactly one of these kinds.	在线旁显示为 {braces}：每个 {general} 恰好是这些种类之一。
-str		Some of these are in a set already.	其中一些已属于某个集合。
-str		Something selected	所选内容
-str		This generalization set	此泛化集
-str		already in it	已在其中
-str		generalization set	泛化集
-str		no shared parent	无共同父类
-str		none for {general} yet	{general} 尚无
-str		not all generalizations	并非全是泛化
-str		nothing selected	未选择
-str		parents differ	父类不同
-str		{generalization} is in {sets}, which group the specialisations of {general}. Remove it from those sets before reconnecting it to {target}.	{generalization} 属于 {sets}，这些集合归组 {general} 的特化。请先将其从这些集合中移除，再重新连接到 {target}。
-str		{generalization} is in {sets}, which groups the specialisations of {general}. Remove it from the set before reconnecting it to {target}.	{generalization} 属于 {sets}，该集合归组 {general} 的特化。请先将其从集合中移除，再重新连接到 {target}。
-str		{name} is not a generalization.	{name} 不是泛化。
-str		{name} removed; its generalizations stay	已移除{name}；其泛化保留
-str		{specific} specialises {general}	{specific} 特化 {general}
 plural		{n} element	{n} 个元素
-plural		{n} generalization	{n} 个泛化
-plural		{n} generalization · to {general}	{n} 个泛化 · 指向 {general}
-plural		{sets} had no other member and went too	{sets} 没有其他成员，也一并删除
-str		Interface realization: from the implementing class to its interface	接口实现：从实现类指向其接口
-str		Association class: between two classes, with a card of its own	关联类：位于两个类之间，带有自己的卡片
-str		Navigable	可导航
-str		On this association · {n}	在此关联上 · {n}
-str		On this association class · {n}	在此关联类上 · {n}
-str		On this dependency · {n}	在此依赖上 · {n}
-str		On this generalization · {n}	在此泛化上 · {n}
-str		On this interface realization · {n}	在此接口实现上 · {n}
-str		Only a class implements an interface	只有类能实现接口
-str		Or type a number or range	或输入数字或范围
-str		Pick a multiplicity	选择多重性
-str		Realized interface	被实现的接口
 str		Relationship kinds	关系类型
 str		Shared	共享
-str		Specific	特殊
-str		Supplier	供应者
-str		The lower bound cannot be *.	下限不能为 *。
-str		The upper bound must be at least {lower}.	上限必须至少为 {lower}。
-str		This association	此关联
-str		This association class	此关联类
-str		This class realizes that interface already	此类已经实现了该接口
-str		This dependency	此依赖
-str		This generalization	此泛化
-str		This interface realization	此接口实现
-str		To	到
-str		Type a whole number, a range such as 2..5, or *.	请输入整数、范围（如 2..5）或 *。
 str		{what} removed	已移除{what}
 # 包
-str		Class · {package}	类 · {package}
-str		«interface» · {package}	«interface» · {package}
-str		«enumeration» · {package}	«enumeration» · {package}
-str		«dataType» · {package}	«dataType» · {package}
-str		«primitive» · {package}	«primitive» · {package}
-str		Association class · {package}	关联类 · {package}
 str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
 # 元模型所命名之物的词语
 str		Alias	别名

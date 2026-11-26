@@ -1,7 +1,9 @@
 //! Coverage tests: every wrapped literal in the shell's, its interfaces' and the desktop app's
-//! source, and every start card text, has a row in every complete catalogue, every row is read,
-//! and no catalogue holds a key twice; a partial catalogue reports its gaps without failing. The
-//! catalogues are screened for hidden characters, addresses and instructions. The machinery's own
+//! source, and every start card text, has a row in every complete language, in the shell's
+//! catalogue or a notation's; every row is read, and no key is in a language's catalogues twice; a
+//! partial catalogue reports its gaps without failing. The catalogues are screened for hidden
+//! characters, addresses and instructions, and together they hold the rows they held before ER's
+//! and UML's rows left the shell's catalogues (AR-816), each found by its key. The machinery's own
 //! tests are in `archforge_shell_api::i18n`.
 
 use std::collections::HashMap;
@@ -9,9 +11,20 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 
-/// The shell's catalogue of a language.
-fn shell(lang: &Language) -> &'static super::Rows {
-    CATALOGUES.iter().find(|rows| rows.code == lang.code).unwrap()
+/// Every catalogue of a language the shell registers ([`tables`]): its own, then each notation's.
+fn catalogues_of(lang: &Language) -> Vec<&'static super::Rows> {
+    tables().map(|table| table.iter().find(|rows| rows.code == lang.code).unwrap()).collect()
+}
+
+/// A language's rows in all its catalogues, read into one as the lookups read them.
+fn parsed(lang: &Language) -> Catalogue {
+    let mut all = Catalogue::default();
+    for rows in catalogues_of(lang) {
+        let one = parse(rows.text);
+        all.strings.extend(one.strings);
+        all.plurals.extend(one.plurals);
+    }
+    all
 }
 
 /// Adds the `.rs` files under `dir` to `out`; a listing that fails part way fails the test.
@@ -156,6 +169,46 @@ fn duplicates(catalogue: &str, text: &str) -> Vec<String> {
     found
 }
 
+/// The keys two of a language's catalogues both hold, each named with the two catalogues, read as
+/// [`duplicates`] reads a key: a lookup would find only the row of the table registered later.
+fn in_two(catalogues: &[(&str, &str)]) -> Vec<String> {
+    let mut first = HashMap::new();
+    let mut found = Vec::new();
+    for (catalogue, text) in catalogues {
+        for line in text.lines().filter(|l| !l.is_empty() && !l.starts_with('#')) {
+            let cols: Vec<&str> = line.split('\t').collect();
+            let [kind, context, key, _] = cols.as_slice() else { continue };
+            let context = if *kind == "plural" { "" } else { context };
+            let holder = *first.entry((kind.to_string(), context.to_string(), key.to_string())).or_insert(*catalogue);
+            if holder != *catalogue {
+                let within = if context.is_empty() { String::new() } else { format!(" in context {context:?}") };
+                found.push(format!("{holder} and {catalogue}: {kind} {key:?}{within}"));
+            }
+        }
+    }
+    found
+}
+
+/// A key in two catalogues of a language is named with both; a context makes a `str` row of its
+/// own, and a `plural` row is one key whatever its context.
+#[test]
+fn a_key_in_two_catalogues_is_named_with_both() {
+    let shell = "# A header\nstr\t\tFile\tDatei\nplural\t\t{n} day ago\ta|b\nstr\tmacOS\tFile\tAblage\n";
+    let er = "str\t\tTable\tTabelle\nstr\tmenu\tFile\tDatei\nplural\tx\t{n} day ago\ta|b\n";
+    let uml = "str\t\tFile\tDatei\nstr\tmacOS\tFile\tAblage\nstr\t\tTable\tTabelle\n";
+    let found = in_two(&[("de.tsv", shell), ("er/de.tsv", er), ("uml/de.tsv", uml)]);
+    assert_eq!(
+        found,
+        [
+            "de.tsv and er/de.tsv: plural \"{n} day ago\"",
+            "de.tsv and uml/de.tsv: str \"File\"",
+            "de.tsv and uml/de.tsv: str \"File\" in context \"macOS\"",
+            "er/de.tsv and uml/de.tsv: str \"Table\""
+        ]
+    );
+    assert!(in_two(&[("de.tsv", shell), ("er/de.tsv", "str\t\tTable\tTabelle\n")]).is_empty(), "keys of their own are no duplicates");
+}
+
 /// A key twice in one catalogue is named with both lines; a context makes a `str` row of its own,
 /// a `plural` row is one key whatever its context, and the two kinds never share a key.
 #[test]
@@ -172,16 +225,20 @@ fn a_key_twice_in_a_catalogue_is_named_with_both_lines() {
     );
 }
 
-/// Every complete catalogue has a row for every literal the source wraps, and no catalogue holds a
-/// key twice, which the loader would read as the later row alone.
+/// Every complete language has a row for every literal the source wraps, in the shell's catalogue
+/// or a notation's, and no catalogue holds a key twice, nor two catalogues of a language one key,
+/// which the loader would read as the later row alone.
 #[test]
 fn every_complete_catalogue_has_every_row() {
     let (strings, plurals) = required();
     assert!(!strings.is_empty(), "the scan found nothing; the scanner is broken");
-    let twice: Vec<String> = LANGUAGES.iter().flat_map(|lang| duplicates(shell(lang).catalogue, shell(lang).text)).collect();
+    let twice: Vec<String> = LANGUAGES.iter().flat_map(catalogues_of).flat_map(|rows| duplicates(rows.catalogue, rows.text)).collect();
     assert!(twice.is_empty(), "{} key(s) are in a catalogue twice; keep one row of each:\n{}", twice.len(), twice.join("\n"));
+    let shared: Vec<String> =
+        LANGUAGES.iter().flat_map(|lang| in_two(&catalogues_of(lang).iter().map(|rows| (rows.catalogue, rows.text)).collect::<Vec<_>>())).collect();
+    assert!(shared.is_empty(), "{} key(s) are in two catalogues of a language; keep the row where it is read:\n{}", shared.len(), shared.join("\n"));
     for lang in LANGUAGES {
-        let c = parse(shell(lang).text);
+        let c = parsed(lang);
         assert!(!c.strings.is_empty(), "{} unpacked empty", lang.code);
         let mut missing = Vec::new();
         missing.extend(strings.iter().filter(|k| !c.strings.contains_key(*k)).map(|(ctx, s)| format!("str\t{ctx}\t{s}")));
@@ -194,13 +251,14 @@ fn every_complete_catalogue_has_every_row() {
     }
 }
 
-/// Every row of every catalogue is one a source or a table looks up.
+/// Every row of every catalogue, the shell's and the notations', is one a source or a table looks
+/// up.
 #[test]
 fn every_catalogue_row_is_read() {
     // A row nothing looks up is dead text a translator would keep for nothing.
     let (strings, plurals) = required();
-    for lang in LANGUAGES {
-        let text = shell(lang).text;
+    for rows in LANGUAGES.iter().flat_map(catalogues_of) {
+        let text = rows.text;
         let unread: Vec<&str> = text
             .lines()
             .filter(|l| !l.is_empty() && !l.starts_with('#'))
@@ -213,7 +271,7 @@ fn every_catalogue_row_is_read() {
                 }
             })
             .collect();
-        assert!(unread.is_empty(), "{} has {} row(s) nothing reads:\n{}", lang.code, unread.len(), unread.join("\n"));
+        assert!(unread.is_empty(), "{} has {} row(s) nothing reads:\n{}", rows.catalogue, unread.len(), unread.join("\n"));
     }
 }
 
@@ -244,7 +302,7 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
     let universe = archforge_notations::universe().unwrap();
     let row = |lang: &str, context: &str, key: &str| {
         let language = LANGUAGES.iter().find(|l| l.code == lang).unwrap();
-        parse(shell(language).text).strings[&(context.to_string(), key.to_string())].clone()
+        parsed(language).strings[&(context.to_string(), key.to_string())].clone()
     };
     let data = |prop| match universe.prop(prop).unwrap().ty {
         TypeRef::Data(ty) => ty,
@@ -391,8 +449,8 @@ fn every_reason_a_command_is_not_available_has_its_row() {
 /// a compound one, a hundred and a thousand (as the machinery's plural rule test has them).
 const EDGES: [u64; 8] = [0, 1, 2, 5, 11, 21, 100, 1000];
 
-/// Each language's plural rows in the shell's catalogues give the form its plural rule picks at
-/// the edge counts.
+/// Each language's plural rows in the shell's and the notations' catalogues give the form its
+/// plural rule picks at the edge counts.
 #[test]
 fn every_languages_plural_rows_give_their_form_at_the_edge_numbers() {
     // Spelled out for one row in every language.
@@ -427,7 +485,7 @@ fn every_languages_plural_rows_give_their_form_at_the_edge_numbers() {
     // Every plural row of every language gives its own form at every edge, with the count in it
     // wherever the English form has it.
     for lang in LANGUAGES {
-        let c = parse(shell(lang).text);
+        let c = parsed(lang);
         set_language(lang.code);
         for (key, forms) in &c.plurals {
             for n in EDGES {
@@ -770,96 +828,176 @@ fn the_screen_refuses_hidden_characters_addresses_and_instructions() {
     assert_eq!(placeholders("{b} vor {a} und {a}"), ["a", "b"]);
 }
 
-/// Every catalogue holds the English catalogue's keys and no other, with the provenance line, the
-/// placeholders, the plural forms and the ellipses English asks for, and passes the screen.
+/// Every catalogue, the shell's and each notation's, holds the keys of its table's English
+/// catalogue and no other, with the provenance line, the placeholders, the plural forms and the
+/// ellipses English asks for, and passes the screen.
 #[test]
 fn every_catalogue_is_keyed_as_english_and_passes_the_screen() {
-    let english_text = shell(&LANGUAGES[0]).text;
-    let english = rows(english_text);
-    assert!(!english.is_empty(), "the English catalogue is empty");
-    let english_comments: String = english_text.lines().filter(|l| l.starts_with('#')).collect::<Vec<_>>().join("\n");
-    for lang in LANGUAGES.iter().skip(1) {
-        let text = shell(lang).text;
-        let translated = rows(text);
-        let mut wrong: Vec<String> = Vec::new();
-        let missing: Vec<_> = english.keys().filter(|k| !translated.contains_key(*k)).collect();
-        let extra: Vec<_> = translated.keys().filter(|k| !english.contains_key(*k)).collect();
-        if lang.complete {
-            wrong.extend(missing.iter().map(|k| format!("missing {k:?}")));
-        }
-        wrong.extend(extra.iter().map(|k| format!("not an English row {k:?}")));
-        let forms = plural_forms(lang);
-        for (n, line) in text.lines().enumerate().filter(|(_, l)| !l.is_empty()) {
-            let cols: Vec<&str> = line.split('\t').collect();
-            let key = (cols.len() == 4).then(|| (cols[0].to_string(), cols[1].to_string(), cols[2].to_string()));
-            let source = key.as_ref().and_then(|k| english.get(k)).map(String::as_str);
-            let at = format!("{}:{}", shell(lang).catalogue, n + 1);
-            if !line.starts_with('#') && cols.len() != 4 {
-                wrong.push(format!("{at}: {} columns", cols.len()));
-                continue;
+    for table in tables() {
+        let english_text = table[0].text;
+        let english = rows(english_text);
+        assert!(!english.is_empty(), "the English catalogue {} is empty", table[0].catalogue);
+        let english_comments: String = english_text.lines().filter(|l| l.starts_with('#')).collect::<Vec<_>>().join("\n");
+        for (lang, catalogue) in LANGUAGES.iter().zip(table).skip(1) {
+            assert_eq!(catalogue.code, lang.code, "{} is in the languages' order", catalogue.catalogue);
+            let text = catalogue.text;
+            let translated = rows(text);
+            let mut wrong: Vec<String> = Vec::new();
+            let missing: Vec<_> = english.keys().filter(|k| !translated.contains_key(*k)).collect();
+            let extra: Vec<_> = translated.keys().filter(|k| !english.contains_key(*k)).collect();
+            if lang.complete {
+                wrong.extend(missing.iter().map(|k| format!("missing {k:?}")));
             }
-            // The provenance line names the translating model, which the screen would refuse as a
-            // name an instruction addresses; it is held to its exact text instead.
-            if n == 1 {
-                if line != PROVENANCE {
-                    wrong.push(format!("{at}: the provenance line is not the recorded one:\n{line}"));
+            wrong.extend(extra.iter().map(|k| format!("not an English row {k:?}")));
+            let forms = plural_forms(lang);
+            for (n, line) in text.lines().enumerate().filter(|(_, l)| !l.is_empty()) {
+                let cols: Vec<&str> = line.split('\t').collect();
+                let key = (cols.len() == 4).then(|| (cols[0].to_string(), cols[1].to_string(), cols[2].to_string()));
+                let source = key.as_ref().and_then(|k| english.get(k)).map(String::as_str);
+                let at = format!("{}:{}", catalogue.catalogue, n + 1);
+                if !line.starts_with('#') && cols.len() != 4 {
+                    wrong.push(format!("{at}: {} columns", cols.len()));
+                    continue;
                 }
-                continue;
-            }
-            // A comment is held to the English catalogue's comments: the file names they cite.
-            let against = if line.starts_with('#') { Some(english_comments.as_str()) } else { source };
-            wrong.extend(screen(line, against).into_iter().map(|w| format!("{at}: {w}")));
-            let (Some(source), Some(key)) = (source, key) else { continue };
-            let value = cols[3];
-            if value.trim().is_empty() {
-                wrong.push(format!("{at}: an empty translation"));
-            }
-            // The placeholders are English's, each form holding those of the English other form.
-            let wanted = placeholders(source.rsplit('|').next().unwrap_or_default());
-            let given: Vec<&str> = if key.0 == "plural" { value.split('|').collect() } else { vec![value] };
-            if key.0 == "plural" && given.len() != forms {
-                wrong.push(format!("{at}: {} plural form(s), the language has {forms}", given.len()));
-            }
-            let english_forms: Vec<&str> = if key.0 == "plural" { source.split('|').collect() } else { vec![source] };
-            for (i, form) in given.iter().enumerate() {
-                // A form with an English counterpart holds its placeholders; a single form holds the other's.
-                let reference = if given.len() == english_forms.len() { placeholders(english_forms[i]) } else { wanted.clone() };
-                if placeholders(form) != reference {
-                    wrong.push(format!("{at}: placeholders {:?}, English has {reference:?}", placeholders(form)));
+                // The provenance line names the translating model, which the screen would refuse as a
+                // name an instruction addresses; it is held to its exact text instead.
+                if n == 1 {
+                    if line != PROVENANCE {
+                        wrong.push(format!("{at}: the provenance line is not the recorded one:\n{line}"));
+                    }
+                    continue;
+                }
+                // A comment is held to the English catalogue's comments: the file names they cite.
+                let against = if line.starts_with('#') { Some(english_comments.as_str()) } else { source };
+                wrong.extend(screen(line, against).into_iter().map(|w| format!("{at}: {w}")));
+                let (Some(source), Some(key)) = (source, key) else { continue };
+                let value = cols[3];
+                if value.trim().is_empty() {
+                    wrong.push(format!("{at}: an empty translation"));
+                }
+                // The placeholders are English's, each form holding those of the English other form.
+                let wanted = placeholders(source.rsplit('|').next().unwrap_or_default());
+                let given: Vec<&str> = if key.0 == "plural" { value.split('|').collect() } else { vec![value] };
+                if key.0 == "plural" && given.len() != forms {
+                    wrong.push(format!("{at}: {} plural form(s), the language has {forms}", given.len()));
+                }
+                let english_forms: Vec<&str> = if key.0 == "plural" { source.split('|').collect() } else { vec![source] };
+                for (i, form) in given.iter().enumerate() {
+                    // A form with an English counterpart holds its placeholders; a single form holds the other's.
+                    let reference = if given.len() == english_forms.len() { placeholders(english_forms[i]) } else { wanted.clone() };
+                    if placeholders(form) != reference {
+                        wrong.push(format!("{at}: placeholders {:?}, English has {reference:?}", placeholders(form)));
+                    }
+                }
+                // Ellipses are significant: a label that opens more keeps its ellipsis.
+                if (source.ends_with('…') || source.ends_with("...")) && !(value.ends_with('…') || value.ends_with("...")) {
+                    wrong.push(format!("{at}: drops the ellipsis of {source:?}"));
                 }
             }
-            // Ellipses are significant: a label that opens more keeps its ellipsis.
-            if (source.ends_with('…') || source.ends_with("...")) && !(value.ends_with('…') || value.ends_with("...")) {
-                wrong.push(format!("{at}: drops the ellipsis of {source:?}"));
-            }
+            assert!(wrong.is_empty(), "{} fails the catalogue screen in {} place(s):\n{}", catalogue.catalogue, wrong.len(), wrong.join("\n"));
         }
-        assert!(wrong.is_empty(), "{} fails the catalogue screen in {} place(s):\n{}", lang.code, wrong.len(), wrong.join("\n"));
     }
 }
 
-/// Every catalogue file in the folder is the shell's catalogue of a registered language, every
-/// language has its file there, and the machinery takes them; a listing that fails part way fails
-/// the test.
+/// Adds the catalogue files under `dir` to `out`, each by its path from the catalogues' folder
+/// (`er/de.tsv`), as the build script walks them; a listing that fails part way fails the test.
+fn catalogue_files(dir: &Path, under: &str, out: &mut Vec<String>) {
+    for entry in std::fs::read_dir(dir).unwrap().map(Result::unwrap) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if entry.file_type().unwrap().is_dir() {
+            catalogue_files(&entry.path(), &format!("{under}{name}/"), out);
+        } else if name.ends_with(".tsv") {
+            out.push(format!("{under}{name}"));
+        }
+    }
+}
+
+/// Every catalogue file under the folder, which the build script checks, is a registered
+/// catalogue, the shell's or a notation's, and every registered catalogue is a file there; each
+/// table has one catalogue for each language, in the languages' order, so the machinery takes it;
+/// a listing that fails part way fails the test.
 #[test]
 fn every_catalogue_in_the_folder_is_registered() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("i18n");
-    let mut files: Vec<String> = std::fs::read_dir(&dir)
-        .unwrap()
-        .map(Result::unwrap)
-        .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| n.ends_with(".tsv"))
-        .collect();
+    let mut files = Vec::new();
+    catalogue_files(&dir, "", &mut files);
     files.sort();
-    let mut registered: Vec<String> = CATALOGUES.iter().map(|rows| rows.catalogue.to_string()).collect();
+    let mut registered: Vec<String> = tables().flatten().map(|rows| rows.catalogue.to_string()).collect();
     registered.sort();
-    assert_eq!(files, registered, "a catalogue the build packs is a registered language, and the other way round");
-    let catalogued: Vec<&str> = CATALOGUES.iter().map(|rows| rows.code).collect();
+    assert_eq!(files, registered, "a catalogue the build checks is a registered one, and the other way round");
+    assert_eq!(tables().count(), 1 + crate::notation_ui::UIS.len(), "the shell's table and one for each notation");
     let languages: Vec<&str> = LANGUAGES.iter().map(|l| l.code).collect();
-    assert_eq!(catalogued, languages, "the shell has one catalogue for each language, in the languages' order");
+    for table in tables() {
+        let catalogued: Vec<&str> = table.iter().map(|rows| rows.code).collect();
+        assert_eq!(catalogued, languages, "{} is one of a table with one catalogue for each language, in the languages' order", table[0].catalogue);
+    }
     assert_eq!(register(CATALOGUES), Ok(()), "the machinery takes the shell's catalogues");
     let names: std::collections::BTreeSet<&str> = LANGUAGES.iter().map(|l| l.native_name).collect();
     let codes: std::collections::BTreeSet<&str> = LANGUAGES.iter().map(|l| l.code).collect();
     assert_eq!((names.len(), codes.len()), (LANGUAGES.len(), LANGUAGES.len()), "each language has a code and a name of its own");
+}
+
+/// Every row of every catalogue before ER's and UML's rows left the shell's catalogues (AR-816),
+/// by language: language, kind, context, key, text.
+const AT_BASE: &str = include_str!("../tests/catalogue-rows.tsv");
+
+/// The rows of `AT_BASE` of the language `code`.
+fn at_base(code: &str) -> Rows {
+    rows(&AT_BASE.lines().filter_map(|l| l.strip_prefix(code)?.strip_prefix('\t')).collect::<Vec<_>>().join("\n"))
+}
+
+/// For every language, the rows the shell's and the notations' catalogues hold together are the
+/// rows at base, none lost, none added, none changed, and none in two of them.
+#[test]
+fn the_catalogues_together_hold_the_rows_at_base() {
+    for lang in LANGUAGES {
+        let base = at_base(lang.code);
+        assert!(!base.is_empty(), "the fixture has no rows of {}", lang.code);
+        let mut together = Rows::new();
+        let mut count = 0;
+        for catalogue in catalogues_of(lang) {
+            let one = rows(catalogue.text);
+            count += one.len();
+            together.extend(one);
+        }
+        assert_eq!(count, together.len(), "{}: a row is in two catalogues", lang.code);
+        let lost: Vec<String> = base.iter().filter(|(k, v)| together.get(*k) != Some(*v)).map(|(k, v)| format!("{k:?} {v:?}")).collect();
+        let added: Vec<String> = together.iter().filter(|(k, v)| base.get(*k) != Some(*v)).map(|(k, v)| format!("{k:?} {v:?}")).collect();
+        assert!(
+            lost.is_empty() && added.is_empty(),
+            "{}: {} row(s) at base no catalogue holds:\n{}\n{} row(s) not at base:\n{}",
+            lang.code,
+            lost.len(),
+            lost.join("\n"),
+            added.len(),
+            added.join("\n")
+        );
+    }
+    assert_eq!(
+        AT_BASE.lines().filter(|l| !l.starts_with('#')).count(),
+        LANGUAGES.iter().map(|l| at_base(l.code).len()).sum::<usize>(),
+        "every row of the fixture is of a language"
+    );
+}
+
+/// Every key at base finds its text through the shell's lookups in every language: a `str` row by
+/// its context and key, a `plural` row in the form each edge count picks.
+#[test]
+fn every_key_finds_its_text_at_base() {
+    for lang in LANGUAGES {
+        set_language(lang.code);
+        for ((kind, context, key), text) in at_base(lang.code) {
+            if kind == "plural" {
+                let forms: Vec<&str> = text.split('|').collect();
+                for n in EDGES {
+                    assert_eq!(trn(&key, &key, n), forms[(lang.plural)(n)].replace("{n}", &n.to_string()), "{} plural {key:?} at {n}", lang.code);
+                }
+            } else {
+                assert_eq!(tr_ctx(&context, &key), text, "{} str {context:?} {key:?}", lang.code);
+            }
+        }
+    }
+    set_language("en");
 }
 
 /// `tr` finds the shell's rows when it is the process's first lookup (as it is when this test runs
