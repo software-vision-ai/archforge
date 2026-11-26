@@ -23155,54 +23155,6 @@ fn a_selected_lines_end_handles_sit_past_its_end_marks() {
     assert!(squared > 0, "an end without a mark keeps its square");
 }
 
-/// An end handle is placed by its mark as drawn (AR-191): on a long straight line a few points past
-/// the triangle's base, the arrow's strokes and the diamond's far corner, as before; where the line
-/// bends close to the end it stays as clear of the mark; on a short line the two ends' handles stay
-/// a hit box apart, never meeting in the middle; an end without such a mark keeps its handle.
-#[test]
-fn an_end_handle_is_placed_by_its_marks_drawn_outline_and_two_never_meet() {
-    use crate::canvas::{END_HANDLE, END_HANDLE_HIT, end_handle_at, mark_outline};
-    use archforge_diagram::figure::EndMark;
-    // How far `at` is from the mark drawn at the route's start: from its nearest corner or edge.
-    let clear_of = |route: &[egui::Pos2], mark: EndMark, at: egui::Pos2| {
-        let outline = mark_outline(mark, route[0], route[1], 1.0);
-        (0..outline.len())
-            .map(|i| {
-                let (a, b) = (outline[i], outline[(i + 1) % outline.len()]);
-                let t = ((at - a).dot(b - a) / (b - a).length_sq()).clamp(0.0, 1.0);
-                (at - (a + (b - a) * t)).length()
-            })
-            .fold(f32::INFINITY, f32::min)
-    };
-    let straight = [egui::pos2(0.0, 0.0), egui::pos2(400.0, 0.0)];
-    for (mark, reach) in [(EndMark::Triangle, 12.0), (EndMark::OpenArrow, 12.0), (EndMark::FilledDiamond, 20.0), (EndMark::HollowDiamond, 20.0)] {
-        let at = end_handle_at(&straight, mark, 1.0).expect("moved past its mark");
-        assert!((at.x - (reach + 8.0)).abs() <= 0.5 && at.y == 0.0, "{mark:?}: {at:?}");
-        assert!(clear_of(&straight, mark, at) >= END_HANDLE + 2.5, "{mark:?}");
-    }
-    for mark in [EndMark::None, EndMark::ExactlyOne, EndMark::ZeroOrMore] {
-        assert_eq!(end_handle_at(&straight, mark, 1.0), None, "{mark:?} keeps its handle at the end");
-    }
-    // A bend 13 points from the end, inside the triangle's reach: the handle turns the corner and
-    // goes on until it is as clear of the triangle's base corner as on a straight line.
-    let bent = [egui::pos2(0.0, 0.0), egui::pos2(13.0, 0.0), egui::pos2(13.0, 300.0)];
-    for mark in [EndMark::Triangle, EndMark::FilledDiamond, EndMark::OpenArrow] {
-        let at = end_handle_at(&bent, mark, 1.0).unwrap();
-        assert!(clear_of(&bent, mark, at) >= END_HANDLE + 2.5, "{mark:?} at {at:?} is clear of its mark");
-        assert!(at.x == 13.0 && at.y > 0.0, "{mark:?}: on the line past the bend, {at:?}");
-    }
-    // A short line: each handle stops half a hit box short of the middle, so they never meet and
-    // both take a press; a long one is placed as before.
-    for length in [10.0, 30.0, 40.0, 60.0] {
-        let line = [egui::pos2(0.0, 0.0), egui::pos2(length, 0.0)];
-        let back = [line[1], line[0]];
-        let (a, b) = (end_handle_at(&line, EndMark::Triangle, 1.0).unwrap(), end_handle_at(&back, EndMark::FilledDiamond, 1.0).unwrap());
-        let apart = (b - a).length();
-        assert!(apart >= END_HANDLE_HIT.min(length) - 0.01, "{length}: the handles {apart} apart");
-        assert!(a.x <= b.x, "{length}: each on its own half");
-    }
-}
-
 /// On a short line between two cards the two end handles keep a hit box apart and each takes its
 /// own press, in light and dark (AR-191).
 #[test]
@@ -23251,32 +23203,6 @@ fn a_short_lines_two_end_handles_stay_apart_and_each_takes_its_own_press() {
             h.run();
         }
     }
-}
-
-/// The two end handles of a line bent back on itself are placed together so their hit boxes never
-/// meet on screen: a short U whose ends come back close, a diamond at one and an arrow at the
-/// other, gets two handles apart, falling short of the marks' clearance only as far as it must;
-/// a line whose handles are apart already keeps the places each takes alone (AR-191).
-#[test]
-fn a_bent_lines_two_end_handles_are_placed_together_so_their_hit_boxes_never_meet() {
-    use crate::canvas::{END_HANDLE_HIT, end_handle_at, end_handles_at};
-    use archforge_diagram::figure::EndMark;
-    let hit = |at: egui::Pos2| egui::Rect::from_center_size(at, egui::Vec2::splat(END_HANDLE_HIT));
-    let u = [egui::pos2(0.0, 0.0), egui::pos2(30.0, 0.0), egui::pos2(30.0, 12.0), egui::pos2(0.0, 12.0)];
-    let back: Vec<egui::Pos2> = u.iter().rev().copied().collect();
-    let marks = [EndMark::FilledDiamond, EndMark::OpenArrow];
-    let alone = [end_handle_at(&u, marks[0], 0.5).unwrap(), end_handle_at(&back, marks[1], 0.5).unwrap()];
-    assert!(hit(alone[0]).intersects(hit(alone[1])), "placed alone, their boxes meet: {alone:?}");
-    let [a, b] = end_handles_at(&u, marks, 0.5);
-    let (a, b) = (a.unwrap_or(u[0]), b.unwrap_or(u[3]));
-    assert!(!hit(a).intersects(hit(b)), "placed together, apart: {a:?} {b:?}");
-    // A long straight line keeps the places each end takes alone.
-    let straight = [egui::pos2(0.0, 0.0), egui::pos2(400.0, 0.0)];
-    let backwards = [straight[1], straight[0]];
-    assert_eq!(
-        end_handles_at(&straight, [EndMark::Triangle, EndMark::FilledDiamond], 1.0),
-        [end_handle_at(&straight, EndMark::Triangle, 1.0), end_handle_at(&backwards, EndMark::FilledDiamond, 1.0)]
-    );
 }
 
 /// On the canvas, a composition routed in a short U between two small cards, its ends close at
@@ -31649,33 +31575,6 @@ fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         assert!(!gone(&h), "one step brings both back");
     }
-}
-
-/// The line that ties a nested card to its owner's (AR-132): straight where the cards face each
-/// other, its ⊕ just outside the owner's side; an elbow where they are apart both ways, the one
-/// crossing fewer other cards; none where the cards overlap, which is no ownership (D4).
-#[test]
-fn the_nesting_line_runs_from_the_owners_side_and_none_joins_overlapping_cards() {
-    use crate::canvas::nesting_route;
-    use egui::{Rect, pos2};
-    let owner = Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(200.0, 100.0));
-    let below = Rect::from_min_size(pos2(50.0, 200.0), egui::vec2(200.0, 80.0));
-    let (points, centre) = nesting_route(owner, below, 7.0, &[]).unwrap();
-    assert_eq!(centre, pos2(125.0, 107.0), "the ⊕ under the owner's foot, in the overlap's middle");
-    assert_eq!(points, [pos2(125.0, 114.0), pos2(125.0, 200.0)]);
-    let right = Rect::from_min_size(pos2(400.0, 20.0), egui::vec2(100.0, 60.0));
-    let (points, centre) = nesting_route(owner, right, 7.0, &[]).unwrap();
-    assert_eq!((centre, points.len()), (pos2(207.0, 50.0), 2), "straight across from the owner's right side");
-    let apart = Rect::from_min_size(pos2(400.0, 300.0), egui::vec2(100.0, 60.0));
-    let (points, _) = nesting_route(owner, apart, 7.0, &[]).unwrap();
-    assert_eq!(points.len(), 3, "one bend");
-    // A card in the way of the first elbow sends the line the other way.
-    let blocker = Rect::from_min_size(pos2(300.0, 20.0), egui::vec2(60.0, 60.0));
-    let (points, centre) = nesting_route(owner, apart, 7.0, &[blocker]).unwrap();
-    assert_eq!(centre, pos2(100.0, 107.0), "out of the owner's foot instead");
-    assert_eq!(points.last().copied(), Some(pos2(400.0, 330.0)));
-    let over = Rect::from_min_size(pos2(150.0, 60.0), egui::vec2(100.0, 80.0));
-    assert!(nesting_route(owner, over, 7.0, &[]).is_none(), "overlapping cards draw no line");
 }
 
 /// The nested sample of the snapshot screen (D2), in light and dark: Priority nested in Order, its

@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+archforge-diagram.workspace = true
 egui.workspace = true
 serde.workspace = true
 
