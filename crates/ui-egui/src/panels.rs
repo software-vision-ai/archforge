@@ -14,6 +14,9 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+pub use archforge_shell_api::notation_ui::MenuId;
+pub(crate) use archforge_shell_api::notation_ui::{Editor, OpenEditor};
+
 use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx};
 use crate::notation_ui::Words;
@@ -97,22 +100,6 @@ pub struct State {
 /// What is left under the last control of a scrolled body, for its trailing text.
 const SCROLL_TAIL: f32 = 48.0;
 
-/// A Properties editor's card, which [`reveal`] brings into view: several can be open at once, and
-/// each card answers only for its own editor. It is named by the metamodel of the notation whose
-/// editor it is and the card's own name there, so two notations' cards never meet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Editor {
-    pub notation: u16,
-    pub card: &'static str,
-}
-
-/// Where an open editor edits: the item, or none for one being added, and the list it belongs to (a
-/// kind of member, type, object or key, or an association's end), so a move to either is new.
-pub(crate) type Place = (Option<Uuid>, usize);
-
-/// An open editor: where it edits, and the refusal its card shows.
-pub(crate) type OpenEditor = Option<(Place, Option<String>)>;
-
 /// The editors of `now` to bring into view: one opened or moved to another place since `was`, or,
 /// true beside it, one whose card shows a new refusal (AR-469). A refusal that goes or stays, and an
 /// editor that changed nothing, bring nothing into view, so a body scrolled away stays put.
@@ -194,48 +181,6 @@ pub struct DescriptionDraft {
     /// Its write was refused: it is kept, for the user to see again on `target` beside the
     /// refusal, and not written again until its text changes.
     pub refused: bool,
-}
-
-/// Whose a menu is: the shell's own (Home's, the Versions panel's), or a notation's, by the index
-/// of its metamodel, so two owners' menus never meet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Scope {
-    Shell,
-    Notation(u16),
-}
-
-/// A menu of the shell's one open-menu slot ([`State::menu`]): whose it is, which of its owner's
-/// menus by key, and which one of a kind shown more than once (a key pair's, an association end's;
-/// 0 for a menu shown once). Only its owner opens, recognises and closes it: the shell keeps its
-/// own beside the screens they belong to, each notation its own beside its state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MenuId {
-    pub(crate) scope: Scope,
-    pub(crate) key: &'static str,
-    pub(crate) index: usize,
-}
-
-impl MenuId {
-    /// The shell's own menu `key`, the first of its kind.
-    pub(crate) const fn shell(key: &'static str) -> MenuId {
-        MenuId { scope: Scope::Shell, key, index: 0 }
-    }
-
-    /// The menu `key` of the notation whose metamodel is `notation`, the first of its kind.
-    pub(crate) const fn of(notation: u16, key: &'static str) -> MenuId {
-        MenuId { scope: Scope::Notation(notation), key, index: 0 }
-    }
-
-    /// The menu of the same owner and key, number `index` of its kind.
-    pub(crate) const fn at(self, index: usize) -> MenuId {
-        MenuId { index, ..self }
-    }
-
-    /// Which one of `kind` it is, when it is one of them: the same owner's menu of the same key,
-    /// whatever its index; none for any other menu.
-    pub(crate) fn index_in(self, kind: MenuId) -> Option<usize> {
-        (self.scope == kind.scope && self.key == kind.key).then_some(self.index)
-    }
 }
 
 /// The selection the panels describe.

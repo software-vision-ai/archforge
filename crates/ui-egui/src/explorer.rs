@@ -17,6 +17,8 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+pub use archforge_shell_api::notation_ui::Row;
+
 use crate::home::control;
 use crate::home_search::Typed;
 use crate::i18n::{fmt, tr, trn};
@@ -246,28 +248,6 @@ pub struct Delete {
     /// anything: the dialog says so instead of saying what it holds goes with it, and the toast
     /// says where it went, as a removal without the dialog does.
     pub hands_to: Option<(String, bool)>,
-}
-
-/// One row of the tree as drawn.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Row {
-    pub id: Uuid,
-    pub obj: Obj,
-    pub depth: u8,
-    /// What the row is, as its notation names it (`schema`, `table`, `column`, `skill`), and its
-    /// icon, drawn muted for a row under another's (a column).
-    pub kind: &'static str,
-    pub icon: &'static ux::Icon,
-    pub muted: bool,
-    pub label: String,
-    /// A column's type, after its name.
-    pub detail: Option<String>,
-    /// What the row is, muted after its name (a UML generalization set's `generalization set`).
-    pub note: Option<String>,
-    pub expandable: bool,
-    pub expanded: bool,
-    /// Whether the row drags onto the canvas (a table).
-    pub draggable: bool,
 }
 
 /// What a notation's rows are made with: the filter, the rows opened and the skills by subject.

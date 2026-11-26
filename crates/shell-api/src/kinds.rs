@@ -1,11 +1,12 @@
 //! The data types the interface `DiagramKind` hands between the shell's canvas and a diagram kind,
-//! which name no shell: what a kind's tool does, the tool itself, and a press on the canvas as the
-//! kind reads it. The trait itself and the rows a kind adds to its element menu, which run on the
-//! `Shell`, stay in the shell (`archforge_ui_egui::kinds` re-exports these under their old paths).
+//! which name no shell: what a kind's tool does, the tool itself, a press on the canvas as the
+//! kind reads it, a line as the canvas drew it, and a label the kind drew of no one node or line.
+//! The trait itself and the rows a kind adds to its element menu, which run on the `Shell`, stay
+//! in the shell (`archforge_ui_egui::kinds` and `canvas` re-export these under their old paths).
 
 use archforge_diagram::ProjectView;
-use archforge_mof::{Obj, Store};
-use egui::Pos2;
+use archforge_mof::{Obj, Store, Uuid};
+use egui::{Pos2, Rect};
 
 use crate::ux::Icon;
 
@@ -52,4 +53,27 @@ pub struct Press<'a> {
     pub node_at: &'a dyn Fn(Pos2) -> Option<Obj>,
     /// The line under a screen point, nodes aside.
     pub line_at: &'a dyn Fn(Pos2) -> Option<Obj>,
+}
+
+/// A label of the figures of no one node or line as its diagram's kind drew it
+/// (`DiagramKind::draw_extras`; a UML generalization set's, AR-129): the element it
+/// stands for, where it was on screen, the node that holds where it was moved to on this diagram,
+/// when it was moved, and what it says while the pointer is on it, its whole text in its
+/// notation's words.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExtraLabel {
+    pub element: Uuid,
+    pub rect: Rect,
+    pub node: Option<Uuid>,
+    pub hover: String,
+}
+
+/// A line as drawn this frame, for its diagram's kind to draw what goes with it
+/// (`DiagramKind::line_extras`): the line, its element, its points on screen from
+/// its source to its target, and whether it is drawn selected.
+pub struct LineDrawn<'a> {
+    pub line: Obj,
+    pub element: Obj,
+    pub points: &'a [Pos2],
+    pub selected: bool,
 }

@@ -23,6 +23,8 @@ use serde_json::json;
 pub use archforge_shell_api::canvas::self_loop;
 pub(crate) use archforge_shell_api::canvas::{END_HANDLE, View, along, end_handles_at, exit_point, nesting_route};
 use archforge_shell_api::canvas::{beside, beside_pair, mark_outline, mark_shape, qualifier_place, signature_place};
+pub use archforge_shell_api::kinds::ExtraLabel;
+pub(crate) use archforge_shell_api::kinds::LineDrawn;
 
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
@@ -237,19 +239,6 @@ pub struct PathBadge {
     pub node: Uuid,
     pub shown: String,
     pub whole: String,
-}
-
-/// A label of the figures of no one node or line as its diagram's kind drew it
-/// ([`crate::kinds::DiagramKind::draw_extras`]; a UML generalization set's, AR-129): the element it
-/// stands for, where it was on screen, the node that holds where it was moved to on this diagram,
-/// when it was moved, and what it says while the pointer is on it, its whole text in its
-/// notation's words.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ExtraLabel {
-    pub element: Uuid,
-    pub rect: Rect,
-    pub node: Option<Uuid>,
-    pub hover: String,
 }
 
 impl Default for State {
@@ -991,16 +980,6 @@ pub(crate) struct Live<'a> {
     pub(crate) draft: Option<(Obj, usize, Option<usize>)>,
     pub(crate) rename_text: Option<&'a str>,
     pub(crate) label_drag: Option<(Uuid, Vec2)>,
-}
-
-/// A line as drawn this frame, for its diagram's kind to draw what goes with it
-/// ([`crate::kinds::DiagramKind::line_extras`]): the line, its element, its points on screen from
-/// its source to its target, and whether it is drawn selected.
-pub(crate) struct LineDrawn<'a> {
-    pub(crate) line: Obj,
-    pub(crate) element: Obj,
-    pub(crate) points: &'a [Pos2],
-    pub(crate) selected: bool,
 }
 
 /// What drawing a diagram leaves behind: the places the next frame's press looks at, and the
