@@ -437,6 +437,7 @@ version = "0.14.0"
 dependencies = [
  "archforge-core",
  "archforge-diagram",
+ "archforge-engine",
  "archforge-mof",
  "craft-i18n",
  "egui",

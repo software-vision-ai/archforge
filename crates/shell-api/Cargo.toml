@@ -12,6 +12,8 @@ publish = false
 # The skills a row of the Models tree lists under its element (notation_ui::Tree).
 archforge-core.workspace = true
 archforge-diagram.workspace = true
+# The revision of the model a dragged line end began on (editing::Gesture::Reconnect).
+archforge-engine.workspace = true
 archforge-mof.workspace = true
 egui.workspace = true
 serde.workspace = true

@@ -3,8 +3,9 @@
 **Purpose.** The shell's interfaces: what a notation's screens implement, and what they may use
 from the shell, so a notation's screens build on this crate and never on the shell crate
 (`archforge-ui-egui`) itself (`forge-ux/adr/0002`, "Notations are plugins", and `0003`, "Two
-registries"). It holds the automation-id registry, the design (`ux`), the canvas geometry that
-names no shell (`canvas`), the data types the interfaces `NotationUi` and `DiagramKind` hand
+registries"). It holds the automation-id registry, the design (`ux`), the canvas geometry and
+state that name no shell (`canvas`), with the editing under way on it (`editing`) and the skills
+open in its tabs (`skill_tab`), the data types the interfaces `NotationUi` and `DiagramKind` hand
 across that name no shell (`notation_ui`, `kinds`), how a search or a filter matches what is typed
 (`search`) and the translations machinery (`i18n`), with which each crate registers its own
 catalogues; story AR-780 moves the shared controls and the
@@ -13,7 +14,8 @@ interfaces themselves with the data types that still name the shell here, unchan
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code
 (the gate's `layers` step scans it as it scans the shell). It takes egui, serde,
-`archforge-mof` (4), whose elements, ids and store the interfaces' data types name,
+`archforge-engine` (3), whose `Revision` a line end being dragged carries (the model's revision
+the drag began on), `archforge-mof` (4), whose elements, ids and store the interfaces' data types name,
 `archforge-core` (5), whose skills a row of the Models tree lists under its element,
 `archforge-diagram` (6), whose rectangles and line-end marks the canvas geometry reads and whose
 notations a press on the canvas carries, craft-i18n, whose `Folder` folds what a search is typed
@@ -38,6 +40,12 @@ against, and `icu_properties`, which says where a letter ends so a search never 
 | `canvas::{mark_shape, mark_outline}` | where a line's end mark (`archforge_diagram::figure::EndMark`) sits and its corners as drawn |
 | `canvas::{END_HANDLE, end_handles_at}` | a selected line's end handle's radius, and where its two handles sit clear of the marks and of each other |
 | `canvas::{beside, beside_pair, qualifier_place, signature_place}` | where a line's end texts sit, one alone or both together; where a qualifier box sits against its card; where a template's signature box sits on its card |
+| `canvas::State` | what the centre keeps between frames, every field public: the tabs and the active one, the tool, the view (pan, zoom, size) and what the next frame does to it, the toggles, the notice and a refused step's words, the editing under way, the popover, the toast, the skills' texts, what the last frame drew that takes a press, and the views kept by diagram; `Default` (Select, grid and minimap on, zoom 1); `say_refused_step`, `notice_is_refused_step` |
+| `canvas::{Tool, Toast, MinimapDrag}` | the canvas tools (`Select`, `Pan`, a kind's `Place` and `Connect` by key, `Note`, `Link`); a line of text at the canvas's foot for a while, with the undo step it speaks of; a drag of the minimap's viewport (`shown`, `scale`, `origin`, `grab`: its mapping frozen as the drag began and where the pointer took hold) |
+| `canvas::{EndText, PackageTab, PathBadge}` | what the last frame drew that takes a press: a cardinality text (line, end, rectangle, anchor); a package's tab (rectangle, node, the whole name when cut); a package's owning path under its card (rectangle, node, text shown, whole sentence) |
+| `editing::{NodeRename, NoteEdit, EntityMenu}` | a name being typed in a node's header; a note's text being typed in place; the element menu, open at a screen point |
+| `editing::{Gesture, Corner}` | a pointer gesture in progress, previewed and committed on release (`Move`, `Resize` by a `Corner`, `Marquee`, `Connect`, `LinkNote`, `EndText`, `Segment`, `Reconnect` with the revision it began on, `ExtraLabel`) |
+| `skill_tab::Doc` | one skill's text while its tab is open: the text as typed and as kept, when it changed, Preview, the selection, what was refused, the notice, a link waiting, the name as typed |
 | `notation_ui::{Offer, Added, Inside}` | what `+` in Models can add (key and word); what an addition gave back (the element and the rows opened to show it); what New inside ▸ offers on an element (its kinds, the rows refused with their reason, why none, where a line parts them) |
 | `notation_ui::{Entry, Words}` | an element as the project search lists it (icon, order, label, detail); how Properties names an element (kind line, word, "This table", "On this table · {n}", heading's name) |
 | `notation_ui::Removal` | `pub struct Removal { pub went: Vec<String>, pub after: Option<String> }`: what a notation works out about a removal of its own elements before it runs, for what is said once it went through |

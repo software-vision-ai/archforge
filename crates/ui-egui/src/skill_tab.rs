@@ -11,6 +11,8 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+pub use archforge_shell_api::skill_tab::Doc;
+
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::markdown::{self, Format};
@@ -26,38 +28,10 @@ const COLUMN: f32 = 760.0;
 const BUTTON: f32 = 28.0;
 const GAP: f32 = 8.0;
 
-/// One skill's text while its tab is open.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Doc {
-    pub skill: Uuid,
-    /// The text as typed, and as the store last had it.
-    pub text: String,
-    pub saved: String,
-    /// When the text last changed, in the window's seconds.
-    pub changed_at: f64,
-    /// The rendered page instead of the source.
-    pub preview: bool,
-    /// The selection while the text had the keyboard last, in chars: the toolbar's buttons take
-    /// the keyboard away, and the editor drops its selection with it.
-    pub selection: Option<(usize, usize)>,
-    /// The text the store refused, and why; kept until the text changes.
-    pub refused: Option<(String, String)>,
-    /// Why the last toolbar edit was not made; cleared by the next change.
-    pub notice: Option<String>,
-    /// A link clicked in Preview, waiting for the confirmation to open it.
-    pub link: Option<String>,
-    /// The name as typed in the title.
-    pub name: String,
-    /// The name takes the keyboard, all of it selected, at the next frame: a skill just made.
-    pub focus_name: bool,
-    /// Why the last rename or removal was refused; cleared by the next one kept.
-    pub settings_refused: Option<String>,
-}
-
-impl Doc {
-    fn pending(&self) -> bool {
-        self.text != self.saved && self.refused.as_ref().is_none_or(|(t, _)| *t != self.text)
-    }
+/// Whether `doc`'s text waits to be kept: it changed since the store last had it, and the store
+/// has not already refused it as it stands.
+fn pending(doc: &Doc) -> bool {
+    doc.text != doc.saved && doc.refused.as_ref().is_none_or(|(t, _)| *t != doc.text)
 }
 
 /// Whether `id` names a live skill.
@@ -189,7 +163,7 @@ pub fn sync(shell: &mut Shell, now: f64, force: bool, only: Option<Uuid>) {
     let Some(session) = shell.session.as_mut() else { return };
     for doc in shell.canvas.skills.iter_mut().filter(|d| only.is_none_or(|o| o == d.skill)) {
         let Some(s) = skill_obj(session.doc(), doc.skill) else { continue };
-        if doc.pending() && (force || only.is_some() || now - doc.changed_at >= IDLE) {
+        if pending(doc) && (force || only.is_some() || now - doc.changed_at >= IDLE) {
             match session.execute("skill.set-body", &json!({ "skill": doc.skill.to_string(), "body": doc.text })) {
                 Ok(_) => {
                     doc.saved = doc.text.clone();
@@ -219,7 +193,7 @@ pub fn unkept_reason() -> String {
 
 /// Whether some open skill has text waiting to be kept.
 pub fn waiting(shell: &Shell) -> bool {
-    shell.canvas.skills.iter().any(Doc::pending)
+    shell.canvas.skills.iter().any(pending)
 }
 
 /// Drops the texts of skills whose tab closed.
@@ -755,6 +729,30 @@ mod tests {
         assert_eq!(inp.events, kept);
         assert_eq!(chord(&mut inp), None);
         assert_eq!(inp.events, kept);
+    }
+
+    /// A text waits to be kept while it differs from the one the store has, unless the store
+    /// already refused it as it stands; a change after the refusal waits again.
+    #[test]
+    fn a_text_waits_to_be_kept_until_kept_or_refused_as_it_stands() {
+        let doc = |text: &str, refused: Option<&str>| Doc {
+            skill: Uuid::v7(0, [0; 10]),
+            text: text.into(),
+            saved: "kept".into(),
+            changed_at: 0.0,
+            preview: false,
+            selection: None,
+            refused: refused.map(|t| (t.into(), "why".into())),
+            notice: None,
+            link: None,
+            name: "Skill".into(),
+            focus_name: false,
+            settings_refused: None,
+        };
+        assert!(!pending(&doc("kept", None)), "the text the store has");
+        assert!(pending(&doc("typed", None)), "a changed text");
+        assert!(!pending(&doc("typed", Some("typed"))), "a text the store refused as it stands");
+        assert!(pending(&doc("typed on", Some("typed"))), "a change after the refusal");
     }
 
     #[test]

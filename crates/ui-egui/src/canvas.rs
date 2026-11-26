@@ -11,8 +11,6 @@
 //! 200 by 156 at 16 px from the right and 14 px above the status bar, the toolbar 342 by 50 at
 //! the bottom centre. The grid dots sit 32 units apart and thin out as the zoom falls.
 
-use std::collections::HashMap;
-
 use archforge_diagram::figure::{EndMark, Tone};
 use archforge_diagram::grid::bounds_of;
 use archforge_diagram::{DIAGRAM, Grid, LabelPlace, diagram, edge, label, node, point, style};
@@ -20,8 +18,8 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-pub use archforge_shell_api::canvas::self_loop;
 pub(crate) use archforge_shell_api::canvas::{END_HANDLE, View, along, end_handles_at, exit_point, nesting_route};
+pub use archforge_shell_api::canvas::{EndText, MinimapDrag, PackageTab, PathBadge, State, Toast, Tool, self_loop};
 use archforge_shell_api::canvas::{beside, beside_pair, mark_outline, mark_shape, qualifier_place, signature_place};
 pub use archforge_shell_api::kinds::ExtraLabel;
 pub(crate) use archforge_shell_api::kinds::LineDrawn;
@@ -83,206 +81,6 @@ pub(crate) const ENTITY_TEXT: f32 = 42.0;
 const FOREIGN_ALPHA: f32 = 0.6;
 /// Below this zoom a node shows its name only.
 pub(crate) const DETAIL_ZOOM: f32 = 0.5;
-
-/// The canvas tools.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Tool {
-    #[default]
-    Select,
-    Pan,
-    /// A diagram kind's tool that places an element where the canvas is clicked (ER's Entity,
-    /// slice E1), by its key.
-    Place(&'static str),
-    /// A diagram kind's tool that drags a line from one element to another (ER's Relationship,
-    /// slice E2), by its key.
-    Connect(&'static str),
-    /// Places a note where the canvas is clicked (slice E4).
-    Note,
-    /// Drags a link from a note to a table or a relationship's line.
-    Link,
-}
-
-/// A drag of the minimap's viewport: the minimap's mapping frozen as the drag began (the part of
-/// the diagram it shows, its scale and where that sits on screen), so the box does not rescale under
-/// the pointer, and where on the viewport the pointer took hold of it.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MinimapDrag {
-    shown: Rect,
-    scale: f32,
-    origin: Pos2,
-    grab: Vec2,
-}
-
-/// A line of text at the canvas's foot for a while, with Undo.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Toast {
-    pub text: String,
-    pub until: u64,
-    /// The undo step the toast speaks of: once another step tops the history, the toast goes.
-    pub undo_label: Option<String>,
-}
-
-/// What the centre keeps between frames: the open tabs, the view and the toggles.
-#[derive(Debug, Clone, PartialEq)]
-pub struct State {
-    /// The diagrams with a tab, in tab order.
-    pub tabs: Vec<Uuid>,
-    /// The tab whose diagram the canvas draws.
-    pub active: Option<Uuid>,
-    pub tool: Tool,
-    /// Where diagram unit (0, 0) is, in logical pixels from the canvas's top left.
-    pub pan: Vec2,
-    pub zoom: f32,
-    /// The canvas's size as last drawn, which the View menu's zooms keep their centre in.
-    pub size: Vec2,
-    /// True until the diagram just opened has been fitted into the canvas once.
-    pub fit_pending: bool,
-    /// A node the next frame brings to the canvas's centre (what the search found).
-    pub centre_on: Option<Uuid>,
-    /// True when the active tab changed without the view: the next frame opens it through the
-    /// engine, so the view's open diagram and the canvas agree.
-    pub reopen_pending: bool,
-    pub minimap_open: bool,
-    /// The minimap's viewport being dragged: its mapping as it was when the drag began.
-    pub minimap_drag: Option<MinimapDrag>,
-    pub grid: bool,
-    pub key_status: bool,
-    /// The last refusal, shown at the top left of the centre, whatever it holds, until the next
-    /// action; a refused step of versions shows as the toast instead (`refused_step`).
-    pub notice: Option<String>,
-    /// The words of `notice` when they say why a step between versions or a way out of current
-    /// work did not go, or what a step passed. Only ever read against `notice`, so whatever
-    /// clears or replaces that ends the toast as well.
-    pub refused_step: Option<String>,
-    /// Editing (slice E1): a name typed in a node, the pointer gesture under way, the entity menu,
-    /// and whether the canvas has the keyboard. What a notation types, draws and opens on the
-    /// canvas is its own ([`crate::notation_ui::NotationState`]).
-    pub rename: Option<crate::editing::NodeRename>,
-    pub gesture: Option<crate::editing::Gesture>,
-    pub menu: Option<crate::editing::EntityMenu>,
-    pub focused: bool,
-    /// Relationships (slice E2): the chevron whose popover is open (the cardinality popover, a menu
-    /// of kinds) and the toast with Undo; the ends a new line gets and the mapping table offer are
-    /// ER's own ([`crate::er_state::ErState`]).
-    pub popover: Option<&'static str>,
-    /// The row of the open popover's menu the arrow keys are on, when they have moved.
-    pub(crate) menu_focus: Option<usize>,
-    /// A press closed the classifier's menu of kinds: the canvas ignores that press until the
-    /// button lets go, so it places, selects and drags nothing.
-    pub(crate) dismissing: bool,
-    pub toast: Option<Toast>,
-    /// A note's text being typed in place (slice E4).
-    pub note_edit: Option<crate::editing::NoteEdit>,
-    /// The texts of the skills with a tab, as typed.
-    pub skills: Vec<crate::skill_tab::Doc>,
-    /// The cardinality texts the last frame drew, where a press grabs one.
-    pub ends: Vec<EndText>,
-    /// The packages' tabs the last frame drew, which take a press as their cards do (AR-113).
-    pub package_tabs: Vec<PackageTab>,
-    /// The owning paths the last frame drew under the packages' cards (AR-565).
-    pub path_badges: Vec<PathBadge>,
-    /// The labels of the figures of no one node or line the last frame drew, which take a press
-    /// (a UML generalization set's, AR-129).
-    pub extra_labels: Vec<ExtraLabel>,
-    /// The line ends the last frame moved out to a qualifier box's outer side (AR-127): where the
-    /// route ended on its node, and where the line now starts, on screen; a selected line's end
-    /// handle follows.
-    pub qualified_ends: Vec<(Pos2, Pos2)>,
-    /// The view each diagram was last left with, by diagram, kept for some ways back to it, not
-    /// for every one: a diagram's kind may restore it as it moves between diagrams (UML's package
-    /// navigation), and a tab taking over before the view of the tab left was drawn shows it
-    /// ([`settle_view`]).
-    pub(crate) views: HashMap<Uuid, (Vec2, f32)>,
-    /// The tab whose view the canvas has drawn since it was opened: none while the view is still
-    /// the one of the tab before, to be fitted or centred on the next frame.
-    pub(crate) shown: Option<Uuid>,
-    /// How many times a tab has taken the active one's place ([`settle_view`]): what a diagram's
-    /// kind sets up for the tab it opened holds only until the next (UML's landing after a switch).
-    pub(crate) settled: u64,
-    /// The zoom the user made since the diagram's kind last ran before the canvas drew, as a
-    /// factor; zero for none. The kind follows it there ([`crate::kinds::DiagramKind::before_draw`]:
-    /// UML's package navigation across a package's threshold), and the canvas clears it right
-    /// after, so a zoom made later in a frame (the minimap's buttons) reaches the next one.
-    pub(crate) zoom_intent: f32,
-    /// When a diagram's kind last marked a switch: the canvas fades in from then over
-    /// [`SWITCH_FADE`]. Not proof that the diagram shown changed: UML marks one too when a zoom out
-    /// at the top package goes no further, so the gesture rests and the canvas fades on the same
-    /// diagram.
-    pub(crate) switched: Option<f64>,
-}
-
-/// A cardinality text as drawn: its line, which end (0 the line's start, 1 its end), where it
-/// was and the end of the line it belongs to, on screen.
-#[derive(Debug, Clone, PartialEq)]
-pub struct EndText {
-    pub edge: Uuid,
-    pub end: u8,
-    pub rect: Rect,
-    pub anchor: Pos2,
-}
-
-/// A package's tab as drawn (AR-113): where it was on screen, its node, and the whole name when
-/// the tab could show it only cut.
-#[derive(Debug, Clone, PartialEq)]
-pub struct PackageTab {
-    pub rect: Rect,
-    pub node: Uuid,
-    pub cut: Option<String>,
-}
-
-/// A package's owning path as drawn under its card (AR-565): where it was on screen, its node, the
-/// text shown, its first owners folded into `…` when the card is too narrow, and the whole
-/// sentence, which its tooltip and a screen reader say.
-#[derive(Debug, Clone, PartialEq)]
-pub struct PathBadge {
-    pub rect: Rect,
-    pub node: Uuid,
-    pub shown: String,
-    pub whole: String,
-}
-
-impl Default for State {
-    /// A canvas with no diagram open: Select, the grid and minimap on, no menu open, Class as the classifier kind.
-    fn default() -> Self {
-        Self {
-            tabs: Vec::new(),
-            active: None,
-            tool: Tool::Select,
-            pan: Vec2::ZERO,
-            zoom: 1.0,
-            size: Vec2::ZERO,
-            fit_pending: false,
-            centre_on: None,
-            reopen_pending: false,
-            minimap_open: true,
-            minimap_drag: None,
-            grid: true,
-            key_status: true,
-            notice: None,
-            refused_step: None,
-            rename: None,
-            gesture: None,
-            menu: None,
-            focused: false,
-            popover: None,
-            menu_focus: None,
-            dismissing: false,
-            toast: None,
-            note_edit: None,
-            skills: Vec::new(),
-            ends: Vec::new(),
-            package_tabs: Vec::new(),
-            path_badges: Vec::new(),
-            extra_labels: Vec::new(),
-            qualified_ends: Vec::new(),
-            views: HashMap::new(),
-            shown: None,
-            settled: 0,
-            zoom_intent: 0.0,
-            switched: None,
-        }
-    }
-}
 
 /// Runs a command for the canvas; a refusal comes back in plain words ([`crate::panels::refusal`]).
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -505,21 +303,6 @@ pub(crate) fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>, least: f3
     }
     if !state.pan.is_finite() {
         state.pan = Vec2::ZERO;
-    }
-}
-
-impl State {
-    /// `notice` becomes why a step between versions or a way out of current work did not go, or
-    /// what a step passed, which the centre says as the toast, or none, which ends what was said
-    /// before.
-    pub(crate) fn say_refused_step(&mut self, words: Option<String>) {
-        self.notice.clone_from(&words);
-        self.refused_step = words;
-    }
-
-    /// Whether `notice` is still the words of a refused step, rather than something said since.
-    fn notice_is_refused_step(&self) -> bool {
-        self.notice.is_some() && self.notice == self.refused_step
     }
 }
 
