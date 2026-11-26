@@ -11,11 +11,11 @@ use archforge_uml::nesting::{self, OwnerProblem};
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
+use crate::cx::{Ctx, Request};
 use crate::explorer::fresh_name;
-use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{PAD, PATH_SEP, ROW, run, section};
+use crate::panels::{PAD, PATH_SEP, ROW, control_cx, run_cx, section_cx};
+use crate::state::Explorer;
 use crate::uml_classifier::Classifier;
 use crate::uml_state::menus;
 use crate::ux::{self, Palette, icons, types};
@@ -151,9 +151,9 @@ pub(crate) fn owner_rows(store: &Store, c: Obj) -> Vec<OwnerRow> {
 
 /// The Owner select at `at`, `width` wide (D2, D3): the owner's path, folded from its front so its
 /// own name shows, the whole path its tooltip and accessible name; a click opens its menu.
-pub(crate) fn owner_field(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, class: Obj) -> Rect {
-    let here = shell.session.as_ref().and_then(|s| nesting::owner_of(s.doc(), class).map(|o| owner_parts(s.doc(), o))).unwrap_or_default();
-    crate::panels::path_select_field(shell, ui, p, at, width, OWNER_ID, &tr("Owner"), &here, menus::CLASS_OWNER)
+pub(crate) fn owner_field(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, class: Obj) -> Rect {
+    let here = cx.session.as_ref().and_then(|s| nesting::owner_of(s.doc(), class).map(|o| owner_parts(s.doc(), o))).unwrap_or_default();
+    crate::panels::path_select_field_cx(cx, ui, p, at, width, OWNER_ID, &tr("Owner"), &here, menus::CLASS_OWNER)
 }
 
 /// What the Owner explains under its field for a nested classifier (D2).
@@ -171,11 +171,11 @@ pub(crate) fn owner_help(store: &Store, class: Obj) -> Option<String> {
 /// may not, muted, each with its short reason, the whole reason on hover and for screen readers.
 /// The arrow keys walk the rows that may be picked, Enter picks, Escape or a press elsewhere
 /// closes; a pick moves the classifier there as one undo step.
-pub(crate) fn owner_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, class: Obj, class_id: Uuid) {
-    if shell.panels.menu != Some(menus::CLASS_OWNER) {
+pub(crate) fn owner_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, field: Rect, class: Obj, class_id: Uuid) {
+    if cx.panels.menu != Some(menus::CLASS_OWNER) {
         return;
     }
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let rows = owner_rows(store, class);
     let open = rows.iter().filter(|r| r.why.is_none()).count();
     let heading = 28.0;
@@ -195,25 +195,24 @@ pub(crate) fn owner_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: R
     let height = full.min(below.max(8.0 + heading + 30.0));
     let left = field.left().min(window.right() - 8.0 - width).max(window.left() + 8.0);
     let m = Rect::from_min_size(pos2(left, field.bottom() + 4.0), vec2(width, height));
-    let picked =
-        ux::overlay(ui, crate::widgets::egui_id(&format!("{OWNER_ID}.layer")), m, |ui| owner_menu_body(shell, ui, p, m, &rows, open, heading));
+    let picked = ux::overlay(ui, crate::widgets::egui_id(&format!("{OWNER_ID}.layer")), m, |ui| owner_menu_body(cx, ui, p, m, &rows, open, heading));
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || field.contains(pos)));
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.menu = None;
-        shell.panels.menu_reached = None;
+        cx.panels.menu = None;
+        cx.panels.menu_reached = None;
     }
     let Some(row) = picked.and_then(|i| rows.get(i)) else { return };
     if row.current {
         return;
     }
-    match run(shell, "uml.classifier.set-owner", json!({ "classifier": class_id.to_string(), "owner": row.id.to_string() })) {
-        Ok(_) => shell.panels.notice = None,
-        Err(e) => shell.panels.notice = Some(e),
+    match run_cx(cx, "uml.classifier.set-owner", json!({ "classifier": class_id.to_string(), "owner": row.id.to_string() })) {
+        Ok(_) => cx.panels.notice = None,
+        Err(e) => cx.panels.notice = Some(e),
     }
 }
 
 /// The Owner menu's frame and rows; gives the row picked.
-fn owner_menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Rect, rows: &[OwnerRow], open: usize, heading: f32) -> Option<usize> {
+fn owner_menu_body(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, m: Rect, rows: &[OwnerRow], open: usize, heading: f32) -> Option<usize> {
     let paint = ui.painter().clone();
     ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.surface);
@@ -227,7 +226,7 @@ fn owner_menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Rect, rows:
         Some(m.width() - 28.0),
     );
     // The arrows walk the rows that may be picked; Enter picks.
-    let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == OWNER_ID).map(|(_, i)| *i);
+    let mut reached = cx.panels.menu_reached.as_ref().filter(|(of, _)| of == OWNER_ID).map(|(_, i)| *i);
     let (down, up, enter) = ui.input_mut(|i| {
         (
             i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
@@ -242,13 +241,13 @@ fn owner_menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Rect, rows:
             Some(i) => i.saturating_sub(1),
         });
     }
-    shell.panels.menu_reached = reached.map(|i| (OWNER_ID.to_string(), i));
+    cx.panels.menu_reached = reached.map(|i| (OWNER_ID.to_string(), i));
     let list = Rect::from_min_max(pos2(m.left(), m.top() + 4.0 + heading), pos2(m.right(), m.bottom() - 4.0));
     // Its rows scroll with the wheel over it, and a row the arrows reach comes into sight.
     let gap = |i: usize| if i >= open && open > 0 && open < rows.len() { 9.0 } else { 0.0 };
     let total = rows.len() as f32 * 30.0 + gap(rows.len());
     let most = (total - list.height()).max(0.0);
-    let mut offset = shell.panels.menu_scroll.as_ref().filter(|(of, _)| of == OWNER_ID).map_or(0.0, |(_, o)| *o);
+    let mut offset = cx.panels.menu_scroll.as_ref().filter(|(of, _)| of == OWNER_ID).map_or(0.0, |(_, o)| *o);
     if ui.input(|i| i.pointer.hover_pos().is_some_and(|at| m.contains(at))) {
         offset -= ui.input(|i| i.smooth_scroll_delta.y);
     }
@@ -261,7 +260,7 @@ fn owner_menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Rect, rows:
         }
     }
     let offset = offset.clamp(0.0, most);
-    shell.panels.menu_scroll = Some((OWNER_ID.to_string(), offset));
+    cx.panels.menu_scroll = Some((OWNER_ID.to_string(), offset));
     let clipped = paint.with_clip_rect(list);
     let mut picked = None;
     let mut y = list.top() - offset;
@@ -278,10 +277,10 @@ fn owner_menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Rect, rows:
         let id = format!("{OWNER_ID}.{i}");
         let path = row.parts.join(PATH_SEP);
         let resp = match &row.why {
-            None => control(shell, ui, &id, "menu-item", r.intersect(list), true).accessible_name(format!("{path} · {}", row.kind)),
+            None => control_cx(cx, ui, &id, "menu-item", r.intersect(list), true).accessible_name(format!("{path} · {}", row.kind)),
             Some((_, whole)) => {
                 // Disabled, it says why on hover and to a screen reader.
-                crate::widgets::record_visible(ui, &mut shell.registry, &id, "menu-item", r.intersect(list));
+                crate::widgets::record_visible(ui, cx.registry, &id, "menu-item", r.intersect(list));
                 let resp = ui.interact(r.intersect(list), crate::widgets::egui_id(&id), Sense::hover());
                 ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&id), |node| {
                     node.set_role(egui::accesskit::Role::MenuItem);
@@ -326,26 +325,24 @@ fn owner_menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Rect, rows:
 /// Makes a classifier of `kind` nested in `owner`, named afresh among everything the owner holds
 /// (`Enumeration 1`), as one undo step, selected; Models opens the rows above it and its name for
 /// typing there (D1), so it is named in place whichever way it was asked for.
-pub(crate) fn add_nested(shell: &mut Shell, owner: Uuid, kind: Classifier) -> Result<Uuid, String> {
-    let store = shell.session.as_ref().map(|s| s.doc()).ok_or_else(|| tr("The model could not be opened"))?;
+pub(crate) fn add_nested(cx: &mut Ctx, owner: Uuid, kind: Classifier) -> Result<Uuid, String> {
+    let store = cx.session.as_ref().map(|s| s.doc()).ok_or_else(|| tr("The model could not be opened"))?;
     let o = store.by_uuid(owner).ok_or_else(|| tr("The model could not be opened"))?;
     // Free among everything the owner holds: a nested classifier clashes only with its other
     // classifiers (`archforge_uml::names`), but a default name its members have reads as theirs.
     let taken = nesting::names_under(store, o).into_iter().map(|c| name(store, c));
     let fresh = fresh_name(kind.stem(), taken, false).ok_or_else(|| tr("No free name is left"))?;
-    let out = run(shell, "uml.nested.add", json!({ "owner": owner.to_string(), "kind": command_kind(kind), "name": fresh }))?;
+    let out = run_cx(cx, "uml.nested.add", json!({ "owner": owner.to_string(), "kind": command_kind(kind), "name": fresh }))?;
     let id = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).ok_or_else(|| tr("The model could not be opened"))?;
-    if let Some(store) = shell.session.as_ref().map(|s| s.doc())
+    if let Some(store) = cx.session.as_ref().map(|s| s.doc())
         && let Some(c) = store.by_uuid(id)
-        && let Some(ui) = crate::notation_ui::of(shell.notation_uis, store, c)
+        && let Some(ui) = crate::notation_ui::of(cx.notation_uis, store, c)
     {
         let parents: Vec<Uuid> = ui.parents(store, c).into_iter().filter_map(|p| store.uuid(p).ok()).collect();
-        shell.explorer.expanded.extend(parents);
+        cx.requests.push(Request::ExpandRows(parents));
     }
-    shell.explorer.filter.clear();
-    shell.explorer.rename = Some(crate::explorer::Rename::fresh(id, fresh));
-    shell.explorer.focused = true;
-    shell.state.show_explorer(crate::state::Explorer::Models);
+    cx.requests.push(Request::NameInModels(id, fresh));
+    cx.requests.push(Request::ShowExplorer(Explorer::Models));
     Ok(id)
 }
 
@@ -353,17 +350,17 @@ pub(crate) fn add_nested(shell: &mut Shell, owner: Uuid, kind: Classifier) -> Re
 /// count and a `+` whose menu offers the kinds Models' New inside ▸ does, then a row a nested
 /// classifier, its icon and name, a click selecting it; none yet says where to add one. Gives the
 /// y under it.
-pub(crate) fn nested_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, class: Obj, class_id: Uuid) -> f32 {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+pub(crate) fn nested_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, class: Obj, class_id: Uuid) -> f32 {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
     let own = name(store, class);
     let rows: Vec<(Uuid, String, Classifier)> =
         nesting::nested(store, class).into_iter().filter_map(|c| Some((store.uuid(c).ok()?, name(store, c), Classifier::of(store, c)?))).collect();
     let title = fmt(&tr("Nested classifiers · {n}"), &[("n", &rows.len().to_string())]);
     let add = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
-    match section(shell, ui, p, r, y, &title, Some((NESTED_ADD_ID, "Add nested classifier"))) {
+    match section_cx(cx, ui, p, r, y, &title, Some((NESTED_ADD_ID, "Add nested classifier"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = if shell.panels.menu == Some(menus::NESTED_KIND) { None } else { Some(menus::NESTED_KIND) };
+            cx.panels.menu = if cx.panels.menu == Some(menus::NESTED_KIND) { None } else { Some(menus::NESTED_KIND) };
             y += 44.0;
         }
     }
@@ -376,10 +373,10 @@ pub(crate) fn nested_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         paint.galley(pos2(r.left() + PAD, y + 4.0), g, p.text_muted.into());
         y += tall + 14.0;
     }
-    let chosen = crate::panels::selected_id(shell);
+    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
     for (id, label, kind) in &rows {
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, ROW));
-        let resp = control(shell, ui, &format!("{NESTED_ROW_ID}.{id}"), "row", row, true).accessible_name(format!("{label} · {}", kind.word()));
+        let resp = control_cx(cx, ui, &format!("{NESTED_ROW_ID}.{id}"), "row", row, true).accessible_name(format!("{label} · {}", kind.word()));
         if Some(*id) == chosen {
             paint.rect_filled(row, 6.0, p.accent_tint);
         } else if resp.contains_pointer() {
@@ -388,17 +385,17 @@ pub(crate) fn nested_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         ux::icon_mid(&paint, pos2(row.left() + 17.0, row.center().y), kind.icon(), p.text_secondary);
         ux::text_mid(&paint, row.left() + 34.0, row.center().y, label, types::UI, p.text, Some((width - 44.0).max(0.0)));
         if resp.clicked() {
-            crate::panels::select_element(shell, *id);
+            crate::panels::select_element_cx(cx, *id);
         }
         y += ROW;
     }
-    if shell.panels.menu == Some(menus::NESTED_KIND) {
+    if cx.panels.menu == Some(menus::NESTED_KIND) {
         let words: Vec<String> = KINDS.iter().map(|k| k.word()).collect();
-        if let Some(i) = crate::panels::menu(shell, ui, p, add, NESTED_ADD_ID, &words)
+        if let Some(i) = crate::panels::menu_cx(cx, ui, p, add, NESTED_ADD_ID, &words)
             && let Some(kind) = KINDS.get(i)
-            && let Err(e) = add_nested(shell, class_id, *kind)
+            && let Err(e) = add_nested(cx, class_id, *kind)
         {
-            shell.panels.notice = Some(e);
+            cx.panels.notice = Some(e);
         }
     }
     y + 10.0
@@ -442,10 +439,10 @@ fn a_kind(kind: Classifier) -> String {
 }
 
 /// Makes the kind `key` inside `o`, as New inside ▸ picks it.
-pub(crate) fn add_inside(shell: &mut Shell, key: &str, o: Obj) -> Option<Result<Uuid, String>> {
+pub(crate) fn add_inside(cx: &mut Ctx, key: &str, o: Obj) -> Option<Result<Uuid, String>> {
     let kind = KINDS.into_iter().find(|k| k.key() == key)?;
-    let id = shell.session.as_ref()?.doc().uuid(o).ok()?;
-    Some(add_nested(shell, id, kind))
+    let id = cx.session.as_ref()?.doc().uuid(o).ok()?;
+    Some(add_nested(cx, id, kind))
 }
 
 /// The words this module hands to `tr` by a name rather than a literal, for the catalogue's

@@ -304,7 +304,7 @@ impl DiagramKind for UmlKind {
     /// The classifier tool shows the kind it places, the Relationship tool the kind it draws.
     fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
         match key {
-            crate::uml_classifier::TOOL => crate::uml_classifier::tool_face(shell, paint, b, ink),
+            crate::uml_classifier::TOOL => crate::uml_classifier::tool_face(&shell.cx_ref(), paint, b, ink),
             "relationship" => crate::uml_relate::tool_face(shell, paint, p, b, ink, active),
             _ => return false,
         }
@@ -329,7 +329,7 @@ impl DiagramKind for UmlKind {
     /// The classifier tool's menu of kinds, or the Relationship tool's.
     fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, key: &str) {
         if key == crate::uml_classifier::KINDS {
-            crate::uml_classifier::popover(shell, ui, p, r, chevron);
+            shell.cx(|cx| crate::uml_classifier::popover(cx, ui, p, r, chevron));
         } else {
             crate::uml_relate::popover(shell, ui, p, r, chevron);
         }
@@ -391,7 +391,7 @@ impl DiagramKind for UmlKind {
         if let Some(context) = context {
             let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
             shell.state.show_panel(crate::state::Panel::Properties);
-            crate::uml_constraints::open(shell, context, Some(element));
+            shell.cx(|cx| crate::uml_constraints::open(cx, context, Some(element)));
             return;
         }
         if shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| !has_member_kinds(s.doc(), e))) {
@@ -532,12 +532,12 @@ impl DiagramKind for UmlKind {
     /// On a package's diagram, package navigation: a landing after a switch, ⌘↓ and ⌘↑, the zoom
     /// keys, and a zoom across a package's threshold (AR-95).
     fn before_draw(&self, shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
-        crate::package_nav::before_draw(shell, ui, r, d);
+        shell.cx(|cx| crate::package_nav::before_draw(cx, ui, r, d));
     }
 
     /// On a package's diagram, the path bar and a selected package's Open (AR-95).
     fn after_draw(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
-        crate::package_nav::after_draw(shell, ui, p, r, d)
+        shell.cx(|cx| crate::package_nav::after_draw(cx, ui, p, r, d))
     }
 
     /// An n-ary association's leg starts at its diamond's outline (AR-128).
@@ -570,7 +570,7 @@ impl DiagramKind for UmlKind {
 
     /// A generalization set's label gets a node where it is let go, on this diagram alone (AR-129).
     fn place_label(&self, shell: &mut Shell, d: Obj, element: Uuid, x: f64, y: f64) {
-        crate::uml_sets::place_label(shell, d, element, x, y);
+        shell.cx(|cx| crate::uml_sets::place_label(cx, d, element, x, y));
     }
 
     /// What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
@@ -846,7 +846,7 @@ impl NotationUi for UmlUi {
         if class(store, obj) == Some(archforge_uml::PACKAGE) || archforge_uml::profiles::is_profile(store, obj) {
             return crate::uml_profiles::add_inside(shell, key, obj);
         }
-        crate::uml_nesting::add_inside(shell, key, obj)
+        shell.cx(|cx| crate::uml_nesting::add_inside(cx, key, obj))
     }
 
     /// A classifier's nested classifiers at any depth, by the names they read by, `Order::Priority`
@@ -975,7 +975,7 @@ impl NotationUi for UmlUi {
             Some((of("package")?, of("to")?))
         });
         match moved {
-            Some((package, to)) => crate::package_nav::move_package(shell, package, to),
+            Some((package, to)) => shell.cx(|cx| crate::package_nav::move_package(cx, package, to)),
             None => crate::panels::run(shell, cmd, params).map(|_| ()),
         }
     }
@@ -1158,11 +1158,11 @@ impl NotationUi for UmlUi {
             Some(c) if c == archforge_uml::PROFILE => return crate::uml_profiles::profile_body(shell, ui, p, r, y, subject),
             Some(c) if c == archforge_uml::STEREOTYPE => return crate::uml_profiles::stereotype_body(shell, ui, p, r, y, subject),
             // A template binding's own panel (AR-131, C2).
-            Some(c) if c == archforge_uml::TEMPLATE_BINDING => return crate::uml_bindings::body(shell, ui, p, r, y, subject),
+            Some(c) if c == archforge_uml::TEMPLATE_BINDING => return shell.cx(|cx| crate::uml_bindings::body(cx, ui, p, r, y, subject)),
             Some(c) if archforge_uml::is_relationship(c) => {
                 return crate::uml_relate::body(shell, ui, p, r, y, subject);
             }
-            Some(c) if c == archforge_uml::GENERALIZATION_SET => return crate::uml_sets::set_body(shell, ui, p, r, y, subject),
+            Some(c) if c == archforge_uml::GENERALIZATION_SET => return shell.cx(|cx| crate::uml_sets::set_body(cx, ui, p, r, y, subject)),
             _ => {}
         }
         // A qualifier shows its association's panel, its row marked (AR-127).
@@ -1206,7 +1206,7 @@ impl NotationUi for UmlUi {
         }
         // The root package's constraints hold for the whole model (AR-133).
         if let Some(id) = root {
-            crate::uml_constraints::section_of(shell, ui, p, r, below, o, id);
+            shell.cx(|cx| crate::uml_constraints::section_of(cx, ui, p, r, below, o, id));
         }
     }
 
@@ -1278,12 +1278,12 @@ impl NotationUi for UmlUi {
     /// A selected generalization set goes from the model, its generalizations kept, Shift held or
     /// not (AR-129).
     fn canvas_delete(&self, shell: &mut Shell, _shift: bool) -> bool {
-        crate::uml_sets::remove_selected_set(shell)
+        shell.cx(crate::uml_sets::remove_selected_set)
     }
 
     /// ⌥⌘G: the selected generalizations into a new set (AR-129).
     fn canvas_keys(&self, shell: &mut Shell, ui: &egui::Ui) -> bool {
-        crate::uml_sets::chord_pressed(shell, ui)
+        shell.cx(|cx| crate::uml_sets::chord_pressed(cx, ui))
     }
 
     /// A template binding's draft (AR-131); the member typed in place on its card (AR-122); the
@@ -1291,11 +1291,11 @@ impl NotationUi for UmlUi {
     /// handles and its menu (AR-128). Each closes itself on a diagram it does not belong to.
     fn canvas_overlay(&self, shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
         match layer {
-            Layer::Drafts => crate::uml_bindings::draw_draft(shell, ui, on),
+            Layer::Drafts => crate::uml_bindings::draw_draft(&shell.cx_ref(), ui, on),
             Layer::Rows => crate::uml_inline::row(shell, ui, on.p, on.view),
             Layer::Menus => {
                 if let Some(at) = uml(&shell.notation_states).and_then(|uml| uml.line_menu) {
-                    crate::uml_sets::line_menu(shell, ui, on.p, on.r, at, on.d);
+                    shell.cx(|cx| crate::uml_sets::line_menu(cx, ui, on.p, on.r, at, on.d));
                 }
                 crate::uml_nary::overlay(shell, ui, on.p, on.r, on.view, on.d);
             }

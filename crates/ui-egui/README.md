@@ -87,9 +87,12 @@ one's own state, the problems, the frame count, the menu bar's hold on an inline
 version shows), its read-only twin `cx::CtxRef` (`Shell::cx_ref`), and `cx::Request`, what lies
 outside it, which the shell carries out once the call returns, in order, each once: the Models
 tree's rows opened over a selected element, the centre leaving a version's details for what was
-opened (`canvas::open` opens at once), and a panel of the right side shown. ER's screens take the
-context; ER's kind and Properties (`er_kind`, `er_ui`) still take the shell from the interfaces and
-build the context once in each method. The controls that take it end in `_cx` (`panels::section_cx`,
+opened (`canvas::open` opens at once), a panel of the right side shown, an explorer of the left
+side shown, and a new element's name opened for typing in Models. ER's screens take the context,
+and so do UML's leaf screens (`package_nav`, `uml_classifier`, `uml_bindings`, `uml_constraints`,
+`uml_nesting`, `uml_sets`, `uml_templates`); ER's kind and Properties (`er_kind`, `er_ui`) still
+take the shell from the interfaces and build the context once in each method, and UML's other
+screens build it around each call into a leaf screen. The controls that take it end in `_cx` (`panels::section_cx`,
 `panels::control_cx`, `menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old
 names over the whole shell forward to them until every caller has moved, and `home::control`
 stays the shell's own way to `panels::control_cx`.

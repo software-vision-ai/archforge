@@ -7,9 +7,9 @@
 use archforge_mof::{ClassId, Obj, Store};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
-use crate::Shell;
-use crate::home::control;
+use crate::cx::{Ctx, CtxRef};
 use crate::i18n::tr;
+use crate::panels::control_cx;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Icon, Palette, icons, types};
 
@@ -209,13 +209,13 @@ impl Classifier {
 }
 
 /// The tool's face: the icon of the kind it places.
-pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, b: Rect, ink: ux::Colour) {
-    ux::icon_in(paint, b, uml(&shell.notation_states).map(|uml| uml.classifier).unwrap_or_default().tool_icon(), ink);
+pub(crate) fn tool_face(cx: &CtxRef, paint: &egui::Painter, b: Rect, ink: ux::Colour) {
+    ux::icon_in(paint, b, uml(cx.notation_states).map(|uml| uml.classifier).unwrap_or_default().tool_icon(), ink);
 }
 
 /// The menu of kinds above the classifier tool's chevron: the current kind marked; the arrow keys
 /// move, Enter or a click picks and arms the tool, Escape or a press elsewhere closes it.
-pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, anchor: Rect) {
+pub(crate) fn popover(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, anchor: Rect) {
     let paint = ui.painter().clone();
     let kinds = Classifier::ALL;
     let size = vec2(224.0, 44.0 + kinds.len() as f32 * 36.0 + 8.0);
@@ -226,7 +226,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     paint.rect_filled(m, 10.0, p.surface);
     paint.rect_stroke(m, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     ux::text(&paint, m.min + vec2(16.0, 14.0), &tr("Classifier").to_uppercase(), types::EYEBROW, p.text_secondary, Some(size.x - 32.0));
-    let chosen = uml(&shell.notation_states).map(|uml| uml.classifier).unwrap_or_default();
+    let chosen = uml(cx.notation_states).map(|uml| uml.classifier).unwrap_or_default();
     let current = kinds.iter().position(|k| *k == chosen).unwrap_or(0);
     // The keys: the arrows walk the rows from the current kind, Enter picks the row they are on.
     let (down, up, enter) = ui.input_mut(|i| {
@@ -237,7 +237,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
         )
     });
     let last = kinds.len().saturating_sub(1);
-    let mut focus = shell.canvas.menu_focus.unwrap_or(current).min(last);
+    let mut focus = cx.canvas.menu_focus.unwrap_or(current).min(last);
     if down {
         focus = (focus + 1).min(last);
     }
@@ -245,15 +245,15 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
         focus = focus.saturating_sub(1);
     }
     if down || up {
-        shell.canvas.menu_focus = Some(focus);
+        cx.canvas.menu_focus = Some(focus);
     }
     let mut picked = enter.then(|| kinds.get(focus).copied()).flatten();
     for (i, kind) in kinds.iter().enumerate() {
         let row = Rect::from_min_size(m.min + vec2(8.0, 40.0 + i as f32 * 36.0), vec2(size.x - 16.0, 34.0));
         // Its name for assistive technology is the kind's.
-        let resp = control(shell, ui, &format!("workspace.classifier.{}", kind.key()), "menu-item", row, true).accessible_name(kind.word());
+        let resp = control_cx(cx, ui, &format!("workspace.classifier.{}", kind.key()), "menu-item", row, true).accessible_name(kind.word());
         let on = *kind == chosen;
-        let keyed = shell.canvas.menu_focus == Some(i);
+        let keyed = cx.canvas.menu_focus == Some(i);
         if on {
             paint.rect_filled(row, 6.0, p.accent_tint);
         } else if resp.hovered() || keyed {
@@ -281,23 +281,23 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
         }
     }
     if let Some(kind) = picked {
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.classifier = kind;
         }
-        shell.canvas.tool = crate::canvas::Tool::Place(TOOL);
-        shell.canvas.popover = None;
-        shell.canvas.menu_focus = None;
+        cx.canvas.tool = crate::canvas::Tool::Place(TOOL);
+        cx.canvas.popover = None;
+        cx.canvas.menu_focus = None;
         return;
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || anchor.contains(pos)));
     if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.canvas.popover = None;
-        shell.canvas.menu_focus = None;
+        cx.canvas.popover = None;
+        cx.canvas.menu_focus = None;
     }
     // The press that closed the menu only closes it: the canvas takes nothing from it, so the
     // armed tool places nothing where the press lets go.
     if outside {
-        shell.canvas.dismissing = true;
+        cx.canvas.dismissing = true;
     }
 }
 

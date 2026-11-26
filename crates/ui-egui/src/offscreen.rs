@@ -1645,7 +1645,7 @@ fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     let in_use = screen == Screen::WorkspaceTemplateInUse;
     let (repo, [_, key]) = crate::uml_ui::put_repository(shell, in_use)?;
     shell.state.show_panel(crate::state::Panel::Properties);
-    crate::uml_templates::open(shell, repo, Some(key));
+    shell.cx(|cx| crate::uml_templates::open(cx, repo, Some(key)));
     if in_use {
         crate::uml_templates::remove_sample(shell);
     } else if screen == Screen::WorkspaceTemplateKinds {
@@ -1688,7 +1688,7 @@ fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                 .and_then(|n| store.uuid(n).ok())
         };
         let (Some(from), Some(to)) = (node_of(bound), node_of(r)) else { return Err("the sample's nodes".into()) };
-        crate::uml_bindings::open_new(shell, d_obj, (from, to), bound, r);
+        shell.cx(|cx| crate::uml_bindings::open_new(cx, d_obj, (from, to), bound, r));
         crate::uml_bindings::apply_sample(shell);
     }
     shell.canvas.fit_pending = false;
@@ -2634,7 +2634,10 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
             };
             crate::uml_panel::open(shell, order, crate::uml_panel::MemberKind::Attribute, Some(status_attribute));
         }
-        11 => crate::uml_constraints::open(shell, order, Some(id(&paid)?)),
+        11 => {
+            let paid = id(&paid)?;
+            shell.cx(|cx| crate::uml_constraints::open(cx, order, Some(paid)));
+        }
         12 => shell.state.panel_collapsed = true,
         _ => {}
     }
@@ -2809,7 +2812,8 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             let repo_node = place(shell, d, repo, 380.0, 40.0, 300.0, crate::uml_ui::members_height(1, 1))?;
             if screen == Screen::GuideTemplate {
                 select(shell, &[repo])?;
-                crate::uml_templates::open(shell, repo, Some(id(&key)?));
+                let key = id(&key)?;
+                shell.cx(|cx| crate::uml_templates::open(cx, repo, Some(key)));
                 guide_view(shell, &[repo], 1.0)?;
             } else {
                 let bound = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": "OrderRepository" }))?)?;

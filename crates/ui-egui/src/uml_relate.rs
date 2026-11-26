@@ -425,7 +425,7 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
     if kind == Relate::TemplateBinding {
         match crate::uml_bindings::refusal(store, from, to, None) {
             Some(why) => shell.canvas.notice = Some(why),
-            None => crate::uml_bindings::open_new(shell, d, (from_node, to_node), from, to),
+            None => shell.cx(|cx| crate::uml_bindings::open_new(cx, d, (from_node, to_node), from, to)),
         }
         return;
     }
@@ -1003,7 +1003,7 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     }
     // The sets a generalization is in (AR-129).
     if class == Some(archforge_uml::GENERALIZATION) {
-        crate::uml_sets::generalization_section(shell, ui, p, r, y, o, id);
+        shell.cx(|cx| crate::uml_sets::generalization_section(cx, ui, p, r, y, o, id));
     }
     if association_class {
         use crate::uml_panel::{MemberKind, members_section};
@@ -1011,7 +1011,7 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
         let y = members_section(shell, ui, p, r, y + 4.0, o, id, MemberKind::Operation);
         // Its constraints, as the class it is (AR-133).
         if shell.session.as_ref().is_some_and(|s| archforge_uml::constraints::is_context(s.doc(), o)) {
-            crate::uml_constraints::section_of(shell, ui, p, r, y + 4.0, o, id);
+            shell.cx(|cx| crate::uml_constraints::section_of(cx, ui, p, r, y + 4.0, o, id));
         }
     }
 }

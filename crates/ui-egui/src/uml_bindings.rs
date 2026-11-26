@@ -22,9 +22,10 @@ use archforge_uml::templates::{self, Kind};
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::{Map, Value as Json, json};
 
-use crate::Shell;
+use crate::cx::{Ctx, CtxRef, Request};
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, PAD, Subject, run, section, select_field};
+use crate::panels::{FIELD, PAD, Subject, run_cx, section_cx, select_field_cx};
+use crate::state::Panel;
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
@@ -71,8 +72,8 @@ fn empty_args(store: &Store, template: Obj) -> Vec<(Uuid, String)> {
 
 /// Opens the draft of a new binding from the class of `nodes.0` to the template of `nodes.1` on
 /// diagram `d`, in Properties.
-pub(crate) fn open_new(shell: &mut Shell, d: Obj, nodes: (Uuid, Uuid), bound: Obj, template: Obj) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn open_new(cx: &mut Ctx, d: Obj, nodes: (Uuid, Uuid), bound: Obj, template: Obj) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let (Ok(b), Ok(t)) = (store.uuid(bound), store.uuid(template)) else { return };
     let draft = BindingDraft {
         binding: None,
@@ -82,21 +83,21 @@ pub(crate) fn open_new(shell: &mut Shell, d: Obj, nodes: (Uuid, Uuid), bound: Ob
         template: t,
         args: empty_args(store, template),
         refused: None,
-        opened_over: crate::panels::selected_id(shell),
+        opened_over: crate::panels::selected_id_cx(&cx.cx_ref()),
     };
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.binding = Some(draft);
     }
-    shell.panels.menu = None;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    cx.panels.menu = None;
+    cx.requests.push(Request::ShowPanel(Panel::Properties));
 }
 
 /// Opens the draft over binding `b` for another template, `template`, its arguments to pick.
-fn open_for_template(shell: &mut Shell, b: Obj, template: Obj) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+fn open_for_template(cx: &mut Ctx, b: Obj, template: Obj) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let (Ok(id), Ok(t)) = (store.uuid(b), store.uuid(template)) else { return };
     let Some(bound) = templates::bound_element(store, b).and_then(|o| store.uuid(o).ok()) else { return };
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.binding = Some(BindingDraft {
             binding: Some(id),
             diagram: None,
@@ -112,18 +113,18 @@ fn open_for_template(shell: &mut Shell, b: Obj, template: Obj) {
 
 /// The line of a new binding's draft on diagram `d`, from the bound class's node to the template's:
 /// the nodes it joins, while one is open there.
-pub(crate) fn draft_line(shell: &Shell, d: Obj) -> Option<(Uuid, Uuid)> {
-    let draft = uml(&shell.notation_states).and_then(|uml| uml.binding.as_ref()).filter(|b| b.binding.is_none())?;
-    let store = shell.session.as_ref()?.doc();
+pub(crate) fn draft_line(cx: &CtxRef, d: Obj) -> Option<(Uuid, Uuid)> {
+    let draft = uml(cx.notation_states).and_then(|uml| uml.binding.as_ref()).filter(|b| b.binding.is_none())?;
+    let store = cx.session.as_ref()?.doc();
     (draft.diagram == store.uuid(d).ok()).then_some(draft.nodes).flatten()
 }
 
 /// A new binding's draft over the canvas `on` (AR-131): dashed in the accent colour from the bound
 /// class to the template until Apply, nothing in the model yet; its nodes where a gesture under way
 /// previews them.
-pub(crate) fn draw_draft(shell: &Shell, ui: &egui::Ui, on: &crate::notation_ui::Overlaid<'_>) {
-    let Some((from, to)) = draft_line(shell, on.d) else { return };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn draw_draft(cx: &CtxRef, ui: &egui::Ui, on: &crate::notation_ui::Overlaid<'_>) {
+    let Some((from, to)) = draft_line(cx, on.d) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let rect = |id: Uuid| on.overrides.get(&id).copied().or_else(|| store.by_uuid(id).map(|n| on.view.rect(&bounds_of(store, n))));
     if let (Some(a), Some(b)) = (rect(from), rect(to)) {
         paint_draft(&ui.painter().with_clip_rect(on.r), on.p, a, b, on.view.zoom);
@@ -241,24 +242,24 @@ fn template_choices(store: &Store, b: Obj, bound: Obj) -> Vec<Obj> {
 }
 
 /// A read-only field with its label, as the draft shows the two ends its line joins.
-fn fixed_field(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, id: &str, label: &str, value: &str) {
+fn fixed_field(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, id: &str, label: &str, value: &str) {
     let paint = ui.painter();
     ux::text(paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
     paint.rect_filled(field, 6.0, p.field);
     ux::text_mid(paint, field.left() + 8.0, field.center().y, value, types::SMALL, p.text, Some((width - 16.0).max(0.0)));
-    let _ = crate::home::control(shell, ui, id, "field", field, false).accessible_name(format!("{label}: {value}"));
+    let _ = crate::panels::control_cx(cx, ui, id, "field", field, false).accessible_name(format!("{label}: {value}"));
 }
 
 /// The refusal on the danger tint, with its icon; gives its height.
-fn refusal_box(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, why: &str) -> f32 {
+fn refusal_box(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, why: &str) -> f32 {
     let paint = ui.painter();
     let g = ux::galley_rows(paint, why, types::SMALL, p.text, Some((width - 42.0).max(0.0)), 8);
     let card = Rect::from_min_size(at, vec2(width.max(0.0), g.size().y + 20.0));
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(paint, Rect::from_min_size(card.min + vec2(10.0, 11.5), Vec2::splat(14.0)), &icons::WARNING, p.danger);
     paint.galley(card.min + vec2(32.0, 10.0), g, p.text.into());
-    crate::widgets::record_visible(ui, &mut shell.registry, &format!("{ID}.refusal"), "text", card);
+    crate::widgets::record_visible(ui, cx.registry, &format!("{ID}.refusal"), "text", card);
     card.height()
 }
 
@@ -290,13 +291,13 @@ fn missing_words(store: &Store, draft: &BindingDraft) -> Option<String> {
 /// The Binding section and the substitutions of a binding (`binding`) or of the open draft; gives
 /// the y under them.
 #[allow(clippy::too_many_arguments, reason = "the section is drawn into the panel for one binding or its draft")]
-fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, binding: Option<Obj>, draft: bool, heading: bool) -> f32 {
+fn sections(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, binding: Option<Obj>, draft: bool, heading: bool) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let half = ((width - 8.0) / 2.0).max(0.0);
     let left = r.left() + PAD;
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
-    let d = if draft { uml(&shell.notation_states).and_then(|uml| uml.binding.clone()) } else { None };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
+    let d = if draft { uml(cx.notation_states).and_then(|uml| uml.binding.clone()) } else { None };
     let (bound, template) = match (&d, binding) {
         (Some(d), _) => (store.by_uuid(d.bound), store.by_uuid(d.template)),
         (None, Some(b)) => (templates::bound_element(store, b), bindings::template_of(store, b)),
@@ -323,17 +324,17 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     let current_template = binding.and_then(|b| bindings::template_of(store, b));
     let (bound_name, template_name) = (name_of(store, bound), name_of(store, template));
     // Properties titles a binding's own panel Binding; the draft's heading is its own.
-    let mut y = if heading { section(shell, ui, p, r, y, &tr("Binding"), None).unwrap_or(y + 50.0) } else { y };
+    let mut y = if heading { section_cx(cx, ui, p, r, y, &tr("Binding"), None).unwrap_or(y + 50.0) } else { y };
     let (bound_id, template_id) = (format!("{ID}.bound"), format!("{ID}.template"));
     // A new binding's ends are the line just drawn; an existing one's are picked here.
     let (mut bound_field, mut template_field) = (None, None);
     if d.as_ref().is_some_and(|d| d.binding.is_none()) {
-        fixed_field(shell, ui, p, pos2(left, y), half, &bound_id, &tr("Bound element"), &bound_name);
-        fixed_field(shell, ui, p, pos2(left + half + 8.0, y), half, &template_id, &tr("Template"), &template_name);
+        fixed_field(cx, ui, p, pos2(left, y), half, &bound_id, &tr("Bound element"), &bound_name);
+        fixed_field(cx, ui, p, pos2(left + half + 8.0, y), half, &template_id, &tr("Template"), &template_name);
     } else {
-        bound_field = Some(select_field(shell, ui, p, pos2(left, y), half, &bound_id, &tr("Bound element"), &bound_name, menus::BINDING_BOUND));
-        template_field = Some(select_field(
-            shell,
+        bound_field = Some(select_field_cx(cx, ui, p, pos2(left, y), half, &bound_id, &tr("Bound element"), &bound_name, menus::BINDING_BOUND));
+        template_field = Some(select_field_cx(
+            cx,
             ui,
             p,
             pos2(left + half + 8.0, y),
@@ -346,7 +347,7 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     }
     y += 17.0 + FIELD + 16.0;
     let title = fmt(&tr("Substitutions · {n}"), &[("n", &rows.len().to_string())]);
-    y = section(shell, ui, p, r, y, &title, None).unwrap_or(y + 50.0);
+    y = section_cx(cx, ui, p, r, y, &title, None).unwrap_or(y + 50.0);
     let refused_now = d.as_ref().and_then(|d| d.refused.clone());
     let mut fields: Vec<Rect> = Vec::new();
     // The selectors take what the parameters' names leave, at least half the width.
@@ -383,51 +384,51 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         ux::icon_mid(&paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
         let id = format!("{ID}.substitution.{k}.argument");
         let said = if on_default { format!("{name}: {shown} ({})", tr("default")) } else { format!("{name}: {shown}") };
-        let resp = crate::home::control(shell, ui, &id, "select", field, true).accessible_name(said);
+        let resp = crate::panels::control_cx(cx, ui, &id, "select", field, true).accessible_name(said);
         let resp = match default {
             Some(dflt) => resp.on_hover_text(fmt(&tr("Default ({name})"), &[("name", dflt)])),
             None => resp,
         };
         if resp.clicked() {
             let m = menus::BINDING_ARGUMENT.at(k);
-            shell.panels.menu = if shell.panels.menu == Some(m) { None } else { Some(m) };
+            cx.panels.menu = if cx.panels.menu == Some(m) { None } else { Some(m) };
         }
         fields.push(field);
         y += FIELD + 12.0;
     }
     // The menus over everything drawn so far.
-    let store_now = shell.session.as_ref().map(|s| s.doc());
-    if let (Some(k), Some(store)) = (shell.panels.menu.and_then(|m| m.index_in(menus::BINDING_ARGUMENT)), store_now)
+    let store_now = cx.session.as_ref().map(|s| s.doc());
+    if let (Some(k), Some(store)) = (cx.panels.menu.and_then(|m| m.index_in(menus::BINDING_ARGUMENT)), store_now)
         && let (Some((q, ..)), Some(field)) = (rows.get(k), fields.get(k))
     {
         let choices = argument_choices(store, *q);
         let items: Vec<String> = choices.iter().map(|(l, _)| l.clone()).collect();
         let id = format!("{ID}.substitution.{k}.argument");
-        if let Some((_, v)) = crate::panels::menu(shell, ui, p, *field, &id, &items).and_then(|i| choices.get(i)).cloned() {
-            pick_argument(shell, binding, *q, v);
+        if let Some((_, v)) = crate::panels::menu_cx(cx, ui, p, *field, &id, &items).and_then(|i| choices.get(i)).cloned() {
+            pick_argument(cx, binding, *q, v);
         }
     }
     if let (Some(menus::BINDING_BOUND), Some(field), Some(b), Some(store)) =
-        (shell.panels.menu, bound_field, binding, shell.session.as_ref().map(|s| s.doc()))
+        (cx.panels.menu, bound_field, binding, cx.session.as_ref().map(|s| s.doc()))
     {
         let choices = bound_choices(store, b, template);
         let items: Vec<String> = choices.iter().map(|c| name_of(store, *c)).collect();
-        if let Some(c) = crate::panels::menu(shell, ui, p, field, &bound_id, &items).and_then(|i| choices.get(i)).copied() {
-            set_bound(shell, b, c);
+        if let Some(c) = crate::panels::menu_cx(cx, ui, p, field, &bound_id, &items).and_then(|i| choices.get(i)).copied() {
+            set_bound(cx, b, c);
         }
     }
     if let (Some(menus::BINDING_TEMPLATE), Some(field), Some(b), Some(store)) =
-        (shell.panels.menu, template_field, binding, shell.session.as_ref().map(|s| s.doc()))
+        (cx.panels.menu, template_field, binding, cx.session.as_ref().map(|s| s.doc()))
     {
         let choices = template_choices(store, b, bound);
         let items: Vec<String> = choices.iter().map(|c| name_of(store, *c)).collect();
-        if let Some(t) = crate::panels::menu(shell, ui, p, field, &template_id, &items).and_then(|i| choices.get(i)).copied() {
+        if let Some(t) = crate::panels::menu_cx(cx, ui, p, field, &template_id, &items).and_then(|i| choices.get(i)).copied() {
             if Some(t) == current_template {
-                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                if let Some(uml) = uml_mut(cx.notation_states) {
                     uml.binding = None;
                 }
             } else {
-                open_for_template(shell, b, t);
+                open_for_template(cx, b, t);
             }
         }
     }
@@ -436,13 +437,12 @@ fn sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
 
 /// The argument `value` picked for parameter `q`: into the draft, or written to binding `binding`
 /// as one undo step.
-fn pick_argument(shell: &mut Shell, binding: Option<Obj>, q: Obj, value: String) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+fn pick_argument(cx: &mut Ctx, binding: Option<Obj>, q: Obj, value: String) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Ok(qid) = store.uuid(q) else { return };
     let binding_id = binding.and_then(|b| store.uuid(b).ok());
     // A draft over this binding, or a new one, takes the pick; nothing is written.
-    if let Some(d) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.binding.as_mut()).filter(|d| binding.is_none() || d.binding == binding_id)
-    {
+    if let Some(d) = uml_mut(cx.notation_states).and_then(|uml| uml.binding.as_mut()).filter(|d| binding.is_none() || d.binding == binding_id) {
         match d.args.iter_mut().find(|(x, _)| *x == qid) {
             Some(slot) => slot.1 = value,
             None => d.args.push((qid, value)),
@@ -453,28 +453,28 @@ fn pick_argument(shell: &mut Shell, binding: Option<Obj>, q: Obj, value: String)
     let Some(b) = binding_id else { return };
     let mut args = Map::new();
     args.insert(qid.to_string(), Json::String(value));
-    if let Err(e) = run(shell, "uml.template-binding.set", json!({ "binding": b.to_string(), "arguments": args })) {
-        shell.panels.notice = Some(e);
+    if let Err(e) = run_cx(cx, "uml.template-binding.set", json!({ "binding": b.to_string(), "arguments": args })) {
+        cx.panels.notice = Some(e);
     }
 }
 
 /// Binding `b` moved to the bound element `c`, its arguments kept, as one undo step.
-fn set_bound(shell: &mut Shell, b: Obj, c: Obj) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+fn set_bound(cx: &mut Ctx, b: Obj, c: Obj) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let (Ok(b), Ok(c)) = (store.uuid(b), store.uuid(c)) else { return };
-    if let Err(e) = run(shell, "uml.template-binding.set", json!({ "binding": b.to_string(), "bound": c.to_string() })) {
-        shell.panels.notice = Some(e);
+    if let Err(e) = run_cx(cx, "uml.template-binding.set", json!({ "binding": b.to_string(), "bound": c.to_string() })) {
+        cx.panels.notice = Some(e);
     }
 }
 
 /// The draft's foot: what it still needs on the danger tint, Cancel and Apply, and the help under
 /// them; gives the y under it.
-fn draft_foot(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32) -> f32 {
+fn draft_foot(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32) -> f32 {
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
-    let Some(draft) = uml(&shell.notation_states).and_then(|uml| uml.binding.clone()) else { return y };
+    let Some(draft) = uml(cx.notation_states).and_then(|uml| uml.binding.clone()) else { return y };
     if let Some(why) = draft.refused.as_deref() {
-        y += refusal_box(shell, ui, p, pos2(left, y), width, why) + 12.0;
+        y += refusal_box(cx, ui, p, pos2(left, y), width, why) + 12.0;
     }
     let apply_w = {
         let paint = ui.painter();
@@ -485,8 +485,8 @@ fn draft_foot(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
         ux::galley(paint, &tr("Cancel"), types::UI, p.text, None).size().x + 20.0
     };
     let right = r.right() - PAD;
-    let (_, apply) = crate::settings::button(
-        shell,
+    let (_, apply) = crate::settings::button_in(
+        cx.registry,
         ui,
         p,
         &format!("{ID}.apply"),
@@ -496,8 +496,8 @@ fn draft_foot(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
         true,
         None,
     );
-    let (_, cancel) = crate::settings::button(
-        shell,
+    let (_, cancel) = crate::settings::button_in(
+        cx.registry,
         ui,
         p,
         &format!("{ID}.cancel"),
@@ -518,23 +518,23 @@ fn draft_foot(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     let h = g.size().y;
     paint.galley(pos2(left, y), g, p.text_muted.into());
     y += h;
-    let escape = shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape));
+    let escape = cx.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape));
     if cancel.clicked() || escape {
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.binding = None;
         }
     } else if apply.clicked() {
-        apply_draft(shell);
+        apply_draft(cx);
     }
     y
 }
 
 /// Writes the draft as one undo step, or says what it still needs and keeps it open.
-fn apply_draft(shell: &mut Shell) {
-    let Some(draft) = uml(&shell.notation_states).and_then(|uml| uml.binding.clone()) else { return };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+fn apply_draft(cx: &mut Ctx) {
+    let Some(draft) = uml(cx.notation_states).and_then(|uml| uml.binding.clone()) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     if let Some(why) = missing_words(store, &draft) {
-        if let Some(d) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.binding.as_mut()) {
+        if let Some(d) = uml_mut(cx.notation_states).and_then(|uml| uml.binding.as_mut()) {
             d.refused = Some(why);
         }
         return;
@@ -545,11 +545,11 @@ fn apply_draft(shell: &mut Shell) {
     }
     let out = match (draft.binding, draft.diagram, draft.nodes) {
         (Some(b), _, _) => {
-            run(shell, "uml.template-binding.set", json!({ "binding": b.to_string(), "template": draft.template.to_string(), "arguments": args }))
+            run_cx(cx, "uml.template-binding.set", json!({ "binding": b.to_string(), "template": draft.template.to_string(), "arguments": args }))
                 .map(|_| Some(b))
         }
         (None, Some(d), Some((from, to))) => {
-            let Some(session) = shell.session.as_mut() else { return };
+            let Some(session) = cx.session.as_mut() else { return };
             let (bound, template) = (draft.bound.to_string(), draft.template.to_string());
             session
                 .batch(&tr("Add template binding"), |b| {
@@ -570,15 +570,15 @@ fn apply_draft(shell: &mut Shell) {
     };
     match out {
         Ok(made) => {
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.binding = None;
             }
             if let Some(b) = made {
-                crate::panels::select_element(shell, b);
+                crate::panels::select_element_cx(cx, b);
             }
         }
         Err(e) => {
-            if let Some(d) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.binding.as_mut()) {
+            if let Some(d) = uml_mut(cx.notation_states).and_then(|uml| uml.binding.as_mut()) {
                 d.refused = Some(e);
             }
         }
@@ -587,9 +587,9 @@ fn apply_draft(shell: &mut Shell) {
 
 /// Properties while a new binding's draft is open (C3): its heading, the Binding section, the
 /// substitutions and the draft's foot. True when it drew, so the selection's panel is not drawn.
-pub(crate) fn draft_panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> bool {
-    drop_stale(shell);
-    if uml(&shell.notation_states).and_then(|uml| uml.binding.as_ref()).is_none_or(|d| d.binding.is_some()) {
+pub(crate) fn draft_panel(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> bool {
+    drop_stale(cx);
+    if uml(cx.notation_states).and_then(|uml| uml.binding.as_ref()).is_none_or(|d| d.binding.is_some()) {
         return false;
     }
     let paint = ui.painter().clone();
@@ -598,24 +598,24 @@ pub(crate) fn draft_panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
     ux::text(&paint, r.min + vec2(PAD, y + 26.0), &tr("Drawing · not in the model until you apply"), types::CAPTION, p.text_secondary, Some(width));
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(r.left(), r.top() + y + 51.0), r.max)));
     clip.set_clip_rect(Rect::from_min_max(pos2(r.left(), r.top() + y + 51.0), r.max));
-    let below = sections(shell, &mut clip, p, r, r.top() + y + 51.0, None, true, true);
-    draft_foot(shell, &mut clip, p, r, below + 4.0);
+    let below = sections(cx, &mut clip, p, r, r.top() + y + 51.0, None, true, true);
+    draft_foot(cx, &mut clip, p, r, below + 4.0);
     true
 }
 
 /// Drops a draft whose elements are gone, whose diagram is no longer the open one, or whose
 /// selection has moved on: a draft belongs to the gesture that opened it.
-pub(crate) fn drop_stale(shell: &mut Shell) {
-    let Some(d) = uml(&shell.notation_states).and_then(|uml| uml.binding.clone()) else { return };
-    let store = shell.session.as_ref().map(|s| s.doc());
+pub(crate) fn drop_stale(cx: &mut Ctx) {
+    let Some(d) = uml(cx.notation_states).and_then(|uml| uml.binding.clone()) else { return };
+    let store = cx.session.as_ref().map(|s| s.doc());
     let gone = store.is_none_or(|st| {
         st.by_uuid(d.bound).is_none_or(|o| !st.is_alive(o))
             || st.by_uuid(d.template).is_none_or(|o| !st.is_alive(o))
             || d.binding.is_some_and(|b| st.by_uuid(b).is_none_or(|o| !st.is_alive(o)))
     });
-    let moved = crate::panels::selected_id(shell) != d.opened_over || (d.binding.is_none() && d.diagram != shell.canvas.active);
+    let moved = crate::panels::selected_id_cx(&cx.cx_ref()) != d.opened_over || (d.binding.is_none() && d.diagram != cx.canvas.active);
     if (gone || moved)
-        && let Some(uml) = uml_mut(&mut shell.notation_states)
+        && let Some(uml) = uml_mut(cx.notation_states)
     {
         uml.binding = None;
     }
@@ -623,13 +623,13 @@ pub(crate) fn drop_stale(shell: &mut Shell) {
 
 /// A binding's Properties (C2): its Bound element and Template, then its substitutions; with
 /// another template picked, the draft over it.
-pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
+pub(crate) fn body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let Some(o) = subject.obj else { return };
-    drop_stale(shell);
-    let draft = uml(&shell.notation_states).and_then(|uml| uml.binding.as_ref()).is_some_and(|d| d.binding == subject.id && d.binding.is_some());
-    let below = sections(shell, ui, p, r, y, Some(o), draft, false);
+    drop_stale(cx);
+    let draft = uml(cx.notation_states).and_then(|uml| uml.binding.as_ref()).is_some_and(|d| d.binding == subject.id && d.binding.is_some());
+    let below = sections(cx, ui, p, r, y, Some(o), draft, false);
     if draft {
-        draft_foot(shell, ui, p, r, below + 4.0);
+        draft_foot(cx, ui, p, r, below + 4.0);
         return;
     }
     let width = (r.width() - 2.0 * PAD).max(0.0);
@@ -687,8 +687,8 @@ pub(crate) fn retain_valid(draft: &mut Option<BindingDraft>, store: &Store) {
 
 /// The open draft's Apply pressed, as a sample to look at.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn apply_sample(shell: &mut Shell) {
-    apply_draft(shell);
+pub(crate) fn apply_sample(shell: &mut crate::Shell) {
+    shell.cx(apply_draft);
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.

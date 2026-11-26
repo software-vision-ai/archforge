@@ -1462,11 +1462,6 @@ pub(crate) fn problems_section_cx(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, 
     y + 8.0
 }
 
-/// [`refuse_empty_name_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn refuse_empty_name(shell: &mut Shell, cmd: &str, name: &str) -> bool {
-    shell.cx(|cx| refuse_empty_name_cx(cx, cmd, name))
-}
-
 /// Refuses a name of nothing but spaces for an element that needs one, before anything is sent:
 /// the panel says so in plain words, and the name as written stays. A diagram may be left without a
 /// name, as may what a notation's rename command `cmd` leaves unnamed
@@ -1860,14 +1855,14 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         Panel::Properties | Panel::Skills => {}
     }
     // A template binding being drawn: its draft, nothing in the model yet (AR-131).
-    if panel == Panel::Properties && crate::uml_bindings::draft_panel(shell, ui, p, r, y) {
+    if panel == Panel::Properties && shell.cx(|cx| crate::uml_bindings::draft_panel(cx, ui, p, r, y)) {
         return;
     }
     // Several elements, generalizations among them: what a set may be made of them (AR-129).
     if panel == Panel::Properties
-        && let Some(all) = crate::uml_sets::selected(shell).filter(|all| all.len() >= 2)
+        && let Some(all) = crate::uml_sets::selected(&shell.cx_ref()).filter(|all| all.len() >= 2)
     {
-        crate::uml_sets::selection_body(shell, ui, p, r, y, &all);
+        shell.cx(|cx| crate::uml_sets::selection_body(cx, ui, p, r, y, &all));
         return;
     }
     // An n-ary association being drawn: its draft, not yet in the model (AR-128).
