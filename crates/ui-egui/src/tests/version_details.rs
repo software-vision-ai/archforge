@@ -75,7 +75,10 @@ fn a_refused_step_stays_the_caption_on_the_pages_over_the_canvas() {
         let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
         assert!(notice.width() < 440.0 && notice.height() == crate::ux::types::CAPTION.line, "{page}: {notice:?}");
         assert!(notice.top() < h.ctx.content_rect().center().y, "{page}: near the top, {notice:?}");
-        assert!(!rect_shapes(h).iter().any(|(r, fill, _)| *fill == p.surface && r.contains_rect(notice) && r.width() == 440.0), "{page}");
+        assert!(
+            !rect_shapes(h).iter().any(|(r, fill, _)| *fill == egui::Color32::from(p.surface) && r.contains_rect(notice) && r.width() == 440.0),
+            "{page}"
+        );
     };
     in_both(|h, _| {
         opened(h, "c2");
@@ -1576,7 +1579,7 @@ fn each_side_of_a_diagram_marks_what_differs_on_it() {
         assert!(
             shape_painted(
                 h,
-                &|s| matches!(s, egui::Shape::Path(l) if l.stroke.width == 2.0 && matches!(l.stroke.color, egui::epaint::ColorMode::Solid(c) if crate::ux::drawn(c) == added))
+                &|s| matches!(s, egui::Shape::Path(l) if l.stroke.width == 2.0 && matches!(l.stroke.color, egui::epaint::ColorMode::Solid(c) if c == egui::Color32::from(added)))
             ),
             "the line"
         );
@@ -2956,7 +2959,7 @@ fn colours(h: &Harness<'static, Shell>) -> &'static crate::ux::Palette {
 
 /// Whether a rectangle exactly over the control `id` is filled with `fill`.
 fn filled(h: &Harness<'static, Shell>, id: &str, fill: crate::ux::Colour) -> bool {
-    rect_shapes(h).iter().any(|(r, f, _)| *r == rect_of(h, id) && *f == fill)
+    rect_shapes(h).iter().any(|(r, f, _)| *r == rect_of(h, id) && *f == egui::Color32::from(fill))
 }
 
 /// Each type of value is worded as a person says it, a click reads nothing, and a label or

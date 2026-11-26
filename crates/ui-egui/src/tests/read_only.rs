@@ -35,7 +35,12 @@ fn centre_of(h: &Harness<'static, Shell>, prefix: &str) -> egui::Pos2 {
 /// The small squares of a node's corner handles, drawn in the accent.
 fn corner_squares(h: &Harness<'static, Shell>) -> usize {
     let accent = crate::ux::palette(h.state().state.theme == ThemeKind::Dark).accent;
-    rect_shapes(h).iter().filter(|(r, fill, stroke)| *stroke == accent && *fill != accent && r.size() == egui::vec2(6.0, 6.0)).count()
+    rect_shapes(h)
+        .iter()
+        .filter(|(r, fill, stroke)| {
+            *stroke == egui::Color32::from(accent) && *fill != egui::Color32::from(accent) && r.size() == egui::vec2(6.0, 6.0)
+        })
+        .count()
 }
 
 /// While a version shows, a diagram row offers neither its menu nor its Delete key (AR-644).
@@ -79,7 +84,10 @@ fn a_selected_node_has_no_corners_while_a_version_shows() {
         );
         click(&mut h, node);
         h.run_steps(2);
-        assert!(rect_shapes(&h).iter().any(|(r, _, stroke)| *stroke == accent && r.contains_rect(rect.shrink(1.0))), "the ring shows it is selected");
+        assert!(
+            rect_shapes(&h).iter().any(|(r, _, stroke)| *stroke == egui::Color32::from(accent) && r.contains_rect(rect.shrink(1.0))),
+            "the ring shows it is selected"
+        );
         assert_eq!(corner_squares(&h), 0, "no corners while a version shows");
         h.state_mut().back_to_current_work();
         h.run_steps(3);

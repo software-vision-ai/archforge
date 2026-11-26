@@ -35,8 +35,9 @@ The rules a change cannot break. `AGENTS.md` lists them in one line each.
   that packaging scales with `cargo xtask resize`. Inter is read at build time from
   the craft-fonts checkout `CRAFT_FONTS_DIR` names (`crates/ui-egui/build.rs`); without it the
   toolkit's face stands in.
-- The interface's icons are drawn in code from the design's vector paths (`crates/ui-egui/src/ux/icons.rs`),
-  not shipped as files. A new icon follows the ones there: our own drawing, the design's stroke
+- The interface's icons are drawn in code from the design's vector paths
+  (`crates/shell-api/src/ux/icons.rs`, and `crates/ui-egui/src/ux/icons.rs` for an icon only one
+  notation draws), not shipped as files. A new icon follows the ones there: our own drawing, the design's stroke
   weight.
 - `ATTRIBUTION.toml` is a hot file: a new row goes beside its relatives, never at the end.
 

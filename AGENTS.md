@@ -60,8 +60,9 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 - The user interface never touches the file system or the operating system itself: the host
   injects `Services`. Only `crates/ui-egui`, the shell, `crates/shell-api`, its interfaces, and the
   application may use the toolkit.
-- The interface draws through `ux`: no literal colour, font or icon outside it, and every control
-  has an automation id.
+- The interface draws through `ux` (`crates/shell-api/src/ux/`, re-exported by the shell as
+  `crate::ux` with the shell's own app icon, fonts and the icons only one notation draws): no
+  literal colour, font or icon outside it, and every control has an automation id.
 - Every string the user sees goes through the catalogues, with a row in every one.
 - Behaviour, icons and wording are our own: never copy another product's.
 - The Rust version is the one `rust-toolchain.toml` pins. A lint added by a newer release is fixed
