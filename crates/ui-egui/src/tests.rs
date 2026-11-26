@@ -17675,39 +17675,51 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn menu_rows(&self) -> &'static [&'static [crate::kinds::ModelRow]] {
         SKETCH_ROWS
     }
+    /// Its name in the New diagram dialog.
     fn word(&self) -> String {
         "Sketch".into()
     }
+    /// Its group in the Diagrams explorer.
     fn group_word(&self) -> String {
         "Sketches".into()
     }
+    /// Its card's sentence in the New diagram dialog.
     fn description(&self) -> String {
         "A sketch of classes".into()
     }
+    /// The New diagram dialog's title once it is chosen.
     fn new_word(&self) -> String {
         "New sketch".into()
     }
+    /// What its diagrams are of.
     fn owner_word(&self) -> String {
         "Package".into()
     }
+    /// The choice that makes a new one.
     fn new_owner(&self) -> String {
         "New package".into()
     }
+    /// The model's packages.
     fn owners(&self, store: &archforge_mof::Store) -> Vec<archforge_mof::Obj> {
         archforge_uml::commands::packages(store)
     }
+    /// No owner from the selection: the sketch's diagrams are of a package chosen in the dialog.
     fn owner_of(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
         None
     }
+    /// Refuses: the sketch makes no package for a diagram to be of.
     fn add_owner(&self, _: &mut crate::cx::Ctx, _: &str) -> Result<String, String> {
         Err("the sketch makes no package".into())
     }
+    /// A UML class takes part in the sketch's gestures.
     fn takes_part(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
         store.class_of(element).ok() == Some(archforge_uml::CLASS)
     }
+    /// Writes down the tool it was asked to place with.
     fn place(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: f64, _: f64) {
         SKETCH_CALLS.lock().unwrap().push(format!("place {tool}"));
     }
+    /// Writes down the tool and the names of the two nodes' elements it was asked to connect.
     fn connect(&self, cx: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, from: archforge_mof::Uuid, to: archforge_mof::Uuid) {
         let name = |id| {
             cx.session.as_ref().and_then(|s| {
@@ -17718,9 +17730,11 @@ impl crate::kinds::DiagramKind for SketchKind {
         };
         SKETCH_CALLS.lock().unwrap().push(format!("connect {tool} {} {}", name(from).unwrap_or_default(), name(to).unwrap_or_default()));
     }
+    /// Writes down the tool of a line dropped on empty canvas.
     fn connect_to_new(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
         SKETCH_CALLS.lock().unwrap().push(format!("connect to new {tool}"));
     }
+    /// Writes down the name typed in place, and takes it.
     fn rename(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, name: &str) -> Result<(), String> {
         SKETCH_CALLS.lock().unwrap().push(format!("rename {name}"));
         Ok(())
@@ -17916,9 +17930,11 @@ impl crate::notation_ui::NotationUi for SketchUi {
         }
         out
     }
+    /// Nothing for Models' `+`.
     fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
         Vec::new()
     }
+    /// Adds nothing, as it offers nothing.
     fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
         None
     }
@@ -17982,6 +17998,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
             }
         })
     }
+    /// A class's words, as Properties names it.
     fn words(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Words> {
         Some(crate::notation_ui::Words {
             kind: "Class · sketch".into(),
@@ -17991,6 +18008,8 @@ impl crate::notation_ui::NotationUi for SketchUi {
             name: archforge_core::name_of(store, o),
         })
     }
+    /// A class's attributes in a section of the shared controls, a row each, then the shared name
+    /// field.
     fn body(&self, cx: &mut crate::cx::Ctx, ui: &mut egui::Ui, p: &crate::ux::Palette, r: egui::Rect, y: f32, subject: &crate::panels::Subject) {
         let attributes = cx
             .session
