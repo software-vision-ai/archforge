@@ -5,16 +5,19 @@ from the shell, so a notation's screens build on this crate and never on the she
 (`archforge-ui-egui`) itself (`forge-ux/adr/0002`, "Notations are plugins", and `0003`, "Two
 registries"). It holds the automation-id registry, the design (`ux`), the canvas geometry that
 names no shell (`canvas`), the data types the interfaces `NotationUi` and `DiagramKind` hand
-across that name no shell (`notation_ui`, `kinds`) and the translations machinery (`i18n`), with
-which each crate registers its own catalogues; story AR-780 moves the shared controls and the
+across that name no shell (`notation_ui`, `kinds`), how a search or a filter matches what is typed
+(`search`) and the translations machinery (`i18n`), with which each crate registers its own
+catalogues; story AR-780 moves the shared controls and the
 interfaces themselves with the data types that still name the shell here, unchanged.
 
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code
 (the gate's `layers` step scans it as it scans the shell). It takes egui, serde,
-`archforge-mof` (4), whose elements, ids and store the interfaces' data types name, and
+`archforge-mof` (4), whose elements, ids and store the interfaces' data types name,
+`archforge-core` (5), whose skills a row of the Models tree lists under its element,
 `archforge-diagram` (6), whose rectangles and line-end marks the canvas geometry reads and whose
-notations a press on the canvas carries.
+notations a press on the canvas carries, craft-i18n, whose `Folder` folds what a search is typed
+against, and `icu_properties`, which says where a letter ends so a search never matches inside one.
 
 **Public API.**
 
@@ -39,9 +42,13 @@ notations a press on the canvas carries.
 | `notation_ui::{Entry, Words}` | an element as the project search lists it (icon, order, label, detail); how Properties names an element (kind line, word, "This table", "On this table · {n}", heading's name) |
 | `notation_ui::Removal` | `pub struct Removal { pub went: Vec<String>, pub after: Option<String> }`: what a notation works out about a removal of its own elements before it runs, for what is said once it went through |
 | `notation_ui::{Layer, Overlaid}` | where among the canvas's own overlays a notation's go (`Drafts`, `Rows`, `Menus`, `Offers`); the canvas an overlay is drawn over (palette, rectangle, `View`, diagram, the nodes a gesture previews) |
+| `notation_ui::Tree` | what a notation's rows of the Models tree are made with: `new(store, filter, expanded)` takes the Models filter as typed, folded and trimmed as one piece, the rows opened and the skills by the element they sit on; `filtering`, `matches`, `open`, `skills`, `row`, `skill_rows` |
+| `notation_ui::Subject` | the selection Properties describes (`obj`, `id`, `class`, `name`, `kind`, `word`, `this`, `on_this`): `of` an element as its `Words` name it, or the model's `root` by the project's name |
 | `notation_ui::{Row, Problem}` | a row of the Models tree as drawn (id, element, depth, kind and icon, muted, label, detail, note, whether it opens, is open and drags onto the canvas); a problem on the element it sits on (element, text) |
 | `notation_ui::{Editor, Place, OpenEditor}` | a Properties editor's card (its notation's metamodel and the card's name); where an open editor edits (the item, or none for one being added, and its list); an open editor (where it edits, the refusal its card shows) |
 | `notation_ui::{MenuId, Scope}` | a menu of the shell's one open-menu slot: whose it is (`Scope::Shell`, `Scope::Notation` by metamodel), its key and its index among a kind shown more than once; `shell`, `of`, `at`, `index_in` |
+| `search::Typed` | what was typed into a search or a filter, folded once: `words` (each word apart), `phrase` (one piece), `trimmed` (one piece, its edges trimmed after folding); `is_empty`, `first`, `in_folded`, `in_any` |
+| `search::{fold, joins, starts}` | `pub fn fold(text: &str) -> Folded`: a text folded as a search folds what is typed; `pub fn joins(prev: Option<char>, next: char) -> bool`: whether `next` goes on the letter before it; `pub fn starts<'a>(name: &'a Folded, word: &'a str) -> impl Iterator<Item = usize> + 'a`: where a folded word starts in a folded name, never inside a letter |
 | `kinds::{ToolUse, KindTool}` | what a diagram kind's tool does (`Place`, `Connect`); a tool it brings to the toolbar (key, icon, hint, use, chevron, width) |
 | `kinds::Press` | a press on the canvas as a diagram kind reads it: where, click or double click, the store and notations, the diagram and selection, and the node and line under a screen point |
 | `kinds::{LineDrawn, ExtraLabel}` | a line as the canvas drew it this frame, for its diagram kind to draw what goes with it (line, element, points on screen from source to target, whether selected); a label a kind drew of no one node or line (the element, where it was on screen, the node that holds where it was moved, its hover text) |

@@ -9,10 +9,16 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+# The skills a row of the Models tree lists under its element (notation_ui::Tree).
+archforge-core.workspace = true
 archforge-diagram.workspace = true
 archforge-mof.workspace = true
 egui.workspace = true
 serde.workspace = true
+# Folds what a search or a filter is typed against (search::Typed).
+craft-i18n.workspace = true
+# Where a letter ends, so a search never matches inside one (search::joins).
+icu_properties.workspace = true
 
 [lints]
 workspace = true

@@ -435,9 +435,12 @@ dependencies = [
 name = "archforge-shell-api"
 version = "0.14.0"
 dependencies = [
+ "archforge-core",
  "archforge-diagram",
  "archforge-mof",
+ "craft-i18n",
  "egui",
+ "icu_properties",
  "serde",
 ]
 
@@ -458,7 +461,6 @@ dependencies = [
  "egui",
  "egui_commonmark",
  "egui_kittest",
- "icu_properties",
  "log",
  "png",
  "pulldown-cmark",
