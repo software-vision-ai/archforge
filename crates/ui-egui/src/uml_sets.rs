@@ -196,11 +196,11 @@ pub(crate) fn secondary_click(press: &crate::kinds::Press<'_>) -> Option<crate::
         return None;
     }
     let first = if elements(store, press.selection).contains(&g) { None } else { store.uuid(g).ok() };
-    Some(crate::editing::Action::Own(Box::new(move |shell| {
+    Some(crate::editing::Action::Own(Box::new(move |cx| {
         if let Some(id) = first {
-            crate::editing::select(shell, vec![id]);
+            crate::editing::select_cx(cx, vec![id]);
         }
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.line_menu = Some(at);
         }
     })))

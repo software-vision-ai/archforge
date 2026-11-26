@@ -191,17 +191,17 @@ pub(crate) fn pointer(cx: &CtxRef, press: &Press<'_>) -> Option<Action> {
             Some(at) if press.clicked => match card(at) {
                 Some(node) => {
                     let (d, double) = (press.d, press.double);
-                    Action::Own(Box::new(move |shell| shell.cx(|cx| click(cx, d, node, double))))
+                    Action::Own(Box::new(move |cx| click(cx, d, node, double)))
                 }
-                None => Action::Own(Box::new(|shell| shell.cx(cancel))),
+                None => Action::Own(Box::new(cancel)),
             },
             _ => Action::Nothing,
         }),
         Tool::Select if press.clicked && adding_end(cx).is_some() => {
             let at = press.at?;
             Some(match card(at) {
-                Some(node) => Action::Own(Box::new(move |shell| shell.cx(|cx| add_end(cx, node)))),
-                None => Action::Own(Box::new(|shell| shell.cx(cancel))),
+                Some(node) => Action::Own(Box::new(move |cx| add_end(cx, node))),
+                None => Action::Own(Box::new(cancel)),
             })
         }
         _ => None,
@@ -217,9 +217,9 @@ pub(crate) fn secondary_click(press: &Press<'_>) -> Option<Action> {
         None => (press.line_at)(at).and_then(|e| store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref())),
     };
     let a = shown.map(|e| press.notations.selects_as(store, e)).filter(|a| has_menu(store, *a)).and_then(|a| uuid(store, a))?;
-    Some(Action::Own(Box::new(move |shell| {
-        crate::editing::select(shell, vec![a]);
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    Some(Action::Own(Box::new(move |cx| {
+        crate::editing::select_cx(cx, vec![a]);
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.nary_menu = Some((at, a));
         }
     })))

@@ -11245,7 +11245,7 @@ fn a_package_added_with_nothing_selected_takes_a_name_free_in_the_root_package()
         archforge_uml::commands::subpackages(st, root).into_iter().map(|p| archforge_core::name_of(st, p)).collect::<Vec<_>>()
     };
     for _ in 0..2 {
-        let added = crate::uml_ui::UmlUi.add(h.state_mut(), "package", None).expect("a package offer");
+        let added = h.state_mut().cx(|cx| crate::uml_ui::UmlUi.add(cx, "package", None)).expect("a package offer");
         assert!(added.as_ref().err().is_none(), "{:?}", added.err());
         h.run();
     }
@@ -13165,13 +13165,13 @@ fn package_navigation_is_umls_kinds_and_ers_does_none() {
         let d = shell.session.as_ref().unwrap().doc().by_uuid(sales_d).unwrap();
         let p = crate::ux::palette(theme == ThemeKind::Dark);
         let view = |shell: &Shell| (shell.canvas.zoom, shell.canvas.pan, uml_of(shell).nav.centre);
-        recorded_alone(shell, |shell, ui| crate::er_kind::ErKind.before_draw(shell, ui, CANVAS, d));
+        recorded_alone(shell, |shell, ui| shell.cx(|cx| crate::er_kind::ErKind.before_draw(cx, ui, CANVAS, d)));
         assert_eq!(view(shell), (0.5, egui::vec2(33.0, 44.0), true), "{theme:?}: the default lands nothing");
-        recorded_alone(shell, |shell, ui| crate::uml_ui::UmlKind.before_draw(shell, ui, CANVAS, d));
+        recorded_alone(shell, |shell, ui| shell.cx(|cx| crate::uml_ui::UmlKind.before_draw(cx, ui, CANVAS, d)));
         assert_eq!(view(shell), (crate::package_nav::LANDING, egui::Vec2::ZERO, false), "{theme:?}: UML lands the entry");
         let mut room = (0.0, 0.0);
-        let er = recorded_alone(shell, |shell, ui| room.0 = crate::er_kind::ErKind.after_draw(shell, ui, p, CANVAS, d));
-        let uml = recorded_alone(shell, |shell, ui| room.1 = crate::uml_ui::UmlKind.after_draw(shell, ui, p, CANVAS, d));
+        let er = recorded_alone(shell, |shell, ui| room.0 = shell.cx(|cx| crate::er_kind::ErKind.after_draw(cx, ui, p, CANVAS, d)));
+        let uml = recorded_alone(shell, |shell, ui| room.1 = shell.cx(|cx| crate::uml_ui::UmlKind.after_draw(cx, ui, p, CANVAS, d)));
         assert!(er.is_empty() && room.0 == 0.0, "{theme:?}: the default draws nothing: {er:?}");
         assert!(uml.iter().any(|i| i == "workspace.canvas.path") && room.1 > 0.0, "{theme:?}: UML's path bar: {uml:?} {room:?}");
     }
@@ -13231,13 +13231,13 @@ fn a_drop_in_models_runs_as_its_notation_runs_it() {
         };
         let shell = h.state_mut();
         let params = |package: &str| serde_json::json!({ "package": package, "to": sales });
-        crate::er_ui::ErUi.run_drop(shell, "uml.package.move", params(&orders)).unwrap();
+        shell.cx(|cx| crate::er_ui::ErUi.run_drop(cx, "uml.package.move", params(&orders))).unwrap();
         assert_eq!((parent(shell, &orders).as_str(), shell.canvas.toast.is_none()), ("Sales", true), "{theme:?}: run plainly");
-        crate::uml_ui::UmlUi.run_drop(shell, "uml.package.move", params(&billing)).unwrap();
+        shell.cx(|cx| crate::uml_ui::UmlUi.run_drop(cx, "uml.package.move", params(&billing))).unwrap();
         assert_eq!(parent(shell, &billing), "Sales", "{theme:?}");
         assert_eq!(shell.canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Billing moved into Sales"), "{theme:?}: as Properties moves it");
         assert_eq!(shell.session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}");
-        let refused = crate::uml_ui::UmlUi.run_drop(shell, "uml.package.move", serde_json::json!({ "package": sales, "to": billing }));
+        let refused = shell.cx(|cx| crate::uml_ui::UmlUi.run_drop(cx, "uml.package.move", serde_json::json!({ "package": sales, "to": billing })));
         assert!(refused.is_err(), "{theme:?}: into a package it holds, refused in words: {refused:?}");
     }
 }
@@ -17657,10 +17657,9 @@ static SKETCH_TOOLS: &[crate::kinds::KindTool] = &[
 ];
 
 /// The sketch kind's rows of the Model menu, a section for each of its tools.
-static SKETCH_ROWS: &[&[crate::actions::Action]] = &[
-    &[crate::model_menu::menu_row!(Some(SKETCH), "model.sketch-class", "Class".into(), |s| s.canvas.tool = crate::canvas::Tool::Place("class"))],
-    &[crate::model_menu::menu_row!(Some(SKETCH), "model.sketch-inherit", "Inherit".into(), |s| s.canvas.tool =
-        crate::canvas::Tool::Connect("inherit"))],
+static SKETCH_ROWS: &[&[crate::kinds::ModelRow]] = &[
+    &[crate::kinds::ModelRow { key: "model.sketch-class", word: || "Class".into(), tool: crate::canvas::Tool::Place("class"), choice: None }],
+    &[crate::kinds::ModelRow { key: "model.sketch-inherit", word: || "Inherit".into(), tool: crate::canvas::Tool::Connect("inherit"), choice: None }],
 ];
 
 impl crate::kinds::DiagramKind for SketchKind {
@@ -17673,7 +17672,7 @@ impl crate::kinds::DiagramKind for SketchKind {
         SKETCH_TOOLS
     }
     /// A row for each of its tools, each in a section of its own.
-    fn menu_rows(&self) -> &'static [&'static [crate::actions::Action]] {
+    fn menu_rows(&self) -> &'static [&'static [crate::kinds::ModelRow]] {
         SKETCH_ROWS
     }
     fn word(&self) -> String {
@@ -17700,18 +17699,18 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn owner_of(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
         None
     }
-    fn add_owner(&self, _: &mut Shell, _: &str) -> Result<String, String> {
+    fn add_owner(&self, _: &mut crate::cx::Ctx, _: &str) -> Result<String, String> {
         Err("the sketch makes no package".into())
     }
     fn takes_part(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
         store.class_of(element).ok() == Some(archforge_uml::CLASS)
     }
-    fn place(&self, _: &mut Shell, tool: &'static str, _: archforge_mof::Obj, _: f64, _: f64) {
+    fn place(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: f64, _: f64) {
         SKETCH_CALLS.lock().unwrap().push(format!("place {tool}"));
     }
-    fn connect(&self, shell: &mut Shell, tool: &'static str, _: archforge_mof::Obj, from: archforge_mof::Uuid, to: archforge_mof::Uuid) {
+    fn connect(&self, cx: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, from: archforge_mof::Uuid, to: archforge_mof::Uuid) {
         let name = |id| {
-            shell.session.as_ref().and_then(|s| {
+            cx.session.as_ref().and_then(|s| {
                 let st = s.doc();
                 let e = st.get(st.by_uuid(id)?, archforge_diagram::node::ELEMENT).ok()?.as_ref()?;
                 Some(archforge_core::name_of(st, e))
@@ -17719,15 +17718,15 @@ impl crate::kinds::DiagramKind for SketchKind {
         };
         SKETCH_CALLS.lock().unwrap().push(format!("connect {tool} {} {}", name(from).unwrap_or_default(), name(to).unwrap_or_default()));
     }
-    fn connect_to_new(&self, _: &mut Shell, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
+    fn connect_to_new(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
         SKETCH_CALLS.lock().unwrap().push(format!("connect to new {tool}"));
     }
-    fn rename(&self, _: &mut Shell, _: archforge_mof::Uuid, name: &str) -> Result<(), String> {
+    fn rename(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, name: &str) -> Result<(), String> {
         SKETCH_CALLS.lock().unwrap().push(format!("rename {name}"));
         Ok(())
     }
     /// Writes down the row it was asked to open at.
-    fn open(&self, _: &mut Shell, _: archforge_mof::Uuid, row: Option<usize>) {
+    fn open(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, row: Option<usize>) {
         SKETCH_CALLS.lock().unwrap().push(format!("open {row:?}"));
     }
     /// Party's menu: a first row that is off, then one after Open in Models that writes down what
@@ -17747,8 +17746,8 @@ impl crate::kinds::DiagramKind for SketchKind {
             keys: if mac { "⌥S" } else { "Alt S" },
             live: true,
             first: false,
-            run: |shell, menu| {
-                let name = shell.session.as_ref().and_then(|s| s.doc().by_uuid(menu.entity).map(|e| archforge_core::name_of(s.doc(), e)));
+            run: |cx, menu| {
+                let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(menu.entity).map(|e| archforge_core::name_of(s.doc(), e)));
                 SKETCH_CALLS.lock().unwrap().push(format!("menu own {}", name.unwrap_or_default()));
             },
         };
@@ -17920,7 +17919,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
         Vec::new()
     }
-    fn add(&self, _: &mut Shell, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
+    fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
         None
     }
     fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
@@ -17955,7 +17954,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
         Box::new(SketchState)
     }
     /// The sketch removes nothing its own way: Delete goes on to the shared removals.
-    fn canvas_delete(&self, _: &mut Shell, _: bool) -> bool {
+    fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
         false
     }
     /// Names each element it is asked about and counts them, signed with its name, so a test sees
@@ -17971,7 +17970,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
         format!("{what} gone from the {} with {} named", self.0, removal.went.len())
     }
     /// The sketch draws nothing over the canvas.
-    fn canvas_overlay(&self, _: &mut Shell, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
+    fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
     fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
         (store.class_of(o).ok()? == archforge_uml::CLASS).then(|| {
             let pkg = store.container(o).ok().flatten().map(|(c, _)| archforge_core::name_of(store, c)).unwrap_or_default();
@@ -17992,8 +17991,8 @@ impl crate::notation_ui::NotationUi for SketchUi {
             name: archforge_core::name_of(store, o),
         })
     }
-    fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &crate::ux::Palette, r: egui::Rect, y: f32, subject: &crate::panels::Subject) {
-        let attributes = shell
+    fn body(&self, cx: &mut crate::cx::Ctx, ui: &mut egui::Ui, p: &crate::ux::Palette, r: egui::Rect, y: f32, subject: &crate::panels::Subject) {
+        let attributes = cx
             .session
             .as_ref()
             .and_then(|s| {
@@ -18009,15 +18008,15 @@ impl crate::notation_ui::NotationUi for SketchUi {
                 )
             })
             .unwrap_or_default();
-        let y = crate::panels::section(shell, ui, p, r, y, "Attributes", None).unwrap_or(y + 50.0);
+        let y = crate::panels::section_cx(cx, ui, p, r, y, "Attributes", None).unwrap_or(y + 50.0);
         for (i, a) in attributes.iter().enumerate() {
             let row = egui::Rect::from_min_size(egui::pos2(r.left() + 16.0, y + i as f32 * 28.0), egui::vec2(r.width() - 32.0, 24.0));
-            crate::home::control(shell, ui, &format!("workspace.properties.sketch.attribute.{i}"), "row", row, true);
+            crate::panels::control_cx(cx, ui, &format!("workspace.properties.sketch.attribute.{i}"), "row", row, true);
             crate::ux::text(&ui.painter().clone(), row.min, a, crate::ux::types::UI, p.text, None);
         }
         // The shared name field, under the attributes.
         let at = egui::pos2(r.left() + 16.0, y + attributes.len() as f32 * 28.0 + 8.0);
-        crate::panels::name_field(shell, ui, p, at, r.width() - 32.0, subject, "uml.class.rename", "class");
+        crate::panels::name_field_cx(cx, ui, p, at, r.width() - 32.0, subject, "uml.class.rename", "class");
     }
 }
 
@@ -23528,7 +23527,7 @@ fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_dro
 /// The classifier tool's hover text, as the class diagram gives it.
 fn classifier_hint(h: &Harness<'static, Shell>) -> String {
     use crate::kinds::DiagramKind;
-    crate::uml_ui::UmlKind.tool_hint(h.state(), crate::uml_classifier::TOOL).expect("the classifier tool names its kind")
+    crate::uml_ui::UmlKind.tool_hint(&h.state().cx_ref(), crate::uml_classifier::TOOL).expect("the classifier tool names its kind")
 }
 
 /// The id of the live element of `class` named `name`.
@@ -24609,7 +24608,7 @@ fn the_relationship_tool_draws_an_interface_realization_from_a_class_to_an_inter
         // The tool says which way it draws, in its tooltip and its accessible name.
         let hint = {
             use crate::kinds::DiagramKind;
-            crate::uml_ui::UmlKind.tool_hint(h.state(), "relationship")
+            crate::uml_ui::UmlKind.tool_hint(&h.state().cx_ref(), "relationship")
         };
         assert_eq!(hint.as_deref(), Some("Interface realization: from the implementing class to its interface"));
         let relate = |h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2| {
@@ -31779,7 +31778,7 @@ fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_
         h.run();
         // Dropped there from Models, as a row dragged onto the canvas is.
         let d = h.state().session.as_ref().unwrap().doc().by_uuid(other).unwrap();
-        crate::kinds::DiagramKind::drop(&crate::uml_ui::UmlKind, h.state_mut(), d, made, (200.0, 200.0));
+        h.state_mut().cx(|cx| crate::kinds::DiagramKind::drop(&crate::uml_ui::UmlKind, cx, d, made, (200.0, 200.0)));
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place enumeration"), "notice {:?}", h.state().canvas.notice);
         h.run();
         assert!(painted(&h).iter().any(|t| t == "Order::Enumeration 1"), "{theme:?}: the qualified name, {:?}", painted(&h));
@@ -32645,7 +32644,7 @@ const PRESSED_AT: egui::Pos2 = egui::pos2(300.0, 200.0);
 
 /// What a kind's answer to a press is, in a word: none left to the shared gestures, nothing taken,
 /// or an action of its own; any other is the shared gestures' own.
-fn answered(action: Option<crate::editing::Action>) -> (&'static str, Option<Box<dyn FnOnce(&mut Shell)>>) {
+fn answered(action: Option<crate::editing::Action>) -> (&'static str, Option<Box<dyn FnOnce(&mut crate::cx::Ctx)>>) {
     match action {
         None => ("none", None),
         Some(crate::editing::Action::Nothing) => ("nothing", None),
@@ -32675,8 +32674,9 @@ fn the_kind_reads_a_press_first_and_ers_leaves_it() {
         let (mut h, ids) = nary_sample(theme, true);
         let shell = h.state_mut();
         let customer = node_here(shell, &ids["Customer"]);
-        let ask =
-            |shell: &Shell, kind: &dyn DiagramKind, node, clicked| pressed_with(shell, node, None, clicked, |p| answered(kind.pointer(shell, p)));
+        let ask = |shell: &Shell, kind: &dyn DiagramKind, node, clicked| {
+            pressed_with(shell, node, None, clicked, |p| answered(kind.pointer(&shell.cx_ref(), p)))
+        };
         assert_eq!(ask(shell, &crate::uml_ui::UmlKind, Some(customer), true).0, "none", "{theme:?}: nothing under way");
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
         uml_of_mut(shell).relation = crate::uml_relate::Relate::NAry;
@@ -32684,7 +32684,7 @@ fn the_kind_reads_a_press_first_and_ers_leaves_it() {
         assert_eq!(ask(shell, &crate::uml_ui::UmlKind, Some(customer), false).0, "nothing", "{theme:?}: no line starts");
         let (word, run) = ask(shell, &crate::uml_ui::UmlKind, Some(customer), true);
         assert_eq!(word, "own", "{theme:?}");
-        run.unwrap()(shell);
+        shell.cx(|cx| run.unwrap()(cx));
         let ends = |shell: &Shell| match &uml_of(shell).nary {
             Some(crate::uml_nary::Nary::Draft { ends, .. }) => ends.len(),
             _ => 0,
@@ -32692,7 +32692,7 @@ fn the_kind_reads_a_press_first_and_ers_leaves_it() {
         assert_eq!(ends(shell), 1, "{theme:?}: Customer is the first end");
         let (word, run) = ask(shell, &crate::uml_ui::UmlKind, None, true);
         assert_eq!(word, "own", "{theme:?}");
-        run.unwrap()(shell);
+        shell.cx(|cx| run.unwrap()(cx));
         assert!(uml_of(shell).nary.is_none() && shell.canvas.tool == crate::canvas::Tool::Select, "{theme:?}: empty canvas cancels");
         // Add end waits on a class.
         let st = shell.session.as_ref().unwrap().doc();
@@ -32703,7 +32703,7 @@ fn the_kind_reads_a_press_first_and_ers_leaves_it() {
         assert_eq!(ask(shell, &crate::uml_ui::UmlKind, Some(customer), false).0, "none", "{theme:?}: a drag may start");
         let (word, run) = ask(shell, &crate::uml_ui::UmlKind, Some(customer), true);
         assert_eq!(word, "own", "{theme:?}");
-        run.unwrap()(shell);
+        shell.cx(|cx| run.unwrap()(cx));
         let st = shell.session.as_ref().unwrap().doc();
         let ends = archforge_uml::nary::ends(st, st.by_uuid(association).unwrap()).len();
         assert_eq!((ends, uml_of(shell).nary.is_none()), (4, true), "{theme:?}: a fourth end, at Customer");
@@ -32726,13 +32726,14 @@ fn the_kind_reads_a_right_click_first_and_ers_leaves_it() {
         let a_id = st.uuid(a).unwrap();
         let diamond = node_here(shell, &a_id.to_string());
         let customer = node_here(shell, &ids["Customer"]);
-        let ask =
-            |shell: &Shell, kind: &dyn DiagramKind, node, line| pressed_with(shell, node, line, false, |p| answered(kind.secondary_click(shell, p)));
+        let ask = |shell: &Shell, kind: &dyn DiagramKind, node, line| {
+            pressed_with(shell, node, line, false, |p| answered(kind.secondary_click(&shell.cx_ref(), p)))
+        };
         assert_eq!(ask(shell, &crate::er_kind::ErKind, Some(diamond), None).0, "none", "{theme:?}: ER's kind leaves it");
         assert_eq!(ask(shell, &crate::uml_ui::UmlKind, Some(customer), None).0, "none", "{theme:?}: a card's menu is the element menu");
         let (word, run) = ask(shell, &crate::uml_ui::UmlKind, Some(diamond), None);
         assert_eq!(word, "own", "{theme:?}");
-        run.unwrap()(shell);
+        shell.cx(|cx| run.unwrap()(cx));
         assert_eq!(uml_of(shell).nary_menu, Some((PRESSED_AT, a_id)), "{theme:?}: its menu, where pressed");
         let st = shell.session.as_ref().unwrap().doc();
         assert_eq!(shell.session.as_ref().unwrap().view().selection, vec![st.by_uuid(a_id).unwrap()], "{theme:?}: the association selected");
@@ -32745,16 +32746,19 @@ fn the_kind_reads_a_right_click_first_and_ers_leaves_it() {
         let st = shell.session.as_ref().unwrap().doc();
         let g = st.by_uuid(archforge_mof::Uuid::parse(&gens[0]).unwrap()).unwrap();
         let line = archforge_diagram::views_of(st, g).1[0];
-        let ask = |shell: &Shell, kind: &dyn DiagramKind| pressed_with(shell, None, Some(line), false, |p| answered(kind.secondary_click(shell, p)));
+        let ask = |shell: &Shell, kind: &dyn DiagramKind| {
+            pressed_with(shell, None, Some(line), false, |p| answered(kind.secondary_click(&shell.cx_ref(), p)))
+        };
         assert_eq!(ask(shell, &crate::er_kind::ErKind).0, "none", "{theme:?}: ER's kind leaves it");
         let (word, run) = ask(shell, &crate::uml_ui::UmlKind);
         assert_eq!(word, "own", "{theme:?}");
-        run.unwrap()(shell);
+        shell.cx(|cx| run.unwrap()(cx));
         assert_eq!(uml_of(shell).line_menu, Some(PRESSED_AT), "{theme:?}: the set actions, where pressed");
         assert_eq!(shell.session.as_ref().unwrap().view().selection, vec![g], "{theme:?}: the line selected first");
         uml_of_mut(shell).line_menu = None;
         shell.session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        ask(shell, &crate::uml_ui::UmlKind).1.unwrap()(shell);
+        let run = ask(shell, &crate::uml_ui::UmlKind).1.unwrap();
+        shell.cx(|cx| run(cx));
         assert_eq!(shell.session.as_ref().unwrap().view().selection.len(), 3, "{theme:?}: a selection holding it is kept");
     }
 }
@@ -32780,8 +32784,9 @@ fn the_kind_takes_its_drawings_keys_first_and_ers_takes_none() {
         let (mut h, ids) = nary_sample(theme, false);
         let shell = h.state_mut();
         let d = shell.session.as_ref().unwrap().doc().by_uuid(shell.canvas.active.unwrap()).unwrap();
-        let escape =
-            |shell: &mut Shell, kind: &dyn DiagramKind| keyed_alone(shell, &[egui::Key::Escape], egui::Modifiers::NONE, |s, ui| kind.keys(s, ui, d));
+        let escape = |shell: &mut Shell, kind: &dyn DiagramKind| {
+            keyed_alone(shell, &[egui::Key::Escape], egui::Modifiers::NONE, |s, ui| s.cx(|cx| kind.keys(cx, ui, d)))
+        };
         assert!(!escape(shell, &crate::uml_ui::UmlKind), "{theme:?}: nothing drawn");
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
         uml_of_mut(shell).relation = crate::uml_relate::Relate::NAry;
@@ -32858,10 +32863,10 @@ fn delete_removes_each_notations_own_selected_element_its_own_way() {
             s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
             (rel, fk)
         };
-        assert!(!crate::uml_ui::UmlUi.canvas_delete(h.state_mut(), false), "{theme:?}: UML leaves a relationship");
-        assert!(!crate::er_ui::ErUi.canvas_delete(h.state_mut(), true), "{theme:?}: Shift leaves it to the dialog");
+        assert!(!h.state_mut().cx(|cx| crate::uml_ui::UmlUi.canvas_delete(cx, false)), "{theme:?}: UML leaves a relationship");
+        assert!(!h.state_mut().cx(|cx| crate::er_ui::ErUi.canvas_delete(cx, true)), "{theme:?}: Shift leaves it to the dialog");
         assert!(alive(&h, rel), "{theme:?}");
-        assert!(crate::er_ui::ErUi.canvas_delete(h.state_mut(), false), "{theme:?}");
+        assert!(h.state_mut().cx(|cx| crate::er_ui::ErUi.canvas_delete(cx, false)), "{theme:?}");
         assert!(!alive(&h, rel) && !alive(&h, fk), "{theme:?}: with its foreign key");
         assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("places removed"), "{theme:?}");
     }
@@ -32873,9 +32878,9 @@ fn delete_removes_each_notations_own_selected_element_its_own_way() {
         let st = h.state().session.as_ref().unwrap().doc();
         let set = st.alive().find(|o| archforge_uml::generalization_sets::is_set(st, *o)).unwrap();
         let g = st.by_uuid(archforge_mof::Uuid::parse(&gens[0]).unwrap()).unwrap();
-        assert!(!crate::er_ui::ErUi.canvas_delete(h.state_mut(), false), "{theme:?}: ER leaves a set");
+        assert!(!h.state_mut().cx(|cx| crate::er_ui::ErUi.canvas_delete(cx, false)), "{theme:?}: ER leaves a set");
         assert!(alive(&h, set), "{theme:?}");
-        assert!(crate::uml_ui::UmlUi.canvas_delete(h.state_mut(), true), "{theme:?}: Shift held too");
+        assert!(h.state_mut().cx(|cx| crate::uml_ui::UmlUi.canvas_delete(cx, true)), "{theme:?}: Shift held too");
         assert!(!alive(&h, set) && alive(&h, g), "{theme:?}: its generalizations kept");
     }
 }
@@ -32896,10 +32901,13 @@ fn a_notations_chord_on_the_selection_is_its_own() {
             st.alive().filter(|o| archforge_uml::generalization_sets::is_set(st, *o)).count()
         };
         let shell = h.state_mut();
-        assert!(!keyed_alone(shell, &[egui::Key::G], chord, |s, ui| crate::er_ui::ErUi.canvas_keys(s, ui)), "{theme:?}: ER takes none");
-        assert!(!keyed_alone(shell, &[egui::Key::G], egui::Modifiers::COMMAND, |s, ui| crate::uml_ui::UmlUi.canvas_keys(s, ui)), "{theme:?}");
+        assert!(!keyed_alone(shell, &[egui::Key::G], chord, |s, ui| s.cx(|cx| crate::er_ui::ErUi.canvas_keys(cx, ui))), "{theme:?}: ER takes none");
+        assert!(
+            !keyed_alone(shell, &[egui::Key::G], egui::Modifiers::COMMAND, |s, ui| s.cx(|cx| crate::uml_ui::UmlUi.canvas_keys(cx, ui))),
+            "{theme:?}"
+        );
         assert_eq!(sets(&h), 0, "{theme:?}");
-        assert!(keyed_alone(h.state_mut(), &[egui::Key::G], chord, |s, ui| crate::uml_ui::UmlUi.canvas_keys(s, ui)), "{theme:?}: ⌥⌘G");
+        assert!(keyed_alone(h.state_mut(), &[egui::Key::G], chord, |s, ui| s.cx(|cx| crate::uml_ui::UmlUi.canvas_keys(cx, ui))), "{theme:?}: ⌥⌘G");
         assert_eq!(sets(&h), 1, "{theme:?}: a set made");
     }
 }
@@ -32998,7 +33006,7 @@ fn overlaid(
     let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0));
     let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ui| {
         let on = crate::notation_ui::Overlaid { p: crate::ux::palette(dark), r, view, d, overrides: &overrides };
-        notation.canvas_overlay(shell, ui, layer, &on);
+        shell.cx(|cx| notation.canvas_overlay(cx, ui, layer, &on));
     });
     out.textures_delta.clear();
     let drawn = (out.shapes.len(), shell.widgets().iter().map(|w| w.id.clone()).collect());
@@ -33137,9 +33145,9 @@ fn a_resolvable_badge_says_and_does_what_its_notation_answers() {
             let st = h.state().session.as_ref().unwrap().doc();
             st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
         };
-        crate::uml_ui::UmlUi.resolve(h.state_mut(), rel);
+        h.state_mut().cx(|cx| crate::uml_ui::UmlUi.resolve(cx, rel));
         assert!(er_of(h.state()).mapping.is_none(), "{theme:?}: UML opens nothing");
-        crate::er_ui::ErUi.resolve(h.state_mut(), rel);
+        h.state_mut().cx(|cx| crate::er_ui::ErUi.resolve(cx, rel));
         assert_eq!(er_of(h.state()).mapping.as_ref().map(|m| m.relationship), Some(rel), "{theme:?}: ER opens the offer");
     }
 }
@@ -33429,7 +33437,7 @@ fn the_n_ary_hint_bar_is_umls_kinds_and_ers_draws_none() {
         click(&mut h, at);
         let hinted = |kind: &dyn DiagramKind, shell: &mut Shell| {
             let p = crate::ux::palette(theme == ThemeKind::Dark);
-            let ids = recorded_alone(shell, |shell, ui| kind.hint_bar(shell, ui, p, CANVAS, 0.0));
+            let ids = recorded_alone(shell, |shell, ui| shell.cx(|cx| kind.hint_bar(cx, ui, p, CANVAS, 0.0)));
             ids.iter().any(|i| i == "workspace.canvas.gestureHint")
         };
         assert!(hinted(&crate::uml_ui::UmlKind, h.state_mut()), "{theme:?}: UML's kind draws the hint");
@@ -34264,7 +34272,9 @@ fn two_diagrams_show_the_same_n_ary_association_and_a_dropped_class_brings_its_l
     h.run();
     assert_eq!(legs_on(&h, None), 3);
     let d = h.state().session.as_ref().unwrap().doc().by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
-    crate::kinds::DiagramKind::drop(&crate::uml_ui::UmlKind, h.state_mut(), d, archforge_mof::Uuid::parse(&ids["Catalog"]).unwrap(), (460.0, 640.0));
+    h.state_mut().cx(|cx| {
+        crate::kinds::DiagramKind::drop(&crate::uml_ui::UmlKind, cx, d, archforge_mof::Uuid::parse(&ids["Catalog"]).unwrap(), (460.0, 640.0))
+    });
     h.run();
     assert_eq!(legs_on(&h, None), 4, "the dropped class brings its leg");
 }

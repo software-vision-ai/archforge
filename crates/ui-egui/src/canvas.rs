@@ -560,7 +560,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     shell.canvas.shown = shell.canvas.active;
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
     if let Some(kind) = kind {
-        kind.before_draw(shell, ui, r, d);
+        shell.cx(|cx| kind.before_draw(cx, ui, r, d));
     }
     shell.canvas.zoom_intent = 0.0;
     let view = View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
@@ -570,7 +570,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         && r.contains(at)
         && let Some(kind) = kind
     {
-        kind.drop(shell, d, element, view.to_canvas(at));
+        shell.cx(|cx| kind.drop(cx, d, element, view.to_canvas(at)));
     }
     let clip = paint.with_clip_rect(r);
     if shell.canvas.grid {
@@ -655,7 +655,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     crate::editing::overlays(shell, ui, p, r, view, d, &overrides);
     // What the diagram's kind draws over the canvas (UML's path bar and a package's Open), and the
     // fade of a switch over that.
-    let below_path = kind.map_or(0.0, |k| k.after_draw(shell, ui, p, r, d));
+    let below_path = kind.map_or(0.0, |k| shell.cx(|cx| k.after_draw(cx, ui, p, r, d)));
     fade(shell, ui, p, r);
     // What the notations offer over the canvas (ER's mapping table offer), under the toast.
     crate::notation_ui::overlays(shell, ui, Layer::Offers, &Overlaid { p, r, view, d, overrides: &overrides });
@@ -679,7 +679,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     toolbar(shell, ui, p, r);
     // What a drawing under way has so far, as the diagram's kind says (a UML n-ary association's).
     if let Some(kind) = kind {
-        kind.hint_bar(shell, ui, p, r, below_path);
+        shell.cx(|cx| kind.hint_bar(cx, ui, p, r, below_path));
     }
     below_path
 }
@@ -729,7 +729,7 @@ pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, con
     if control(shell, ui, &format!("workspace.canvas.problem.{control_id}"), "badge", b, true).on_hover_text(hint).clicked()
         && let Some(notation) = resolver
     {
-        notation.resolve(shell, element);
+        shell.cx(|cx| notation.resolve(cx, element));
     }
 }
 
@@ -2394,10 +2394,10 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         } else {
             p.text_secondary
         };
-        if !kind.is_some_and(|k| k.tool_face(shell, &paint, p, tool.key, b, ink, active)) {
+        if !kind.is_some_and(|k| k.tool_face(&shell.cx_ref(), &paint, p, tool.key, b, ink, active)) {
             ux::icon_in(&paint, b, tool.icon, ink);
         }
-        let hint = kind.and_then(|k| k.tool_hint(shell, tool.key)).unwrap_or_else(|| tr(tool.hint));
+        let hint = kind.and_then(|k| k.tool_hint(&shell.cx_ref(), tool.key)).unwrap_or_else(|| tr(tool.hint));
         // Its name for assistive technology is its tooltip: what it makes now, and which way.
         let live = !shell.looking_only();
         if control(shell, ui, &format!("workspace.tools.{}", tool.key), "button", b, live)
@@ -2482,7 +2482,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         }
     }
     if let (Some(kind), Some((key, chevron))) = (kind, open_at) {
-        kind.popover(shell, ui, p, r, chevron, key);
+        shell.cx(|cx| kind.popover(cx, ui, p, r, chevron, key));
     }
 }
 

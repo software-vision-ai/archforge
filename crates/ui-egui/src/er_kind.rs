@@ -8,14 +8,11 @@
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect};
 
-use crate::Shell;
-use crate::actions::Action;
 use crate::canvas::{Tool, View};
-use crate::cx::Request;
+use crate::cx::{Ctx, CtxRef, Request};
 use crate::er_state::er;
 use crate::i18n::tr;
-use crate::kinds::{DiagramKind, KindTool, MenuRow, ToolUse};
-use crate::model_menu::menu_row;
+use crate::kinds::{DiagramKind, KindTool, MenuRow, ModelRow, ToolUse};
 use crate::state::Panel;
 use crate::ux::{Palette, icons};
 
@@ -35,13 +32,10 @@ const TOOLS: &[KindTool] = &[
 ];
 
 /// An ER diagram's rows of the Model menu, as its tools: Entity, then Relationship.
-static MENU_ROWS: &[&[Action]] = &[&[
-    menu_row!(KIND, "model.entity", tr("Entity"), |s| s.canvas.tool = Tool::Place("entity")),
-    menu_row!(KIND, "model.relationship", tr("Relationship"), |s| s.canvas.tool = Tool::Connect("relationship")),
+static MENU_ROWS: &[&[ModelRow]] = &[&[
+    ModelRow { key: "model.entity", word: || tr("Entity"), tool: Tool::Place("entity"), choice: None },
+    ModelRow { key: "model.relationship", word: || tr("Relationship"), tool: Tool::Connect("relationship"), choice: None },
 ]];
-
-/// The kind its rows are of, as the Model menu's rows ask for it.
-const KIND: Option<&str> = Some(archforge_er::DIAGRAM_KIND);
 
 /// The entity menu's first row, in a section of its own: a table's related tables, not built yet.
 const RELATED: MenuRow = MenuRow { key: "related", label: "Show related tables", keys: "R", live: false, first: true, run: |_, _| {} };
@@ -53,13 +47,11 @@ const COLLAPSE: MenuRow = MenuRow {
     keys: "",
     live: true,
     first: false,
-    run: |shell, menu| {
-        shell.cx(|cx| {
-            // The command selects the relationship it makes.
-            if let Err(e) = crate::panels::run_cx(cx, "er.relationship.collapse", serde_json::json!({ "entity": menu.entity.to_string() })) {
-                cx.canvas.notice = Some(e);
-            }
-        });
+    run: |cx, menu| {
+        // The command selects the relationship it makes.
+        if let Err(e) = crate::panels::run_cx(cx, "er.relationship.collapse", serde_json::json!({ "entity": menu.entity.to_string() })) {
+            cx.canvas.notice = Some(e);
+        }
     },
 };
 
@@ -72,11 +64,9 @@ fn add_column(mac: bool) -> MenuRow {
         keys: crate::editing::new_row_keys(mac),
         live: true,
         first: false,
-        run: |shell, menu| {
-            shell.cx(|cx| {
-                crate::er_table::open_column(cx, menu.entity, None);
-                cx.requests.push(Request::ShowPanel(Panel::Properties));
-            });
+        run: |cx, menu| {
+            crate::er_table::open_column(cx, menu.entity, None);
+            cx.requests.push(Request::ShowPanel(Panel::Properties));
         },
     }
 }
@@ -91,7 +81,7 @@ impl DiagramKind for ErKind {
     }
 
     /// Entity and Relationship, one row for each of its tools.
-    fn menu_rows(&self) -> &'static [&'static [Action]] {
+    fn menu_rows(&self) -> &'static [&'static [ModelRow]] {
         MENU_ROWS
     }
 
@@ -158,9 +148,8 @@ impl DiagramKind for ErKind {
 
     /// A schema named `name` for a new ER diagram to be of; a refusal comes back in plain words
     /// ([`crate::panels::refusal`]).
-    fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String> {
-        shell
-            .cx(|cx| crate::panels::run_cx(cx, "er.schema.add", serde_json::json!({ "name": name })))
+    fn add_owner(&self, cx: &mut Ctx, name: &str) -> Result<String, String> {
+        crate::panels::run_cx(cx, "er.schema.add", serde_json::json!({ "name": name }))
             .map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
@@ -169,19 +158,19 @@ impl DiagramKind for ErKind {
     }
 
     /// The relationship tool shows the ends it draws, as the cardinality popover sets them.
-    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
+    fn tool_face(&self, cx: &CtxRef, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
         if key != "relationship" {
             return false;
         }
-        let kind = er(shell.cx_ref().notation_states).map(|er| er.relationship).unwrap_or_default();
+        let kind = er(cx.notation_states).map(|er| er.relationship).unwrap_or_default();
         let fill = if active { p.accent_tint } else { p.surface };
         crate::connect::tool_line(paint, p, b.center(), kind.from, kind.to, ink, fill);
         true
     }
 
     /// The cardinality popover, ER's one chevron.
-    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, _key: &str) {
-        shell.cx(|cx| crate::connect::popover(cx, ui, p, r, chevron));
+    fn popover(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, _key: &str) {
+        crate::connect::popover(cx, ui, p, r, chevron);
     }
 
     fn takes_part(&self, store: &Store, element: Obj) -> bool {
@@ -189,43 +178,41 @@ impl DiagramKind for ErKind {
     }
 
     /// The Entity tool: a table placed there, its name open for typing.
-    fn place(&self, shell: &mut Shell, _tool: &'static str, d: Obj, x: f64, y: f64) {
-        shell.cx(|cx| crate::er_place::place_entity(cx, d, x, y));
+    fn place(&self, cx: &mut Ctx, _tool: &'static str, d: Obj, x: f64, y: f64) {
+        crate::er_place::place_entity(cx, d, x, y);
     }
 
     /// The Relationship tool: a relationship between the two tables, with the ends its popover set.
-    fn connect(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid) {
-        shell.cx(|cx| crate::connect::connect(cx, d, from_node, to_node));
+    fn connect(&self, cx: &mut Ctx, _tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid) {
+        crate::connect::connect(cx, d, from_node, to_node);
     }
 
     /// A relationship dropped on empty canvas: a new table there, joined to the first.
-    fn connect_to_new(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64) {
-        shell.cx(|cx| crate::er_place::connect_to_new(cx, d, from_node, x, y));
+    fn connect_to_new(&self, cx: &mut Ctx, _tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64) {
+        crate::er_place::connect_to_new(cx, d, from_node, x, y);
     }
 
     /// A table renamed in place on the canvas.
-    fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String> {
-        shell.cx(|cx| crate::panels::run_cx(cx, "er.entity.rename", serde_json::json!({ "entity": element.to_string(), "name": name }))).map(|_| ())
+    fn rename(&self, cx: &mut Ctx, element: Uuid, name: &str) -> Result<(), String> {
+        crate::panels::run_cx(cx, "er.entity.rename", serde_json::json!({ "entity": element.to_string(), "name": name })).map(|_| ())
     }
 
     /// A column's editor, or a new column's past the last.
-    fn open(&self, shell: &mut Shell, element: Uuid, row: Option<usize>) {
-        shell.cx(|cx| {
-            let column = row.and_then(|row| {
-                let store = cx.session.as_ref()?.doc();
-                let e = store.by_uuid(element)?;
-                let columns: Vec<Obj> = store
-                    .list(e, archforge_er::entity::ATTRIBUTE)
-                    .unwrap_or_default()
-                    .iter()
-                    .filter_map(archforge_mof::Value::as_ref)
-                    .filter(|c| store.is_alive(*c))
-                    .collect();
-                store.uuid(*columns.get(row)?).ok()
-            });
-            crate::er_table::open_column(cx, element, column);
-            cx.requests.push(Request::ShowPanel(Panel::Properties));
+    fn open(&self, cx: &mut Ctx, element: Uuid, row: Option<usize>) {
+        let column = row.and_then(|row| {
+            let store = cx.session.as_ref()?.doc();
+            let e = store.by_uuid(element)?;
+            let columns: Vec<Obj> = store
+                .list(e, archforge_er::entity::ATTRIBUTE)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(archforge_mof::Value::as_ref)
+                .filter(|c| store.is_alive(*c))
+                .collect();
+            store.uuid(*columns.get(row)?).ok()
         });
+        crate::er_table::open_column(cx, element, column);
+        cx.requests.push(Request::ShowPanel(Panel::Properties));
     }
 
     /// A table's second adorner adds a column.
@@ -234,8 +221,8 @@ impl DiagramKind for ErKind {
     }
 
     /// A table dragged from Models, placed with its lines to the tables the diagram shows.
-    fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
-        shell.cx(|cx| crate::er_place::place_dropped(cx, d, element, at));
+    fn drop(&self, cx: &mut Ctx, d: Obj, element: Uuid, at: (f64, f64)) {
+        crate::er_place::place_dropped(cx, d, element, at);
     }
 
     /// A table's menu: its related tables first, then after Open in Models its new column and,
@@ -252,8 +239,8 @@ impl DiagramKind for ErKind {
     }
 
     /// The relationship being drawn, with the ends its popover set.
-    fn live_line(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, view: View, from_node: Uuid, pointer: Pos2, target: Option<Rect>) {
-        crate::connect::live_line(&shell.cx_ref(), paint, p, view, from_node, pointer, target);
+    fn live_line(&self, cx: &CtxRef, paint: &egui::Painter, p: &Palette, view: View, from_node: Uuid, pointer: Pos2, target: Option<Rect>) {
+        crate::connect::live_line(cx, paint, p, view, from_node, pointer, target);
     }
 }
 
