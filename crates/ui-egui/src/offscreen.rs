@@ -1030,7 +1030,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 .ok_or("the sample has no such class")?;
             store.uuid(c).map_err(|e| e.to_string())?
         };
-        if !crate::uml_inline::open(&mut shell, class, crate::uml_panel::MemberKind::Attribute, None) {
+        if !shell.cx(|cx| crate::uml_inline::open(cx, class, crate::uml_panel::MemberKind::Attribute, None)) {
             return Err("the class's card cannot hold a row".into());
         }
         if let Some(inline) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.inline.as_mut()) {
@@ -2216,7 +2216,7 @@ fn literal_draft(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.25;
     shell.canvas.pan = egui::vec2(160.0 - bounds.x as f32 * 1.25, 120.0 - bounds.y as f32 * 1.25);
-    if !crate::uml_inline::open(shell, status, crate::uml_panel::MemberKind::Literal, None) {
+    if !shell.cx(|cx| crate::uml_inline::open(cx, status, crate::uml_panel::MemberKind::Literal, None)) {
         return Err("OrderStatus's card cannot hold a row".into());
     }
     if let Some(inline) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.inline.as_mut()) {
@@ -2594,7 +2594,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
     };
     match step {
         1 => {
-            if !crate::uml_inline::open(shell, order, crate::uml_panel::MemberKind::Attribute, None) {
+            if !shell.cx(|cx| crate::uml_inline::open(cx, order, crate::uml_panel::MemberKind::Attribute, None)) {
                 return Err("Order's card cannot hold a row".into());
             }
             if let Some(inline) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.inline.as_mut()) {
@@ -2618,7 +2618,8 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
             shell.canvas.menu_focus = Some(2);
         }
         5 => {
-            if !crate::uml_inline::open(shell, id(&status)?, crate::uml_panel::MemberKind::Literal, None) {
+            let status = id(&status)?;
+            if !shell.cx(|cx| crate::uml_inline::open(cx, status, crate::uml_panel::MemberKind::Literal, None)) {
                 return Err("OrderStatus's card cannot hold a row".into());
             }
             if let Some(inline) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.inline.as_mut()) {

@@ -883,20 +883,6 @@ pub(crate) fn menu_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id
     menu_frame(cx, ui, p, anchor, id, MenuRows { items, notes: &[], item_parts: &[], note_parts: &[] }, 0.0)
 }
 
-/// [`menu_noted_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn menu_noted(
-    shell: &mut Shell,
-    ui: &egui::Ui,
-    p: &Palette,
-    anchor: Rect,
-    id: &str,
-    items: &[String],
-    notes: &[String],
-    note_parts: &[Vec<String>],
-) -> Option<usize> {
-    shell.cx(|cx| menu_noted_cx(cx, ui, p, anchor, id, items, notes, note_parts))
-}
-
 /// [`menu_cx`] with a muted note after an item's text where `notes` has one (empty for none), such as
 /// the package that tells two types of one name apart; the note joins the row's accessible name.
 /// `note_parts` holds a note's parts when it is a package's path: too long for its row, it folds

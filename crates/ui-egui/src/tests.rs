@@ -8900,7 +8900,7 @@ fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
     let store = session.doc();
     let node = store.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
     let class = store.uuid(store.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap();
-    assert!(crate::uml_inline::open(s, class, crate::uml_panel::MemberKind::Attribute, None), "Catalog's card takes a row");
+    assert!(s.cx(|cx| crate::uml_inline::open(cx, class, crate::uml_panel::MemberKind::Attribute, None)), "Catalog's card takes a row");
     assert!(s.notation_states.editing() && s.notation_states.holds_keys(), "a row typed in place is edited and holds the keys");
     s.cx(|cx| crate::er_table::open_column(cx, table, None));
     s.cx(|cx| crate::keys::open(cx, table, None));
@@ -19190,7 +19190,7 @@ fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_
             (order, crate::uml_panel::MemberKind::Attribute, "+ total : Money"),
             (order, crate::uml_panel::MemberKind::Operation, "+ pay() : Boolean"),
         ] {
-            assert!(crate::uml_inline::open(h.state_mut(), class, kind, None), "{kind:?}'s draft opens");
+            assert!(h.state_mut().cx(|cx| crate::uml_inline::open(cx, class, kind, None)), "{kind:?}'s draft opens");
             uml_of_mut(h.state_mut()).inline.as_mut().unwrap().edit.name = "Returned".into();
             h.run();
             // Its ring: the accent's outline round the tinted row, a row's height, not a card's.
@@ -22809,12 +22809,14 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
     click(&mut h, at);
     h.event(egui::Event::Text("reference".into()));
+    h.state_mut().state.show_panel(crate::state::Panel::Skills);
     h.run();
     let at = rect_of(&h, "workspace.canvas.member.details").center();
     click(&mut h, at);
     assert!(uml_of(h.state()).inline.is_none());
     let edit = uml_of(h.state()).member.clone().expect("Properties' editor");
     assert_eq!((edit.name.as_str(), edit.target, edit.class), ("reference", None, catalog));
+    assert_eq!(h.state().state.panel, crate::state::Panel::Properties, "Properties shows the editor");
     uml_of_mut(h.state_mut()).member = None;
     // ⇧⌘↩ opens an operation's row from the keys.
     select(&mut h);
@@ -22827,13 +22829,19 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     assert!(uml_of(h.state()).inline.is_none());
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     h.run();
-    // Drawn too small for its rows, the card leaves the member to Properties' editor.
+    // Drawn too small for its rows, the card leaves the member to Properties' editor, which the
+    // right side then shows: ⌘↩'s attribute, and ⇧⌘↩'s operation.
     h.state_mut().canvas.zoom = 0.4;
-    select(&mut h);
-    h.state_mut().canvas.focused = true;
-    key(&mut h, egui::Key::Enter, egui::Modifiers { command: true, ..Default::default() });
-    assert!(uml_of(h.state()).inline.is_none());
-    assert!(uml_of(h.state()).member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()));
+    for (shift, kind) in [(false, crate::uml_panel::MemberKind::Attribute), (true, crate::uml_panel::MemberKind::Operation)] {
+        uml_of_mut(h.state_mut()).member = None;
+        h.state_mut().state.show_panel(crate::state::Panel::Skills);
+        select(&mut h);
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::Enter, egui::Modifiers { command: true, shift, ..Default::default() });
+        assert!(uml_of(h.state()).inline.is_none());
+        assert!(uml_of(h.state()).member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none() && e.kind == kind), "{kind:?}");
+        assert_eq!(h.state().state.panel, crate::state::Panel::Properties, "{kind:?}: Properties shows the editor");
+    }
 }
 
 #[test]
@@ -22860,14 +22868,14 @@ fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_k
         st.uuid(t).unwrap()
     };
     // Renamed in place, it keeps that Money.
-    assert!(crate::uml_inline::open(h.state_mut(), catalog, crate::uml_panel::MemberKind::Attribute, Some(fee)));
+    assert!(h.state_mut().cx(|cx| crate::uml_inline::open(cx, catalog, crate::uml_panel::MemberKind::Attribute, Some(fee))));
     h.run();
     uml_of_mut(h.state_mut()).inline.as_mut().unwrap().edit.name = "charge".into();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     assert!(uml_of(h.state()).inline.is_none(), "{:?}", uml_of(h.state()).inline);
     assert_eq!(type_of(&h), money, "the type stays the one it was");
     // Typing a name two types share is refused, the type unchanged.
-    assert!(crate::uml_inline::open(h.state_mut(), catalog, crate::uml_panel::MemberKind::Attribute, Some(fee)));
+    assert!(h.state_mut().cx(|cx| crate::uml_inline::open(cx, catalog, crate::uml_panel::MemberKind::Attribute, Some(fee))));
     h.run();
     uml_of_mut(h.state_mut()).inline.as_mut().unwrap().ty = "money".into();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -22883,7 +22891,7 @@ fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_k
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     // A draft at the end of Order's attributes moves its operation down, still drawn in the card.
     let order = class(&h, "Order");
-    assert!(crate::uml_inline::open(h.state_mut(), order, crate::uml_panel::MemberKind::Attribute, None));
+    assert!(h.state_mut().cx(|cx| crate::uml_inline::open(cx, order, crate::uml_panel::MemberKind::Attribute, None)));
     h.run();
     let canvas = rect_of(&h, "workspace.canvas");
     fn texts(s: &egui::Shape, clip: egui::Rect, out: &mut Vec<(String, egui::Pos2, egui::Rect)>) {
@@ -25021,29 +25029,51 @@ fn an_enumeration_at_its_literal_cap_says_so_and_takes_no_more() {
 }
 
 /// A card that leaves members out (past `MAX_CARD_ROWS`) takes a new member in Properties' editor,
-/// not as a draft row in the middle of its rows.
+/// not as a draft row in the middle of its rows, from ⌘↩ and from its compartment's +, the right
+/// side showing Properties; in light and dark.
 #[test]
 fn a_card_that_lists_only_some_of_its_members_adds_one_in_properties() {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
-    let catalog = named(&h, archforge_uml::CLASS, "Catalog");
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.batch("Add attribute", |b| {
-            for i in 0..archforge_uml::figures::MAX_CARD_ROWS {
-                b.execute("uml.attribute.add", &serde_json::json!({ "class": catalog.to_string(), "name": format!("a{i}") }))?;
-            }
-            Ok(())
-        })
-        .unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        let catalog = named(&h, archforge_uml::CLASS, "Catalog");
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            s.batch("Add attribute", |b| {
+                for i in 0..archforge_uml::figures::MAX_CARD_ROWS {
+                    b.execute("uml.attribute.add", &serde_json::json!({ "class": catalog.to_string(), "name": format!("a{i}") }))?;
+                }
+                Ok(())
+            })
+            .unwrap();
+            s.execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
+        }
+        // At a zoom that shows the card's rows, its top in view, so only what it leaves out decides.
+        h.run();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let card = archforge_diagram::grid::bounds_of(st, st.by_uuid(archforge_mof::Uuid::parse(&node_of(&h, catalog)).unwrap()).unwrap());
+        h.state_mut().canvas.fit_pending = false;
+        h.state_mut().canvas.zoom = 1.0;
+        h.state_mut().canvas.pan = egui::vec2(160.0 - card.x as f32, 120.0 - card.y as f32);
+        h.state_mut().canvas.focused = true;
+        h.state_mut().state.show_panel(crate::state::Panel::Skills);
+        h.run();
+        assert!(h.state().canvas.zoom >= crate::canvas::DETAIL_ZOOM, "{theme:?}: the card shows its rows");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
+        assert!(uml_of(h.state()).inline.is_none(), "{theme:?}: no draft row among the rows");
+        assert!(uml_of(h.state()).member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()), "{theme:?}: Properties' editor instead");
+        assert_eq!(h.state().state.panel, crate::state::Panel::Properties, "{theme:?}: Properties shows the editor");
+        // So does the attributes' +.
+        uml_of_mut(h.state_mut()).member = None;
+        h.state_mut().state.show_panel(crate::state::Panel::Skills);
+        h.run();
+        let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+        click(&mut h, at);
+        assert!(uml_of(h.state()).inline.is_none(), "{theme:?}: no draft row from the +");
+        let new = uml_of(h.state()).member.as_ref().map(|e| (e.class, e.target, e.kind));
+        assert_eq!(new, Some((catalog, None, crate::uml_panel::MemberKind::Attribute)), "{theme:?}: the +'s new attribute");
+        assert_eq!(h.state().state.panel, crate::state::Panel::Properties, "{theme:?}: Properties shows it");
     }
-    h.state_mut().canvas.zoom = 1.0;
-    h.state_mut().canvas.focused = true;
-    h.run();
-    key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
-    assert!(uml_of(h.state()).inline.is_none(), "no draft row among the rows");
-    assert!(uml_of(h.state()).member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()), "Properties' editor instead");
 }
 
 /// Properties lists an enumeration's literals under `Literals · n`, each with its pencil: `+` and
@@ -25170,7 +25200,8 @@ fn constraint_rows(h: &Harness<'static, Shell>, name: &str) -> Vec<String> {
 /// constrained element and Linked note make it a constraint note linked to both cards, which says
 /// it is not evaluated; deleting a constrained element drops it and the toast says so, and a
 /// constraint left naming nothing goes with it, said too; a double click on the note opens its
-/// editor. In light and dark, every control found by its automation id.
+/// editor, Properties shown on the right side. In light and dark, every control found by its
+/// automation id.
 #[test]
 fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_deleted_element() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -25254,12 +25285,14 @@ fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_de
         assert!(painted_now.iter().any(|t| t == "CONSTRAINT · NOT EVALUATED"), "{painted_now:?}");
         assert!(painted_now.iter().any(|t| t == "{ payment.amount = total()"));
         assert!(ids(&h).contains(&format!("workspace.canvas.node.{note}")));
-        // A double click on the note opens its editor.
+        // A double click on the note opens its editor, in Properties brought to the right side.
+        h.state_mut().state.show_panel(crate::state::Panel::Skills);
         h.state_mut().canvas.fit_pending = true;
         h.run();
         let at = rect_of(&h, &format!("workspace.canvas.node.{note}")).center();
         double_click(&mut h, at);
         assert_eq!(uml_of(h.state()).constraint.as_ref().map(|e| e.target), Some(Some(c)), "the note's double click opens it");
+        assert_eq!(h.state().state.panel, crate::state::Panel::Properties, "{theme:?}: Properties shows the note's editor");
         let at = rect_of(&h, "workspace.properties.constraint.cancel").center();
         click(&mut h, at);
         // Deleting Payment drops it, one step, and the toast says what nonEmpty constrains now.
@@ -28924,7 +28957,7 @@ fn a_menus_rows_of_one_text_are_told_apart() {
                     notes.swap(0, 1);
                 }
                 let anchor = egui::Rect::from_min_size(egui::pos2(700.0, 600.0), egui::vec2(220.0, 28.0));
-                let k = crate::panels::menu_noted(shell, ui, p, anchor, "test.menu", &items, &notes, &[]);
+                let k = shell.cx(|cx| crate::panels::menu_noted_cx(cx, ui, p, anchor, "test.menu", &items, &notes, &[]));
                 picked.lock().unwrap().extend(k.map(|k| (k, notes[k].clone())));
             },
             shell,
@@ -28971,7 +29004,7 @@ fn a_menus_twin_rows_keep_their_ids_when_it_scrolls() {
                     (items[twin], notes[twin]) = ("T".to_string(), "template parameter".to_string());
                 }
                 let anchor = egui::Rect::from_min_size(egui::pos2(700.0, 600.0), egui::vec2(220.0, 28.0));
-                picked.lock().unwrap().extend(crate::panels::menu_noted(shell, ui, p, anchor, "test.long", &items, &notes, &[]));
+                picked.lock().unwrap().extend(shell.cx(|cx| crate::panels::menu_noted_cx(cx, ui, p, anchor, "test.long", &items, &notes, &[])));
             },
             shell,
         );
@@ -29052,7 +29085,7 @@ fn rows_menu(theme: ThemeKind, rows: &MenuRowsSet, picks: &std::sync::Arc<std::s
             let p = crate::ux::palette(shell.state.theme.is_dark());
             let (items, notes) = shown.lock().unwrap().clone();
             let anchor = egui::Rect::from_min_size(egui::pos2(700.0, 600.0), egui::vec2(220.0, 28.0));
-            picked.lock().unwrap().extend(crate::panels::menu_noted(shell, ui, p, anchor, "test.rows", &items, &notes, &[]));
+            picked.lock().unwrap().extend(shell.cx(|cx| crate::panels::menu_noted_cx(cx, ui, p, anchor, "test.rows", &items, &notes, &[])));
         },
         shell,
     );
@@ -33027,7 +33060,7 @@ fn umls_overlays_go_at_their_layers() {
             let node = st.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
             st.uuid(st.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap()
         };
-        assert!(crate::uml_inline::open(h.state_mut(), class, crate::uml_panel::MemberKind::Attribute, None), "{theme:?}: the row opens");
+        assert!(h.state_mut().cx(|cx| crate::uml_inline::open(cx, class, crate::uml_panel::MemberKind::Attribute, None)), "{theme:?}: the row opens");
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
         h.run();
         uml_of_mut(h.state_mut()).line_menu = Some(rect_of(&h, "workspace.canvas").center());
@@ -33058,7 +33091,7 @@ fn a_card_draft_is_the_notations_row_typed_in_place() {
         };
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(uml_of(h.state()).card_draft(st), None, "{theme:?}");
-        assert!(crate::uml_inline::open(h.state_mut(), class, crate::uml_panel::MemberKind::Attribute, None), "{theme:?}");
+        assert!(h.state_mut().cx(|cx| crate::uml_inline::open(cx, class, crate::uml_panel::MemberKind::Attribute, None)), "{theme:?}");
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(uml_of(h.state()).card_draft(st), Some((catalog, 0, None)), "{theme:?}: a new attribute on Catalog");
         assert_eq!(er_of(h.state()).card_draft(st), None, "{theme:?}: ER types no row on a card");
@@ -33240,7 +33273,7 @@ fn the_canvas_draws_a_card_grown_by_the_row_typed_on_it() {
         let node = rect_of(&h, &id);
         let plain = drawn_height(&h, node);
         assert!((plain - node.height()).abs() < 0.5, "{theme:?}: drawn as its node, {plain} {node:?}");
-        assert!(crate::uml_inline::open(h.state_mut(), class, crate::uml_panel::MemberKind::Attribute, None), "{theme:?}");
+        assert!(h.state_mut().cx(|cx| crate::uml_inline::open(cx, class, crate::uml_panel::MemberKind::Attribute, None)), "{theme:?}");
         h.run();
         let grown = drawn_height(&h, rect_of(&h, &id));
         assert!(grown > node.height() + 1.0, "{theme:?}: grown by the row, {grown} over {}", node.height());
