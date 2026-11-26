@@ -121,11 +121,6 @@ pub(crate) fn editing(s: &State, notations: &crate::notation_ui::NotationStates)
     s.name.is_some() || notations.editing()
 }
 
-/// [`reveal_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, editor: Editor, card: Rect) {
-    shell.cx(|cx| reveal_cx(cx, ui, editor, card))
-}
-
 /// Brings the card of `editor`, once drawn, into the body's view when [`to_reveal`] asks: an opened
 /// card's foot if it fits, else its top; a refused card's foot, with its Apply, Cancel and refusal,
 /// also when the card is taller than the body. A card drawn after another's reveal counts the scroll
@@ -608,21 +603,6 @@ pub(crate) fn field_inner(ui: &egui::Ui, field: Rect) -> Rect {
     )
 }
 
-/// [`select_field_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn select_field(
-    shell: &mut Shell,
-    ui: &egui::Ui,
-    p: &Palette,
-    at: egui::Pos2,
-    width: f32,
-    id: &str,
-    label: &str,
-    value: &str,
-    menu: MenuId,
-) -> Rect {
-    shell.cx(|cx| select_field_cx(cx, ui, p, at, width, id, label, value, menu))
-}
-
 /// A filled select showing `value`; a click opens or closes `menu`.
 pub(crate) fn select_field_cx(
     cx: &mut Ctx,
@@ -646,21 +626,6 @@ pub(crate) fn select_field_cx(
         cx.panels.menu = if cx.panels.menu == Some(menu) { None } else { Some(menu) };
     }
     field
-}
-
-/// [`path_select_field_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn path_select_field(
-    shell: &mut Shell,
-    ui: &egui::Ui,
-    p: &Palette,
-    at: egui::Pos2,
-    width: f32,
-    id: &str,
-    label: &str,
-    parts: &[String],
-    menu: MenuId,
-) -> Rect {
-    shell.cx(|cx| path_select_field_cx(cx, ui, p, at, width, id, label, parts, menu))
 }
 
 /// [`select_field_cx`] for a package's path, its names from the top in `parts` (`Commerce platform
@@ -737,19 +702,6 @@ const COMBO_W: f32 = 160.0;
 const COMBO_MAX_W: f32 = 264.0;
 fn combo_height(n: usize) -> f32 {
     n as f32 * 30.0 + 78.0
-}
-
-/// [`editable_select_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn editable_select(
-    shell: &mut Shell,
-    ui: &mut egui::Ui,
-    p: &Palette,
-    at: egui::Pos2,
-    width: f32,
-    text: &mut String,
-    c: &Combo,
-) -> ComboOut {
-    shell.cx(|cx| editable_select_cx(cx, ui, p, at, width, text, c))
 }
 
 /// A label over a filled field that takes typing, with a chevron that opens its options above or
@@ -961,11 +913,6 @@ pub(crate) fn menu_noted_cx(
 ) -> Option<usize> {
     let width = noted_width(ui, p, items, notes);
     menu_frame(cx, ui, p, anchor, id, MenuRows { items, notes, item_parts: &[], note_parts }, width)
-}
-
-/// [`menu_paths_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn menu_paths(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, paths: &[Vec<String>]) -> Option<usize> {
-    shell.cx(|cx| menu_paths_cx(cx, ui, p, anchor, id, paths))
 }
 
 /// [`menu_cx`] of package paths, each given by its names from the top (`paths`): as wide as the
@@ -1275,11 +1222,6 @@ pub(crate) fn control_cx(cx: &mut Ctx, ui: &egui::Ui, id: &str, kind: &'static s
 /// What a control that is off says.
 pub(crate) fn off_words_cx(cx: &CtxRef) -> String {
     if cx.looking_only { tr("Read only while viewing a version") } else { tr("Not available yet") }
-}
-
-/// [`check_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn check(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, id: &str, label: &str, on: &mut bool) -> f32 {
-    shell.cx(|cx| check_cx(cx, ui, p, at, id, label, on))
 }
 
 /// A check box with its label; a click flips `on`.
@@ -1612,20 +1554,10 @@ fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui
     }
 }
 
-/// [`selected_id_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn selected_id(shell: &Shell) -> Option<Uuid> {
-    selected_id_cx(&shell.cx_ref())
-}
-
 /// The first selected element's id, which a list in Properties marks.
 pub(crate) fn selected_id_cx(cx: &CtxRef) -> Option<Uuid> {
     let s = cx.session.as_ref()?;
     s.view().selection.first().and_then(|o| s.doc().uuid(*o).ok())
-}
-
-/// [`select_element_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn select_element(shell: &mut Shell, id: Uuid) {
-    shell.cx(|cx| select_element_cx(cx, id))
 }
 
 /// Selects an element a Properties row lists, so the Models tree and the canvas mark it as they
@@ -1642,11 +1574,6 @@ pub(crate) fn select_element_cx(cx: &mut Ctx, id: Uuid) {
     if let Err(e) = run_cx(cx, "view.select", json!({ "ids": [id.to_string()] })) {
         cx.panels.notice = Some(e);
     }
-}
-
-/// [`edit_button_cx`] over the whole shell, for code not on the narrow context yet.
-pub(crate) fn edit_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, row: Rect, id: &str, row_hovered: bool) -> bool {
-    shell.cx(|cx| edit_button_cx(cx, ui, p, row, id, row_hovered))
 }
 
 /// A list row's edit button at its right end. Only it, or a double click on the row, opens the
@@ -1842,7 +1769,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     }
     // A description typed on the element selected before goes to it first.
     flush_description(shell, s.id);
-    crate::uml_relate::finish_ends(shell, s.id);
+    shell.cx(|cx| crate::uml_relate::finish_ends(cx, s.id));
     match panel {
         Panel::Agent => {
             crate::chat_view::draw(shell, ui, p, r, y);
@@ -1866,7 +1793,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         return;
     }
     // An n-ary association being drawn: its draft, not yet in the model (AR-128).
-    if panel == Panel::Properties && crate::uml_nary::draft_body(shell, ui, p, r, y) {
+    if panel == Panel::Properties && shell.cx(|cx| crate::uml_nary::draft_body(cx, ui, p, r, y)) {
         return;
     }
     ux::text(&paint, r.min + vec2(PAD, y), &s.name, types::CARD_TITLE, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));

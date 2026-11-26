@@ -20,10 +20,9 @@ use archforge_uml::profiles;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
-use crate::home::control;
+use crate::cx::Ctx;
 use crate::i18n::{fmt, tr, tr_ctx, trn};
-use crate::panels::{FIELD, PAD, ROW, run, section};
+use crate::panels::{FIELD, PAD, ROW, control_cx, run_cx, section_cx};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
@@ -257,10 +256,10 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
 /// is: the panel's own element's, a member's selected there, which the title names, or an association
 /// end's, with ids of its own and no diagram check. Gives the y under it.
 #[allow(clippy::too_many_arguments, reason = "a section is drawn into the panel for its element")]
-pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, element: Obj, heading: Heading) -> f32 {
+pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, element: Obj, heading: Heading) -> f32 {
     let prefix = heading.prefix();
     let add_id = format!("{prefix}.add");
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
     let Ok(element_id) = store.uuid(element) else { return y };
     let own = name(store, element);
     let applied: Vec<(Obj, Obj)> = applications::applied_to(store, element);
@@ -272,16 +271,16 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     };
     let add = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
     let picking =
-        shell.panels.menu == Some(menus::STEREOTYPE_PICK) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id);
-    match section(shell, ui, p, r, y, &title, Some((&add_id, "Apply stereotype"))) {
+        cx.panels.menu == Some(menus::STEREOTYPE_PICK) && uml(cx.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id);
+    match section_cx(cx, ui, p, r, y, &title, Some((&add_id, "Apply stereotype"))) {
         Some(next) => y = next - 6.0,
         None => {
-            shell.panels.menu = if picking { None } else { Some(menus::STEREOTYPE_PICK) };
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            cx.panels.menu = if picking { None } else { Some(menus::STEREOTYPE_PICK) };
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.stereotypes.menu_for = Some(element_id);
                 uml.stereotypes.filter.clear();
             }
-            shell.panels.menu_reached = None;
+            cx.panels.menu_reached = None;
             y += 44.0;
         }
     }
@@ -289,12 +288,12 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     let left = r.left() + PAD;
     let mut row_index = 0usize;
     for (s, instance) in &applied {
-        y = applied_rows(shell, ui, p, (left, width), y, &prefix, element, element_id, *s, *instance, &mut row_index);
+        y = applied_rows(cx, ui, p, (left, width), y, &prefix, element, element_id, *s, *instance, &mut row_index);
     }
-    if let Some((_, why)) = uml(&shell.notation_states).and_then(|uml| uml.stereotypes.refused.clone()).filter(|(e, _)| *e == element_id) {
-        y = refusal(shell, ui, p, left, y + 4.0, width, &why, &format!("{prefix}.refusal"));
+    if let Some((_, why)) = uml(cx.notation_states).and_then(|uml| uml.stereotypes.refused.clone()).filter(|(e, _)| *e == element_id) {
+        y = refusal(cx, ui, p, left, y + 4.0, width, &why, &format!("{prefix}.refusal"));
     }
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
     let said = match applied.first() {
         Some((s, _)) => fmt(&tr(VALUES_HELP), &[("name", &own), ("stereotype", &name(store, *s))]),
         None => {
@@ -305,10 +304,10 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     y = help(ui, p, left, y + 4.0, width, &said);
     // The diagram's choice once, under the panel's own section, not under each end's.
     if !matches!(heading, Heading::End(_)) {
-        y = show_values_check(shell, ui, p, left, y);
+        y = show_values_check(cx, ui, p, left, y);
     }
-    if shell.panels.menu == Some(menus::STEREOTYPE_PICK) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id) {
-        picker(shell, ui, p, add, &add_id, element, element_id);
+    if cx.panels.menu == Some(menus::STEREOTYPE_PICK) && uml(cx.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id) {
+        picker(cx, ui, p, add, &add_id, element, element_id);
     }
     y + 6.0
 }
@@ -316,9 +315,9 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
 /// The Stereotypes section on `owner`'s panel: the selected member's when a member of it is
 /// selected (its row marked), else `owner`'s own; none for what takes no stereotype, nor while the
 /// model has no stereotype to apply. Gives the y under it.
-pub(crate) fn section_for(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, owner: Obj) -> f32 {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
-    let selected = crate::panels::selected_id(shell).and_then(|id| store.by_uuid(id));
+pub(crate) fn section_for(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, owner: Obj) -> f32 {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
+    let selected = crate::panels::selected_id_cx(&cx.cx_ref()).and_then(|id| store.by_uuid(id));
     let member = selected.filter(|m| {
         *m != owner
             && store.class_of(*m).is_ok_and(|c| c == archforge_uml::PROPERTY || c == archforge_uml::OPERATION)
@@ -329,18 +328,18 @@ pub(crate) fn section_for(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
     if !takes(store, target) || (applications::all_stereotypes(store).is_empty() && applications::applied_to(store, target).is_empty()) {
         return y;
     }
-    section_of(shell, ui, p, r, y, target, if member.is_some() { Heading::Member } else { Heading::Own })
+    section_of(cx, ui, p, r, y, target, if member.is_some() { Heading::Member } else { Heading::Own })
 }
 
 /// The Stereotypes section of association end `end`, the `i`th, in its part of the association's
 /// Properties, as an attribute's is; none while the model has no stereotype to apply. Gives the y
 /// under it.
-pub(crate) fn end_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, end: Obj, i: usize) -> f32 {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+pub(crate) fn end_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, end: Obj, i: usize) -> f32 {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
     if !takes(store, end) || (applications::all_stereotypes(store).is_empty() && applications::applied_to(store, end).is_empty()) {
         return y;
     }
-    section_of(shell, ui, p, r, y, end, Heading::End(i))
+    section_of(cx, ui, p, r, y, end, Heading::End(i))
 }
 
 /// A muted line of help at `y`, `width` wide; gives the y under it.
@@ -354,14 +353,14 @@ fn help(ui: &egui::Ui, p: &Palette, left: f32, y: f32, width: f32, text: &str) -
 
 /// A refusal on the danger's tint with its warning; gives the y under it.
 #[allow(clippy::too_many_arguments, reason = "a refusal is drawn at its place with its id")]
-fn refusal(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y: f32, width: f32, why: &str, id: &str) -> f32 {
+fn refusal(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, left: f32, y: f32, width: f32, why: &str, id: &str) -> f32 {
     let paint = ui.painter().clone();
     let text = ux::galley_rows(&paint, why, types::SMALL, p.text, Some((width - 42.0).max(0.0)), 8);
     let card = Rect::from_min_size(pos2(left, y), vec2(width, text.size().y + 20.0));
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
     paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-    crate::widgets::record_visible(ui, &mut shell.registry, id, "text", card);
+    crate::widgets::record_visible(ui, cx.registry, id, "text", card);
     card.bottom() + 12.0
 }
 
@@ -369,7 +368,7 @@ fn refusal(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y: f32, wid
 /// line per property, its name at the left and its control at the right. Gives the y under them.
 #[allow(clippy::too_many_arguments, reason = "the rows are drawn for their element, stereotype and place")]
 fn applied_rows(
-    shell: &mut Shell,
+    cx: &mut Ctx,
     ui: &mut egui::Ui,
     p: &Palette,
     (left, width): (f32, f32),
@@ -381,7 +380,7 @@ fn applied_rows(
     instance: Obj,
     row_index: &mut usize,
 ) -> f32 {
-    let Some(store) = shell.session.as_ref().map(|x| x.doc()) else { return y };
+    let Some(store) = cx.session.as_ref().map(|x| x.doc()) else { return y };
     let Ok(s_id) = store.uuid(s) else { return y };
     let label = format!("«{}»", name(store, s));
     let profile = profiles::profile_of(store, s).map(|x| name(store, x)).unwrap_or_default();
@@ -389,7 +388,7 @@ fn applied_rows(
     let key = format!("{prefix}.applied.{s_id}");
     let paint = ui.painter().clone();
     let r = Rect::from_min_size(pos2(left, y), vec2(width, ROW));
-    crate::widgets::record_visible(ui, &mut shell.registry, &key, "row", r);
+    crate::widgets::record_visible(ui, cx.registry, &key, "row", r);
     ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&key), |node| {
         node.set_role(egui::accesskit::Role::Row);
         node.set_label(format!("{label} {profile}"));
@@ -408,16 +407,16 @@ fn applied_rows(
     let bin = Rect::from_center_size(pos2(r.right() - 16.0, r.center().y), vec2(24.0, 24.0));
     ux::icon_in(&paint, Rect::from_center_size(bin.center(), vec2(14.0, 14.0)), &icons::TRASH, p.text_secondary);
     let hint = fmt(&tr("Remove «{stereotype}» from {name}"), &[("stereotype", &name(store, s)), ("name", &name(store, element))]);
-    if control(shell, ui, &format!("{key}.remove"), "button", bin, true).on_hover_text(hint.as_str()).accessible_name(hint.as_str()).clicked() {
-        match run(shell, "uml.stereotype.unapply", json!({ "element": element_id.to_string(), "stereotype": s_id.to_string() })) {
+    if control_cx(cx, ui, &format!("{key}.remove"), "button", bin, true).on_hover_text(hint.as_str()).accessible_name(hint.as_str()).clicked() {
+        match run_cx(cx, "uml.stereotype.unapply", json!({ "element": element_id.to_string(), "stereotype": s_id.to_string() })) {
             Ok(_) => {
-                shell.panels.notice = None;
-                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                cx.panels.notice = None;
+                if let Some(uml) = uml_mut(cx.notation_states) {
                     uml.stereotypes.refused = None;
                 }
             }
             Err(e) => {
-                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                if let Some(uml) = uml_mut(cx.notation_states) {
                     uml.stereotypes.refused = Some((element_id, e));
                 }
             }
@@ -426,7 +425,7 @@ fn applied_rows(
     }
     y += ROW;
     for property in properties {
-        y = value_line(shell, ui, p, (left, width), y, &key, element_id, s_id, instance, property, *row_index);
+        y = value_line(cx, ui, p, (left, width), y, &key, element_id, s_id, instance, property, *row_index);
         *row_index = row_index.saturating_add(1);
     }
     y + 4.0
@@ -447,7 +446,7 @@ fn default_tag(paint: &egui::Painter, p: &Palette, right: f32, mid: f32) -> f32 
 /// under it.
 #[allow(clippy::too_many_arguments, reason = "a value's line is drawn for its element, stereotype and property")]
 fn value_line(
-    shell: &mut Shell,
+    cx: &mut Ctx,
     ui: &mut egui::Ui,
     p: &Palette,
     (left, width): (f32, f32),
@@ -459,7 +458,7 @@ fn value_line(
     property: Obj,
     index: usize,
 ) -> f32 {
-    let Some(store) = shell.session.as_ref().map(|x| x.doc()) else { return y };
+    let Some(store) = cx.session.as_ref().map(|x| x.doc()) else { return y };
     let Ok(p_id) = store.uuid(property) else { return y };
     let paint = ui.painter().clone();
     let label_w = (width * 0.38).max(0.0);
@@ -497,25 +496,25 @@ fn value_line(
             let state =
                 if set { shown.clone() } else { fmt(&tr("{value} (default)"), &[("value", if default.is_empty() { "—" } else { &default })]) };
             let menu = menus::STEREOTYPE_VALUE.at(index);
-            let open = shell.panels.menu == Some(menu) && uml(&shell.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id);
-            if control(shell, ui, &id, "select", field, true).accessible_name(format!("{p_name}: {state}")).clicked() {
-                shell.panels.menu = if open { None } else { Some(menu) };
-                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            let open = cx.panels.menu == Some(menu) && uml(cx.notation_states).and_then(|uml| uml.stereotypes.menu_for) == Some(element_id);
+            if control_cx(cx, ui, &id, "select", field, true).accessible_name(format!("{p_name}: {state}")).clicked() {
+                cx.panels.menu = if open { None } else { Some(menu) };
+                if let Some(uml) = uml_mut(cx.notation_states) {
                     uml.stereotypes.menu_for = Some(element_id);
                 }
-                shell.panels.menu_reached = None;
+                cx.panels.menu_reached = None;
             }
             if open {
                 let mut items = vec![if default.is_empty() { tr("No value") } else { fmt(&tr("Default ({value})"), &[("value", &default)]) }];
                 items.extend(choices.iter().cloned());
-                if let Some(i) = crate::panels::menu(shell, ui, p, field, &id, &items) {
+                if let Some(i) = crate::panels::menu_cx(cx, ui, p, field, &id, &items) {
                     let values: Vec<String> = if i == 0 { Vec::new() } else { choices.get(i - 1).cloned().into_iter().collect() };
-                    write_values(shell, element_id, s_id, p_id, values, None);
+                    write_values(cx, element_id, s_id, p_id, values, None);
                 }
             }
         }
         None => {
-            let editing = uml(&shell.notation_states)
+            let editing = uml(cx.notation_states)
                 .and_then(|uml| uml.stereotypes.value.clone())
                 .filter(|v| v.element == element_id && v.stereotype == s_id && v.property == p_id);
             let current = typed.join(", ");
@@ -528,7 +527,7 @@ fn value_line(
             if !set && text.is_empty() && !focused && !default.is_empty() {
                 inner_right = default_tag(&paint, p, field.right() - 6.0, field.center().y) - 6.0;
             }
-            crate::widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
+            crate::widgets::record_visible(ui, cx.registry, &id, "field", field);
             let inner = crate::panels::field_inner(ui, field);
             let inner = Rect::from_min_max(inner.min, pos2(inner_right.max(inner.left()), inner.bottom()));
             let hint = if default.is_empty() { "—".to_string() } else { default.clone() };
@@ -561,15 +560,15 @@ fn value_line(
                     text.split(',').map(|v| v.trim().to_string()).collect()
                 };
                 if values == typed && refused.is_none() {
-                    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                    if let Some(uml) = uml_mut(cx.notation_states) {
                         uml.stereotypes.value = None;
                     }
                 } else {
-                    write_values(shell, element_id, s_id, p_id, values, Some(text));
+                    write_values(cx, element_id, s_id, p_id, values, Some(text));
                 }
             } else if text != current || refused.is_some() {
                 let changed = editing.as_ref().is_none_or(|v| v.text != text);
-                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                if let Some(uml) = uml_mut(cx.notation_states) {
                     uml.stereotypes.value = Some(ValueEdit {
                         element: element_id,
                         stereotype: s_id,
@@ -579,7 +578,7 @@ fn value_line(
                     });
                 }
             } else if editing.is_some()
-                && let Some(uml) = uml_mut(&mut shell.notation_states)
+                && let Some(uml) = uml_mut(cx.notation_states)
             {
                 uml.stereotypes.value = None;
             }
@@ -589,7 +588,7 @@ fn value_line(
                 paint.galley(pos2(field.left(), field.bottom() + 4.0), g, p.danger.into());
                 crate::widgets::record_visible(
                     ui,
-                    &mut shell.registry,
+                    cx.registry,
                     &format!("{id}.refusal"),
                     "text",
                     Rect::from_min_size(pos2(field.left(), field.bottom() + 4.0), vec2(field.width(), tall)),
@@ -640,31 +639,31 @@ fn values_said(values: &Values) -> String {
 /// Writes `values` of property `p_id` on the element's stereotype `s_id` in one undo step, whose
 /// command grows the cards that show them on diagrams that show values (AR-241); refused, the text
 /// typed stays in its field with the reason, the model untouched.
-fn write_values(shell: &mut Shell, element: Uuid, s_id: Uuid, p_id: Uuid, values: Vec<String>, typed: Option<String>) {
-    let problem = shell.session.as_ref().and_then(|s| {
+fn write_values(cx: &mut Ctx, element: Uuid, s_id: Uuid, p_id: Uuid, values: Vec<String>, typed: Option<String>) {
+    let problem = cx.session.as_ref().and_then(|s| {
         let store = s.doc();
         let property = store.by_uuid(p_id)?;
         applications::read_values(store, property, &values).err().map(|e| value_refusal(store, property, &e))
     });
     if let Some(why) = problem {
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.stereotypes.value =
                 Some(ValueEdit { element, stereotype: s_id, property: p_id, text: typed.unwrap_or_else(|| values.join(", ")), refused: Some(why) });
         }
         return;
     }
     let params = json!({ "element": element.to_string(), "stereotype": s_id.to_string(), "property": p_id.to_string(), "values": values });
-    let Some(session) = shell.session.as_mut() else { return };
+    let Some(session) = cx.session.as_mut() else { return };
     let out = session.execute("uml.stereotype.set-value", &params);
     match out {
         Ok(_) => {
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.stereotypes.value = None;
             }
-            shell.panels.notice = None;
+            cx.panels.notice = None;
         }
         Err(e) => {
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.stereotypes.value = Some(ValueEdit {
                     element,
                     stereotype: s_id,
@@ -678,9 +677,9 @@ fn write_values(shell: &mut Shell, element: Uuid, s_id: Uuid, p_id: Uuid, values
 }
 
 /// The open class diagram, when one is open.
-fn open_class_diagram(shell: &Shell) -> Option<(Uuid, Obj)> {
-    let id = shell.canvas.active?;
-    let store = shell.session.as_ref()?.doc();
+fn open_class_diagram(cx: &Ctx) -> Option<(Uuid, Obj)> {
+    let id = cx.canvas.active?;
+    let store = cx.session.as_ref()?.doc();
     let d = store.by_uuid(id)?;
     let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string));
     (kind.as_deref() == Some(archforge_uml::STRUCTURE_DIAGRAM)).then_some((id, d))
@@ -689,26 +688,26 @@ fn open_class_diagram(shell: &Shell) -> Option<(Uuid, Obj)> {
 /// Show stereotype values on this diagram, while a class diagram is open: ticked, its cards list
 /// the values set on their stereotypes, each diagram its own choice; turned on, the cards that would
 /// hide a value grow, in the same undo step. Gives the y under it.
-fn show_values_check(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y: f32) -> f32 {
-    let Some((d_id, d)) = open_class_diagram(shell) else { return y };
-    let was = shell.session.as_ref().is_some_and(|s| applications::values_shown(s.doc(), d));
+fn show_values_check(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, left: f32, y: f32) -> f32 {
+    let Some((d_id, d)) = open_class_diagram(cx) else { return y };
+    let was = cx.session.as_ref().is_some_and(|s| applications::values_shown(s.doc(), d));
     let mut on = was;
-    crate::panels::check(shell, ui, p, pos2(left, y), SHOW_ID, &tr("Show stereotype values on this diagram"), &mut on);
+    crate::panels::check_cx(cx, ui, p, pos2(left, y), SHOW_ID, &tr("Show stereotype values on this diagram"), &mut on);
     if on != was
-        && let Err(e) = show_values(shell, d_id, on)
+        && let Err(e) = show_values(cx, d_id, on)
     {
-        shell.panels.notice = Some(e);
+        cx.panels.notice = Some(e);
     }
     y + 28.0
 }
 
 /// Shows or hides the stereotype values on diagram `d` in one undo step, whose command grows the
 /// cards that would hide a value (AR-241).
-pub(crate) fn show_values(shell: &mut Shell, d: Uuid, on: bool) -> Result<(), String> {
-    let session = shell.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
+pub(crate) fn show_values(cx: &mut Ctx, d: Uuid, on: bool) -> Result<(), String> {
+    let session = cx.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
     session
         .execute("uml.stereotype.show-values", &json!({ "diagram": d.to_string(), "show": on }))
-        .map(|_| shell.panels.notice = None)
+        .map(|_| cx.panels.notice = None)
         .map_err(|e| crate::panels::refusal(&e))
 }
 
@@ -716,12 +715,12 @@ pub(crate) fn show_values(shell: &mut Shell, d: Uuid, on: bool) -> Result<(), St
 /// stereotypes that apply and those applied (ticked), a line, and the rest, muted, their short
 /// reason at the right and the whole one on hover and for screen readers. Typing filters, the arrows
 /// walk the rows that apply, Enter applies, Escape or a press elsewhere closes.
-fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &str, element: Obj, element_id: Uuid) {
+fn picker(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &str, element: Obj, element_id: Uuid) {
     // Typing filters the rows; Backspace takes the last character back.
     let typed: String = ui.input(|i| i.events.iter().filter_map(|e| if let egui::Event::Text(t) = e { Some(t.clone()) } else { None }).collect());
     let back = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace));
     if (!typed.is_empty() || back)
-        && let Some(uml) = uml_mut(&mut shell.notation_states)
+        && let Some(uml) = uml_mut(cx.notation_states)
     {
         let f = &mut uml.stereotypes.filter;
         if back {
@@ -730,10 +729,10 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &
         if f.chars().count() < 64 {
             f.push_str(&typed);
         }
-        shell.panels.menu_reached = None;
+        cx.panels.menu_reached = None;
     }
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    let filter = uml(&shell.notation_states).map(|uml| uml.stereotypes.filter.clone()).unwrap_or_default();
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
+    let filter = uml(cx.notation_states).map(|uml| uml.stereotypes.filter.clone()).unwrap_or_default();
     let rows = picks(store, element, &filter);
     let heading = fmt(&tr("Apply to {name}"), &[("name", &name(store, element))]);
     let split = rows.iter().position(|r| !r.live && !r.ticked);
@@ -765,8 +764,8 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &
             let said = fmt(&tr("Filter: {text}"), &[("text", &filter)]);
             ux::text(&paint, pos2(m.left() + 14.0, m.top() + 30.0), &said, types::CAPTION, p.text_secondary, Some(m.width() - 28.0));
         }
-        crate::widgets::record_visible(ui, &mut shell.registry, &format!("{add_id}.menu"), "menu", m);
-        let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == add_id).map(|(_, i)| *i);
+        crate::widgets::record_visible(ui, cx.registry, &format!("{add_id}.menu"), "menu", m);
+        let mut reached = cx.panels.menu_reached.as_ref().filter(|(of, _)| of == add_id).map(|(_, i)| *i);
         let (down, up, enter) = ui.input_mut(|i| {
             (
                 i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
@@ -785,7 +784,7 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &
         }
         // Enter with nothing reached applies the first that applies, as the filter left it.
         let reached_for_enter = reached.or_else(|| live.first().copied());
-        shell.panels.menu_reached = reached.map(|i| (add_id.to_string(), i));
+        cx.panels.menu_reached = reached.map(|i| (add_id.to_string(), i));
         let list = Rect::from_min_max(pos2(m.left(), m.top() + 4.0 + head), pos2(m.right(), m.bottom() - 4.0));
         let clipped = paint.with_clip_rect(list);
         if rows.is_empty() {
@@ -809,9 +808,9 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &
             }
             let rid = format!("{add_id}.{}", row.stereotype);
             let resp = if row.live {
-                control(shell, ui, &rid, "menu-item", r.intersect(list), true).accessible_name(format!("{} {}", row.label, row.detail))
+                control_cx(cx, ui, &rid, "menu-item", r.intersect(list), true).accessible_name(format!("{} {}", row.label, row.detail))
             } else {
-                crate::widgets::record_visible(ui, &mut shell.registry, &rid, "menu-item", r.intersect(list));
+                crate::widgets::record_visible(ui, cx.registry, &rid, "menu-item", r.intersect(list));
                 let resp = ui.interact(r.intersect(list), crate::widgets::egui_id(&rid), Sense::hover());
                 let why = row.why.clone().unwrap_or_else(|| row.detail.clone());
                 let ticked = row.ticked;
@@ -853,22 +852,22 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &
     });
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || anchor.contains(pos)));
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.menu = None;
-        shell.panels.menu_reached = None;
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        cx.panels.menu = None;
+        cx.panels.menu_reached = None;
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.stereotypes.filter.clear();
         }
     }
     if let Some(s) = picked {
-        match run(shell, "uml.stereotype.apply", json!({ "element": element_id.to_string(), "stereotype": s.to_string() })) {
+        match run_cx(cx, "uml.stereotype.apply", json!({ "element": element_id.to_string(), "stereotype": s.to_string() })) {
             Ok(_) => {
-                shell.panels.notice = None;
-                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                cx.panels.notice = None;
+                if let Some(uml) = uml_mut(cx.notation_states) {
                     uml.stereotypes.refused = None;
                 }
             }
             Err(e) => {
-                if let Some(uml) = uml_mut(&mut shell.notation_states) {
+                if let Some(uml) = uml_mut(cx.notation_states) {
                     uml.stereotypes.refused = Some((element_id, e));
                 }
             }
@@ -902,7 +901,7 @@ pub(crate) fn going_along(store: &Store, element: Obj) -> Vec<String> {
 /// Class) applied to Commerce, and Logging (Tracked, extending Class) applied nowhere, so the picker
 /// (F4) shows each kind of row; the open diagram showing the values. Gives Order's id.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_values(shell: &mut Shell) -> Result<Uuid, String> {
+pub(crate) fn put_values(shell: &mut crate::Shell) -> Result<Uuid, String> {
     let (commerce, _, entity) = crate::uml_profiles::put_profiles(shell, true)?;
     let session = shell.session.as_mut().ok_or("the sample needs a session")?;
     let order = {
@@ -919,7 +918,7 @@ pub(crate) fn put_values(shell: &mut Shell) -> Result<Uuid, String> {
     let logging = run("uml.profile.add", json!({ "name": "Logging" }))?;
     run("uml.stereotype.add", json!({ "profile": logging, "name": "Tracked", "extends": ["Class"] }))?;
     if let Some(d) = shell.canvas.active {
-        show_values(shell, d, true)?;
+        shell.cx(|cx| show_values(cx, d, true))?;
     }
     if let Some(s) = shell.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;

@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use archforge_mof::{Obj, Uuid};
 use archforge_notations::Session;
 
+use crate::explorer::Delete;
 use crate::notation_ui::{NotationStates, NotationUi};
 use crate::state::{Explorer, Panel};
 use crate::{Shell, canvas, menu_bar, panels, widgets};
@@ -49,6 +50,8 @@ pub(crate) struct Ctx<'a> {
 pub(crate) struct CtxRef<'a> {
     /// The open project's model, when one is open.
     pub session: &'a Option<Session>,
+    /// The centre's own state: the open tabs, the view, the tool, the notice and the toast.
+    pub canvas: &'a canvas::State,
     /// The notations the shell knows.
     pub notation_uis: &'static [&'static dyn NotationUi],
     /// Each notation's own state: its editors, menus, drawings and tools.
@@ -73,12 +76,20 @@ pub(crate) enum Request {
     /// its filter goes, so the row is listed, the name is selected whole, so typing replaces it, and
     /// the keyboard goes to Models.
     NameInModels(Uuid, String),
+    /// The delete dialog asks about this removal, naming what goes with it.
+    AskDelete(Delete),
 }
 
 impl Ctx<'_> {
     /// The read-only twin of this context, over the same parts.
     pub(crate) fn cx_ref(&self) -> CtxRef<'_> {
-        CtxRef { session: self.session, notation_uis: self.notation_uis, notation_states: self.notation_states, looking_only: self.looking_only }
+        CtxRef {
+            session: self.session,
+            canvas: self.canvas,
+            notation_uis: self.notation_uis,
+            notation_states: self.notation_states,
+            looking_only: self.looking_only,
+        }
     }
 }
 
@@ -108,7 +119,13 @@ impl Shell {
 
     /// The read-only twin of the narrow context over this shell's parts.
     pub(crate) fn cx_ref(&self) -> CtxRef<'_> {
-        CtxRef { session: &self.session, notation_uis: self.notation_uis, notation_states: &self.notation_states, looking_only: self.looking_only() }
+        CtxRef {
+            session: &self.session,
+            canvas: &self.canvas,
+            notation_uis: self.notation_uis,
+            notation_states: &self.notation_states,
+            looking_only: self.looking_only(),
+        }
     }
 
     /// Carries out the context's `requests`, in their order.
@@ -124,6 +141,7 @@ impl Shell {
                     self.explorer.rename = Some(crate::explorer::Rename::fresh(id, name));
                     self.explorer.focused = true;
                 }
+                Request::AskDelete(delete) => self.explorer.delete = Some(delete),
             }
         }
     }
