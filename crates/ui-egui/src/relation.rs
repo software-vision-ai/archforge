@@ -11,13 +11,12 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
 use crate::connect::cardinality_text;
+use crate::cx::Ctx;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
-use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, FieldOut, PAD, ROW, Subject, check, edit_field, name_field, run, section, select_field};
+use crate::panels::{FIELD, FieldOut, PAD, ROW, Subject, check_cx, control_cx, edit_field_cx, name_field_cx, run_cx, section_cx, select_field_cx};
 use crate::ux::{self, Palette, icons, types};
 
 /// A cardinality button's size and pitch.
@@ -142,39 +141,39 @@ fn cardinality_word(c: Cardinality) -> &'static str {
 
 /// Takes a command's result: a refusal goes to the notice; after a success the relationship is
 /// selected again, since commands that make columns or keys select what they made.
-fn apply(shell: &mut Shell, rel: Uuid, result: Result<serde_json::Value, String>) {
+fn apply(cx: &mut Ctx, rel: Uuid, result: Result<serde_json::Value, String>) {
     match result {
         Ok(_) => {
-            shell.panels.notice = None;
-            let still = shell.session.as_ref().is_some_and(|s| s.view().selection.iter().any(|o| s.doc().uuid(*o).ok() == Some(rel)));
-            if !still && let Err(e) = run(shell, "view.select", json!({ "ids": [rel.to_string()] })) {
-                shell.panels.notice = Some(e);
+            cx.panels.notice = None;
+            let still = cx.session.as_ref().is_some_and(|s| s.view().selection.iter().any(|o| s.doc().uuid(*o).ok() == Some(rel)));
+            if !still && let Err(e) = run_cx(cx, "view.select", json!({ "ids": [rel.to_string()] })) {
+                cx.panels.notice = Some(e);
             }
         }
-        Err(e) => shell.panels.notice = Some(e),
+        Err(e) => cx.panels.notice = Some(e),
     }
 }
 
 /// Draws a relationship's Properties under the heading, from `y`.
-pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
+pub(crate) fn body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(rel) = shell.session.as_ref().and_then(|s| subject.obj.and_then(|o| read(s.doc(), o))) else { return };
-    let (from_name, to_name, parent_name, child_name) = match shell.session.as_ref() {
+    let Some(rel) = cx.session.as_ref().and_then(|s| subject.obj.and_then(|o| read(s.doc(), o))) else { return };
+    let (from_name, to_name, parent_name, child_name) = match cx.session.as_ref() {
         Some(s) => (name(s.doc(), rel.from), name(s.doc(), rel.to), name(s.doc(), rel.parent), name(s.doc(), rel.child)),
         None => return,
     };
     // Relationship: name and Identifying.
-    name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "er.relationship.rename", "relationship");
+    name_field_cx(cx, ui, p, pos2(r.left() + PAD, y), width, subject, "er.relationship.rename", "relationship");
     y += 17.0 + FIELD + 12.0;
     let mut identifying = rel.identifying;
-    check(shell, ui, p, pos2(r.left() + PAD, y), "workspace.properties.identifying", &tr("Identifying"), &mut identifying);
+    check_cx(cx, ui, p, pos2(r.left() + PAD, y), "workspace.properties.identifying", &tr("Identifying"), &mut identifying);
     if identifying != rel.identifying {
-        set_identifying(shell, &rel, identifying);
+        set_identifying(cx, &rel, identifying);
     }
     y += 32.0;
     // Ends.
-    y = section(shell, ui, p, r, y, &tr("Ends"), None).unwrap_or(y + 50.0) - 6.0;
+    y = section_cx(cx, ui, p, r, y, &tr("Ends"), None).unwrap_or(y + 50.0) - 6.0;
     for (i, (entity_name, current)) in [(from_name.clone(), rel.from_end), (to_name.clone(), rel.to_end)].into_iter().enumerate() {
         let caption = fmt(&tr("{entity} end"), &[("entity", &entity_name)]);
         ux::text(&paint, pos2(r.left() + PAD, y), &caption, types::CAPTION, p.text_secondary, Some(width));
@@ -198,65 +197,65 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
                 if on { p.accent_tint } else { p.field },
             );
             let id = format!("workspace.properties.end.{}.{j}", if i == 0 { "from" } else { "to" });
-            if control(shell, ui, &id, "button", b, true).on_hover_text(cardinality_text(*c)).clicked() {
+            if control_cx(cx, ui, &id, "button", b, true).on_hover_text(cardinality_text(*c)).clicked() {
                 picked = Some(*c);
             }
         }
         if let Some(c) = picked {
             let (f, t) = if i == 0 { (c, rel.to_end) } else { (rel.from_end, c) };
-            let out = run(
-                shell,
+            let out = run_cx(
+                cx,
                 "er.relationship.set-ends",
                 json!({ "relationship": rel.id.to_string(), "from_end": cardinality_word(f), "to_end": cardinality_word(t) }),
             );
-            apply(shell, rel.id, out);
+            apply(cx, rel.id, out);
         }
         y += END_BUTTON.y + 10.0;
-        role_field(shell, ui, p, pos2(r.left() + PAD, y), width, &rel, i);
+        role_field(cx, ui, p, pos2(r.left() + PAD, y), width, &rel, i);
         y += 17.0 + FIELD + 14.0;
     }
     // Foreign key.
     y += 4.0;
-    foreign_key(shell, ui, p, r, y, &rel, &parent_name, &child_name);
+    foreign_key(cx, ui, p, r, y, &rel, &parent_name, &child_name);
 }
 
 /// A role field: typed in place, committed on Enter or when the keyboard leaves it; Escape brings
 /// the role back.
-fn role_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, rel: &Rel, end: usize) {
-    let mut text = match er(&shell.notation_states).and_then(|er| er.role.as_ref()) {
+fn role_field(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, rel: &Rel, end: usize) {
+    let mut text = match er(cx.notation_states).and_then(|er| er.role.as_ref()) {
         Some(e) if e.target == rel.id && e.end == end => e.text.clone(),
         _ => rel.roles[end].clone(),
     };
     let id = format!("workspace.properties.role.{}", if end == 0 { "from" } else { "to" });
-    let out = edit_field(shell, ui, p, at, width, &id, &tr("Role"), &mut text, archforge_er::rules::MAX_NAME, false, true);
+    let out = edit_field_cx(cx, ui, p, at, width, &id, &tr("Role"), &mut text, archforge_er::rules::MAX_NAME, false, true);
     if out == FieldOut::Cancel {
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+        if let Some(er) = er_mut(cx.notation_states) {
             er.role = None;
         }
     } else if out == FieldOut::Commit {
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+        if let Some(er) = er_mut(cx.notation_states) {
             er.role = None;
         }
         if text.trim() != rel.roles[end] {
             let mut roles = rel.roles.clone();
             roles[end] = text.trim().to_string();
             let out =
-                run(shell, "er.relationship.set-roles", json!({ "relationship": rel.id.to_string(), "from_role": roles[0], "to_role": roles[1] }));
-            apply(shell, rel.id, out);
+                run_cx(cx, "er.relationship.set-roles", json!({ "relationship": rel.id.to_string(), "from_role": roles[0], "to_role": roles[1] }));
+            apply(cx, rel.id, out);
         }
     } else if text != rel.roles[end] {
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+        if let Some(er) = er_mut(cx.notation_states) {
             er.role = Some(RoleEdit { target: rel.id, end, text });
         }
-    } else if er(&shell.notation_states).and_then(|er| er.role.as_ref()).is_some_and(|e| e.target == rel.id && e.end == end)
-        && let Some(er) = er_mut(&mut shell.notation_states)
+    } else if er(cx.notation_states).and_then(|er| er.role.as_ref()).is_some_and(|e| e.target == rel.id && e.end == end)
+        && let Some(er) = er_mut(cx.notation_states)
     {
         er.role = None;
     }
 }
 
 /// What the Foreign key section reads of the store once per frame, owned so the drawing may
-/// change the shell.
+/// change the context.
 struct FkView {
     fk_id: String,
     key: Option<Uuid>,
@@ -345,7 +344,7 @@ fn word_of<T: PartialEq + Copy>(table: &[(T, &'static str, &'static str)], value
 
 /// The Foreign key section: its header with the tag and the switch, then the key, the pairs, the
 /// actions and More; or the card for a parent without a key.
-fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, rel: &Rel, parent_name: &str, child_name: &str) {
+fn foreign_key(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, rel: &Rel, parent_name: &str, child_name: &str) {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), 1.0)), 0.0, p.border);
@@ -361,33 +360,33 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     paint.rect_filled(sw, 10.0, if on { p.accent_fill } else { p.border });
     let knob = if on { sw.right_center() - vec2(10.0, 0.0) } else { sw.left_center() + vec2(10.0, 0.0) };
     paint.circle_filled(knob, 8.0, p.surface);
-    if control(shell, ui, "workspace.properties.foreign-key", "toggle", sw, true).on_hover_text(tr("Foreign key")).clicked() {
+    if control_cx(cx, ui, "workspace.properties.foreign-key", "toggle", sw, true).on_hover_text(tr("Foreign key")).clicked() {
         if on {
-            remove_foreign_key(shell, rel);
+            remove_foreign_key(cx, rel);
         } else {
-            add_foreign_key(shell, rel, parent_name);
+            add_foreign_key(cx, rel, parent_name);
         }
         return;
     }
     y += 50.0;
     let Some(fk) = rel.fk.as_ref() else {
-        if er(&shell.notation_states).and_then(|er| er.no_key_card) == Some(rel.id) {
-            let has_key = shell.session.as_ref().is_some_and(|s| archforge_er::rules::primary_key_of(s.doc(), rel.parent).is_some());
+        if er(cx.notation_states).and_then(|er| er.no_key_card) == Some(rel.id) {
+            let has_key = cx.session.as_ref().is_some_and(|s| archforge_er::rules::primary_key_of(s.doc(), rel.parent).is_some());
             if has_key {
-                if let Some(er) = er_mut(&mut shell.notation_states) {
+                if let Some(er) = er_mut(cx.notation_states) {
                     er.no_key_card = None;
                 }
             } else {
-                parent_without_key(shell, ui, p, r, y, rel, parent_name, child_name);
+                parent_without_key(cx, ui, p, r, y, rel, parent_name, child_name);
             }
         }
         return;
     };
-    let open_pair = shell.panels.menu.and_then(|m| m.index_in(menus::PAIR));
-    let Some(v) = shell.session.as_ref().map(|s| fk_view(s.doc(), rel, fk, open_pair, child_name)) else { return };
+    let open_pair = cx.panels.menu.and_then(|m| m.index_in(menus::PAIR));
+    let Some(v) = cx.session.as_ref().map(|s| fk_view(s.doc(), rel, fk, open_pair, child_name)) else { return };
     // Points to.
     let points =
-        select_field(shell, ui, p, pos2(r.left() + PAD, y), width, "workspace.properties.points-to", &tr("Points to"), &v.key_word, menus::POINTS);
+        select_field_cx(cx, ui, p, pos2(r.left() + PAD, y), width, "workspace.properties.points-to", &tr("Points to"), &v.key_word, menus::POINTS);
     y += 17.0 + FIELD + 14.0;
     // The pairs: the parent's key columns against the child's.
     let half = ((width - 8.0) / 2.0).max(0.0);
@@ -405,8 +404,8 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         paint.rect_filled(field, 6.0, p.field);
         ux::text_mid(&paint, field.left() + 8.0, field.center().y, child_col, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
         ux::icon_mid(&paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
-        if control(shell, ui, &format!("workspace.properties.pair.{i}"), "select", field, true).clicked() {
-            shell.panels.menu = if shell.panels.menu == Some(menus::PAIR.at(i)) { None } else { Some(menus::PAIR.at(i)) };
+        if control_cx(cx, ui, &format!("workspace.properties.pair.{i}"), "select", field, true).clicked() {
+            cx.panels.menu = if cx.panels.menu == Some(menus::PAIR.at(i)) { None } else { Some(menus::PAIR.at(i)) };
         }
         pair_fields.push(field);
         y += ROW;
@@ -415,9 +414,9 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     // On delete and On update.
     let (delete_word, update_word) = (word_of(&ACTIONS, v.on_delete).1, word_of(&ACTIONS, v.on_update).1);
     let on_delete =
-        select_field(shell, ui, p, pos2(r.left() + PAD, y), half, "workspace.properties.on-delete", &tr("On delete"), &delete_word, menus::ON_DELETE);
-    let on_update = select_field(
-        shell,
+        select_field_cx(cx, ui, p, pos2(r.left() + PAD, y), half, "workspace.properties.on-delete", &tr("On delete"), &delete_word, menus::ON_DELETE);
+    let on_update = select_field_cx(
+        cx,
         ui,
         p,
         pos2(r.left() + PAD + half + 8.0, y),
@@ -430,7 +429,7 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     y += 17.0 + FIELD + 14.0;
     // More: Deferrable, and Match when it can matter.
     let more = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 24.0));
-    let open = er(&shell.notation_states).is_some_and(|er| er.more_open);
+    let open = er(cx.notation_states).is_some_and(|er| er.more_open);
     ux::icon_in(
         &paint,
         Rect::from_min_size(more.min + vec2(0.0, 4.0), Vec2::splat(16.0)),
@@ -438,8 +437,8 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         p.text_secondary,
     );
     ux::text(&paint, more.min + vec2(22.0, 2.0), &tr("More"), types::UI, p.text, Some((width - 22.0).max(0.0)));
-    if control(shell, ui, "workspace.properties.more", "disclosure", more, true).clicked()
-        && let Some(er) = er_mut(&mut shell.notation_states)
+    if control_cx(cx, ui, "workspace.properties.more", "disclosure", more, true).clicked()
+        && let Some(er) = er_mut(cx.notation_states)
     {
         er.more_open = !open;
     }
@@ -448,8 +447,8 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     let mut matching = None;
     if open {
         let word = word_of(&DEFERRABLE, v.deferrable).1;
-        deferrable = Some(select_field(
-            shell,
+        deferrable = Some(select_field_cx(
+            cx,
             ui,
             p,
             pos2(r.left() + PAD, y),
@@ -463,24 +462,24 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         if v.columns.len() >= 2 && v.any_nullable {
             let word = word_of(&MATCH, v.matching).1;
             matching =
-                Some(select_field(shell, ui, p, pos2(r.left() + PAD, y), width, "workspace.properties.match", &tr("Match"), &word, menus::MATCH));
+                Some(select_field_cx(cx, ui, p, pos2(r.left() + PAD, y), width, "workspace.properties.match", &tr("Match"), &word, menus::MATCH));
         }
     }
     // The open menu, over the rest.
-    match shell.panels.menu {
+    match cx.panels.menu {
         Some(menus::POINTS) => {
             let items: Vec<Item> = v
                 .keys
                 .iter()
                 .map(|(id, kind, _, columns)| Item { label: kind.clone(), detail: columns.clone(), enabled: true, on: v.key == Some(*id) })
                 .collect();
-            if let Some(i) = menu(shell, ui, p, points, "workspace.properties.points-to", &items, None)
+            if let Some(i) = menu(cx, ui, p, points, "workspace.properties.points-to", &items, None)
                 && let Some((key, _, _, _)) = v.keys.get(i)
             {
-                let child: Vec<Uuid> = shell.session.as_ref().and_then(|s| s.doc().uuid(rel.child).ok()).into_iter().collect();
+                let child: Vec<Uuid> = cx.session.as_ref().and_then(|s| s.doc().uuid(rel.child).ok()).into_iter().collect();
                 let params = json!({ "foreign_key": v.fk_id, "key": key.to_string() });
-                let out = crate::er_place::run_fitting(shell, &tr("Points to"), "er.foreign-key.set-key", params, &child);
-                apply(shell, rel.id, out);
+                let out = crate::er_place::run_fitting(cx, &tr("Points to"), "er.foreign-key.set-key", params, &child);
+                apply(cx, rel.id, out);
             }
         }
         Some(m) if m.index_in(menus::PAIR).is_some() => {
@@ -488,12 +487,12 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
             // The rows are read at the frame's start, so a menu just opened draws next frame.
             let Some((_, items, targets, heading)) = v.pair_menu.as_ref() else {
                 if i >= v.pairs.len() {
-                    shell.panels.menu = None;
+                    cx.panels.menu = None;
                 }
                 return;
             };
             let anchor = pair_fields.get(i).copied().unwrap_or(more);
-            if let Some(j) = menu(shell, ui, p, anchor, &format!("workspace.properties.pair.{i}"), items, Some((1, heading.clone())))
+            if let Some(j) = menu(cx, ui, p, anchor, &format!("workspace.properties.pair.{i}"), items, Some((1, heading.clone())))
                 && let Some(target) = targets.get(j)
                 && let Some(key) = v.key
             {
@@ -502,32 +501,32 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
                     && *slot != target.to_string()
                 {
                     *slot = target.to_string();
-                    let child: Vec<Uuid> = shell.session.as_ref().and_then(|s| s.doc().uuid(rel.child).ok()).into_iter().collect();
+                    let child: Vec<Uuid> = cx.session.as_ref().and_then(|s| s.doc().uuid(rel.child).ok()).into_iter().collect();
                     let params = json!({ "foreign_key": v.fk_id, "key": key.to_string(), "columns": columns });
-                    let out = crate::er_place::run_fitting(shell, &tr("Points to"), "er.foreign-key.set-key", params, &child);
-                    apply(shell, rel.id, out);
+                    let out = crate::er_place::run_fitting(cx, &tr("Points to"), "er.foreign-key.set-key", params, &child);
+                    apply(cx, rel.id, out);
                 }
             }
         }
         Some(menus::ON_DELETE) | Some(menus::ON_UPDATE) => {
-            let which_delete = shell.panels.menu == Some(menus::ON_DELETE);
+            let which_delete = cx.panels.menu == Some(menus::ON_DELETE);
             let current = if which_delete { v.on_delete } else { v.on_update };
             let items: Vec<Item> =
                 ACTIONS.iter().map(|(a, _, w)| Item { label: tr(w), detail: String::new(), enabled: true, on: *a == current }).collect();
             let (anchor, id) =
                 if which_delete { (on_delete, "workspace.properties.on-delete") } else { (on_update, "workspace.properties.on-update") };
-            if let Some(i) = menu(shell, ui, p, anchor, id, &items, None)
+            if let Some(i) = menu(cx, ui, p, anchor, id, &items, None)
                 && let Some((_, word, _)) = ACTIONS.get(i)
             {
                 let (d, u) = if which_delete { (*word, word_of(&ACTIONS, v.on_update).0) } else { (word_of(&ACTIONS, v.on_delete).0, *word) };
-                let out = run(shell, "er.foreign-key.set-actions", json!({ "foreign_key": v.fk_id, "on_delete": d, "on_update": u }));
-                apply(shell, rel.id, out);
+                let out = run_cx(cx, "er.foreign-key.set-actions", json!({ "foreign_key": v.fk_id, "on_delete": d, "on_update": u }));
+                apply(cx, rel.id, out);
             }
         }
         Some(menus::DEFERRABLE) | Some(menus::MATCH) => {
-            let is_deferrable = shell.panels.menu == Some(menus::DEFERRABLE);
+            let is_deferrable = cx.panels.menu == Some(menus::DEFERRABLE);
             let Some(anchor) = (if is_deferrable { deferrable } else { matching }) else {
-                shell.panels.menu = None;
+                cx.panels.menu = None;
                 return;
             };
             let items: Vec<Item> = if is_deferrable {
@@ -536,15 +535,15 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
                 MATCH.iter().map(|(m, _, w)| Item { label: tr(w), detail: String::new(), enabled: true, on: *m == v.matching }).collect()
             };
             let id = if is_deferrable { "workspace.properties.deferrable" } else { "workspace.properties.match" };
-            if let Some(i) = menu(shell, ui, p, anchor, id, &items, None) {
+            if let Some(i) = menu(cx, ui, p, anchor, id, &items, None) {
                 let m = if is_deferrable { word_of(&MATCH, v.matching).0 } else { MATCH.get(i).map(|(_, w, _)| *w).unwrap_or("simple") };
                 let d = if is_deferrable {
                     DEFERRABLE.get(i).map(|(_, w, _)| *w).unwrap_or("not-deferrable")
                 } else {
                     word_of(&DEFERRABLE, v.deferrable).0
                 };
-                let out = run(shell, "er.foreign-key.set-options", json!({ "foreign_key": v.fk_id, "match": m, "deferrable": d }));
-                apply(shell, rel.id, out);
+                let out = run_cx(cx, "er.foreign-key.set-options", json!({ "foreign_key": v.fk_id, "match": m, "deferrable": d }));
+                apply(cx, rel.id, out);
             }
         }
         _ => {}
@@ -552,7 +551,7 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
 }
 
 /// The card for a parent without a primary key, with its two offers.
-fn parent_without_key(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, rel: &Rel, parent_name: &str, child_name: &str) {
+fn parent_without_key(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, rel: &Rel, parent_name: &str, child_name: &str) {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 118.0));
@@ -565,7 +564,7 @@ fn parent_without_key(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y:
     let mut ry = card.top() + 54.0;
     for (key, icon, label) in [("add-id", &icons::PLUS, "Add id column"), ("choose-keys", &icons::LIST, "Choose key columns")] {
         let row = Rect::from_min_size(pos2(card.left() + 8.0, ry), vec2((width - 16.0).max(0.0), 28.0));
-        let resp = control(shell, ui, &format!("workspace.properties.{key}"), "button", row, true);
+        let resp = control_cx(cx, ui, &format!("workspace.properties.{key}"), "button", row, true);
         if resp.hovered() {
             paint.rect_filled(row, 5.0, p.surface);
         }
@@ -573,12 +572,12 @@ fn parent_without_key(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y:
         ux::text(&paint, row.min + vec2(30.0, 5.0), &tr(label), types::SMALL, p.text, Some((width - 50.0).max(0.0)));
         if resp.clicked() {
             match key {
-                "add-id" => add_id_column(shell, rel, parent_name),
+                "add-id" => add_id_column(cx, rel, parent_name),
                 _ => {
                     // The parent's Properties, where its columns are made key columns.
-                    if let Some(id) = shell.session.as_ref().and_then(|s| s.doc().uuid(rel.parent).ok()) {
-                        let out = run(shell, "view.select", json!({ "ids": [id.to_string()] }));
-                        apply(shell, rel.id, out);
+                    if let Some(id) = cx.session.as_ref().and_then(|s| s.doc().uuid(rel.parent).ok()) {
+                        let out = run_cx(cx, "view.select", json!({ "ids": [id.to_string()] }));
+                        apply(cx, rel.id, out);
                     }
                 }
             }
@@ -590,11 +589,11 @@ fn parent_without_key(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y:
 
 /// Makes the relationship identifying or not: the foreign key's columns join or leave the
 /// child's primary key, then the flag follows, as one step.
-fn set_identifying(shell: &mut Shell, rel: &Rel, on: bool) {
-    let Some(session) = shell.session.as_mut() else { return };
+fn set_identifying(cx: &mut Ctx, rel: &Rel, on: bool) {
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     let Some(fk) = rel.fk.as_ref() else {
-        shell.panels.notice = Some(tr("An identifying relationship needs its foreign key; turn the switch on first"));
+        cx.panels.notice = Some(tr("An identifying relationship needs its foreign key; turn the switch on first"));
         return;
     };
     let Some(child) = store.uuid(rel.child).ok() else { return };
@@ -623,13 +622,13 @@ fn set_identifying(shell: &mut Shell, rel: &Rel, on: bool) {
         b.execute("er.relationship.set-identifying", &json!({ "relationship": rel_id, "identifying": on }))?;
         crate::er_place::grow_to_fit(b, &[child])
     });
-    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
+    apply(cx, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
 }
 
 /// Adds an `id` column as the parent's primary key, then the foreign key with its new child
 /// columns, as one step.
-fn add_id_column(shell: &mut Shell, rel: &Rel, _parent_name: &str) {
-    let Some(session) = shell.session.as_mut() else { return };
+fn add_id_column(cx: &mut Ctx, rel: &Rel, _parent_name: &str) {
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     let (Some(parent), Some(child)) = (store.uuid(rel.parent).ok(), store.uuid(rel.child).ok()) else { return };
     let rel_id = rel.id.to_string();
@@ -638,31 +637,31 @@ fn add_id_column(shell: &mut Shell, rel: &Rel, _parent_name: &str) {
         b.execute("er.foreign-key.add", &json!({ "entity": child.to_string(), "references": parent.to_string(), "relationship": rel_id }))?;
         crate::er_place::grow_to_fit(b, &[parent, child])
     });
-    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
+    apply(cx, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
 }
 
 /// Turns the foreign key on: the engine adds one child column per parent key column with the key.
-fn add_foreign_key(shell: &mut Shell, rel: &Rel, _parent_name: &str) {
-    let Some(session) = shell.session.as_mut() else { return };
+fn add_foreign_key(cx: &mut Ctx, rel: &Rel, _parent_name: &str) {
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     if archforge_er::rules::primary_key_of(store, rel.parent).is_none() {
         // Nothing to point at: the card below the switch says so.
-        shell.panels.menu = None;
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+        cx.panels.menu = None;
+        if let Some(er) = er_mut(cx.notation_states) {
             er.no_key_card = Some(rel.id);
         }
         return;
     }
     let (Some(parent), Some(child)) = (store.uuid(rel.parent).ok(), store.uuid(rel.child).ok()) else { return };
     let params = json!({ "entity": child.to_string(), "references": parent.to_string(), "relationship": rel.id.to_string() });
-    let out = crate::er_place::run_fitting(shell, &tr("Add foreign key"), "er.foreign-key.add", params, &[child]);
-    apply(shell, rel.id, out);
+    let out = crate::er_place::run_fitting(cx, &tr("Add foreign key"), "er.foreign-key.add", params, &[child]);
+    apply(cx, rel.id, out);
 }
 
 /// Turns the foreign key off: the key and its columns go, as one step.
-fn remove_foreign_key(shell: &mut Shell, rel: &Rel) {
+fn remove_foreign_key(cx: &mut Ctx, rel: &Rel) {
     let Some(fk) = rel.fk.as_ref() else { return };
-    let Some(session) = shell.session.as_mut() else { return };
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     let columns: Vec<String> = fk.columns.iter().filter_map(|c| store.uuid(*c).ok()).map(|u| u.to_string()).collect();
     let fk_id = fk.id.to_string();
@@ -673,7 +672,7 @@ fn remove_foreign_key(shell: &mut Shell, rel: &Rel) {
         }
         Ok(())
     });
-    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
+    apply(cx, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
 }
 
 /// One row of a menu: its label, a detail at the right, whether it can be picked, whether it is
@@ -687,18 +686,20 @@ struct Item {
 
 /// A menu under `anchor` with rich rows and an optional heading before row `at`; gives the index
 /// picked, closing on a pick or a click elsewhere.
-fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[Item], heading: Option<(usize, String)>) -> Option<usize> {
+fn menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[Item], heading: Option<(usize, String)>) -> Option<usize> {
     let heading_h = if heading.is_some() { 22.0 } else { 0.0 };
     let height = 8.0 + items.len() as f32 * 30.0 + heading_h;
     let width = anchor.width().max(200.0);
     let m = ux::drop_rect(ui, anchor, anchor.right() - width, vec2(width, height));
     // Over the panel's rows below it, on a layer of its own.
-    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), m, |ui| menu_body(shell, ui, p, anchor, m, id, items, heading, heading_h))
+    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), m, |ui| menu_body(cx, ui, p, anchor, m, id, items, heading, heading_h))
 }
 
+/// The rows of [`menu`] on its own layer at `m`, with the heading before its row when there is one;
+/// gives the index picked.
 #[allow(clippy::too_many_arguments)]
 fn menu_body(
-    shell: &mut Shell,
+    cx: &mut Ctx,
     ui: &egui::Ui,
     p: &Palette,
     anchor: Rect,
@@ -723,7 +724,7 @@ fn menu_body(
             ry += heading_h;
         }
         let row = Rect::from_min_size(pos2(m.left() + 4.0, ry), vec2((width - 8.0).max(0.0), 30.0));
-        let resp = control(shell, ui, &format!("{id}.{i}"), "menu-item", row, item.enabled);
+        let resp = control_cx(cx, ui, &format!("{id}.{i}"), "menu-item", row, item.enabled);
         if item.on {
             paint.rect_filled(row, 5.0, p.accent_tint);
         } else if resp.hovered() && item.enabled {
@@ -744,7 +745,7 @@ fn menu_body(
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || anchor.contains(pos)));
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.panels.menu = None;
+        cx.panels.menu = None;
     }
     picked
 }

@@ -10,14 +10,14 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::Shell;
+use crate::cx::Ctx;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::er_ui::children;
-use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{
-    FIELD, PAD, ROW, Subject, check, edit_button, icon_button, menu, name_field, refusal, reveal, run, section, select_element, select_field,
-    selected_id, string_of, text_field,
+    FIELD, PAD, ROW, Subject, check_cx, control_cx, edit_button_cx, icon_button_cx, menu_cx, name_field_cx, refusal, reveal_cx, run_cx, section_cx,
+    select_element_cx, select_field_cx, selected_id_cx, string_of, text_field_cx,
 };
 use crate::ux::{self, Palette, icons, types};
 
@@ -105,40 +105,40 @@ fn entity_rows(store: &Store, e: Obj) -> (Vec<ColumnRow>, bool) {
 }
 
 /// A table: name and kind, its columns with the editor, its keys.
-pub(crate) fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
+pub(crate) fn entity_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
     let (Some(entity), Some(entity_id)) = (subject.obj, subject.id) else { return };
-    let (columns, associative) = match shell.session.as_ref() {
+    let (columns, associative) = match cx.session.as_ref() {
         Some(s) => entity_rows(s.doc(), entity),
         None => return,
     };
     let half = ((width - 8.0) / 2.0).max(0.0);
-    name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, "er.entity.rename", "entity");
+    name_field_cx(cx, ui, p, pos2(r.left() + PAD, y), half, subject, "er.entity.rename", "entity");
     let kind_word = if associative { tr("Mapping table") } else { tr("Regular") };
     let kind_field =
-        select_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, "workspace.properties.kind", &tr("Kind"), &kind_word, menus::KIND);
+        select_field_cx(cx, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, "workspace.properties.kind", &tr("Kind"), &kind_word, menus::KIND);
     y += 17.0 + FIELD + 16.0;
     // A pure mapping table offers to collapse back into its line (slice S4).
-    let collapsible = shell.session.as_ref().is_some_and(|s| archforge_er::rules::collapse_problem(s.doc(), entity).is_none());
+    let collapsible = cx.session.as_ref().is_some_and(|s| archforge_er::rules::collapse_problem(s.doc(), entity).is_none());
     if collapsible {
-        y = collapse_offer(shell, ui, p, r, y, entity, entity_id, &subject.name);
+        y = collapse_offer(cx, ui, p, r, y, entity, entity_id, &subject.name);
     }
     // Columns.
     let title = fmt(&tr("Columns · {n}"), &[("n", &columns.len().to_string())]);
-    let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.columns.add", "Add column"))) else {
-        open_column(shell, entity_id, None);
+    let Some(next) = section_cx(cx, ui, p, r, y, &title, Some(("workspace.properties.columns.add", "Add column"))) else {
+        open_column(cx, entity_id, None);
         return;
     };
     y = next - 6.0;
-    let chosen = selected_id(shell);
+    let chosen = selected_id_cx(&cx.cx_ref());
     for col in &columns {
-        if er(&shell.notation_states).and_then(|er| er.column.as_ref()).is_some_and(|c| c.target == Some(col.id)) {
-            y = column_editor(shell, ui, p, r, y);
+        if er(cx.notation_states).and_then(|er| er.column.as_ref()).is_some_and(|c| c.target == Some(col.id)) {
+            y = column_editor(cx, ui, p, r, y);
             continue;
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), ROW));
-        let resp = control(shell, ui, &format!("workspace.properties.column.{}", col.id), "row", row, true);
+        let resp = control_cx(cx, ui, &format!("workspace.properties.column.{}", col.id), "row", row, true);
         if Some(col.id) == chosen {
             paint.rect_filled(row, 6.0, p.accent_tint);
         } else if resp.contains_pointer() {
@@ -168,38 +168,38 @@ pub(crate) fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
             // The link mark of a key column that follows the column it points at.
             let mark = Rect::from_min_size(pos2(after, mid - 7.0), vec2(14.0, 14.0));
             ux::icon_in(&paint, mark, &icons::LINK, p.text_secondary);
-            control(shell, ui, &format!("workspace.properties.column.{}.link", col.id), "mark", mark.expand(3.0), true)
+            control_cx(cx, ui, &format!("workspace.properties.column.{}.link", col.id), "mark", mark.expand(3.0), true)
                 .on_hover_text(fmt(&tr("Follows {target}"), &[("target", target)]));
             after += 20.0;
         }
         ux::text_mid(&paint, after, mid + 0.5, &col.ty, types::CAPTION, p.text_secondary, Some((row.right() - after - 32.0).max(0.0)));
         let id = format!("workspace.properties.column.{}", col.id);
-        if edit_button(shell, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
-            select_element(shell, col.id);
-            open_column(shell, entity_id, Some(col.id));
+        if edit_button_cx(cx, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
+            select_element_cx(cx, col.id);
+            open_column(cx, entity_id, Some(col.id));
         } else if resp.clicked() {
-            select_element(shell, col.id);
+            select_element_cx(cx, col.id);
         }
         y += ROW;
     }
-    if er(&shell.notation_states).and_then(|er| er.column.as_ref()).is_some_and(|c| c.entity == entity_id && c.target.is_none()) {
-        y = column_editor(shell, ui, p, r, y);
+    if er(cx.notation_states).and_then(|er| er.column.as_ref()).is_some_and(|c| c.entity == entity_id && c.target.is_none()) {
+        y = column_editor(cx, ui, p, r, y);
     }
     y += 10.0;
     // Keys, checks and indexes, then the problems the rules find on the table.
-    y = crate::keys::keys_section(shell, ui, p, r, y, entity, entity_id);
-    y = crate::checks::checks_section(shell, ui, p, r, y + 4.0, entity, entity_id);
-    y = crate::indexes::indexes_section(shell, ui, p, r, y + 4.0, entity, entity_id);
-    y = crate::subtypes::subtypes_section(shell, ui, p, r, y + 4.0, entity, entity_id, entity_id);
-    crate::panels::problems_section(shell, ui, p, r, y + 4.0, entity);
+    y = crate::keys::keys_section(cx, ui, p, r, y, entity, entity_id);
+    y = crate::checks::checks_section(cx, ui, p, r, y + 4.0, entity, entity_id);
+    y = crate::indexes::indexes_section(cx, ui, p, r, y + 4.0, entity, entity_id);
+    y = crate::subtypes::subtypes_section(cx, ui, p, r, y + 4.0, entity, entity_id, entity_id);
+    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, entity);
     // The kind menu last, over the rows.
-    if shell.panels.menu == Some(menus::KIND) {
+    if cx.panels.menu == Some(menus::KIND) {
         let items = [tr("Regular"), tr("Mapping table")];
-        if let Some(i) = menu(shell, ui, p, kind_field, "workspace.properties.kind", &items) {
+        if let Some(i) = menu_cx(cx, ui, p, kind_field, "workspace.properties.kind", &items) {
             let kind = if i == 1 { "associative" } else { "regular" };
-            match run(shell, "er.entity.set-kind", json!({ "entity": entity_id.to_string(), "kind": kind })) {
-                Ok(_) => shell.panels.notice = None,
-                Err(e) => shell.panels.notice = Some(e),
+            match run_cx(cx, "er.entity.set-kind", json!({ "entity": entity_id.to_string(), "kind": kind })) {
+                Ok(_) => cx.panels.notice = None,
+                Err(e) => cx.panels.notice = Some(e),
             }
         }
     }
@@ -217,8 +217,8 @@ pub fn column_edit_mut(shell: &mut Shell) -> Option<&mut ColumnEdit> {
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.
-pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn open_column(cx: &mut Ctx, entity: Uuid, target: Option<Uuid>) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let edit = match target.and_then(|t| store.by_uuid(t)) {
         Some(a) => {
             let (length, precision, scale) = archforge_er::rules::own_size_of(store, a);
@@ -283,10 +283,10 @@ pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>)
             }
         }
     };
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.column = Some(edit);
     }
-    shell.panels.menu = None;
+    cx.panels.menu = None;
 }
 
 /// The generation choices, in the engine's order, with their words for the select.
@@ -307,10 +307,10 @@ fn is_computed(g: archforge_er::Generation) -> bool {
 /// under More, the collation); gives the y under it.
 /// The offer on a pure mapping table to become its many-to-many line again (the design's card
 /// "Mapping table that can collapse"); gives the y under it.
-fn collapse_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, entity: Obj, entity_id: Uuid, name: &str) -> f32 {
+fn collapse_offer(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, entity: Obj, entity_id: Uuid, name: &str) -> f32 {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
-    let (from, to) = match shell.session.as_ref() {
+    let (from, to) = match cx.session.as_ref() {
         Some(s) => {
             let store = s.doc();
             let mut parents = archforge_er::rules::foreign_keys(store, entity).into_iter().filter_map(|fk| {
@@ -321,7 +321,7 @@ fn collapse_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y:
         }
         None => return y,
     };
-    let y = section(shell, ui, p, r, y, &tr("Mapping table"), None).unwrap_or(y + 50.0) - 6.0;
+    let y = section_cx(cx, ui, p, r, y, &tr("Mapping table"), None).unwrap_or(y + 50.0) - 6.0;
     let message = fmt(
         &tr("{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again."),
         &[("name", name), ("from", &from), ("to", &to)],
@@ -338,15 +338,15 @@ fn collapse_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y:
     let button = Rect::from_min_size(card.min + vec2(12.0, 12.0 + text_h + 12.0), vec2(6.0 + 14.0 + 7.0 + g.size().x + 8.0, 24.0));
     ux::icon_in(&paint, Rect::from_min_size(button.min + vec2(6.0, 5.0), Vec2::splat(14.0)), &icons::MERGE_LINE, p.text);
     paint.galley(button.min + vec2(27.0, 2.5), g, p.text.into());
-    let resp = control(shell, ui, "workspace.properties.collapse", "button", button, true);
+    let resp = control_cx(cx, ui, "workspace.properties.collapse", "button", button, true);
     if resp.hovered() {
         paint.rect_stroke(button, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     }
     if resp.clicked() {
         // The command selects the relationship it makes.
-        match run(shell, "er.relationship.collapse", json!({ "entity": entity_id.to_string() })) {
-            Ok(_) => shell.panels.notice = None,
-            Err(e) => shell.panels.notice = Some(e),
+        match run_cx(cx, "er.relationship.collapse", json!({ "entity": entity_id.to_string() })) {
+            Ok(_) => cx.panels.notice = None,
+            Err(e) => cx.panels.notice = Some(e),
         }
     }
     card.bottom() + 10.0
@@ -354,10 +354,10 @@ fn collapse_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y:
 
 /// Draws the open column editor's card from `y` and acts on what is done in it; gives the y under
 /// it, or `y` while no column editor is open.
-fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
+fn column_editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
-    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.column.clone()) else { return y };
+    let Some(mut edit) = er(cx.notation_states).and_then(|er| er.column.clone()) else { return y };
     let typed = edit.domain.is_some() || edit.enum_type.is_some();
     let shape = if typed { archforge_er::rules::TypeShape::Plain } else { archforge_er::rules::type_shape(&edit.ty) };
     let computed = is_computed(edit.generation);
@@ -384,13 +384,13 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    reveal(shell, ui, crate::er_state::COLUMN, card);
+    reveal_cx(cx, ui, crate::er_state::COLUMN, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
     let mut cy = 12.0;
-    let mut enter = text_field(
-        shell,
+    let mut enter = text_field_cx(
+        cx,
         ui,
         p,
         at(0.0, cy),
@@ -416,7 +416,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         );
         let unlink = Rect::from_min_size(pos2(card.right() - 12.0 - 24.0, card.top() + cy - 4.0), Vec2::splat(24.0));
         ux::icon_in(&paint, Rect::from_center_size(unlink.center(), Vec2::splat(12.0)), &icons::CLOSE, p.text_secondary);
-        if control(shell, ui, "workspace.properties.column.unlink", "button", unlink, true).on_hover_text(tr("Unlink")).clicked() {
+        if control_cx(cx, ui, "workspace.properties.column.unlink", "button", unlink, true).on_hover_text(tr("Unlink")).clicked() {
             // Pending until Apply, so the card stays one step and Cancel keeps the link.
             edit.linked = None;
             edit.unlink = true;
@@ -430,7 +430,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         _ => ((inner - 80.0 - 8.0).max(60.0), 80.0),
     };
     let typed_name = edit.ty.clone();
-    enter |= text_field(shell, ui, p, at(0.0, cy), type_w, "workspace.properties.column.type", &tr("Type"), &mut edit.ty, MAX_TYPE, false, false);
+    enter |= text_field_cx(cx, ui, p, at(0.0, cy), type_w, "workspace.properties.column.type", &tr("Type"), &mut edit.ty, MAX_TYPE, false, false);
     if typed && edit.ty != typed_name {
         // Typing a name over a domain or enum type leaves it.
         edit.domain = None;
@@ -440,13 +440,13 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     let type_field = Rect::from_min_size(at(0.0, cy + 17.0), vec2(type_w, FIELD));
     let chevron = Rect::from_min_size(pos2(type_field.right() - 24.0, type_field.top() + 2.0), Vec2::splat(24.0));
     ux::icon(&paint, pos2(chevron.left() + 4.0, chevron.top() + 10.0), &icons::CHEVRON_DOWN, 16.0, p.text_secondary);
-    if control(shell, ui, "workspace.properties.column.type.menu", "button", chevron, true).on_hover_text(tr("Pick a type")).clicked() {
-        shell.panels.menu = if shell.panels.menu == Some(menus::COLUMN_TYPE) { None } else { Some(menus::COLUMN_TYPE) };
+    if control_cx(cx, ui, "workspace.properties.column.type.menu", "button", chevron, true).on_hover_text(tr("Pick a type")).clicked() {
+        cx.panels.menu = if cx.panels.menu == Some(menus::COLUMN_TYPE) { None } else { Some(menus::COLUMN_TYPE) };
     }
     match shape {
         archforge_er::rules::TypeShape::Length => {
-            enter |= text_field(
-                shell,
+            enter |= text_field_cx(
+                cx,
                 ui,
                 p,
                 at(type_w + 8.0, cy),
@@ -460,8 +460,8 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
             );
         }
         archforge_er::rules::TypeShape::Precision => {
-            enter |= text_field(
-                shell,
+            enter |= text_field_cx(
+                cx,
                 ui,
                 p,
                 at(type_w + 8.0, cy),
@@ -475,8 +475,8 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
             );
         }
         archforge_er::rules::TypeShape::PrecisionScale => {
-            enter |= text_field(
-                shell,
+            enter |= text_field_cx(
+                cx,
                 ui,
                 p,
                 at(type_w + 8.0, cy),
@@ -488,8 +488,8 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
                 false,
                 false,
             );
-            enter |= text_field(
-                shell,
+            enter |= text_field_cx(
+                cx,
                 ui,
                 p,
                 at(type_w + 8.0 + size_w + 8.0, cy),
@@ -506,8 +506,8 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     }
     cy += row;
     if !on_domain {
-        enter |= text_field(
-            shell,
+        enter |= text_field_cx(
+            cx,
             ui,
             p,
             at(0.0, cy),
@@ -522,8 +522,8 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         cy += row;
     }
     let generation_word = GENERATIONS.iter().find(|(g, _)| *g == edit.generation).map(|(_, w)| tr(w)).unwrap_or_default();
-    let generation_field = select_field(
-        shell,
+    let generation_field = select_field_cx(
+        cx,
         ui,
         p,
         at(0.0, cy),
@@ -535,8 +535,8 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     );
     cy += row;
     if computed {
-        enter |= text_field(
-            shell,
+        enter |= text_field_cx(
+            cx,
             ui,
             p,
             at(0.0, cy),
@@ -554,17 +554,17 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     // A key column is never null: ticking Primary key ticks Not null, and unticking Not null
     // unticks Primary key.
     let was_key = edit.primary_key;
-    let next_x = check(shell, ui, p, at(0.0, cy), "workspace.properties.column.primary-key", &tr("Primary key"), &mut edit.primary_key);
+    let next_x = check_cx(cx, ui, p, at(0.0, cy), "workspace.properties.column.primary-key", &tr("Primary key"), &mut edit.primary_key);
     if edit.primary_key && !was_key {
         edit.not_null = true;
     }
     let was_not_null = edit.not_null;
-    check(shell, ui, p, pos2(next_x - 12.0, card.top() + cy), "workspace.properties.column.not-null", &tr("Not null"), &mut edit.not_null);
+    check_cx(cx, ui, p, pos2(next_x - 12.0, card.top() + cy), "workspace.properties.column.not-null", &tr("Not null"), &mut edit.not_null);
     if was_not_null && !edit.not_null {
         edit.primary_key = false;
     }
     cy += 28.0;
-    check(shell, ui, p, at(0.0, cy), "workspace.properties.column.unique", &tr("Unique"), &mut edit.unique);
+    check_cx(cx, ui, p, at(0.0, cy), "workspace.properties.column.unique", &tr("Unique"), &mut edit.unique);
     cy += 20.0 + 14.0;
     // More: the collation; a domain brings its own, so a column on one shows neither.
     if !on_domain {
@@ -576,13 +576,13 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
             p.text_secondary,
         );
         ux::text(&paint, more.min + vec2(22.0, 2.0), &tr("More"), types::UI, p.text, Some((inner - 22.0).max(0.0)));
-        if control(shell, ui, "workspace.properties.column.more", "disclosure", more, true).clicked() {
+        if control_cx(cx, ui, "workspace.properties.column.more", "disclosure", more, true).clicked() {
             edit.more = !edit.more;
         }
         cy += 24.0 + 10.0;
         if edit.more {
-            enter |= text_field(
-                shell,
+            enter |= text_field_cx(
+                cx,
                 ui,
                 p,
                 at(0.0, cy),
@@ -599,10 +599,10 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     }
     let mut remove = false;
     if edit.target.is_some() {
-        remove = icon_button(shell, ui, p, at(0.0, cy), "workspace.properties.column.remove", &icons::TRASH, p.danger, None, "Remove");
+        remove = icon_button_cx(cx, ui, p, at(0.0, cy), "workspace.properties.column.remove", &icons::TRASH, p.danger, None, "Remove");
     }
-    let cancel = icon_button(
-        shell,
+    let cancel = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - 2.0 * FIELD - 8.0, card.top() + cy),
@@ -612,8 +612,8 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         None,
         "Cancel",
     );
-    let apply = icon_button(
-        shell,
+    let apply = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - FIELD, card.top() + cy),
@@ -627,8 +627,8 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         ux::text(&paint, at(0.0, cy + FIELD + 8.0), why, types::CAPTION, p.amber, Some(inner));
     }
     // The type menu, over the card: the schema's domains and enum types, then the base types.
-    if shell.panels.menu == Some(menus::COLUMN_TYPE) {
-        let types: Vec<(Option<(bool, Uuid)>, String)> = shell
+    if cx.panels.menu == Some(menus::COLUMN_TYPE) {
+        let types: Vec<(Option<(bool, Uuid)>, String)> = cx
             .session
             .as_ref()
             .and_then(|s| {
@@ -652,7 +652,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         let mut items: Vec<(Option<(bool, Uuid)>, String)> = types;
         items.extend(BASE_TYPES.iter().map(|t| (None, (*t).to_string())));
         let labels: Vec<String> = items.iter().map(|(_, l)| l.clone()).collect();
-        if let Some(i) = menu(shell, ui, p, type_field, "workspace.properties.column.type.menu", &labels)
+        if let Some(i) = menu_cx(cx, ui, p, type_field, "workspace.properties.column.type.menu", &labels)
             && let Some((picked, label)) = items.get(i)
         {
             match picked {
@@ -682,25 +682,25 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         }
     }
     // The generation menu, over the card.
-    if shell.panels.menu == Some(menus::GENERATION) {
+    if cx.panels.menu == Some(menus::GENERATION) {
         let items: Vec<String> = GENERATIONS.iter().map(|(_, w)| tr(w)).collect();
-        if let Some(i) = menu(shell, ui, p, generation_field, "workspace.properties.column.generation", &items)
+        if let Some(i) = menu_cx(cx, ui, p, generation_field, "workspace.properties.column.generation", &items)
             && let Some((g, _)) = GENERATIONS.get(i)
         {
             edit.generation = *g;
         }
     }
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.column = Some(edit.clone());
     }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+        if let Some(er) = er_mut(cx.notation_states) {
             er.column = None;
         }
     } else if remove {
         if let Some(t) = edit.target {
             // What goes with the column, named for the toast.
-            let went: Vec<String> = shell
+            let went: Vec<String> = cx
                 .session
                 .as_ref()
                 .and_then(|s| {
@@ -710,9 +710,9 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
                     Some(keys.iter().chain(fks.iter()).filter(|k| **k != a).map(|k| archforge_er::rules::label(store, *k)).collect())
                 })
                 .unwrap_or_default();
-            match run(shell, "er.attribute.remove", json!({ "attribute": t.to_string() })) {
+            match run_cx(cx, "er.attribute.remove", json!({ "attribute": t.to_string() })) {
                 Ok(_) => {
-                    if let Some(er) = er_mut(&mut shell.notation_states) {
+                    if let Some(er) = er_mut(cx.notation_states) {
                         er.column = None;
                     }
                     let text = if went.is_empty() {
@@ -720,21 +720,21 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
                     } else {
                         fmt(&tr("{name} removed · {keys} went with it"), &[("name", &edit.name), ("keys", &went.join(", "))])
                     };
-                    let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-                    shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+                    let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+                    cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(300), undo_label });
                 }
-                Err(e) => set_column_refusal(shell, e),
+                Err(e) => set_column_refusal(cx, e),
             }
         }
     } else if apply || enter {
-        commit_column(shell, &edit);
+        commit_column(cx, &edit);
     }
     card.bottom() + 8.0
 }
 
 /// Shows `why` on the open column editor's card, which stays open with what was typed.
-fn set_column_refusal(shell: &mut Shell, why: String) {
-    if let Some(c) = er_mut(&mut shell.notation_states).and_then(|er| er.column.as_mut()) {
+fn set_column_refusal(cx: &mut Ctx, why: String) {
+    if let Some(c) = er_mut(cx.notation_states).and_then(|er| er.column.as_mut()) {
         c.refused = Some(why);
     }
 }
@@ -759,12 +759,12 @@ pub(crate) fn size_value(text: &str) -> Result<i64, String> {
 /// generation rules, so an edit that changes the generation gives the old one up first (as None)
 /// and takes the new one last, after the type, default and flags it needs; the expression goes
 /// only with a computed generation, the field being hidden otherwise.
-fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
+fn commit_column(cx: &mut Ctx, edit: &ColumnEdit) {
     let nullable = if edit.not_null { "no" } else { "yes" };
     let size = match (size_value(&edit.length), size_value(&edit.precision), size_value(&edit.scale)) {
         (Ok(l), Ok(p), Ok(s)) => (l, p, s),
         (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
-            set_column_refusal(shell, e);
+            set_column_refusal(cx, e);
             return;
         }
     };
@@ -772,7 +772,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
     let expression = if is_computed(edit.generation) { edit.expression.trim() } else { "" };
     let outcome = match edit.target {
         None => crate::er_place::run_growing(
-            shell,
+            cx,
             &tr("Add column"),
             "er.attribute.add",
             json!({
@@ -792,7 +792,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
         Some(t) => {
             // Every changed field in one batch: a refusal rolls the whole card back, so what the
             // card shows and what landed never drift apart.
-            let Some(session) = shell.session.as_mut() else { return };
+            let Some(session) = cx.session.as_mut() else { return };
             let store = session.doc();
             let Some(a) = store.by_uuid(t) else { return };
             let old_name = archforge_core::name_of(store, a);
@@ -869,11 +869,11 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
     };
     match outcome {
         Ok(()) => {
-            if let Some(er) = er_mut(&mut shell.notation_states) {
+            if let Some(er) = er_mut(cx.notation_states) {
                 er.column = None;
             }
         }
-        Err(e) => set_column_refusal(shell, e),
+        Err(e) => set_column_refusal(cx, e),
     }
 }
 

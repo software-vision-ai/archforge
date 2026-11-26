@@ -6608,8 +6608,8 @@ fn two_editors_opened_before_one_draw_leave_the_last_in_view() {
         let above = h.state().panels.body.unwrap().top() - at.y;
         wheel_properties(&mut h, above - 200.0);
         assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.properties.check")), "{theme:?}: Checks under the fold");
-        crate::keys::open(h.state_mut(), entity, Some(&first));
-        crate::checks::open(h.state_mut(), entity, None);
+        h.state_mut().cx(|cx| crate::keys::open(cx, entity, Some(&first)));
+        h.state_mut().cx(|cx| crate::checks::open(cx, entity, None));
         h.run();
         assert!(in_view(&h, "workspace.properties.check.apply").is_some(), "{theme:?}: the check's Apply in view");
     });
@@ -8902,12 +8902,12 @@ fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
     let class = store.uuid(store.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap();
     assert!(crate::uml_inline::open(s, class, crate::uml_panel::MemberKind::Attribute, None), "Catalog's card takes a row");
     assert!(s.notation_states.editing() && s.notation_states.holds_keys(), "a row typed in place is edited and holds the keys");
-    crate::er_table::open_column(s, table, None);
-    crate::keys::open(s, table, None);
-    crate::checks::open(s, table, None);
-    crate::indexes::open(s, table, None);
-    crate::types::open(s, schema, TypeKind::Domain, None);
-    crate::objects::open(s, schema, ObjectKind::Sequence, None);
+    s.cx(|cx| crate::er_table::open_column(cx, table, None));
+    s.cx(|cx| crate::keys::open(cx, table, None));
+    s.cx(|cx| crate::checks::open(cx, table, None));
+    s.cx(|cx| crate::indexes::open(cx, table, None));
+    s.cx(|cx| crate::types::open(cx, schema, TypeKind::Domain, None));
+    s.cx(|cx| crate::objects::open(cx, schema, ObjectKind::Sequence, None));
     let er = er_of_mut(s);
     er.role = Some(crate::relation::RoleEdit { target: table, end: 0, text: "buyer".into() });
     er.no_key_card = Some(table);
@@ -13749,9 +13749,12 @@ fn the_entity_menu_removes_from_the_diagram_and_the_dialog_deletes_from_the_mode
     let nodes = node_ids(&h);
     let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
     let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
-    // The add-column adorner opens the column editor for the selected table.
+    // The add-column adorner opens the column editor for the selected table, and Properties shows
+    // it in place of the panel that showed.
     let at = rect_of(&h, &customer_node).center();
     click(&mut h, at);
+    h.state_mut().state.panel = crate::state::Panel::Skills;
+    h.run();
     let at = rect_of(&h, "workspace.canvas.adorn.add-column").center();
     click(&mut h, at);
     assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.is_none() && c.entity.to_string() == customer));
@@ -13848,6 +13851,9 @@ fn a_tables_menu_adds_its_own_rows_and_runs_them() {
         let at = rect_of(&h, "workspace.canvas.menu.related").center();
         click(&mut h, at);
         assert!(h.state().canvas.menu.is_none() && er_of(h.state()).column.is_none(), "{theme:?}: Show related tables is off");
+        // Add column shows Properties in place of the panel that showed.
+        h.state_mut().state.panel = crate::state::Panel::Skills;
+        h.run();
         let at = rect_of(&h, &node_of(&h, "Order")).center();
         right_click(&mut h, at);
         let at = rect_of(&h, "workspace.canvas.menu.add-column").center();
@@ -14539,7 +14545,7 @@ fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
                 .unwrap(),
         )
         .unwrap();
-    crate::er_table::open_column(h.state_mut(), archforge_mof::Uuid::parse(&_customer).unwrap(), Some(customer_id));
+    h.state_mut().cx(|cx| crate::er_table::open_column(cx, archforge_mof::Uuid::parse(&_customer).unwrap(), Some(customer_id)));
     {
         let s = h.state_mut().session.as_mut().unwrap();
         s.execute("view.select", &serde_json::json!({ "ids": [_customer] })).unwrap();
@@ -14748,7 +14754,7 @@ fn the_column_editor_makes_a_computed_or_identity_column_plain_with_a_default() 
         // A column being added that was made computed, given an expression and made plain again
         // is added plain, without the expression its hidden field still holds.
         let (mut h, customer) = table_harness_in(theme);
-        crate::er_table::open_column(h.state_mut(), archforge_mof::Uuid::parse(&customer).unwrap(), None);
+        h.state_mut().cx(|cx| crate::er_table::open_column(cx, archforge_mof::Uuid::parse(&customer).unwrap(), None));
         h.run();
         er_of_mut(h.state_mut()).column.as_mut().unwrap().name = "nickname".into();
         er_of_mut(h.state_mut()).column.as_mut().unwrap().ty = "TEXT".into();
@@ -18213,6 +18219,46 @@ fn the_narrow_contexts_requests_run_in_order_once_after_the_call() {
     // The old way in asks the same through the context.
     crate::panels::select_element(shell, class);
     assert!(shell.explorer.expanded.contains(&pkg), "the shell's way in carries the request out too");
+}
+
+/// The narrow context reaches each notation's own state, the shell's: what is changed through it
+/// lands on the shell, and its read-only twin, from the shell or from the context, reads the same
+/// states.
+#[test]
+fn the_narrow_context_reaches_each_notations_own_state() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let shell = h.state_mut();
+    let states: *const _ = &shell.notation_states;
+    assert!(std::ptr::eq(shell.cx_ref().notation_states, states), "the twin over the shell");
+    assert!(!er_of(shell).more_open);
+    shell.cx(|cx| {
+        assert!(std::ptr::eq(&*cx.notation_states, states), "the context's states are the shell's");
+        crate::er_state::er_mut(cx.notation_states).expect("the shell's notations hold ER").more_open = true;
+        assert!(std::ptr::eq(cx.cx_ref().notation_states, states), "the twin over the context");
+    });
+    assert!(er_of(shell).more_open, "changed through the context, changed on the shell");
+}
+
+/// A panel the narrow context asks for shows, unfolded, once the call returns; of two asked in one
+/// call the one asked last shows, as the requests run in the order asked, and a new call asks
+/// nothing again.
+#[test]
+fn the_narrow_context_shows_the_panel_asked_last() {
+    use crate::cx::Request;
+    use crate::state::Panel;
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let shell = h.state_mut();
+    (shell.state.panel, shell.state.panel_collapsed) = (Panel::Skills, true);
+    shell.cx(|cx| cx.requests.push(Request::ShowPanel(Panel::Properties)));
+    assert_eq!((shell.state.panel, shell.state.panel_collapsed), (Panel::Properties, false), "Properties shows, unfolded");
+    shell.cx(|cx| {
+        cx.requests.push(Request::ShowPanel(Panel::Agent));
+        cx.requests.push(Request::ShowPanel(Panel::Skills));
+    });
+    assert_eq!(shell.state.panel, Panel::Skills, "the panel asked last shows");
+    shell.state.panel_collapsed = true;
+    shell.cx(|_| ());
+    assert!(shell.state.panel_collapsed, "a request runs once");
 }
 
 /// The shared removals ask the removed element's notation what to say (AR-789): Delete on a line
@@ -32681,7 +32727,7 @@ fn escape_on_the_canvas_closes_ers_mapping_offer() {
             let st = h.state().session.as_ref().unwrap().doc();
             st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
         };
-        crate::connect::offer_mapping(h.state_mut(), rel);
+        h.state_mut().cx(|cx| crate::connect::offer_mapping(cx, rel));
         h.state_mut().canvas.focused = true;
         h.run();
         assert!(er_of(h.state()).mapping.is_some(), "{theme:?}: the offer is open");
@@ -32784,7 +32830,7 @@ fn ers_overlay_is_its_mapping_offer_at_the_offers_layer() {
             let st = h.state().session.as_ref().unwrap().doc();
             st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
         };
-        crate::connect::offer_mapping(h.state_mut(), rel);
+        h.state_mut().cx(|cx| crate::connect::offer_mapping(cx, rel));
         let (shapes, ids) = overlaid(&mut h, &crate::er_ui::ErUi, Layer::Offers);
         assert!(shapes > 0 && ids.iter().any(|i| i == "workspace.mapping.name"), "{theme:?}: the offer, {ids:?}");
         for layer in [Layer::Drafts, Layer::Rows, Layer::Menus] {
@@ -33063,7 +33109,7 @@ fn a_many_to_many_badge_opens_the_mapping_offer_and_another_badge_nothing() {
         er_of_mut(h.state_mut()).relationship =
             crate::connect::RelKind { from: archforge_er::Cardinality::ZeroOrMore, to: archforge_er::Cardinality::ZeroOrMore, identifying: false };
         let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
-        crate::connect::connect(h.state_mut(), d, customer, order);
+        h.state_mut().cx(|cx| crate::connect::connect(cx, d, customer, order));
         er_of_mut(h.state_mut()).mapping = None;
         let edge = {
             let s = h.state_mut().session.as_mut().unwrap();

@@ -740,7 +740,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             if let Some((column, entity)) = email
                 && let Ok(entity) = store.uuid(entity)
             {
-                crate::er_table::open_column(&mut shell, entity, Some(column));
+                shell.cx(|cx| crate::er_table::open_column(cx, entity, Some(column)));
                 if let Some(c) = er_mut(&mut shell.notation_states).and_then(|er| er.column.as_mut()) {
                     c.more = true;
                 }
@@ -755,7 +755,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 && let Ok(entity) = store.uuid(e)
                 && let Some(index) = crate::indexes::rows(store, e).into_iter().next()
             {
-                crate::indexes::open(&mut shell, entity, Some(&index));
+                shell.cx(|cx| crate::indexes::open(cx, entity, Some(&index)));
                 if let Some(i) = er_mut(&mut shell.notation_states).and_then(|er| er.index.as_mut()) {
                     i.more = true;
                 }
@@ -770,7 +770,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 && let Ok(entity) = store.uuid(e)
                 && let Some(unique) = crate::keys::rows(store, e).into_iter().find(|k| !k.primary)
             {
-                crate::keys::open(&mut shell, entity, Some(&unique));
+                shell.cx(|cx| crate::keys::open(cx, entity, Some(&unique)));
             }
         }
     }

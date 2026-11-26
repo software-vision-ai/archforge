@@ -13,13 +13,13 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
+use crate::cx::Ctx;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
-use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, check, icon_button, menu, run, section, text_field};
+use crate::panels::{FIELD, PAD, check_cx, control_cx, icon_button_cx, menu_cx, run_cx, section_cx, text_field_cx};
 use crate::ux::{self, Palette, icons, types};
-use crate::{Shell, widgets};
+use crate::widgets;
 
 /// One column of an index as edited: a column of the table, or an expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,8 +95,8 @@ pub fn rows(store: &Store, e: Obj) -> Vec<IndexRow> {
 }
 
 /// Opens the editor on an index, or on one to add to `entity`.
-pub fn open(shell: &mut Shell, entity: Uuid, target: Option<&IndexRow>) {
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+pub(crate) fn open(cx: &mut Ctx, entity: Uuid, target: Option<&IndexRow>) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.index = Some(match target {
             Some(ix) => IndexEdit {
                 target: Some(ix.id),
@@ -124,56 +124,56 @@ pub fn open(shell: &mut Shell, entity: Uuid, target: Option<&IndexRow>) {
             },
         });
     }
-    shell.panels.menu = None;
+    cx.panels.menu = None;
 }
 
 /// The Indexes section with its rows and the editor; gives the y under it.
-pub(crate) fn indexes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, entity: Obj, entity_id: Uuid) -> f32 {
+pub(crate) fn indexes_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, entity: Obj, entity_id: Uuid) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let indexes = match shell.session.as_ref() {
+    let indexes = match cx.session.as_ref() {
         Some(s) => rows(s.doc(), entity),
         None => return y,
     };
     let title = fmt(&tr("Indexes · {n}"), &[("n", &indexes.len().to_string())]);
-    let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.indexes.add", "Add index"))) else {
-        open(shell, entity_id, None);
+    let Some(next) = section_cx(cx, ui, p, r, y, &title, Some(("workspace.properties.indexes.add", "Add index"))) else {
+        open(cx, entity_id, None);
         return y;
     };
     y = next - 6.0;
-    let editing_new = er(&shell.notation_states).and_then(|er| er.index.as_ref()).is_some_and(|i| i.target.is_none() && i.entity == entity_id);
+    let editing_new = er(cx.notation_states).and_then(|er| er.index.as_ref()).is_some_and(|i| i.target.is_none() && i.entity == entity_id);
     for index in &indexes {
-        if er(&shell.notation_states).and_then(|er| er.index.as_ref()).is_some_and(|i| i.target == Some(index.id)) {
-            y = editor(shell, ui, p, r, y);
+        if er(cx.notation_states).and_then(|er| er.index.as_ref()).is_some_and(|i| i.target == Some(index.id)) {
+            y = editor(cx, ui, p, r, y);
             continue;
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 44.0));
         let id = format!("workspace.properties.index.row.{}", index.id);
-        let resp = control(shell, ui, &id, "row", row, true);
+        let resp = control_cx(cx, ui, &id, "row", row, true);
         if resp.contains_pointer() {
             paint.rect_filled(row, 6.0, p.page);
         }
         badge(&paint, row.min + vec2(2.0, 6.0), "IX", p.purple_tint, p.purple);
         ux::text(&paint, row.min + vec2(38.0, 4.0), &index.label, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, row.min + vec2(38.0, 23.0), &index.summary, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if crate::panels::edit_button(shell, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
-            open(shell, entity_id, Some(index));
+        if crate::panels::edit_button_cx(cx, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
+            open(cx, entity_id, Some(index));
         }
         y += 44.0;
     }
     if editing_new {
-        y = editor(shell, ui, p, r, y);
+        y = editor(cx, ui, p, r, y);
     }
     y
 }
 
 /// The index editor card; gives the y under it.
-fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
+fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.index.clone()) else { return y };
+    let Some(mut edit) = er(cx.notation_states).and_then(|er| er.index.clone()) else { return y };
     // The table's columns, named, for the rows and the menu.
-    let all_columns: Vec<(Uuid, String, String)> = match shell.session.as_ref().and_then(|s| s.doc().by_uuid(edit.entity).map(|e| (s.doc(), e))) {
+    let all_columns: Vec<(Uuid, String, String)> = match cx.session.as_ref().and_then(|s| s.doc().by_uuid(edit.entity).map(|e| (s.doc(), e))) {
         Some((store, e)) => store
             .list(e, archforge_er::entity::ATTRIBUTE)
             .unwrap_or_default()
@@ -191,12 +191,12 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::er_state::INDEX, card);
+    crate::panels::reveal_cx(cx, ui, crate::er_state::INDEX, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
-    let name_done = text_field(
-        shell,
+    let name_done = text_field_cx(
+        cx,
         ui,
         p,
         at(0.0, 12.0),
@@ -209,7 +209,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         false,
     );
     let mut cy = 12.0 + 17.0 + FIELD + 14.0;
-    check(shell, ui, p, at(0.0, cy), "workspace.properties.index.unique", &tr("Unique"), &mut edit.unique);
+    check_cx(cx, ui, p, at(0.0, cy), "workspace.properties.index.unique", &tr("Unique"), &mut edit.unique);
     cy += 28.0;
     ux::text(&paint, at(0.0, cy), &tr("Columns, in index order"), types::CAPTION, p.text_secondary, Some(inner));
     cy += 17.0;
@@ -239,7 +239,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                 // An expression, typed in place.
                 let field = Rect::from_min_max(pos2(row.left() + 24.0, row.top() + 2.0), pos2(text_right, row.bottom() - 2.0));
                 let id = format!("workspace.properties.index.column.{i}.expression");
-                widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
+                widgets::record_visible(ui, cx.registry, &id, "field", field);
                 let out = egui::TextEdit::singleline(&mut spec.expression)
                     .id(widgets::egui_id(&id))
                     .frame(egui::Frame::NONE)
@@ -263,7 +263,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             SortDirection::Descending => (&icons::SORT_DESCENDING, "Descending"),
         };
         ux::icon_in(&paint, Rect::from_center_size(dir.center(), Vec2::splat(14.0)), icon, p.text_secondary);
-        if control(shell, ui, &format!("workspace.properties.index.column.{i}.direction"), "button", dir, true).on_hover_text(tr(hint)).clicked() {
+        if control_cx(cx, ui, &format!("workspace.properties.index.column.{i}.direction"), "button", dir, true).on_hover_text(tr(hint)).clicked() {
             spec.direction = match spec.direction {
                 SortDirection::Ascending => SortDirection::Descending,
                 SortDirection::Descending => SortDirection::Ascending,
@@ -271,17 +271,17 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         }
         let x = Rect::from_min_size(pos2(row.right() - 26.0, row.top() + 6.0), Vec2::splat(16.0));
         ux::icon_in(&paint, x, &icons::CLOSE, p.text_secondary);
-        if control(shell, ui, &format!("workspace.properties.index.column.{i}.remove"), "button", x.expand(4.0), true)
+        if control_cx(cx, ui, &format!("workspace.properties.index.column.{i}.remove"), "button", x.expand(4.0), true)
             .on_hover_text(tr("Remove"))
             .clicked()
         {
             remove_at = Some(i);
         }
         let hit = Rect::from_min_max(row.min, pos2(dir.left(), row.bottom()));
-        if control(shell, ui, &format!("workspace.properties.index.column.{i}"), "row", hit, true).secondary_clicked() {
-            shell.panels.menu = Some(menus::INDEX_NULLS.at(i));
+        if control_cx(cx, ui, &format!("workspace.properties.index.column.{i}"), "row", hit, true).secondary_clicked() {
+            cx.panels.menu = Some(menus::INDEX_NULLS.at(i));
         }
-        if shell.panels.menu == Some(menus::INDEX_NULLS.at(i)) {
+        if cx.panels.menu == Some(menus::INDEX_NULLS.at(i)) {
             nulls_anchor = Some((i, row));
         }
         cy += 32.0;
@@ -294,8 +294,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let ink = if full { p.text_muted } else { p.text_secondary };
     ux::text(&paint, add.min + vec2(8.0, 5.0), &tr("Add a column"), types::SMALL, ink, Some((inner - 36.0).max(0.0)));
     ux::icon_mid(&paint, pos2(add.right() - 14.0, add.center().y), &icons::CHEVRON_DOWN, ink);
-    if control(shell, ui, "workspace.properties.index.column.add", "select", add, true).clicked() && !full {
-        shell.panels.menu = if shell.panels.menu == Some(menus::INDEX_COLUMN) { None } else { Some(menus::INDEX_COLUMN) };
+    if control_cx(cx, ui, "workspace.properties.index.column.add", "select", add, true).clicked() && !full {
+        cx.panels.menu = if cx.panels.menu == Some(menus::INDEX_COLUMN) { None } else { Some(menus::INDEX_COLUMN) };
     }
     cy += FIELD + 12.0;
     // More: Where and Method.
@@ -307,13 +307,13 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         p.text_secondary,
     );
     ux::text(&paint, more.min + vec2(22.0, 2.0), &tr("More"), types::UI, p.text, Some((inner - 22.0).max(0.0)));
-    if control(shell, ui, "workspace.properties.index.more", "disclosure", more, true).clicked() {
+    if control_cx(cx, ui, "workspace.properties.index.more", "disclosure", more, true).clicked() {
         edit.more = !edit.more;
     }
     cy += 34.0;
     if edit.more {
-        text_field(
-            shell,
+        text_field_cx(
+            cx,
             ui,
             p,
             at(0.0, cy),
@@ -326,8 +326,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             false,
         );
         cy += 17.0 + FIELD + 14.0;
-        text_field(
-            shell,
+        text_field_cx(
+            cx,
             ui,
             p,
             at(0.0, cy),
@@ -343,10 +343,10 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     }
     let mut remove = false;
     if edit.target.is_some() {
-        remove = icon_button(shell, ui, p, at(0.0, cy), "workspace.properties.index.remove", &icons::TRASH, p.danger, None, "Remove");
+        remove = icon_button_cx(cx, ui, p, at(0.0, cy), "workspace.properties.index.remove", &icons::TRASH, p.danger, None, "Remove");
     }
-    let cancel = icon_button(
-        shell,
+    let cancel = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - 2.0 * FIELD - 8.0, card.top() + cy),
@@ -356,8 +356,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         None,
         "Cancel",
     );
-    let apply = icon_button(
-        shell,
+    let apply = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - FIELD, card.top() + cy),
@@ -376,19 +376,19 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         edit.columns.remove(i);
     }
     // The menus, over the card.
-    if shell.panels.menu == Some(menus::INDEX_COLUMN) {
+    if cx.panels.menu == Some(menus::INDEX_COLUMN) {
         let used: Vec<Uuid> = edit.columns.iter().filter_map(|c| c.attribute).collect();
         let free: Vec<&(Uuid, String, String)> = all_columns.iter().filter(|(c, _, _)| !used.contains(c)).collect();
         let mut items: Vec<String> = free.iter().map(|(_, n, t)| if t.is_empty() { n.clone() } else { format!("{n} · {t}") }).collect();
         items.push(tr("An expression"));
-        if let Some(i) = menu(shell, ui, p, add, "workspace.properties.index.column.add", &items) {
+        if let Some(i) = menu_cx(cx, ui, p, add, "workspace.properties.index.column.add", &items) {
             let attribute = free.get(i).map(|(id, _, _)| *id);
             edit.columns.push(ColumnSpec { attribute, expression: String::new(), direction: SortDirection::Ascending, nulls: NullsOrder::Default });
         }
     }
     if let Some((i, row)) = nulls_anchor {
         let items = [tr("Nulls default"), tr("Nulls first"), tr("Nulls last")];
-        if let Some(pick) = menu(shell, ui, p, row, &format!("workspace.properties.index.column.{i}.nulls"), &items)
+        if let Some(pick) = menu_cx(cx, ui, p, row, &format!("workspace.properties.index.column.{i}.nulls"), &items)
             && let Some(spec) = edit.columns.get_mut(i)
         {
             spec.nulls = match pick {
@@ -398,37 +398,37 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             };
         }
     }
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.index = Some(edit.clone());
     }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+        if let Some(er) = er_mut(cx.notation_states) {
             er.index = None;
         }
     } else if remove {
-        match run(shell, "er.index.remove", json!({ "index": edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
+        match run_cx(cx, "er.index.remove", json!({ "index": edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
             Ok(_) => {
-                if let Some(er) = er_mut(&mut shell.notation_states) {
+                if let Some(er) = er_mut(cx.notation_states) {
                     er.index = None;
                 }
             }
-            Err(e) => refuse(shell, e),
+            Err(e) => refuse(cx, e),
         }
     } else if apply || name_done {
-        commit(shell, &edit);
+        commit(cx, &edit);
     }
     card.bottom() + 8.0
 }
 
 /// Shows `why` on the open index editor's card, which stays open with what was typed.
-fn refuse(shell: &mut Shell, why: String) {
-    if let Some(i) = er_mut(&mut shell.notation_states).and_then(|er| er.index.as_mut()) {
+fn refuse(cx: &mut Ctx, why: String) {
+    if let Some(i) = er_mut(cx.notation_states).and_then(|er| er.index.as_mut()) {
         i.refused = Some(why);
     }
 }
 
 /// Writes the index through its command; the table stays selected.
-fn commit(shell: &mut Shell, edit: &IndexEdit) {
+fn commit(cx: &mut Ctx, edit: &IndexEdit) {
     let columns: Vec<serde_json::Value> = edit
         .columns
         .iter()
@@ -458,18 +458,18 @@ fn commit(shell: &mut Shell, edit: &IndexEdit) {
             "er.index.set"
         }
     };
-    match run(shell, cmd, params) {
+    match run_cx(cx, cmd, params) {
         Ok(_) => {
-            if let Some(er) = er_mut(&mut shell.notation_states) {
+            if let Some(er) = er_mut(cx.notation_states) {
                 er.index = None;
             }
-            shell.panels.notice = None;
+            cx.panels.notice = None;
             let entity = edit.entity.to_string();
-            if let Err(e) = run(shell, "view.select", json!({ "ids": [entity] })) {
-                shell.panels.notice = Some(e);
+            if let Err(e) = run_cx(cx, "view.select", json!({ "ids": [entity] })) {
+                cx.panels.notice = Some(e);
             }
         }
-        Err(e) => refuse(shell, e),
+        Err(e) => refuse(cx, e),
     }
 }
 

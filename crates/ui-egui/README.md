@@ -82,12 +82,14 @@ chevrons 8); rows, fields and bars centre their content on their middle line (`u
 project's database yet, and the status bar says so once there is something unsaved. A notation's
 screens and the shared controls reach the shell through the narrow context (`cx`, crate-private,
 `forge-ux/adr/0002`): `cx::Ctx`, the parts they change, each borrowed apart by `Shell::cx` (the
-session, the panels' and the canvas's state, the automation registry, the notations, the problems,
-the frame count, the menu bar's hold on an inline editor, whether a version shows), its read-only
-twin `cx::CtxRef` (`Shell::cx_ref`), and `cx::Request`, what lies outside it, which the shell
-carries out once the call returns, in order, each once: the Models tree's rows opened over a
-selected element, and the centre leaving a version's details for what was opened (`canvas::open`
-opens at once). The controls that take it end in `_cx` (`panels::section_cx`,
+session, the panels' and the canvas's state, the automation registry, the notations and each
+one's own state, the problems, the frame count, the menu bar's hold on an inline editor, whether a
+version shows), its read-only twin `cx::CtxRef` (`Shell::cx_ref`), and `cx::Request`, what lies
+outside it, which the shell carries out once the call returns, in order, each once: the Models
+tree's rows opened over a selected element, the centre leaving a version's details for what was
+opened (`canvas::open` opens at once), and a panel of the right side shown. ER's screens take the
+context; ER's kind and Properties (`er_kind`, `er_ui`) still take the shell from the interfaces and
+build the context once in each method. The controls that take it end in `_cx` (`panels::section_cx`,
 `panels::control_cx`, `menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old
 names over the whole shell forward to them until every caller has moved, and `home::control`
 stays the shell's own way to `panels::control_cx`.

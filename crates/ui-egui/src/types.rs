@@ -13,14 +13,14 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
+use crate::cx::Ctx;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::er_table::{number, size_value};
-use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, check, ghost_button, icon_button, menu, run, section, text_field};
+use crate::panels::{FIELD, PAD, check_cx, control_cx, ghost_button_cx, icon_button_cx, menu_cx, run_cx, section_cx, text_field_cx};
 use crate::ux::{self, Palette, icons, types};
-use crate::{Shell, widgets};
+use crate::widgets;
 
 /// Which kind of type an editor edits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,7 +91,7 @@ pub fn rows(store: &Store, schema: Obj) -> Vec<TypeRow> {
 }
 
 /// Opens the editor on a type, or on one of `kind` to add to `schema`.
-pub fn open(shell: &mut Shell, schema: Uuid, kind: TypeKind, target: Option<Uuid>) {
+pub(crate) fn open(cx: &mut Ctx, schema: Uuid, kind: TypeKind, target: Option<Uuid>) {
     let mut edit = TypeEdit {
         kind,
         target,
@@ -108,7 +108,7 @@ pub fn open(shell: &mut Shell, schema: Uuid, kind: TypeKind, target: Option<Uuid
         refused: None,
         opened: true,
     };
-    if let (Some(t), Some(store)) = (target, shell.session.as_ref().map(|s| s.doc()))
+    if let (Some(t), Some(store)) = (target, cx.session.as_ref().map(|s| s.doc()))
         && let Some(o) = store.by_uuid(t)
     {
         use archforge_er::rules as r;
@@ -127,10 +127,10 @@ pub fn open(shell: &mut Shell, schema: Uuid, kind: TypeKind, target: Option<Uuid
             TypeKind::Enum => edit.literals = r::literals_of(store, o),
         }
     }
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.type_edit = Some(edit);
     }
-    shell.panels.menu = None;
+    cx.panels.menu = None;
 }
 
 /// The kind of a type element, when it is one.
@@ -143,30 +143,30 @@ pub fn kind_of(store: &Store, o: Obj) -> Option<TypeKind> {
 }
 
 /// The Types section with its rows and the editor; gives the y under it.
-pub(crate) fn types_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, schema: Obj, schema_id: Uuid) -> f32 {
+pub(crate) fn types_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, schema: Obj, schema_id: Uuid) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let list = match shell.session.as_ref() {
+    let list = match cx.session.as_ref() {
         Some(s) => rows(s.doc(), schema),
         None => return y,
     };
     let title = fmt(&tr("Types · {n}"), &[("n", &list.len().to_string())]);
     let add_at = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
-    let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.types.add", "Add type"))) else {
-        shell.panels.menu = if shell.panels.menu == Some(menus::TYPE_KIND) { None } else { Some(menus::TYPE_KIND) };
+    let Some(next) = section_cx(cx, ui, p, r, y, &title, Some(("workspace.properties.types.add", "Add type"))) else {
+        cx.panels.menu = if cx.panels.menu == Some(menus::TYPE_KIND) { None } else { Some(menus::TYPE_KIND) };
         return y + 50.0;
     };
     y = next - 6.0;
-    let editing_new = er(&shell.notation_states).and_then(|er| er.type_edit.as_ref()).is_some_and(|t| t.target.is_none() && t.schema == schema_id);
-    let chosen = crate::panels::selected_id(shell);
+    let editing_new = er(cx.notation_states).and_then(|er| er.type_edit.as_ref()).is_some_and(|t| t.target.is_none() && t.schema == schema_id);
+    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
     for row in &list {
-        if er(&shell.notation_states).and_then(|er| er.type_edit.as_ref()).is_some_and(|t| t.target == Some(row.id)) {
-            y = editor(shell, ui, p, r, y);
+        if er(cx.notation_states).and_then(|er| er.type_edit.as_ref()).is_some_and(|t| t.target == Some(row.id)) {
+            y = editor(cx, ui, p, r, y);
             continue;
         }
         let rect = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 44.0));
         let id = format!("workspace.properties.type.row.{}", row.id);
-        let resp = control(shell, ui, &id, "row", rect, true);
+        let resp = control_cx(cx, ui, &id, "row", rect, true);
         if Some(row.id) == chosen {
             paint.rect_filled(rect, 6.0, p.accent_tint);
         } else if resp.contains_pointer() {
@@ -178,33 +178,33 @@ pub(crate) fn types_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
         }
         ux::text(&paint, rect.min + vec2(38.0, 4.0), &row.name, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, rect.min + vec2(38.0, 23.0), &row.detail, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if crate::panels::edit_button(shell, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
-            crate::panels::select_element(shell, row.id);
-            open(shell, schema_id, row.kind, Some(row.id));
+        if crate::panels::edit_button_cx(cx, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
+            crate::panels::select_element_cx(cx, row.id);
+            open(cx, schema_id, row.kind, Some(row.id));
         } else if resp.clicked() {
-            crate::panels::select_element(shell, row.id);
+            crate::panels::select_element_cx(cx, row.id);
         }
         y += 44.0;
     }
     if editing_new {
-        y = editor(shell, ui, p, r, y);
+        y = editor(cx, ui, p, r, y);
     }
     // Which kind to add, under the +.
-    if shell.panels.menu == Some(menus::TYPE_KIND) {
+    if cx.panels.menu == Some(menus::TYPE_KIND) {
         let items = [tr("Domain"), tr("Enum type")];
         let anchor = Rect::from_min_size(pos2(r.right() - PAD - 160.0, add_at.top()), vec2(160.0, 28.0));
-        if let Some(i) = menu(shell, ui, p, anchor, "workspace.properties.types.add", &items) {
-            open(shell, schema_id, if i == 0 { TypeKind::Domain } else { TypeKind::Enum }, None);
+        if let Some(i) = menu_cx(cx, ui, p, anchor, "workspace.properties.types.add", &items) {
+            open(cx, schema_id, if i == 0 { TypeKind::Domain } else { TypeKind::Enum }, None);
         }
     }
     y
 }
 
 /// The domain or enum editor card; gives the y under it.
-fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
+fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.type_edit.clone()) else { return y };
+    let Some(mut edit) = er(cx.notation_states).and_then(|er| er.type_edit.clone()) else { return y };
     let row = 17.0 + FIELD + 10.0;
     let shape = archforge_er::rules::type_shape(&edit.base);
     let height = match edit.kind {
@@ -214,13 +214,13 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::er_state::TYPE, card);
+    crate::panels::reveal_cx(cx, ui, crate::er_state::TYPE, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
     let mut cy = 12.0;
-    let mut enter = text_field(
-        shell,
+    let mut enter = text_field_cx(
+        cx,
         ui,
         p,
         at(0.0, cy),
@@ -242,8 +242,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                 archforge_er::rules::TypeShape::PrecisionScale => ((inner - 2.0 * 64.0 - 16.0).max(60.0), 64.0),
                 _ => ((inner - 80.0 - 8.0).max(60.0), 80.0),
             };
-            enter |= text_field(
-                shell,
+            enter |= text_field_cx(
+                cx,
                 ui,
                 p,
                 at(0.0, cy),
@@ -257,8 +257,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             );
             match shape {
                 archforge_er::rules::TypeShape::Length => {
-                    enter |= text_field(
-                        shell,
+                    enter |= text_field_cx(
+                        cx,
                         ui,
                         p,
                         at(type_w + 8.0, cy),
@@ -272,8 +272,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                     );
                 }
                 archforge_er::rules::TypeShape::Precision => {
-                    enter |= text_field(
-                        shell,
+                    enter |= text_field_cx(
+                        cx,
                         ui,
                         p,
                         at(type_w + 8.0, cy),
@@ -287,8 +287,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                     );
                 }
                 archforge_er::rules::TypeShape::PrecisionScale => {
-                    enter |= text_field(
-                        shell,
+                    enter |= text_field_cx(
+                        cx,
                         ui,
                         p,
                         at(type_w + 8.0, cy),
@@ -300,8 +300,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                         false,
                         false,
                     );
-                    enter |= text_field(
-                        shell,
+                    enter |= text_field_cx(
+                        cx,
                         ui,
                         p,
                         at(type_w + 8.0 + size_w + 8.0, cy),
@@ -317,8 +317,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                 archforge_er::rules::TypeShape::Plain => {}
             }
             cy += row;
-            enter |= text_field(
-                shell,
+            enter |= text_field_cx(
+                cx,
                 ui,
                 p,
                 at(0.0, cy),
@@ -331,7 +331,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                 false,
             );
             cy += row;
-            check(shell, ui, p, at(0.0, cy), "workspace.properties.domain.not-null", &tr("Not null"), &mut edit.not_null);
+            check_cx(cx, ui, p, at(0.0, cy), "workspace.properties.domain.not-null", &tr("Not null"), &mut edit.not_null);
             cy += 28.0;
             ux::text(&paint, at(0.0, cy), &tr("Checks"), types::CAPTION, p.text_secondary, Some(inner));
             cy += 17.0;
@@ -341,7 +341,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                 let field =
                     crate::panels::field_inner(ui, Rect::from_min_max(pos2(rect.left() + 0.0, rect.top()), pos2(rect.right() - 22.0, rect.bottom())));
                 let id = format!("workspace.properties.domain.check.{i}");
-                widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
+                widgets::record_visible(ui, cx.registry, &id, "field", field);
                 let out = egui::TextEdit::singleline(&mut edit.checks[i])
                     .id(widgets::egui_id(&id))
                     .frame(egui::Frame::NONE)
@@ -357,12 +357,12 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                 }
                 let x = Rect::from_min_size(pos2(rect.right() - 26.0, rect.top() + 6.0), Vec2::splat(16.0));
                 ux::icon_in(&paint, x, &icons::CLOSE, p.text_secondary);
-                if control(shell, ui, &format!("{id}.remove"), "button", x.expand(4.0), true).on_hover_text(tr("Remove")).clicked() {
+                if control_cx(cx, ui, &format!("{id}.remove"), "button", x.expand(4.0), true).on_hover_text(tr("Remove")).clicked() {
                     remove_at = Some(i);
                 }
                 cy += 32.0;
             }
-            if ghost_button(shell, ui, p, at(0.0, cy), "workspace.properties.domain.check.add", &icons::PLUS, &tr("Add a check"))
+            if ghost_button_cx(cx, ui, p, at(0.0, cy), "workspace.properties.domain.check.add", &icons::PLUS, &tr("Add a check"))
                 && edit.checks.len() < archforge_er::rules::MAX_KEY_COLUMNS
             {
                 edit.checks.push(String::new());
@@ -386,7 +386,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                     Rect::from_min_max(pos2(rect.left() + 20.0, rect.top()), pos2(rect.right() - 22.0, rect.bottom())),
                 );
                 let id = format!("workspace.properties.enum.literal.{i}");
-                widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
+                widgets::record_visible(ui, cx.registry, &id, "field", field);
                 let out = egui::TextEdit::singleline(&mut edit.literals[i])
                     .id(widgets::egui_id(&id))
                     .frame(egui::Frame::NONE)
@@ -402,12 +402,12 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                 }
                 let x = Rect::from_min_size(pos2(rect.right() - 26.0, rect.top() + 6.0), Vec2::splat(16.0));
                 ux::icon_in(&paint, x, &icons::CLOSE, p.text_secondary);
-                if control(shell, ui, &format!("{id}.remove"), "button", x.expand(4.0), true).on_hover_text(tr("Remove")).clicked() {
+                if control_cx(cx, ui, &format!("{id}.remove"), "button", x.expand(4.0), true).on_hover_text(tr("Remove")).clicked() {
                     remove_at = Some(i);
                 }
                 cy += 32.0;
             }
-            if ghost_button(shell, ui, p, at(0.0, cy), "workspace.properties.enum.literal.add", &icons::PLUS, &tr("Add a literal"))
+            if ghost_button_cx(cx, ui, p, at(0.0, cy), "workspace.properties.enum.literal.add", &icons::PLUS, &tr("Add a literal"))
                 && edit.literals.len() < archforge_er::rules::MAX_LITERALS
             {
                 edit.literals.push(String::new());
@@ -422,10 +422,10 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     }
     let mut remove = false;
     if edit.target.is_some() {
-        remove = icon_button(shell, ui, p, at(0.0, cy), "workspace.properties.type.remove", &icons::TRASH, p.danger, None, "Remove");
+        remove = icon_button_cx(cx, ui, p, at(0.0, cy), "workspace.properties.type.remove", &icons::TRASH, p.danger, None, "Remove");
     }
-    let cancel = icon_button(
-        shell,
+    let cancel = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - 2.0 * FIELD - 8.0, card.top() + cy),
@@ -435,8 +435,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         None,
         "Cancel",
     );
-    let apply = icon_button(
-        shell,
+    let apply = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - FIELD, card.top() + cy),
@@ -449,11 +449,11 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     if let Some(why) = &edit.refused {
         ux::text(&paint, at(0.0, cy + FIELD + 8.0), why, types::CAPTION, p.amber, Some(inner));
     }
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.type_edit = Some(edit.clone());
     }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+        if let Some(er) = er_mut(cx.notation_states) {
             er.type_edit = None;
         }
     } else if remove {
@@ -461,44 +461,44 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             TypeKind::Domain => ("er.domain.remove", "domain"),
             TypeKind::Enum => ("er.enum.remove", "enum"),
         };
-        match run(shell, cmd, json!({ key: edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
+        match run_cx(cx, cmd, json!({ key: edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
             Ok(_) => {
-                if let Some(er) = er_mut(&mut shell.notation_states) {
+                if let Some(er) = er_mut(cx.notation_states) {
                     er.type_edit = None;
                 }
-                reselect(shell, edit.schema);
+                reselect(cx, edit.schema);
             }
-            Err(e) => refuse(shell, e),
+            Err(e) => refuse(cx, e),
         }
     } else if apply || enter {
-        commit(shell, &edit);
+        commit(cx, &edit);
     }
     card.bottom() + 8.0
 }
 
 /// Shows `why` on the open domain or enum editor's card, which stays open with what was typed.
-fn refuse(shell: &mut Shell, why: String) {
-    if let Some(t) = er_mut(&mut shell.notation_states).and_then(|er| er.type_edit.as_mut()) {
+fn refuse(cx: &mut Ctx, why: String) {
+    if let Some(t) = er_mut(cx.notation_states).and_then(|er| er.type_edit.as_mut()) {
         t.refused = Some(why);
     }
 }
 
 /// The schema is what the panel shows after a type command selected the type.
-fn reselect(shell: &mut Shell, schema: Uuid) {
-    if let Err(e) = run(shell, "view.select", json!({ "ids": [schema.to_string()] })) {
-        shell.panels.notice = Some(e);
+fn reselect(cx: &mut Ctx, schema: Uuid) {
+    if let Err(e) = run_cx(cx, "view.select", json!({ "ids": [schema.to_string()] })) {
+        cx.panels.notice = Some(e);
     }
 }
 
 /// Writes the type through its command; the schema stays selected.
-fn commit(shell: &mut Shell, edit: &TypeEdit) {
+fn commit(cx: &mut Ctx, edit: &TypeEdit) {
     let name = edit.name.trim().to_string();
     let (cmd, params) = match edit.kind {
         TypeKind::Domain => {
             let size = match (size_value(&edit.length), size_value(&edit.precision), size_value(&edit.scale)) {
                 (Ok(l), Ok(p), Ok(s)) => (l, p, s),
                 (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
-                    refuse(shell, e);
+                    refuse(cx, e);
                     return;
                 }
             };
@@ -533,15 +533,15 @@ fn commit(shell: &mut Shell, edit: &TypeEdit) {
             }
         }
     };
-    match run(shell, cmd, params) {
+    match run_cx(cx, cmd, params) {
         Ok(_) => {
-            if let Some(er) = er_mut(&mut shell.notation_states) {
+            if let Some(er) = er_mut(cx.notation_states) {
                 er.type_edit = None;
             }
-            shell.panels.notice = None;
-            reselect(shell, edit.schema);
+            cx.panels.notice = None;
+            reselect(cx, edit.schema);
         }
-        Err(e) => refuse(shell, e),
+        Err(e) => refuse(cx, e),
     }
 }
 

@@ -10,9 +10,9 @@ use archforge_diagram::grid::bounds_of;
 use archforge_mof::{Obj, Store, Uuid};
 use serde_json::json;
 
-use crate::Shell;
 use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_ROW, Tool};
-use crate::editing::{NodeRename, element_of, nodes_of, on_diagram, place_with_lines, select, unit_rect, uuid};
+use crate::cx::Ctx;
+use crate::editing::{NodeRename, element_of, nodes_of, on_diagram, place_with_lines_cx, select_cx, unit_rect, uuid};
 use crate::er_state::er;
 use crate::i18n::tr;
 
@@ -48,17 +48,17 @@ fn entity_name(store: &Store, schema: Obj) -> Option<String> {
 
 /// Adds a table to the diagram's schema and places it at `(x, y)`, its centre under the click,
 /// as one undo step; then its name is open for typing.
-pub(crate) fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
-    shell.canvas.notice = None;
-    let Some(session) = shell.session.as_mut() else { return };
+pub(crate) fn place_entity(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
+    cx.canvas.notice = None;
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     let Some(schema) = crate::diagrams::schema_of(store, d) else {
-        shell.canvas.notice = Some(tr("The diagram is of no schema"));
+        cx.canvas.notice = Some(tr("The diagram is of no schema"));
         return;
     };
     let (Some(schema_id), Some(diagram_id)) = (uuid(store, schema), uuid(store, d)) else { return };
     let Some(name) = entity_name(store, schema) else {
-        shell.canvas.notice = Some(tr("No free name is left"));
+        cx.canvas.notice = Some(tr("No free name is left"));
         return;
     };
     let (px, py) = ((x - ENTITY_WIDTH / 2.0).round(), (y - ENTITY_EMPTY_HEIGHT / 2.0).round());
@@ -76,13 +76,13 @@ pub(crate) fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
         Ok(o) => {
             let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
             if let (Some(entity), Some(node)) = (id_at(0), id_at(1)) {
-                select(shell, vec![entity]);
-                shell.canvas.rename = Some(NodeRename { node, entity, text: name, opened: true, refused: None });
-                shell.canvas.focused = true;
+                select_cx(cx, vec![entity]);
+                cx.canvas.rename = Some(NodeRename { node, entity, text: name, opened: true, refused: None });
+                cx.canvas.focused = true;
             }
-            shell.canvas.tool = Tool::Select;
+            cx.canvas.tool = Tool::Select;
         }
-        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -90,23 +90,23 @@ pub(crate) fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
 /// `from_node` by the relationship the tool is set to, all one undo step; then the new table's name
 /// is open for typing. The relationship's foreign key starts off (and so it is not identifying):
 /// the new table is still to be shaped, and its keys come when the user turns the key on.
-pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
+pub(crate) fn connect_to_new(cx: &mut Ctx, d: Obj, from_node: Uuid, x: f64, y: f64) {
     use crate::connect::cardinality_word;
-    shell.canvas.notice = None;
-    let kind = er(&shell.notation_states).map(|er| er.relationship).unwrap_or_default();
-    let Some(session) = shell.session.as_mut() else { return };
+    cx.canvas.notice = None;
+    let kind = er(cx.notation_states).map(|er| er.relationship).unwrap_or_default();
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     let Some(schema) = crate::diagrams::schema_of(store, d) else {
-        shell.canvas.notice = Some(tr("The diagram is of no schema"));
+        cx.canvas.notice = Some(tr("The diagram is of no schema"));
         return;
     };
     let Some(from) = store.by_uuid(from_node).and_then(|n| entity_of_node(store, n)) else {
-        shell.canvas.notice = Some(tr("A relationship joins two tables"));
+        cx.canvas.notice = Some(tr("A relationship joins two tables"));
         return;
     };
     let (Some(schema_id), Some(diagram_id), Some(from_id)) = (uuid(store, schema), uuid(store, d), uuid(store, from)) else { return };
     let Some(name) = entity_name(store, schema) else {
-        shell.canvas.notice = Some(tr("No free name is left"));
+        cx.canvas.notice = Some(tr("No free name is left"));
         return;
     };
     let (px, py) = ((x - ENTITY_WIDTH / 2.0).round(), (y - ENTITY_EMPTY_HEIGHT / 2.0).round());
@@ -143,24 +143,24 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
         Ok(o) => {
             let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
             if let (Some(entity), Some(node)) = (id_at(0), id_at(1)) {
-                select(shell, vec![entity]);
-                shell.canvas.rename = Some(NodeRename { node, entity, text: name, opened: true, refused: None });
-                shell.canvas.focused = true;
+                select_cx(cx, vec![entity]);
+                cx.canvas.rename = Some(NodeRename { node, entity, text: name, opened: true, refused: None });
+                cx.canvas.focused = true;
             }
         }
-        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
 /// Places a table dragged from the Models explorer on diagram `d`, centred on `at`; a table of
 /// another schema is welcome (slice S7), one already on the diagram is said so and left.
-pub(crate) fn place_dropped(shell: &mut Shell, d: Obj, entity: Uuid, at: (f64, f64)) {
-    shell.canvas.notice = None;
-    let Some(session) = shell.session.as_ref() else { return };
+pub(crate) fn place_dropped(cx: &mut Ctx, d: Obj, entity: Uuid, at: (f64, f64)) {
+    cx.canvas.notice = None;
+    let Some(session) = cx.session.as_ref() else { return };
     let store = session.doc();
     let Some(e) = store.by_uuid(entity).filter(|e| store.class_of(*e).ok() == Some(archforge_er::ENTITY)) else { return };
     if on_diagram(store, d, e) {
-        shell.canvas.notice = Some(tr("Already on this diagram"));
+        cx.canvas.notice = Some(tr("Already on this diagram"));
         return;
     }
     let columns = store.list(e, archforge_er::entity::ATTRIBUTE).map(|l| l.len()).unwrap_or(0);
@@ -175,15 +175,15 @@ pub(crate) fn place_dropped(shell: &mut Shell, d: Obj, entity: Uuid, at: (f64, f
         .chain(archforge_er::rules::supertype_links(store, e))
         .chain(archforge_er::rules::subtype_links(store, e))
         .collect();
-    place_with_lines(shell, d, e, at, (ENTITY_WIDTH, height), &links, &archforge_er::ErNotation, &tr("Place table"));
+    place_with_lines_cx(cx, d, e, at, (ENTITY_WIDTH, height), &links, &archforge_er::ErNotation, &tr("Place table"));
 }
 
 /// Where a new table lands on the open diagram when the diagram is of `schema`: to the right of
 /// the rightmost node, or near the top left of an empty diagram; none when no such diagram is open.
-fn free_place(shell: &Shell, schema: Obj) -> Option<(Uuid, f64, f64)> {
-    let session = shell.session.as_ref()?;
+fn free_place(cx: &Ctx, schema: Obj) -> Option<(Uuid, f64, f64)> {
+    let session = cx.session.as_ref()?;
     let store = session.doc();
-    let d = shell.canvas.active.and_then(|id| store.by_uuid(id)).filter(|d| store.is_alive(*d))?;
+    let d = cx.canvas.active.and_then(|id| store.by_uuid(id)).filter(|d| store.is_alive(*d))?;
     if crate::diagrams::schema_of(store, d) != Some(schema) {
         return None;
     }
@@ -197,9 +197,9 @@ fn free_place(shell: &Shell, schema: Obj) -> Option<(Uuid, f64, f64)> {
 
 /// Adds a table to `schema` with `name`; on an open diagram of the schema it is placed as well,
 /// in the same undo step. The table is selected either way. Gives the table's id.
-pub fn add_entity(shell: &mut Shell, schema: Uuid, name: &str) -> Result<Uuid, String> {
-    let placed = shell.session.as_ref().and_then(|s| s.doc().by_uuid(schema)).and_then(|s| free_place(shell, s));
-    let session = shell.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
+pub(crate) fn add_entity(cx: &mut Ctx, schema: Uuid, name: &str) -> Result<Uuid, String> {
+    let placed = cx.session.as_ref().and_then(|s| s.doc().by_uuid(schema)).and_then(|s| free_place(cx, s));
+    let session = cx.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
     let add = json!({ "schema": schema.to_string(), "name": name });
     let entity = match placed {
         None => session.execute("er.entity.add", &add).map(|o| o.value).map_err(|e| crate::panels::refusal(&e))?,
@@ -220,14 +220,14 @@ pub fn add_entity(shell: &mut Shell, schema: Uuid, name: &str) -> Result<Uuid, S
     };
     let id = entity.get("id").and_then(|i| i.as_str()).and_then(Uuid::parse).ok_or_else(|| tr("The model could not be opened"))?;
     // Placing selected the node; the table is what the explorer and Properties follow.
-    select(shell, vec![id]);
+    select_cx(cx, vec![id]);
     Ok(id)
 }
 
 /// Runs a column command and, in the same undo step, grows every node of `entity` whose height
 /// would hide the columns it then has.
-pub fn run_growing(shell: &mut Shell, label: &str, cmd: &str, params: serde_json::Value, entity: Uuid) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
+pub(crate) fn run_growing(cx: &mut Ctx, label: &str, cmd: &str, params: serde_json::Value, entity: Uuid) -> Result<serde_json::Value, String> {
+    let Some(session) = cx.session.as_mut() else { return Err(tr("The model could not be opened")) };
     let store = session.doc();
     let Some(e) = store.by_uuid(entity) else { return Err(tr("The model could not be opened")) };
     let columns = store.list(e, archforge_er::entity::ATTRIBUTE).map(|l| l.len()).unwrap_or(0);
@@ -319,14 +319,8 @@ pub(crate) fn grow_to_fit(
 
 /// Runs `cmd` and grows the nodes of `entities` to show their columns, as one undo step named
 /// `label`; gives the command's result.
-pub(crate) fn run_fitting(
-    shell: &mut Shell,
-    label: &str,
-    cmd: &str,
-    params: serde_json::Value,
-    entities: &[Uuid],
-) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
+pub(crate) fn run_fitting(cx: &mut Ctx, label: &str, cmd: &str, params: serde_json::Value, entities: &[Uuid]) -> Result<serde_json::Value, String> {
+    let Some(session) = cx.session.as_mut() else { return Err(tr("The model could not be opened")) };
     session
         .batch(label, |b| {
             b.execute(cmd, &params)?;

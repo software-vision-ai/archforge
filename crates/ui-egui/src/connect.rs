@@ -16,11 +16,12 @@ use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::canvas::{View, end_glyph};
+use crate::cx::{Ctx, CtxRef};
 use crate::er_state::{er, er_mut};
-use crate::home::control;
 use crate::i18n::{fmt, tr};
+use crate::panels::control_cx;
 use crate::ux::{self, Palette, types};
-use crate::{Shell, widgets};
+use crate::widgets;
 
 /// The popover's size and its rows.
 const POPOVER: Vec2 = vec2(330.0, 281.0);
@@ -69,8 +70,8 @@ pub struct MappingOffer {
 
 /// Runs a command for a line being drawn or offered; a refusal comes back in plain words
 /// ([`crate::panels::refusal`]).
-fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    crate::panels::run(shell, id, params)
+fn run(cx: &mut Ctx, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    crate::panels::run_cx(cx, id, params)
 }
 
 pub(crate) fn cardinality_word(c: Cardinality) -> &'static str {
@@ -123,7 +124,7 @@ pub(crate) fn tool_line(paint: &egui::Painter, p: &Palette, centre: Pos2, from: 
 }
 
 /// The cardinality popover above the toolbar's Relationship chevron.
-pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, anchor: Rect) {
+pub(crate) fn popover(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, anchor: Rect) {
     let paint = ui.painter().clone();
     let x = (anchor.center().x - POPOVER.x / 2.0).clamp(r.left() + 8.0, (r.right() - POPOVER.x - 8.0).max(r.left() + 8.0));
     let y = (anchor.top() - 8.0 - POPOVER.y).max(r.top() + 8.0);
@@ -132,7 +133,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     paint.rect_filled(m, 10.0, p.surface);
     paint.rect_stroke(m, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let at = |x: f32, y: f32| m.min + vec2(x, y);
-    let kind = er(&shell.notation_states).map(|er| er.relationship).unwrap_or_default();
+    let kind = er(cx.notation_states).map(|er| er.relationship).unwrap_or_default();
     ux::text(&paint, at(16.0, 14.0), &tr("Cardinality").to_uppercase(), types::EYEBROW, p.text_secondary, Some(160.0));
     let readout = format!("{} — {}", cardinality_text(kind.from), cardinality_text(kind.to));
     let g = ux::galley(&paint, &readout, types::SMALL, p.text, None);
@@ -161,7 +162,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
                 (None, Some(t)) => cardinality_text(t),
                 _ => String::new(),
             };
-            if control(shell, ui, &format!("workspace.cardinality.{key}.{i}"), "button", b, true).on_hover_text(hint).clicked() {
+            if control_cx(cx, ui, &format!("workspace.cardinality.{key}.{i}"), "button", b, true).on_hover_text(hint).clicked() {
                 match row {
                     0 => {
                         next.from = PRESETS[i].0;
@@ -181,28 +182,28 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     paint.rect_filled(sw, 10.0, if kind.identifying { p.accent_fill } else { p.border });
     let knob = if kind.identifying { sw.right_center() - vec2(10.0, 0.0) } else { sw.left_center() + vec2(10.0, 0.0) };
     paint.circle_filled(knob, 8.0, p.surface);
-    if control(shell, ui, "workspace.cardinality.identifying", "toggle", sw, true).on_hover_text(tr("Identifying")).clicked() {
+    if control_cx(cx, ui, "workspace.cardinality.identifying", "toggle", sw, true).on_hover_text(tr("Identifying")).clicked() {
         next.identifying = !kind.identifying;
     }
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.relationship = next;
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || anchor.contains(pos)));
     if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.canvas.popover = None;
+        cx.canvas.popover = None;
     }
 }
 
 /// The line being drawn: from the source entity's border to the pointer, with the chosen ends,
 /// and a ring on the entity under the pointer.
-pub(crate) fn live_line(shell: &Shell, paint: &egui::Painter, p: &Palette, view: View, from_node: Uuid, pointer: Pos2, target: Option<Rect>) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn live_line(cx: &CtxRef, paint: &egui::Painter, p: &Palette, view: View, from_node: Uuid, pointer: Pos2, target: Option<Rect>) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(n) = store.by_uuid(from_node) else { return };
     let rect = view.rect(&bounds_of(store, n));
     if !rect.is_finite() || !pointer.is_finite() {
         return;
     }
-    let kind = er(&shell.notation_states).map(|er| er.relationship).unwrap_or_default();
+    let kind = er(cx.notation_states).map(|er| er.relationship).unwrap_or_default();
     let z = view.zoom;
     let stroke = Stroke::new((1.5 * z).clamp(1.0, 3.0), p.accent);
     let (start, end) = match target {
@@ -234,10 +235,10 @@ pub(crate) fn live_line(shell: &Shell, paint: &egui::Painter, p: &Palette, view:
 /// step; the foreign key comes along when the parent has a primary key and neither table is
 /// without columns (one still to be shaped is not given key columns unasked). Selects the
 /// relationship; a many-to-many one opens the mapping table offer.
-pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
-    shell.canvas.notice = None;
-    let kind = er(&shell.notation_states).map(|er| er.relationship).unwrap_or_default();
-    let Some(session) = shell.session.as_mut() else { return };
+pub(crate) fn connect(cx: &mut Ctx, d: Obj, from_node: Uuid, to_node: Uuid) {
+    cx.canvas.notice = None;
+    let kind = er(cx.notation_states).map(|er| er.relationship).unwrap_or_default();
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     let node_entity = |id: Uuid| {
         let n = store.by_uuid(id)?;
@@ -245,7 +246,7 @@ pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
         (store.class_of(e).ok() == Some(archforge_er::ENTITY)).then_some(e)
     };
     let (Some(from), Some(to)) = (node_entity(from_node), node_entity(to_node)) else {
-        shell.canvas.notice = Some(tr("A relationship joins two tables"));
+        cx.canvas.notice = Some(tr("A relationship joins two tables"));
         return;
     };
     let (Some(from_id), Some(to_id), Some(diagram_id)) = (store.uuid(from).ok(), store.uuid(to).ok(), store.uuid(d).ok()) else { return };
@@ -278,34 +279,34 @@ pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     match out {
         Ok(o) => {
             let Some(rel) = o.value.get(0).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse) else { return };
-            if let Err(e) = run(shell, "view.select", json!({ "ids": [rel.to_string()] })) {
-                shell.canvas.notice = Some(e);
+            if let Err(e) = run(cx, "view.select", json!({ "ids": [rel.to_string()] })) {
+                cx.canvas.notice = Some(e);
             }
             if kind.many_to_many() {
-                offer_mapping(shell, rel);
+                offer_mapping(cx, rel);
             } else if kind.identifying && !with_key {
-                shell.canvas.notice = Some(tr("Identifying needs the parent's primary key; drawn as not identifying"));
+                cx.canvas.notice = Some(tr("Identifying needs the parent's primary key; drawn as not identifying"));
             }
         }
-        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
 /// Opens the mapping table offer for a many-to-many relationship, named after its two tables.
-pub fn offer_mapping(shell: &mut Shell, relationship: Uuid) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn offer_mapping(cx: &mut Ctx, relationship: Uuid) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(rel) = store.by_uuid(relationship) else { return };
     let end = |p| store.get(rel, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
     let name = format!("{}{}", end(archforge_er::relationship::FROM), end(archforge_er::relationship::TO));
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.mapping = Some(MappingOffer { relationship, name, refused: None });
     }
 }
 
 /// The mapping table offer, over the canvas: the design's card "Many to many picked".
-pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
-    let Some(offer) = er(&shell.notation_states).and_then(|er| er.mapping.clone()) else { return };
-    let (from, to, chips) = match shell.session.as_ref().and_then(|s| s.doc().by_uuid(offer.relationship).map(|rel| (s.doc(), rel))) {
+pub(crate) fn mapping_offer(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect) {
+    let Some(offer) = er(cx.notation_states).and_then(|er| er.mapping.clone()) else { return };
+    let (from, to, chips) = match cx.session.as_ref().and_then(|s| s.doc().by_uuid(offer.relationship).map(|rel| (s.doc(), rel))) {
         Some((store, rel)) => {
             let end = |p| store.get(rel, p).ok().and_then(|v| v.as_ref());
             let name = |e: Option<Obj>| e.map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
@@ -320,7 +321,7 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
             (name(f), name(t), chips)
         }
         None => {
-            if let Some(er) = er_mut(&mut shell.notation_states) {
+            if let Some(er) = er_mut(cx.notation_states) {
                 er.mapping = None;
             }
             return;
@@ -337,9 +338,9 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     ux::text(&paint, at(16.0, 44.0), &tr("Mapping table"), types::CAPTION, p.text_secondary, Some(width));
     let field = Rect::from_min_size(at(16.0, 61.0), vec2(width, 28.0));
     paint.rect_filled(field, 6.0, p.field);
-    widgets::record_visible(ui, &mut shell.registry, "workspace.mapping.name", "field", field);
+    widgets::record_visible(ui, cx.registry, "workspace.mapping.name", "field", field);
     let inner = crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left(), field.top()), pos2(field.right(), field.bottom())));
-    if let Some(o) = er_mut(&mut shell.notation_states).and_then(|er| er.mapping.as_mut()) {
+    if let Some(o) = er_mut(cx.notation_states).and_then(|er| er.mapping.as_mut()) {
         let edit = egui::TextEdit::singleline(&mut o.name)
             .id(widgets::egui_id("workspace.mapping.name"))
             .frame(egui::Frame::NONE)
@@ -352,16 +353,16 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
         let _ = (*out.response).clone().accessible_name(tr("Mapping table"));
     }
     ux::text(&paint, at(16.0, 101.0), &tr("Columns"), types::CAPTION, p.text_secondary, Some(width));
-    let mut cx = at(16.0, 118.0).x;
+    let mut chip_x = at(16.0, 118.0).x;
     for chip in chips.iter().take(4) {
         let g = ux::galley(&paint, chip, types::CAPTION, p.text, Some(width));
-        let b = Rect::from_min_size(pos2(cx, at(0.0, 118.0).y), vec2(g.size().x + 16.0, 24.0));
+        let b = Rect::from_min_size(pos2(chip_x, at(0.0, 118.0).y), vec2(g.size().x + 16.0, 24.0));
         if b.right() > m.right() - 16.0 {
             break;
         }
         paint.rect_filled(b, 6.0, p.field);
         paint.galley(b.min + vec2(8.0, 4.0), g, p.text.into());
-        cx = b.right() + 8.0;
+        chip_x = b.right() + 8.0;
     }
     if let Some(refused) = &offer.refused {
         ux::text(&paint, at(16.0, 150.0), refused, types::CAPTION, p.amber, Some(width));
@@ -375,7 +376,7 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
         let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, m.bottom() - 44.0), pos2(x, m.bottom() - 16.0));
         paint.rect_filled(b, 6.0, if primary { p.accent_fill } else { p.field });
         paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink.into());
-        if control(shell, ui, id, "button", b, true).clicked() {
+        if control_cx(cx, ui, id, "button", b, true).clicked() {
             action = Some(primary);
         }
         x = b.left() - 8.0;
@@ -385,22 +386,22 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     }
     match action {
         Some(true) => {
-            let name = er(&shell.notation_states).and_then(|er| er.mapping.as_ref()).map(|o| o.name.trim().to_string()).unwrap_or_default();
-            match run(shell, "er.relationship.resolve", json!({ "relationship": offer.relationship.to_string(), "name": name })) {
+            let name = er(cx.notation_states).and_then(|er| er.mapping.as_ref()).map(|o| o.name.trim().to_string()).unwrap_or_default();
+            match run(cx, "er.relationship.resolve", json!({ "relationship": offer.relationship.to_string(), "name": name })) {
                 Ok(_) => {
-                    if let Some(er) = er_mut(&mut shell.notation_states) {
+                    if let Some(er) = er_mut(cx.notation_states) {
                         er.mapping = None;
                     }
                 }
                 Err(e) => {
-                    if let Some(o) = er_mut(&mut shell.notation_states).and_then(|er| er.mapping.as_mut()) {
+                    if let Some(o) = er_mut(cx.notation_states).and_then(|er| er.mapping.as_mut()) {
                         o.refused = Some(e);
                     }
                 }
             }
         }
         Some(false) => {
-            if let Some(er) = er_mut(&mut shell.notation_states) {
+            if let Some(er) = er_mut(cx.notation_states) {
                 er.mapping = None;
             }
         }
@@ -411,8 +412,8 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
 /// Removes the selected relationship from the model and says so with Undo. Its foreign key and the
 /// key columns that key brought go with it, as the foreign key switch takes them off, all one undo
 /// step: a line deleted leaves no key behind that nothing draws.
-pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
-    let Some(session) = shell.session.as_ref() else { return false };
+pub(crate) fn remove_selected_relationship(cx: &mut Ctx) -> bool {
+    let Some(session) = cx.session.as_ref() else { return false };
     let store = session.doc();
     let rel = session.view().selection.iter().copied().find_map(|o| match store.class_of(o).ok() {
         Some(c) if c == archforge_er::RELATIONSHIP => Some(o),
@@ -432,17 +433,17 @@ pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
         }
     }
     ids.push(id.to_string());
-    let Some(session) = shell.session.as_mut() else { return false };
+    let Some(session) = cx.session.as_mut() else { return false };
     let removed = session
         .batch(&tr("Remove relationship"), |b| b.execute("element.remove", &json!({ "ids": ids })).map(|_| ()))
         .map_err(|e| crate::panels::refusal(&e));
     match removed {
         Ok(_) => {
             let text = if name.is_empty() { tr("Relationship removed") } else { fmt(&tr("{name} removed"), &[("name", &name)]) };
-            let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            shell.canvas.toast = Some(crate::canvas::Toast { text, until: shell.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
+            let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+            cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
         }
-        Err(e) => shell.canvas.notice = Some(e),
+        Err(e) => cx.canvas.notice = Some(e),
     }
     true
 }
