@@ -305,7 +305,7 @@ impl DiagramKind for UmlKind {
     fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
         match key {
             crate::uml_classifier::TOOL => crate::uml_classifier::tool_face(&shell.cx_ref(), paint, b, ink),
-            "relationship" => crate::uml_relate::tool_face(shell, paint, p, b, ink, active),
+            "relationship" => crate::uml_relate::tool_face(&shell.cx_ref(), paint, p, b, ink, active),
             _ => return false,
         }
         true
@@ -316,14 +316,14 @@ impl DiagramKind for UmlKind {
     fn tool_hint(&self, shell: &Shell, key: &str) -> Option<String> {
         match key {
             crate::uml_classifier::TOOL => Some(uml(&shell.notation_states).map(|uml| uml.classifier).unwrap_or_default().word()),
-            "relationship" => crate::uml_relate::tool_hint(shell),
+            "relationship" => crate::uml_relate::tool_hint(&shell.cx_ref()),
             _ => None,
         }
     }
 
     /// A realization starts only at a class: from any other classifier the tool starts no line.
     fn line_start_problem(&self, shell: &Shell, store: &Store, tool: &'static str, element: Obj) -> Option<String> {
-        (tool == "relationship").then(|| crate::uml_relate::start_problem(shell, store, element)).flatten()
+        (tool == "relationship").then(|| crate::uml_relate::start_problem(&shell.cx_ref(), store, element)).flatten()
     }
 
     /// The classifier tool's menu of kinds, or the Relationship tool's.
@@ -331,16 +331,19 @@ impl DiagramKind for UmlKind {
         if key == crate::uml_classifier::KINDS {
             shell.cx(|cx| crate::uml_classifier::popover(cx, ui, p, r, chevron));
         } else {
-            crate::uml_relate::popover(shell, ui, p, r, chevron);
+            shell.cx(|cx| crate::uml_relate::popover(cx, ui, p, r, chevron));
         }
     }
 
+    /// The chosen kind of relationship drawn between the classes of two nodes.
     fn connect(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid) {
-        crate::uml_relate::connect(shell, d, from_node, to_node);
+        shell.cx(|cx| crate::uml_relate::connect(cx, d, from_node, to_node));
     }
 
+    /// The chosen kind of relationship dropped on empty canvas: a new classifier there, related to
+    /// the node's.
     fn connect_to_new(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64) {
-        crate::uml_relate::connect_to_new(shell, d, from_node, x, y);
+        shell.cx(|cx| crate::uml_relate::connect_to_new(cx, d, from_node, x, y));
     }
 
     fn reconnects(&self) -> bool {
@@ -350,7 +353,7 @@ impl DiagramKind for UmlKind {
     /// Moves an end of a selected line onto the classifier of `to_node`, the Relationship tool's rules
     /// kept, on the revision `at` the drag began on.
     fn reconnect(&self, shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid, at: archforge_engine::Revision) {
-        crate::uml_relate::reconnect(shell, element, source, to_node, at);
+        shell.cx(|cx| crate::uml_relate::reconnect(cx, element, source, to_node, at));
     }
 
     /// Renames a card's element in place: a package or a classifier,
@@ -419,7 +422,7 @@ impl DiagramKind for UmlKind {
         }
         let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
         shell.state.show_panel(crate::state::Panel::Properties);
-        crate::uml_panel::open(shell, element, kind, target);
+        shell.cx(|cx| crate::uml_panel::open(cx, element, kind, target));
     }
 
     /// A selected card's second adorner adds an attribute, or an enumeration's a literal; a
@@ -440,7 +443,7 @@ impl DiagramKind for UmlKind {
         if !crate::uml_inline::open(shell, element, MemberKind::Operation, None) {
             let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
             shell.state.show_panel(crate::state::Panel::Properties);
-            crate::uml_panel::open(shell, element, MemberKind::Operation, None);
+            shell.cx(|cx| crate::uml_panel::open(cx, element, MemberKind::Operation, None));
         }
     }
 
@@ -467,7 +470,7 @@ impl DiagramKind for UmlKind {
 
     /// An n-ary association drawn class by class, and Add end waiting on a class (AR-128).
     fn pointer(&self, shell: &Shell, press: &Press<'_>) -> Option<Action> {
-        crate::uml_nary::pointer(shell, press)
+        crate::uml_nary::pointer(&shell.cx_ref(), press)
     }
 
     /// The menu of an n-ary association from its diamond or a leg (AR-128), and the set actions
@@ -478,7 +481,7 @@ impl DiagramKind for UmlKind {
 
     /// An n-ary association's drawing, or Add end: Enter, Backspace and Escape (AR-128).
     fn keys(&self, shell: &mut Shell, ui: &egui::Ui, d: Obj) -> bool {
-        crate::uml_nary::keys(shell, ui, d)
+        shell.cx(|cx| crate::uml_nary::keys(cx, ui, d))
     }
 
     /// The classifier tool's menu of kinds.
@@ -503,7 +506,7 @@ impl DiagramKind for UmlKind {
         }
         // A stereotype goes onto its profile's diagram with the metaclasses it extends (AR-134).
         if let Some(s) = store.by_uuid(element).filter(|o| archforge_uml::profiles::is_stereotype(store, *o)) {
-            crate::uml_profiles::drop_stereotype(shell, d, s, at);
+            shell.cx(|cx| crate::uml_profiles::drop_stereotype(cx, d, s, at));
             return;
         }
         let Some((c, kind)) = store.by_uuid(element).and_then(|c| Some((c, Classifier::of(store, c)?))) else { return };
@@ -575,7 +578,7 @@ impl DiagramKind for UmlKind {
 
     /// What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
     fn hint_bar(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, below: f32) {
-        crate::uml_nary::hint_bar(shell, ui, p, r, below);
+        shell.cx(|cx| crate::uml_nary::hint_bar(cx, ui, p, r, below));
     }
 }
 
@@ -756,7 +759,7 @@ impl NotationUi for UmlUi {
                 parents.push(id);
                 let edit = crate::uml_panel::MemberEdit { name, ..crate::uml_panel::edit_of(Some(store), id, MemberKind::Literal, None) };
                 let (cmd, params) = crate::uml_panel::command_of(&edit);
-                crate::uml_panel::write_in_sight(shell, &edit, cmd, params)
+                shell.cx(|cx| crate::uml_panel::write_in_sight(cx, &edit, cmd, params))
             }
             "package" => {
                 // With nothing selected it goes into the root package, so its name is free there;
@@ -841,10 +844,12 @@ impl NotationUi for UmlUi {
         crate::uml_profiles::inside(store, obj).or_else(|| crate::uml_nesting::inside(store, obj))
     }
 
+    /// New ▸ on a package or a profile makes the kind `key` names there, New inside ▸ on a
+    /// classifier a nested classifier; either is named in place in Models.
     fn add_inside(&self, shell: &mut Shell, key: &str, obj: Obj) -> Option<Result<Uuid, String>> {
         let store = shell.session.as_ref()?.doc();
         if class(store, obj) == Some(archforge_uml::PACKAGE) || archforge_uml::profiles::is_profile(store, obj) {
-            return crate::uml_profiles::add_inside(shell, key, obj);
+            return shell.cx(|cx| crate::uml_profiles::add_inside(cx, key, obj));
         }
         shell.cx(|cx| crate::uml_nesting::add_inside(cx, key, obj))
     }
@@ -1153,14 +1158,14 @@ impl NotationUi for UmlUi {
             return;
         }
         match class(store, o) {
-            Some(c) if archforge_uml::is_classifier(c) => return crate::uml_panel::class_body(shell, ui, p, r, y, subject),
+            Some(c) if archforge_uml::is_classifier(c) => return shell.cx(|cx| crate::uml_panel::class_body(cx, ui, p, r, y, subject)),
             // A profile's and a stereotype's panels (AR-134, F1).
-            Some(c) if c == archforge_uml::PROFILE => return crate::uml_profiles::profile_body(shell, ui, p, r, y, subject),
-            Some(c) if c == archforge_uml::STEREOTYPE => return crate::uml_profiles::stereotype_body(shell, ui, p, r, y, subject),
+            Some(c) if c == archforge_uml::PROFILE => return shell.cx(|cx| crate::uml_profiles::profile_body(cx, ui, p, r, y, subject)),
+            Some(c) if c == archforge_uml::STEREOTYPE => return shell.cx(|cx| crate::uml_profiles::stereotype_body(cx, ui, p, r, y, subject)),
             // A template binding's own panel (AR-131, C2).
             Some(c) if c == archforge_uml::TEMPLATE_BINDING => return shell.cx(|cx| crate::uml_bindings::body(cx, ui, p, r, y, subject)),
             Some(c) if archforge_uml::is_relationship(c) => {
-                return crate::uml_relate::body(shell, ui, p, r, y, subject);
+                return shell.cx(|cx| crate::uml_relate::body(cx, ui, p, r, y, subject));
             }
             Some(c) if c == archforge_uml::GENERALIZATION_SET => return shell.cx(|cx| crate::uml_sets::set_body(cx, ui, p, r, y, subject)),
             _ => {}
@@ -1170,7 +1175,7 @@ impl NotationUi for UmlUi {
             let Some(words) = self.words(store, a) else { return };
             let (Ok(id), Ok(metaclass)) = (store.uuid(a), store.class_of(a)) else { return };
             let of = Subject::of(a, id, metaclass, words);
-            return crate::uml_relate::body(shell, ui, p, r, y, &of);
+            return shell.cx(|cx| crate::uml_relate::body(cx, ui, p, r, y, &of));
         }
         // A constraint shows its context's panel, its row marked (AR-133).
         if let Some(c) = constraint_context(store, o) {
@@ -1185,12 +1190,12 @@ impl NotationUi for UmlUi {
             let of = Subject::of(c, id, metaclass, words);
             // A stereotype's property shows its stereotype's panel, its row marked (AR-134).
             if archforge_uml::profiles::is_stereotype(store, c) {
-                return crate::uml_profiles::stereotype_body(shell, ui, p, r, y, &of);
+                return shell.cx(|cx| crate::uml_profiles::stereotype_body(cx, ui, p, r, y, &of));
             }
-            return crate::uml_panel::class_body(shell, ui, p, r, y, &of);
+            return shell.cx(|cx| crate::uml_panel::class_body(cx, ui, p, r, y, &of));
         }
         if class(store, o) == Some(archforge_uml::PACKAGE) && archforge_uml::commands::root_package(store) != Some(o) {
-            return crate::uml_panel::package_body(shell, ui, p, r, y, subject);
+            return shell.cx(|cx| crate::uml_panel::package_body(cx, ui, p, r, y, subject));
         }
         let Some((cmd, key)) = self.rename(store, o) else { return };
         let width = r.width() - 2.0 * crate::panels::PAD;
@@ -1201,8 +1206,8 @@ impl NotationUi for UmlUi {
         // The root package applies profiles as any package does (AR-134, F5), and carries
         // stereotypes (AR-135).
         if is_package && let Some(id) = subject.id {
-            below = crate::uml_stereotypes::section_for(shell, ui, p, r, below, o);
-            below = crate::uml_profiles::applied_section(shell, ui, p, r, below, o, id);
+            below = shell.cx(|cx| crate::uml_stereotypes::section_for(cx, ui, p, r, below, o));
+            below = shell.cx(|cx| crate::uml_profiles::applied_section(cx, ui, p, r, below, o, id));
         }
         // The root package's constraints hold for the whole model (AR-133).
         if let Some(id) = root {
@@ -1297,7 +1302,7 @@ impl NotationUi for UmlUi {
                 if let Some(at) = uml(&shell.notation_states).and_then(|uml| uml.line_menu) {
                     shell.cx(|cx| crate::uml_sets::line_menu(cx, ui, on.p, on.r, at, on.d));
                 }
-                crate::uml_nary::overlay(shell, ui, on.p, on.r, on.view, on.d);
+                shell.cx(|cx| crate::uml_nary::overlay(cx, ui, on.p, on.r, on.view, on.d));
             }
             Layer::Offers => {}
         }

@@ -302,7 +302,7 @@ pub(crate) trait NotationState: Any {
         false
     }
     /// Its Properties editors that are open, each by its card, with where it edits and the refusal
-    /// its card shows ([`crate::panels::reveal`]).
+    /// its card shows ([`crate::panels::reveal_cx`]).
     fn open_editors(&self) -> Vec<(Editor, OpenEditor)> {
         Vec::new()
     }

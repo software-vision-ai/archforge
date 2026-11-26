@@ -299,10 +299,10 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     // The type menu, under the type field: a pick sets the type and gives the field the keyboard.
     let mut picked = false;
     if shell.panels.menu == Some(menus::INLINE_TYPE) && !literal {
-        let choices = crate::uml_panel::choices_for_menu(shell, Some(inline.edit.class));
+        let choices = shell.cx(|cx| crate::uml_panel::choices_for_menu(cx, Some(inline.edit.class)));
         let chosen = crate::panels::menu_noted(shell, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes, &choices.note_parts);
         let value = chosen.map(|i| choices.values.get(i).cloned().unwrap_or_default());
-        crate::uml_panel::keep_choices(shell, choices);
+        shell.cx(|cx| crate::uml_panel::keep_choices(cx, choices));
         if let Some(value) = value {
             // The pick is kept by what it is, its name shown.
             inline.ty = shell.session.as_ref().map(|s| type_text(s.doc(), &value)).unwrap_or_default();
@@ -383,7 +383,7 @@ fn commit(shell: &mut Shell, next: bool) {
         }
     }
     let (cmd, params) = crate::uml_panel::command_of(&inline.edit);
-    match crate::uml_panel::write_in_sight(shell, &inline.edit, cmd, params) {
+    match shell.cx(|cx| crate::uml_panel::write_in_sight(cx, &inline.edit, cmd, params)) {
         Ok(_) => {
             shell.canvas.notice = None;
             if next && inline.edit.target.is_none() {
@@ -484,7 +484,7 @@ pub(crate) fn add_buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: R
         }
         ux::icon_in(&paint, b.shrink(3.0), &icons::PLUS, p.text_secondary);
         if resp.clicked() && !open(shell, class, kind, None) {
-            crate::uml_panel::open(shell, class, kind, None);
+            shell.cx(|cx| crate::uml_panel::open(cx, class, kind, None));
             shell.state.show_panel(crate::state::Panel::Properties);
         }
     }

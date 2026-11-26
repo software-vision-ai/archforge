@@ -8983,12 +8983,12 @@ fn kept_type_and_target_choices_are_built_again_for_another_session_of_the_same_
     let status = archforge_mof::Uuid::parse(&status).unwrap();
     let read = |h: &mut Harness<'static, Shell>| {
         let s = h.state_mut();
-        let choices = crate::uml_panel::choices_for_menu(s, None);
+        let choices = s.cx(|cx| crate::uml_panel::choices_for_menu(cx, None));
         let invoice = choices.labels.iter().any(|l| l == "Invoice");
-        crate::uml_panel::keep_choices(s, choices);
-        let targets = crate::uml_panel::take_targets(s, "status", |_| None, |st| st.by_uuid(status));
+        s.cx(|cx| crate::uml_panel::keep_choices(cx, choices));
+        let targets = s.cx(|cx| crate::uml_panel::take_targets(cx, "status", |_| None, |st| st.by_uuid(status)));
         let literals = targets.literals.clone().unwrap_or_default();
-        crate::uml_panel::keep_targets(s, targets);
+        s.cx(|cx| crate::uml_panel::keep_targets(cx, targets));
         (invoice, literals)
     };
     let first = h.state().build(&rows_now(&h)).unwrap();
@@ -18159,9 +18159,11 @@ fn the_narrow_context_reaches_the_shells_own_parts() {
     let held = crate::widgets::egui_id("cx.held");
     shell.frames = 41;
     let (session, problems, uis): (*const _, *const _, *const _) = (&shell.session, &shell.problems, shell.notation_uis);
+    let centre: *const _ = &shell.canvas;
     {
         let twin = shell.cx_ref();
         assert!(std::ptr::eq(twin.session, session) && std::ptr::eq(twin.notation_uis, uis) && !twin.looking_only, "the twin over the shell");
+        assert!(std::ptr::eq(twin.canvas, centre), "the twin reads the shell's canvas");
     }
     let made = shell.cx(|cx| {
         assert_eq!((cx.frames, cx.looking_only), (41, false));
@@ -18174,6 +18176,8 @@ fn the_narrow_context_reaches_the_shells_own_parts() {
         let made = crate::panels::run_cx(cx, "uml.package.add", serde_json::json!({ "name": "sales" })).unwrap();
         let twin = cx.cx_ref();
         assert!(std::ptr::eq(twin.session, session) && std::ptr::eq(twin.notation_uis, uis) && !twin.looking_only, "the twin over the context");
+        assert_eq!(twin.canvas.notice.as_deref(), Some("said on the canvas"), "the twin reads the context's canvas");
+        assert!(std::ptr::eq(twin.canvas, centre), "the twin's canvas is the shell's");
         made
     });
     assert_eq!(shell.panels.notice.as_deref(), Some("said in Properties"));
@@ -18216,9 +18220,9 @@ fn the_narrow_contexts_requests_run_in_order_once_after_the_call() {
     shell.explorer.expanded.clear();
     shell.cx(|cx| assert!(cx.requests.is_empty(), "a new call starts with nothing asked"));
     assert!(shell.explorer.expanded.is_empty(), "a request runs once");
-    // The old way in asks the same through the context.
-    crate::panels::select_element(shell, class);
-    assert!(shell.explorer.expanded.contains(&pkg), "the shell's way in carries the request out too");
+    // Asked alone in a context of its own, the rows open as that call returns.
+    shell.cx(|cx| crate::panels::select_element_cx(cx, class));
+    assert!(shell.explorer.expanded.contains(&pkg), "a context of its own carries the request out too");
 }
 
 /// The narrow context reaches each notation's own state, the shell's: what is changed through it
@@ -18300,6 +18304,28 @@ fn the_narrow_context_opens_a_new_name_in_models() {
     (shell.explorer.filter, shell.explorer.rename, shell.explorer.focused) = ("order".into(), None, false);
     shell.cx(|_| ());
     assert_eq!((shell.explorer.filter.as_str(), &shell.explorer.rename, shell.explorer.focused), ("order", &None, false), "a request runs once");
+}
+
+/// A removal the narrow context asks the delete dialog about opens the dialog once the call
+/// returns; of two asked in one call the one asked last is asked, as the requests run in the order
+/// asked, and a new call asks nothing again.
+#[test]
+fn the_narrow_context_opens_the_delete_dialog_asked_last() {
+    use crate::cx::Request;
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let shell = h.state_mut();
+    let asked = |name: &str, id: u8| crate::explorer::Delete { ids: vec![archforge_mof::Uuid([id; 16])], name: name.into(), ..Default::default() };
+    shell.explorer.delete = None;
+    shell.cx(|cx| cx.requests.push(Request::AskDelete(asked("Order", 1))));
+    assert_eq!(shell.explorer.delete, Some(asked("Order", 1)), "the dialog asks about Order");
+    shell.cx(|cx| {
+        cx.requests.push(Request::AskDelete(asked("Customer", 2)));
+        cx.requests.push(Request::AskDelete(asked("Payment", 3)));
+    });
+    assert_eq!(shell.explorer.delete, Some(asked("Payment", 3)), "the removal asked last is asked");
+    shell.explorer.delete = None;
+    shell.cx(|_| ());
+    assert_eq!(shell.explorer.delete, None, "a request runs once");
 }
 
 /// The shared removals ask the removed element's notation what to say (AR-789): Delete on a line
@@ -18413,13 +18439,13 @@ fn a_row_properties_selects_opens_the_rows_its_notation_names() {
         ("a view", view, BTreeSet::from([schema])),
     ] {
         h.state_mut().explorer.expanded.clear();
-        crate::panels::select_element(h.state_mut(), element);
+        h.state_mut().cx(|cx| crate::panels::select_element_cx(cx, element));
         assert_eq!(h.state().explorer.expanded.iter().copied().collect::<BTreeSet<_>>(), rows, "{what}");
     }
     let (mut h, ..) = sketch_harness();
     let (sales, party) = (find(&h, "sales"), find(&h, "Party"));
     h.state_mut().explorer.expanded.clear();
-    crate::panels::select_element(h.state_mut(), party);
+    h.state_mut().cx(|cx| crate::panels::select_element_cx(cx, party));
     assert_eq!(h.state().explorer.expanded.iter().copied().collect::<Vec<_>>(), [sales], "the class's package");
     assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 1, "and it is selected");
 }
@@ -18730,7 +18756,7 @@ fn a_class_takes_attributes_in_properties_typed_checked_moved_and_removed_each_o
     let row = format!("workspace.properties.attribute.{rating}");
     let at = rect_of(&h, &row).left_center() + egui::vec2(20.0, 0.0);
     click(&mut h, at);
-    assert_eq!(crate::panels::selected_id(h.state()), Some(rating));
+    assert_eq!(crate::panels::selected_id_cx(&h.state().cx_ref()), Some(rating));
     assert!(painted(&h).iter().any(|t| t == "Attributes · 3"), "the class's panel shows for its attribute");
     // Its edit button opens the editor in its place; a multiplicity that does not read is refused.
     let at = rect_of(&h, &format!("{row}.edit")).center();
@@ -24351,7 +24377,7 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         let authorise = member(&h, "Payment", "authorise", true);
         select(&mut h, payment_id);
         let authorise_id = uuid(&h, authorise);
-        crate::uml_panel::open(h.state_mut(), payment_id, MemberKind::Operation, Some(authorise_id));
+        h.state_mut().cx(|cx| crate::uml_panel::open(cx, payment_id, MemberKind::Operation, Some(authorise_id)));
         h.run();
         // The editor's own box, beside the classifier's: the one its explanation describes.
         let member_node = |h: &Harness<'static, Shell>| {
@@ -24388,7 +24414,7 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
             h.state_mut().session.as_mut().unwrap().execute("uml.attribute.add", &params).unwrap().value["id"].as_str().unwrap().to_string();
         let card_amount = archforge_mof::Uuid::parse(&card_amount).unwrap();
         select(&mut h, payment_id);
-        crate::uml_panel::open(h.state_mut(), payment_id, MemberKind::Attribute, Some(amount_id));
+        h.state_mut().cx(|cx| crate::uml_panel::open(cx, payment_id, MemberKind::Attribute, Some(amount_id)));
         h.run();
         let before = revision(&h);
         let at = rect_of(&h, MEMBER_LEAF_ID).center();
@@ -24409,7 +24435,7 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         let leaf = serde_json::json!({ "attribute": amount_id.to_string(), "leaf": true });
         h.state_mut().session.as_mut().unwrap().execute("uml.attribute.set", &leaf).unwrap();
         select(&mut h, card_id);
-        crate::uml_panel::open(h.state_mut(), card_id, MemberKind::Attribute, Some(card_amount));
+        h.state_mut().cx(|cx| crate::uml_panel::open(cx, card_id, MemberKind::Attribute, Some(card_amount)));
         h.run();
         let at = rect_of(&h, "workspace.properties.member.redefines").center();
         click(&mut h, at);
@@ -24427,7 +24453,7 @@ fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
         uml_of_mut(h.state_mut()).member = None;
         let clear = serde_json::json!({ "attribute": amount_id.to_string(), "leaf": false });
         h.state_mut().session.as_mut().unwrap().execute("uml.attribute.set", &clear).unwrap();
-        crate::uml_panel::open(h.state_mut(), card_id, MemberKind::Attribute, Some(card_amount));
+        h.state_mut().cx(|cx| crate::uml_panel::open(cx, card_id, MemberKind::Attribute, Some(card_amount)));
         h.run();
         let at = rect_of(&h, "workspace.properties.member.redefines").center();
         click(&mut h, at);
@@ -25824,7 +25850,7 @@ fn a_relationship_refused_on_a_class_diagram_says_why_in_plain_words() {
             let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
             let revision = h.state().session.as_ref().unwrap().revision();
             uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::Dependency;
-            crate::uml_relate::connect(h.state_mut(), d, node, node);
+            h.state_mut().cx(|cx| crate::uml_relate::connect(cx, d, node, node));
             h.run();
             // The sentence as the catalogue words it: the kind, with a capital, in its template.
             let class = crate::i18n::tr_ctx("refusal", "a class");
@@ -30371,7 +30397,7 @@ fn a_moved_end_drops_what_it_no_longer_subsets_and_says_so() {
         let item = st.by_uuid(archforge_mof::Uuid::parse(&made["Item"]).unwrap()).unwrap();
         let node = archforge_diagram::views_of(st, item).2.first().and_then(|n| st.uuid(*n).ok()).unwrap();
         let at = h.state().session.as_ref().unwrap().token();
-        crate::uml_relate::reconnect(h.state_mut(), archforge_mof::Uuid::parse(&holds).unwrap(), true, node, at);
+        h.state_mut().cx(|cx| crate::uml_relate::reconnect(cx, archforge_mof::Uuid::parse(&holds).unwrap(), true, node, at));
         h.run();
         assert_eq!(h.state().canvas.notice.as_deref(), Some("The moved ends no longer subset or redefine lines, so those were dropped."));
         assert!(
@@ -31845,6 +31871,60 @@ fn a_new_nested_classifier_is_named_in_models_once_the_call_returns() {
     assert_eq!((shell.state.explorer, shell.state.explorer_collapsed), (Explorer::Models, false), "Models shows, unfolded");
 }
 
+/// A stereotype made in a profile through the narrow context, as New ▸ Stereotype makes it, asks
+/// Models, in this order, to open the rows above it, to open its name for typing and to show
+/// itself, and Models does all three once the call returns (AR-134, F2).
+#[test]
+fn a_new_stereotype_is_named_in_models_once_the_call_returns() {
+    use crate::cx::Request;
+    use crate::state::Explorer;
+    let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let (_, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+    let persistence = archforge_mof::Uuid::parse(&persistence).unwrap();
+    let shell = h.state_mut();
+    let profile = shell.session.as_ref().unwrap().doc().by_uuid(persistence).unwrap();
+    shell.explorer.expanded.clear();
+    (shell.explorer.filter, shell.explorer.rename, shell.explorer.focused) = ("zzz".into(), None, false);
+    (shell.state.explorer, shell.state.explorer_collapsed) = (Explorer::Diagrams, true);
+    let (made, asked) = shell.cx(|cx| {
+        let made = crate::uml_profiles::add_inside(cx, "stereotype", profile).expect("offered").expect("made");
+        (made, cx.requests.clone())
+    });
+    let [Request::ExpandRows(rows), Request::NameInModels(named, name), Request::ShowExplorer(Explorer::Models)] = &asked[..] else {
+        panic!("the rows, the name, then Models: {asked:?}")
+    };
+    assert!(rows.contains(&persistence) && *named == made && name == "Stereotype 1", "{asked:?}");
+    assert!(rows.iter().all(|row| shell.explorer.expanded.contains(row)), "the rows above it open");
+    assert_eq!(shell.explorer.rename, Some(crate::explorer::Rename::fresh(made, "Stereotype 1".into())), "its name open for typing");
+    assert!(shell.explorer.filter.is_empty() && shell.explorer.focused, "listed, with the keyboard");
+    assert_eq!((shell.state.explorer, shell.state.explorer_collapsed), (Explorer::Models, false), "Models shows, unfolded");
+}
+
+/// The Relationship tool armed with N-ary association draws by clicks on a class diagram only: not
+/// on an ER diagram, whose own Relationship tool has the same key, and not with no diagram open
+/// (AR-128).
+#[test]
+fn the_n_ary_tool_is_armed_on_a_class_diagram_only() {
+    let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let class_diagram = h.state().canvas.active.expect("the class diagram is open");
+    let er_diagram = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let shop = s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value["id"].as_str().unwrap().to_string();
+        let d = s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" })).unwrap().value;
+        archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
+    };
+    let armed_on = |shell: &mut Shell, d: Option<archforge_mof::Uuid>| {
+        shell.canvas.active = d;
+        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        uml_of_mut(shell).relation = crate::uml_relate::Relate::NAry;
+        crate::uml_nary::armed(&shell.cx_ref())
+    };
+    let shell = h.state_mut();
+    assert!(armed_on(shell, Some(class_diagram)), "on the class diagram");
+    assert!(!armed_on(shell, Some(er_diagram)), "not on an ER diagram");
+    assert!(!armed_on(shell, None), "not with no diagram open");
+}
+
 /// Repository, Order and Entity (Order specializes it) in the package Shop, on two class diagrams,
 /// the first open and Repository selected with Properties shown (AR-130). Gives the ids by name:
 /// Repository, Order, Entity, diagram, second.
@@ -32142,7 +32222,7 @@ fn a_template_binding_is_drawn_and_applied_from_its_draft() {
         uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::TemplateBinding;
         let draw = |h: &mut Harness<'static, Shell>| {
             let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
-            crate::uml_relate::connect(h.state_mut(), d, from, to);
+            h.state_mut().cx(|cx| crate::uml_relate::connect(cx, d, from, to));
             h.run();
         };
         // Another panel, folded away, gives way to the draft in Properties.
@@ -32674,7 +32754,7 @@ fn the_kind_takes_its_drawings_keys_first_and_ers_takes_none() {
         uml_of_mut(shell).relation = crate::uml_relate::Relate::NAry;
         let customer = node_here(shell, &ids["Customer"]);
         let node = shell.session.as_ref().unwrap().doc().uuid(customer).unwrap();
-        crate::uml_nary::click(shell, d, node, false);
+        shell.cx(|cx| crate::uml_nary::click(cx, d, node, false));
         assert!(uml_of(shell).nary.is_some(), "{theme:?}: a drawing under way");
         assert!(!escape(shell, &crate::er_kind::ErKind), "{theme:?}: ER's kind takes none");
         assert!(uml_of(shell).nary.is_some(), "{theme:?}: and leaves the drawing");
@@ -32931,7 +33011,7 @@ fn umls_overlays_go_at_their_layers() {
         let (mut h, _, (from, to)) = binding_sample(theme);
         uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::TemplateBinding;
         let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
-        crate::uml_relate::connect(h.state_mut(), d, from, to);
+        h.state_mut().cx(|cx| crate::uml_relate::connect(cx, d, from, to));
         h.run();
         for layer in all {
             let (shapes, ids) = overlaid(&mut h, &crate::uml_ui::UmlUi, layer);
@@ -33106,7 +33186,7 @@ fn the_canvas_draws_a_template_bindings_draft_with_its_arrow_at_the_template() {
         assert!(accent_segments(&h).is_empty(), "{theme:?}: nothing drafted yet");
         uml_of_mut(h.state_mut()).relation = crate::uml_relate::Relate::TemplateBinding;
         let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
-        crate::uml_relate::connect(h.state_mut(), d, from, to);
+        h.state_mut().cx(|cx| crate::uml_relate::connect(cx, d, from, to));
         h.run();
         let segments = accent_segments(&h);
         assert!(segments.len() > 3, "{theme:?}: dashes and an arrow, {segments:?}");
@@ -33962,6 +34042,25 @@ fn add_end_from_the_plus_takes_the_next_class_clicked() {
     assert!(uml_of(h.state()).nary.is_some(), "armed");
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert!(uml_of(h.state()).nary.is_none(), "Escape cancels Add end");
+    // Delete from the model asks first, the dialog naming the association asked from its diamond.
+    h.run();
+    let at = card(&h, &ids["diamond"]);
+    right_click(&mut h, at);
+    let at = rect_of(&h, "workspace.canvas.menu.delete").center();
+    click(&mut h, at);
+    let asked = h.state().explorer.delete.clone().expect("the dialog asks");
+    let diamond = archforge_mof::Uuid::parse(&ids["diamond"]).unwrap();
+    assert_eq!((asked.name.as_str(), asked.node), ("recommends", Some(diamond)), "{asked:?}");
+    let at = rect_of(&h, "workspace.explorer.delete.cancel").center();
+    click(&mut h, at);
+    assert_eq!(naries(&h).len(), 1, "nothing deleted before the dialog is confirmed");
+    // Remove from this diagram takes the diamond off the diagram, the association kept.
+    let at = card(&h, &ids["diamond"]);
+    right_click(&mut h, at);
+    let at = rect_of(&h, "workspace.canvas.menu.remove").center();
+    click(&mut h, at);
+    assert!(!ids_of(&h).contains(&format!("workspace.canvas.node.{}", ids["diamond"])), "the diamond left the diagram");
+    assert_eq!(naries(&h).len(), 1, "the association stays in the model");
 }
 
 /// A selected leg's class end drags onto another class, moving that end there with its leg; the
@@ -34356,7 +34455,7 @@ fn a_members_remove_asks_before_its_stereotype_applications_go() {
             archforge_uml::members::attributes(st, o).into_iter().find(|a| archforge_core::name_of(st, *a) == n).and_then(|a| st.uuid(a).ok())
         };
         let id_attr = member(&h, "id").unwrap();
-        crate::uml_panel::open(h.state_mut(), order, crate::uml_panel::MemberKind::Attribute, Some(id_attr));
+        h.state_mut().cx(|cx| crate::uml_panel::open(cx, order, crate::uml_panel::MemberKind::Attribute, Some(id_attr)));
         h.run();
         let before = h.state().session.as_ref().unwrap().revision();
         let at = rect_of(&h, "workspace.properties.member.remove").center();
@@ -34370,7 +34469,7 @@ fn a_members_remove_asks_before_its_stereotype_applications_go() {
         assert_eq!(member(&h, "id"), None, "{theme:?}: removed once confirmed");
         // One without an application goes at once.
         let placed = member(&h, "placedAt").unwrap();
-        crate::uml_panel::open(h.state_mut(), order, crate::uml_panel::MemberKind::Attribute, Some(placed));
+        h.state_mut().cx(|cx| crate::uml_panel::open(cx, order, crate::uml_panel::MemberKind::Attribute, Some(placed)));
         h.run();
         let at = rect_of(&h, "workspace.properties.member.remove").center();
         click(&mut h, at);
@@ -34490,7 +34589,7 @@ fn the_picker_keeps_its_keys_from_the_models_tree() {
             key(&mut h, k, egui::Modifiers::NONE);
             assert!(h.state().explorer.delete.is_none(), "{theme:?}: {k:?} asks Models to remove nothing");
             assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "{theme:?}: {k:?} removes nothing");
-            assert_eq!(crate::panels::selected_id(h.state()), Some(order), "{theme:?}: {k:?} leaves the class selected");
+            assert_eq!(crate::panels::selected_id_cx(&h.state().cx_ref()), Some(order), "{theme:?}: {k:?} leaves the class selected");
         }
         assert_eq!(uml_of(h.state()).stereotypes.filter, "e", "{theme:?}: Backspace edited the picker's filter");
     }

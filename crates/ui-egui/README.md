@@ -84,15 +84,18 @@ screens and the shared controls reach the shell through the narrow context (`cx`
 `forge-ux/adr/0002`): `cx::Ctx`, the parts they change, each borrowed apart by `Shell::cx` (the
 session, the panels' and the canvas's state, the automation registry, the notations and each
 one's own state, the problems, the frame count, the menu bar's hold on an inline editor, whether a
-version shows), its read-only twin `cx::CtxRef` (`Shell::cx_ref`), and `cx::Request`, what lies
+version shows), its read-only twin `cx::CtxRef` (`Shell::cx_ref`: the session, the canvas's
+state, the notations and their states, whether a version shows), and `cx::Request`, what lies
 outside it, which the shell carries out once the call returns, in order, each once: the Models
 tree's rows opened over a selected element, the centre leaving a version's details for what was
 opened (`canvas::open` opens at once), a panel of the right side shown, an explorer of the left
-side shown, and a new element's name opened for typing in Models. ER's screens take the context,
-and so do UML's leaf screens (`package_nav`, `uml_classifier`, `uml_bindings`, `uml_constraints`,
-`uml_nesting`, `uml_sets`, `uml_templates`); ER's kind and Properties (`er_kind`, `er_ui`) still
-take the shell from the interfaces and build the context once in each method, and UML's other
-screens build it around each call into a leaf screen. The controls that take it end in `_cx` (`panels::section_cx`,
+side shown, a new element's name opened for typing in Models, and the delete dialog opened on a
+removal. ER's screens take the context, and so do UML's leaf screens (`package_nav`,
+`uml_classifier`, `uml_bindings`, `uml_constraints`, `uml_nesting`, `uml_sets`, `uml_templates`)
+and its panel screens (`uml_panel`, `uml_relate`, `uml_profiles`, `uml_stereotypes`, `uml_nary`,
+`uml_qualifiers`); ER's kind and Properties (`er_kind`, `er_ui`) still take the shell from the
+interfaces and build the context once in each method, and UML's entry screens (`uml_ui`,
+`uml_inline`) build it around each call into the other UML screens. The controls that take it end in `_cx` (`panels::section_cx`,
 `panels::control_cx`, `menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old
 names over the whole shell forward to them until every caller has moved, and `home::control`
 stays the shell's own way to `panels::control_cx`.

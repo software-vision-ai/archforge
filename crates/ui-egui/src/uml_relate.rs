@@ -26,11 +26,13 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
 use crate::canvas::{Drawing, LineDrawn, along, exit_point};
-use crate::home::control;
+use crate::cx::{Ctx, CtxRef};
 use crate::i18n::{fmt, tr};
-use crate::panels::{Combo, ComboOut, FIELD, FieldOut, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
+use crate::panels::{
+    Combo, ComboOut, FIELD, FieldOut, PAD, Subject, check_cx, control_cx, editable_select_cx, menu_cx, run_cx, section_cx, select_field_cx,
+    text_field_cx,
+};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
@@ -213,13 +215,13 @@ fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: ux::Colour
 }
 
 /// The Relationship tool's face: the kind it draws, across its double-width button.
-pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, p: &Palette, b: Rect, ink: ux::Colour, active: bool) {
+pub(crate) fn tool_face(cx: &CtxRef, paint: &egui::Painter, p: &Palette, b: Rect, ink: ux::Colour, active: bool) {
     let fill = if active { p.accent_tint } else { p.surface };
     sample(
         paint,
         b.center() - vec2(24.0, 0.0),
         b.center() + vec2(24.0, 0.0),
-        uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default(),
+        uml(cx.notation_states).map(|uml| uml.relation).unwrap_or_default(),
         ink,
         fill,
     );
@@ -238,7 +240,7 @@ fn row_top(i: usize) -> f32 {
 
 /// The menu of kinds above the Relationship tool's chevron, the current one tinted and ticked; a
 /// pick chooses and closes it.
-pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, anchor: Rect) {
+pub(crate) fn popover(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, anchor: Rect) {
     let paint = ui.painter().clone();
     let size = vec2(248.0, row_top(Relate::ALL.len()) + 4.0 + 8.0);
     let x = (anchor.center().x - size.x / 2.0).clamp(r.left() + 8.0, (r.right() - size.x - 8.0).max(r.left() + 8.0));
@@ -248,7 +250,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     paint.rect_filled(m, 10.0, p.surface);
     paint.rect_stroke(m, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     ux::text(&paint, m.min + vec2(16.0, 14.0), &tr("Relationship").to_uppercase(), types::EYEBROW, p.text_secondary, Some(200.0));
-    let chosen = uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default();
+    let chosen = uml(cx.notation_states).map(|uml| uml.relation).unwrap_or_default();
     for (i, kind) in Relate::ALL.iter().enumerate() {
         let row = Rect::from_min_size(m.min + vec2(8.0, row_top(i)), vec2(size.x - 16.0, 34.0));
         if kind.after_separator() {
@@ -256,7 +258,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
             paint.line_segment([pos2(m.left() + 16.0, y), pos2(m.right() - 16.0, y)], Stroke::new(1.0, p.border));
         }
         let name = tr(kind.hint().unwrap_or(kind.word()));
-        let resp = control(shell, ui, &format!("workspace.relate.{}", kind.key()), "menu-item", row, true).accessible_name(name);
+        let resp = control_cx(cx, ui, &format!("workspace.relate.{}", kind.key()), "menu-item", row, true).accessible_name(name);
         let on = *kind == chosen;
         if on {
             paint.rect_filled(row, 6.0, p.accent_tint);
@@ -279,15 +281,15 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
             ux::icon_mid(&paint, row.right_center() - vec2(16.0, 0.0), &icons::TICK, p.accent);
         }
         if resp.clicked() {
-            if let Some(uml) = uml_mut(&mut shell.notation_states) {
+            if let Some(uml) = uml_mut(cx.notation_states) {
                 uml.relation = *kind;
             }
-            shell.canvas.popover = None;
+            cx.canvas.popover = None;
         }
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || anchor.contains(pos)));
     if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.canvas.popover = None;
+        cx.canvas.popover = None;
     }
 }
 
@@ -370,14 +372,14 @@ pub(crate) fn association_refusal(kind: Relate, store: &Store, element: Obj) -> 
 }
 
 /// Why the chosen kind starts no line at `element`, when it does not.
-pub(crate) fn start_problem(shell: &Shell, store: &Store, element: Obj) -> Option<String> {
-    kind_start_problem(uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default(), store, element)
+pub(crate) fn start_problem(cx: &CtxRef, store: &Store, element: Obj) -> Option<String> {
+    kind_start_problem(uml(cx.notation_states).map(|uml| uml.relation).unwrap_or_default(), store, element)
 }
 
 /// The Relationship tool's tooltip and accessible name when the kind it draws needs its direction
 /// said: none takes the tool's own.
-pub(crate) fn tool_hint(shell: &Shell) -> Option<String> {
-    uml(&shell.notation_states).and_then(|uml| uml.relation.hint()).map(tr)
+pub(crate) fn tool_hint(cx: &CtxRef) -> Option<String> {
+    uml(cx.notation_states).and_then(|uml| uml.relation.hint()).map(tr)
 }
 
 /// Draws the chosen kind between the classes of two nodes, its line on diagram `d` with its name
@@ -385,25 +387,25 @@ pub(crate) fn tool_hint(shell: &Shell) -> Option<String> {
 /// user's words where the shell knows the rule (a realization's, a generalization's, an
 /// association's at an enumeration, a data type or a primitive type). A dependency drawn again
 /// reuses the one that joins the two already, and several are refused rather than added to (AR-699).
-pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
-    shell.canvas.notice = None;
-    let kind = uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default();
+pub(crate) fn connect(cx: &mut Ctx, d: Obj, from_node: Uuid, to_node: Uuid) {
+    cx.canvas.notice = None;
+    let kind = uml(cx.notation_states).map(|uml| uml.relation).unwrap_or_default();
     // An n-ary association is drawn by clicks, never dragged (AR-128).
     if kind == Relate::NAry {
-        shell.canvas.notice = Some(tr("An n-ary association is drawn by clicking each class in turn"));
+        cx.canvas.notice = Some(tr("An n-ary association is drawn by clicking each class in turn"));
         return;
     }
-    let Some(session) = shell.session.as_mut() else { return };
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     // A realization refused draws nothing, and says why in the user's words.
     if kind == Relate::Realization
         && let Some(why) = realization_refusal(store, class_of_node(store, from_node), class_of_node(store, to_node), None)
     {
-        shell.canvas.notice = Some(why);
+        cx.canvas.notice = Some(why);
         return;
     }
     let (Some(from), Some(to)) = (class_of_node(store, from_node), class_of_node(store, to_node)) else {
-        shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
+        cx.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
     // An association to or from an enumeration, a data type or a primitive type draws nothing either, nor a generalization the
@@ -414,25 +416,25 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
         .or_else(|| class_end_refusal(kind, store, to))
         .or_else(|| (kind == Relate::Generalization).then(|| generalization_refusal(store, from, to, None)).flatten());
     if let Some(why) = refusal {
-        shell.canvas.notice = Some(why);
+        cx.canvas.notice = Some(why);
         return;
     }
     if kind == Relate::AssociationClass {
-        connect_class(shell, d, (from, from_node), (to, to_node), None);
+        connect_class(cx, d, (from, from_node), (to, to_node), None);
         return;
     }
     // A template binding writes nothing yet: its draft opens in Properties for the arguments (C3).
     if kind == Relate::TemplateBinding {
         match crate::uml_bindings::refusal(store, from, to, None) {
-            Some(why) => shell.canvas.notice = Some(why),
-            None => shell.cx(|cx| crate::uml_bindings::open_new(cx, d, (from_node, to_node), from, to)),
+            Some(why) => cx.canvas.notice = Some(why),
+            None => crate::uml_bindings::open_new(cx, d, (from_node, to_node), from, to),
         }
         return;
     }
     // A dependency drawn again reuses the one there is (AR-699); several, as a document of an
     // earlier version may hold, are never added to, and the canvas offers no choice among them yet.
     if kind == Relate::Dependency && archforge_uml::matches::existing_matches(store, archforge_uml::matches::Kind::Dependency, from, to).len() > 1 {
-        shell.canvas.notice = Some(tr("Several dependencies already join these two elements in this direction, so none was added."));
+        cx.canvas.notice = Some(tr("Several dependencies already join these two elements in this direction, so none was added."));
         return;
     }
     let (Ok(from), Ok(to), Ok(diagram)) = (store.uuid(from), store.uuid(to), store.uuid(d)) else { return };
@@ -453,12 +455,12 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
     match out {
         Ok(o) => {
             if let Some(id) = o.value.get(0).and_then(|v| v.get("id")).and_then(|v| v.as_str())
-                && let Err(e) = run(shell, "view.select", json!({ "ids": [id] }))
+                && let Err(e) = run_cx(cx, "view.select", json!({ "ids": [id] }))
             {
-                shell.canvas.notice = Some(e);
+                cx.canvas.notice = Some(e);
             }
         }
-        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -483,18 +485,18 @@ type NewEnd = (String, (f64, f64, f64, f64));
 /// element, its line and its card above the line's middle, as one undo step. The association class
 /// takes a fresh name in the first class's package, its card's name opens for typing; with a new
 /// class, that class's name does, as an association's new class's.
-pub(crate) fn connect_class(shell: &mut Shell, d: Obj, from: (Obj, Uuid), to: (Obj, Uuid), new: Option<NewEnd>) {
-    let Some(session) = shell.session.as_mut() else { return };
+pub(crate) fn connect_class(cx: &mut Ctx, d: Obj, from: (Obj, Uuid), to: (Obj, Uuid), new: Option<NewEnd>) {
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     let Some(package) = archforge_uml::nesting::home_package(store, from.0) else {
-        shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
+        cx.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
     let mut taken: Vec<String> =
         archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c)).collect();
     taken.extend(new.as_ref().map(|(n, _)| n.clone()));
     let Some(name) = crate::explorer::fresh_name(crate::uml_classifier::Classifier::AssociationClass.stem(), taken.into_iter(), false) else {
-        shell.canvas.notice = Some(tr("No free name is left"));
+        cx.canvas.notice = Some(tr("No free name is left"));
         return;
     };
     let rect_of = |node: Uuid| store.by_uuid(node).map(|n| archforge_diagram::grid::bounds_of(store, n));
@@ -503,7 +505,7 @@ pub(crate) fn connect_class(shell: &mut Shell, d: Obj, from: (Obj, Uuid), to: (O
         None => rect_of(to.1),
     };
     let (Some(from_rect), Some(to_rect)) = (rect_of(from.1), to_rect) else { return };
-    let (cx, cy, cw, ch) = card_place(from_rect, to_rect);
+    let (card_x, card_y, card_w, card_h) = card_place(from_rect, to_rect);
     let (Ok(diagram), Ok(from_id), Ok(home)) = (store.uuid(d), store.uuid(from.0), store.uuid(package)) else { return };
     let to_id = store.uuid(to.0).ok();
     let diagram_package = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()).and_then(|p| store.uuid(p).ok());
@@ -530,7 +532,10 @@ pub(crate) fn connect_class(shell: &mut Shell, d: Obj, from: (Obj, Uuid), to: (O
             "diagram.connect",
             &json!({ "diagram": diagram.to_string(), "element": element, "source": from.1.to_string(), "target": to_node }),
         )?;
-        b.execute("diagram.place", &json!({ "diagram": diagram.to_string(), "element": element, "x": cx, "y": cy, "width": cw, "height": ch }))?;
+        b.execute(
+            "diagram.place",
+            &json!({ "diagram": diagram.to_string(), "element": element, "x": card_x, "y": card_y, "width": card_w, "height": card_h }),
+        )?;
         Ok(())
     });
     match out {
@@ -540,17 +545,17 @@ pub(crate) fn connect_class(shell: &mut Shell, d: Obj, from: (Obj, Uuid), to: (O
             // and its card; else the association class, its line and its card.
             let (element, card) = if new.is_some() { (id_at(2), id_at(4)) } else { (id_at(0), id_at(2)) };
             let Some(element) = element else { return };
-            let _ = run(shell, "view.select", json!({ "ids": [element.to_string()] }));
+            let _ = run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
             let rename = match new {
                 Some((class_name, _)) => id_at(0).zip(id_at(1)).map(|(class, node)| (node, class, class_name)),
                 None => card.map(|card| (card, element, name)),
             };
             if let Some((node, entity, text)) = rename {
-                shell.canvas.rename = Some(crate::editing::NodeRename { node, entity, text, opened: true, refused: None });
-                shell.canvas.focused = true;
+                cx.canvas.rename = Some(crate::editing::NodeRename { node, entity, text, opened: true, refused: None });
+                cx.canvas.focused = true;
             }
         }
-        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -559,37 +564,37 @@ pub(crate) fn connect_class(shell: &mut Shell, d: Obj, from: (Obj, Uuid), to: (O
 /// an interface, the only kind an interface specializes, one out of an enumeration an enumeration,
 /// one out of a data type a data type, one out of a primitive type a primitive type, and a
 /// realization an interface, the only kind a class realizes.
-pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
-    shell.canvas.notice = None;
-    let kind = uml(&shell.notation_states).map(|uml| uml.relation).unwrap_or_default();
-    let Some(session) = shell.session.as_mut() else { return };
+pub(crate) fn connect_to_new(cx: &mut Ctx, d: Obj, from_node: Uuid, x: f64, y: f64) {
+    cx.canvas.notice = None;
+    let kind = uml(cx.notation_states).map(|uml| uml.relation).unwrap_or_default();
+    let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     let Some(package) = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()) else {
-        shell.canvas.notice = Some(tr("The diagram is of no package"));
+        cx.canvas.notice = Some(tr("The diagram is of no package"));
         return;
     };
     let Some(from) = class_of_node(store, from_node) else {
-        shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
+        cx.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
     if let Some(why) = kind_start_problem(kind, store, from) {
-        shell.canvas.notice = Some(why);
+        cx.canvas.notice = Some(why);
         return;
     }
     // A binding ends at a template that exists: empty canvas makes none.
     if kind == Relate::TemplateBinding {
-        shell.canvas.notice = Some(tr("A binding ends at a template: a class, an interface or a data type with template parameters"));
+        cx.canvas.notice = Some(tr("A binding ends at a template: a class, an interface or a data type with template parameters"));
         return;
     }
     if kind == Relate::AssociationClass {
         let names = archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c));
         let Some(name) = crate::explorer::fresh_name(crate::uml_classifier::Classifier::Class.stem(), names, false) else {
-            shell.canvas.notice = Some(tr("No free name is left"));
+            cx.canvas.notice = Some(tr("No free name is left"));
             return;
         };
         let (w, h) = crate::uml_classifier::Classifier::Class.size();
         let place = ((x - w / 2.0).round(), (y - h / 2.0).round(), w, h);
-        connect_class(shell, d, (from, from_node), (from, from_node), Some((name, place)));
+        connect_class(cx, d, (from, from_node), (from, from_node), Some((name, place)));
         return;
     }
     let (Ok(package_id), Ok(diagram), Ok(from_id)) = (store.uuid(package), store.uuid(d), store.uuid(from)) else { return };
@@ -603,7 +608,7 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
     };
     let names = archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c));
     let Some(name) = crate::explorer::fresh_name(made.stem(), names, false) else {
-        shell.canvas.notice = Some(tr("No free name is left"));
+        cx.canvas.notice = Some(tr("No free name is left"));
         return;
     };
     let (w, h) = made.size();
@@ -634,12 +639,12 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
         Ok(o) => {
             let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
             if let (Some(class), Some(node)) = (id_at(0), id_at(1)) {
-                let _ = run(shell, "view.select", json!({ "ids": [class.to_string()] }));
-                shell.canvas.rename = Some(crate::editing::NodeRename { node, entity: class, text: name, opened: true, refused: None });
-                shell.canvas.focused = true;
+                let _ = run_cx(cx, "view.select", json!({ "ids": [class.to_string()] }));
+                cx.canvas.rename = Some(crate::editing::NodeRename { node, entity: class, text: name, opened: true, refused: None });
+                cx.canvas.focused = true;
             }
         }
-        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -647,13 +652,13 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
 /// `at`, the revision the drag began on; dropped back on its own class it changes nothing, and a
 /// refusal is said at the canvas's top: a realization's, a generalization's, and an association's
 /// moved onto an enumeration, a data type or a primitive type, in the user's words.
-pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid, at: archforge_engine::Revision) {
-    shell.canvas.notice = None;
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+pub(crate) fn reconnect(cx: &mut Ctx, element: Uuid, source: bool, to_node: Uuid, at: archforge_engine::Revision) {
+    cx.canvas.notice = None;
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let line = store.by_uuid(element);
     // An n-ary association's leg moves its end onto another class (AR-128).
     if line.is_some_and(|l| archforge_uml::nary::association_of_end(store, l).is_some()) {
-        crate::uml_nary::reconnect_end(shell, element, to_node);
+        crate::uml_nary::reconnect_end(cx, element, to_node);
         return;
     }
     if let Some(r) = line.filter(|r| store.class_of(*r).ok() == Some(archforge_uml::INTERFACE_REALIZATION))
@@ -667,18 +672,18 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
             && moved != Some(if source { implementing } else { contract })
             && let Some(why) = realization_refusal(store, i, c, Some(r))
         {
-            shell.canvas.notice = Some(why);
+            cx.canvas.notice = Some(why);
             return;
         }
     }
     let Some(target) = class_of_node(store, to_node) else {
-        shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
+        cx.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
     if line.is_some_and(|l| store.class_of(l).ok() == Some(archforge_uml::ASSOCIATION))
         && let Some(why) = association_refusal(Relate::Association, store, target)
     {
-        shell.canvas.notice = Some(why);
+        cx.canvas.notice = Some(why);
         return;
     }
     // An association class's end moves onto another class only, never onto its own card.
@@ -689,7 +694,7 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
             class_end_refusal(Relate::AssociationClass, store, target)
         };
         if let Some(why) = why {
-            shell.canvas.notice = Some(why);
+            cx.canvas.notice = Some(why);
             return;
         }
     }
@@ -704,7 +709,7 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
         let why = crate::uml_bindings::refusal(store, b, t, Some(r))
             .or_else(|| (!source).then(|| crate::uml_bindings::needs_arguments(store, t)).flatten());
         if let Some(why) = why {
-            shell.canvas.notice = Some(why);
+            cx.canvas.notice = Some(why);
             return;
         }
     }
@@ -712,8 +717,8 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     if let Some(r) = line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::GENERALIZATION))
         && let Some(why) = crate::uml_sets::reconnect_refusal(store, r, target)
     {
-        shell.canvas.notice = Some(why.clone());
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        cx.canvas.notice = Some(why.clone());
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.set_refused = Some((element, why));
         }
         return;
@@ -722,7 +727,7 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     if let (Some(r), Some((specific, general))) = (line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::GENERALIZATION)), ends) {
         let (s, g) = if source { (target, general) } else { (specific, target) };
         if let Some(why) = generalization_refusal(store, s, g, Some(r)) {
-            shell.canvas.notice = Some(why);
+            cx.canvas.notice = Some(why);
             return;
         }
     }
@@ -732,17 +737,17 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     // when the end is dropped makes the drop stale (AR-697).
     let revision = json!({ "history": at.history, "revision": at.revision });
     let params = json!({ "relationship": element.to_string(), "end": end, "class": class.to_string(), "expected_revision": revision });
-    match run(shell, "uml.relationship.reconnect", params) {
+    match run_cx(cx, "uml.relationship.reconnect", params) {
         // What the moved ends no longer subset or redefine went in the same step: said.
         Ok(out) => {
             let names: Vec<&str> =
                 out.get("dropped").and_then(|d| d.as_array()).into_iter().flatten().filter_map(|d| d.get("name")?.as_str()).collect();
             if !names.is_empty() {
-                shell.canvas.notice =
+                cx.canvas.notice =
                     Some(fmt(&tr("The moved ends no longer subset or redefine {names}, so those were dropped."), &[("names", &names.join(", "))]));
             }
         }
-        Err(e) => shell.canvas.notice = Some(e),
+        Err(e) => cx.canvas.notice = Some(e),
     }
 }
 
@@ -793,8 +798,8 @@ impl EndsEdit {
 /// field would: the click that moves the selection draws the next subject before that field can
 /// see it lose the keyboard. The rest goes as Cancel: a refused role or multiplicity, Modifiers
 /// not Applied.
-pub(crate) fn finish_ends(shell: &mut Shell, subject: Option<Uuid>) {
-    let Some(edit) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.take_if(|e| Some(e.association) != subject)) else { return };
+pub(crate) fn finish_ends(cx: &mut Ctx, subject: Option<Uuid>) {
+    let Some(edit) = uml_mut(cx.notation_states).and_then(|uml| uml.ends.take_if(|e| Some(e.association) != subject)) else { return };
     let parse = archforge_uml::members::parse_multiplicity;
     for i in 0..2 {
         // What is left out keeps what the end has.
@@ -808,9 +813,9 @@ pub(crate) fn finish_ends(shell: &mut Shell, subject: Option<Uuid>) {
             params["multiplicity"] = json!(edit.multiplicity[i].trim());
         }
         if params.as_object().is_some_and(|fields| fields.len() > 2)
-            && let Err(e) = run(shell, "uml.association.set-end", params)
+            && let Err(e) = run_cx(cx, "uml.association.set-end", params)
         {
-            shell.panels.notice = Some(crate::panels::refused_on(shell, edit.association, e));
+            cx.panels.notice = Some(crate::panels::refused_on_cx(&cx.cx_ref(), edit.association, e));
         }
     }
 }
@@ -899,7 +904,7 @@ pub(crate) fn end_refusal(store: &Store, end: Obj, m: &EndModifiers) -> Option<(
 /// `typed` in end `end`'s multiplicity of association `id`, committed and refused, as a sample
 /// to look at.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn refuse_typed(shell: &mut Shell, id: Uuid, end: usize, typed: &str) -> Result<(), String> {
+pub(crate) fn refuse_typed(shell: &mut crate::Shell, id: Uuid, end: usize, typed: &str) -> Result<(), String> {
     let store = shell.session.as_ref().ok_or("no project is open")?.doc();
     let a = store.by_uuid(id).ok_or("no such association")?;
     let mut edit = ends_edit(store, a, id).ok_or("not an association")?;
@@ -944,14 +949,14 @@ fn aggregation_words() -> [String; 3] {
 /// A line's Properties: an association's or a dependency's name, its classes (a realization's
 /// implementing class and the interface it realizes), an association's ends; an association
 /// class's name, classes and ends, then its attributes and operations as a class's.
-pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
+pub(crate) fn body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let (Some(o), Some(id)) = (subject.obj, subject.id) else { return };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     // An n-ary association's panel is its own: its name and package, then its ends (AR-128).
     if archforge_uml::nary::is_nary(store, o) {
-        crate::uml_nary::body(shell, ui, p, r, y, subject, o, id);
+        crate::uml_nary::body(cx, ui, p, r, y, subject, o, id);
         return;
     }
     let class = store.class_of(o).ok();
@@ -964,7 +969,7 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     let (rename, key) =
         if association_class { ("uml.association-class.rename", "association_class") } else { ("uml.relationship.rename", "relationship") };
     if class != Some(archforge_uml::GENERALIZATION) && class != Some(archforge_uml::INTERFACE_REALIZATION) {
-        crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, rename, key);
+        crate::panels::name_field_cx(cx, ui, p, pos2(r.left() + PAD, y), width, subject, rename, key);
         y += 17.0 + FIELD + 12.0;
     }
     // The classes it joins, read only: its ends drag onto another class on the canvas.
@@ -981,7 +986,7 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
         let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(half, FIELD));
         paint.rect_filled(field, 6.0, p.field);
         ux::text_mid(&paint, field.left() + 8.0, field.center().y, &value, types::SMALL, p.text_secondary, Some((half - 16.0).max(0.0)));
-        control(shell, ui, &format!("workspace.properties.relationship.{}", ["from", "to"][i]), "field", field, false);
+        control_cx(cx, ui, &format!("workspace.properties.relationship.{}", ["from", "to"][i]), "field", field, false);
     }
     y += 17.0 + FIELD + 8.0;
     // A realization's ends each move onto their own kind.
@@ -997,21 +1002,21 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     y += (height + 12.0).max(28.0);
     // Its stereotypes, an association's, an association class's or a generalization's, or its
     // selected member's (AR-135, F3).
-    y = crate::uml_stereotypes::section_for(shell, ui, p, r, y, o);
+    y = crate::uml_stereotypes::section_for(cx, ui, p, r, y, o);
     if class.is_some_and(archforge_uml::is_association) {
-        y = ends_sections(shell, ui, p, r, y, o, id);
+        y = ends_sections(cx, ui, p, r, y, o, id);
     }
     // The sets a generalization is in (AR-129).
     if class == Some(archforge_uml::GENERALIZATION) {
-        shell.cx(|cx| crate::uml_sets::generalization_section(cx, ui, p, r, y, o, id));
+        crate::uml_sets::generalization_section(cx, ui, p, r, y, o, id);
     }
     if association_class {
         use crate::uml_panel::{MemberKind, members_section};
-        let y = members_section(shell, ui, p, r, y, o, id, MemberKind::Attribute);
-        let y = members_section(shell, ui, p, r, y + 4.0, o, id, MemberKind::Operation);
+        let y = members_section(cx, ui, p, r, y, o, id, MemberKind::Attribute);
+        let y = members_section(cx, ui, p, r, y + 4.0, o, id, MemberKind::Operation);
         // Its constraints, as the class it is (AR-133).
-        if shell.session.as_ref().is_some_and(|s| archforge_uml::constraints::is_context(s.doc(), o)) {
-            shell.cx(|cx| crate::uml_constraints::section_of(cx, ui, p, r, y + 4.0, o, id));
+        if cx.session.as_ref().is_some_and(|s| archforge_uml::constraints::is_context(s.doc(), o)) {
+            crate::uml_constraints::section_of(cx, ui, p, r, y + 4.0, o, id);
         }
     }
 }
@@ -1023,12 +1028,12 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
 /// not read stays in its field, with why under it, and the model keeps the one it had. Gives the y
 /// under the ends.
 #[allow(clippy::too_many_arguments, reason = "the ends are drawn into the panel for their association")]
-fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, a: Obj, id: Uuid) -> f32 {
+fn ends_sections(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, a: Obj, id: Uuid) -> f32 {
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
     let Some(ends) = archforge_uml::figures::member_ends(store, a) else { return y };
-    if uml(&shell.notation_states).and_then(|uml| uml.ends.as_ref()).is_none_or(|e| e.association != id)
-        && let Some(uml) = uml_mut(&mut shell.notation_states)
+    if uml(cx.notation_states).and_then(|uml| uml.ends.as_ref()).is_none_or(|e| e.association != id)
+        && let Some(uml) = uml_mut(cx.notation_states)
     {
         uml.ends = ends_edit(store, a, id);
     }
@@ -1040,7 +1045,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let roles = ends.map(|e| archforge_core::name_of(store, e));
     let written = ends.map(|e| archforge_uml::figures::multiplicity(store, e));
     let modifiers = ends.map(|e| EndModifiers::of(store, e));
-    let Some(mut edit) = uml(&shell.notation_states).and_then(|uml| uml.ends.clone()) else { return y };
+    let Some(mut edit) = uml(cx.notation_states).and_then(|uml| uml.ends.clone()) else { return y };
     // A change the model took elsewhere (an undo, a redo, another view) reaches the fields.
     for i in 0..2 {
         if edit.written_role[i] != roles[i] {
@@ -1062,12 +1067,12 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let words = aggregation_words();
     for i in 0..2 {
         let title = fmt(&tr("End at {class}"), &[("class", &classes[i])]);
-        y = section(shell, ui, p, r, y, &title, None).unwrap_or(y + 50.0) - 6.0;
+        y = section_cx(cx, ui, p, r, y, &title, None).unwrap_or(y + 50.0) - 6.0;
         let half = ((width - 8.0) / 2.0).max(0.0);
         let key = format!("workspace.properties.end.{i}");
         let at = pos2(r.left() + PAD, y);
-        let role_out = crate::panels::edit_field(
-            shell,
+        let role_out = crate::panels::edit_field_cx(
+            cx,
             ui,
             p,
             at,
@@ -1087,7 +1092,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         let typed = edit.multiplicity[i].clone();
         let refusal = edit.refused[i].clone();
         // Where the other end is qualified, this end's multiplicity counts per qualifier value (AR-127).
-        let per_value = shell.session.as_ref().and_then(|s| crate::uml_qualifiers::per_value_note(s.doc(), ends[1 - i], ends[i]));
+        let per_value = cx.session.as_ref().and_then(|s| crate::uml_qualifiers::per_value_note(s.doc(), ends[1 - i], ends[i]));
         let m_label = if per_value.is_some() { tr("Per qualifier value") } else { tr("Multiplicity") };
         let combo = Combo {
             id: &format!("{key}.multiplicity"),
@@ -1104,7 +1109,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             menu: menus::END_MULTIPLICITY.at(i),
             limit: 24,
         };
-        let asked = editable_select(shell, ui, p, at + vec2(half + 8.0, 0.0), half, &mut edit.multiplicity[i], &combo);
+        let asked = editable_select_cx(cx, ui, p, at + vec2(half + 8.0, 0.0), half, &mut edit.multiplicity[i], &combo);
         if edit.multiplicity[i] != typed {
             // Typing again takes the reason away until the next commit.
             edit.refused[i] = None;
@@ -1162,11 +1167,11 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         let whole = aggregations[1 - i] != 0;
         let mut nav = navigable[i] && !whole;
         if !whole {
-            check(shell, ui, p, pos2(r.left() + PAD, y + 6.0), &format!("{key}.navigable"), &tr("Navigable"), &mut nav);
+            check_cx(cx, ui, p, pos2(r.left() + PAD, y + 6.0), &format!("{key}.navigable"), &tr("Navigable"), &mut nav);
             y += 32.0;
         }
-        let field = select_field(
-            shell,
+        let field = select_field_cx(
+            cx,
             ui,
             p,
             pos2(r.left() + PAD, y),
@@ -1178,8 +1183,8 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         );
         y += 17.0 + FIELD + 16.0;
         let mut agg = aggregations[i];
-        if shell.panels.menu == Some(menus::END_AGGREGATION.at(i))
-            && let Some(k) = menu(shell, ui, p, field, &format!("{key}.aggregation"), &words)
+        if cx.panels.menu == Some(menus::END_AGGREGATION.at(i))
+            && let Some(k) = menu_cx(cx, ui, p, field, &format!("{key}.aggregation"), &words)
         {
             agg = k;
         }
@@ -1195,48 +1200,48 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         );
         let title = tr("Modifiers");
         let g = ux::text(&ui.painter().clone(), more.min + vec2(22.0, 2.0), &title, types::UI, p.text, Some((width - 22.0).max(0.0)));
-        let summary = shell.session.as_ref().map(|s| modifiers_summary(s.doc(), ends[i])).unwrap_or_default();
+        let summary = cx.session.as_ref().map(|s| modifiers_summary(s.doc(), ends[i])).unwrap_or_default();
         if !open {
             let x = g.right() + 10.0;
             ux::text(&ui.painter().clone(), pos2(x, more.top() + 3.0), &summary, types::SMALL, p.text_muted, Some((more.right() - x).max(0.0)));
         }
         let name = if open { title.clone() } else { format!("{title}: {summary}") };
-        if control(shell, ui, &format!("{key}.modifiers"), "disclosure", more, true).accessible_name(name).clicked() {
+        if control_cx(cx, ui, &format!("{key}.modifiers"), "disclosure", more, true).accessible_name(name).clicked() {
             edit.modifiers_open[i] = !open;
         }
         y += 28.0;
-        let (next, asked) = if open { end_modifiers(shell, ui, p, r, y, &mut edit, ends[i], i) } else { (y, Asked::Nothing) };
+        let (next, asked) = if open { end_modifiers(cx, ui, p, r, y, &mut edit, ends[i], i) } else { (y, Asked::Nothing) };
         y = next;
         // Its qualifiers, with their editor (AR-127).
-        y = crate::uml_qualifiers::section_of(shell, ui, p, r, y, id, i, ends[i]);
+        y = crate::uml_qualifiers::section_of(cx, ui, p, r, y, id, i, ends[i]);
         // Its stereotypes, as an attribute's (AR-135).
-        y = crate::uml_stereotypes::end_section(shell, ui, p, r, y, ends[i], i);
-        if let Some(uml) = uml_mut(&mut shell.notation_states) {
+        y = crate::uml_stereotypes::end_section(cx, ui, p, r, y, ends[i], i);
+        if let Some(uml) = uml_mut(cx.notation_states) {
             uml.ends = Some(edit.clone());
         }
         match asked {
             Asked::Nothing => {}
             Asked::Cancel => {
-                if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
+                if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.ends.as_mut()) {
                     e.modifiers[i] = e.written_modifiers[i].clone();
                     e.modifier_refused[i] = None;
                 }
                 return y;
             }
             Asked::Apply => {
-                apply_end_modifiers(shell, id, ends[i], i, &roles[i], &written[i], navigable[i] && !whole, aggregations[i]);
+                apply_end_modifiers(cx, id, ends[i], i, &roles[i], &written[i], navigable[i] && !whole, aggregations[i]);
                 return y;
             }
         }
-        if role && let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
+        if role && let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.ends.as_mut()) {
             e.role_tried[i] = Some(edit.role[i].trim().to_string());
         }
         // An association class's end takes no role one of its attributes is named, as they share
         // its names: said in the user's words, and nothing is written.
-        let clash = shell.session.as_ref().and_then(|s| archforge_uml::members::attribute_clash(s.doc(), a, edit.role[i].trim()));
+        let clash = cx.session.as_ref().and_then(|s| archforge_uml::members::attribute_clash(s.doc(), a, edit.role[i].trim()));
         if role && let Some(attribute) = clash {
-            let named = shell.session.as_ref().map(|s| archforge_core::name_of(s.doc(), attribute)).unwrap_or_default();
-            shell.panels.notice =
+            let named = cx.session.as_ref().map(|s| archforge_core::name_of(s.doc(), attribute)).unwrap_or_default();
+            cx.panels.notice =
                 Some(fmt(&tr("This association class has an attribute named {name}; an end's role takes another name."), &[("name", &named)]));
             return y;
         }
@@ -1254,10 +1259,10 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             // The modifiers go as the model has them: only Apply writes the edited ones.
             let mut params = params;
             modifiers[i].put_into(&mut params);
-            match run(shell, "uml.association.set-end", params) {
+            match run_cx(cx, "uml.association.set-end", params) {
                 Ok(_) => {
-                    shell.panels.notice = None;
-                    if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
+                    cx.panels.notice = None;
+                    if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.ends.as_mut()) {
                         // A refused multiplicity still in its field keeps its reason while
                         // another field of the end is written.
                         if write_multiplicity {
@@ -1269,14 +1274,14 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                 // A multiplicity the model refuses (a composition's whole allows one at most) is
                 // said under its field; anything else at the panel's foot.
                 Err(e) if write_multiplicity => {
-                    if let Some(ends) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
+                    if let Some(ends) = uml_mut(cx.notation_states).and_then(|uml| uml.ends.as_mut()) {
                         ends.refused[i] = Some(e);
                     }
                     if ui.input(|inp| inp.key_pressed(egui::Key::Enter)) {
                         ui.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&format!("{key}.multiplicity"))));
                     }
                 }
-                Err(e) => shell.panels.notice = Some(e),
+                Err(e) => cx.panels.notice = Some(e),
             }
             return y;
         }
@@ -1316,7 +1321,7 @@ enum Asked {
 /// y under it and what was asked; Escape, with no menu open and something edited, brings the
 /// model's back as Cancel does.
 #[allow(clippy::too_many_arguments, reason = "the block is drawn into the end's section of the panel")]
-fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, edit: &mut EndsEdit, end: Obj, i: usize) -> (f32, Asked) {
+fn end_modifiers(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, edit: &mut EndsEdit, end: Obj, i: usize) -> (f32, Asked) {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let half = ((width - 8.0) / 2.0).max(0.0);
@@ -1336,13 +1341,13 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             _ => y,
         }
     };
-    let Some((end_id, role)) = shell.session.as_ref().and_then(|s| Some((s.doc().uuid(end).ok()?, archforge_core::name_of(s.doc(), end)))) else {
+    let Some((end_id, role)) = cx.session.as_ref().and_then(|s| Some((s.doc().uuid(end).ok()?, archforge_core::name_of(s.doc(), end)))) else {
         return (y, Asked::Nothing);
     };
     // The choices, built once per state of the project: Subsets', Redefines' and the literals of
     // the end's type when it is an enumeration.
     let targets = crate::uml_panel::take_targets(
-        shell,
+        cx,
         &format!("end|{end_id}"),
         |store| Some(archforge_uml::modifiers::Shape::of(store, end)),
         |store| store.get(end, archforge_uml::typed_element::TYPE).ok().and_then(|v| v.as_ref()),
@@ -1355,24 +1360,24 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let default = match &targets.literals {
         Some(_) => {
             let shown = if m.default.trim().is_empty() { tr("None") } else { m.default.clone() };
-            Some(select_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &shown, menus::END_DEFAULT.at(i)))
+            Some(select_field_cx(cx, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &shown, menus::END_DEFAULT.at(i)))
         }
         None => {
-            enter = text_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &mut m.default, limit, false, false);
+            enter = text_field_cx(cx, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &mut m.default, limit, false, false);
             None
         }
     };
     y += 17.0 + FIELD + 10.0;
     y = under(&paint, y, &["default"]);
-    check(shell, ui, p, pos2(left, y), &format!("{key}.static"), &tr("Static"), &mut m.is_static);
-    check(shell, ui, p, pos2(right, y), &format!("{key}.derived"), &tr("Derived"), &mut m.derived);
+    check_cx(cx, ui, p, pos2(left, y), &format!("{key}.static"), &tr("Static"), &mut m.is_static);
+    check_cx(cx, ui, p, pos2(right, y), &format!("{key}.derived"), &tr("Derived"), &mut m.derived);
     y += 26.0;
-    check(shell, ui, p, pos2(left, y), &format!("{key}.read-only"), &tr("Read only"), &mut m.read_only);
-    check(shell, ui, p, pos2(right, y), &format!("{key}.ordered"), &tr("Ordered"), &mut m.ordered);
+    check_cx(cx, ui, p, pos2(left, y), &format!("{key}.read-only"), &tr("Read only"), &mut m.read_only);
+    check_cx(cx, ui, p, pos2(right, y), &format!("{key}.ordered"), &tr("Ordered"), &mut m.ordered);
     y += 26.0;
-    check(shell, ui, p, pos2(left, y), &format!("{key}.unique"), &tr("Unique"), &mut m.unique);
+    check_cx(cx, ui, p, pos2(left, y), &format!("{key}.unique"), &tr("Unique"), &mut m.unique);
     y += 16.0 + 16.0;
-    let shown = |ids: &[Uuid]| match shell.session.as_ref() {
+    let shown = |ids: &[Uuid]| match cx.session.as_ref() {
         Some(s) if !ids.is_empty() => {
             ids.iter().filter_map(|u| s.doc().by_uuid(*u)).map(|o| archforge_core::name_of(s.doc(), o)).collect::<Vec<_>>().join(", ")
         }
@@ -1380,9 +1385,9 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     };
     let (subsets_shown, redefines_shown) = (shown(&m.subsets), shown(&m.redefines));
     let subsets =
-        select_field(shell, ui, p, pos2(left, y), half, &format!("{key}.subsets"), &tr("Subsets"), &subsets_shown, menus::END_SUBSETS.at(i));
+        select_field_cx(cx, ui, p, pos2(left, y), half, &format!("{key}.subsets"), &tr("Subsets"), &subsets_shown, menus::END_SUBSETS.at(i));
     let redefines =
-        select_field(shell, ui, p, pos2(right, y), half, &format!("{key}.redefines"), &tr("Redefines"), &redefines_shown, menus::END_REDEFINES.at(i));
+        select_field_cx(cx, ui, p, pos2(right, y), half, &format!("{key}.redefines"), &tr("Redefines"), &redefines_shown, menus::END_REDEFINES.at(i));
     y += 17.0 + FIELD + 6.0;
     let mut said = 0.0_f32;
     let offered = crate::uml_panel::offered_subsets(&targets, &role);
@@ -1401,8 +1406,8 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     }
     y = under(&paint, y + 4.0, &["subsets", "redefines"]);
     // Cancel and Apply at the right, as an editor's are.
-    let cancel = crate::panels::icon_button(
-        shell,
+    let cancel = crate::panels::icon_button_cx(
+        cx,
         ui,
         p,
         pos2(left + width - 2.0 * FIELD - 8.0, y),
@@ -1412,8 +1417,8 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         None,
         "Cancel",
     );
-    let apply = crate::panels::icon_button(
-        shell,
+    let apply = crate::panels::icon_button_cx(
+        cx,
         ui,
         p,
         pos2(left + width - FIELD, y),
@@ -1425,21 +1430,21 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     );
     y += FIELD + 16.0;
     // The menus over what is under them.
-    match shell.panels.menu {
+    match cx.panels.menu {
         Some(open) if open == menus::END_DEFAULT.at(i) => {
             if let (Some(field), Some(names)) = (default, targets.literals.as_ref())
-                && let Some(pick) = crate::uml_panel::literal_menu(shell, ui, p, field, &default_id, names)
+                && let Some(pick) = crate::uml_panel::literal_menu(cx, ui, p, field, &default_id, names)
             {
                 m.default = pick;
             }
         }
         Some(open) if open == menus::END_SUBSETS.at(i) => {
-            if let Some(pick) = crate::uml_panel::target_menu(shell, ui, p, subsets, &format!("{key}.subsets"), &offered) {
+            if let Some(pick) = crate::uml_panel::target_menu(cx, ui, p, subsets, &format!("{key}.subsets"), &offered) {
                 m.subsets = pick;
             }
         }
         Some(open) if open == menus::END_REDEFINES.at(i) => {
-            match crate::uml_panel::redefines_menu(shell, ui, p, redefines, &format!("{key}.redefines"), &targets) {
+            match crate::uml_panel::redefines_menu(cx, ui, p, redefines, &format!("{key}.redefines"), &targets) {
                 Some(Ok(pick)) => {
                     m.redefines = pick;
                     if edit.modifier_refused[i].as_ref().is_some_and(|(field, _)| *field == "redefines") {
@@ -1454,7 +1459,7 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         _ => {}
     }
     drop(offered);
-    crate::uml_panel::keep_targets(shell, targets);
+    crate::uml_panel::keep_targets(cx, targets);
     if edit.modifiers[i] != before {
         edit.modifiers_last = Some(i);
     }
@@ -1466,7 +1471,7 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         Some(f) => own.iter().any(|c| f == crate::widgets::egui_id(&format!("{key}.{c}"))),
         None => edit.escape_target() == Some(i),
     };
-    let escape = edited && theirs && shell.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));
+    let escape = edited && theirs && cx.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));
     let asked = if cancel || escape {
         Asked::Cancel
     } else if apply || enter {
@@ -1482,13 +1487,12 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
 /// sits under its field in the user's words, the edit kept and the Modifiers open, and nothing is
 /// written.
 #[allow(clippy::too_many_arguments, reason = "the end's other fields go as the model has them")]
-fn apply_end_modifiers(shell: &mut Shell, id: Uuid, end: Obj, i: usize, role: &str, multiplicity: &str, navigable: bool, aggregation: usize) {
-    let Some(m) = uml(&shell.notation_states).and_then(|uml| uml.ends.as_ref()).filter(|e| e.association == id).map(|e| e.modifiers[i].clone())
-    else {
+fn apply_end_modifiers(cx: &mut Ctx, id: Uuid, end: Obj, i: usize, role: &str, multiplicity: &str, navigable: bool, aggregation: usize) {
+    let Some(m) = uml(cx.notation_states).and_then(|uml| uml.ends.as_ref()).filter(|e| e.association == id).map(|e| e.modifiers[i].clone()) else {
         return;
     };
-    if let Some(why) = shell.session.as_ref().and_then(|s| end_refusal(s.doc(), end, &m)) {
-        if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
+    if let Some(why) = cx.session.as_ref().and_then(|s| end_refusal(s.doc(), end, &m)) {
+        if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.ends.as_mut()) {
             e.modifier_refused[i] = Some(why);
         }
         return;
@@ -1502,18 +1506,18 @@ fn apply_end_modifiers(shell: &mut Shell, id: Uuid, end: Obj, i: usize, role: &s
         "aggregation": AGGREGATIONS[aggregation.min(AGGREGATIONS.len() - 1)],
     });
     m.put_into(&mut params);
-    match run(shell, "uml.association.set-end", params) {
+    match run_cx(cx, "uml.association.set-end", params) {
         // Written, the end's Modifiers close, their summary saying what they are now.
         Ok(_) => {
-            shell.panels.notice = None;
-            if let Some(e) = uml_mut(&mut shell.notation_states).and_then(|uml| uml.ends.as_mut()) {
+            cx.panels.notice = None;
+            if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.ends.as_mut()) {
                 e.modifier_refused[i] = None;
                 e.modifiers_open[i] = false;
             }
         }
         // Anything the shell did not foresee is said at the panel's foot, as for the end's other
         // fields.
-        Err(e) => shell.panels.notice = Some(e),
+        Err(e) => cx.panels.notice = Some(e),
     }
 }
 

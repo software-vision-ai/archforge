@@ -1493,7 +1493,7 @@ fn sample_class_members(shell: &mut Shell, editor: bool) -> Result<(), String> {
     crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [class.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     if editor && let Some(op) = op {
-        crate::uml_panel::open(shell, class, crate::uml_panel::MemberKind::Operation, Some(op));
+        shell.cx(|cx| crate::uml_panel::open(cx, class, crate::uml_panel::MemberKind::Operation, Some(op)));
     }
     Ok(())
 }
@@ -1555,7 +1555,7 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
     crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [a.to_string()] }))?;
     shell.panels.editors_for = Some(a);
     if screen == Screen::WorkspaceNary {
-        crate::uml_nary::open(shell, a, 2);
+        shell.cx(|cx| crate::uml_nary::open(cx, a, 2));
     } else {
         if let Some(uml) = uml_mut(&mut shell.notation_states) {
             uml.nary_remove = Some(crate::uml_nary::RemoveAsk { association: a, end: 2, opened: true });
@@ -1592,11 +1592,13 @@ fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
     if refused {
         crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [commerce] }))?;
         shell.explorer.expanded.insert(id(&commerce)?);
-        crate::uml_profiles::unapply_profile(shell, id(&commerce)?, id(&persistence)?);
+        let (package, profile) = (id(&commerce)?, id(&persistence)?);
+        shell.cx(|cx| crate::uml_profiles::unapply_profile(cx, package, profile));
         shell.panels.editors_for = Some(id(&commerce)?);
         return Ok(());
     }
-    crate::uml_profiles::open_profile_diagram(shell, id(&persistence)?)?;
+    let profile = id(&persistence)?;
+    shell.cx(|cx| crate::uml_profiles::open_profile_diagram(cx, profile))?;
     crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [entity] }))?;
     shell.explorer.expanded.insert(id(&persistence)?);
     let cached = {
@@ -1605,7 +1607,8 @@ fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
         let c = archforge_uml::profiles::properties(store, e).into_iter().find(|a| archforge_core::name_of(store, *a) == "cached").ok_or("cached")?;
         store.uuid(c).map_err(|e| e.to_string())?
     };
-    crate::uml_panel::open(shell, id(&entity)?, crate::uml_panel::MemberKind::Attribute, Some(cached));
+    let class = id(&entity)?;
+    shell.cx(|cx| crate::uml_panel::open(cx, class, crate::uml_panel::MemberKind::Attribute, Some(cached)));
     shell.panels.editors_for = Some(id(&entity)?);
     if let Some(s) = shell.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;
@@ -1725,7 +1728,7 @@ fn sample_qualifiers(shell: &mut Shell, refused: bool) -> Result<(), String> {
     if refused {
         crate::uml_qualifiers::refuse_sample(shell, a_id, 0, "lineNo", "String");
     } else {
-        crate::uml_qualifiers::open(shell, a_id, 0, Some(q));
+        shell.cx(|cx| crate::uml_qualifiers::open(cx, a_id, 0, Some(q)));
     }
     shell.panels.editors_for = Some(a_id);
     shell.canvas.fit_pending = false;
@@ -1771,7 +1774,7 @@ fn sample_leaf(shell: &mut Shell) -> Result<(), String> {
     let amount_edit = edit_of(Some(store), payment_id, MemberKind::Attribute, Some(amount_id));
     for edit in [&total_edit, &card_amount] {
         let (cmd, params) = command_of(edit);
-        write_in_sight(shell, edit, cmd, params)?;
+        shell.cx(|cx| write_in_sight(cx, edit, cmd, params))?;
     }
     crate::panels::run(shell, "uml.classifier.set", serde_json::json!({ "classifier": pricing_id.to_string(), "final": true, "leaf": true }))?;
     crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [payment_id.to_string()] }))?;
@@ -2380,7 +2383,7 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
     crate::canvas::open(shell, diagram);
     crate::panels::run(shell, "view.select", json!({ "ids": [order.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
-    crate::uml_panel::open(shell, order, crate::uml_panel::MemberKind::Attribute, Some(total));
+    shell.cx(|cx| crate::uml_panel::open(cx, order, crate::uml_panel::MemberKind::Attribute, Some(total)));
     Ok(())
 }
 
@@ -2632,7 +2635,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
                     .and_then(|a| store.uuid(a).ok())
                     .ok_or("Order has no status")?
             };
-            crate::uml_panel::open(shell, order, crate::uml_panel::MemberKind::Attribute, Some(status_attribute));
+            shell.cx(|cx| crate::uml_panel::open(cx, order, crate::uml_panel::MemberKind::Attribute, Some(status_attribute)));
         }
         11 => {
             let paid = id(&paid)?;
@@ -2729,7 +2732,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             )?)?;
             grow_order(shell, (3, 2))?;
             select(shell, &[order])?;
-            crate::uml_panel::open(shell, order, crate::uml_panel::MemberKind::Operation, Some(op));
+            shell.cx(|cx| crate::uml_panel::open(cx, order, crate::uml_panel::MemberKind::Operation, Some(op)));
             guide_view(shell, &[order], 1.0)?;
         }
         Screen::GuideQualifier => {
@@ -2741,7 +2744,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             let n = node(shell, customer)?;
             run(shell, "diagram.move", json!({ "nodes": [n.to_string()], "dx": -100.0, "dy": 0.0 }))?;
             select(shell, &[places])?;
-            crate::uml_qualifiers::open(shell, places, 0, Some(q));
+            shell.cx(|cx| crate::uml_qualifiers::open(cx, places, 0, Some(q)));
             guide_view(shell, &[customer, order], 0.75)?;
         }
         Screen::GuideNary => {
@@ -2780,7 +2783,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                 run(shell, "uml.classifier.set", json!({ "classifier": card.to_string(), "final": true }))?;
                 run(shell, "uml.attribute.set", json!({ "attribute": amount.to_string(), "leaf": true }))?;
                 select(shell, &[payment])?;
-                crate::uml_panel::open(shell, payment, crate::uml_panel::MemberKind::Attribute, Some(amount));
+                shell.cx(|cx| crate::uml_panel::open(cx, payment, crate::uml_panel::MemberKind::Attribute, Some(amount)));
             }
             guide_view(shell, &cards, 0.85)?;
         }
@@ -2839,7 +2842,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             run(shell, "uml.attribute.add", json!({ "class": entity.to_string(), "name": "table", "type": "String" }))?;
             shell.state.show_explorer(crate::state::Explorer::Models);
             if screen == Screen::GuideProfile {
-                crate::uml_profiles::open_profile_diagram(shell, profile)?;
+                shell.cx(|cx| crate::uml_profiles::open_profile_diagram(cx, profile))?;
                 select(shell, &[entity])?;
                 shell.explorer.expanded.insert(profile);
                 shell.canvas.fit_pending = false;
@@ -2854,7 +2857,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                     json!({ "element": order.to_string(), "stereotype": entity.to_string(), "property": "table", "values": ["orders"] }),
                 )?;
                 let d = shell.canvas.active.ok_or("no diagram is open")?;
-                crate::uml_stereotypes::show_values(shell, d, true)?;
+                shell.cx(|cx| crate::uml_stereotypes::show_values(cx, d, true))?;
                 braces_under_order(shell)?;
                 select(shell, &[order])?;
                 guide_view(shell, &[order], 1.0)?;

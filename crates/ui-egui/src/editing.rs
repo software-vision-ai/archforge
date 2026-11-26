@@ -19,7 +19,7 @@ use serde_json::json;
 pub use archforge_shell_api::editing::{Corner, EntityMenu, Gesture, NodeRename, NoteEdit};
 
 use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_ROW, Tool, View};
-use crate::cx::Ctx;
+use crate::cx::{Ctx, Request};
 use crate::home::control;
 use crate::i18n::tr;
 use crate::notation_ui::{Layer, Overlaid};
@@ -1166,14 +1166,19 @@ fn commit_rename(shell: &mut Shell) {
     }
 }
 
-/// Removes the nodes from the diagram, the model untouched.
+/// [`unplace_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn unplace(shell: &mut Shell, nodes: Vec<Uuid>) {
+    shell.cx(|cx| unplace_cx(cx, nodes));
+}
+
+/// Removes the nodes from the diagram, the model untouched; a refusal is said at the canvas's top.
+pub(crate) fn unplace_cx(cx: &mut Ctx, nodes: Vec<Uuid>) {
     if nodes.is_empty() {
         return;
     }
     let ids: Vec<String> = nodes.iter().map(Uuid::to_string).collect();
-    if let Err(e) = run(shell, "diagram.unplace", json!({ "nodes": ids })) {
-        shell.canvas.notice = Some(e);
+    if let Err(e) = crate::panels::run_cx(cx, "diagram.unplace", json!({ "nodes": ids })) {
+        cx.canvas.notice = Some(e);
     }
 }
 
@@ -1187,45 +1192,51 @@ pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
     diagrams.len()
 }
 
-/// Asks before an entity goes from the model, with what goes with it; what its notation keeps
-/// (the package Types while it holds the built-in types) is said at the canvas's top instead.
+/// [`ask_delete_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
-    ask_delete_of(shell, Some(node), entity);
+    shell.cx(|cx| ask_delete_cx(cx, node, entity));
 }
 
-/// [`ask_delete`] for an entity selected on the diagram by its card `node`, or with none by a line
-/// alone (an association class drawn without its card): the dialog then offers no removal from
-/// the diagram, as the line's own Delete does that.
-fn ask_delete_of(shell: &mut Shell, node: Option<Uuid>, entity: Uuid) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+/// Asks before an entity goes from the model, with what goes with it; what its notation keeps
+/// (the package Types while it holds the built-in types) is said at the canvas's top instead.
+pub(crate) fn ask_delete_cx(cx: &mut Ctx, node: Uuid, entity: Uuid) {
+    ask_delete_of(cx, Some(node), entity);
+}
+
+/// [`ask_delete_cx`] for an entity selected on the diagram by its card `node`, or with none by a
+/// line alone (an association class drawn without its card): the dialog then offers no removal
+/// from the diagram, as the line's own Delete does that. The shell opens the dialog once the call
+/// that asked returns ([`Request::AskDelete`]).
+fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
     // What its notation keeps (UML's package Types with the built-in types) is said, not asked.
-    if let Some(why) = crate::notation_ui::of(shell.notation_uis, store, e).and_then(|ui| ui.remove_refusal(store, e)) {
-        shell.canvas.notice = Some(why);
-        shell.canvas.menu = None;
+    if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(store, e)) {
+        cx.canvas.notice = Some(why);
+        cx.canvas.menu = None;
         return;
     }
-    let (relationships, keys, foreign_keys) = crate::notation_ui::of(shell.notation_uis, store, e).map_or((0, 0, 0), |ui| ui.consequences(store, e));
+    let (relationships, keys, foreign_keys) = crate::notation_ui::of(cx.notation_uis, store, e).map_or((0, 0, 0), |ui| ui.consequences(store, e));
     let diagrams = diagrams_showing(store, e);
-    let along = crate::notation_ui::of(shell.notation_uis, store, e).map(|ui| ui.goes_along(store, e)).unwrap_or_default();
-    let applications = crate::notation_ui::of(shell.notation_uis, store, e).map(|ui| ui.applications_along(store, e)).unwrap_or_default();
+    let along = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.goes_along(store, e)).unwrap_or_default();
+    let applications = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.applications_along(store, e)).unwrap_or_default();
     // A nested package hands what it holds up: the dialog says where, and so does the toast.
-    let hands_to = crate::notation_ui::of(shell.notation_uis, store, e)
+    let hands_to = crate::notation_ui::of(cx.notation_uis, store, e)
         .and_then(|ui| Some((archforge_core::name_of(store, ui.hands_up(store, e)?), ui.has_children(store, e))));
-    shell.explorer.delete = Some(crate::explorer::Delete {
+    cx.requests.push(Request::AskDelete(crate::explorer::Delete {
         along,
         applications,
         ids: vec![entity],
         // Named as every path that asks names it, an unnamed relationship by its ends (AR-216).
-        name: crate::notation_ui::label(shell.notation_uis, store, e),
+        name: crate::notation_ui::label(cx.notation_uis, store, e),
         relationships,
         keys,
         foreign_keys,
         diagrams,
         node,
         hands_to,
-    });
-    shell.canvas.menu = None;
+    }));
+    cx.canvas.menu = None;
 }
 
 /// Draws what sits over the diagram: the marquee, a selected node's adorners, the Arrange bar,
@@ -1841,7 +1852,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         if delete && !shift {
             remove_lines_here(shell, d);
         } else if delete && let Some(entity) = line_element_here(shell, d, kind) {
-            ask_delete_of(shell, None, entity);
+            shell.cx(|cx| ask_delete_of(cx, None, entity));
         }
         return;
     }
