@@ -16,6 +16,8 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+pub use archforge_shell_api::editing::{Corner, EntityMenu, Gesture, NodeRename, NoteEdit};
+
 use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_ROW, Tool, View};
 use crate::home::control;
 use crate::i18n::tr;
@@ -46,75 +48,8 @@ const STACK_GAP: f64 = 24.0;
 const MENU_WIDTH: f32 = 260.0;
 const MENU_ROW: f32 = 30.0;
 
-/// A name being typed in a node's header.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NodeRename {
-    pub node: Uuid,
-    pub entity: Uuid,
-    pub text: String,
-    /// True until the field has taken the keyboard once.
-    pub opened: bool,
-    pub refused: Option<String>,
-}
-
-/// A note's text being typed in place.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NoteEdit {
-    pub node: Uuid,
-    pub text: String,
-    pub opened: bool,
-    pub refused: Option<String>,
-}
-
 /// A note's size when placed, in diagram units.
 const NOTE_SIZE: (f64, f64) = (200.0, 72.0);
-
-/// A corner handle of a selected node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Corner {
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight,
-}
-
-/// A pointer gesture in progress, previewed on the canvas and committed on release.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Gesture {
-    /// The nodes moved together, from the screen point the drag started at.
-    Move { nodes: Vec<Uuid>, from: Pos2 },
-    /// A node resized by a corner, from its rectangle in diagram units.
-    Resize { node: Uuid, corner: Corner, base: Rect, from: Pos2 },
-    /// A selection rectangle from a screen point.
-    Marquee { from: Pos2 },
-    /// A line of a kind's connect tool drawn from a node, from the screen point the drag started
-    /// at (ER's relationship, slice E2).
-    Connect { tool: &'static str, from_node: Uuid, from: Pos2 },
-    /// A note link drawn from a note's handle to a table or a relationship's line.
-    LinkNote { note: Uuid },
-    /// A cardinality text dragged off its place: its line, its end, the screen point the drag
-    /// started at, its centre then and the end of the line it belongs to.
-    EndText { edge: Uuid, end: u8, from: Pos2, centre: Pos2, anchor: Pos2 },
-    /// A segment of a right-angled line slid across: the line, the segment's index in the route,
-    /// the route as it was in diagram units, and the screen point the drag started at.
-    Segment { edge: Uuid, index: usize, route: Vec<(f64, f64)>, from: Pos2 },
-    /// A selected line's end dragged towards another element: the line's
-    /// element, whether it is the source end, the screen point of the end that stays, and the
-    /// revision of the model the drag began on, which the drop changes only if it still holds (AR-697).
-    Reconnect { element: Uuid, source: bool, fixed: Pos2, at: archforge_engine::Revision },
-    /// A label of the figures of no one node or line dragged where no node holds it yet (a UML
-    /// generalization set's, AR-129): the element it stands for, the screen point the drag started
-    /// at and the label's rectangle then.
-    ExtraLabel { element: Uuid, from: Pos2, rect: Rect },
-}
-
-/// The entity menu, open at a screen point.
-#[derive(Debug, Clone, PartialEq)]
-pub struct EntityMenu {
-    pub node: Uuid,
-    pub entity: Uuid,
-    pub at: Pos2,
-}
 
 /// What lies at diagram point `(x, y)`: the grid's topmost node or nearest line, looking through a
 /// node its notation says holds a label (a UML generalization set's, AR-129). A label takes a press

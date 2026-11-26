@@ -4,7 +4,8 @@
 //!
 //! It holds the automation-id registry (`widgets`), the design (`ux`: the colours, the type, the
 //! icons the shell and both notations draw, and the helpers that draw them), the canvas's
-//! geometry that names no shell (`canvas`), the data types the interfaces `NotationUi`
+//! geometry and state that name no shell (`canvas`), with the editing under way on it (`editing`)
+//! and the skills open in its tabs (`skill_tab`), the data types the interfaces `NotationUi`
 //! (`notation_ui`) and `DiagramKind` (`kinds`) hand across that name no shell, how a search or a
 //! filter matches what is typed (`search`), and the translations machinery (`i18n`), with which
 //! each crate registers its own catalogues. Story
@@ -14,9 +15,11 @@
 //! portable target.
 
 pub mod canvas;
+pub mod editing;
 pub mod i18n;
 pub mod kinds;
 pub mod notation_ui;
 pub mod search;
+pub mod skill_tab;
 pub mod ux;
 pub mod widgets;
