@@ -327,7 +327,7 @@ pub fn add(shell: &mut Shell, key: &str) {
     let Some(session) = shell.session.as_ref() else { return };
     let sel = selected(shell);
     let Some(ui) = offers(shell.notation_uis, session.doc(), sel).into_iter().find(|(_, o)| o.key == key).map(|(ui, _)| ui) else { return };
-    match ui.add(shell, key, sel) {
+    match shell.cx(|cx| ui.add(cx, key, sel)) {
         None => {}
         Some(Ok(Added { id, parents })) => {
             shell.explorer.expanded.extend(parents);
@@ -634,7 +634,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         let todo = row_at(at).filter(|t| t.id != dragged).and_then(|t| drop_of(shell, dragged, t));
         // The drop runs as the target's notation runs it (a UML package moved as Properties moves
         // it, AR-568).
-        let out = todo.map_or(Ok(()), |(notation, cmd, params)| notation.run_drop(shell, cmd, params));
+        let out = todo.map_or(Ok(()), |(notation, cmd, params)| shell.cx(|cx| notation.run_drop(cx, cmd, params)));
         if let Err(e) = out {
             shell.explorer.notice = Some(e);
         }
@@ -1220,7 +1220,7 @@ fn context_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
     shell.explorer.context = (!outside).then_some(state);
     if let Some(k) = sub_clicked.and_then(|i| inside.as_ref()?.kinds.get(i)).map(|(key, _, _)| *key) {
         shell.explorer.context = None;
-        if let Some(Err(e)) = ui_of.and_then(|u| u.add_inside(shell, k, obj)) {
+        if let Some(Err(e)) = ui_of.and_then(|u| shell.cx(|cx| u.add_inside(cx, k, obj))) {
             shell.explorer.notice = Some(e);
         }
         return;

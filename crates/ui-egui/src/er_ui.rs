@@ -12,7 +12,7 @@ use archforge_mof::{ClassId, Obj, Store, Uuid, Value};
 use egui::Rect;
 use serde_json::json;
 
-use crate::Shell;
+use crate::cx::Ctx;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{Rows, fmt, tr, trn};
 use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
@@ -169,45 +169,43 @@ impl NotationUi for ErUi {
     /// A schema, a table in the selection's schema, or a column in the selection's table; a table
     /// lands on an open diagram of its schema too, and a column's table grows with it, in the
     /// same step.
-    fn add(&self, shell: &mut Shell, key: &str, sel: Option<Obj>) -> Option<Result<Added, String>> {
-        shell.cx(|cx| {
-            let store = cx.session.as_ref()?.doc();
-            let no_name = || Some(Err(tr("No free name is left")));
-            let mut parents: Vec<Uuid> = Vec::new();
-            let out = match key {
-                "schema" => {
-                    let Some(name) = fresh_name("Schema", schemas(store).into_iter().map(|s| name(store, s)), false) else { return no_name() };
-                    crate::panels::run_cx(cx, "er.schema.add", json!({ "name": name }))
-                }
-                "table" => {
-                    let schema = sel.and_then(|o| r::schema_of(store, o))?;
-                    let taken = children(store, schema, archforge_er::schema::ENTITY).into_iter().map(|e| name(store, e));
-                    let Some(name) = fresh_name("Table", taken, false) else { return no_name() };
-                    let schema_id = store.uuid(schema).ok()?;
-                    parents.push(schema_id);
-                    crate::er_place::add_entity(cx, schema_id, &name).map(|id| json!({ "id": id.to_string() }))
-                }
-                "column" => {
-                    let entity = sel.and_then(|o| match class(store, o) {
-                        Some(c) if c == archforge_er::ENTITY => Some(o),
-                        Some(c) if c == archforge_er::ATTRIBUTE => r::entity_of(store, o),
-                        _ => None,
-                    })?;
-                    let taken = children(store, entity, archforge_er::entity::ATTRIBUTE).into_iter().map(|a| name(store, a));
-                    let Some(name) = fresh_name("column", taken, true) else { return no_name() };
-                    let entity_id = store.uuid(entity).ok()?;
-                    parents.extend(r::schema_of(store, entity).and_then(|s| store.uuid(s).ok()));
-                    parents.push(entity_id);
-                    let params = json!({ "entity": entity_id.to_string(), "name": name, "type": "TEXT" });
-                    crate::er_place::run_growing(cx, &tr("Add column"), "er.attribute.add", params, entity_id)
-                }
-                _ => return None,
-            };
-            match out {
-                Ok(out) => out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).map(|id| Ok(Added { id, parents })),
-                Err(e) => Some(Err(e)),
+    fn add(&self, cx: &mut Ctx, key: &str, sel: Option<Obj>) -> Option<Result<Added, String>> {
+        let store = cx.session.as_ref()?.doc();
+        let no_name = || Some(Err(tr("No free name is left")));
+        let mut parents: Vec<Uuid> = Vec::new();
+        let out = match key {
+            "schema" => {
+                let Some(name) = fresh_name("Schema", schemas(store).into_iter().map(|s| name(store, s)), false) else { return no_name() };
+                crate::panels::run_cx(cx, "er.schema.add", json!({ "name": name }))
             }
-        })
+            "table" => {
+                let schema = sel.and_then(|o| r::schema_of(store, o))?;
+                let taken = children(store, schema, archforge_er::schema::ENTITY).into_iter().map(|e| name(store, e));
+                let Some(name) = fresh_name("Table", taken, false) else { return no_name() };
+                let schema_id = store.uuid(schema).ok()?;
+                parents.push(schema_id);
+                crate::er_place::add_entity(cx, schema_id, &name).map(|id| json!({ "id": id.to_string() }))
+            }
+            "column" => {
+                let entity = sel.and_then(|o| match class(store, o) {
+                    Some(c) if c == archforge_er::ENTITY => Some(o),
+                    Some(c) if c == archforge_er::ATTRIBUTE => r::entity_of(store, o),
+                    _ => None,
+                })?;
+                let taken = children(store, entity, archforge_er::entity::ATTRIBUTE).into_iter().map(|a| name(store, a));
+                let Some(name) = fresh_name("column", taken, true) else { return no_name() };
+                let entity_id = store.uuid(entity).ok()?;
+                parents.extend(r::schema_of(store, entity).and_then(|s| store.uuid(s).ok()));
+                parents.push(entity_id);
+                let params = json!({ "entity": entity_id.to_string(), "name": name, "type": "TEXT" });
+                crate::er_place::run_growing(cx, &tr("Add column"), "er.attribute.add", params, entity_id)
+            }
+            _ => return None,
+        };
+        match out {
+            Ok(out) => out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).map(|id| Ok(Added { id, parents })),
+            Err(e) => Some(Err(e)),
+        }
     }
 
     fn rename(&self, store: &Store, obj: Obj) -> Option<(&'static str, &'static str)> {
@@ -464,81 +462,70 @@ impl NotationUi for ErUi {
     /// Properties' body for an ER element: a schema's name and sections, a table's or a
     /// relationship's panel, and for a column, a type, a sequence, a view or a generalization the
     /// panel of what holds it, its own row marked.
-    fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
-        shell.cx(|cx| {
-            let width = r.width() - 2.0 * crate::panels::PAD;
-            match subject.class {
-                Some(c) if c == archforge_er::SCHEMA => {
-                    crate::panels::name_field_cx(
-                        cx,
-                        ui,
-                        p,
-                        egui::pos2(r.left() + crate::panels::PAD, y),
-                        width,
-                        subject,
-                        "er.schema.rename",
-                        "schema",
-                    );
-                    if let (Some(o), Some(id)) = (subject.obj, subject.id) {
-                        let y = crate::types::types_section(cx, ui, p, r, y + 17.0 + FIELD + 16.0, o, id);
-                        let y = crate::objects::section_of(cx, ui, p, r, y, o, id, crate::objects::ObjectKind::Sequence);
-                        let y = crate::objects::section_of(cx, ui, p, r, y, o, id, crate::objects::ObjectKind::View);
-                        crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, o);
-                    }
+    fn body(&self, cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
+        let width = r.width() - 2.0 * crate::panels::PAD;
+        match subject.class {
+            Some(c) if c == archforge_er::SCHEMA => {
+                crate::panels::name_field_cx(cx, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, "er.schema.rename", "schema");
+                if let (Some(o), Some(id)) = (subject.obj, subject.id) {
+                    let y = crate::types::types_section(cx, ui, p, r, y + 17.0 + FIELD + 16.0, o, id);
+                    let y = crate::objects::section_of(cx, ui, p, r, y, o, id, crate::objects::ObjectKind::Sequence);
+                    let y = crate::objects::section_of(cx, ui, p, r, y, o, id, crate::objects::ObjectKind::View);
+                    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, o);
                 }
-                Some(c) if c == archforge_er::GENERALIZATION => {
-                    // A generalization: its supertype's Subtypes section.
-                    let sup = cx.session.as_ref().and_then(|s| {
-                        let store = s.doc();
-                        let sup = crate::subtypes::supertype_of_link(store, subject.obj?)?;
-                        Some((sup, store.uuid(sup).ok()?))
-                    });
-                    if let (Some((sup, sup_id)), Some(id)) = (sup, subject.id) {
-                        let y = crate::subtypes::subtypes_section(cx, ui, p, r, y, sup, sup_id, id);
-                        crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, sup);
-                    }
-                }
-                Some(c) if c == archforge_er::DOMAIN || c == archforge_er::ENUM_TYPE => {
-                    // A type: its schema's Types section, this type's row marked.
-                    let schema = cx.session.as_ref().and_then(|s| {
-                        let store = s.doc();
-                        let schema = r::schema_of(store, subject.obj?)?;
-                        Some((schema, store.uuid(schema).ok()?, crate::types::kind_of(store, subject.obj?)?))
-                    });
-                    if let Some((schema, schema_id, _)) = schema {
-                        let y = crate::types::types_section(cx, ui, p, r, y, schema, schema_id);
-                        crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, schema);
-                    }
-                }
-                Some(c) if c == archforge_er::SEQUENCE || c == archforge_er::VIEW => {
-                    // A sequence or view: its schema's section, its row marked.
-                    let schema = cx.session.as_ref().and_then(|s| {
-                        let store = s.doc();
-                        let schema = r::schema_of(store, subject.obj?)?;
-                        Some((schema, store.uuid(schema).ok()?, crate::objects::kind_of(store, subject.obj?)?))
-                    });
-                    if let Some((schema, schema_id, kind)) = schema {
-                        let y = crate::objects::section_of(cx, ui, p, r, y, schema, schema_id, kind);
-                        crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, schema);
-                    }
-                }
-                Some(c) if c == archforge_er::ENTITY => crate::er_table::entity_body(cx, ui, p, r, y, subject),
-                Some(c) if c == archforge_er::RELATIONSHIP => crate::relation::body(cx, ui, p, r, y, subject),
-                Some(c) if c == archforge_er::ATTRIBUTE => {
-                    // A column: its table's panel, the column's row marked.
-                    let table = cx.session.as_ref().and_then(|s| {
-                        let store = s.doc();
-                        let e = r::entity_of(store, subject.obj?)?;
-                        let words = self.words(store, e)?;
-                        Some(Subject::of(e, store.uuid(e).ok()?, archforge_er::ENTITY, words))
-                    });
-                    if let Some(table) = table {
-                        crate::er_table::entity_body(cx, ui, p, r, y, &table);
-                    }
-                }
-                _ => {}
             }
-        })
+            Some(c) if c == archforge_er::GENERALIZATION => {
+                // A generalization: its supertype's Subtypes section.
+                let sup = cx.session.as_ref().and_then(|s| {
+                    let store = s.doc();
+                    let sup = crate::subtypes::supertype_of_link(store, subject.obj?)?;
+                    Some((sup, store.uuid(sup).ok()?))
+                });
+                if let (Some((sup, sup_id)), Some(id)) = (sup, subject.id) {
+                    let y = crate::subtypes::subtypes_section(cx, ui, p, r, y, sup, sup_id, id);
+                    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, sup);
+                }
+            }
+            Some(c) if c == archforge_er::DOMAIN || c == archforge_er::ENUM_TYPE => {
+                // A type: its schema's Types section, this type's row marked.
+                let schema = cx.session.as_ref().and_then(|s| {
+                    let store = s.doc();
+                    let schema = r::schema_of(store, subject.obj?)?;
+                    Some((schema, store.uuid(schema).ok()?, crate::types::kind_of(store, subject.obj?)?))
+                });
+                if let Some((schema, schema_id, _)) = schema {
+                    let y = crate::types::types_section(cx, ui, p, r, y, schema, schema_id);
+                    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, schema);
+                }
+            }
+            Some(c) if c == archforge_er::SEQUENCE || c == archforge_er::VIEW => {
+                // A sequence or view: its schema's section, its row marked.
+                let schema = cx.session.as_ref().and_then(|s| {
+                    let store = s.doc();
+                    let schema = r::schema_of(store, subject.obj?)?;
+                    Some((schema, store.uuid(schema).ok()?, crate::objects::kind_of(store, subject.obj?)?))
+                });
+                if let Some((schema, schema_id, kind)) = schema {
+                    let y = crate::objects::section_of(cx, ui, p, r, y, schema, schema_id, kind);
+                    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, schema);
+                }
+            }
+            Some(c) if c == archforge_er::ENTITY => crate::er_table::entity_body(cx, ui, p, r, y, subject),
+            Some(c) if c == archforge_er::RELATIONSHIP => crate::relation::body(cx, ui, p, r, y, subject),
+            Some(c) if c == archforge_er::ATTRIBUTE => {
+                // A column: its table's panel, the column's row marked.
+                let table = cx.session.as_ref().and_then(|s| {
+                    let store = s.doc();
+                    let e = r::entity_of(store, subject.obj?)?;
+                    let words = self.words(store, e)?;
+                    Some(Subject::of(e, store.uuid(e).ok()?, archforge_er::ENTITY, words))
+                });
+                if let Some(table) = table {
+                    crate::er_table::entity_body(cx, ui, p, r, y, &table);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// ER's own refusals: those its commands alone give, in the ER editors' words.
@@ -607,15 +594,15 @@ impl NotationUi for ErUi {
 
     /// A selected relationship goes from the model with its foreign key and the key columns that
     /// key brought, without Shift; with Shift, the shared removals ask about its line.
-    fn canvas_delete(&self, shell: &mut Shell, shift: bool) -> bool {
-        !shift && shell.cx(crate::connect::remove_selected_relationship)
+    fn canvas_delete(&self, cx: &mut Ctx, shift: bool) -> bool {
+        !shift && crate::connect::remove_selected_relationship(cx)
     }
 
     /// The mapping table offer, over the fade and under the toast, while one is open; it closes
     /// itself once its relationship is gone. Nothing at the other layers.
-    fn canvas_overlay(&self, shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
+    fn canvas_overlay(&self, cx: &mut Ctx, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
         if layer == Layer::Offers {
-            shell.cx(|cx| crate::connect::mapping_offer(cx, ui, on.p, on.r));
+            crate::connect::mapping_offer(cx, ui, on.p, on.r);
         }
     }
 
@@ -625,8 +612,8 @@ impl NotationUi for ErUi {
     }
 
     /// Opens the mapping table offer for the many-to-many relationship `element`.
-    fn resolve(&self, shell: &mut Shell, element: Uuid) {
-        shell.cx(|cx| crate::connect::offer_mapping(cx, element));
+    fn resolve(&self, cx: &mut Ctx, element: Uuid) {
+        crate::connect::offer_mapping(cx, element);
     }
 
     /// Every table box too short for its table's columns grows to show them all

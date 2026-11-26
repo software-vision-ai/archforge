@@ -189,13 +189,15 @@ fn the_longest_menu_fits_the_lowest_window() {
 }
 
 /// The ids of `rows`, by section.
-fn ids_of(rows: &[&[crate::actions::Action]]) -> Vec<Vec<&'static str>> {
-    rows.iter().map(|section| section.iter().map(|a| a.id).collect()).collect()
+fn ids_of(rows: &[&[crate::kinds::ModelRow]]) -> Vec<Vec<&'static str>> {
+    rows.iter().map(|section| section.iter().map(|row| row.key).collect()).collect()
 }
 
-/// Each notation's kind answers its own rows, by section in the menu's order, with no keys and no
-/// place in Home's search; the table of actions holds every kind's rows in the kinds' order, then
-/// the shared ones, each id once.
+/// Each notation's kind answers its own rows as data, by section in the menu's order: each row's
+/// id, its word and the tool it arms, with the choice of the tool's popover it makes first where
+/// the tool has one. The table of actions holds every kind's rows in the kinds' order, then the
+/// shared ones, each id once, none with keys or among the table's own actions, which alone Home's
+/// search lists.
 #[test]
 fn each_kind_answers_its_own_rows() {
     use crate::kinds::DiagramKind;
@@ -215,11 +217,49 @@ fn each_kind_answers_its_own_rows() {
     ];
     let uml: Vec<Vec<&str>> = std::iter::once(classifiers.to_vec()).chain(relate).collect();
     assert_eq!(ids_of(crate::uml_ui::UmlKind.menu_rows()), uml);
-    let all: Vec<&str> = crate::model_menu::rows(crate::kinds::KINDS).map(|a| a.id).collect();
+    let all: Vec<&str> = crate::model_menu::rows(crate::kinds::KINDS).map(|(_, row)| row.key).collect();
     assert_eq!(all, [ER_ROWS.to_vec(), uml.concat(), SHARED.to_vec()].concat());
     assert!(all.iter().enumerate().all(|(n, id)| !all[n + 1..].contains(id)), "{all:?}");
-    assert!(crate::model_menu::rows(crate::kinds::KINDS).all(|a| a.keys.is_none() && a.search.is_none()));
+    assert!(all.iter().all(|id| crate::actions::keys(id).is_none() && !crate::actions::ACTIONS.iter().any(|a| a.id == *id)), "{all:?}");
     assert_eq!(crate::model_menu::every_menu(), [[ER_ROWS.to_vec(), SHARED.to_vec()].concat(), [uml.concat(), SHARED.to_vec()].concat()]);
+    // The data itself: each row's word, the tool it arms, whether it makes a choice first, and the
+    // kind it is of.
+    let data: Vec<(&str, String, Tool, bool, Option<&str>)> =
+        crate::model_menu::rows(crate::kinds::KINDS).map(|(kind, row)| (row.key, (row.word)(), row.tool, row.choice.is_some(), kind)).collect();
+    let (er, structure) = (Some(archforge_er::DIAGRAM_KIND), Some(archforge_uml::STRUCTURE_DIAGRAM));
+    let mut wanted = vec![
+        ("model.entity", "Entity".to_string(), Tool::Place("entity"), false, er),
+        ("model.relationship", "Relationship".to_string(), Tool::Connect("relationship"), false, er),
+    ];
+    wanted.extend(classifiers.into_iter().zip(Classifier::ALL).map(|(id, k)| (id, k.word(), Tool::Place(TOOL), true, structure)));
+    wanted.push(("model.package", "Package".to_string(), Tool::Place("package"), false, structure));
+    wanted.extend(
+        uml[1..].concat().into_iter().zip(Relate::ALL).map(|(id, k)| (id, k.word().to_string(), Tool::Connect("relationship"), true, structure)),
+    );
+    wanted.extend([("model.note", "Note".to_string(), Tool::Note, false, None), ("model.link", "Link note".to_string(), Tool::Link, false, None)]);
+    assert_eq!(data, wanted);
+}
+
+/// The menu's entries are made from the rows' data, whichever kind answers them: on a diagram of
+/// its kind, each row's label is its word and choosing it arms the tool it names, closing the
+/// toolbar's popover.
+#[test]
+fn the_entries_are_made_from_the_rows_data() {
+    use crate::kinds::DiagramKind;
+    for theme in BOTH {
+        let kinds: [(Harness<'static, Shell>, &dyn DiagramKind); 2] =
+            [(er(theme), &crate::er_kind::ErKind), (uml_sized(theme, BIG), &crate::uml_ui::UmlKind)];
+        for (mut h, kind) in kinds {
+            let s = h.state_mut();
+            for (_, row) in crate::model_menu::rows(&[kind]) {
+                (s.canvas.tool, s.canvas.popover, s.canvas.menu_focus) = (Tool::Select, Some(KINDS), Some(0));
+                assert_eq!(label(s, row.key), (row.word)(), "{theme:?}: {}", row.key);
+                assert!(available(s, row.key), "{theme:?}: {}", row.key);
+                run(s, row.key);
+                assert_eq!((s.canvas.tool, s.canvas.popover, s.canvas.menu_focus), (row.tool, None, None), "{theme:?}: {}", row.key);
+            }
+        }
+    }
 }
 
 /// The menu builds from what the open diagram's kind answers, a kind it never names included: the

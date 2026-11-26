@@ -79,9 +79,9 @@ pub(crate) enum Action {
     /// Something refused before it began, said at the canvas's top: a line the tool starts nowhere.
     Notice(String),
     /// What the diagram's kind makes of the press ([`crate::kinds::DiagramKind::pointer`],
-    /// [`crate::kinds::DiagramKind::secondary_click`]), run on the shell once decided: a UML
-    /// n-ary association's next end, or a menu of its own opened.
-    Own(Box<dyn FnOnce(&mut Shell)>),
+    /// [`crate::kinds::DiagramKind::secondary_click`]), run through the narrow context once
+    /// decided: a UML n-ary association's next end, or a menu of its own opened.
+    Own(Box<dyn FnOnce(&mut Ctx)>),
 }
 
 /// Whether a canvas action changes nothing, so that it stays on while a version shows.
@@ -384,7 +384,8 @@ fn decide(
         node_at: &hit_node,
         line_at: &line_at,
     };
-    let own = |press: &crate::kinds::Press<'_>| kind.and_then(|k| k.pointer(shell, press));
+    let cx = shell.cx_ref();
+    let own = |press: &crate::kinds::Press<'_>| kind.and_then(|k| k.pointer(&cx, press));
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
         Tool::Connect(tool) => {
@@ -400,7 +401,7 @@ fn decide(
             if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
                 let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
                 let Some((n, element)) = hit_node(from).and_then(|n| Some((n, part_of_node(kind, store, n)?))) else { return Action::Nothing };
-                if let Some(why) = kind.and_then(|k| k.line_start_problem(shell, store, tool, element)) {
+                if let Some(why) = kind.and_then(|k| k.line_start_problem(&cx, store, tool, element)) {
                     return Action::Notice(why);
                 }
                 return match uuid(store, n) {
@@ -526,7 +527,7 @@ fn decide(
             // A right click means what the diagram's kind says first (UML's menus of an n-ary
             // association and of generalization lines, AR-128, AR-129).
             if resp.secondary_clicked()
-                && let Some(action) = kind.and_then(|k| k.secondary_click(shell, &press))
+                && let Some(action) = kind.and_then(|k| k.secondary_click(&cx, &press))
             {
                 return action;
             }
@@ -658,7 +659,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
     }
     match if shell.looking_only() && !only_looks(&action) { Action::Nothing } else { action } {
         Action::Nothing => {}
-        Action::Own(run) => run(shell),
+        Action::Own(run) => shell.cx(|cx| run(cx)),
         Action::Select(ids) => select(shell, ids),
         Action::Toggle(id) => {
             let mut ids: Vec<Uuid> =
@@ -680,7 +681,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
         Action::Commit => commit(shell, view, d, pointer, shift, resp.rect),
         Action::Place(tool, x, y) => {
             if let Some(kind) = kind {
-                kind.place(shell, tool, d, x, y);
+                shell.cx(|cx| kind.place(cx, tool, d, x, y));
             }
         }
         Action::Menu(m) => shell.canvas.menu = Some(m),
@@ -696,7 +697,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
         }
         Action::Open(element, row) => {
             if let Some(kind) = kind {
-                kind.open(shell, element, row);
+                shell.cx(|cx| kind.open(cx, element, row));
             }
         }
         Action::ResetEnd(edge, end) => {
@@ -823,13 +824,13 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
         Gesture::Connect { tool, from_node, from } => {
             let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d)) else { return };
             if let Some(to_node) = node_at(shell, view, d, pointer) {
-                kind.connect(shell, tool, d, from_node, to_node);
+                shell.cx(|cx| kind.connect(cx, tool, d, from_node, to_node));
                 // The line drawn, the tool hands back to Select, as the placing tools do.
                 shell.canvas.tool = Tool::Select;
             } else if canvas.contains(pointer) && (pointer - from).length() / view.zoom >= DRAG_MIN {
                 // Dropped on empty canvas: a new element there, joined to the one the drag began on.
                 let (x, y) = view.to_canvas(pointer);
-                kind.connect_to_new(shell, tool, d, from_node, x, y);
+                shell.cx(|cx| kind.connect_to_new(cx, tool, d, from_node, x, y));
                 shell.canvas.tool = Tool::Select;
             }
         }
@@ -839,12 +840,12 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
             }
             let (x, y) = view.to_canvas(rect.min + (pointer - from));
             let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d)) else { return };
-            kind.place_label(shell, d, element, x, y);
+            shell.cx(|cx| kind.place_label(cx, d, element, x, y));
         }
         Gesture::Reconnect { element, source, at, .. } => {
             let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d)) else { return };
             if let Some(to_node) = node_at(shell, view, d, pointer) {
-                kind.reconnect(shell, element, source, to_node, at);
+                shell.cx(|cx| kind.reconnect(cx, element, source, to_node, at));
             }
         }
         Gesture::LinkNote { note } => {
@@ -1139,7 +1140,7 @@ fn commit_rename(shell: &mut Shell) {
         crate::kinds::kind_of(shell, s.doc(), d)
     });
     let Some(kind) = kind else { return };
-    match kind.rename(shell, r.entity, r.text.trim()) {
+    match shell.cx(|cx| kind.rename(cx, r.entity, r.text.trim())) {
         Ok(()) => shell.canvas.rename = None,
         Err(e) => {
             // The field takes the keyboard again, the text selected, so the name can be retyped.
@@ -1238,7 +1239,7 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
             let store = shell.session.as_ref().map(|s| s.doc());
             store.map(|s| view.rect(&bounds_of(s, n))).unwrap_or(Rect::NOTHING)
         });
-        kind.live_line(shell, &paint, p, view, from_node, pointer, target);
+        kind.live_line(&shell.cx_ref(), &paint, p, view, from_node, pointer, target);
     }
     // A note link being drawn: dashed from the note to the pointer.
     if let Some(Gesture::LinkNote { note }) = shell.canvas.gesture
@@ -1450,7 +1451,7 @@ fn adorners(
             control(shell, ui, &id, "button", b, live).on_hover_text(tr(hint))
         };
         if resp.clicked() && key != "connect" {
-            kind.open(shell, entity, None);
+            shell.cx(|cx| kind.open(cx, entity, None));
         }
         // Dragging the connect adorner draws a line from this element.
         if let Some(tool) = connect
@@ -1461,7 +1462,7 @@ fn adorners(
             // A line the tool starts nowhere at this element is said, and not begun.
             let problem = shell.session.as_ref().and_then(|s| {
                 let store = s.doc();
-                store.by_uuid(entity).and_then(|e| kind.line_start_problem(shell, store, tool, e))
+                store.by_uuid(entity).and_then(|e| kind.line_start_problem(&shell.cx_ref(), store, tool, e))
             });
             if let Some(why) = problem {
                 shell.canvas.notice = Some(why);
@@ -1471,7 +1472,7 @@ fn adorners(
             }
         }
     }
-    kind.card_controls(shell, ui, p, r, rect, entity);
+    shell.cx(|cx| kind.card_controls(cx, ui, p, r, rect, entity));
 }
 
 /// A selected note's link handle at its top right: dragged onto a table or a relationship's line,
@@ -1717,7 +1718,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
         "delete" => ask_delete(shell, menu.node, menu.entity),
         key => {
             if let Some(row) = own.iter().find(|row| row.key == key) {
-                (row.run)(shell, menu);
+                shell.cx(|cx| (row.run)(cx, menu));
             }
         }
     }
@@ -1763,7 +1764,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     // A drawing under way on the diagram's kind takes its keys first (UML's n-ary association, or
     // Add end: Enter, Backspace and Escape, AR-128).
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
-    if kind.is_some_and(|k| k.keys(shell, ui, d)) {
+    if kind.is_some_and(|k| shell.cx(|cx| k.keys(cx, ui, d))) {
         return;
     }
     // An open menu the keys walk (UML's classifier kinds) takes the arrows and Enter itself; the
@@ -1794,7 +1795,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     }
     // A notation's chord on the selection (UML's ⌥⌘G makes a generalization set, AR-129).
     let uis = shell.notation_uis;
-    if uis.iter().any(|u| u.canvas_keys(shell, ui)) {
+    if uis.iter().any(|u| shell.cx(|cx| u.canvas_keys(cx, ui))) {
         return;
     }
     if escape {
@@ -1824,7 +1825,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     // nodes alone, and a label's node is always nested in a classifier's, so a set selected by its
     // label, moved or not, leaves `selected` empty
     // (`delete_on_a_set_label_removes_the_set_and_keeps_its_lines`).
-    if delete && selected.is_empty() && uis.iter().any(|u| u.canvas_delete(shell, shift)) {
+    if delete && selected.is_empty() && uis.iter().any(|u| shell.cx(|cx| u.canvas_delete(cx, shift))) {
         return;
     }
     if delete && !shift && selected.is_empty() && (remove_selected_link(shell) || remove_selected_line(shell)) {
@@ -1849,7 +1850,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         if let [(_, Some(entity))] = selected.as_slice()
             && let Some(kind) = kind.filter(|k| takes_rows(k, *entity))
         {
-            if add_second { kind.open_second(shell, *entity) } else { kind.open(shell, *entity, None) }
+            if add_second { shell.cx(|cx| kind.open_second(cx, *entity)) } else { shell.cx(|cx| kind.open(cx, *entity, None)) }
         }
         return;
     }

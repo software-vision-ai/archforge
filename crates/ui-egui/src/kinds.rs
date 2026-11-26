@@ -17,7 +17,8 @@ use egui::{Pos2, Rect, Stroke};
 pub(crate) use archforge_shell_api::kinds::{KindTool, Press, ToolUse};
 
 use crate::Shell;
-use crate::canvas::{Drawing, ExtraLabel, LineDrawn, View};
+use crate::canvas::{Drawing, ExtraLabel, LineDrawn, Tool, View};
+use crate::cx::{Ctx, CtxRef};
 use crate::editing::{Action, EntityMenu};
 use crate::ux::{Icon, Palette};
 use crate::widgets::Registry;
@@ -37,7 +38,22 @@ pub(crate) struct MenuRow {
     /// Open in Models, before Generate….
     pub(crate) first: bool,
     /// What it does when picked, on the menu's node and element.
-    pub(crate) run: fn(&mut Shell, &EntityMenu),
+    pub(crate) run: fn(&mut Ctx, &EntityMenu),
+}
+
+/// A row a diagram kind gives the Model menu ([`DiagramKind::menu_rows`]), as data: the shell makes
+/// the menu's entry from it ([`crate::model_menu`]), which arms the tool as the kind's toolbar button
+/// and popover do.
+pub(crate) struct ModelRow {
+    /// Its id, in the menu and the table of actions (`model.class`).
+    pub(crate) key: &'static str,
+    /// Its name, in the language in use when asked.
+    pub(crate) word: fn() -> String,
+    /// The tool it arms.
+    pub(crate) tool: Tool,
+    /// The choice of the tool's popover it makes before arming the tool, in the notation's own state
+    /// (UML's kind of classifier, or of relationship); none for a tool with no such choice.
+    pub(crate) choice: Option<fn(&mut crate::notation_ui::NotationStates)>,
 }
 
 /// What a diagram kind does with the canvas's tools and gestures.
@@ -47,11 +63,11 @@ pub(crate) trait DiagramKind: Sync {
     /// Its tools, in toolbar order.
     fn tools(&self) -> &'static [KindTool];
     /// Its rows of the Model menu while one of its diagrams shows, by section, in the menu's order:
-    /// one for each thing its tools make, each arming the tool as its toolbar button and popover
-    /// do (made with [`crate::model_menu::menu_row`]). The menu adds Note and Link note after them.
-    /// Every kind answers, as it answers its tools: a kind with tools and no rows would leave the
-    /// menu without them.
-    fn menu_rows(&self) -> &'static [&'static [crate::actions::Action]];
+    /// one for each thing its tools make, as data ([`ModelRow`]): the shell makes each entry, which
+    /// arms the tool as its toolbar button and popover do. The menu adds Note and Link note after
+    /// them. Every kind answers, as it answers its tools: a kind with tools and no rows would leave
+    /// the menu without them.
+    fn menu_rows(&self) -> &'static [&'static [ModelRow]];
     /// Its name in the New diagram dialog.
     fn word(&self) -> String;
     /// The name of its group in the Diagrams explorer, which holds its diagrams.
@@ -81,25 +97,25 @@ pub(crate) trait DiagramKind: Sync {
     /// The element a diagram of it would be of, from the selection.
     fn owner_of(&self, store: &Store, selected: Obj) -> Option<Obj>;
     /// Makes a new element for a diagram to be of, named `name`; its id.
-    fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String>;
+    fn add_owner(&self, cx: &mut Ctx, name: &str) -> Result<String, String>;
     /// Whether the toolbar shows the status marks toggle.
     fn status_marks(&self) -> bool {
         false
     }
     /// Draws a tool's face itself; false draws its icon.
     #[allow(clippy::too_many_arguments, reason = "a face is drawn from the tool, its button, its ink and its state")]
-    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
-        let _ = (shell, paint, p, key, b, ink, active);
+    fn tool_face(&self, cx: &CtxRef, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
+        let _ = (cx, paint, p, key, b, ink, active);
         false
     }
     /// A tool's hover text when it names what the tool makes now; none takes its `hint`.
-    fn tool_hint(&self, shell: &Shell, key: &str) -> Option<String> {
-        let _ = (shell, key);
+    fn tool_hint(&self, cx: &CtxRef, key: &str) -> Option<String> {
+        let _ = (cx, key);
         None
     }
     /// The popover the chevron `key` opens, drawn while it is open.
-    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, key: &str) {
-        let _ = (shell, ui, p, r, chevron, key);
+    fn popover(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, key: &str) {
+        let _ = (cx, ui, p, r, chevron, key);
     }
     /// Whether the element a node shows takes part in the kind's gestures: connecting from and to
     /// it, its adorners, renaming it in place, its menu and opening its editor.
@@ -107,17 +123,17 @@ pub(crate) trait DiagramKind: Sync {
     /// Why a line of the tool `tool` starts nowhere at `element`, when it does not: the tool then
     /// draws nothing and the reason is said at the canvas's top. By default every element that
     /// takes part starts one.
-    fn line_start_problem(&self, shell: &Shell, store: &Store, tool: &'static str, element: Obj) -> Option<String> {
-        let _ = (shell, store, tool, element);
+    fn line_start_problem(&self, cx: &CtxRef, store: &Store, tool: &'static str, element: Obj) -> Option<String> {
+        let _ = (cx, store, tool, element);
         None
     }
     /// Places a new element at `(x, y)` on diagram `d` with the tool `tool`.
-    fn place(&self, shell: &mut Shell, tool: &'static str, d: Obj, x: f64, y: f64);
+    fn place(&self, cx: &mut Ctx, tool: &'static str, d: Obj, x: f64, y: f64);
     /// Connects the elements of two nodes with the tool `tool`.
-    fn connect(&self, shell: &mut Shell, tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid);
+    fn connect(&self, cx: &mut Ctx, tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid);
     /// A line of the tool `tool` dropped on empty canvas at `(x, y)`: a new element there, joined
     /// to the node's.
-    fn connect_to_new(&self, shell: &mut Shell, tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64);
+    fn connect_to_new(&self, cx: &mut Ctx, tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64);
     /// Whether ⇧⌫ deletes the element of a selected node from the model: by default those that take
     /// part in the gestures.
     fn deletes(&self, store: &Store, element: Obj) -> bool {
@@ -130,22 +146,22 @@ pub(crate) trait DiagramKind: Sync {
         false
     }
     /// Renames the element as typed in place.
-    fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String>;
+    fn rename(&self, cx: &mut Ctx, element: Uuid, name: &str) -> Result<(), String>;
     /// Opens the element's editor, at the row of its card under a double click (None: the editor's
     /// new row, as the second adorner asks).
-    fn open(&self, shell: &mut Shell, element: Uuid, row: Option<usize>);
+    fn open(&self, cx: &mut Ctx, element: Uuid, row: Option<usize>);
     /// Whether a selected line's ends drag onto another element to reconnect it.
     fn reconnects(&self) -> bool {
         false
     }
     /// Moves the source or target end of the line element `element` to the element of `to_node`,
     /// only while the model is at `at`, the revision the drag began on, where the command checks one.
-    fn reconnect(&self, shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid, at: archforge_engine::Revision) {
-        let _ = (shell, element, source, to_node, at);
+    fn reconnect(&self, cx: &mut Ctx, element: Uuid, source: bool, to_node: Uuid, at: archforge_engine::Revision) {
+        let _ = (cx, element, source, to_node, at);
     }
     /// Places an element dragged from the Models explorer on diagram `d`, centred on `at`.
-    fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
-        let _ = (shell, d, element, at);
+    fn drop(&self, cx: &mut Ctx, d: Obj, element: Uuid, at: (f64, f64)) {
+        let _ = (cx, d, element, at);
     }
     /// The second adorner of the selected `element`, beside Connect: its key and hover text; it
     /// opens the editor's new row, as its menu's row and ⌘↩ do (a class's attribute, an
@@ -156,13 +172,13 @@ pub(crate) trait DiagramKind: Sync {
     }
     /// The other new row a selected element takes, with Shift added to the adorner's keys (a
     /// class's operation, beside its attribute); none by default.
-    fn open_second(&self, shell: &mut Shell, element: Uuid) {
-        let _ = (shell, element);
+    fn open_second(&self, cx: &mut Ctx, element: Uuid) {
+        let _ = (cx, element);
     }
     /// Controls a selected element's card holds on it (a class's + for each compartment), drawn
     /// with its adorners; none by default.
-    fn card_controls(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, element: Uuid) {
-        let _ = (shell, ui, p, clip, rect, element);
+    fn card_controls(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, element: Uuid) {
+        let _ = (cx, ui, p, clip, rect, element);
     }
     /// The rows a right click's menu on `element` adds to the shared ones (Open in Models, Generate…,
     /// Remove from this diagram, Delete from the model…), in order, each with what it does when
@@ -175,22 +191,22 @@ pub(crate) trait DiagramKind: Sync {
     /// under way had its chance to end and before a drag starts one. Some takes the press, even as
     /// [`Action::Nothing`] (UML's n-ary association drawn by clicks, Add end waiting on a class);
     /// none by default, leaving it to the shared gestures.
-    fn pointer(&self, shell: &Shell, press: &Press<'_>) -> Option<Action> {
-        let _ = (shell, press);
+    fn pointer(&self, cx: &CtxRef, press: &Press<'_>) -> Option<Action> {
+        let _ = (cx, press);
         None
     }
     /// What a right click with Select at `press.at` means to the kind, before its element menu
     /// opens (UML's menu of an n-ary association, and of generalization lines); none by default,
     /// leaving the element menu to open where [`DiagramKind::menu`] says.
-    fn secondary_click(&self, shell: &Shell, press: &Press<'_>) -> Option<Action> {
-        let _ = (shell, press);
+    fn secondary_click(&self, cx: &CtxRef, press: &Press<'_>) -> Option<Action> {
+        let _ = (cx, press);
         None
     }
     /// Reads the keys a drawing under way on diagram `d` takes before the canvas's own (UML's n-ary
     /// association: Enter, Backspace and Escape); true when it took them this frame, false by
     /// default.
-    fn keys(&self, shell: &mut Shell, ui: &egui::Ui, d: Obj) -> bool {
-        let _ = (shell, ui, d);
+    fn keys(&self, cx: &mut Ctx, ui: &egui::Ui, d: Obj) -> bool {
+        let _ = (cx, ui, d);
         false
     }
     /// Whether the popover of its chevron `key` is a menu the arrow keys, Enter and Escape walk
@@ -210,14 +226,14 @@ pub(crate) trait DiagramKind: Sync {
     /// Runs before the canvas `r` draws diagram `d`: may take keys, follow the zoom made since the
     /// last drawing ([`crate::canvas::State::zoom_intent`]) and set the view, or open another diagram (UML's
     /// package navigation); nothing by default.
-    fn before_draw(&self, shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
-        let _ = (shell, ui, r, d);
+    fn before_draw(&self, cx: &mut Ctx, ui: &egui::Ui, r: Rect, d: Obj) {
+        let _ = (cx, ui, r, d);
     }
     /// Draws over the canvas `r` once diagram `d` and its gestures are drawn, under the toast, the
     /// minimap and the toolbar (UML's path bar and a selected package's Open). Gives how much room
     /// it takes at the canvas's top, for the hint bar to go below; none by default, drawing nothing.
-    fn after_draw(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
-        let _ = (shell, ui, p, r, d);
+    fn after_draw(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
+        let _ = (cx, ui, p, r, d);
         0.0
     }
     /// Where a line of the drawing `d` leaving the node `source` starts when not where its route
@@ -247,20 +263,20 @@ pub(crate) trait DiagramKind: Sync {
     /// corner at `(x, y)`, as a drag lets it go there: `element` is the element the label stands
     /// for (UML gives a generalization set's label a node there). A refusal is said at the
     /// canvas's top. Nothing by default.
-    fn place_label(&self, shell: &mut Shell, d: Obj, element: Uuid, x: f64, y: f64) {
-        let _ = (shell, d, element, x, y);
+    fn place_label(&self, cx: &mut Ctx, d: Obj, element: Uuid, x: f64, y: f64) {
+        let _ = (cx, d, element, x, y);
     }
     /// Draws the hint bar at the canvas `r`'s top, `below` the room the canvas's top already
     /// takes: what a drawing under way has so far and what the keys do (a UML n-ary association's,
     /// or what its Add end waits for); none by default.
-    fn hint_bar(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, below: f32) {
-        let _ = (shell, ui, p, r, below);
+    fn hint_bar(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, below: f32) {
+        let _ = (cx, ui, p, r, below);
     }
     /// The line drawn from a node to the pointer while connecting; a plain line by default.
     #[allow(clippy::too_many_arguments, reason = "a live line is drawn from its node to the pointer over the view")]
-    fn live_line(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, view: View, from_node: Uuid, pointer: Pos2, target: Option<Rect>) {
+    fn live_line(&self, cx: &CtxRef, paint: &egui::Painter, p: &Palette, view: View, from_node: Uuid, pointer: Pos2, target: Option<Rect>) {
         let Some(rect) =
-            shell.session.as_ref().and_then(|s| s.doc().by_uuid(from_node).map(|n| view.rect(&archforge_diagram::grid::bounds_of(s.doc(), n))))
+            cx.session.as_ref().and_then(|s| s.doc().by_uuid(from_node).map(|n| view.rect(&archforge_diagram::grid::bounds_of(s.doc(), n))))
         else {
             return;
         };

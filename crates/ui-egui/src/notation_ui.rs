@@ -38,7 +38,7 @@ pub(crate) trait NotationUi: Sync {
     fn offers(&self, store: &Store, selection: Option<Obj>) -> Vec<Offer>;
     /// Adds what the offer `key` names at `selection` with a fresh default name; None when it has
     /// nothing to add there, a refusal in the user's words.
-    fn add(&self, shell: &mut Shell, key: &str, selection: Option<Obj>) -> Option<Result<Added, String>>;
+    fn add(&self, cx: &mut Ctx, key: &str, selection: Option<Obj>) -> Option<Result<Added, String>>;
     /// The command that renames an element of `class` in place, and its key for the element.
     fn rename(&self, store: &Store, obj: Obj) -> Option<(&'static str, &'static str)>;
     /// Why `obj` cannot be renamed `name`, in the user's words, checked before the rename command
@@ -58,8 +58,8 @@ pub(crate) trait NotationUi: Sync {
         None
     }
     /// Makes what New inside ▸ `key` names inside `obj`, its name open for typing in Models.
-    fn add_inside(&self, shell: &mut Shell, key: &str, obj: Obj) -> Option<Result<Uuid, String>> {
-        let _ = (shell, key, obj);
+    fn add_inside(&self, cx: &mut Ctx, key: &str, obj: Obj) -> Option<Result<Uuid, String>> {
+        let _ = (cx, key, obj);
         None
     }
     /// What goes with `obj` when it is removed, by name, for the dialog to name each: a UML
@@ -113,8 +113,8 @@ pub(crate) trait NotationUi: Sync {
     /// comes back in the user's words, for the tree to say.
     ///
     /// [`drop_on`]: NotationUi::drop_on
-    fn run_drop(&self, shell: &mut Shell, cmd: &'static str, params: serde_json::Value) -> Result<(), String> {
-        crate::panels::run(shell, cmd, params).map(|_| ())
+    fn run_drop(&self, cx: &mut Ctx, cmd: &'static str, params: serde_json::Value) -> Result<(), String> {
+        crate::panels::run_cx(cx, cmd, params).map(|_| ())
     }
     /// Why `obj`, which the model says carries no skill, carries none, in the user's words for the
     /// Skills panel ("Relationships carry no skills"); none takes the panel's general line.
@@ -180,7 +180,7 @@ pub(crate) trait NotationUi: Sync {
     }
     /// Draws the body of Properties for `subject`, an element of its metamodel.
     #[allow(clippy::too_many_arguments, reason = "the body is drawn into the panel from its top, for its subject")]
-    fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject);
+    fn body(&self, cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject);
 
     // Refusals: each is said by the one notation whose commands give it; one the engine, the
     // diagrams or both notations give is the shell's own ([`crate::panels::said`]).
@@ -243,11 +243,11 @@ pub(crate) trait NotationUi: Sync {
     /// Delete on the canvas, with none of the diagram's boxes selected and Shift held or not
     /// (`shift`): removes one of its own selected elements its own way and gives true; false
     /// leaves the key to the next notation and then to the shared removals.
-    fn canvas_delete(&self, shell: &mut Shell, shift: bool) -> bool;
+    fn canvas_delete(&self, cx: &mut Ctx, shift: bool) -> bool;
     /// Reads a chord of its own on the selection, once the canvas has the keys and changes are
     /// allowed (UML's ⌥⌘G); true when it took the keys this frame, false by default.
-    fn canvas_keys(&self, shell: &mut Shell, ui: &egui::Ui) -> bool {
-        let _ = (shell, ui);
+    fn canvas_keys(&self, cx: &mut Ctx, ui: &egui::Ui) -> bool {
+        let _ = (cx, ui);
         false
     }
 
@@ -256,7 +256,7 @@ pub(crate) trait NotationUi: Sync {
 
     /// Draws what of its own goes over the canvas `on` at `layer`, from its own state: the drafts,
     /// rows, menus and offers it has open; nothing at a layer it has nothing for.
-    fn canvas_overlay(&self, shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>);
+    fn canvas_overlay(&self, cx: &mut Ctx, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>);
     /// What a problem badge on one of its elements says on hover when the badge offers a way out
     /// of the problem, as the element's figure says it does (ER's many-to-many relationship: "Many
     /// to many · add a mapping table"); none leaves the badge a plain one, its problems on hover
@@ -266,8 +266,8 @@ pub(crate) trait NotationUi: Sync {
     }
     /// A click on such a badge on its element `element`: ER opens the mapping table offer for the
     /// relationship; nothing by default.
-    fn resolve(&self, shell: &mut Shell, element: Uuid) {
-        let _ = (shell, element);
+    fn resolve(&self, cx: &mut Ctx, element: Uuid) {
+        let _ = (cx, element);
     }
 
     // As a project opens.
@@ -454,11 +454,12 @@ pub(crate) fn say_after_cx(cx: &mut Ctx, after: Option<String>, lead: &str) {
 }
 
 /// Draws every notation's overlays at `layer` over the canvas `on`, in the order of the notations
-/// ([`NotationUi::canvas_overlay`]).
+/// ([`NotationUi::canvas_overlay`]), each through a context of its own, so the shell carries out
+/// what one asked before the next draws.
 pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
     let uis = shell.notation_uis;
     for notation in uis {
-        notation.canvas_overlay(shell, ui, layer, on);
+        shell.cx(|cx| notation.canvas_overlay(cx, ui, layer, on));
     }
 }
 

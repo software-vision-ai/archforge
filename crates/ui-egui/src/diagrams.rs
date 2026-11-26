@@ -427,7 +427,7 @@ fn create(shell: &mut Shell) {
     let fresh_schema = edit.schema.is_none();
     let schema = match edit.schema {
         Some(s) => Ok(s.to_string()),
-        None => kind.add_owner(shell, &name),
+        None => shell.cx(|cx| kind.add_owner(cx, &name)),
     };
     let made = schema.and_then(|schema| {
         let made = run(shell, "diagram.add", json!({ "kind": kind.kind(), "element": &schema, "name": name }));

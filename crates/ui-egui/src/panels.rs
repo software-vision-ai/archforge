@@ -1340,7 +1340,7 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
         // An element of a notation: its notation's sections.
         Some(_) => {
             if let Some(notation) = notation {
-                notation.body(shell, ui, p, r, y, subject);
+                shell.cx(|cx| notation.body(cx, ui, p, r, y, subject));
             }
         }
     }

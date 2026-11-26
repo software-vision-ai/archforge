@@ -59,8 +59,12 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   (`Shell::cx`), `CtxRef` is its read-only twin (`Shell::cx_ref`), and what lies outside it (the
   Models tree's rows, the centre leaving a version's details, a panel of the right side or an
   explorer of the left side shown, a new element's name opened for typing in Models, the delete
-  dialog opened on a removal) is a `Request` the shell carries out once the call returns. The controls taking it end in `_cx`;
-  the old ones over the whole shell forward to them until every caller has moved.
+  dialog opened on a removal) is a `Request` the shell carries out once the call returns. The
+  interfaces `NotationUi` and `DiagramKind` hand it over: a method that reaches the shell takes
+  `&mut Ctx`, or `&CtxRef` where it only reads, and the shell builds it at each call, never the
+  notation. A kind's rows of the Model menu are data (`kinds::ModelRow`), from which the shell
+  makes the menu's entries. The controls taking it end in `_cx`; the old ones over the whole
+  shell forward to them for the shell's own screens.
 - A control whose screen does not exist yet says "Not available yet" on hover. A canvas tool that
   is not built is left out of the toolbar instead.
 - The interface never touches the file system: what it needs from the host comes through

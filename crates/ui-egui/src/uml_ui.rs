@@ -12,14 +12,14 @@ use archforge_uml::commands::{classifiers, package_of, packages};
 use egui::Rect;
 use serde_json::json;
 
+#[cfg(any(test, feature = "snapshot"))]
 use crate::Shell;
 use crate::canvas::Tool;
-use crate::cx::{Ctx, Request};
+use crate::cx::{Ctx, CtxRef, Request};
 use crate::editing::Action;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{Rows, fmt, tr, tr_ctx, trn};
-use crate::kinds::{DiagramKind, KindTool, MenuRow, Press, ToolUse};
-use crate::model_menu::menu_row;
+use crate::kinds::{DiagramKind, KindTool, MenuRow, ModelRow, Press, ToolUse};
 use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
 use crate::panels::Subject;
 use crate::uml_classifier::Classifier;
@@ -99,43 +99,48 @@ const TOOLS: &[KindTool] = &[
     },
 ];
 
-/// The kind its rows of the Model menu are of.
-const KIND: Option<&str> = Some(archforge_uml::STRUCTURE_DIAGRAM);
-
 /// A row of the Model menu that arms the classifier tool with `$kind`, as the tool's own menu does.
 macro_rules! classifier_row {
     ($id:literal, $kind:ident) => {
-        menu_row!(KIND, $id, Classifier::$kind.word(), |s| {
-            if let Some(uml) = crate::uml_state::uml_mut(&mut s.notation_states) {
-                uml.classifier = Classifier::$kind;
-            }
-            s.canvas.tool = Tool::Place(crate::uml_classifier::TOOL);
-        })
+        ModelRow {
+            key: $id,
+            word: || Classifier::$kind.word(),
+            tool: Tool::Place(crate::uml_classifier::TOOL),
+            choice: Some(|states| {
+                if let Some(uml) = crate::uml_state::uml_mut(states) {
+                    uml.classifier = Classifier::$kind;
+                }
+            }),
+        }
     };
 }
 
 /// A row of the Model menu that arms the Relationship tool with `$kind`, as the tool's own menu does.
 macro_rules! relation_row {
     ($id:literal, $kind:ident) => {
-        menu_row!(KIND, $id, tr(Relate::$kind.word()), |s| {
-            if let Some(uml) = crate::uml_state::uml_mut(&mut s.notation_states) {
-                uml.relation = Relate::$kind;
-            }
-            s.canvas.tool = Tool::Connect("relationship");
-        })
+        ModelRow {
+            key: $id,
+            word: || tr(Relate::$kind.word()),
+            tool: Tool::Connect("relationship"),
+            choice: Some(|states| {
+                if let Some(uml) = crate::uml_state::uml_mut(states) {
+                    uml.relation = Relate::$kind;
+                }
+            }),
+        }
     };
 }
 
 /// A class diagram's rows of the Model menu: the classifier tool's kinds and Package, then the
 /// Relationship tool's sections.
-static MENU_ROWS: &[&[crate::actions::Action]] = &[
+static MENU_ROWS: &[&[ModelRow]] = &[
     &[
         classifier_row!("model.class", Class),
         classifier_row!("model.interface", Interface),
         classifier_row!("model.enumeration", Enumeration),
         classifier_row!("model.data-type", DataType),
         classifier_row!("model.primitive-type", PrimitiveType),
-        menu_row!(KIND, "model.package", tr("Package"), |s| s.canvas.tool = Tool::Place("package")),
+        ModelRow { key: "model.package", word: || tr("Package"), tool: Tool::Place("package"), choice: None },
     ],
     &[
         relation_row!("model.relate.association", Association),
@@ -160,7 +165,7 @@ impl DiagramKind for UmlKind {
     }
 
     /// The classifier tool's kinds and Package, then the Relationship tool's kinds in its sections.
-    fn menu_rows(&self) -> &'static [&'static [crate::actions::Action]] {
+    fn menu_rows(&self) -> &'static [&'static [ModelRow]] {
         MENU_ROWS
     }
 
@@ -240,16 +245,14 @@ impl DiagramKind for UmlKind {
 
     /// A package named `name` for a new UML structure diagram to be of, or the root package while
     /// the model has none yet. A refusal comes back in plain words ([`crate::panels::refusal`]).
-    fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String> {
-        shell.cx(|cx| {
-            let has_root = cx.session.as_ref().is_some_and(|s| archforge_uml::commands::root_package(s.doc()).is_some());
-            let made = if has_root {
-                crate::panels::run_cx(cx, "uml.package.add", json!({ "name": name }))
-            } else {
-                crate::panels::run_cx(cx, "uml.model.root", json!({}))
-            };
-            made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
-        })
+    fn add_owner(&self, cx: &mut Ctx, name: &str) -> Result<String, String> {
+        let has_root = cx.session.as_ref().is_some_and(|s| archforge_uml::commands::root_package(s.doc()).is_some());
+        let made = if has_root {
+            crate::panels::run_cx(cx, "uml.package.add", json!({ "name": name }))
+        } else {
+            crate::panels::run_cx(cx, "uml.model.root", json!({}))
+        };
+        made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
     /// A classifier takes part in the UML structure diagram's gestures.
@@ -260,60 +263,55 @@ impl DiagramKind for UmlKind {
     /// A class, an interface, an enumeration, a data type or a primitive type, as the classifier
     /// tool's kind says, in the diagram's package, its card (a primitive type's a header's height)
     /// centred under the click, as one undo step; then its name is open for typing.
-    fn place(&self, shell: &mut Shell, tool: &'static str, d: Obj, x: f64, y: f64) {
-        shell.cx(|cx| {
-            if tool == "package" {
-                place_package(cx, d, x, y);
-                return;
-            }
-            cx.canvas.notice = None;
-            let Some(session) = cx.session.as_mut() else { return };
-            let store = session.doc();
-            let Some(package) = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()) else {
-                cx.canvas.notice = Some(tr("The diagram is of no package"));
-                return;
-            };
-            let (Ok(package_id), Ok(diagram_id)) = (store.uuid(package), store.uuid(d)) else {
-                cx.canvas.notice = Some(tr("The diagram is of no package"));
-                return;
-            };
-            let kind = uml(cx.notation_states).map(|uml| uml.classifier).unwrap_or_default();
-            let Some(name) = fresh_name(kind.stem(), classifiers(store, package).into_iter().map(|c| name(store, c)), false) else {
-                cx.canvas.notice = Some(tr("No free name is left"));
-                return;
-            };
-            let (w, h) = kind.size();
-            let (px, py) = ((x - w / 2.0).round(), (y - h / 2.0).round());
-            let name_for_batch = name.clone();
-            let out = session.batch(&kind.add_step(), |b| {
-                let c = b.execute(kind.add_command(), &json!({ "package": package_id.to_string(), "name": name_for_batch }))?;
-                let class = c.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
-                b.execute(
-                    "diagram.place",
-                    &json!({ "diagram": diagram_id.to_string(), "element": class, "x": px, "y": py, "width": w, "height": h }),
-                )?;
-                Ok(())
-            });
-            match out {
-                Ok(o) => {
-                    let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
-                    if let (Some(class), Some(node)) = (id_at(0), id_at(1)) {
-                        let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [class.to_string()] }));
-                        cx.canvas.rename = Some(crate::editing::NodeRename { node, entity: class, text: name, opened: true, refused: None });
-                        cx.canvas.focused = true;
-                    }
-                    cx.canvas.tool = crate::canvas::Tool::Select;
-                }
-                Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
-            }
+    fn place(&self, cx: &mut Ctx, tool: &'static str, d: Obj, x: f64, y: f64) {
+        if tool == "package" {
+            place_package(cx, d, x, y);
+            return;
+        }
+        cx.canvas.notice = None;
+        let Some(session) = cx.session.as_mut() else { return };
+        let store = session.doc();
+        let Some(package) = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()) else {
+            cx.canvas.notice = Some(tr("The diagram is of no package"));
+            return;
+        };
+        let (Ok(package_id), Ok(diagram_id)) = (store.uuid(package), store.uuid(d)) else {
+            cx.canvas.notice = Some(tr("The diagram is of no package"));
+            return;
+        };
+        let kind = uml(cx.notation_states).map(|uml| uml.classifier).unwrap_or_default();
+        let Some(name) = fresh_name(kind.stem(), classifiers(store, package).into_iter().map(|c| name(store, c)), false) else {
+            cx.canvas.notice = Some(tr("No free name is left"));
+            return;
+        };
+        let (w, h) = kind.size();
+        let (px, py) = ((x - w / 2.0).round(), (y - h / 2.0).round());
+        let name_for_batch = name.clone();
+        let out = session.batch(&kind.add_step(), |b| {
+            let c = b.execute(kind.add_command(), &json!({ "package": package_id.to_string(), "name": name_for_batch }))?;
+            let class = c.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+            b.execute("diagram.place", &json!({ "diagram": diagram_id.to_string(), "element": class, "x": px, "y": py, "width": w, "height": h }))?;
+            Ok(())
         });
+        match out {
+            Ok(o) => {
+                let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
+                if let (Some(class), Some(node)) = (id_at(0), id_at(1)) {
+                    let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [class.to_string()] }));
+                    cx.canvas.rename = Some(crate::editing::NodeRename { node, entity: class, text: name, opened: true, refused: None });
+                    cx.canvas.focused = true;
+                }
+                cx.canvas.tool = crate::canvas::Tool::Select;
+            }
+            Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        }
     }
 
     /// The classifier tool shows the kind it places, the Relationship tool the kind it draws.
-    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
+    fn tool_face(&self, cx: &CtxRef, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: crate::ux::Colour, active: bool) -> bool {
         match key {
-            crate::uml_classifier::TOOL => crate::uml_classifier::tool_face(&shell.cx_ref(), paint, b, ink),
-            "relationship" => crate::uml_relate::tool_face(&shell.cx_ref(), paint, p, b, ink, active),
+            crate::uml_classifier::TOOL => crate::uml_classifier::tool_face(cx, paint, b, ink),
+            "relationship" => crate::uml_relate::tool_face(cx, paint, p, b, ink, active),
             _ => return false,
         }
         true
@@ -321,38 +319,37 @@ impl DiagramKind for UmlKind {
 
     /// The classifier tool's tooltip names the kind it places; the Relationship tool's says which
     /// way a realization runs.
-    fn tool_hint(&self, shell: &Shell, key: &str) -> Option<String> {
-        let cx = shell.cx_ref();
+    fn tool_hint(&self, cx: &CtxRef, key: &str) -> Option<String> {
         match key {
             crate::uml_classifier::TOOL => Some(uml(cx.notation_states).map(|uml| uml.classifier).unwrap_or_default().word()),
-            "relationship" => crate::uml_relate::tool_hint(&cx),
+            "relationship" => crate::uml_relate::tool_hint(cx),
             _ => None,
         }
     }
 
     /// A realization starts only at a class: from any other classifier the tool starts no line.
-    fn line_start_problem(&self, shell: &Shell, store: &Store, tool: &'static str, element: Obj) -> Option<String> {
-        (tool == "relationship").then(|| crate::uml_relate::start_problem(&shell.cx_ref(), store, element)).flatten()
+    fn line_start_problem(&self, cx: &CtxRef, store: &Store, tool: &'static str, element: Obj) -> Option<String> {
+        (tool == "relationship").then(|| crate::uml_relate::start_problem(cx, store, element)).flatten()
     }
 
     /// The classifier tool's menu of kinds, or the Relationship tool's.
-    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, key: &str) {
+    fn popover(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, key: &str) {
         if key == crate::uml_classifier::KINDS {
-            shell.cx(|cx| crate::uml_classifier::popover(cx, ui, p, r, chevron));
+            crate::uml_classifier::popover(cx, ui, p, r, chevron);
         } else {
-            shell.cx(|cx| crate::uml_relate::popover(cx, ui, p, r, chevron));
+            crate::uml_relate::popover(cx, ui, p, r, chevron);
         }
     }
 
     /// The chosen kind of relationship drawn between the classes of two nodes.
-    fn connect(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid) {
-        shell.cx(|cx| crate::uml_relate::connect(cx, d, from_node, to_node));
+    fn connect(&self, cx: &mut Ctx, _tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid) {
+        crate::uml_relate::connect(cx, d, from_node, to_node);
     }
 
     /// The chosen kind of relationship dropped on empty canvas: a new classifier there, related to
     /// the node's.
-    fn connect_to_new(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64) {
-        shell.cx(|cx| crate::uml_relate::connect_to_new(cx, d, from_node, x, y));
+    fn connect_to_new(&self, cx: &mut Ctx, _tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64) {
+        crate::uml_relate::connect_to_new(cx, d, from_node, x, y);
     }
 
     fn reconnects(&self) -> bool {
@@ -361,22 +358,20 @@ impl DiagramKind for UmlKind {
 
     /// Moves an end of a selected line onto the classifier of `to_node`, the Relationship tool's rules
     /// kept, on the revision `at` the drag began on.
-    fn reconnect(&self, shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid, at: archforge_engine::Revision) {
-        shell.cx(|cx| crate::uml_relate::reconnect(cx, element, source, to_node, at));
+    fn reconnect(&self, cx: &mut Ctx, element: Uuid, source: bool, to_node: Uuid, at: archforge_engine::Revision) {
+        crate::uml_relate::reconnect(cx, element, source, to_node, at);
     }
 
     /// Renames a card's element in place: a package or a classifier,
     /// through its own command.
-    fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String> {
-        shell.cx(|cx| {
-            let store = cx.session.as_ref().map(|s| s.doc());
-            let (cmd, key) = match store.and_then(|st| st.by_uuid(element).map(|o| (st, o))) {
-                Some((st, o)) if class(st, o) == Some(archforge_uml::PACKAGE) => ("uml.package.rename", "package"),
-                Some((st, o)) => Classifier::of(st, o).unwrap_or_default().rename_command(),
-                None => Classifier::Class.rename_command(),
-            };
-            crate::panels::run_cx(cx, cmd, json!({ key: element.to_string(), "name": name })).map(|_| ())
-        })
+    fn rename(&self, cx: &mut Ctx, element: Uuid, name: &str) -> Result<(), String> {
+        let store = cx.session.as_ref().map(|s| s.doc());
+        let (cmd, key) = match store.and_then(|st| st.by_uuid(element).map(|o| (st, o))) {
+            Some((st, o)) if class(st, o) == Some(archforge_uml::PACKAGE) => ("uml.package.rename", "package"),
+            Some((st, o)) => Classifier::of(st, o).unwrap_or_default().rename_command(),
+            None => Classifier::Class.rename_command(),
+        };
+        crate::panels::run_cx(cx, cmd, json!({ key: element.to_string(), "name": name })).map(|_| ())
     }
 
     /// A class, an interface, an enumeration, a data type, or a package on the diagram, goes from the model with
@@ -395,47 +390,45 @@ impl DiagramKind for UmlKind {
     /// The member at `row` of the classifier's card (its attributes, then its operations; an
     /// enumeration's literals), or a new attribute (a new literal), typed in place on the card, or
     /// in Properties' editor where the card cannot hold it. A primitive type has no member to open.
-    fn open(&self, shell: &mut Shell, element: Uuid, row: Option<usize>) {
-        shell.cx(|cx| {
-            // A constraint's braces or note open its editor in its context's Properties (AR-133).
-            let context = cx.session.as_ref().and_then(|s| {
-                let store = s.doc();
-                let c = store.by_uuid(element).filter(|c| archforge_uml::constraints::is_constraint(store, *c))?;
-                store.uuid(archforge_uml::constraints::context_of(store, c)?).ok()
-            });
-            if let Some(context) = context {
-                let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
-                cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
-                crate::uml_constraints::open(cx, context, Some(element));
-                return;
-            }
-            if cx.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| !has_member_kinds(s.doc(), e))) {
-                return;
-            }
-            let enumeration = cx.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| is_enumeration(s.doc(), e)));
-            let member = row.and_then(|row| {
-                let store = cx.session.as_ref()?.doc();
-                let c = store.by_uuid(element)?;
-                if enumeration {
-                    return Some((MemberKind::Literal, store.uuid(*archforge_uml::commands::literals(store, c).get(row)?).ok()?));
-                }
-                let attributes = archforge_uml::members::attributes(store, c);
-                let (kind, o) = match attributes.get(row) {
-                    Some(a) => (MemberKind::Attribute, *a),
-                    None => (MemberKind::Operation, *archforge_uml::members::operations(store, c).get(row - attributes.len())?),
-                };
-                Some((kind, store.uuid(o).ok()?))
-            });
-            let new = if enumeration { MemberKind::Literal } else { MemberKind::Attribute };
-            let (kind, target) = member.map_or((new, None), |(kind, id)| (kind, Some(id)));
-            // Typed in place on the card; Properties' editor where the card cannot hold it.
-            if crate::uml_inline::open(cx, element, kind, target) {
-                return;
-            }
+    fn open(&self, cx: &mut Ctx, element: Uuid, row: Option<usize>) {
+        // A constraint's braces or note open its editor in its context's Properties (AR-133).
+        let context = cx.session.as_ref().and_then(|s| {
+            let store = s.doc();
+            let c = store.by_uuid(element).filter(|c| archforge_uml::constraints::is_constraint(store, *c))?;
+            store.uuid(archforge_uml::constraints::context_of(store, c)?).ok()
+        });
+        if let Some(context) = context {
             let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
             cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
-            crate::uml_panel::open(cx, element, kind, target);
+            crate::uml_constraints::open(cx, context, Some(element));
+            return;
+        }
+        if cx.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| !has_member_kinds(s.doc(), e))) {
+            return;
+        }
+        let enumeration = cx.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| is_enumeration(s.doc(), e)));
+        let member = row.and_then(|row| {
+            let store = cx.session.as_ref()?.doc();
+            let c = store.by_uuid(element)?;
+            if enumeration {
+                return Some((MemberKind::Literal, store.uuid(*archforge_uml::commands::literals(store, c).get(row)?).ok()?));
+            }
+            let attributes = archforge_uml::members::attributes(store, c);
+            let (kind, o) = match attributes.get(row) {
+                Some(a) => (MemberKind::Attribute, *a),
+                None => (MemberKind::Operation, *archforge_uml::members::operations(store, c).get(row - attributes.len())?),
+            };
+            Some((kind, store.uuid(o).ok()?))
         });
+        let new = if enumeration { MemberKind::Literal } else { MemberKind::Attribute };
+        let (kind, target) = member.map_or((new, None), |(kind, id)| (kind, Some(id)));
+        // Typed in place on the card; Properties' editor where the card cannot hold it.
+        if crate::uml_inline::open(cx, element, kind, target) {
+            return;
+        }
+        let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
+        cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
+        crate::uml_panel::open(cx, element, kind, target);
     }
 
     /// A selected card's second adorner adds an attribute, or an enumeration's a literal; a
@@ -449,23 +442,21 @@ impl DiagramKind for UmlKind {
 
     /// A class's operation, typed in place as its attribute is; an enumeration takes no operation,
     /// so ⇧⌘↩ adds nothing to it.
-    fn open_second(&self, shell: &mut Shell, element: Uuid) {
-        shell.cx(|cx| {
-            if cx.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| is_enumeration(s.doc(), e))) {
-                return;
-            }
-            if !crate::uml_inline::open(cx, element, MemberKind::Operation, None) {
-                let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
-                cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
-                crate::uml_panel::open(cx, element, MemberKind::Operation, None);
-            }
-        });
+    fn open_second(&self, cx: &mut Ctx, element: Uuid) {
+        if cx.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| is_enumeration(s.doc(), e))) {
+            return;
+        }
+        if !crate::uml_inline::open(cx, element, MemberKind::Operation, None) {
+            let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
+            cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
+            crate::uml_panel::open(cx, element, MemberKind::Operation, None);
+        }
     }
 
     /// The + of each compartment: a class's attributes and operations, an enumeration's literals; a
     /// primitive type's card has no compartment.
-    fn card_controls(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, element: Uuid) {
-        shell.cx(|cx| crate::uml_inline::add_buttons(cx, ui, p, clip, rect, element));
+    fn card_controls(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, element: Uuid) {
+        crate::uml_inline::add_buttons(cx, ui, p, clip, rect, element);
     }
 
     /// A class's menu adds its new row after Open in Models, as its second adorner names it (an
@@ -478,25 +469,25 @@ impl DiagramKind for UmlKind {
             keys: crate::editing::new_row_keys(mac),
             live: true,
             first: false,
-            run: |shell, menu| UmlKind.open(shell, menu.entity, None),
+            run: |cx, menu| UmlKind.open(cx, menu.entity, None),
         });
         Some(row.into_iter().collect())
     }
 
     /// An n-ary association drawn class by class, and Add end waiting on a class (AR-128).
-    fn pointer(&self, shell: &Shell, press: &Press<'_>) -> Option<Action> {
-        crate::uml_nary::pointer(&shell.cx_ref(), press)
+    fn pointer(&self, cx: &CtxRef, press: &Press<'_>) -> Option<Action> {
+        crate::uml_nary::pointer(cx, press)
     }
 
     /// The menu of an n-ary association from its diamond or a leg (AR-128), and the set actions
     /// from a generalization's line (AR-129).
-    fn secondary_click(&self, _shell: &Shell, press: &Press<'_>) -> Option<Action> {
+    fn secondary_click(&self, _cx: &CtxRef, press: &Press<'_>) -> Option<Action> {
         crate::uml_nary::secondary_click(press).or_else(|| crate::uml_sets::secondary_click(press))
     }
 
     /// An n-ary association's drawing, or Add end: Enter, Backspace and Escape (AR-128).
-    fn keys(&self, shell: &mut Shell, ui: &egui::Ui, d: Obj) -> bool {
-        shell.cx(|cx| crate::uml_nary::keys(cx, ui, d))
+    fn keys(&self, cx: &mut Ctx, ui: &egui::Ui, d: Obj) -> bool {
+        crate::uml_nary::keys(cx, ui, d)
     }
 
     /// The classifier tool's menu of kinds.
@@ -512,52 +503,50 @@ impl DiagramKind for UmlKind {
     /// A classifier from the tree (a primitive type a header's height), with its lines to the classifiers the
     /// diagram shows; one already there is said so and left. An association class's card comes
     /// with its own line too, where the diagram shows both its classes.
-    fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
-        shell.cx(|cx| {
-            cx.canvas.notice = None;
-            let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
-            if store.by_uuid(element).is_some_and(|o| class(store, o) == Some(archforge_uml::PACKAGE)) {
-                drop_package(cx, d, element, at);
-                return;
-            }
-            // A stereotype goes onto its profile's diagram with the metaclasses it extends (AR-134).
-            if let Some(s) = store.by_uuid(element).filter(|o| archforge_uml::profiles::is_stereotype(store, *o)) {
-                crate::uml_profiles::drop_stereotype(cx, d, s, at);
-                return;
-            }
-            let Some((c, kind)) = store.by_uuid(element).and_then(|c| Some((c, Classifier::of(store, c)?))) else { return };
-            if crate::editing::on_diagram(store, d, c) {
-                cx.canvas.notice = Some(tr("Already on this diagram"));
-                return;
-            }
-            let notation = archforge_uml::UmlNotation;
-            let links: Vec<Obj> = store
-                .alive()
-                .filter(|l| class(store, *l).is_some_and(archforge_uml::is_relationship))
-                .filter(|l| *l == c || archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
-                // A line the diagram draws already (an association class's, its card not yet placed) stays as it is.
-                .filter(|l| archforge_diagram::views_of(store, *l).1.iter().all(|e| archforge_diagram::diagram_of(store, *e) != Some(d)))
-                // The legs of n-ary associations whose diamond this diagram shows, from their ends at
-                // the classifier (AR-128).
-                .chain(store.alive().filter(|e| {
-                    archforge_uml::nary::leg_ends(store, *e).is_some_and(|(a, t)| t == c && crate::editing::on_diagram(store, d, a))
-                        && archforge_diagram::views_of(store, *e).1.iter().all(|l| archforge_diagram::diagram_of(store, *l) != Some(d))
-                }))
-                .collect();
-            let (width, _) = kind.size();
-            crate::editing::place_with_lines_cx(cx, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
-        });
+    fn drop(&self, cx: &mut Ctx, d: Obj, element: Uuid, at: (f64, f64)) {
+        cx.canvas.notice = None;
+        let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
+        if store.by_uuid(element).is_some_and(|o| class(store, o) == Some(archforge_uml::PACKAGE)) {
+            drop_package(cx, d, element, at);
+            return;
+        }
+        // A stereotype goes onto its profile's diagram with the metaclasses it extends (AR-134).
+        if let Some(s) = store.by_uuid(element).filter(|o| archforge_uml::profiles::is_stereotype(store, *o)) {
+            crate::uml_profiles::drop_stereotype(cx, d, s, at);
+            return;
+        }
+        let Some((c, kind)) = store.by_uuid(element).and_then(|c| Some((c, Classifier::of(store, c)?))) else { return };
+        if crate::editing::on_diagram(store, d, c) {
+            cx.canvas.notice = Some(tr("Already on this diagram"));
+            return;
+        }
+        let notation = archforge_uml::UmlNotation;
+        let links: Vec<Obj> = store
+            .alive()
+            .filter(|l| class(store, *l).is_some_and(archforge_uml::is_relationship))
+            .filter(|l| *l == c || archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
+            // A line the diagram draws already (an association class's, its card not yet placed) stays as it is.
+            .filter(|l| archforge_diagram::views_of(store, *l).1.iter().all(|e| archforge_diagram::diagram_of(store, *e) != Some(d)))
+            // The legs of n-ary associations whose diamond this diagram shows, from their ends at
+            // the classifier (AR-128).
+            .chain(store.alive().filter(|e| {
+                archforge_uml::nary::leg_ends(store, *e).is_some_and(|(a, t)| t == c && crate::editing::on_diagram(store, d, a))
+                    && archforge_diagram::views_of(store, *e).1.iter().all(|l| archforge_diagram::diagram_of(store, *l) != Some(d))
+            }))
+            .collect();
+        let (width, _) = kind.size();
+        crate::editing::place_with_lines_cx(cx, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
     }
 
     /// On a package's diagram, package navigation: a landing after a switch, ⌘↓ and ⌘↑, the zoom
     /// keys, and a zoom across a package's threshold (AR-95).
-    fn before_draw(&self, shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
-        shell.cx(|cx| crate::package_nav::before_draw(cx, ui, r, d));
+    fn before_draw(&self, cx: &mut Ctx, ui: &egui::Ui, r: Rect, d: Obj) {
+        crate::package_nav::before_draw(cx, ui, r, d);
     }
 
     /// On a package's diagram, the path bar and a selected package's Open (AR-95).
-    fn after_draw(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
-        shell.cx(|cx| crate::package_nav::after_draw(cx, ui, p, r, d))
+    fn after_draw(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
+        crate::package_nav::after_draw(cx, ui, p, r, d)
     }
 
     /// An n-ary association's leg starts at its diamond's outline (AR-128).
@@ -589,13 +578,13 @@ impl DiagramKind for UmlKind {
     }
 
     /// A generalization set's label gets a node where it is let go, on this diagram alone (AR-129).
-    fn place_label(&self, shell: &mut Shell, d: Obj, element: Uuid, x: f64, y: f64) {
-        shell.cx(|cx| crate::uml_sets::place_label(cx, d, element, x, y));
+    fn place_label(&self, cx: &mut Ctx, d: Obj, element: Uuid, x: f64, y: f64) {
+        crate::uml_sets::place_label(cx, d, element, x, y);
     }
 
     /// What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
-    fn hint_bar(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, below: f32) {
-        shell.cx(|cx| crate::uml_nary::hint_bar(cx, ui, p, r, below));
+    fn hint_bar(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, below: f32) {
+        crate::uml_nary::hint_bar(cx, ui, p, r, below);
     }
 }
 
@@ -759,55 +748,53 @@ impl NotationUi for UmlUi {
     }
 
     /// Adds what the offer `key` names at the selection, with a fresh name free among its siblings.
-    fn add(&self, shell: &mut Shell, key: &str, sel: Option<Obj>) -> Option<Result<Added, String>> {
-        shell.cx(|cx| {
-            let store = cx.session.as_ref()?.doc();
-            let no_name = || Some(Err(tr("No free name is left")));
-            let home = sel.and_then(|o| home_of(store, o));
-            // The packages it sits under open, so its row shows.
-            let mut parents: Vec<Uuid> = home.map(|h| chain(store, h)).unwrap_or_default().into_iter().filter_map(|p| store.uuid(p).ok()).collect();
-            let out = match key {
-                "literal" => {
-                    // At the end of the selected enumeration, or of the selected literal's, its card
-                    // growing to show it.
-                    let e = sel.and_then(|o| enumeration_at(store, o))?;
-                    let taken = archforge_uml::commands::literals(store, e).into_iter().map(|l| name(store, l));
-                    let Some(name) = fresh_name("Literal", taken, false) else { return no_name() };
-                    let id = store.uuid(e).ok()?;
-                    parents.push(id);
-                    let edit = crate::uml_panel::MemberEdit { name, ..crate::uml_panel::edit_of(Some(store), id, MemberKind::Literal, None) };
-                    let (cmd, params) = crate::uml_panel::command_of(&edit);
-                    crate::uml_panel::write_in_sight(cx, &edit, cmd, params)
-                }
-                "package" => {
-                    // With nothing selected it goes into the root package, so its name is free there;
-                    // without a root yet, the packages at the top are the ones the root takes in.
-                    let home = home.or_else(|| {
-                        let root = archforge_uml::commands::root_package(store)?;
-                        parents.extend(store.uuid(root).ok());
-                        Some(root)
-                    });
-                    let siblings = home.map_or_else(|| packages(store), |h| archforge_uml::commands::subpackages(store, h));
-                    let Some(name) = fresh_name("Package", siblings.into_iter().map(|p| name(store, p)), false) else { return no_name() };
-                    let parent = home.and_then(|h| store.uuid(h).ok()).map(|u| u.to_string()).unwrap_or_default();
-                    crate::panels::run_cx(cx, "uml.package.add", json!({ "name": name, "parent": parent }))
-                }
-                key => {
-                    let kind = Classifier::ALL.into_iter().find(|k| k.key() == key)?;
-                    let package = home?;
-                    let Some(name) = fresh_name(kind.stem(), classifiers(store, package).into_iter().map(|c| name(store, c)), false) else {
-                        return no_name();
-                    };
-                    let package_id = store.uuid(package).ok()?;
-                    parents.push(package_id);
-                    crate::panels::run_cx(cx, kind.add_command(), json!({ "package": package_id.to_string(), "name": name }))
-                }
-            };
-            match out {
-                Ok(out) => out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).map(|id| Ok(Added { id, parents })),
-                Err(e) => Some(Err(e)),
+    fn add(&self, cx: &mut Ctx, key: &str, sel: Option<Obj>) -> Option<Result<Added, String>> {
+        let store = cx.session.as_ref()?.doc();
+        let no_name = || Some(Err(tr("No free name is left")));
+        let home = sel.and_then(|o| home_of(store, o));
+        // The packages it sits under open, so its row shows.
+        let mut parents: Vec<Uuid> = home.map(|h| chain(store, h)).unwrap_or_default().into_iter().filter_map(|p| store.uuid(p).ok()).collect();
+        let out = match key {
+            "literal" => {
+                // At the end of the selected enumeration, or of the selected literal's, its card
+                // growing to show it.
+                let e = sel.and_then(|o| enumeration_at(store, o))?;
+                let taken = archforge_uml::commands::literals(store, e).into_iter().map(|l| name(store, l));
+                let Some(name) = fresh_name("Literal", taken, false) else { return no_name() };
+                let id = store.uuid(e).ok()?;
+                parents.push(id);
+                let edit = crate::uml_panel::MemberEdit { name, ..crate::uml_panel::edit_of(Some(store), id, MemberKind::Literal, None) };
+                let (cmd, params) = crate::uml_panel::command_of(&edit);
+                crate::uml_panel::write_in_sight(cx, &edit, cmd, params)
             }
-        })
+            "package" => {
+                // With nothing selected it goes into the root package, so its name is free there;
+                // without a root yet, the packages at the top are the ones the root takes in.
+                let home = home.or_else(|| {
+                    let root = archforge_uml::commands::root_package(store)?;
+                    parents.extend(store.uuid(root).ok());
+                    Some(root)
+                });
+                let siblings = home.map_or_else(|| packages(store), |h| archforge_uml::commands::subpackages(store, h));
+                let Some(name) = fresh_name("Package", siblings.into_iter().map(|p| name(store, p)), false) else { return no_name() };
+                let parent = home.and_then(|h| store.uuid(h).ok()).map(|u| u.to_string()).unwrap_or_default();
+                crate::panels::run_cx(cx, "uml.package.add", json!({ "name": name, "parent": parent }))
+            }
+            key => {
+                let kind = Classifier::ALL.into_iter().find(|k| k.key() == key)?;
+                let package = home?;
+                let Some(name) = fresh_name(kind.stem(), classifiers(store, package).into_iter().map(|c| name(store, c)), false) else {
+                    return no_name();
+                };
+                let package_id = store.uuid(package).ok()?;
+                parents.push(package_id);
+                crate::panels::run_cx(cx, kind.add_command(), json!({ "package": package_id.to_string(), "name": name }))
+            }
+        };
+        match out {
+            Ok(out) => out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).map(|id| Ok(Added { id, parents })),
+            Err(e) => Some(Err(e)),
+        }
     }
 
     /// The command that renames `obj`, and the key that names it: a package, a classifier or a
@@ -865,14 +852,12 @@ impl NotationUi for UmlUi {
 
     /// New ▸ on a package or a profile makes the kind `key` names there, New inside ▸ on a
     /// classifier a nested classifier; either is named in place in Models.
-    fn add_inside(&self, shell: &mut Shell, key: &str, obj: Obj) -> Option<Result<Uuid, String>> {
-        shell.cx(|cx| {
-            let store = cx.session.as_ref()?.doc();
-            if class(store, obj) == Some(archforge_uml::PACKAGE) || archforge_uml::profiles::is_profile(store, obj) {
-                return crate::uml_profiles::add_inside(cx, key, obj);
-            }
-            crate::uml_nesting::add_inside(cx, key, obj)
-        })
+    fn add_inside(&self, cx: &mut Ctx, key: &str, obj: Obj) -> Option<Result<Uuid, String>> {
+        let store = cx.session.as_ref()?.doc();
+        if class(store, obj) == Some(archforge_uml::PACKAGE) || archforge_uml::profiles::is_profile(store, obj) {
+            return crate::uml_profiles::add_inside(cx, key, obj);
+        }
+        crate::uml_nesting::add_inside(cx, key, obj)
     }
 
     /// A classifier's nested classifiers at any depth, by the names they read by, `Order::Priority`
@@ -994,18 +979,16 @@ impl NotationUi for UmlUi {
     /// A package dropped into another goes as Properties' Parent package moves it: one step with a
     /// toast offering Undo, its cards kept where they are and none added to its new owner's diagram
     /// (AR-568). Any other drop runs its command.
-    fn run_drop(&self, shell: &mut Shell, cmd: &'static str, params: serde_json::Value) -> Result<(), String> {
-        shell.cx(|cx| {
-            let moved = cx.session.as_ref().filter(|_| cmd == "uml.package.move").and_then(|s| {
-                let store = s.doc();
-                let of = |key: &str| store.by_uuid(Uuid::parse(params.get(key)?.as_str()?)?);
-                Some((of("package")?, of("to")?))
-            });
-            match moved {
-                Some((package, to)) => crate::package_nav::move_package(cx, package, to),
-                None => crate::panels::run_cx(cx, cmd, params).map(|_| ()),
-            }
-        })
+    fn run_drop(&self, cx: &mut Ctx, cmd: &'static str, params: serde_json::Value) -> Result<(), String> {
+        let moved = cx.session.as_ref().filter(|_| cmd == "uml.package.move").and_then(|s| {
+            let store = s.doc();
+            let of = |key: &str| store.by_uuid(Uuid::parse(params.get(key)?.as_str()?)?);
+            Some((of("package")?, of("to")?))
+        });
+        match moved {
+            Some((package, to)) => crate::package_nav::move_package(cx, package, to),
+            None => crate::panels::run_cx(cx, cmd, params).map(|_| ()),
+        }
     }
 
     /// A package held over itself or a package it holds: a drop there is refused.
@@ -1167,8 +1150,75 @@ impl NotationUi for UmlUi {
     }
 
     /// A package's name; a classifier's panel, which a member's or a literal's selection shows too.
-    fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
-        shell.cx(|cx| self.body_cx(cx, ui, p, r, y, subject));
+    fn body(&self, cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
+        let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
+        let Some(o) = subject.obj else { return };
+        // A metaclass on a profile's diagram is UML's own: its panel says so, and nothing changes it
+        // (AR-134).
+        if archforge_uml::profiles::is_metaclass(store, o) {
+            let width = (r.width() - 2.0 * crate::panels::PAD).max(0.0);
+            let said = tr("A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.");
+            let paint = ui.painter();
+            let g = crate::ux::galley_rows(paint, &said, crate::ux::types::CAPTION, p.text_muted, Some(width), 6);
+            paint.galley(egui::pos2(r.left() + crate::panels::PAD, y), g, p.text_muted.into());
+            return;
+        }
+        match class(store, o) {
+            Some(c) if archforge_uml::is_classifier(c) => return crate::uml_panel::class_body(cx, ui, p, r, y, subject),
+            // A profile's and a stereotype's panels (AR-134, F1).
+            Some(c) if c == archforge_uml::PROFILE => return crate::uml_profiles::profile_body(cx, ui, p, r, y, subject),
+            Some(c) if c == archforge_uml::STEREOTYPE => return crate::uml_profiles::stereotype_body(cx, ui, p, r, y, subject),
+            // A template binding's own panel (AR-131, C2).
+            Some(c) if c == archforge_uml::TEMPLATE_BINDING => return crate::uml_bindings::body(cx, ui, p, r, y, subject),
+            Some(c) if archforge_uml::is_relationship(c) => {
+                return crate::uml_relate::body(cx, ui, p, r, y, subject);
+            }
+            Some(c) if c == archforge_uml::GENERALIZATION_SET => return crate::uml_sets::set_body(cx, ui, p, r, y, subject),
+            _ => {}
+        }
+        // A qualifier shows its association's panel, its row marked (AR-127).
+        if let Some((a, _)) = archforge_uml::qualifiers::association_of(store, o) {
+            let Some(words) = self.words(store, a) else { return };
+            let (Ok(id), Ok(metaclass)) = (store.uuid(a), store.class_of(a)) else { return };
+            let of = Subject::of(a, id, metaclass, words);
+            return crate::uml_relate::body(cx, ui, p, r, y, &of);
+        }
+        // A constraint shows its context's panel, its row marked (AR-133).
+        if let Some(c) = constraint_context(store, o) {
+            let Some(words) = self.words(store, c) else { return };
+            let (Ok(id), Ok(metaclass)) = (store.uuid(c), store.class_of(c)) else { return };
+            let of = Subject::of(c, id, metaclass, words);
+            return self.body(cx, ui, p, r, y, &of);
+        }
+        if let Some(c) = owner_of(store, o) {
+            let Some(words) = self.words(store, c) else { return };
+            let (Ok(id), Ok(metaclass)) = (store.uuid(c), store.class_of(c)) else { return };
+            let of = Subject::of(c, id, metaclass, words);
+            // A stereotype's property shows its stereotype's panel, its row marked (AR-134).
+            if archforge_uml::profiles::is_stereotype(store, c) {
+                return crate::uml_profiles::stereotype_body(cx, ui, p, r, y, &of);
+            }
+            return crate::uml_panel::class_body(cx, ui, p, r, y, &of);
+        }
+        if class(store, o) == Some(archforge_uml::PACKAGE) && archforge_uml::commands::root_package(store) != Some(o) {
+            return crate::uml_panel::package_body(cx, ui, p, r, y, subject);
+        }
+        let Some((cmd, key)) = self.rename(store, o) else { return };
+        let width = r.width() - 2.0 * crate::panels::PAD;
+        let root = archforge_uml::constraints::is_context(store, o).then_some(subject.id).flatten();
+        let is_package = class(store, o) == Some(archforge_uml::PACKAGE);
+        crate::panels::name_field_cx(cx, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, cmd, key);
+        let mut below = y + 17.0 + crate::panels::FIELD + 16.0;
+        // The root package applies profiles as any package does (AR-134, F5), and carries
+        // stereotypes (AR-135).
+        if is_package && let Some(id) = subject.id {
+            below = crate::uml_stereotypes::section_for(cx, ui, p, r, below, o);
+            below = crate::uml_profiles::applied_section(cx, ui, p, r, below, o, id);
+        }
+        // The root package's constraints hold for the whole model (AR-133).
+        if let Some(id) = root {
+            crate::uml_constraints::section_of(cx, ui, p, r, below, o, id);
+        }
     }
 
     /// UML's own refusals: those its commands alone give, in its editors' and the canvas's words.
@@ -1238,104 +1288,29 @@ impl NotationUi for UmlUi {
 
     /// A selected generalization set goes from the model, its generalizations kept, Shift held or
     /// not (AR-129).
-    fn canvas_delete(&self, shell: &mut Shell, _shift: bool) -> bool {
-        shell.cx(crate::uml_sets::remove_selected_set)
+    fn canvas_delete(&self, cx: &mut Ctx, _shift: bool) -> bool {
+        crate::uml_sets::remove_selected_set(cx)
     }
 
     /// ⌥⌘G: the selected generalizations into a new set (AR-129).
-    fn canvas_keys(&self, shell: &mut Shell, ui: &egui::Ui) -> bool {
-        shell.cx(|cx| crate::uml_sets::chord_pressed(cx, ui))
+    fn canvas_keys(&self, cx: &mut Ctx, ui: &egui::Ui) -> bool {
+        crate::uml_sets::chord_pressed(cx, ui)
     }
 
     /// A template binding's draft (AR-131); the member typed in place on its card (AR-122); the
     /// menu of generalization lines (AR-129), then an n-ary association's draft, its legs' end
     /// handles and its menu (AR-128). Each closes itself on a diagram it does not belong to.
-    fn canvas_overlay(&self, shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
+    fn canvas_overlay(&self, cx: &mut Ctx, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>) {
         match layer {
-            Layer::Drafts => crate::uml_bindings::draw_draft(&shell.cx_ref(), ui, on),
-            Layer::Rows => shell.cx(|cx| crate::uml_inline::row(cx, ui, on.p, on.view)),
-            Layer::Menus => shell.cx(|cx| {
+            Layer::Drafts => crate::uml_bindings::draw_draft(&cx.cx_ref(), ui, on),
+            Layer::Rows => crate::uml_inline::row(cx, ui, on.p, on.view),
+            Layer::Menus => {
                 if let Some(at) = uml(cx.notation_states).and_then(|uml| uml.line_menu) {
                     crate::uml_sets::line_menu(cx, ui, on.p, on.r, at, on.d);
                 }
                 crate::uml_nary::overlay(cx, ui, on.p, on.r, on.view, on.d);
-            }),
+            }
             Layer::Offers => {}
-        }
-    }
-}
-
-impl UmlUi {
-    /// [`NotationUi::body`] through the narrow context: a package's name; a classifier's panel,
-    /// which a member's or a literal's selection shows too.
-    fn body_cx(&self, cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
-        let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
-        let Some(o) = subject.obj else { return };
-        // A metaclass on a profile's diagram is UML's own: its panel says so, and nothing changes it
-        // (AR-134).
-        if archforge_uml::profiles::is_metaclass(store, o) {
-            let width = (r.width() - 2.0 * crate::panels::PAD).max(0.0);
-            let said = tr("A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.");
-            let paint = ui.painter();
-            let g = crate::ux::galley_rows(paint, &said, crate::ux::types::CAPTION, p.text_muted, Some(width), 6);
-            paint.galley(egui::pos2(r.left() + crate::panels::PAD, y), g, p.text_muted.into());
-            return;
-        }
-        match class(store, o) {
-            Some(c) if archforge_uml::is_classifier(c) => return crate::uml_panel::class_body(cx, ui, p, r, y, subject),
-            // A profile's and a stereotype's panels (AR-134, F1).
-            Some(c) if c == archforge_uml::PROFILE => return crate::uml_profiles::profile_body(cx, ui, p, r, y, subject),
-            Some(c) if c == archforge_uml::STEREOTYPE => return crate::uml_profiles::stereotype_body(cx, ui, p, r, y, subject),
-            // A template binding's own panel (AR-131, C2).
-            Some(c) if c == archforge_uml::TEMPLATE_BINDING => return crate::uml_bindings::body(cx, ui, p, r, y, subject),
-            Some(c) if archforge_uml::is_relationship(c) => {
-                return crate::uml_relate::body(cx, ui, p, r, y, subject);
-            }
-            Some(c) if c == archforge_uml::GENERALIZATION_SET => return crate::uml_sets::set_body(cx, ui, p, r, y, subject),
-            _ => {}
-        }
-        // A qualifier shows its association's panel, its row marked (AR-127).
-        if let Some((a, _)) = archforge_uml::qualifiers::association_of(store, o) {
-            let Some(words) = self.words(store, a) else { return };
-            let (Ok(id), Ok(metaclass)) = (store.uuid(a), store.class_of(a)) else { return };
-            let of = Subject::of(a, id, metaclass, words);
-            return crate::uml_relate::body(cx, ui, p, r, y, &of);
-        }
-        // A constraint shows its context's panel, its row marked (AR-133).
-        if let Some(c) = constraint_context(store, o) {
-            let Some(words) = self.words(store, c) else { return };
-            let (Ok(id), Ok(metaclass)) = (store.uuid(c), store.class_of(c)) else { return };
-            let of = Subject::of(c, id, metaclass, words);
-            return self.body_cx(cx, ui, p, r, y, &of);
-        }
-        if let Some(c) = owner_of(store, o) {
-            let Some(words) = self.words(store, c) else { return };
-            let (Ok(id), Ok(metaclass)) = (store.uuid(c), store.class_of(c)) else { return };
-            let of = Subject::of(c, id, metaclass, words);
-            // A stereotype's property shows its stereotype's panel, its row marked (AR-134).
-            if archforge_uml::profiles::is_stereotype(store, c) {
-                return crate::uml_profiles::stereotype_body(cx, ui, p, r, y, &of);
-            }
-            return crate::uml_panel::class_body(cx, ui, p, r, y, &of);
-        }
-        if class(store, o) == Some(archforge_uml::PACKAGE) && archforge_uml::commands::root_package(store) != Some(o) {
-            return crate::uml_panel::package_body(cx, ui, p, r, y, subject);
-        }
-        let Some((cmd, key)) = self.rename(store, o) else { return };
-        let width = r.width() - 2.0 * crate::panels::PAD;
-        let root = archforge_uml::constraints::is_context(store, o).then_some(subject.id).flatten();
-        let is_package = class(store, o) == Some(archforge_uml::PACKAGE);
-        crate::panels::name_field_cx(cx, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, cmd, key);
-        let mut below = y + 17.0 + crate::panels::FIELD + 16.0;
-        // The root package applies profiles as any package does (AR-134, F5), and carries
-        // stereotypes (AR-135).
-        if is_package && let Some(id) = subject.id {
-            below = crate::uml_stereotypes::section_for(cx, ui, p, r, below, o);
-            below = crate::uml_profiles::applied_section(cx, ui, p, r, below, o, id);
-        }
-        // The root package's constraints hold for the whole model (AR-133).
-        if let Some(id) = root {
-            crate::uml_constraints::section_of(cx, ui, p, r, below, o, id);
         }
     }
 }

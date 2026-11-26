@@ -44,8 +44,9 @@ its own figures is let go; and
 the hooks the canvas runs as it draws: before and after a diagram is drawn, where a line starts,
 what goes with a line, the figures of no one node or line, and the hint bar, through which UML
 draws its association classes' ties and names, its generalization sets, its n-ary legs and hint,
-and runs its package navigation, whose state is UML's own; and its rows of the Model menu, from
-which `model_menu` builds the menu, Note and Link note after them;
+and runs its package navigation, whose state is UML's own; and its rows of the Model menu, as
+data (`kinds::ModelRow`: the row's id, its word, the tool it arms and the choice of the tool's
+popover it makes first), from which `model_menu` makes the menu's entries, Note and Link note after them;
 `er_kind`: ER's, whose entity menu adds a table's related tables, new column and collapse); a click
 selects what it hits; `editing`, shared by every kind: Select drags, resizes, marquees, nudges and
 arranges nodes, the element menu opens in Models, hands the element to an agent, removes it from
@@ -93,12 +94,17 @@ side shown, a new element's name opened for typing in Models, and the delete dia
 removal. ER's screens take the context, and so do UML's leaf screens (`package_nav`,
 `uml_classifier`, `uml_bindings`, `uml_constraints`, `uml_nesting`, `uml_sets`, `uml_templates`),
 its panel screens (`uml_panel`, `uml_relate`, `uml_profiles`, `uml_stereotypes`, `uml_nary`,
-`uml_qualifiers`) and its member typed in place on a card (`uml_inline`); ER's and UML's kinds and
-Properties (`er_kind`, `er_ui`, `uml_ui`) still take the shell from the interfaces and build the
-context once in each method. The controls that take it end in `_cx` (`panels::section_cx`,
-`panels::control_cx`, `menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old
-names over the whole shell forward to them until every caller has moved, and `home::control`
-stays the shell's own way to `panels::control_cx`.
+`uml_qualifiers`) and its member typed in place on a card (`uml_inline`). The interfaces hand a
+notation the context, not the shell: each method of `NotationUi` and `DiagramKind` that reaches
+the shell takes `&mut cx::Ctx`, or `&cx::CtxRef` where it only reads (a tool's face and hint,
+where a line starts, the live line, a press and a right click), and so do a row of an element's
+menu (`kinds::MenuRow::run`) and what a kind makes of a press (`editing::Action::Own`). The shell
+builds the context at each call (`Shell::cx`, `Shell::cx_ref`) and carries out its requests once
+the method returns, so ER's and UML's kinds and Properties (`er_kind`, `er_ui`, `uml_ui`) build
+none. The controls that take it end in `_cx` (`panels::section_cx`, `panels::control_cx`,
+`menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old names over the whole
+shell forward to them for the shell's own screens, and `home::control` stays the shell's own way
+to `panels::control_cx`.
 
 **Layer.** 11, the top of the interface's layers, above the shell's interfaces
 (`archforge-shell-api`, 9) and the notations' screens (10); over `archforge-notations` (8),
@@ -138,7 +144,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `actions::file_title` | `fn(&Shell) -> String`: the File menu's title on this system, the native bar's own word where a language has one (German Ablage, Datei in the window's bar) |
 | `actions::ticked` | `fn(&Shell, &str) -> Option<bool>`: whether a row that shows and hides something is ticked now (`view_menu::ticked`: the minimap, an explorer or a panel shows); `None` for a row with no tick |
 | `view_menu::VIEW_MENU` | `[&[&str]; 4]`: the View menu's rows by section, on every system, with their ids beside it; `actions::{label, available, run}` answer for them |
-| `model_menu::sections` | `fn(&Shell) -> Vec<Vec<&'static str>>`: the ids of the Model menu's rows now, by section: the rows the open diagram's kind answers (`DiagramKind::menu_rows`), then Note and Link note; `actions::{label, available, run}` answer for them |
+| `model_menu::sections` | `fn(&Shell) -> Vec<Vec<&'static str>>`: the ids of the Model menu's rows now, by section: the rows the open diagram's kind answers as data (`DiagramKind::menu_rows`), then Note and Link note; `actions::{label, available, run}` answer for them, through the entries `model_menu` makes from that data |
 | `Services` | host functions: the installed fonts, the account's name, the folder new projects go in, the projects host, the id source for a model's elements, the AI Agents and Chat host (`agents`), the project's kept conversations (`chats`) and the time with the local offset Chat shows times in (`clock`) |
 | `ai_agents::{AgentHost, Look, Keys, Program, Key, Store, KeyText, CodexAccount, AccountError, LoginWay, LoginEvent, AgentPrefs, Provider, need_account, reread_account, sign_in_expired, approved_browser_page}` | AI Agents' and Chat's one host service, `AgentHost`: it finds the programs (`look`, at start), reads and keeps the keys in the secure store (`read_keys`, first when the page needs them, never at launch), sends the test message, reads Codex's account (`codex_account_read`: first when a Codex conversation starts, `need_account`, and again each time the page shows, on Check connection and on a Codex conversation's Sign-in expired card, `reread_account` and `sign_in_expired`; never at launch), runs its ChatGPT sign-in (a browser page opens only on `approved_browser_page`) and sign-out, and runs Chat's conversations (`connect`, `start`, `send`, `stop`, `end`) and removes a deleted one's private folder (`forget`, its program ended first, a bounded wait); every call answers at once, on a channel from the host's own thread; `CodexAccount`'s and `LoginEvent`'s `Debug` show an email, a code or an address by length only; `fake::Fake` (tests and feature `snapshot`) answers what it was set up with and counts the calls |
 | `chat::{ChatStart, ChatRefusal, ChatEvent, TurnEnd, ChatFailure, FailureKind, HostEvent, EventSink, Ticket, start, send, stop, end, take_events, valid_id, check_id, MAX_SESSIONS, MAX_WAITING, MAX_RUNNING}` | Chat's conversations as the shell knows them (`ChatFailure` carries a rate limit's `reset`): an id is a conversation's lowercase UUID, checked before the host is asked; at most `MAX_SESSIONS` (64) kept, each with at most `MAX_WAITING` (4096) events waiting, past which an event is dropped and the first drop logged, an end never dropped; the host's events and agent access's changes (`HostEvent::Access`) come on one channel with a repaint; `Shell::chats.holds_access()` drives the status bar's Agent item (`workspace.status.agent`), which opens Settings on AI Agents |
