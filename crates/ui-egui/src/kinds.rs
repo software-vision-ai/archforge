@@ -11,39 +11,16 @@
 //! Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows where
 //! a kind has marks (ER's key status).
 
-use archforge_diagram::ProjectView;
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke};
+
+pub(crate) use archforge_shell_api::kinds::{KindTool, Press, ToolUse};
 
 use crate::Shell;
 use crate::canvas::{Drawing, ExtraLabel, LineDrawn, View};
 use crate::editing::{Action, EntityMenu};
 use crate::ux::{Icon, Palette};
 use crate::widgets::Registry;
-
-/// What a kind's tool does on the canvas.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ToolUse {
-    /// A click on empty canvas places a new element there.
-    Place,
-    /// A drag from an element's node to another's connects them.
-    Connect,
-}
-
-/// A tool a diagram kind brings to the toolbar, after Select and Pan.
-pub(crate) struct KindTool {
-    /// Its automation key (`workspace.tools.{key}`).
-    pub(crate) key: &'static str,
-    pub(crate) icon: &'static Icon,
-    /// Its hover text, in the catalogue.
-    pub(crate) hint: &'static str,
-    pub(crate) use_: ToolUse,
-    /// A chevron beside it that opens the kind's popover, with its key and hover text.
-    pub(crate) chevron: Option<(&'static str, &'static str)>,
-    /// Twice as wide, so a face that draws what the tool makes reads (a relationship's line); an
-    /// icon's face is as wide as any tool's.
-    pub(crate) wide: bool,
-}
 
 /// A row a diagram kind adds to its elements' menu ([`DiagramKind::menu`]), with what it does when
 /// picked.
@@ -61,27 +38,6 @@ pub(crate) struct MenuRow {
     pub(crate) first: bool,
     /// What it does when picked, on the menu's node and element.
     pub(crate) run: fn(&mut Shell, &EntityMenu),
-}
-
-/// A press on the canvas as a diagram kind reads it ([`DiagramKind::pointer`],
-/// [`DiagramKind::secondary_click`]): the shared gestures' own view of it, read once.
-pub(crate) struct Press<'a> {
-    /// Where the pointer is on screen, when it is on the canvas.
-    pub at: Option<Pos2>,
-    /// Whether the primary button clicked, and whether as a double click (a third click in a row
-    /// counts, as egui counts it a triple).
-    pub clicked: bool,
-    pub double: bool,
-    pub store: &'a Store,
-    pub notations: &'a ProjectView,
-    /// The diagram the canvas shows, and what is selected.
-    pub d: Obj,
-    pub selection: &'a [Obj],
-    /// The node under a screen point that takes the press: a card, or a package's tab, the one
-    /// drawn on top.
-    pub node_at: &'a dyn Fn(Pos2) -> Option<Obj>,
-    /// The line under a screen point, nodes aside.
-    pub line_at: &'a dyn Fn(Pos2) -> Option<Obj>,
 }
 
 /// What a diagram kind does with the canvas's tools and gestures.

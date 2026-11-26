@@ -3,14 +3,18 @@
 **Purpose.** The shell's interfaces: what a notation's screens implement, and what they may use
 from the shell, so a notation's screens build on this crate and never on the shell crate
 (`archforge-ui-egui`) itself (`forge-ux/adr/0002`, "Notations are plugins", and `0003`, "Two
-registries"). It holds the automation-id registry, the design (`ux`) and the canvas geometry that
-names no shell (`canvas`); story AR-780 moves the shared controls, the interfaces `NotationUi` and
-`DiagramKind` with the data types they name, and the translations machinery here, unchanged.
+registries"). It holds the automation-id registry, the design (`ux`), the canvas geometry that
+names no shell (`canvas`) and the data types the interfaces `NotationUi` and `DiagramKind` hand
+across that name no shell (`notation_ui`, `kinds`); story AR-780 moves the shared controls, the
+interfaces themselves with the data types that still name the shell, and the translations
+machinery here, unchanged.
 
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code
-(the gate's `layers` step scans it as it scans the shell). It takes egui, serde and
-`archforge-diagram` (6), whose rectangles and line-end marks the canvas geometry reads.
+(the gate's `layers` step scans it as it scans the shell). It takes egui, serde,
+`archforge-mof` (4), whose elements, ids and store the interfaces' data types name, and
+`archforge-diagram` (6), whose rectangles and line-end marks the canvas geometry reads and whose
+notations a press on the canvas carries.
 
 **Public API.**
 
@@ -31,6 +35,12 @@ screens (10) and the shell (11). Builds for the portable target; holds no proces
 | `canvas::{mark_shape, mark_outline}` | where a line's end mark (`archforge_diagram::figure::EndMark`) sits and its corners as drawn |
 | `canvas::{END_HANDLE, end_handles_at}` | a selected line's end handle's radius, and where its two handles sit clear of the marks and of each other |
 | `canvas::{beside, beside_pair, qualifier_place, signature_place}` | where a line's end texts sit, one alone or both together; where a qualifier box sits against its card; where a template's signature box sits on its card |
+| `notation_ui::{Offer, Added, Inside}` | what `+` in Models can add (key and word); what an addition gave back (the element and the rows opened to show it); what New inside ▸ offers on an element (its kinds, the rows refused with their reason, why none, where a line parts them) |
+| `notation_ui::{Entry, Words}` | an element as the project search lists it (icon, order, label, detail); how Properties names an element (kind line, word, "This table", "On this table · {n}", heading's name) |
+| `notation_ui::Removal` | `pub struct Removal { pub went: Vec<String>, pub after: Option<String> }`: what a notation works out about a removal of its own elements before it runs, for what is said once it went through |
+| `notation_ui::{Layer, Overlaid}` | where among the canvas's own overlays a notation's go (`Drafts`, `Rows`, `Menus`, `Offers`); the canvas an overlay is drawn over (palette, rectangle, `View`, diagram, the nodes a gesture previews) |
+| `kinds::{ToolUse, KindTool}` | what a diagram kind's tool does (`Place`, `Connect`); a tool it brings to the toolbar (key, icon, hint, use, chevron, width) |
+| `kinds::Press` | a press on the canvas as a diagram kind reads it: where, click or double click, the store and notations, the diagram and selection, and the node and line under a screen point |
 
 **Non-goals.** Installing fonts and the app icon, which stay in the shell, as do the icons only one
 notation draws until its screens crate takes them; anything that touches the file system or
