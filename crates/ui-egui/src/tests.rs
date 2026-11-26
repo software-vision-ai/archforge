@@ -4635,8 +4635,7 @@ mod installed_fonts {
         for code in ["ja", "zh-Hans"] {
             i18n::set_language(code);
             until(&mut s, &ctx, |s| !s.fonts.fallback_order().is_empty());
-            let lang = i18n::LANGUAGES.iter().find(|l| l.code == code).unwrap();
-            let text = i18n::catalogue_text(lang);
+            let text = i18n::CATALOGUES.iter().find(|c| c.code == code).unwrap().text;
             let mut wanted: std::collections::BTreeSet<char> = text
                 .lines()
                 .filter(|l| !l.starts_with('#'))
@@ -4663,7 +4662,7 @@ fn the_bundled_faces_draw_every_character_of_the_latin_script_catalogues() {
     let mut out = ctx.run_ui(Default::default(), |_| {});
     out.textures_delta.clear();
     for lang in crate::i18n::LANGUAGES.iter().filter(|l| !matches!(l.code, "ja" | "zh-Hans")) {
-        let text = crate::i18n::catalogue_text(lang);
+        let text = crate::i18n::CATALOGUES.iter().find(|c| c.code == lang.code).unwrap().text;
         let mut wanted: std::collections::BTreeSet<char> =
             text.lines().filter(|l| !l.starts_with('#')).flat_map(|l| l.split('\t').nth(3).unwrap_or_default().chars().collect::<Vec<_>>()).collect();
         wanted.extend(lang.native_name.chars());

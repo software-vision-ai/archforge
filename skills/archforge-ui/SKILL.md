@@ -65,10 +65,11 @@ after every visible change, in both appearances, beside the design.
 
 ## Text and translations
 - Every string the user sees goes through `tr("…")`, `tr_ctx("context", "…")` for a word with
-  several meanings, or `trn("{n} thing", "{n} things", n)` (`crates/ui-egui/src/i18n/mod.rs`).
-  Pass the English text as a literal: the coverage test reads the literals in
-  `crates/ui-egui/src` and `apps/archforge/src`. Text from a table goes through a function the
-  test calls, as `home::start_texts` does.
+  several meanings, or `trn("{n} thing", "{n} things", n)` (the machinery is
+  `crates/shell-api/src/i18n/mod.rs`; the shell's `crate::i18n` re-exports it with its
+  catalogues registered). Pass the English text as a literal: the coverage test reads the
+  literals in `crates/ui-egui/src`, `crates/shell-api/src` and `apps/archforge/src`. Text from a
+  table goes through a function the test calls, as `home::start_texts` does.
 - The catalogues are `crates/ui-egui/src/i18n/<code>.tsv`, keyed by the English text, four
   tab-separated columns: kind, context, key, text. All seven are complete, so a new string needs
   its row in every one. Rows go beside related entries, never at the end of the file. A key is in
@@ -77,8 +78,9 @@ after every visible change, in both appearances, beside the design.
 - Translate the whole sentence with its punctuation; placeholders such as `{n}` may move. A row a
   model translated says so, as the catalogue header records its provenance.
 - The catalogue screen test refuses hidden characters, addresses and instructions in a row.
-- A new language is a catalogue plus a row in `LANGUAGES`; `every_catalogue_in_the_folder_is_registered`
-  fails without the row. Japanese and Chinese draw with an installed family
+- A new language is a catalogue plus a row in `LANGUAGES` (`crates/shell-api/src/i18n/mod.rs`)
+  and in the shell's `CATALOGUES` (`crates/ui-egui/src/i18n/mod.rs`);
+  `every_catalogue_in_the_folder_is_registered` fails without the rows. Japanese and Chinese draw with an installed family
   (`crates/ui-egui/src/fonts.rs`).
 - Wording is plain and UK English: colour, licence, catalogue.
 
