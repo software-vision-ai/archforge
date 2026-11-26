@@ -435,6 +435,7 @@ dependencies = [
 name = "archforge-shell-api"
 version = "0.14.0"
 dependencies = [
+ "archforge-diagram",
  "egui",
  "serde",
 ]

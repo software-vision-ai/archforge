@@ -2,12 +2,13 @@
 //! what they may use from the shell, so a notation's screens never depend on the shell crate
 //! (`archforge-ui-egui`) itself.
 //!
-//! It holds the automation-id registry (`widgets`) and the design (`ux`: the colours, the type, the
-//! icons the shell and both notations draw, and the helpers that draw them). Story AR-780 moves the
-//! rest into it, step by step and unchanged: the shared controls and canvas geometry, the
-//! interfaces `NotationUi` and `DiagramKind` with the data types they name, and the translations
-//! machinery. It sits on the shell interfaces' layer (9), below the notations'
-//! screens (10) and the shell (11), and builds for the portable target.
+//! It holds the automation-id registry (`widgets`), the design (`ux`: the colours, the type, the
+//! icons the shell and both notations draw, and the helpers that draw them) and the canvas's
+//! geometry that names no shell (`canvas`). Story AR-780 moves the rest into it, step by step and
+//! unchanged: the shared controls, the interfaces `NotationUi` and `DiagramKind` with the data
+//! types they name, and the translations machinery. It sits on the shell interfaces' layer (9),
+//! below the notations' screens (10) and the shell (11), and builds for the portable target.
 
+pub mod canvas;
 pub mod ux;
 pub mod widgets;

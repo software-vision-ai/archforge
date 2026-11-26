@@ -20,6 +20,10 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+pub use archforge_shell_api::canvas::self_loop;
+pub(crate) use archforge_shell_api::canvas::{END_HANDLE, View, along, end_handles_at, exit_point, nesting_route};
+use archforge_shell_api::canvas::{beside, beside_pair, mark_outline, mark_shape, qualifier_place, signature_place};
+
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::notation_ui::{Layer, Overlaid};
@@ -475,27 +479,6 @@ pub(crate) fn diagram_bounds(store: &Store, d: Obj) -> Option<Rect> {
         out = Some(out.map_or(r, |o| o.union(r)));
     }
     out
-}
-
-/// The view's mapping between diagram units and the screen.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct View {
-    pub origin: Pos2,
-    pub pan: Vec2,
-    pub zoom: f32,
-}
-
-impl View {
-    pub fn to_screen(self, x: f64, y: f64) -> Pos2 {
-        self.origin + self.pan + vec2(x as f32, y as f32) * self.zoom
-    }
-    pub fn rect(self, b: &archforge_diagram::Rect) -> Rect {
-        Rect::from_min_size(self.to_screen(b.x, b.y), vec2(b.width as f32, b.height as f32) * self.zoom)
-    }
-    pub fn to_canvas(self, at: Pos2) -> (f64, f64) {
-        let v = (at - self.origin - self.pan) / self.zoom;
-        (v.x as f64, v.y as f64)
-    }
 }
 
 /// Zooms by `factor` about `at`, a point on the screen, so what is under it stays there.
@@ -1490,68 +1473,6 @@ fn draw_constraint_links(paint: &egui::Painter, d: &Drawing<'_>) {
 /// The radius of the ⊕ at an owner's end of a nesting line, in diagram units (AR-132).
 const CONTAINMENT_RADIUS: f32 = 7.0;
 
-/// The route of the line that ties a nested classifier's card `nested` to its owner's card
-/// `owner` (AR-132): straight where the cards face each other across a gap, else leaving the owner
-/// at its side and turning once into the nested card, the elbow crossing fewer of the `others`
-/// cards. Gives the points from the
-/// ⊕'s rim to the nested card, and the ⊕'s centre, `radius` out from the owner's side; None when
-/// the cards overlap, since a card over another is no ownership of its own and draws no line.
-pub(crate) fn nesting_route(owner: Rect, nested: Rect, radius: f32, others: &[Rect]) -> Option<(Vec<Pos2>, Pos2)> {
-    if owner.intersects(nested) || !owner.is_finite() || !nested.is_finite() {
-        return None;
-    }
-    let (x_lo, x_hi) = (owner.left().max(nested.left()), owner.right().min(nested.right()));
-    let (y_lo, y_hi) = (owner.top().max(nested.top()), owner.bottom().min(nested.bottom()));
-    let below = nested.top() >= owner.bottom();
-    let right = nested.left() >= owner.right();
-    // Leaves the owner at `at` going `dir`: the ⊕ sits just outside, the line starts at its rim.
-    let ring = |at: Pos2, dir: Vec2| (at + dir * radius, at + dir * 2.0 * radius);
-    if x_hi - x_lo >= 2.0 * radius {
-        let x = (x_lo + x_hi) / 2.0;
-        let (from, to, dir) = if below {
-            (pos2(x, owner.bottom()), pos2(x, nested.top()), vec2(0.0, 1.0))
-        } else {
-            (pos2(x, owner.top()), pos2(x, nested.bottom()), vec2(0.0, -1.0))
-        };
-        let (centre, start) = ring(from, dir);
-        return Some((vec![start, to], centre));
-    }
-    if y_hi - y_lo >= 2.0 * radius {
-        let y = (y_lo + y_hi) / 2.0;
-        let (from, to, dir) = if right {
-            (pos2(owner.right(), y), pos2(nested.left(), y), vec2(1.0, 0.0))
-        } else {
-            (pos2(owner.left(), y), pos2(nested.right(), y), vec2(-1.0, 0.0))
-        };
-        let (centre, start) = ring(from, dir);
-        return Some((vec![start, to], centre));
-    }
-    // Apart both ways: an elbow, out of the owner's side then down or up into the nested card, or
-    // out of its top or bottom then across into the nested card's side; the one crossing fewer
-    // other cards.
-    let (x, y) = (nested.center().x, nested.center().y);
-    let toward_x = if x >= owner.center().x { 1.0 } else { -1.0 };
-    let toward_y = if y >= owner.center().y { 1.0 } else { -1.0 };
-    let side = pos2(if toward_x > 0.0 { owner.right() } else { owner.left() }, owner.center().y);
-    let end_v = pos2(x, if toward_y > 0.0 { nested.top() } else { nested.bottom() });
-    let (c1, s1) = ring(side, vec2(toward_x, 0.0));
-    let across_first = vec![s1, pos2(x, side.y), end_v];
-    let foot = pos2(owner.center().x, if toward_y > 0.0 { owner.bottom() } else { owner.top() });
-    let end_h = pos2(if toward_x > 0.0 { nested.left() } else { nested.right() }, y);
-    let (c2, s2) = ring(foot, vec2(0.0, toward_y));
-    let down_first = vec![s2, pos2(foot.x, y), end_h];
-    let crossings = |points: &[Pos2]| points.windows(2).map(|w| others.iter().filter(|o| segment_crosses(**o, w[0], w[1])).count()).sum::<usize>();
-    if crossings(&down_first) < crossings(&across_first) { Some((down_first, c2)) } else { Some((across_first, c1)) }
-}
-
-/// Whether the level or upright segment from `a` to `b` passes through `r`, shrunk a little so a
-/// segment along its edge does not count.
-fn segment_crosses(r: Rect, a: Pos2, b: Pos2) -> bool {
-    let inner = r.shrink(2.0);
-    let seg = Rect::from_two_pos(a, b);
-    inner.intersects(seg.expand(0.5))
-}
-
 /// The lines that tie each nested classifier's card to its owner's card where the diagram shows
 /// both (AR-132): solid in the muted ink, the accent while either is selected, ending in ⊕ at the
 /// owner. Worked out from the model each frame, never stored; overlapping cards draw none.
@@ -1988,87 +1909,6 @@ fn selection_ring(paint: &egui::Painter, p: &Palette, rect: Rect, looking: bool)
     }
 }
 
-/// Where a line from a rectangle's centre towards `toward` leaves the rectangle.
-pub(crate) fn exit_point(rect: Rect, toward: Pos2) -> Pos2 {
-    let c = rect.center();
-    let d = toward - c;
-    if d == Vec2::ZERO || !d.is_finite() {
-        return c;
-    }
-    let tx = if d.x.abs() > f32::EPSILON { (rect.width() / 2.0) / d.x.abs() } else { f32::INFINITY };
-    let ty = if d.y.abs() > f32::EPSILON { (rect.height() / 2.0) / d.y.abs() } else { f32::INFINITY };
-    let t = tx.min(ty);
-    if t.is_finite() { c + d * t } else { c }
-}
-
-/// How far a self relationship's loop reaches out of its entity.
-/// The diagram's self-loop, on screen (the grid hit-tests the same shape).
-const LOOP_REACH: f32 = archforge_diagram::grid::LOOP_REACH as f32;
-const LOOP_HALF: f32 = archforge_diagram::grid::LOOP_HALF as f32;
-/// The points of a self relationship's loop on the entity's right side.
-pub fn self_loop(rect: Rect, z: f32) -> Vec<Pos2> {
-    let cy = rect.center().y;
-    vec![
-        pos2(rect.right(), cy - LOOP_HALF * z),
-        pos2(rect.right() + LOOP_REACH * z, cy - LOOP_HALF * z),
-        pos2(rect.right() + LOOP_REACH * z, cy + LOOP_HALF * z),
-        pos2(rect.right(), cy + LOOP_HALF * z),
-    ]
-}
-
-/// A point along a polyline at `t` of its length, 0 at its start and 1 at its end.
-pub(crate) fn along(points: &[Pos2], t: f32) -> Pos2 {
-    let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
-    if points.is_empty() {
-        return Pos2::ZERO;
-    }
-    if total <= 0.0 || points.len() == 1 {
-        return points[0];
-    }
-    let mut left = (total * t.clamp(0.0, 1.0)).max(0.0);
-    for w in points.windows(2) {
-        let len = (w[1] - w[0]).length();
-        if left <= len {
-            return w[0] + (w[1] - w[0]) * if len > 0.0 { left / len } else { 0.0 };
-        }
-        left -= len;
-    }
-    points[points.len() - 1]
-}
-
-/// Where a mark the line stops short of sits at `tip`, coming from `back`: the line's direction,
-/// the mark's base, half its width across, and its length; a triangle stops the line at its base,
-/// a diamond at its far corner.
-fn mark_shape(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> (Vec2, Pos2, Vec2, f32) {
-    let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
-    let s = z.max(0.6);
-    let (len, half) = match mark {
-        EndMark::Triangle | EndMark::FilledTriangle => (12.0 * s, 7.5 * s),
-        EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
-        _ => (0.0, 6.0 * s),
-    };
-    (dir, tip - dir * len, vec2(-dir.y, dir.x) * half, len)
-}
-
-/// The corners of a line's mark as it is drawn at `tip`, coming from `back`: a triangle's tip and
-/// base corners, a diamond's four corners, an open arrow's tip and the ends of its two strokes;
-/// none for any other mark.
-pub(crate) fn mark_outline(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> Vec<Pos2> {
-    let (dir, base, side, len) = mark_shape(mark, tip, back, z);
-    match mark {
-        EndMark::Triangle | EndMark::FilledTriangle => vec![tip, base + side, base - side],
-        EndMark::HollowDiamond | EndMark::FilledDiamond => {
-            let middle = tip - dir * (len / 2.0);
-            vec![tip, middle + side, base, middle - side]
-        }
-        EndMark::OpenArrow => {
-            let back = tip - dir * 12.0 * z.max(0.6);
-            vec![tip, back + side, back - side]
-        }
-        _ => Vec::new(),
-    }
-}
-
 /// Draws a line's triangle, diamond or open arrow at `tip`, coming from `back`, a hollow one filled
 /// with `bg`, at its [`mark_outline`].
 #[allow(clippy::too_many_arguments, reason = "a mark is drawn at its end, in its stroke and over what it is drawn on")]
@@ -2358,30 +2198,6 @@ fn qualifier_boxes(
     out
 }
 
-/// Where a qualifier box of `size` sits against `node` for a line leaving it at `tip`: on the side
-/// `tip` is nearest, centred on it, and the point on its outer side the line starts from.
-pub(crate) fn qualifier_place(node: Rect, tip: Pos2, size: Vec2) -> (Rect, Pos2) {
-    let gaps = [(tip.x - node.left()).abs(), (tip.x - node.right()).abs(), (tip.y - node.top()).abs(), (tip.y - node.bottom()).abs()];
-    let side = (0..4).min_by(|a, b| gaps[*a].total_cmp(&gaps[*b])).unwrap_or(1);
-    let (w, h) = (size.x, size.y);
-    match side {
-        0 => (Rect::from_min_size(pos2(node.left() - w, tip.y - h / 2.0), size), pos2(node.left() - w, tip.y)),
-        1 => (Rect::from_min_size(pos2(node.right(), tip.y - h / 2.0), size), pos2(node.right() + w, tip.y)),
-        2 => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.top() - h), size), pos2(tip.x, node.top() - h)),
-        _ => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.bottom()), size), pos2(tip.x, node.bottom() + h)),
-    }
-}
-
-/// How far a template's signature box reaches past its card's right side and above its top, in
-/// diagram units, as the design draws it (page 08, C1).
-const SIGNATURE_OUT: Vec2 = vec2(28.0, 24.0);
-
-/// Where a template signature box of `size` sits on `card`: over its top-right corner, reaching
-/// [`SIGNATURE_OUT`] past it, scaled by `z`.
-pub(crate) fn signature_place(card: Rect, size: Vec2, z: f32) -> Rect {
-    Rect::from_min_size(pos2(card.right() + SIGNATURE_OUT.x * z - size.x, card.top() - SIGNATURE_OUT.y * z), size)
-}
-
 /// A template's signature (AR-130): a dashed box on the surface over the card's top-right corner,
 /// one parameter a row in their order; gives its rectangle, none for a card that is no template.
 fn signature_box(paint: &egui::Painter, p: &Palette, rows: &[String], card: Rect, z: f32) -> Option<Rect> {
@@ -2413,217 +2229,6 @@ fn draw_qualifier_box(paint: &egui::Painter, p: &Palette, rect: Rect, rows: Vec<
         paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text.into());
         y += h;
     }
-}
-
-/// The radius of a selected line's end handle, and the room between it and the end's mark.
-pub(crate) const END_HANDLE: f32 = 5.0;
-const END_HANDLE_GAP: f32 = 3.0;
-
-/// A selected line's end handle's hit box across, which two handles must not share.
-pub(crate) const END_HANDLE_HIT: f32 = 16.0;
-/// The step a handle's place is looked for in along the line, and the most steps taken.
-const END_HANDLE_STEP: f32 = 0.5;
-const END_HANDLE_STEPS: usize = 4096;
-
-/// Where a selected line's end handle sits when its end's mark (an arrowhead, a triangle, a
-/// diamond) would hide under it, `points` running from that end along the line: the first place
-/// along the line a few points clear of the mark as drawn ([`mark_outline`]), measured from the
-/// mark itself, so a bend close to the end never brings the handle onto it. It goes no further
-/// than half a hit box short of the line's middle, so the two ends' handles stay apart and both
-/// take a press on a short line. None, the handle on the end itself, for an end without such a
-/// mark or a line of no length.
-pub(crate) fn end_handle_at(points: &[Pos2], mark: EndMark, z: f32) -> Option<Pos2> {
-    let (&tip, &next) = (points.first()?, points.get(1)?);
-    let outline = mark_outline(mark, tip, next, z);
-    let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
-    if outline.is_empty() || total <= 0.0 || !total.is_finite() {
-        return None;
-    }
-    let limit = (total / 2.0 - END_HANDLE_HIT / 2.0).max(0.0);
-    let clear = END_HANDLE + END_HANDLE_GAP;
-    // The steps short of `limit`, at most END_HANDLE_STEPS of them, then `limit` itself once, so
-    // the farthest place is looked at too and none is looked at twice.
-    let steps = (limit / END_HANDLE_STEP).ceil().clamp(0.0, END_HANDLE_STEPS as f32) as usize;
-    let at = (0..steps)
-        .map(|i| i as f32 * END_HANDLE_STEP)
-        .filter(|d| *d < limit)
-        .chain(std::iter::once(limit))
-        .map(|d| at_length(points, d))
-        .find(|at| outside_by(&outline, *at) >= clear);
-    Some(at.unwrap_or_else(|| at_length(points, limit)))
-}
-
-/// The most places along each half of a line the two end handles are tried at together.
-const END_HANDLE_TRIES: usize = 64;
-
-/// Where a selected line's two end handles sit, `points` running from its first end to its
-/// second, `marks` its ends' marks: each as [`end_handle_at`] places it (None, on its end), unless
-/// the two hit boxes would meet on screen, as on a short line bent back on itself. Then the pair
-/// is chosen together, each on its own half of the line, so the boxes stay apart: one that clears
-/// both marks if there is one, else one that keeps both pressable, falling short of the marks'
-/// clearance by as little as it can; the nearest to where they were placed alone. Where no two
-/// places are apart, the pair furthest apart is taken.
-pub(crate) fn end_handles_at(points: &[Pos2], marks: [EndMark; 2], z: f32) -> [Option<Pos2>; 2] {
-    let backwards: Vec<Pos2> = points.iter().rev().copied().collect();
-    let alone = [end_handle_at(points, marks[0], z), end_handle_at(&backwards, marks[1], z)];
-    let (Some(&start), Some(&end)) = (points.first(), points.last()) else { return alone };
-    let placed = [alone[0].unwrap_or(start), alone[1].unwrap_or(end)];
-    let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
-    if handles_apart(placed[0], placed[1]) || points.len() < 2 || total <= 0.0 || !total.is_finite() {
-        return alone;
-    }
-    // Each end's places on its own half, with how far each falls short of clearing its mark.
-    let half = total / 2.0;
-    let step = half / END_HANDLE_TRIES as f32;
-    let clear = END_HANDLE + END_HANDLE_GAP;
-    let places = |route: &[Pos2], mark: EndMark| -> Vec<(f32, Pos2, f32)> {
-        let outline = route.get(1).map(|next| mark_outline(mark, route[0], *next, z)).unwrap_or_default();
-        (0..=END_HANDLE_TRIES)
-            .map(|i| {
-                let d = i as f32 * step;
-                let at = at_length(route, d);
-                let short = if outline.is_empty() { 0.0 } else { (clear - outside_by(&outline, at)).max(0.0) };
-                (d, at, short)
-            })
-            .collect()
-    };
-    let (first, second) = (places(points, marks[0]), places(&backwards, marks[1]));
-    let mut best: Option<(f32, [(f32, Pos2); 2])> = None;
-    let mut widest: Option<(f32, [(f32, Pos2); 2])> = None;
-    for &(da, a, sa) in &first {
-        for &(db, b, sb) in &second {
-            let gap = (a.x - b.x).abs().max((a.y - b.y).abs());
-            if widest.is_none_or(|(w, _)| gap > w) {
-                widest = Some((gap, [(da, a), (db, b)]));
-            }
-            if handles_apart(a, b) {
-                // Falling short of a mark's clearance weighs far more than moving a handle.
-                let cost = (sa + sb) * 1000.0 + (a - placed[0]).length() + (b - placed[1]).length();
-                if best.is_none_or(|(c, _)| cost < c) {
-                    best = Some((cost, [(da, a), (db, b)]));
-                }
-            }
-        }
-    }
-    match best.or(widest) {
-        Some((_, pair)) => pair.map(|(d, at)| (d > 0.0).then_some(at)),
-        None => alone,
-    }
-}
-
-/// Whether two end handles at `a` and `b` keep their hit boxes apart on screen, with a point
-/// between them.
-fn handles_apart(a: Pos2, b: Pos2) -> bool {
-    (a.x - b.x).abs().max((a.y - b.y).abs()) >= END_HANDLE_HIT + 1.0
-}
-
-/// The point `d` along the polyline `points` from its start; its end when it is shorter.
-fn at_length(points: &[Pos2], d: f32) -> Pos2 {
-    let mut left = d.max(0.0);
-    for w in points.windows(2) {
-        let len = (w[1] - w[0]).length();
-        if left <= len {
-            return w[0] + (w[1] - w[0]) * if len > 0.0 { left / len } else { 0.0 };
-        }
-        left -= len;
-    }
-    points.last().copied().unwrap_or(Pos2::ZERO)
-}
-
-/// How far `at` is outside the convex `outline`: its distance to the nearest edge, none inside.
-fn outside_by(outline: &[Pos2], at: Pos2) -> f32 {
-    let n = outline.len();
-    let edges = || (0..n).filter_map(|i| Some((*outline.get(i)?, *outline.get((i + 1) % n)?)));
-    let cross = |(a, b): (Pos2, Pos2)| (b - a).x * (at - a).y - (b - a).y * (at - a).x;
-    let inside = n >= 3 && (edges().all(|e| cross(e) >= 0.0) || edges().all(|e| cross(e) <= 0.0));
-    if inside {
-        return 0.0;
-    }
-    edges()
-        .map(|(a, b)| {
-            let ab = b - a;
-            let t = if ab.length_sq() > 0.0 { ((at - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
-            (at - (a + ab * t)).length()
-        })
-        .fold(f32::INFINITY, f32::min)
-}
-
-/// How far a line's end mark reaches back along the line from its tip, and how far it spreads to
-/// either side, at zoom `z`: a triangle, a diamond or an open arrow; nothing for any other mark.
-fn mark_extent(mark: EndMark, z: f32) -> (f32, f32) {
-    let s = z.max(0.6);
-    match mark {
-        EndMark::Triangle | EndMark::FilledTriangle => (12.0 * s, 7.5 * s),
-        EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
-        EndMark::OpenArrow => (12.0 * s, 6.0 * s),
-        _ => (0.0, 0.0),
-    }
-}
-
-/// Where a cardinality text sits by default: a little along the line from its end, and further
-/// for a text longer than that reach, beside the line rather than on it: under a level line (a
-/// line's name sits above it), right of an upright one, off a slanted one along its true normal;
-/// clear of the end's `mark` (an arrowhead, a diamond or a triangle), along the line and to its
-/// side.
-fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32, mark: EndMark) -> Pos2 {
-    match beside_parts(end, towards, size, z, mark) {
-        Some((d, n, along, reach)) => end + d * along + n * reach,
-        None => end,
-    }
-}
-
-/// [`beside`]'s parts: the line's direction from the end, the unit normal the text sits on, how
-/// far along and how far off the line its centre goes. None for an end with no direction.
-fn beside_parts(end: Pos2, towards: Pos2, size: Vec2, z: f32, mark: EndMark) -> Option<(Vec2, Vec2, f32, f32)> {
-    let d = towards - end;
-    if d.length() <= f32::EPSILON || !d.is_finite() {
-        return None;
-    }
-    let d = d.normalized();
-    // The true normal, on the side a level line's text has (below) or an upright one's (right).
-    let normal = vec2(-d.y, d.x);
-    let n = if d.x.abs() >= d.y.abs() {
-        if normal.y >= 0.0 { normal } else { -normal }
-    } else if normal.x >= 0.0 {
-        normal
-    } else {
-        -normal
-    };
-    let (mark_len, mark_half) = mark_extent(mark, z);
-    // Far enough off the line that the text's box, projected on the normal, clears it, and the
-    // mark's wings, whichever way the line runs.
-    let reach = n.x.abs() * size.x / 2.0 + n.y.abs() * size.y / 2.0 + (6.0 * z).max(mark_half + 4.0 * z);
-    // And far enough along it that a long text, such as an end's modifiers (AR-126), clears the
-    // card the line leaves and the mark at its end; a short one keeps its usual place.
-    let along = (d.x.abs() * size.x / 2.0 + d.y.abs() * size.y / 2.0 + mark_len + 8.0 * z).max(30.0 * z);
-    Some((d, n, along, reach))
-}
-
-/// The default centres of a line's two end texts, `ends` each its end, the point the line leaves
-/// it towards, the text's size and the end's mark, as [`beside`] places them; when the two would
-/// overlap (a short line, a long text, a diamond's reach), each keeps to its own half of the span
-/// between the ends, and if they still meet the second goes to the other side of the line.
-fn beside_pair(ends: [(Pos2, Pos2, Vec2, EndMark); 2], z: f32) -> [Pos2; 2] {
-    let centres = ends.map(|(end, towards, size, mark)| beside(end, towards, size, z, mark));
-    let rect = |c: Pos2, size: Vec2| Rect::from_center_size(c, size).expand(2.0 * z);
-    let meet = |c: [Pos2; 2]| rect(c[0], ends[0].2).intersects(rect(c[1], ends[1].2));
-    if !meet(centres) {
-        return centres;
-    }
-    let span = (ends[1].0 - ends[0].0).length();
-    let capped = ends.map(|(end, towards, size, mark)| match beside_parts(end, towards, size, z, mark) {
-        Some((d, n, along, reach)) => {
-            let half = d.x.abs() * size.x / 2.0 + d.y.abs() * size.y / 2.0;
-            let room = (span / 2.0 - half - 4.0 * z).max(half);
-            (end + d * along.min(room) + n * reach, end + d * along.min(room) - n * reach)
-        }
-        None => (end, end),
-    });
-    let first = [capped[0].0, capped[1].0];
-    if !meet(first) {
-        return first;
-    }
-    [capped[0].0, capped[1].1]
 }
 
 /// A soft band under a line's whole route, so the line under the pointer stands out.
@@ -3111,25 +2716,6 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
 }
 
-/// A short end text, four characters at zoom 1, sits 30 points along a level or an upright line
-/// from its end, as it always has, where the end has no mark; a long one goes further, clear of the
-/// card and of an arrowhead, beside the line clear of the arrowhead's wings (AR-126).
-#[cfg(test)]
-#[test]
-fn an_end_text_sits_thirty_along_its_line_and_a_long_one_clears_the_mark() {
-    let four = vec2(26.0, 14.0);
-    for (towards, d, n) in [(pos2(200.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0)), (pos2(0.0, 200.0), vec2(0.0, 1.0), vec2(1.0, 0.0))] {
-        let at = beside(Pos2::ZERO, towards, four, 1.0, EndMark::None);
-        assert_eq!((at.to_vec2() - n * (at.to_vec2().dot(n))).length(), 30.0, "{towards:?}: {at:?}");
-        assert!((at.to_vec2().dot(d) - 30.0).abs() < f32::EPSILON);
-    }
-    let long = vec2(120.0, 14.0);
-    let at = beside(Pos2::ZERO, pos2(400.0, 0.0), long, 1.0, EndMark::OpenArrow);
-    let (len, half) = mark_extent(EndMark::OpenArrow, 1.0);
-    assert!(at.x - long.x / 2.0 >= len + 8.0, "its near edge clears the arrowhead: {at:?}");
-    assert!(at.y - long.y / 2.0 >= half + 4.0, "and its wings: {at:?}");
-}
-
 /// The height a command grows a node to, [`archforge_diagram::figure::Card::height`], is the one the
 /// canvas lays a card's places out by: the last place's top, a row and the foot, or the header for
 /// a card with none, whether its compartments are empty, full or both (AR-241).
@@ -3156,60 +2742,6 @@ fn a_cards_height_is_where_the_canvas_ends_its_last_place() {
         let laid = slots(&c).last().map_or(ENTITY_HEADER, |(top, _, _)| top + ENTITY_ROW + archforge_diagram::figure::CARD_FOOT);
         assert_eq!(card_height(&c), laid, "{:?}", c.compartments.iter().map(Vec::len).collect::<Vec<_>>());
     }
-}
-
-/// On a straight slanted route, direction (0.8, 0.6), an end text sits off the line along its true
-/// normal: no corner of its box crosses the route, short or long, with or without a mark.
-#[cfg(test)]
-#[test]
-fn an_end_text_on_a_slanted_line_keeps_its_box_off_the_route() {
-    let towards = pos2(400.0, 300.0);
-    let normal = vec2(-0.6, 0.8);
-    for (size, mark) in [(vec2(26.0, 14.0), EndMark::None), (vec2(140.0, 14.0), EndMark::OpenArrow), (vec2(80.0, 14.0), EndMark::FilledDiamond)] {
-        for z in [0.5, 1.0, 2.0] {
-            let c = beside(Pos2::ZERO, towards, size * z, z, mark);
-            let r = Rect::from_center_size(c, size * z);
-            let sides: Vec<f32> = [r.left_top(), r.right_top(), r.left_bottom(), r.right_bottom()].iter().map(|p| p.to_vec2().dot(normal)).collect();
-            assert!(sides.iter().all(|s| *s > 0.0) || sides.iter().all(|s| *s < 0.0), "{size:?} {mark:?} at {z}: {r:?} crosses the route");
-        }
-    }
-}
-
-/// A short line's two end texts never overlap, a diamond at one end included: each keeps to its
-/// half of the line, or the second goes to the other side; texts that clear each other keep their
-/// usual places.
-#[cfg(test)]
-#[test]
-fn a_short_line_s_two_end_texts_keep_clear_of_each_other() {
-    let gap = |c: [Pos2; 2], a: Vec2, b: Vec2| !Rect::from_center_size(c[0], a).intersects(Rect::from_center_size(c[1], b));
-    for (len, a, b, marks) in [
-        (110.0, vec2(70.0, 14.0), vec2(70.0, 14.0), [EndMark::FilledDiamond, EndMark::None]),
-        (110.0, vec2(70.0, 14.0), vec2(70.0, 14.0), [EndMark::None, EndMark::HollowDiamond]),
-        (60.0, vec2(90.0, 14.0), vec2(90.0, 14.0), [EndMark::FilledDiamond, EndMark::OpenArrow]),
-    ] {
-        let c = beside_pair([(Pos2::ZERO, pos2(len, 0.0), a, marks[0]), (pos2(len, 0.0), Pos2::ZERO, b, marks[1])], 1.0);
-        assert!(gap(c, a, b), "{len} {marks:?}: {c:?}");
-    }
-    // Far apart, each stays where it alone would be.
-    let far =
-        [(Pos2::ZERO, pos2(600.0, 0.0), vec2(40.0, 14.0), EndMark::FilledDiamond), (pos2(600.0, 0.0), Pos2::ZERO, vec2(40.0, 14.0), EndMark::None)];
-    let c = beside_pair(far, 1.0);
-    assert_eq!(c, far.map(|(e, t, s, m)| beside(e, t, s, 1.0, m)));
-}
-
-/// A self relationship's loop leaves its entity's right side and comes back to it, around the
-/// entity's centre.
-#[cfg(test)]
-#[test]
-fn a_self_loop_leaves_and_returns_on_the_right_side_around_the_centre() {
-    let rect = Rect::from_min_size(pos2(100.0, 100.0), vec2(240.0, 166.0));
-    let points = self_loop(rect, 1.0);
-    assert_eq!(points.len(), 4);
-    assert!(points.iter().all(|p| p.is_finite()));
-    assert_eq!(points[0].x, rect.right());
-    assert_eq!(points[3].x, rect.right());
-    assert_eq!(points[1].x, rect.right() + LOOP_REACH);
-    assert!((points[0].y + points[3].y) / 2.0 - rect.center().y < 0.001);
 }
 
 /// Every hover text of the tables, for the catalogue tests.
