@@ -12,23 +12,35 @@ mod check;
 /// it uses.
 const FACES: &[(&str, &str)] = &[("Inter", "Regular"), ("Inter", "SemiBold")];
 
-/// Writes the faces, then fails the build at a catalogue row that does not have four columns, or at
-/// a listing of the catalogues that fails part way.
+/// Writes the faces, then fails the build at a catalogue row that does not have four columns, in
+/// the shell's catalogues or a notation's (a folder of its own under `i18n`), or at a listing of
+/// the catalogues that fails part way.
 fn main() {
     faces();
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
     let i18n = Path::new(&manifest).join("src").join("i18n");
     println!("cargo:rerun-if-changed={}", i18n.display());
     let Ok(entries) = std::fs::read_dir(&i18n) else { return };
+    catalogues(&i18n, entries);
+}
+
+/// Checks every catalogue in `entries`, the listing of `dir`, and in its folders, and exits the
+/// build at the first malformed row or at a listing that fails part way.
+fn catalogues(dir: &Path, entries: std::fs::ReadDir) {
     for entry in entries {
-        // The standard library does not promise that a listing ends after an error.
-        let path = match entry {
-            Ok(entry) => entry.path(),
-            Err(e) => {
-                println!("cargo:warning={}: the catalogues were not all listed, so they cannot all be checked: {e}", i18n.display());
-                std::process::exit(1);
-            }
+        // The standard library does not promise that a listing ends after an error. A folder is
+        // told by the entry's own type, which does not follow a link.
+        let (path, folder) = match entry.and_then(|entry| Ok((entry.path(), entry.file_type()?.is_dir()))) {
+            Ok(found) => found,
+            Err(e) => listing_failed(dir, &e),
         };
+        if folder {
+            match std::fs::read_dir(&path) {
+                Ok(entries) => catalogues(&path, entries),
+                Err(e) => listing_failed(&path, &e),
+            }
+            continue;
+        }
         if path.extension().is_none_or(|e| e != "tsv") {
             continue;
         }
@@ -38,6 +50,12 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
+
+/// Fails the build: the catalogues in `dir` were not all listed, so they cannot all be checked.
+fn listing_failed(dir: &Path, e: &std::io::Error) -> ! {
+    println!("cargo:warning={}: the catalogues were not all listed, so they cannot all be checked: {e}", dir.display());
+    std::process::exit(1);
 }
 
 /// Writes `faces.rs`: one `Face` per wanted face the fonts input lists, none without the input.

@@ -141,8 +141,6 @@ str		No schemas yet	Noch keine Schemas
 str		Add	Hinzufügen
 str		Schema	Schema
 str		Folder	Ordner
-str		Table	Tabelle
-str		Column	Spalte
 str		Skill	Skill
 str		Nothing matches the filter	Nichts passt zum Filter
 str		Expand all	Alle aufklappen
@@ -160,146 +158,40 @@ plural		{n} foreign key goes with it.	{n} Fremdschlüssel geht mit.|{n} Fremdsch
 plural		{n} nested classifier goes with it: {names}.	{n} verschachtelter Klassifizierer geht mit: {names}.|{n} verschachtelte Klassifizierer gehen mit: {names}.
 plural		{n} stereotype application goes with it: {names}.	{n} Stereotyp-Anwendung geht mit: {names}.|{n} Stereotyp-Anwendungen gehen mit: {names}.
 str		Delete	Löschen
-str		Schema · model	Schema · Modell
-str		Table · model, in every diagram	Tabelle · Modell, in jedem Diagramm
-str		Column · model	Spalte · Modell
-str		Domain · model	Domäne · Modell
-str		This domain	Diese Domäne
-str		On this domain · {n}	Zu dieser Domäne · {n}
-str		Enum type · model	Aufzählungstyp · Modell
-str		This enum type	Dieser Aufzählungstyp
-str		On this enum type · {n}	Zu diesem Aufzählungstyp · {n}
-str		Subtype · {sub} is a {super}	Untertyp · {sub} ist ein {super}
-str		Subtype	Untertyp
-str		This subtype	Dieser Untertyp
-str		On this subtype · {n}	Zu diesem Untertyp · {n}
 str		Element · model	Element · Modell
 str		Skill · model	Skill · Modell
-str		Columns · {n}	Spalten · {n}
-str		Keys · {n}	Schlüssel · {n}
-str		Add a column	Spalte hinzufügen
-str		Add unique constraint	Eindeutigkeitsbedingung hinzufügen
-str		Columns, in key order	Spalten in Schlüsselreihenfolge
 str		Nulls distinct	Nullwerte verschieden
-str		Types · {n}	Typen · {n}
-plural		{n} check	{n} Prüfbedingung|{n} Prüfbedingungen
 plural		{n} literal	{n} Literal|{n} Literale
-str		Add type	Typ hinzufügen
 str		Domain	Domäne
 str		Enum type	Aufzählungstyp
 str		Base type	Basistyp
-str		Checks	Prüfbedingungen
-str		Add a check	Prüfbedingung hinzufügen
-str		Literals, in order	Literale in Reihenfolge
-str		Subtypes · {n}	Untertypen · {n}
-str		Add subtype	Untertyp hinzufügen
 str		Complete	Vollständig
 str		Disjoint	Disjunkt
-str		Discriminator	Diskriminator
-str		Mapping	Abbildung
 str		Table per type	Tabelle je Typ
 str		Single table	Eine Tabelle
 str		Table per concrete type	Tabelle je konkretem Typ
-str		key on {columns}	Schlüssel über {columns}
 str		complete	vollständig
 str		disjoint	disjunkt
 str		overlapping	überlappend
-str		Add a literal	Literal hinzufügen
-plural		{n} column takes {name}: {columns}. Retype it first.	{n} Spalte verwendet {name}: {columns}. Ändern Sie zuerst ihren Typ.|{n} Spalten verwenden {name}: {columns}. Ändern Sie zuerst ihren Typ.
-str		Give the literals as a list of names.	Geben Sie die Literale als Liste von Namen an.
-str		An enum type needs at least one literal.	Ein Aufzählungstyp braucht mindestens ein Literal.
-str		An enum type has at most {max} literals.	Ein Aufzählungstyp hat höchstens {max} Literale.
-str		A literal can't be empty.	Ein Literal darf nicht leer sein.
-str		The literal "{name}" is not a valid name. {why}	Das Literal „{name}“ ist kein gültiger Name. {why}
-str		The literal "{name}" is given twice. Give each literal once.	Das Literal „{name}“ ist doppelt angegeben. Geben Sie jedes Literal nur einmal an.
-str		Sequences · {n}	Sequenzen · {n}
-str		Add sequence	Sequenz hinzufügen
 str		Sequence	Sequenz
-str		Sequence · model	Sequenz · Modell
-str		This sequence	Diese Sequenz
-str		On this sequence · {n}	Zu dieser Sequenz · {n}
-str		from {start} by {increment}	ab {start} in Schritten von {increment}
-str		cycles	zyklisch
-str		owned by {column}	gehört zu {column}
-str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} ist eine Spalte eines anderen Schemas. Eine Sequenz gehört zu einer Spalte ihres Schemas.
-str		The column {column} belongs to no table.	Die Spalte {column} gehört zu keiner Tabelle.
-str		{column} has no type. A sequence's owner has a whole-number type.	{column} hat keinen Typ. Eine Sequenz gehört zu einer Spalte mit ganzzahligem Typ.
-str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} hat den Typ {type}. Eine Sequenz gehört zu einer Spalte mit ganzzahligem Typ.
-str		The increment can't be 0. A sequence moves by at least 1.	Die Schrittweite darf nicht 0 sein. Eine Sequenz bewegt sich um mindestens 1.
-str		The minimum "{value}" is not a whole number between {min} and {max}.	Das Minimum „{value}“ ist keine ganze Zahl zwischen {min} und {max}.
-str		The maximum "{value}" is not a whole number between {min} and {max}.	Das Maximum „{value}“ ist keine ganze Zahl zwischen {min} und {max}.
-str		The maximum {maximum} is not greater than the minimum {minimum}.	Das Maximum {maximum} ist nicht größer als das Minimum {minimum}.
-str		The start {start} is below the minimum {minimum}.	Der Startwert {start} liegt unter dem Minimum {minimum}.
-str		The start {start} is above the maximum {maximum}.	Der Startwert {start} liegt über dem Maximum {maximum}.
-str	sequence	Start	Startwert
 str		Increment	Schrittweite
 str		Minimum	Minimum
 str		Maximum	Maximum
 str		Cycle	Zyklisch
-str		Owned by	Gehört zu
-plural		{n} more column, not listed	{n} weitere Spalte, nicht aufgeführt|{n} weitere Spalten, nicht aufgeführt
-str		{field} takes a whole number	{field} braucht eine ganze Zahl
-str		Views · {n}	Sichten · {n}
-str		Add view	Sicht hinzufügen
 str		View	Sicht
-str		View · model	Sicht · Modell
-str		This view	Diese Sicht
-str		On this view · {n}	Zu dieser Sicht · {n}
-str		view	Sicht
-str		materialized	materialisiert
 str		Materialized	Materialisiert
 str		Query	Abfrage
-str		Pick a type	Typ wählen
-str		domain	Domäne
-str		enum	Aufzählung
-str		not null	nicht null
-str		Checks · {n}	Prüfbedingungen · {n}
-str		Indexes · {n}	Indizes · {n}
-str		Add check constraint	Prüfbedingung hinzufügen
-str		Add index	Index hinzufügen
-str		Columns, in index order	Spalten in Indexreihenfolge
-str		An expression	Ein Ausdruck
 str		Where	Where
 str		Method	Methode
 str		Ascending	Aufsteigend
 str		Descending	Absteigend
-str		Nulls default	Nullwerte standardmäßig
-str		Nulls first	Nullwerte zuerst
-str		Nulls last	Nullwerte zuletzt
 str		Problems · {n}	Probleme · {n}
-str		lacks its table or its key	hat keine Tabelle oder keinen Schlüssel
-str		{column} is a key column and may be null	{column} ist eine Schlüsselspalte und darf leer sein
-str		{from} to {to} is many to many	{from} zu {to} ist viele zu viele
-str		Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.	Mindestens eine Zeile in {many} je Zeile in {one} gilt nur im Diagramm: Kein Datenbankschlüssel kann das erzwingen. Wählen Sie „null oder mehr“, wenn eine Zeile in {one} keine haben darf.
 str		{key}: {problem}	{key}: {problem}
-str		{name} has no primary key	{name} hat keinen Primärschlüssel
-str		{name} has subtypes but no primary key to share	{name} hat Untertypen, aber keinen Primärschlüssel zum Teilen
-str		{name} removed · {keys} went with it	{name} entfernt · {keys} ging mit
-str		Add column	Spalte hinzufügen
 str		Link to a table or a relationship	Mit einer Tabelle oder einer Beziehung verbinden
 str		Drop the link on a table or a relationship's line	Den Link auf einer Tabelle oder der Linie einer Beziehung loslassen
-str		Edit column	Spalte bearbeiten
 str		Add skill	Skill hinzufügen
 str		Kind	Art
 str		Regular	Regulär
-str		Mapping table	Zuordnungstabelle
-str		Follows {target}	Folgt {target}
-str		Unlink	Verknüpfung lösen
-str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} enthält nur seine zwei Schlüssel und kann wieder die Viele-zu-viele-Linie zwischen {from} und {to} werden.
-str		Collapse into a relationship	In eine Beziehung zusammenfassen
-str		Only a many-to-many relationship becomes a mapping table.	Nur aus einer Viele-zu-viele-Beziehung wird eine Zuordnungstabelle.
-str		The relationship lacks one of its two tables.	Der Beziehung fehlt eine ihrer beiden Tabellen.
-str		A mapping table has exactly two foreign keys.	Eine Zuordnungstabelle hat genau zwei Fremdschlüssel.
-str		The foreign key {foreign_key} stands for no relationship.	Der Fremdschlüssel {foreign_key} steht für keine Beziehung.
-str		The foreign key {foreign_key} points at no key.	Der Fremdschlüssel {foreign_key} verweist auf keinen Schlüssel.
-str		The table has a relationship of its own, so it does not collapse into a relationship.	Die Tabelle hat eine eigene Beziehung und lässt sich daher nicht in eine Beziehung zusammenfassen.
-str		The table has columns of its own, so it does not collapse into a relationship.	Die Tabelle hat eigene Spalten und lässt sich daher nicht in eine Beziehung zusammenfassen.
-str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	Nicht alle Spalten der Tabelle gehören zu ihrem Primärschlüssel, daher lässt sie sich nicht in eine Beziehung zusammenfassen.
-str		The table has a unique constraint, so it does not collapse into a relationship.	Die Tabelle hat eine Eindeutigkeitsbedingung und lässt sich daher nicht in eine Beziehung zusammenfassen.
-str		The table has a check, so it does not collapse into a relationship.	Die Tabelle hat eine Prüfbedingung und lässt sich daher nicht in eine Beziehung zusammenfassen.
-str		The table has an index, so it does not collapse into a relationship.	Die Tabelle hat einen Index und lässt sich daher nicht in eine Beziehung zusammenfassen.
-str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} hat keinen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei.
-str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei.
 str		Type	Typ
 str		Primary key	Primärschlüssel
 str		Not null	Nicht null
@@ -307,27 +199,12 @@ str		Unique	Eindeutig
 str		Length	Länge
 str		Precision	Genauigkeit
 str		Scale	Nachkommastellen
-str		The size {value} is not between 1 and 65535.	Die Größe {value} liegt nicht zwischen 1 und 65535.
-str		A column without a type name of its own takes no size.	Eine Spalte ohne eigenen Typnamen hat keine Größe.
-str		{type} takes no length.	{type} hat keine Länge.
-str		{type} takes no precision.	{type} hat keine Genauigkeit.
-str		{type} takes no scale.	{type} hat keine Nachkommastellen.
-str		A BINARY holds at most 255 bytes, not {value}.	Ein BINARY fasst höchstens 255 Bytes, nicht {value}.
-str		The scale {value} is more than the precision.	Die Nachkommastellen ({value}) übersteigen die Genauigkeit.
-str		A scale needs a precision.	Nachkommastellen brauchen eine Genauigkeit.
-str		A type name holds no size; give the length, precision or scale instead.	Ein Typname enthält keine Größe; geben Sie stattdessen Länge, Genauigkeit oder Nachkommastellen an.
 str		Default	Standardwert
 str		Generation	Erzeugung
 str		Expression	Ausdruck
 str		Collation	Sortierung
 str		Description	Beschreibung
-str		{text} is not a number	{text} ist keine Zahl
 str		None	Keine
-str		built-in	eingebaut
-str		Identity, always	Identität, immer
-str		Identity, by default	Identität, standardmäßig
-str		Computed, stored	Berechnet, gespeichert
-str		Computed, virtual	Berechnet, virtuell
 str		Remove	Entfernen
 str		Edit	Bearbeiten
 str		Apply	Übernehmen
@@ -382,16 +259,9 @@ str		Back	Zurück
 str		Step 1 of 2 · Choose what the diagram shows	Schritt 1 von 2 · Wählen Sie, was das Diagramm zeigt
 str		Step 2 of 2 · Name it and say what it is of	Schritt 2 von 2 · Benennen Sie es und legen Sie fest, wovon es ist
 str		Diagram name	Diagrammname
-str		New ER diagram	Neues ER-Diagramm
-str		New UML structure diagram	Neues UML-Strukturdiagramm
-str		Tables, their columns and keys, and the relationships between them.	Tabellen mit ihren Spalten und Schlüsseln und den Beziehungen zwischen ihnen.
-str		Classes, packages and the relationships between them.	Klassen, Pakete und die Beziehungen zwischen ihnen.
 str		Customer	Kunde
 str		Order	Bestellung
 str		Create	Erstellen
-str		ER diagram	ER-Diagramm
-str		ER diagrams	ER-Diagramme
-str		New schema	Neues Schema
 str		Name the diagram	Dem Diagramm einen Namen geben
 str		Saving…	Wird gesichert…
 str		Opening…	Wird geöffnet…
@@ -678,69 +548,6 @@ str		Enter a name.	Geben Sie einen Namen ein.
 str		A name has to be one line.	Ein Name muss aus einer Zeile bestehen.
 str		A name can't be empty.	Ein Name darf nicht leer sein.
 str		There is {what} named {name} already.	Den Namen {name} trägt bereits {what}.
-str		{what} cannot depend on itself.	{what} kann nicht von sich selbst abhängen.
-str		No id is given. Give the id of {what}.	Es ist keine ID angegeben. Hier wird {what} per ID erwartet.
-str		{name} is not {what}.	{name} passt hier nicht: erwartet wird {what}.
-str		Give the key's columns as a list of ids.	Geben Sie die Spalten des Schlüssels als Liste von IDs an.
-str		A key holds at most {max} columns.	Ein Schlüssel umfasst höchstens {max} Spalten.
-str		A key needs at least one column.	Ein Schlüssel braucht mindestens eine Spalte.
-str		{column} is not a column of {table}.	{column} ist keine Spalte von {table}.
-str		{name} may be null, which a primary key column never is.	{name} darf leer sein, was eine Primärschlüsselspalte nie darf.
-str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	Der Fremdschlüssel {foreign_key} verweist auf diesen Schlüssel von {table}. Ändern oder entfernen Sie ihn zuerst.
-str		{table} has no primary key.	{table} hat keinen Primärschlüssel.
-str		The key is not one of {table}'s keys.	Der Schlüssel ist keiner der Schlüssel von {table}.
-str		The key of {table} has no columns to refer to.	Der Schlüssel von {table} hat keine Spalten, auf die verwiesen werden kann.
-str		Identifying relationships would run in a cycle between {child} and {parent}.	Identifizierende Beziehungen würden einen Zyklus zwischen {child} und {parent} bilden.
-str		Only a relationship with its foreign key points at a key.	Nur eine Beziehung mit ihrem Fremdschlüssel verweist auf einen Schlüssel.
-str		A many-to-many relationship takes no foreign key. Add a mapping table instead.	Eine Viele-zu-viele-Beziehung hat keinen Fremdschlüssel. Fügen Sie stattdessen eine Zuordnungstabelle hinzu.
-str		A relationship of a table with itself needs a role at the end its key points to, such as parent.	Eine Beziehung einer Tabelle mit sich selbst braucht eine Rolle an dem Ende, auf das ihr Schlüssel verweist, etwa parent.
-str		A role needs a letter or a digit, since it names key columns.	Eine Rolle braucht einen Buchstaben oder eine Ziffer, da sie Schlüsselspalten benennt.
-str		A table cannot be a subtype of itself.	Eine Tabelle kann kein Untertyp von sich selbst sein.
-str		The two tables are in different schemas. A subtype is in its supertype's schema.	Die beiden Tabellen liegen in verschiedenen Schemas. Ein Untertyp liegt im Schema seines Obertyps.
-str		{table} has a supertype already. A table has one supertype.	{table} hat bereits einen Obertyp. Eine Tabelle hat einen Obertyp.
-str		The supertype is a subtype of this table already, which would close a circle.	Der Obertyp ist bereits ein Untertyp dieser Tabelle, das würde einen Kreis schließen.
-str		Subtypes would run deeper than {max} levels here.	Untertypen würden hier tiefer als {max} Ebenen reichen.
-str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	Dies ist Teil des Schlüssels eines Untertyps. Entfernen Sie stattdessen den Untertyp oder ändern Sie die Untertyp-Abbildung des Obertyps.
-str		The foreign key points at this key already. Name the columns to change them.	Der Fremdschlüssel verweist bereits auf diesen Schlüssel. Nennen Sie die Spalten, um sie zu ändern.
-str		A foreign key needs at least one column.	Ein Fremdschlüssel braucht mindestens eine Spalte.
-str		A foreign key holds at most {max} columns.	Ein Fremdschlüssel umfasst höchstens {max} Spalten.
-str		{name} appears twice in the foreign key.	{name} kommt im Fremdschlüssel zweimal vor.
-str		The foreign key needs as many columns as the key of {table}, which has {n}.	Der Fremdschlüssel braucht so viele Spalten wie der Schlüssel von {table}, also {n}.
-str		{column} is of type {type}, but {target} is of type {target_type}.	{column} hat den Typ {type}, aber {target} hat den Typ {target_type}.
-str		{column} has no type, but {target} is of type {target_type}.	{column} hat keinen Typ, aber {target} hat den Typ {target_type}.
-str		{column} is of type {type}, but {target} has no type.	{column} hat den Typ {type}, aber {target} hat keinen Typ.
-str		Set null needs nullable columns, but {column} may never be null.	„Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber {column} darf nie leer sein.
-str		The relationship does not join {table} and {references}.	Die Beziehung verbindet {table} und {references} nicht.
-str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	Die Fremdschlüsselspalten einer identifizierenden Beziehung gehören zum Primärschlüssel, {column} aber nicht.
-str		The key {name} would break: {why}	Der Schlüssel {name} wäre danach ungültig: {why}
-str		The foreign key {name} would break: {why}	Der Fremdschlüssel {name} wäre danach ungültig: {why}
-str		Keys built on each other run deeper than {max} levels here, or in a loop.	Aufeinander aufbauende Schlüssel reichen hier tiefer als {max} Ebenen oder bilden eine Schleife.
-str		This element is removed where it is edited.	Dieses Element wird dort entfernt, wo es bearbeitet wird.
-str		This is part of a subtype's key, which goes only with its subtype.	Dies ist Teil des Schlüssels eines Untertyps und wird nur mit diesem Untertyp entfernt.
-str		Only a computed column takes an expression.	Nur eine berechnete Spalte hat einen Ausdruck.
-str		A computed column needs an expression.	Eine berechnete Spalte braucht einen Ausdruck.
-str		A computed column takes no default.	Eine berechnete Spalte hat keinen Standardwert.
-str		An identity column needs an integer type.	Eine Identitätsspalte braucht einen Ganzzahltyp.
-str		An identity column may never be null.	Eine Identitätsspalte darf nie leer sein.
-str		An identity column takes no default.	Eine Identitätsspalte hat keinen Standardwert.
-str		An identity column takes no expression.	Eine Identitätsspalte hat keinen Ausdruck.
-str		A key or identity column may never be null.	Eine Schlüssel- oder Identitätsspalte darf nie leer sein.
-str		The column {name} would break: {why}	Die Spalte {name} wäre danach ungültig: {why}
-str		A column takes a domain or an enum type, not both.	Eine Spalte hat eine Domäne oder einen Aufzählungstyp, nicht beides.
-str		A column on a domain takes the domain's type.	Eine Spalte auf einer Domäne übernimmt den Typ der Domäne.
-str		A column on a domain takes the domain's size.	Eine Spalte auf einer Domäne übernimmt die Größe der Domäne.
-str		The table {name} would break: {why}	Die Tabelle {name} wäre danach ungültig: {why}
-str		A column on a domain takes the domain's default.	Eine Spalte auf einer Domäne übernimmt den Standardwert der Domäne.
-str		A column on a domain takes the domain's collation.	Eine Spalte auf einer Domäne übernimmt die Sortierung der Domäne.
-str		A column of an enum type takes no type name of its own.	Eine Spalte eines Aufzählungstyps hat keinen eigenen Typnamen.
-str		A column of an enum type takes no size.	Eine Spalte eines Aufzählungstyps hat keine Größe.
-str		{name} follows no column.	{name} folgt keiner Spalte.
-plural		The table has {n} column.	Die Tabelle hat {n} Spalte.|Die Tabelle hat {n} Spalten.
-str		A package cannot go into itself or a package it holds.	Ein Paket kann nicht in sich selbst oder in ein Paket verschoben werden, das es enthält.
-str		The model's root package holds all the other packages, so it stays where it is.	Das Wurzelpaket des Modells enthält alle anderen Pakete und bleibt daher, wo es ist.
-str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	Das Paket {types} enthält die eingebauten Typen: Solange es sie enthält, behält es seinen Namen und bleibt unter dem Wurzelpaket.
-str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	Es gibt bereits ein Paket {types}, das die eingebauten Typen enthält; ein zweites kann nicht daneben stehen.
-str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	Im Paket trägt {what} den Namen {name}, den Namen eines eingebauten Typs, der in {types} diesen Typ bedeuten würde. Benennen Sie {name} zuerst um.
 str		The model cannot be changed at the moment; nothing was changed.	Das Modell kann gerade nicht geändert werden; nichts wurde geändert.
 str		There is nothing to undo.	Es gibt nichts rückgängig zu machen.
 str		There is nothing to redo.	Es gibt nichts zu wiederholen.
@@ -748,97 +555,27 @@ str		The project has no model root yet.	Das Projekt hat noch keine Modellwurzel.
 str		There is no skill yet.	Es gibt noch keinen Skill.
 str		There is no diagram yet.	Es gibt noch kein Diagramm.
 str		There is nothing to remove or describe yet.	Es gibt noch nichts zu entfernen oder zu beschreiben.
-str		There is no schema yet.	Es gibt noch kein Schema.
-str		There is no entity yet.	Es gibt noch keine Tabelle.
-str		There is no package yet.	Es gibt noch kein Paket.
-str		There is no class, interface, enumeration, data type or primitive type yet.	Es gibt noch keine Klasse, Schnittstelle, Aufzählung, keinen Datentyp und keinen primitiven Typ.
-str		There is no class yet.	Es gibt noch keine Klasse.
-str		There is no enumeration yet.	Es gibt noch keine Aufzählung.
-str		There is no class or interface yet.	Es gibt noch keine Klasse und keine Schnittstelle.
-str		There is no association or association class yet.	Es gibt noch keine Assoziation und keine Assoziationsklasse.
-str		There is no n-ary association yet.	Es gibt noch keine n-äre Assoziation.
-str		There is no generalization yet.	Es gibt noch keine Generalisierung.
-str		There is no generalization set yet.	Es gibt noch keine Generalisierungsmenge.
-str		There is no class, interface, enumeration, data type, primitive type, association class or package yet.	Es gibt noch keine Klasse, Schnittstelle, Aufzählung, Assoziationsklasse, keinen Datentyp, keinen primitiven Typ und kein Paket.
-str		There is no constraint yet.	Es gibt noch keine Einschränkung.
-str		There is no class, interface or data type yet.	Es gibt noch keine Klasse, keine Schnittstelle und keinen Datentyp.
-str		There is no template parameter yet.	Es gibt noch keinen Template-Parameter.
-str		There is no template yet: give a class, an interface or a data type a template parameter first.	Es gibt noch kein Template: Geben Sie zuerst einer Klasse, einer Schnittstelle oder einem Datentyp einen Template-Parameter.
-str		There is no template binding yet.	Es gibt noch keine Template-Bindung.
-str		There is no profile yet.	Es gibt noch kein Profil.
-str		There is no stereotype yet.	Es gibt noch keinen Stereotyp.
-str		No stereotype is applied yet.	Es ist noch kein Stereotyp angewendet.
 str		Another change is still under way. Try again once it ends.	Eine andere Änderung läuft noch. Versuchen Sie es erneut, sobald sie beendet ist.
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	Das Modell konnte nach einem Fehler nicht wiederhergestellt werden. Öffnen Sie das Projekt erneut, um fortzufahren.
 str		Undo and redo cannot run as part of another change.	Rückgängig und Wiederholen können nicht Teil einer anderen Änderung sein.
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	Das Modell hat sich geändert, seit es gelesen wurde, oder ein anderes Projekt wurde gelesen. Lesen Sie es erneut und versuchen Sie es noch einmal. Es wurde nichts geändert.
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	Die Änderung gibt nicht an, für welchen Stand des Modells sie gedacht ist. Lesen Sie das Modell und versuchen Sie es noch einmal. Es wurde nichts geändert.
-str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	Das Paket hat Klassendiagramme, aber keines ist sein Standarddiagramm. Wählen Sie eines davon als Standarddiagramm.
-str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	Das Paket hat mehr als ein Standarddiagramm. Wählen Sie das Klassendiagramm, das sein Standarddiagramm bleibt.
-str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets existiert nicht mehr. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
-str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets ist kein Klassendiagramm. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
-str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Das Standarddiagramm des Pakets gehört zu einem anderen Element. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
 str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Dieses Diagramm ist das Standarddiagramm von {package}. Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von {package}.
 str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. Wählen Sie zuerst eines seiner eigenen Klassendiagramme.
-str		This connection already exists: the dependency {dependency}. Select the existing relationship.	Diese Verbindung besteht bereits: die Abhängigkeit {dependency}. Wählen Sie die bestehende Beziehung aus.
-str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr. Wählen Sie erneut unter denen, die sie verbinden. Es wurde nichts geändert.
-str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr, und keine andere tut es jetzt. Es wurde nichts geändert.
-str		Several dependencies already join these two elements in this direction, so none was added.	Mehrere Abhängigkeiten verbinden diese beiden Elemente bereits in dieser Richtung, daher wurde keine hinzugefügt.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Ein Diagramm kann sich beim Entfernen nicht selbst ersetzen. Wählen Sie ein anderes Diagramm als Ersatz.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Wählen Sie als Ersatz entweder ein vorhandenes Diagramm oder ein neues, nicht beides.
 str		A name has to be text.	Ein Name muss Text sein.
 str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} ist kein Standarddiagramm und wird daher ohne Ersatz entfernt.
 str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} ist kein anderes Diagramm derselben Art von {package} und kann das zu entfernende Diagramm daher nicht ersetzen.
-str		No package is given. Give its id.	Es ist kein Paket angegeben. Geben Sie seine ID an.
-str		{name} is not a package.	{name} ist kein Paket.
-str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} ist keines der Klassendiagramme von {package}. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
-str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} hat noch kein Klassendiagramm, daher gibt es nichts zu öffnen. Erstellen Sie zuerst ein Klassendiagramm dafür.
-str		{parent} has no diagram yet to take this package's diagrams. Create one for it first. Nothing was changed.	{parent} hat noch kein Diagramm, das die Diagramme dieses Pakets aufnehmen kann. Erstellen Sie zuerst eines dafür. Es wurde nichts geändert.
-str		{parent} has no valid default diagram to take this package's diagrams. Choose its default first. Nothing was changed.	{parent} hat kein gültiges Standarddiagramm, das die Diagramme dieses Pakets aufnehmen kann. Wählen Sie zuerst sein Standarddiagramm. Es wurde nichts geändert.
 str		This could not be done because of an internal error. Nothing was changed.	Dies war wegen eines internen Fehlers nicht möglich. Es wurde nichts geändert.
 str		The text can't be empty.	Der Text darf nicht leer sein.
 str		It can't be longer than {max} characters.	Höchstens {max} Zeichen sind möglich.
 str		It can't hold a control or hidden character.	Steuerzeichen und unsichtbare Zeichen sind nicht erlaubt.
 str		It can't start or end with a space.	Am Anfang und am Ende darf kein Leerzeichen stehen.
 str		This element takes no description.	Dieses Element erhält keine Beschreibung.
-str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	Dieses Element besitzt {max} oder mehr Kommentare, daher lässt sich seine Beschreibung nicht finden. Entfernen Sie zuerst einige in der Datei.
-str	refusal	a class	eine Klasse
-str	refusal	an association class	eine Assoziationsklasse
-str	refusal	an association	eine Assoziation
-str	refusal	a generalization	eine Generalisierung
-str	refusal	an interface	eine Schnittstelle
-str	refusal	an enumeration	eine Aufzählung
-str	refusal	a data type	ein Datentyp
-str	refusal	a primitive type	ein primitiver Typ
-str	refusal	a package	ein Paket
-str	refusal	a profile	ein Profil
-str	refusal	a stereotype	ein Stereotyp
 str	refusal	an element	ein Element
-str	refusal	a schema	ein Schema
-str	refusal	an attribute	ein Attribut
-str	refusal	an operation	eine Operation
-str	refusal	a literal	ein Literal
-str	refusal	a qualifier	ein Qualifizierer
-str	refusal	a template parameter	ein Template-Parameter
-str	refusal	a generalization set	eine Generalisierungsmenge
-str	refusal	a table	eine Tabelle
-str	refusal	a column	eine Spalte
-str	refusal	a relationship	eine Beziehung
-str	refusal	a domain	eine Domäne
-str	refusal	an enum type	ein Aufzählungstyp
-str	refusal	a sequence	eine Sequenz
-str	refusal	a view	eine Sicht
 str	refusal	a constraint	eine Einschränkung
-str	refusal	a key	ein Schlüssel
-str	refusal	a primary key	ein Primärschlüssel
-str	refusal	a unique constraint	eine Eindeutigkeitsbedingung
-str	refusal	a foreign key	ein Fremdschlüssel
-str	refusal	a check	eine Prüfbedingung
-str	refusal	an index	ein Index
-str	refusal	a subtype	ein Untertyp
-str	refusal	a key column	eine Schlüsselspalte
 str	refusal	a skill	ein Skill
-str	refusal	an association end	ein Assoziationsende
 str		A name can't start or end with a space.	Ein Name darf nicht mit einem Leerzeichen beginnen oder enden.
 str		Working changes	Aktuelle Änderungen
 str		History	Verlauf
@@ -978,7 +715,6 @@ str		No diagrams yet	Noch keine Diagramme
 str		Select	Auswählen
 str		Pan	Verschieben
 str		Entity	Entität
-str		Entity · {schema}	Entität · {schema}
 str		Relationship	Beziehung
 str		Relationship types	Beziehungsarten
 str		Note	Notiz
@@ -1119,8 +855,6 @@ str		The code comes from the codex program, which keeps the sign-in itself. Arch
 str		API key saved · ends in {last4}	API-Schlüssel gespeichert · endet auf {last4}
 str		Kept in {store}, never in the project, and handed to codex only when Chat runs it.	Aufbewahrt in {store}, nie im Projekt, und nur an codex übergeben, wenn Chat es startet.
 str		Done	Fertig
-str		Add table	Tabelle hinzufügen
-str		Place table	Tabelle platzieren
 str		Already on this diagram	Schon in diesem Diagramm
 str		Resize	Größe ändern
 str		Arrange	Anordnen
@@ -1130,26 +864,12 @@ str		Align centres	Zentriert ausrichten
 str		Align right	Rechts ausrichten
 str		Distribute horizontally	Horizontal verteilen
 str		Stack vertically	Vertikal stapeln
-str		Show related tables	Verwandte Tabellen zeigen
 str		Open in Models	In Modelle öffnen
 str		Remove from this diagram	Aus diesem Diagramm entfernen
 str		Delete from the model…	Aus dem Modell löschen…
-str		The diagram is of no schema	Das Diagramm gehört zu keinem Schema
-str		A relationship joins two tables	Eine Beziehung verbindet zwei Tabellen
-str		Add relationship	Beziehung hinzufügen
-str		Cardinality	Kardinalität
-str		Presets	Vorgaben
 str		Start	Anfang
-str		End	Ende
 str		Identifying	Identifizierend
-str		Identifying needs the parent's primary key; drawn as not identifying	Identifizierend braucht den Primärschlüssel der Elterntabelle; als nicht identifizierend gezeichnet
-str		Many to many · add a mapping table	Viele zu viele · Zuordnungstabelle hinzufügen
-str		Many to many · {from} and {to}	Viele zu viele · {from} und {to}
-str		Add mapping table	Zuordnungstabelle hinzufügen
-str		Keep the line	Linie behalten
 str		Columns	Spalten
-str		Remove relationship	Beziehung entfernen
-str		Relationship removed	Beziehung entfernt
 str		{name} removed	{name} entfernt
 str		Undo	Rückgängig
 str		Redo	Wiederholen
@@ -1159,7 +879,6 @@ str		Paste	Einsetzen
 str		Select all	Alles auswählen
 str		Select All	Alles auswählen
 str		Nothing to act on here	Hier gibt es nichts zu tun
-plural		+ {n} more column	+ {n} weitere Spalte|+ {n} weitere Spalten
 str		Minimap	Minimap
 str		Hide minimap	Minimap ausblenden
 str		Show minimap	Minimap einblenden
@@ -1289,43 +1008,20 @@ str		Help & shortcuts	Hilfe & Tastenkürzel
 str		Switch to the dark appearance	Zur dunklen Darstellung wechseln
 str		Switch to the light appearance	Zur hellen Darstellung wechseln
 str		This model	Dieses Modell
-str		This schema	Dieses Schema
-str		This table	Diese Tabelle
-str		This column	Diese Spalte
 str		This skill	Dieser Skill
 str		This element	Dieses Element
 str		On this model · {n}	Auf diesem Modell · {n}
-str		On this schema · {n}	Auf diesem Schema · {n}
-str		On this table · {n}	Auf dieser Tabelle · {n}
-str		On this column · {n}	Auf dieser Spalte · {n}
 str		On this skill · {n}	Auf diesem Skill · {n}
 str		On this element · {n}	Auf diesem Element · {n}
-str		Literals carry no skills	Literale tragen keine Skills
-str		Built-in types carry no skills	Eingebaute Typen tragen keine Skills
-str		Types keeps the built-in types, so it stays while it holds them	Types enthält die eingebauten Typen und bleibt daher, solange es sie enthält
 str		Relationships carry no skills	Beziehungen tragen keine Skills
-str		Generalization sets carry no skills	Generalisierungsmengen tragen keine Skills
 str		This element carries no skills	Dieses Element trägt keine Skills
 str		Diagram	Diagramm
 str		Default diagram	Standarddiagramm
 str		Diagram · of {schema}	Diagramm · von {schema}
 str		This diagram	Dieses Diagramm
 str		On this diagram · {n}	Auf diesem Diagramm · {n}
-str		Relationship · {from} to {to}	Beziehung · {from} zu {to}
-str		This relationship	Diese Beziehung
-str		On this relationship · {n}	Auf dieser Beziehung · {n}
-str		Add foreign key	Fremdschlüssel hinzufügen
-str		Remove foreign key	Fremdschlüssel entfernen
-str		Add id column	id-Spalte hinzufügen
-str		Choose key columns	Schlüsselspalten wählen
-str		Ends	Enden
-str		{entity} end	{entity}-Ende
 str		Role	Rolle
 str		Foreign key	Fremdschlüssel
-str		An identifying relationship needs its foreign key; turn the switch on first	Eine identifizierende Beziehung braucht ihren Fremdschlüssel; erst den Schalter einschalten
-str		Points to	Zeigt auf
-str		Existing columns of {entity}	Vorhandene Spalten von {entity}
-str		{type} · type differs	{type} · anderer Typ
 str		On delete	Beim Löschen
 str		On update	Beim Ändern
 str		No action	Keine Aktion
@@ -1336,213 +1032,26 @@ str		Set default	Auf Standard setzen
 str		More	Mehr
 str		Deferrable	Aufschiebbar
 str		No	Nein
-str		Yes – checked at once	Ja – sofort geprüft
-str		Yes – checked at commit	Ja – beim Commit geprüft
 str		Match	Abgleich
 str		Simple	Einfach
 str		Full	Vollständig
 str		Partial	Teilweise
-str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} hat noch keinen Primärschlüssel, also gibt es in {child} nichts, worauf gezeigt werden kann.
 # Klassendiagramme
-str		Add class	Klasse hinzufügen
-str		Add interface	Schnittstelle hinzufügen
-str		Add enumeration	Aufzählung hinzufügen
-str		Add data type	Datentyp hinzufügen
-str		Add primitive type	Primitiven Typ hinzufügen
-str		Add association class	Assoziationsklasse hinzufügen
 str		Class	Klasse
 str		Interface	Schnittstelle
-str		«interface»	«interface»
 str		Enumeration	Aufzählung
-str		«enumeration»	«enumeration»
 str		Data type	Datentyp
 str		Primitive type	Primitiver Typ
-str		«dataType»	«dataType»
-str		«stereotype»	«stereotype»
-str		«metaclass»	«metaclass»
-str		{keywords} · {package}	{keywords} · {package}
-str		«primitive»	«primitive»
 str		Association class	Assoziationsklasse
-str		Classifier	Klassifikator
 str		Classifier kinds	Klassifikatorarten
-str		UML structure diagram	UML-Strukturdiagramm
-str		UML structure diagrams	UML-Strukturdiagramme
-str		Class · model, in every diagram	Klasse · Modell, in jedem Diagramm
-str		Interface · model, in every diagram	Schnittstelle · Modell, in jedem Diagramm
-str		Enumeration · model, in every diagram	Aufzählung · Modell, in jedem Diagramm
-str		Data type · model, in every diagram	Datentyp · Modell, in jedem Diagramm
-str		Primitive type · model, in every diagram	Primitiver Typ · Modell, in jedem Diagramm
-str		Association class · model, in every diagram	Assoziationsklasse · Modell, in jedem Diagramm
-str		New package	Neues Paket
-str		On this class · {n}	Auf dieser Klasse · {n}
-str		On this interface · {n}	Auf dieser Schnittstelle · {n}
-str		On this enumeration · {n}	Auf dieser Aufzählung · {n}
-str		On this data type · {n}	Auf diesem Datentyp · {n}
-str		On this primitive type · {n}	Auf diesem primitiven Typ · {n}
-str		On this package · {n}	Auf diesem Paket · {n}
 str		Package	Paket
-str		Package · model	Paket · Modell
-str		The diagram is of no package	Das Diagramm gehört zu keinem Paket
-str		This class	Diese Klasse
-str		This interface	Diese Schnittstelle
-str		This enumeration	Diese Aufzählung
-str		This data type	Dieser Datentyp
-str		This primitive type	Dieser primitive Typ
-str		This package	Dieses Paket
-plural		+ {n} more member	+ {n} weiteres Element|+ {n} weitere Elemente
-plural		+ {n} more literal	+ {n} weiteres Literal|+ {n} weitere Literale
-plural		{n} constraint changed	{n} Einschränkung geändert|{n} Einschränkungen geändert
-plural		+ {n} more line	+ {n} weitere Zeile|+ {n} weitere Zeilen
-plural		+ {n} more element	+ {n} weiteres Element|+ {n} weitere Elemente
 # Klassenmerkmale in den Eigenschaften
-str		Abstract	Abstrakt
-str		No subclasses (final)	Keine Unterklassen (final)
-str		Nothing may specialise {name}. Shown as {final} after its name.	Nichts darf {name} spezialisieren. Als {final} hinter dem Namen gezeigt.
-plural		{name} has {n} subclass: {subclasses}.	{name} hat {n} Unterklasse: {subclasses}.|{name} hat {n} Unterklassen: {subclasses}.
-plural		Remove that generalization before making it final.	Entfernen Sie diese Generalisierung, bevor Sie es final machen.|Entfernen Sie diese Generalisierungen, bevor Sie es final machen.
-str		{names} and {last}	{names} und {last}
-plural		Select the generalization	Die Generalisierung auswählen|Die {n} Generalisierungen auswählen
-str		No redefinition (leaf)	Keine Redefinition (leaf)
-str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}.	Eine Unterklasse könnte {name} dort, wo es geerbt wird, nicht redefinieren. Als {leaf} gezeigt.
-str		A subclass could not redefine this member. Shown as {leaf} after it.	Eine Unterklasse könnte dieses Element nicht redefinieren. Als {leaf} dahinter gezeigt.
-plural		{names} redefines it. Remove that redefinition first.	{names} redefiniert es. Entfernen Sie zuerst diese Redefinition.|{names} redefinieren es. Entfernen Sie zuerst diese Redefinitionen.
-str		Add attribute	Attribut hinzufügen
-str		Add property	Eigenschaft hinzufügen
-str		Add operation	Operation hinzufügen
-str		Add literal	Literal hinzufügen
-str		More details in Properties	Weitere Angaben in den Eigenschaften
-str		There is no type named {name}.	Es gibt keinen Typ namens {name}.
-str		There is a literal named {name} already.	Es gibt bereits ein Literal namens {name}.
-str		An enumeration holds at most {n} literals.	Eine Aufzählung enthält höchstens {n} Literale.
-str		Several types are named {name}; pick one from the menu.	Mehrere Typen heißen {name}; wählen Sie einen aus dem Menü.
-str		Add parameter	Parameter hinzufügen
-str		Attribute	Attribut
-str		Literal	Literal
-str		Attribute · model	Attribut · Modell
-str		Literal · model	Literal · Modell
-str		Attributes · {n}	Attribute · {n}
-str		Literals · {n}	Literale · {n}
-str		Owner	Besitzer
 str		Owner: {path}	Besitzer: {path}
-str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Der Besitzer ist ein Paket oder ein Klassifizierer. Ein Wechsel behält die Identität, die Member, die Beziehungen von {name} und jeden Typ, der es verwendet.
-str		{kind} · nested in {owner} · model, in every diagram	{kind} · verschachtelt in {owner} · Modell, in jedem Diagramm
-str		Nested classifiers · {n}	Verschachtelte Klassifizierer · {n}
-str		Add nested classifier	Verschachtelten Klassifizierer hinzufügen
-str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	Noch keine. Hier oder über Modelle ▸ Neu in {name} hinzufügen; beide bieten dieselben Arten.
-str		New	Neu
-str		New in {name}	Neu in {name}
-str	uml	Profile	Profil
-str		profile	Profil
 str		Stereotype	Stereotyp
-str		extends {metaclasses}	erweitert {metaclasses}
-str		extends nothing yet	erweitert noch nichts
-str		applies {profiles}	wendet {profiles} an
-str		Profile · model	Profil · Modell
-str		This profile	Dieses Profil
-str		On this profile · {n}	Auf diesem Profil · {n}
-str		Stereotype · in profile {profile} · model	Stereotyp · im Profil {profile} · Modell
-str		This stereotype	Dieser Stereotyp
-str		On this stereotype · {n}	Auf diesem Stereotyp · {n}
-str		Metaclass · UML	Metaklasse · UML
-str		Metaclass	Metaklasse
-str		This metaclass	Diese Metaklasse
-str		On this metaclass · {n}	Auf dieser Metaklasse · {n}
-str		Metaclasses carry no skills	Metaklassen tragen keine Skills
-str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	Eine UML-Metaklasse, die Stereotypen erweitern. Sie gehört UML selbst, erscheint weder in Modelle noch in den Typmenüs und ändert sich nie.
-str		The UML library holds the metaclasses that stereotypes extend. It never changes.	Die UML-Bibliothek enthält die Metaklassen, die Stereotypen erweitern. Sie ändert sich nie.
-str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} ist eine UML-Metaklasse aus der UML-Bibliothek. Sie ändert sich nie.
-str		{package} applies {profile} already.	{package} wendet {profile} bereits an.
-str		{package} does not apply {profile}.	{package} wendet {profile} nicht an.
-str		A profile holds at most {max} stereotypes.	Ein Profil fasst höchstens {max} Stereotypen.
-str		A stereotype extends at most {max} metaclasses.	Ein Stereotyp erweitert höchstens {max} Metaklassen.
-str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} ist eine UML-Metaklasse, die Archforge noch nicht zeichnet. Ein Stereotyp erweitert {metaclasses}.
-str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} ist keine Metaklasse, die Archforge zeichnet. Ein Stereotyp erweitert {metaclasses}.
-str		{name} is named twice. Name each metaclass once.	{name} ist zweimal genannt. Jede Metaklasse nur einmal nennen.
-str		Give the metaclasses as a list of names.	Die Metaklassen als Liste von Namen angeben.
-str		This stereotype is in no profile.	Dieser Stereotyp liegt in keinem Profil.
-str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} ist das Erweiterungsende eines Stereotyps. Stattdessen die Metaklasse aus dem entfernen, was der Stereotyp erweitert.
-plural		{name} has values on {n} element. Remove those first.	{name} hat Werte an {n} Element. Diese zuerst entfernen.|{name} hat Werte an {n} Elementen. Diese zuerst entfernen.
-plural		Values on {n} element don't fit {name} [{bounds}].	Die Werte an {n} Element passen nicht zu {name} [{bounds}].|Die Werte an {n} Elementen passen nicht zu {name} [{bounds}].
-str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	Das Literal {literal} ist der Wert von {property} in «{stereotype}» auf {element}. Setzen Sie dort zuerst einen anderen Wert.
-str		The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.	Das Literal {literal} ist der Wert von {property} in «{stereotype}», das auf kein Element angewendet ist. Ändern Sie diesen Wert zuerst in der Datei.
-str		Stereotypes · {n}	Stereotypen · {n}
-str		Add stereotype	Stereotyp hinzufügen
-str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Noch keiner. Hier hinzufügen oder in Modelle ▸ Neu ▸ Stereotyp.
-str		Open profile diagram	Profildiagramm öffnen
-str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	Ein Paket wendet das Profil über Angewendete Profile in seinen Eigenschaften an; seine Elemente können dann die Stereotypen des Profils verwenden.
-str		Extends · {n}	Erweitert · {n}
-str		Add extended metaclass	Erweiterte Metaklasse hinzufügen
-str		{name} extends	{name} erweitert
-str		extended	erweitert
-str		Extended already	Bereits erweitert
-str		not drawn by Archforge yet	von Archforge noch nicht gezeichnet
-str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	Angeboten: die Metaklassen, die Archforge zeichnet. Andere Metaklassen stehen deaktiviert in der Liste, als von Archforge noch nicht gezeichnet.
-str		Properties · {n}	Eigenschaften · {n}
-str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	Typen: primitive Typen, Aufzählungen und Datentypen des Modells. Umbenennen von {name} behält jede Anwendung; Entfernen wird abgelehnt, solange Elemente ihn verwenden.
-str		Applied profiles · {n}	Angewendete Profile · {n}
-str		Apply profile	Profil anwenden
-str		Apply to {name}	Auf {name} anwenden
-str		applied	angewendet
-str		Applied already	Bereits angewendet
-str		No profile yet	Noch kein Profil
-str		Make one with New ▸ Profile in Models.	Eines mit Neu ▸ Profil in Modelle anlegen.
-str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	Elemente in {name} und in seinen Paketen können die Stereotypen der angewendeten Profile verwenden. Anwenden ist ein Rückgängig-Schritt; es fügt selbst keinen Stereotyp hinzu.
-str		Unapply profile	Profil nicht mehr anwenden
-str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} wird in {package} verwendet: {uses}. Diese zuerst entfernen.
-str		{name} is in use: {uses}. Remove those first.	{name} wird verwendet: {uses}. Diese zuerst entfernen.
-str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} wendet die Profile an, die seine Elemente verwenden: {uses}. Diese zuerst entfernen.
-str		Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.	{name} dorthin zu verschieben nimmt Stereotypen aus den Paketen, die ihre Profile anwenden: {uses}. Das Profil zuerst dort anwenden.
-str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} enthält das Profil {profile}, das verwendet wird: {uses}. Diese zuerst entfernen.
-str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» auf {metaclass} wird verwendet: {uses}. Diese zuerst entfernen.
-str		«{stereotype}» on {elements}	«{stereotype}» auf {elements}
 str		{first} and {second}	{first} und {second}
 str		{first}, {second} and {third}	{first}, {second} und {third}
-plural		Show the use	Die Verwendung zeigen|Die {n} Verwendungen zeigen
-str		A stereotype is shown on its profile's diagram	Ein Stereotyp erscheint im Diagramm seines Profils
-str		Place stereotype	Stereotyp platzieren
 # Stereotypes applied (AR-135)
-str		Stereotypes of {name} · {n}	Stereotypen von {name} · {n}
-str		Stereotypes of this end · {n}	Stereotypen dieses Endes · {n}
-str		Apply stereotype	Stereotyp anwenden
-str		Remove «{stereotype}» from {name}	«{stereotype}» von {name} entfernen
-str	value	default	Standard
-str		{value} (default)	{value} (Standard)
-str		Default ({value})	Standard ({value})
-str		No value	Kein Wert
-str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	Gesetzte Werte werden an {name} gespeichert; ein Standardwert zeigt die Markierung, bis Sie ihn ändern. Entfernen nimmt «{stereotype}» von {name} und behält seine Definition.
-str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	Noch keiner angewendet. + bietet die Stereotypen der Profile an, die auf {package} oder ein Paket darum herum angewendet sind.
-str		Show stereotype values on this diagram	Stereotyp-Werte in diesem Diagramm zeigen
-str		Filter: {text}	Filter: {text}
-str		No stereotype matches.	Kein Stereotyp passt.
-str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	Noch kein Stereotyp. Legen Sie einen in einem Profil an, über Modelle ▸ Neu ▸ Stereotyp.
-str		{kinds} only	nur {kinds}
-str		classes	Klassen
-str		interfaces	Schnittstellen
-str		enumerations	Aufzählungen
-str		data types	Datentypen
-str		properties	Eigenschaften
-str		operations	Operationen
-str		associations	Assoziationen
-str		generalizations	Generalisierungen
-str		packages	Pakete
-str		{profile} not applied	{profile} nicht angewendet
-str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» erweitert nicht {metaclass}: es erweitert {metaclasses}.
-str		«{stereotype}» extends no metaclass yet.	«{stereotype}» erweitert noch keine Metaklasse.
-str		Its profile {profile} is not applied to {package} or a package around it.	Sein Profil {profile} ist weder auf {package} noch auf ein Paket darum herum angewendet.
-str		A stereotype application takes no stereotype. Stereotypes apply to the model's elements.	Eine Stereotyp-Anwendung trägt keinen Stereotyp. Stereotypen gelten für die Elemente des Modells.
-str		This is no element of the model, so no stereotype applies to it.	Das ist kein Element des Modells, daher gilt kein Stereotyp dafür.
-str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} gehört zu einem Profil, das Stereotypen definiert und selbst keine trägt.
-str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} trägt keinen Stereotyp. Ein Stereotyp erweitert {metaclasses}.
-str		«{stereotype}» is applied to {name} already.	«{stereotype}» ist bereits auf {name} angewendet.
-str		«{stereotype}» is not applied to {name}.	«{stereotype}» ist nicht auf {name} angewendet.
-str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» hat keine Eigenschaft {name}. Vorhanden sind: {properties}.
-str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» hat keine Eigenschaft {name}. Es gibt noch keine Eigenschaften.
-str		{name} is not a stereotype.	{name} ist kein Stereotyp.
-str		{name} is not a class diagram.	{name} ist kein Klassendiagramm.
-str		Give the values as a list of texts.	Geben Sie die Werte als Liste von Texten an.
 str		No element is given. Give its id.	Es ist kein Element angegeben. Geben Sie seine ID an.
-str		No stereotype is given. Give its id.	Es ist kein Stereotyp angegeben. Geben Sie seine ID an.
-str		No class diagram is given. Give its id.	Es ist kein Klassendiagramm angegeben. Geben Sie seine ID an.
 str		No diagram is given. Give its id.	Es ist kein Diagramm angegeben. Geben Sie seine ID an.
 str		No box is given. Give its id.	Es ist kein Kasten angegeben. Geben Sie seine ID an.
 str		No line is given. Give its id.	Es ist keine Linie angegeben. Geben Sie ihre ID an.
@@ -1594,464 +1103,56 @@ str		{word} is not a diagram kind. The kinds are {kinds}.	{word} ist keine Diagr
 str		This project holds no notation, so it knows no diagram kind.	Dieses Projekt enthält keine Notation und kennt daher keine Diagrammart.
 str		This line has no label text {word}. It has {slots}.	Diese Linie hat keinen Beschriftungstext {word}. Sie hat {slots}.
 str		This line has no label text {word}. It has none.	Diese Linie hat keinen Beschriftungstext {word}. Sie hat keinen.
-str		No property is given. Give its name or id.	Es ist keine Eigenschaft angegeben. Geben Sie ihren Namen oder ihre ID an.
-str		This element is gone.	Dieses Element gibt es nicht mehr.
-str		{name} is a template parameter of {template} and types only its members.	{name} ist ein Template-Parameter von {template} und typisiert nur dessen Member.
-str		An element carries at most {max} stereotypes.	Ein Element trägt höchstens {max} Stereotypen.
-str		{value} is no value of {name}. {accepted}	{value} ist kein Wert von {name}. {accepted}
-str		A whole number, such as 42 or -7.	Eine ganze Zahl, etwa 42 oder -7.
-str		A number, such as 2.5 or -1e3.	Eine Zahl, etwa 2.5 oder -1e3.
-str		true or false.	true oder false.
-str		A whole number of 0 or more, or *.	Eine ganze Zahl ab 0 oder *.
-str		Any text.	Beliebiger Text.
-str		One of {literals}.	Eines von {literals}.
-str		The enumeration {name} has no literals yet.	Die Aufzählung {name} hat noch keine Literale.
-str		{name} holds at most {n} values.	{name} fasst höchstens {n} Werte.
-str		{name} holds each value once, and {value} is there twice.	{name} fasst jeden Wert einmal, und {value} steht zweimal da.
-str		A value is empty. Clear the field to show the default.	Ein Wert ist leer. Leeren Sie das Feld, um den Standardwert zu zeigen.
-str		A value is longer than {n} characters.	Ein Wert ist länger als {n} Zeichen.
-plural		{name} holds [{bounds}] values; {n} is given.	{name} fasst [{bounds}] Werte; {n} ist angegeben.|{name} fasst [{bounds}] Werte; {n} sind angegeben.
-str		nested	verschachtelt
-str		package	Paket
-str		class	Klasse
-str		interface	Schnittstelle
-str		enumeration	Aufzählung
-str		data type	Datentyp
-str		primitive type	primitiver Typ
-str		association class	Assoziationsklasse
-str		attribute	Attribut
-str		operation	Operation
-str		constraint	Einschränkung
-str		element	Element
-str		itself	es selbst
-str		inside it	darin
-str		owns none	besitzt keine
-str		{kind} {name} already holds that name	{kind} {name} trägt diesen Namen schon
-str		kept for a built-in type	für einen eingebauten Typ reserviert
-str		built-in type	eingebauter Typ
-str		{name} cannot own itself.	{name} kann sich nicht selbst besitzen.
-str		{owner} is inside {name}: owning {name} would make a cycle.	{owner} liegt in {name}: {name} zu besitzen ergäbe einen Zyklus.
-str		{owner} owns no classifiers: only a package, a class, an interface or an association class does.	{owner} besitzt keine Klassifizierer: Das tun nur ein Paket, eine Klasse, eine Schnittstelle oder eine Assoziationsklasse.
-str		{name} stays in a package: a primitive type or an association class is never nested in a classifier.	{name} bleibt in einem Paket: Ein primitiver Typ oder eine Assoziationsklasse wird nie in einen Klassifizierer verschachtelt.
-str		{owner} already owns a member named {name}.	{owner} besitzt bereits ein Member namens {name}.
-str		The package {owner} keeps the name {name} for a built-in type.	Das Paket {owner} hält den Namen {name} für einen eingebauten Typ frei.
-str		{name} is a built-in type and stays in Types.	{name} ist ein eingebauter Typ und bleibt in Types.
-str		{name} is a built-in type, which is never made leaf.	{name} ist ein eingebauter Typ und wird nie als leaf markiert.
-str		Constraints · {n}	Einschränkungen · {n}
-str		Add constraint	Einschränkung hinzufügen
-str		Edit constraint	Einschränkung bearbeiten
 str		Constraint	Einschränkung
-str		Describe the rule…	Regel beschreiben …
-str		Constrained elements	Eingeschränkte Elemente
-str		Remove {name} from the constrained elements	{name} aus den eingeschränkten Elementen entfernen
-str		Add a constrained element	Eingeschränktes Element hinzufügen
-str		On this diagram	In diesem Diagramm
-str		Linked note	Verknüpfte Notiz
-str		Braces	Geschweifte Klammern
-str		Language	Sprache
-str		Plain text	Klartext
-str		Pick a language	Sprache wählen
-str		Pick the constraint's language	Sprache der Einschränkung wählen
-str		Or type any language	Oder eine beliebige Sprache eingeben
-str		Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.	So gespeichert, wie geschrieben. Archforge bewahrt den Text und seine Verweise auf, wertet ihn aber nicht aus: Nichts wird gegen das Modell geprüft.
-str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Lange Einschränkungen oder solche über mehrere Elemente lesen sich am besten als verknüpfte Notiz; die Wahl gilt je Diagramm.
 str		Type an expression. A constraint without one states no rule.	Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest.
-str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	Geschweifte Klammern stehen bei einem eingeschränkten Element, und dieses Diagramm zeigt keines davon. Zeigen Sie sie als verknüpfte Notiz.
-str		Only a classifier of the model's own or a package owns constraints.	Nur ein modelleigener Klassifizierer oder ein Paket besitzt Einschränkungen.
-str		A constraint names only elements of this model.	Eine Einschränkung nennt nur Elemente dieses Modells.
-str		A constraint names at most {max} elements.	Eine Einschränkung nennt höchstens {max} Elemente.
-str		No constraint is given. Give its id.	Es ist keine Einschränkung angegeben. Geben Sie ihre ID an.
-str		{name} is not a constraint of this model.	{name} ist keine Einschränkung dieses Modells.
 str		Give the elements as a list of ids.	Geben Sie die Elemente als Liste von IDs an.
-str		This constraint is among no element's constraints.	Diese Einschränkung steht unter den Einschränkungen keines Elements.
-str		There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.	Unter den Einschränkungen gibt es keine Stelle {at}. Geben Sie eine Stelle von 0 bis {last} an, oder -1 für die letzte.
-str		Give both x and y, or neither to place it where it reads.	Geben Sie x und y beide an, oder keines, damit es dort steht, wo es sich gut liest.
 str		The {axis} is not a number.	Der Wert {axis} ist keine Zahl.
 str		The {axis} is farther than {max} from the origin.	Der Wert {axis} liegt weiter als {max} vom Ursprung entfernt.
 str		An element is named twice. Name each element once.	Ein Element ist zweimal genannt. Jedes Element nur einmal nennen.
-str		{field}: {word} is not one of the choices. The choices are {words}.	{field}: {word} ist keine der Möglichkeiten. Möglich sind {words}.
-str		{field}: no choice is given. The choices are {words}.	{field}: Es ist keine Möglichkeit angegeben. Möglich sind {words}.
-str		a constraint	eine Einschränkung
-str		{constraint} constrained nothing else and went with it	{constraint} schränkte nichts anderes ein und wurde mit entfernt
-str		{constraint} now constrains {elements} only	{constraint} schränkt jetzt nur noch {elements} ein
 str		{name} deleted	{name} gelöscht
-str		Constraint · model, not evaluated	Einschränkung · Modell, nicht ausgewertet
-str		This constraint	Diese Einschränkung
-str		On this constraint · {n}	Bei dieser Einschränkung · {n}
-str		Qualifier · model	Qualifizierer · Modell
-str		Qualifier	Qualifizierer
-str		This qualifier	Dieser Qualifizierer
-str		On this qualifier · {n}	Bei diesem Qualifizierer · {n}
-str		Constraint · not evaluated	Einschränkung · nicht ausgewertet
 str		Parameter	Parameter
-str		No literals yet	Noch keine Literale
-str		Move down	Nach unten
-str		Move up	Nach oben
-str		Multiplicity	Multiplizität
-str		On this attribute · {n}	An diesem Attribut · {n}
-str		On this literal · {n}	An diesem Literal · {n}
-str		On this operation · {n}	An dieser Operation · {n}
 str		Operation	Operation
-str		Operation · model	Operation · Modell
-str		Operations · {n}	Operationen · {n}
-str		Parameters	Parameter
 str		Private	Privat
 str		Protected	Geschützt
 str		Public	Öffentlich
-str		Remove parameter	Parameter entfernen
-str		Return type	Rückgabetyp
-str		Static	Statisch
-str		Modifiers	Modifikatoren
-str		Default value	Standardwert
-str		Derived	Abgeleitet
 str		Read only	Schreibgeschützt
 str		Ordered	Geordnet
-str		Subsets	Teilmenge von
-str		Redefines	Redefiniert
-str		No property to subset	Keine Eigenschaft für eine Teilmenge
-str		No property to redefine	Keine Eigenschaft zum Redefinieren
-str		The default value {value} does not fit {type}; change or clear it first.	Der Standardwert {value} passt nicht zu {type}; ändern oder leeren Sie ihn zuerst.
-str		A property chosen here is gone; choose again.	Eine hier gewählte Eigenschaft gibt es nicht mehr; wählen Sie erneut.
-str		A property subsets at most {max} properties.	Eine Eigenschaft ist Teilmenge von höchstens {max} Eigenschaften.
-str		A property redefines at most {max} properties.	Eine Eigenschaft redefiniert höchstens {max} Eigenschaften.
-str		Give the properties as a list of ids.	Geben Sie die Eigenschaften als Liste von IDs an.
-str		An item in the list has no id. Give each property's id.	Ein Eintrag der Liste hat keine ID. Geben Sie die ID jeder Eigenschaft an.
-str		{key} is not a key here. An item holds an id and a name.	{key} ist hier kein Schlüssel. Ein Eintrag enthält eine ID und einen Namen.
-str		Give at most {max} checks.	Geben Sie höchstens {max} Prüfbedingungen an.
-str		Two checks are named {name}. Give each check its own name.	Zwei Prüfbedingungen heißen {name}. Geben Sie jeder Prüfbedingung einen eigenen Namen.
-str		Give each check as text, or as an object with an expression and a name.	Geben Sie jede Prüfbedingung als Text an oder als Objekt mit einem Ausdruck und einem Namen.
 str		An item takes no {key}. It takes {takes}.	Ein Eintrag kennt keinen Schlüssel {key}. Er kennt {takes}.
 str		An item holds a key without a name. It takes {takes}.	Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt {takes}.
-str		An index needs at least one column.	Ein Index braucht mindestens eine Spalte.
-str		An index holds at most {max} columns.	Ein Index umfasst höchstens {max} Spalten.
-str		{name} is in the index twice. Give each column once.	{name} steht zweimal im Index. Geben Sie jede Spalte nur einmal an.
-str		Give each index column as a column's id, or as an object with an attribute or an expression.	Geben Sie jede Indexspalte als ID einer Spalte an oder als Objekt mit einem Attribut oder einem Ausdruck.
-str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} ist zusammen mit einem Ausdruck angegeben. Eine Indexspalte sortiert nach einer Spalte oder nach einem Ausdruck.
-str		An index column needs a column or an expression to sort by.	Eine Indexspalte braucht eine Spalte oder einen Ausdruck, nach dem sie sortiert.
 str		There is no element with the id {id}.	Es gibt kein Element mit der ID {id}.
-str		A default value is at most {n} characters.	Ein Standardwert hat höchstens {n} Zeichen.
-str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} ist keine ganze Zahl, wie sie der Standardwert eines Integer ist, etwa 42.
-str		{value} is not a number, which a Real's default is, such as 2.5.	{value} ist keine Zahl, wie sie der Standardwert eines Real ist, etwa 2.5.
-str		{value} is neither true nor false, which a Boolean's default is.	{value} ist weder true noch false, was der Standardwert eines Boolean ist.
-str		{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.	{value} ist weder eine ganze Zahl ab 0 noch *, was der Standardwert eines UnlimitedNatural ist.
 str		{value} is not a literal of {enumeration}.	{value} ist kein Literal von {enumeration}.
-str		{value} cannot be read as a default.	{value} lässt sich nicht als Standardwert lesen.
-str		A property without a name cannot be named here.	Eine Eigenschaft ohne Namen kann hier nicht genannt werden.
-str		{name} is not a property this one can subset.	{name} ist keine Eigenschaft, deren Teilmenge diese sein kann.
-str		{name} is not a property this one can redefine.	{name} ist keine Eigenschaft, die diese redefinieren kann.
-str		{name} has this property's name; a subset takes another.	{name} hat den Namen dieser Eigenschaft; eine Teilmenge braucht einen anderen.
-str		{name} subsets this property already.	{name} ist bereits eine Teilmenge dieser Eigenschaft.
-str		The moved ends no longer subset or redefine {names}, so those were dropped.	Die verschobenen Enden sind keine Teilmenge und keine Redefinition von {names} mehr; diese Angaben wurden entfernt.
-str		{name} has a type this property's type does not conform to.	{name} hat einen Typ, zu dem der Typ dieser Eigenschaft nicht konform ist.
-str		{name} holds fewer values than this property.	{name} fasst weniger Werte als diese Eigenschaft.
-str		This property's multiplicity does not lie within {name}'s.	Die Multiplizität dieser Eigenschaft liegt nicht innerhalb der von {name}.
-str		{name} is composite; only a composite end redefines it.	{name} ist eine Komposition; nur ein Kompositionsende redefiniert sie.
-str		{name} is leaf: nothing may redefine it. Clear "No redefinition" on it first.	{name} ist leaf: Nichts darf es redefinieren. Entfernen Sie zuerst „Keine Redefinition“ daran.
-str		This attribute	Dieses Attribut
-str		This literal	Dieses Literal
-str		This operation	Diese Operation
 str		Visibility	Sichtbarkeit
-str		Place class	Klasse platzieren
-str		Place interface	Schnittstelle platzieren
-str		Place enumeration	Aufzählung platzieren
-str		Place data type	Datentyp platzieren
-str		Place primitive type	Primitiven Typ platzieren
-str		Place association class	Assoziationsklasse platzieren
-str		Add package	Paket hinzufügen
-str		Place package	Paket platzieren
 str		Move package	Paket verschieben
-str		Parent package	Übergeordnetes Paket
 str		{what} moved into {where}	{what} nach {where} verschoben
 str		Open this package's diagram	Diagramm dieses Pakets öffnen
 str		Open this package's diagram (⌘↓)	Diagramm dieses Pakets öffnen (⌘↓)
 str		This is the top package: zooming out goes no further	Dies ist das oberste Paket: weiter hinauszoomen führt nirgendwohin
 # Klassen in Beziehung setzen
-str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
-str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnittstelle
-str		A relationship joins two classes or interfaces	Eine Beziehung verbindet zwei Klassen oder Schnittstellen
-str		An association class does not join itself	Eine Assoziationsklasse verbindet sich nicht mit sich selbst
-str		This association class has an attribute named {name}; an end's role takes another name.	Diese Assoziationsklasse hat ein Attribut namens {name}; die Rolle eines Endes braucht einen anderen Namen.
-str		An end of this association class has the role {name}; an attribute takes another name.	Ein Ende dieser Assoziationsklasse hat die Rolle {name}; ein Attribut braucht einen anderen Namen.
-str		An enumeration is a data type and joins no association	Eine Aufzählung ist ein Datentyp und gehört zu keiner Assoziation
-str		A data type joins no association	Ein Datentyp gehört zu keiner Assoziation
-str		A primitive type joins no association	Ein primitiver Typ gehört zu keiner Assoziation
-str		An association class joins only classes	Eine Assoziationsklasse verbindet nur Klassen
-str		An interface specializes only an interface	Eine Schnittstelle spezialisiert nur eine Schnittstelle
-str		A class cannot specialize an interface	Eine Klasse kann keine Schnittstelle spezialisieren
-str		An enumeration specializes only an enumeration	Eine Aufzählung spezialisiert nur eine Aufzählung
-str		Only an enumeration specializes an enumeration	Nur eine Aufzählung spezialisiert eine Aufzählung
-str		A data type specializes only a data type	Ein Datentyp spezialisiert nur einen Datentyp
-str		Only a data type specializes a data type	Nur ein Datentyp spezialisiert einen Datentyp
-str		A primitive type specializes only a primitive type	Ein primitiver Typ spezialisiert nur einen primitiven Typ
-str		Only a primitive type specializes a primitive type	Nur ein primitiver Typ spezialisiert einen primitiven Typ
-str		A built-in type specializes nothing	Ein eingebauter Typ spezialisiert nichts
-str		Nothing specializes an association class	Nichts spezialisiert eine Assoziationsklasse
-str		A classifier cannot specialize itself	Ein Klassifikator kann sich nicht selbst spezialisieren
-str		This one specializes that one already	Dieser spezialisiert jenen bereits
-str		That one specializes this one already, which would make a cycle	Jener spezialisiert diesen bereits, das ergäbe einen Zyklus
-str		{name} is final: nothing may specialise it. Clear "No subclasses" in its Properties first.	{name} ist final: Nichts darf es spezialisieren. Entfernen Sie zuerst „Keine Unterklassen“ in seinen Eigenschaften.
-str		Add association	Assoziation hinzufügen
-str		Add dependency	Abhängigkeit hinzufügen
-str		Add generalization	Generalisierung hinzufügen
-str		Add interface realization	Schnittstellenrealisierung hinzufügen
 str		Aggregation	Aggregation
 str		Association	Assoziation
-str		Association · model	Assoziation · Modell
-str		Clear	Leeren
-str		Client	Client
 str		Composite	Komposition
-str		Composition	Komposition
-str		The other end has an aggregation already: only the part's end has one.	Das andere Ende hat bereits eine Aggregation: Nur das Ende des Teils hat eine.
-str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	Das Ganze einer Komposition lässt höchstens eins zu: Setzen Sie zuerst die Multiplizität des anderen Endes auf 1 oder 0..1.
-str		This end is a composition's whole, which allows one at most.	Dieses Ende ist das Ganze einer Komposition, das höchstens eins zulässt.
-str		The whole's end of an aggregation or composition is not navigable.	Das Ende des Ganzen einer Aggregation oder Komposition ist nicht navigierbar.
 str		Dependency	Abhängigkeit
-str		Dependency · model	Abhängigkeit · Modell
-str		Directed association	Gerichtete Assoziation
-str		Drag a line end onto another class.	Ziehen Sie ein Linienende auf eine andere Klasse.
 str		Drag onto another class to move this end	Auf eine andere Klasse ziehen, um dieses Ende zu verschieben
-str		Drag the class end onto another class, the interface end onto another interface.	Ziehen Sie das Klassenende auf eine andere Klasse, das Schnittstellenende auf eine andere Schnittstelle.
-str		End at {class}	Ende bei {class}
-str		Qualifiers · {n}	Qualifizierer · {n}
-str		Add qualifier	Qualifizierer hinzufügen
-str		Qualified end: the qualifier box is drawn here, against {class}.	Qualifiziertes Ende: Das Qualifiziererfeld wird hier gezeichnet, an {class}.
-str		Per qualifier value	Je Qualifiziererwert
-str		Counted per qualifier value of the other end; shown next to {class}.	Gezählt je Qualifiziererwert des anderen Endes; neben {class} angezeigt.
-str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	Ein {owner} und ein {qualifiers} wählen {multiplicity} {target}.
-str		Type a name: a qualifier without one picks nothing.	Geben Sie einen Namen ein: Ein Qualifizierer ohne Namen wählt nichts aus.
-str		This end already has a qualifier named {name}. Pick another name.	Dieses Ende hat bereits einen Qualifizierer namens {name}. Wählen Sie einen anderen Namen.
 # Templates (AR-130)
-str		Template parameters · {n}	Template-Parameter · {n}
-str		Add template parameter	Template-Parameter hinzufügen
-str		Constrained to	Eingeschränkt auf
-str		Any	Beliebig
 str		Value	Wert
-str		Parameter kind	Parameterart
-str		not yet	noch nicht
-str		{kind} template parameters are not supported yet.	{kind}-Template-Parameter werden noch nicht unterstützt.
-str		this parameter	diesen Parameter
-str		Arguments for {name} must be {constraint} or specialise it.	Argumente für {name} müssen {constraint} sein oder es spezialisieren.
-str		Arguments for {name} must be classes.	Argumente für {name} müssen Klassen sein.
-str		Arguments for {name} must be interfaces.	Argumente für {name} müssen Schnittstellen sein.
-str		Arguments for {name} must be data types.	Argumente für {name} müssen Datentypen sein.
-str		Arguments for {name} must be enumerations.	Argumente für {name} müssen Aufzählungen sein.
-str		Arguments for {name} must be primitive types.	Argumente für {name} müssen primitive Typen sein.
-str		Bindings that leave it out use {default}.	Bindungen, die ihn auslassen, verwenden {default}.
-str		Renaming or reordering keeps every binding.	Umbenennen oder Umordnen erhält jede Bindung.
-str		Show the binding	Bindung zeigen
-str		Show the binding selects it, on the canvas and in Properties.	Bindung zeigen wählt sie aus, auf der Arbeitsfläche und in den Eigenschaften.
-str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	{name} umzubenennen oder seinen Standardwert zu ändern ist erlaubt: Bindungen folgen dem Parameter, nicht seinem Namen.
-str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} bindet {name} -> {actual}. Ändern oder entfernen Sie zuerst diese Bindung und entfernen Sie dann {name}.
-str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} bindet {template}, und {name} ist sein letzter Parameter. Entfernen Sie zuerst diese Bindung und entfernen Sie dann {name}.
-plural		{n} more binding uses it too.	{n} weitere Bindung verwendet ihn ebenfalls.|{n} weitere Bindungen verwenden ihn ebenfalls.
-str		Type a name: a template parameter without one stands for nothing.	Geben Sie einen Namen ein: Ein Template-Parameter ohne Namen steht für nichts.
-str		{template} already has a template parameter named {name}. Pick another name.	{template} hat bereits einen Template-Parameter namens {name}. Wählen Sie einen anderen Namen.
-str		{default} does not fit {name}: pick a default its arguments could be.	{default} passt nicht zu {name}: Wählen Sie einen Standardwert, der eines seiner Argumente sein könnte.
-str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} bindet {name} -> {actual}, was nicht mehr passen würde. Ändern oder entfernen Sie zuerst diese Bindung.
-str		A template has at most {max} parameters.	Ein Template hat höchstens {max} Parameter.
-str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} bindet {template} und gibt {name} kein Argument, daher braucht {name} einen Standardwert.
-str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	Im Paket {types}, in dem dieser eingebaute Typ liegt, trägt bereits {what} den Namen {name}: Benennen Sie {name} um, um den eingebauten Typ zu verwenden.
-str		template parameter	Template-Parameter
-str		template	Template
-plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · Template, {n} Parameter · Modell, in jedem Diagramm|{kind} · Template, {n} Parameter · Modell, in jedem Diagramm
 # Template bindings (AR-131)
 str		Template binding	Template-Bindung
-str		Template binding: from the bound class to its template	Template-Bindung: von der gebundenen Klasse zu ihrem Template
-str		«bind»	«bind»
-str		Add template binding	Template-Bindung hinzufügen
-str		This template binding	Diese Template-Bindung
-str		On this template binding · {n}	Auf dieser Template-Bindung · {n}
-str		Binding · {bound} binds {template} · model, in every diagram	Bindung · {bound} bindet {template} · Modell, in jedem Diagramm
-str		binds {template}	bindet {template}
-str		Binding	Bindung
-str		Bound element	Gebundenes Element
-str		Template	Template
-str		Substitutions · {n}	Ersetzungen · {n}
-str		default	Standard
-str		Default ({name})	Standardwert ({name})
-str		Choose a class	Klasse wählen
-str		Choose an interface	Schnittstelle wählen
-str		Choose a data type	Datentyp wählen
-str		Choose an enumeration	Aufzählung wählen
-str		Choose a primitive type	Primitiven Typ wählen
-str		{name} needs an argument: pick a class.	{name} braucht ein Argument: Wählen Sie eine Klasse.
-str		{name} needs an argument: pick an interface.	{name} braucht ein Argument: Wählen Sie eine Schnittstelle.
-str		{name} needs an argument: pick a data type.	{name} braucht ein Argument: Wählen Sie einen Datentyp.
-str		{name} needs an argument: pick an enumeration.	{name} braucht ein Argument: Wählen Sie eine Aufzählung.
-str		{name} needs an argument: pick a primitive type.	{name} braucht ein Argument: Wählen Sie einen primitiven Typ.
-str		{name} ({kind})	{name} ({kind})
-str		{names} have no default, so each needs an argument.	{names} haben keinen Standardwert, daher braucht jeder ein Argument.
-plural		{names} can keep its default.	{names} kann seinen Standardwert behalten.|{names} können ihre Standardwerte behalten.
-str		New template binding	Neue Template-Bindung
-str		Drawing · not in the model until you apply	Wird gezeichnet · erst nach Übernehmen im Modell
-str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	Das Loslassen der Linie auf einem Template öffnet dies. Die Linie bleibt gestrichelt in der Akzentfarbe bis Übernehmen; ein Rückgängig-Schritt fügt dann die Bindung mit ihren Argumenten hinzu. Abbrechen oder Esc entfernt den Entwurf und hinterlässt nichts.
-str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	Ein anderes Template braucht eigene Argumente: Wählen Sie sie, dann Übernehmen. Abbrechen oder Esc lässt die Bindung, wie sie ist.
-str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	Jede Auswahl listet nur die Argumente, die zu ihrem Parameter passen: seine Art und seine Einschränkung oder was sie spezialisiert. Ein Parameter auf seinem Standardwert folgt dem Standardwert des Templates.
-str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	Die Linie zeigt «bind» mit jedem Parameter und seinem Argument und weist auf das Template. Die Bindung hält ihre Argumente im Modell; sie ist weder eine Abhängigkeit noch eine Realisierung.
-str		Only a class, an interface or a data type binds a template	Nur eine Klasse, eine Schnittstelle oder ein Datentyp bindet ein Template
-str		A binding ends at a template: a class, an interface or a data type with template parameters	Eine Bindung endet an einem Template: einer Klasse, Schnittstelle oder einem Datentyp mit Template-Parametern
-str		A template is bound by a classifier of its own kind	Ein Template wird von einem Classifier seiner eigenen Art gebunden
-str		A template does not bind itself	Ein Template bindet sich nicht selbst
-str		This one binds that template already	Dieses bindet dieses Template bereits
-str		That template binds this one already, which would make a cycle	Dieses Template bindet dieses Element bereits, was einen Zyklus ergäbe
-str		Pick another template in the binding's Properties, where its arguments are chosen.	Wählen Sie ein anderes Template in den Eigenschaften der Bindung, wo seine Argumente gewählt werden.
-str		N-ary association	N-äre Assoziation
-str		this n-ary association	Diese n-äre Assoziation
-str		N-ary association: click each class in turn, then press Enter	N-äre Assoziation: Klicken Sie nacheinander auf jede Klasse und drücken Sie dann die Eingabetaste
-str		An n-ary association is drawn by clicking each class in turn	Eine n-äre Assoziation wird durch Klicken auf jede Klasse nacheinander gezeichnet
-str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	Eingabe beendet ab 3 · Rücktaste entfernt das letzte · Esc bricht ab
-str		Click a class for the new end	Klicken Sie auf eine Klasse für das neue Ende
-str		Esc cancels	Esc bricht ab
-str		An n-ary association joins classes and interfaces	Eine n-äre Assoziation verbindet Klassen und Schnittstellen
-str		An association takes at most {n} ends	Eine Assoziation hat höchstens {n} Enden
-str		An n-ary association needs three ends or more.	Eine n-äre Assoziation braucht drei Enden oder mehr.
-str		An n-ary association needs three ends or more: click another class	Eine n-äre Assoziation braucht drei Enden oder mehr: Klicken Sie auf eine weitere Klasse
-str		Add n-ary association	N-äre Assoziation hinzufügen
-str		New n-ary association	Neue n-äre Assoziation
-str		Drawing · not in the model until you finish	Zeichnen · erst im Modell, wenn Sie fertig sind
-str		Ends so far · {n}	Bisherige Enden · {n}
-str		Next: click a class on the canvas	Weiter: Klicken Sie auf eine Klasse im Zeichenbereich
-str		Next: click a class on the canvas, or press Enter to finish	Weiter: Klicken Sie auf eine Klasse im Zeichenbereich oder drücken Sie die Eingabetaste, um abzuschließen
-str		Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.	Die Eingabetaste oder ein Doppelklick auf die letzte Klasse schließt ab, sobald es 3 Enden oder mehr sind. Ein Rückgängig-Schritt fügt die Assoziation, ihre Raute und jedes Ende hinzu.
-str		Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.	Esc, ein Werkzeugwechsel oder ein Klick auf leere Fläche bricht ab und lässt nichts im Modell. Die Rücktaste nimmt das letzte Ende weg.
-str		New ends are named after their class and start at *; change them after finishing.	Neue Enden werden nach ihrer Klasse benannt und beginnen bei *; ändern Sie sie nach dem Abschließen.
-str		Ends · {n}	Enden · {n}
-str		Add end	Ende hinzufügen
-str		Draws a new leg	Zeichnet einen neuen Schenkel
-str		Reconnect end	Ende neu verbinden
-str		Drag a leg end	Ein Schenkelende ziehen
-str		Open a class diagram to pick the new end's class	Öffnen Sie ein Klassendiagramm, um die Klasse des neuen Endes zu wählen
-str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Enden einer n-ären Assoziation sind keine Aggregationen, daher wird Aggregation nicht angeboten. Wiederholen Sie einen Typ für zwei Enden, wenn sich die Rollen unterscheiden.
-str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	Die Enden einer n-ären Assoziation sind keine Aggregationen: Nur eine binäre Assoziation hat ein Ganzes und ein Teil.
-str		Another end has the role {role} already. Pick another role.	Ein anderes Ende hat bereits die Rolle {role}. Wählen Sie eine andere Rolle.
-str		Set association end	Assoziationsende festlegen
-str		End {role} removed	Ende {role} entfernt
-str		Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.	Die Raute oder ein beliebiger Schenkel wählt die eine Assoziation aus. Aus diesem Diagramm entfernen blendet sie hier aus; Aus dem Modell löschen löscht sie und ihre Enden überall.
-str		Two ends would remain	Zwei Enden blieben übrig
-str		An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.	Eine n-äre Assoziation braucht drei Enden oder mehr. Ohne {role} bleiben nur {first} und {second}.
-str		Keep 3 ends	3 Enden behalten
-str		Make it binary	Binär machen
-str		Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Binär machen macht sie zu einer einfachen Assoziation zwischen {first} und {second}, mit beiden Enden, in einem Rückgängig-Schritt. 3 Enden behalten oder Esc ändert nichts.
-str		Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Binär machen macht {name} zu einer einfachen Assoziation zwischen {first} und {second}, mit ihrem Namen und beiden Enden, in einem Rückgängig-Schritt. 3 Enden behalten oder Esc ändert nichts.
-plural		N-ary association · {n} end · model, in every diagram	N-äre Assoziation · {n} Ende · Modell, in jedem Diagramm|N-äre Assoziation · {n} Enden · Modell, in jedem Diagramm
-plural		N-ary association · {n} end — click a class for the next end	N-äre Assoziation · {n} Ende — Klasse für das nächste Ende anklicken|N-äre Assoziation · {n} Enden — Klasse für das nächste Ende anklicken
 str		From	Von
-str		General	Allgemein
 str		Generalization	Generalisierung
-str		Generalization · model	Generalisierung · Modell
-str		Implementing class	Implementierende Klasse
 str		Interface realization	Schnittstellenrealisierung
-str		Interface realization · model	Schnittstellenrealisierung · Modell
 # Generalisierungsmengen (AR-129)
-str		A set groups generalizations of one class.	Eine Menge fasst Generalisierungen einer Klasse zusammen.
-str		A set groups at least one generalization.	Eine Menge fasst mindestens eine Generalisierung zusammen.
-plural		A set groups at most {n} generalization.	Eine Menge fasst höchstens {n} Generalisierung zusammen.|Eine Menge fasst höchstens {n} Generalisierungen zusammen.
-str		Add member	Mitglied hinzufügen
-str		Add member offers only generalizations to {general}. Edit opens that generalization.	Mitglied hinzufügen bietet nur Generalisierungen zu {general} an. Bearbeiten öffnet diese Generalisierung.
-str		Add to a generalization set	Zu einer Generalisierungsmenge hinzufügen
-str		Add to set	Zu Menge hinzufügen
-str		Add to set ▸ {name}	Zu Menge hinzufügen ▸ {name}
-str		Add to {name}	Zu {name} hinzufügen
-str		Completeness	Vollständigkeit
-str		Create generalization set…	Generalisierungsmenge anlegen …
-str		Create set from selection	Menge aus Auswahl anlegen
-str		Delete from the model	Aus dem Modell löschen
 str		Rename	Umbenennen
 str		Show in diagram	Im Diagramm zeigen
 str		No diagram shows it yet	Noch kein Diagramm zeigt es
 str		Delete from model	Aus dem Modell löschen
 str		Delete diagram	Diagramm löschen
 str		A skill is removed from its tab	Ein Skill wird in seinem Tab entfernt
-str		New inside {name}	Neu in {name}
-str		not inside a class	nicht in einer Klasse
-str		{name} is {kind}, which owns no classifiers: only a class, an interface or an association class does.	{name} ist {kind} und besitzt keine Klassifizierer: Das tun nur eine Klasse, eine Schnittstelle oder eine Assoziationsklasse.
-str		a class	eine Klasse
-str		an interface	eine Schnittstelle
-str		an enumeration	eine Aufzählung
-str		a data type	ein Datentyp
-str		a primitive type	ein primitiver Typ
-str		an association class	eine Assoziationsklasse
-str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	Das Löschen der Menge behält ihre Generalisierungen; nur die Gruppierung geht. Die Mengenlinie läuft quer über ihre Mitglieder; ziehen Sie ihre Beschriftung, um sie zu verschieben, eine Änderung nur am Diagramm.
-str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	Das Löschen dieser Generalisierung nimmt sie im selben Rückgängig-Schritt aus ihren Mengen; eine Menge ohne Mitglieder geht mit.
-str		Disjointness	Disjunktheit
-str		General class	Allgemeine Klasse
 str		Generalization set	Generalisierungsmenge
-str		Generalization set {label}	Generalisierungsmenge {label}
-str		Generalization set · model, in every diagram	Generalisierungsmenge · Modell, in jedem Diagramm
-str		Generalization sets	Generalisierungsmengen
-str		Generalization sets · {n}	Generalisierungsmengen · {n}
-str		Incomplete	Unvollständig
-str		Members · {n}	Mitglieder · {n}
-str		Membership is listed here for every set, and each set draws its own line and label on the canvas.	Die Zugehörigkeit steht hier für jede Menge, und jede Menge zeichnet ihre eigene Linie und Beschriftung auf die Arbeitsfläche.
-str		New set from this generalization	Neue Menge aus dieser Generalisierung
-str		No other generalization to {general}	Keine weitere Generalisierung zu {general}
-str		None of these is in a set yet.	Keine davon ist schon in einer Menge.
-str		Not in a set yet.	Noch in keiner Menge.
-str		On this generalization set · {n}	An dieser Generalisierungsmenge · {n}
-str		Overlapping	Überlappend
-str		Remove from set	Aus der Menge entfernen
-str		Same action as the context menu's Create generalization set… ({chord}). Only generalizations to one class form a set; a mixed selection disables it and says why.	Dieselbe Aktion wie Generalisierungsmenge anlegen … im Kontextmenü ({chord}). Nur Generalisierungen zu einer Klasse bilden eine Menge; eine gemischte Auswahl sperrt sie und sagt warum.
-str		Select generalizations to one class first.	Wählen Sie zuerst Generalisierungen zu einer Klasse aus.
-str		Selection · all specialise {general}	Auswahl · alle spezialisieren {general}
-str		Selection · mixed	Auswahl · gemischt
-str		Set	Menge
-str		Shown beside the lines as {braces}: a {general} is at most one of these kinds.	Neben den Linien als {braces} gezeigt: ein {general} ist höchstens eine dieser Arten.
-str		Shown beside the lines as {braces}: a {general} may be any number of these kinds.	Neben den Linien als {braces} gezeigt: ein {general} kann beliebig viele dieser Arten sein.
-str		Shown beside the lines as {braces}: every {general} is at least one of these kinds.	Neben den Linien als {braces} gezeigt: jedes {general} ist mindestens eine dieser Arten.
-str		Shown beside the lines as {braces}: every {general} is exactly one of these kinds.	Neben den Linien als {braces} gezeigt: jedes {general} ist genau eine dieser Arten.
-str		Some of these are in a set already.	Einige davon sind schon in einer Menge.
-str		Something selected	Etwas Ausgewähltes
-str		This generalization set	Diese Generalisierungsmenge
-str		already in it	schon enthalten
-str		generalization set	Generalisierungsmenge
-str		no shared parent	kein gemeinsamer Elternteil
-str		none for {general} yet	noch keine für {general}
-str		not all generalizations	nicht nur Generalisierungen
-str		nothing selected	nichts ausgewählt
-str		parents differ	Eltern verschieden
-str		{generalization} is in {sets}, which group the specialisations of {general}. Remove it from those sets before reconnecting it to {target}.	{generalization} gehört zu {sets}, die die Spezialisierungen von {general} zusammenfassen. Entfernen Sie sie aus diesen Mengen, bevor Sie sie mit {target} verbinden.
-str		{generalization} is in {sets}, which groups the specialisations of {general}. Remove it from the set before reconnecting it to {target}.	{generalization} gehört zu {sets}, die die Spezialisierungen von {general} zusammenfasst. Entfernen Sie sie aus der Menge, bevor Sie sie mit {target} verbinden.
-str		{name} is not a generalization.	{name} ist keine Generalisierung.
-str		{name} removed; its generalizations stay	{name} entfernt; die Generalisierungen bleiben
-str		{specific} specialises {general}	{specific} spezialisiert {general}
 plural		{n} element	{n} Element|{n} Elemente
-plural		{n} generalization	{n} Generalisierung|{n} Generalisierungen
-plural		{n} generalization · to {general}	{n} Generalisierung · zu {general}|{n} Generalisierungen · zu {general}
-plural		{sets} had no other member and went too	{sets} hatte kein weiteres Mitglied und ging mit|{sets} hatten keine weiteren Mitglieder und gingen mit
-str		Interface realization: from the implementing class to its interface	Schnittstellenrealisierung: von der implementierenden Klasse zu ihrer Schnittstelle
-str		Association class: between two classes, with a card of its own	Assoziationsklasse: zwischen zwei Klassen, mit einer eigenen Karte
-str		Navigable	Navigierbar
-str		On this association · {n}	An dieser Assoziation · {n}
-str		On this association class · {n}	Auf dieser Assoziationsklasse · {n}
-str		On this dependency · {n}	An dieser Abhängigkeit · {n}
-str		On this generalization · {n}	An dieser Generalisierung · {n}
-str		On this interface realization · {n}	An dieser Schnittstellenrealisierung · {n}
-str		Only a class implements an interface	Nur eine Klasse implementiert eine Schnittstelle
-str		Or type a number or range	Oder eine Zahl oder einen Bereich eingeben
-str		Pick a multiplicity	Multiplizität wählen
-str		Realized interface	Realisierte Schnittstelle
 str		Relationship kinds	Beziehungsarten
 str		Shared	Geteilt
-str		Specific	Speziell
-str		Supplier	Lieferant
-str		The lower bound cannot be *.	Die Untergrenze darf nicht * sein.
-str		The upper bound must be at least {lower}.	Die Obergrenze muss mindestens {lower} sein.
-str		This association	Diese Assoziation
-str		This association class	Diese Assoziationsklasse
-str		This class realizes that interface already	Diese Klasse realisiert diese Schnittstelle bereits
-str		This dependency	Diese Abhängigkeit
-str		This generalization	Diese Generalisierung
-str		This interface realization	Diese Schnittstellenrealisierung
-str		To	Nach
-str		Type a whole number, a range such as 2..5, or *.	Geben Sie eine ganze Zahl, einen Bereich wie 2..5 oder * ein.
 str		{what} removed	{what} entfernt
 # Pakete
-str		Class · {package}	Klasse · {package}
-str		«interface» · {package}	«interface» · {package}
-str		«enumeration» · {package}	«enumeration» · {package}
-str		«dataType» · {package}	«dataType» · {package}
-str		«primitive» · {package}	«primitive» · {package}
-str		Association class · {package}	Assoziationsklasse · {package}
 str		{name} removed; what it held moved to {parent}	{name} entfernt; der Inhalt wurde nach {parent} verschoben
 # Wörter für das, was das Metamodell benennt
 str		Alias	Alias

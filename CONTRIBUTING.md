@@ -72,8 +72,9 @@ this`. Its hint to drop `--locked` is not the fix here:
 
 ## Translations
 
-The interface strings live in `crates/ui-egui/src/i18n/<language>.tsv`, keyed by the English text.
-A new string needs a row in every catalogue; the tests say which rows are missing. Place new rows
+The interface strings live in `crates/ui-egui/src/i18n/<language>.tsv`, keyed by the English text;
+a string only one notation's screens say lives in that notation's catalogues, `i18n/er/` or
+`i18n/uml/`. A new string needs a row in every language; the tests say which rows are missing. Place new rows
 beside related entries rather than at the end of the file.
 
 ## Licence of contributions

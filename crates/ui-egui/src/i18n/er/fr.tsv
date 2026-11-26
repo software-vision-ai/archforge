@@ -1,0 +1,255 @@
+# ER · Catalogue français. Colonnes : kind, context, key, text (voir i18n/mod.rs). Les lignes se placent à côté des entrées apparentées.
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
+str		Table	Table
+str		Column	Colonne
+str		Schema · model	Schéma · modèle
+str		Table · model, in every diagram	Table · modèle, dans chaque diagramme
+str		Column · model	Colonne · modèle
+str		Domain · model	Domaine · modèle
+str		This domain	Ce domaine
+str		On this domain · {n}	Sur ce domaine · {n}
+str		Enum type · model	Type énuméré · modèle
+str		This enum type	Ce type énuméré
+str		On this enum type · {n}	Sur ce type énuméré · {n}
+str		Subtype · {sub} is a {super}	Sous-type · {sub} est un {super}
+str		Subtype	Sous-type
+str		This subtype	Ce sous-type
+str		On this subtype · {n}	Sur ce sous-type · {n}
+str		Columns · {n}	Colonnes · {n}
+str		Keys · {n}	Clés · {n}
+str		Add a column	Ajouter une colonne
+str		Add unique constraint	Ajouter une contrainte d’unicité
+str		Columns, in key order	Colonnes, dans l’ordre de la clé
+str		Types · {n}	Types · {n}
+plural		{n} check	{n} contrôle|{n} contrôles
+str		Add type	Ajouter un type
+str		Checks	Contrôles
+str		Add a check	Ajouter un contrôle
+str		Literals, in order	Littéraux dans l’ordre
+str		Subtypes · {n}	Sous-types · {n}
+str		Add subtype	Ajouter un sous-type
+str		Discriminator	Discriminant
+str		Mapping	Correspondance
+str		key on {columns}	clé sur {columns}
+str		Add a literal	Ajouter un littéral
+plural		{n} column takes {name}: {columns}. Retype it first.	{n} colonne utilise {name} : {columns}. Changez d’abord son type.|{n} colonnes utilisent {name} : {columns}. Changez d’abord leur type.
+str		Give the literals as a list of names.	Indiquez les littéraux sous forme de liste de noms.
+str		An enum type needs at least one literal.	Un type énuméré a besoin d’au moins un littéral.
+str		An enum type has at most {max} literals.	Un type énuméré a au plus {max} littéraux.
+str		A literal can't be empty.	Un littéral ne peut pas être vide.
+str		The literal "{name}" is not a valid name. {why}	Le littéral « {name} » n’est pas un nom valide. {why}
+str		The literal "{name}" is given twice. Give each literal once.	Le littéral « {name} » est indiqué deux fois. Indiquez chaque littéral une seule fois.
+str		Sequences · {n}	Séquences · {n}
+str		Add sequence	Ajouter une séquence
+str		Sequence · model	Séquence · modèle
+str		This sequence	Cette séquence
+str		On this sequence · {n}	Sur cette séquence · {n}
+str		from {start} by {increment}	à partir de {start}, pas de {increment}
+str		cycles	cyclique
+str		owned by {column}	appartient à {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} est une colonne d’un autre schéma. Une séquence appartient à une colonne de son schéma.
+str		The column {column} belongs to no table.	La colonne {column} n’appartient à aucune table.
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} n’a pas de type. Une séquence appartient à une colonne de type entier.
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} est de type {type}. Une séquence appartient à une colonne de type entier.
+str		The increment can't be 0. A sequence moves by at least 1.	L’incrément ne peut pas être 0. Une séquence avance d’au moins 1.
+str		The minimum "{value}" is not a whole number between {min} and {max}.	Le minimum « {value} » n’est pas un nombre entier entre {min} et {max}.
+str		The maximum "{value}" is not a whole number between {min} and {max}.	Le maximum « {value} » n’est pas un nombre entier entre {min} et {max}.
+str		The maximum {maximum} is not greater than the minimum {minimum}.	Le maximum {maximum} n’est pas supérieur au minimum {minimum}.
+str		The start {start} is below the minimum {minimum}.	La valeur initiale {start} est inférieure au minimum {minimum}.
+str		The start {start} is above the maximum {maximum}.	La valeur initiale {start} est supérieure au maximum {maximum}.
+str	sequence	Start	Valeur initiale
+str		Owned by	Appartient à
+plural		{n} more column, not listed	{n} colonne de plus, non listée|{n} colonnes de plus, non listées
+str		{field} takes a whole number	{field} attend un nombre entier
+str		Views · {n}	Vues · {n}
+str		Add view	Ajouter une vue
+str		View · model	Vue · modèle
+str		This view	Cette vue
+str		On this view · {n}	Sur cette vue · {n}
+str		view	vue
+str		materialized	matérialisée
+str		Pick a type	Choisir un type
+str		domain	domaine
+str		enum	énumération
+str		not null	non nul
+str		Checks · {n}	Contrôles · {n}
+str		Indexes · {n}	Index · {n}
+str		Add check constraint	Ajouter une contrainte de contrôle
+str		Add index	Ajouter un index
+str		Columns, in index order	Colonnes dans l’ordre de l’index
+str		An expression	Une expression
+str		Nulls default	Nuls par défaut
+str		Nulls first	Nuls en premier
+str		Nulls last	Nuls en dernier
+str		lacks its table or its key	n’a pas sa table ou sa clé
+str		{column} is a key column and may be null	{column} est une colonne clé et peut être nulle
+str		{from} to {to} is many to many	{from} vers {to} est plusieurs à plusieurs
+str		Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.	Au moins une ligne de {many} pour chaque ligne de {one} n’existe que sur le diagramme : aucune clé de base de données ne peut l’exiger. Choisissez zéro ou plusieurs si une ligne de {one} peut n’en avoir aucune.
+str		{name} has no primary key	{name} n’a pas de clé primaire
+str		{name} has subtypes but no primary key to share	{name} a des sous-types mais aucune clé primaire à partager
+str		{name} removed · {keys} went with it	{name} supprimée · {keys} est parti avec
+str		Add column	Ajouter une colonne
+str		Edit column	Modifier la colonne
+str		Mapping table	Table d’association
+str		Follows {target}	Suit {target}
+str		Unlink	Dissocier
+str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} ne contient que ses deux clés et peut redevenir la ligne plusieurs-à-plusieurs entre {from} et {to}.
+str		Collapse into a relationship	Replier en une relation
+str		Only a many-to-many relationship becomes a mapping table.	Seule une relation plusieurs à plusieurs devient une table d’association.
+str		The relationship lacks one of its two tables.	Il manque à la relation l’une de ses deux tables.
+str		A mapping table has exactly two foreign keys.	Une table d’association a exactement deux clés étrangères.
+str		The foreign key {foreign_key} stands for no relationship.	La clé étrangère {foreign_key} ne représente aucune relation.
+str		The foreign key {foreign_key} points at no key.	La clé étrangère {foreign_key} ne pointe vers aucune clé.
+str		The table has a relationship of its own, so it does not collapse into a relationship.	La table a une relation qui lui est propre, elle ne se replie donc pas en une relation.
+str		The table has columns of its own, so it does not collapse into a relationship.	La table a des colonnes qui lui sont propres, elle ne se replie donc pas en une relation.
+str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	Les colonnes de la table ne sont pas toutes dans sa clé primaire, elle ne se replie donc pas en une relation.
+str		The table has a unique constraint, so it does not collapse into a relationship.	La table a une contrainte d’unicité, elle ne se replie donc pas en une relation.
+str		The table has a check, so it does not collapse into a relationship.	La table a un contrôle, elle ne se replie donc pas en une relation.
+str		The table has an index, so it does not collapse into a relationship.	La table a un index, elle ne se replie donc pas en une relation.
+str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} n’a aucune clé étrangère dans sa clé primaire. Une table d’association en a besoin de deux.
+str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} n’a qu’une clé étrangère dans sa clé primaire. Une table d’association en a besoin de deux.
+str		The size {value} is not between 1 and 65535.	La taille {value} n'est pas comprise entre 1 et 65535.
+str		A column without a type name of its own takes no size.	Une colonne sans nom de type propre n'a pas de taille.
+str		{type} takes no length.	{type} n'a pas de longueur.
+str		{type} takes no precision.	{type} n'a pas de précision.
+str		{type} takes no scale.	{type} n'a pas d'échelle.
+str		A BINARY holds at most 255 bytes, not {value}.	Un BINARY contient au plus 255 octets, pas {value}.
+str		The scale {value} is more than the precision.	L'échelle {value} est supérieure à la précision.
+str		A scale needs a precision.	Une échelle a besoin d'une précision.
+str		A type name holds no size; give the length, precision or scale instead.	Un nom de type ne contient pas de taille ; indiquez plutôt la longueur, la précision ou l'échelle.
+str		{text} is not a number	{text} n’est pas un nombre
+str		Identity, always	Identité, toujours
+str		Identity, by default	Identité, par défaut
+str		Computed, stored	Calculée, stockée
+str		Computed, virtual	Calculée, virtuelle
+str		New ER diagram	Nouveau diagramme ER
+str		Tables, their columns and keys, and the relationships between them.	Des tables, leurs colonnes et clés, et les relations entre elles.
+str		ER diagram	Diagramme ER
+str		ER diagrams	Diagrammes ER
+str		New schema	Nouveau schéma
+str		No id is given. Give the id of {what}.	Aucun identifiant n’est indiqué. Indiquez l’identifiant attendu pour {what}.
+str		{name} is not {what}.	{name} n’est pas {what}.
+str		Give the key's columns as a list of ids.	Indiquez les colonnes de la clé sous forme de liste d’identifiants.
+str		A key holds at most {max} columns.	Une clé comprend au plus {max} colonnes.
+str		A key needs at least one column.	Une clé doit comprendre au moins une colonne.
+str		{column} is not a column of {table}.	{column} n’est pas une colonne de {table}.
+str		{name} may be null, which a primary key column never is.	{name} peut être nulle, ce qu’une colonne de clé primaire n’est jamais.
+str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	La clé étrangère {foreign_key} pointe vers cette clé de {table}. Modifiez-la ou supprimez-la d’abord.
+str		{table} has no primary key.	{table} n’a pas de clé primaire.
+str		The key is not one of {table}'s keys.	La clé n’est pas une des clés de {table}.
+str		The key of {table} has no columns to refer to.	La clé de {table} n’a aucune colonne à laquelle faire référence.
+str		Identifying relationships would run in a cycle between {child} and {parent}.	Les relations identifiantes formeraient un cycle entre {child} et {parent}.
+str		Only a relationship with its foreign key points at a key.	Seule une relation dotée de sa clé étrangère pointe vers une clé.
+str		A many-to-many relationship takes no foreign key. Add a mapping table instead.	Une relation plusieurs à plusieurs ne prend pas de clé étrangère. Ajoutez plutôt une table d’association.
+str		A relationship of a table with itself needs a role at the end its key points to, such as parent.	Une relation d’une table avec elle-même a besoin d’un rôle à l’extrémité vers laquelle pointe sa clé, comme parent.
+str		A role needs a letter or a digit, since it names key columns.	Un rôle a besoin d’une lettre ou d’un chiffre, car il nomme des colonnes de clé.
+str		A table cannot be a subtype of itself.	Une table ne peut pas être un sous-type d’elle-même.
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	Les deux tables sont dans des schémas différents. Un sous-type est dans le schéma de son supertype.
+str		{table} has a supertype already. A table has one supertype.	{table} a déjà un supertype. Une table a un seul supertype.
+str		The supertype is a subtype of this table already, which would close a circle.	Le supertype est déjà un sous-type de cette table, ce qui fermerait un cercle.
+str		Subtypes would run deeper than {max} levels here.	Les sous-types dépasseraient ici {max} niveaux.
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	Ceci fait partie de la clé d’un sous-type. Supprimez plutôt le sous-type ou modifiez le mappage des sous-types du supertype.
+str		The foreign key points at this key already. Name the columns to change them.	La clé étrangère pointe déjà vers cette clé. Indiquez les colonnes pour les modifier.
+str		A foreign key needs at least one column.	Une clé étrangère doit comprendre au moins une colonne.
+str		A foreign key holds at most {max} columns.	Une clé étrangère comprend au plus {max} colonnes.
+str		{name} appears twice in the foreign key.	{name} figure deux fois dans la clé étrangère.
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	La clé étrangère doit comprendre autant de colonnes que la clé de {table}, soit {n}.
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} est de type {type}, mais {target} est de type {target_type}.
+str		{column} has no type, but {target} is of type {target_type}.	{column} n’a pas de type, mais {target} est de type {target_type}.
+str		{column} is of type {type}, but {target} has no type.	{column} est de type {type}, mais {target} n’a pas de type.
+str		Set null needs nullable columns, but {column} may never be null.	« Mettre à nul » demande des colonnes qui peuvent être nulles, mais {column} ne peut jamais être nulle.
+str		The relationship does not join {table} and {references}.	La relation ne relie pas {table} et {references}.
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	Les colonnes de clé étrangère d’une relation identifiante font partie de la clé primaire, et {column} n’en fait pas partie.
+str		The key {name} would break: {why}	La clé {name} ne serait plus valide : {why}
+str		The foreign key {name} would break: {why}	La clé étrangère {name} ne serait plus valide : {why}
+str		Keys built on each other run deeper than {max} levels here, or in a loop.	Les clés construites les unes sur les autres dépassent ici {max} niveaux ou forment une boucle.
+str		This element is removed where it is edited.	Cet élément se supprime là où il se modifie.
+str		This is part of a subtype's key, which goes only with its subtype.	Ceci fait partie de la clé d'un sous-type et ne se supprime qu'avec son sous-type.
+str		Only a computed column takes an expression.	Seule une colonne calculée prend une expression.
+str		A computed column needs an expression.	Une colonne calculée a besoin d’une expression.
+str		A computed column takes no default.	Une colonne calculée ne prend pas de valeur par défaut.
+str		An identity column needs an integer type.	Une colonne d’identité a besoin d’un type entier.
+str		An identity column may never be null.	Une colonne d’identité n’est jamais nulle.
+str		An identity column takes no default.	Une colonne d’identité ne prend pas de valeur par défaut.
+str		An identity column takes no expression.	Une colonne d’identité ne prend pas d’expression.
+str		A key or identity column may never be null.	Une colonne de clé ou d’identité n’est jamais nulle.
+str		The column {name} would break: {why}	La colonne {name} ne serait plus valide : {why}
+str		A column takes a domain or an enum type, not both.	Une colonne prend un domaine ou un type énuméré, pas les deux.
+str		A column on a domain takes the domain's type.	Une colonne sur un domaine prend le type du domaine.
+str		A column on a domain takes the domain's size.	Une colonne sur un domaine prend la taille du domaine.
+str		The table {name} would break: {why}	La table {name} ne serait plus valide : {why}
+str		A column on a domain takes the domain's default.	Une colonne sur un domaine prend la valeur par défaut du domaine.
+str		A column on a domain takes the domain's collation.	Une colonne sur un domaine prend la collation du domaine.
+str		A column of an enum type takes no type name of its own.	Une colonne d'un type énuméré n'a pas de nom de type propre.
+str		A column of an enum type takes no size.	Une colonne d'un type énuméré n'a pas de taille.
+str		{name} follows no column.	{name} ne suit aucune colonne.
+plural		The table has {n} column.	La table a {n} colonne.|La table a {n} colonnes.
+str		There is no schema yet.	Il n’y a pas encore de schéma.
+str		There is no entity yet.	Il n’y a pas encore de table.
+str	refusal	a schema	un schéma
+str	refusal	a table	une table
+str	refusal	a column	une colonne
+str	refusal	a relationship	une relation
+str	refusal	a domain	un domaine
+str	refusal	an enum type	un type énuméré
+str	refusal	a sequence	une séquence
+str	refusal	a view	une vue
+str	refusal	a key	une clé
+str	refusal	a primary key	une clé primaire
+str	refusal	a unique constraint	une contrainte d’unicité
+str	refusal	a foreign key	une clé étrangère
+str	refusal	a check	un contrôle
+str	refusal	an index	un index
+str	refusal	a subtype	un sous-type
+str	refusal	a key column	une colonne de clé
+str		Entity · {schema}	Entité · {schema}
+str		Add table	Ajouter une table
+str		Place table	Placer la table
+str		Show related tables	Afficher les tables liées
+str		The diagram is of no schema	Le diagramme n’est d’aucun schéma
+str		A relationship joins two tables	Une relation relie deux tables
+str		Add relationship	Ajouter une relation
+str		Cardinality	Cardinalité
+str		Presets	Préréglages
+str		End	Fin
+str		Identifying needs the parent's primary key; drawn as not identifying	Identifiante demande la clé primaire du parent ; tracée comme non identifiante
+str		Many to many · add a mapping table	Plusieurs à plusieurs · ajouter une table de liaison
+str		Many to many · {from} and {to}	Plusieurs à plusieurs · {from} et {to}
+str		Add mapping table	Ajouter la table de liaison
+str		Keep the line	Garder la ligne
+str		Remove relationship	Retirer la relation
+str		Relationship removed	Relation supprimée
+plural		+ {n} more column	+ {n} colonne de plus|+ {n} colonnes de plus
+str		This schema	Ce schéma
+str		This table	Cette table
+str		This column	Cette colonne
+str		On this schema · {n}	Sur ce schéma · {n}
+str		On this table · {n}	Sur cette table · {n}
+str		On this column · {n}	Sur cette colonne · {n}
+str		Relationship · {from} to {to}	Relation · {from} vers {to}
+str		This relationship	Cette relation
+str		On this relationship · {n}	Sur cette relation · {n}
+str		Add foreign key	Ajouter une clé étrangère
+str		Remove foreign key	Retirer la clé étrangère
+str		Add id column	Ajouter une colonne id
+str		Choose key columns	Choisir les colonnes clés
+str		Ends	Extrémités
+str		{entity} end	Extrémité {entity}
+str		An identifying relationship needs its foreign key; turn the switch on first	Une relation identifiante a besoin de sa clé étrangère ; activez d’abord le commutateur
+str		Points to	Pointe vers
+str		Existing columns of {entity}	Colonnes existantes de {entity}
+str		{type} · type differs	{type} · type différent
+str		Yes – checked at once	Oui – vérifiée tout de suite
+str		Yes – checked at commit	Oui – vérifiée à la validation
+str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} n’a pas encore de clé primaire ; il n’y a donc rien dans {child} vers quoi pointer.
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field} : {word} ne fait pas partie des choix. Les choix sont {words}.
+str		{field}: no choice is given. The choices are {words}.	{field} : aucun choix n’est indiqué. Les choix sont {words}.
+str		Give at most {max} checks.	Indiquez au plus {max} contrôles.
+str		Two checks are named {name}. Give each check its own name.	Deux contrôles s’appellent {name}. Donnez à chaque contrôle son propre nom.
+str		Give each check as text, or as an object with an expression and a name.	Indiquez chaque contrôle sous forme de texte ou d’objet avec une expression et un nom.
+str		An index needs at least one column.	Un index doit comprendre au moins une colonne.
+str		An index holds at most {max} columns.	Un index comprend au plus {max} colonnes.
+str		{name} is in the index twice. Give each column once.	{name} figure deux fois dans l’index. Indiquez chaque colonne une seule fois.
+str		Give each index column as a column's id, or as an object with an attribute or an expression.	Indiquez chaque colonne d’index par l’identifiant d’une colonne ou par un objet avec un attribut ou une expression.
+str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} est indiquée avec une expression. Une colonne d’index trie selon une colonne ou selon une expression.
+str		An index column needs a column or an expression to sort by.	Une colonne d’index a besoin d’une colonne ou d’une expression selon laquelle trier.

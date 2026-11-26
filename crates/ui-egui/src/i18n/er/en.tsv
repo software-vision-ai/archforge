@@ -1,0 +1,254 @@
+# ER · English catalogue. Columns: kind, context, key, text (see i18n/mod.rs). Rows go beside related entries.
+str		Table	Table
+str		Column	Column
+str		Schema · model	Schema · model
+str		Table · model, in every diagram	Table · model, in every diagram
+str		Column · model	Column · model
+str		Domain · model	Domain · model
+str		This domain	This domain
+str		On this domain · {n}	On this domain · {n}
+str		Enum type · model	Enum type · model
+str		This enum type	This enum type
+str		On this enum type · {n}	On this enum type · {n}
+str		Subtype · {sub} is a {super}	Subtype · {sub} is a {super}
+str		Subtype	Subtype
+str		This subtype	This subtype
+str		On this subtype · {n}	On this subtype · {n}
+str		Columns · {n}	Columns · {n}
+str		Keys · {n}	Keys · {n}
+str		Add a column	Add a column
+str		Add unique constraint	Add unique constraint
+str		Columns, in key order	Columns, in key order
+str		Types · {n}	Types · {n}
+plural		{n} check	{n} check|{n} checks
+str		Add type	Add type
+str		Checks	Checks
+str		Add a check	Add a check
+str		Literals, in order	Literals, in order
+str		Subtypes · {n}	Subtypes · {n}
+str		Add subtype	Add subtype
+str		Discriminator	Discriminator
+str		Mapping	Mapping
+str		key on {columns}	key on {columns}
+str		Add a literal	Add a literal
+plural		{n} column takes {name}: {columns}. Retype it first.	{n} column takes {name}: {columns}. Retype it first.|{n} columns take {name}: {columns}. Retype them first.
+str		Give the literals as a list of names.	Give the literals as a list of names.
+str		An enum type needs at least one literal.	An enum type needs at least one literal.
+str		An enum type has at most {max} literals.	An enum type has at most {max} literals.
+str		A literal can't be empty.	A literal can't be empty.
+str		The literal "{name}" is not a valid name. {why}	The literal "{name}" is not a valid name. {why}
+str		The literal "{name}" is given twice. Give each literal once.	The literal "{name}" is given twice. Give each literal once.
+str		Sequences · {n}	Sequences · {n}
+str		Add sequence	Add sequence
+str		Sequence · model	Sequence · model
+str		This sequence	This sequence
+str		On this sequence · {n}	On this sequence · {n}
+str		from {start} by {increment}	from {start} by {increment}
+str		cycles	cycles
+str		owned by {column}	owned by {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} is a column of another schema. A sequence's owner is a column of its schema.
+str		The column {column} belongs to no table.	The column {column} belongs to no table.
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} has no type. A sequence's owner has a whole-number type.
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} is of type {type}. A sequence's owner has a whole-number type.
+str		The increment can't be 0. A sequence moves by at least 1.	The increment can't be 0. A sequence moves by at least 1.
+str		The minimum "{value}" is not a whole number between {min} and {max}.	The minimum "{value}" is not a whole number between {min} and {max}.
+str		The maximum "{value}" is not a whole number between {min} and {max}.	The maximum "{value}" is not a whole number between {min} and {max}.
+str		The maximum {maximum} is not greater than the minimum {minimum}.	The maximum {maximum} is not greater than the minimum {minimum}.
+str		The start {start} is below the minimum {minimum}.	The start {start} is below the minimum {minimum}.
+str		The start {start} is above the maximum {maximum}.	The start {start} is above the maximum {maximum}.
+str	sequence	Start	Start
+str		Owned by	Owned by
+plural		{n} more column, not listed	{n} more column, not listed|{n} more columns, not listed
+str		{field} takes a whole number	{field} takes a whole number
+str		Views · {n}	Views · {n}
+str		Add view	Add view
+str		View · model	View · model
+str		This view	This view
+str		On this view · {n}	On this view · {n}
+str		view	view
+str		materialized	materialized
+str		Pick a type	Pick a type
+str		domain	domain
+str		enum	enum
+str		not null	not null
+str		Checks · {n}	Checks · {n}
+str		Indexes · {n}	Indexes · {n}
+str		Add check constraint	Add check constraint
+str		Add index	Add index
+str		Columns, in index order	Columns, in index order
+str		An expression	An expression
+str		Nulls default	Nulls default
+str		Nulls first	Nulls first
+str		Nulls last	Nulls last
+str		lacks its table or its key	lacks its table or its key
+str		{column} is a key column and may be null	{column} is a key column and may be null
+str		{from} to {to} is many to many	{from} to {to} is many to many
+str		Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.	Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.
+str		{name} has no primary key	{name} has no primary key
+str		{name} has subtypes but no primary key to share	{name} has subtypes but no primary key to share
+str		{name} removed · {keys} went with it	{name} removed · {keys} went with it
+str		Add column	Add column
+str		Edit column	Edit column
+str		Mapping table	Mapping table
+str		Follows {target}	Follows {target}
+str		Unlink	Unlink
+str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.
+str		Collapse into a relationship	Collapse into a relationship
+str		Only a many-to-many relationship becomes a mapping table.	Only a many-to-many relationship becomes a mapping table.
+str		The relationship lacks one of its two tables.	The relationship lacks one of its two tables.
+str		A mapping table has exactly two foreign keys.	A mapping table has exactly two foreign keys.
+str		The foreign key {foreign_key} stands for no relationship.	The foreign key {foreign_key} stands for no relationship.
+str		The foreign key {foreign_key} points at no key.	The foreign key {foreign_key} points at no key.
+str		The table has a relationship of its own, so it does not collapse into a relationship.	The table has a relationship of its own, so it does not collapse into a relationship.
+str		The table has columns of its own, so it does not collapse into a relationship.	The table has columns of its own, so it does not collapse into a relationship.
+str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	Not all of the table's columns are in its primary key, so it does not collapse into a relationship.
+str		The table has a unique constraint, so it does not collapse into a relationship.	The table has a unique constraint, so it does not collapse into a relationship.
+str		The table has a check, so it does not collapse into a relationship.	The table has a check, so it does not collapse into a relationship.
+str		The table has an index, so it does not collapse into a relationship.	The table has an index, so it does not collapse into a relationship.
+str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} has no foreign key within its primary key. A mapping table needs two.
+str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} has only one foreign key within its primary key. A mapping table needs two.
+str		The size {value} is not between 1 and 65535.	The size {value} is not between 1 and 65535.
+str		A column without a type name of its own takes no size.	A column without a type name of its own takes no size.
+str		{type} takes no length.	{type} takes no length.
+str		{type} takes no precision.	{type} takes no precision.
+str		{type} takes no scale.	{type} takes no scale.
+str		A BINARY holds at most 255 bytes, not {value}.	A BINARY holds at most 255 bytes, not {value}.
+str		The scale {value} is more than the precision.	The scale {value} is more than the precision.
+str		A scale needs a precision.	A scale needs a precision.
+str		A type name holds no size; give the length, precision or scale instead.	A type name holds no size; give the length, precision or scale instead.
+str		{text} is not a number	{text} is not a number
+str		Identity, always	Identity, always
+str		Identity, by default	Identity, by default
+str		Computed, stored	Computed, stored
+str		Computed, virtual	Computed, virtual
+str		New ER diagram	New ER diagram
+str		Tables, their columns and keys, and the relationships between them.	Tables, their columns and keys, and the relationships between them.
+str		ER diagram	ER diagram
+str		ER diagrams	ER diagrams
+str		New schema	New schema
+str		No id is given. Give the id of {what}.	No id is given. Give the id of {what}.
+str		{name} is not {what}.	{name} is not {what}.
+str		Give the key's columns as a list of ids.	Give the key's columns as a list of ids.
+str		A key holds at most {max} columns.	A key holds at most {max} columns.
+str		A key needs at least one column.	A key needs at least one column.
+str		{column} is not a column of {table}.	{column} is not a column of {table}.
+str		{name} may be null, which a primary key column never is.	{name} may be null, which a primary key column never is.
+str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	The foreign key {foreign_key} points at this key of {table}. Change or remove it first.
+str		{table} has no primary key.	{table} has no primary key.
+str		The key is not one of {table}'s keys.	The key is not one of {table}'s keys.
+str		The key of {table} has no columns to refer to.	The key of {table} has no columns to refer to.
+str		Identifying relationships would run in a cycle between {child} and {parent}.	Identifying relationships would run in a cycle between {child} and {parent}.
+str		Only a relationship with its foreign key points at a key.	Only a relationship with its foreign key points at a key.
+str		A many-to-many relationship takes no foreign key. Add a mapping table instead.	A many-to-many relationship takes no foreign key. Add a mapping table instead.
+str		A relationship of a table with itself needs a role at the end its key points to, such as parent.	A relationship of a table with itself needs a role at the end its key points to, such as parent.
+str		A role needs a letter or a digit, since it names key columns.	A role needs a letter or a digit, since it names key columns.
+str		A table cannot be a subtype of itself.	A table cannot be a subtype of itself.
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	The two tables are in different schemas. A subtype is in its supertype's schema.
+str		{table} has a supertype already. A table has one supertype.	{table} has a supertype already. A table has one supertype.
+str		The supertype is a subtype of this table already, which would close a circle.	The supertype is a subtype of this table already, which would close a circle.
+str		Subtypes would run deeper than {max} levels here.	Subtypes would run deeper than {max} levels here.
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.
+str		The foreign key points at this key already. Name the columns to change them.	The foreign key points at this key already. Name the columns to change them.
+str		A foreign key needs at least one column.	A foreign key needs at least one column.
+str		A foreign key holds at most {max} columns.	A foreign key holds at most {max} columns.
+str		{name} appears twice in the foreign key.	{name} appears twice in the foreign key.
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	The foreign key needs as many columns as the key of {table}, which has {n}.
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} is of type {type}, but {target} is of type {target_type}.
+str		{column} has no type, but {target} is of type {target_type}.	{column} has no type, but {target} is of type {target_type}.
+str		{column} is of type {type}, but {target} has no type.	{column} is of type {type}, but {target} has no type.
+str		Set null needs nullable columns, but {column} may never be null.	Set null needs nullable columns, but {column} may never be null.
+str		The relationship does not join {table} and {references}.	The relationship does not join {table} and {references}.
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	An identifying relationship's foreign key columns are part of the primary key, and {column} is not.
+str		The key {name} would break: {why}	The key {name} would break: {why}
+str		The foreign key {name} would break: {why}	The foreign key {name} would break: {why}
+str		Keys built on each other run deeper than {max} levels here, or in a loop.	Keys built on each other run deeper than {max} levels here, or in a loop.
+str		This element is removed where it is edited.	This element is removed where it is edited.
+str		This is part of a subtype's key, which goes only with its subtype.	This is part of a subtype's key, which goes only with its subtype.
+str		Only a computed column takes an expression.	Only a computed column takes an expression.
+str		A computed column needs an expression.	A computed column needs an expression.
+str		A computed column takes no default.	A computed column takes no default.
+str		An identity column needs an integer type.	An identity column needs an integer type.
+str		An identity column may never be null.	An identity column may never be null.
+str		An identity column takes no default.	An identity column takes no default.
+str		An identity column takes no expression.	An identity column takes no expression.
+str		A key or identity column may never be null.	A key or identity column may never be null.
+str		The column {name} would break: {why}	The column {name} would break: {why}
+str		A column takes a domain or an enum type, not both.	A column takes a domain or an enum type, not both.
+str		A column on a domain takes the domain's type.	A column on a domain takes the domain's type.
+str		A column on a domain takes the domain's size.	A column on a domain takes the domain's size.
+str		The table {name} would break: {why}	The table {name} would break: {why}
+str		A column on a domain takes the domain's default.	A column on a domain takes the domain's default.
+str		A column on a domain takes the domain's collation.	A column on a domain takes the domain's collation.
+str		A column of an enum type takes no type name of its own.	A column of an enum type takes no type name of its own.
+str		A column of an enum type takes no size.	A column of an enum type takes no size.
+str		{name} follows no column.	{name} follows no column.
+plural		The table has {n} column.	The table has {n} column.|The table has {n} columns.
+str		There is no schema yet.	There is no schema yet.
+str		There is no entity yet.	There is no entity yet.
+str	refusal	a schema	a schema
+str	refusal	a table	a table
+str	refusal	a column	a column
+str	refusal	a relationship	a relationship
+str	refusal	a domain	a domain
+str	refusal	an enum type	an enum type
+str	refusal	a sequence	a sequence
+str	refusal	a view	a view
+str	refusal	a key	a key
+str	refusal	a primary key	a primary key
+str	refusal	a unique constraint	a unique constraint
+str	refusal	a foreign key	a foreign key
+str	refusal	a check	a check
+str	refusal	an index	an index
+str	refusal	a subtype	a subtype
+str	refusal	a key column	a key column
+str		Entity · {schema}	Entity · {schema}
+str		Add table	Add table
+str		Place table	Place table
+str		Show related tables	Show related tables
+str		The diagram is of no schema	The diagram is of no schema
+str		A relationship joins two tables	A relationship joins two tables
+str		Add relationship	Add relationship
+str		Cardinality	Cardinality
+str		Presets	Presets
+str		End	End
+str		Identifying needs the parent's primary key; drawn as not identifying	Identifying needs the parent's primary key; drawn as not identifying
+str		Many to many · add a mapping table	Many to many · add a mapping table
+str		Many to many · {from} and {to}	Many to many · {from} and {to}
+str		Add mapping table	Add mapping table
+str		Keep the line	Keep the line
+str		Remove relationship	Remove relationship
+str		Relationship removed	Relationship removed
+plural		+ {n} more column	+ {n} more column|+ {n} more columns
+str		This schema	This schema
+str		This table	This table
+str		This column	This column
+str		On this schema · {n}	On this schema · {n}
+str		On this table · {n}	On this table · {n}
+str		On this column · {n}	On this column · {n}
+str		Relationship · {from} to {to}	Relationship · {from} to {to}
+str		This relationship	This relationship
+str		On this relationship · {n}	On this relationship · {n}
+str		Add foreign key	Add foreign key
+str		Remove foreign key	Remove foreign key
+str		Add id column	Add id column
+str		Choose key columns	Choose key columns
+str		Ends	Ends
+str		{entity} end	{entity} end
+str		An identifying relationship needs its foreign key; turn the switch on first	An identifying relationship needs its foreign key; turn the switch on first
+str		Points to	Points to
+str		Existing columns of {entity}	Existing columns of {entity}
+str		{type} · type differs	{type} · type differs
+str		Yes – checked at once	Yes – checked at once
+str		Yes – checked at commit	Yes – checked at commit
+str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} has no primary key yet, so there is nothing in {child} to point at.
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}: {word} is not one of the choices. The choices are {words}.
+str		{field}: no choice is given. The choices are {words}.	{field}: no choice is given. The choices are {words}.
+str		Give at most {max} checks.	Give at most {max} checks.
+str		Two checks are named {name}. Give each check its own name.	Two checks are named {name}. Give each check its own name.
+str		Give each check as text, or as an object with an expression and a name.	Give each check as text, or as an object with an expression and a name.
+str		An index needs at least one column.	An index needs at least one column.
+str		An index holds at most {max} columns.	An index holds at most {max} columns.
+str		{name} is in the index twice. Give each column once.	{name} is in the index twice. Give each column once.
+str		Give each index column as a column's id, or as an object with an attribute or an expression.	Give each index column as a column's id, or as an object with an attribute or an expression.
+str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} is given with an expression too. An index column sorts by a column or by an expression.
+str		An index column needs a column or an expression to sort by.	An index column needs a column or an expression to sort by.

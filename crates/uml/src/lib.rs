@@ -400,7 +400,7 @@ impl Notation for UmlNotation {
 /// A project's notations when it holds UML alone.
 pub static ALONE: &[&dyn Notation] = &[&UmlNotation];
 
-/// The words UML's figures say, for the shell's catalogue: the texts, and the plural.
+/// The words UML's figures say, for the catalogues: the texts, and the plural.
 pub const WORDS: &[&str] = &[
     "Class",
     "Class · {package}",

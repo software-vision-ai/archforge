@@ -1,0 +1,255 @@
+# ER · 日本語カタログ。列: kind、context、key、text（i18n/mod.rs を参照）。行は関連する項目の隣に置きます。
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
+str		Table	テーブル
+str		Column	列
+str		Schema · model	スキーマ · モデル
+str		Table · model, in every diagram	テーブル · モデル、すべての図に
+str		Column · model	列 · モデル
+str		Domain · model	ドメイン · モデル
+str		This domain	このドメイン
+str		On this domain · {n}	このドメインに · {n}
+str		Enum type · model	列挙型 · モデル
+str		This enum type	この列挙型
+str		On this enum type · {n}	この列挙型に · {n}
+str		Subtype · {sub} is a {super}	サブタイプ · {sub} は {super} の一種
+str		Subtype	サブタイプ
+str		This subtype	このサブタイプ
+str		On this subtype · {n}	このサブタイプに · {n}
+str		Columns · {n}	列 · {n}
+str		Keys · {n}	キー · {n}
+str		Add a column	列を追加
+str		Add unique constraint	一意制約を追加
+str		Columns, in key order	キーの順の列
+str		Types · {n}	型 · {n}
+plural		{n} check	{n} 件のチェック制約
+str		Add type	型を追加
+str		Checks	チェック制約
+str		Add a check	チェック制約を追加
+str		Literals, in order	リテラル（順序どおり）
+str		Subtypes · {n}	サブタイプ · {n}
+str		Add subtype	サブタイプを追加
+str		Discriminator	識別子
+str		Mapping	マッピング
+str		key on {columns}	{columns} のキー
+str		Add a literal	リテラルを追加
+plural		{n} column takes {name}: {columns}. Retype it first.	{n} 個の列が {name} を使っています: {columns}。先に型を変更してください。
+str		Give the literals as a list of names.	リテラルは名前のリストで指定してください。
+str		An enum type needs at least one literal.	列挙型にはリテラルが 1 つ以上必要です。
+str		An enum type has at most {max} literals.	列挙型が持てるリテラルは最大 {max} 個です。
+str		A literal can't be empty.	リテラルは空にできません。
+str		The literal "{name}" is not a valid name. {why}	リテラル「{name}」は有効な名前ではありません。{why}
+str		The literal "{name}" is given twice. Give each literal once.	リテラル「{name}」が 2 回指定されています。各リテラルは 1 回だけ指定してください。
+str		Sequences · {n}	シーケンス · {n}
+str		Add sequence	シーケンスを追加
+str		Sequence · model	シーケンス · モデル
+str		This sequence	このシーケンス
+str		On this sequence · {n}	このシーケンスに · {n}
+str		from {start} by {increment}	{start} から {increment} ずつ
+str		cycles	循環
+str		owned by {column}	{column} が所有
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} は別のスキーマの列です。シーケンスの所有者はそのスキーマの列です。
+str		The column {column} belongs to no table.	列 {column} はどのテーブルにも属していません。
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} には型がありません。シーケンスの所有者は整数型の列です。
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} の型は {type} です。シーケンスの所有者は整数型の列です。
+str		The increment can't be 0. A sequence moves by at least 1.	増分を 0 にはできません。シーケンスは少なくとも 1 ずつ進みます。
+str		The minimum "{value}" is not a whole number between {min} and {max}.	最小値「{value}」は {min} から {max} までの整数ではありません。
+str		The maximum "{value}" is not a whole number between {min} and {max}.	最大値「{value}」は {min} から {max} までの整数ではありません。
+str		The maximum {maximum} is not greater than the minimum {minimum}.	最大値 {maximum} が最小値 {minimum} より大きくありません。
+str		The start {start} is below the minimum {minimum}.	開始値 {start} が最小値 {minimum} を下回っています。
+str		The start {start} is above the maximum {maximum}.	開始値 {start} が最大値 {maximum} を上回っています。
+str	sequence	Start	開始値
+str		Owned by	所有者
+plural		{n} more column, not listed	ほか {n} 列（一覧にありません）
+str		{field} takes a whole number	{field} には整数を入力してください
+str		Views · {n}	ビュー · {n}
+str		Add view	ビューを追加
+str		View · model	ビュー · モデル
+str		This view	このビュー
+str		On this view · {n}	このビューに · {n}
+str		view	ビュー
+str		materialized	マテリアライズド
+str		Pick a type	型を選ぶ
+str		domain	ドメイン
+str		enum	列挙
+str		not null	NOT NULL
+str		Checks · {n}	チェック制約 · {n}
+str		Indexes · {n}	インデックス · {n}
+str		Add check constraint	チェック制約を追加
+str		Add index	インデックスを追加
+str		Columns, in index order	インデックス順の列
+str		An expression	式
+str		Nulls default	NULL の順序: 既定
+str		Nulls first	NULL を先頭に
+str		Nulls last	NULL を末尾に
+str		lacks its table or its key	テーブルまたはキーがありません
+str		{column} is a key column and may be null	{column} はキー列ですが NULL を許可しています
+str		{from} to {to} is many to many	{from} から {to} は多対多です
+str		Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.	すべての {one} に少なくとも 1 つの {many} があることは図の上だけの決まりです。データベースのキーではこれを強制できません。{one} が 1 つも持たない場合があるなら「0 以上」を選んでください。
+str		{name} has no primary key	{name} に主キーがありません
+str		{name} has subtypes but no primary key to share	{name} にはサブタイプがありますが、共有する主キーがありません
+str		{name} removed · {keys} went with it	{name} を削除しました · {keys} も削除されました
+str		Add column	列を追加
+str		Edit column	列を編集
+str		Mapping table	対応テーブル
+str		Follows {target}	{target} に追従
+str		Unlink	リンクを解除
+str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} は 2 つのキーしか持たないため、{from} と {to} の多対多の線に戻せます。
+str		Collapse into a relationship	リレーションシップに折りたたむ
+str		Only a many-to-many relationship becomes a mapping table.	対応テーブルになるのは多対多のリレーションシップだけです。
+str		The relationship lacks one of its two tables.	リレーションシップに 2 つのテーブルの一方がありません。
+str		A mapping table has exactly two foreign keys.	対応テーブルの外部キーはちょうど 2 つです。
+str		The foreign key {foreign_key} stands for no relationship.	外部キー {foreign_key} はどのリレーションシップも表していません。
+str		The foreign key {foreign_key} points at no key.	外部キー {foreign_key} はどのキーも指していません。
+str		The table has a relationship of its own, so it does not collapse into a relationship.	テーブルに独自のリレーションシップがあるため、リレーションシップに折りたためません。
+str		The table has columns of its own, so it does not collapse into a relationship.	テーブルに独自の列があるため、リレーションシップに折りたためません。
+str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	テーブルの列がすべて主キーに含まれていないため、リレーションシップに折りたためません。
+str		The table has a unique constraint, so it does not collapse into a relationship.	テーブルに一意制約があるため、リレーションシップに折りたためません。
+str		The table has a check, so it does not collapse into a relationship.	テーブルにチェック制約があるため、リレーションシップに折りたためません。
+str		The table has an index, so it does not collapse into a relationship.	テーブルにインデックスがあるため、リレーションシップに折りたためません。
+str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} の主キーの中に外部キーがありません。対応テーブルには 2 つ必要です。
+str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} の主キーの中に外部キーが 1 つしかありません。対応テーブルには 2 つ必要です。
+str		The size {value} is not between 1 and 65535.	サイズ {value} は 1 から 65535 の範囲外です。
+str		A column without a type name of its own takes no size.	独自の型名のない列にはサイズを指定できません。
+str		{type} takes no length.	{type} には長さを指定できません。
+str		{type} takes no precision.	{type} には精度を指定できません。
+str		{type} takes no scale.	{type} には小数桁を指定できません。
+str		A BINARY holds at most 255 bytes, not {value}.	BINARY は最大 255 バイトです。{value} は指定できません。
+str		The scale {value} is more than the precision.	小数桁 {value} が精度を超えています。
+str		A scale needs a precision.	小数桁には精度が必要です。
+str		A type name holds no size; give the length, precision or scale instead.	型名にはサイズを含めません。代わりに長さ、精度、または小数桁を指定してください。
+str		{text} is not a number	{text} は数値ではありません
+str		Identity, always	識別列、常に
+str		Identity, by default	識別列、既定で
+str		Computed, stored	計算列、保存
+str		Computed, virtual	計算列、仮想
+str		New ER diagram	新しいER図
+str		Tables, their columns and keys, and the relationships between them.	テーブルとその列やキー、そしてテーブル間のリレーションシップ。
+str		ER diagram	ER図
+str		ER diagrams	ER図
+str		New schema	新しいスキーマ
+str		No id is given. Give the id of {what}.	ID が指定されていません。{what}の ID を指定してください。
+str		{name} is not {what}.	{name} は{what}ではありません。
+str		Give the key's columns as a list of ids.	キーの列は ID のリストで指定してください。
+str		A key holds at most {max} columns.	キーに含められる列は最大 {max} 個です。
+str		A key needs at least one column.	キーには少なくとも 1 つの列が必要です。
+str		{column} is not a column of {table}.	{column} は {table} の列ではありません。
+str		{name} may be null, which a primary key column never is.	{name} は NULL を許可していますが、主キーの列は NULL を許可できません。
+str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	外部キー {foreign_key} が {table} のこのキーを参照しています。先に外部キーを変更または削除してください。
+str		{table} has no primary key.	{table} に主キーがありません。
+str		The key is not one of {table}'s keys.	このキーは {table} のキーではありません。
+str		The key of {table} has no columns to refer to.	{table} のキーには参照できる列がありません。
+str		Identifying relationships would run in a cycle between {child} and {parent}.	識別リレーションシップが {child} と {parent} の間で循環します。
+str		Only a relationship with its foreign key points at a key.	外部キーを持つリレーションシップだけがキーを参照します。
+str		A many-to-many relationship takes no foreign key. Add a mapping table instead.	多対多のリレーションシップは外部キーを持ちません。代わりに対応テーブルを追加してください。
+str		A relationship of a table with itself needs a role at the end its key points to, such as parent.	テーブル自身とのリレーションシップには、キーが参照する側の端に parent のようなロールが必要です。
+str		A role needs a letter or a digit, since it names key columns.	ロールはキー列の名前になるため、文字か数字が必要です。
+str		A table cannot be a subtype of itself.	テーブルを自分自身のサブタイプにすることはできません。
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	2 つのテーブルは別々のスキーマにあります。サブタイプはスーパータイプと同じスキーマに置きます。
+str		{table} has a supertype already. A table has one supertype.	{table} にはすでにスーパータイプがあります。テーブルのスーパータイプは 1 つだけです。
+str		The supertype is a subtype of this table already, which would close a circle.	スーパータイプはすでにこのテーブルのサブタイプであり、循環になります。
+str		Subtypes would run deeper than {max} levels here.	サブタイプがここで {max} 段を超えます。
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	これはサブタイプのキーの一部です。代わりにサブタイプを削除するか、スーパータイプのサブタイプマッピングを変更してください。
+str		The foreign key points at this key already. Name the columns to change them.	外部キーはすでにこのキーを参照しています。変更するには列を指定してください。
+str		A foreign key needs at least one column.	外部キーには少なくとも 1 つの列が必要です。
+str		A foreign key holds at most {max} columns.	外部キーに含められる列は最大 {max} 個です。
+str		{name} appears twice in the foreign key.	{name} が外部キーに 2 回含まれています。
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	外部キーには {table} のキーと同じ数の列 ({n} 個) が必要です。
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} の型は {type} ですが、{target} の型は {target_type} です。
+str		{column} has no type, but {target} is of type {target_type}.	{column} には型がありませんが、{target} の型は {target_type} です。
+str		{column} is of type {type}, but {target} has no type.	{column} の型は {type} ですが、{target} には型がありません。
+str		Set null needs nullable columns, but {column} may never be null.	「NULL に設定」には NULL を許可する列が必要ですが、{column} は NULL を許可できません。
+str		The relationship does not join {table} and {references}.	このリレーションシップは {table} と {references} を結んでいません。
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	識別リレーションシップの外部キーの列は主キーに含まれますが、{column} は含まれていません。
+str		The key {name} would break: {why}	キー {name} が成り立たなくなります: {why}
+str		The foreign key {name} would break: {why}	外部キー {name} が成り立たなくなります: {why}
+str		Keys built on each other run deeper than {max} levels here, or in a loop.	互いの上に作られたキーが、ここで {max} 段を超えているか、循環しています。
+str		This element is removed where it is edited.	この要素は、編集する場所で削除します。
+str		This is part of a subtype's key, which goes only with its subtype.	これはサブタイプのキーの一部で、そのサブタイプと一緒にのみ削除されます。
+str		Only a computed column takes an expression.	式を持てるのは計算列だけです。
+str		A computed column needs an expression.	計算列には式が必要です。
+str		A computed column takes no default.	計算列は既定値を持てません。
+str		An identity column needs an integer type.	識別列には整数型が必要です。
+str		An identity column may never be null.	識別列は NULL を許可できません。
+str		An identity column takes no default.	識別列は既定値を持てません。
+str		An identity column takes no expression.	識別列は式を持てません。
+str		A key or identity column may never be null.	キーの列や識別列は NULL を許可できません。
+str		The column {name} would break: {why}	列 {name} が成り立たなくなります: {why}
+str		A column takes a domain or an enum type, not both.	列にはドメインか列挙型のどちらか一方を指定します。両方は指定できません。
+str		A column on a domain takes the domain's type.	ドメイン上の列はドメインの型を使います。
+str		A column on a domain takes the domain's size.	ドメイン上の列はドメインのサイズを使います。
+str		The table {name} would break: {why}	テーブル {name} が成り立たなくなります: {why}
+str		A column on a domain takes the domain's default.	ドメイン上の列はドメインの既定値を使います。
+str		A column on a domain takes the domain's collation.	ドメイン上の列はドメインの照合順序を使います。
+str		A column of an enum type takes no type name of its own.	列挙型の列には独自の型名を指定できません。
+str		A column of an enum type takes no size.	列挙型の列にはサイズを指定できません。
+str		{name} follows no column.	{name} はどの列にも従っていません。
+plural		The table has {n} column.	テーブルには {n} 個の列があります。
+str		There is no schema yet.	スキーマはまだありません。
+str		There is no entity yet.	テーブルはまだありません。
+str	refusal	a schema	スキーマ
+str	refusal	a table	テーブル
+str	refusal	a column	列
+str	refusal	a relationship	リレーションシップ
+str	refusal	a domain	ドメイン
+str	refusal	an enum type	列挙型
+str	refusal	a sequence	シーケンス
+str	refusal	a view	ビュー
+str	refusal	a key	キー
+str	refusal	a primary key	主キー
+str	refusal	a unique constraint	一意制約
+str	refusal	a foreign key	外部キー
+str	refusal	a check	チェック制約
+str	refusal	an index	インデックス
+str	refusal	a subtype	サブタイプ
+str	refusal	a key column	キー列
+str		Entity · {schema}	エンティティ · {schema}
+str		Add table	テーブルを追加
+str		Place table	テーブルを配置
+str		Show related tables	関連テーブルを表示
+str		The diagram is of no schema	この図はどのスキーマにも属していません
+str		A relationship joins two tables	リレーションシップは2つのテーブルを結びます
+str		Add relationship	リレーションシップを追加
+str		Cardinality	カーディナリティ
+str		Presets	プリセット
+str		End	終点
+str		Identifying needs the parent's primary key; drawn as not identifying	識別には親テーブルの主キーが必要です。非識別として描きました
+str		Many to many · add a mapping table	多対多 · マッピングテーブルを追加
+str		Many to many · {from} and {to}	多対多 · {from} と {to}
+str		Add mapping table	マッピングテーブルを追加
+str		Keep the line	線のままにする
+str		Remove relationship	リレーションシップを削除
+str		Relationship removed	リレーションシップを削除しました
+plural		+ {n} more column	+ 他 {n} 列
+str		This schema	このスキーマ
+str		This table	このテーブル
+str		This column	この列
+str		On this schema · {n}	このスキーマに · {n}
+str		On this table · {n}	このテーブルに · {n}
+str		On this column · {n}	この列に · {n}
+str		Relationship · {from} to {to}	リレーションシップ · {from} から {to}
+str		This relationship	このリレーションシップ
+str		On this relationship · {n}	このリレーションシップに · {n}
+str		Add foreign key	外部キーを追加
+str		Remove foreign key	外部キーを削除
+str		Add id column	id 列を追加
+str		Choose key columns	キー列を選択
+str		Ends	端
+str		{entity} end	{entity} 側
+str		An identifying relationship needs its foreign key; turn the switch on first	識別リレーションシップには外部キーが必要です。先にスイッチをオンにしてください
+str		Points to	参照先
+str		Existing columns of {entity}	{entity} の既存の列
+str		{type} · type differs	{type} · 型が異なります
+str		Yes – checked at once	はい – すぐに検査
+str		Yes – checked at commit	はい – コミット時に検査
+str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} にはまだ主キーがないため、{child} から参照できるものがありません。
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}: {word} は選択肢にありません。選択肢は {words} です。
+str		{field}: no choice is given. The choices are {words}.	{field}: 選択肢が指定されていません。選択肢は {words} です。
+str		Give at most {max} checks.	チェック制約は最大 {max} 個まで指定してください。
+str		Two checks are named {name}. Give each check its own name.	2 つのチェック制約の名前が {name} です。チェック制約にはそれぞれ別の名前を付けてください。
+str		Give each check as text, or as an object with an expression and a name.	チェック制約はそれぞれテキスト、または式と名前を持つオブジェクトで指定してください。
+str		An index needs at least one column.	インデックスには少なくとも 1 つの列が必要です。
+str		An index holds at most {max} columns.	インデックスに含められる列は最大 {max} 個です。
+str		{name} is in the index twice. Give each column once.	{name} がインデックスに 2 回含まれています。各列は 1 回だけ指定してください。
+str		Give each index column as a column's id, or as an object with an attribute or an expression.	インデックス列はそれぞれ列の ID、または属性か式を持つオブジェクトで指定してください。
+str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} は式と一緒に指定されています。インデックス列は列か式のどちらかで並べ替えます。
+str		An index column needs a column or an expression to sort by.	インデックス列には並べ替えに使う列か式が必要です。

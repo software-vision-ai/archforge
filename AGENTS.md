@@ -63,7 +63,8 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 - The interface draws through `ux` (`crates/shell-api/src/ux/`, re-exported by the shell as
   `crate::ux` with the shell's own app icon, fonts and the icons only one notation draws): no
   literal colour, font or icon outside it, and every control has an automation id.
-- Every string the user sees goes through the catalogues, with a row in every one.
+- Every string the user sees goes through the catalogues, with a row in every language: in the
+  shell's catalogues, or in a notation's own when only that notation's screens say it.
 - Behaviour, icons and wording are our own: never copy another product's.
 - The Rust version is the one `rust-toolchain.toml` pins. A lint added by a newer release is fixed
   in code in the change that raises it, never by allowing the lint or by holding the version back.

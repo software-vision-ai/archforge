@@ -17928,6 +17928,10 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn parents(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
         store.container(o).ok().flatten().map(|(c, _)| c).into_iter().collect()
     }
+    /// None: the sketch says nothing a catalogue holds.
+    fn catalogues(&self) -> &'static [crate::i18n::Rows] {
+        &[]
+    }
     /// The class, the one kind it makes.
     fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
         &[archforge_uml::CLASS]

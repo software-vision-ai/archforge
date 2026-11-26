@@ -206,6 +206,10 @@ pub(crate) trait NotationUi: Sync {
     // Words and limits: each about its own elements; the shell keeps those of the core, the
     // diagrams and both notations.
 
+    /// Its own catalogues, one per language in the order of `LANGUAGES`: the rows only its own
+    /// screens name. The shell registers them with its own before its first lookup
+    /// ([`crate::i18n::tables`]), as the shared screens look some of them up too.
+    fn catalogues(&self) -> &'static [crate::i18n::Rows];
     /// The classes of its metamodel it creates, the only ones of it that get a kind word of their
     /// own ([`crate::model_words::kind_label`]); the rest of its classes say Element.
     fn created_classes(&self) -> &'static [ClassId];
