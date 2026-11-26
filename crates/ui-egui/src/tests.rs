@@ -18143,6 +18143,78 @@ fn names_typed_in_place(theme: ThemeKind) {
     assert_eq!(h.state().explorer.filter.chars().count(), longest, "the filter");
 }
 
+/// The narrow context reaches the shell's own parts, each borrowed apart: two of them are held at
+/// once, what is changed through it lands on the shell, what it only reads is the shell's, and its
+/// read-only twin, from the shell or from the context, reads the same parts.
+#[test]
+fn the_narrow_context_reaches_the_shells_own_parts() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let shell = h.state_mut();
+    let held = crate::widgets::egui_id("cx.held");
+    shell.frames = 41;
+    let (session, problems, uis): (*const _, *const _, *const _) = (&shell.session, &shell.problems, shell.notation_uis);
+    {
+        let twin = shell.cx_ref();
+        assert!(std::ptr::eq(twin.session, session) && std::ptr::eq(twin.notation_uis, uis) && !twin.looking_only, "the twin over the shell");
+    }
+    let made = shell.cx(|cx| {
+        assert_eq!((cx.frames, cx.looking_only), (41, false));
+        assert!(std::ptr::eq(cx.problems, problems) && std::ptr::eq(cx.notation_uis, uis), "the problems and the notations are the shell's");
+        let (panels, canvas, registry) = (&mut *cx.panels, &mut *cx.canvas, &mut *cx.registry);
+        panels.notice = Some("said in Properties".into());
+        canvas.notice = Some("said on the canvas".into());
+        registry.record("cx.part", "button", egui::Rect::from_min_size(egui::pos2(1.0, 2.0), egui::vec2(3.0, 4.0)));
+        *cx.menu_bar.held = Some(held);
+        let made = crate::panels::run_cx(cx, "uml.package.add", serde_json::json!({ "name": "sales" })).unwrap();
+        let twin = cx.cx_ref();
+        assert!(std::ptr::eq(twin.session, session) && std::ptr::eq(twin.notation_uis, uis) && !twin.looking_only, "the twin over the context");
+        made
+    });
+    assert_eq!(shell.panels.notice.as_deref(), Some("said in Properties"));
+    assert_eq!(shell.canvas.notice.as_deref(), Some("said on the canvas"));
+    assert!(shell.registry.entries().iter().any(|e| e.id == "cx.part" && e.rect == [1.0, 2.0, 4.0, 6.0]), "recorded in the shell's registry");
+    assert_eq!(shell.menu_bar.held, Some(held), "the bar holds the editor");
+    let id = archforge_mof::Uuid::parse(made["id"].as_str().unwrap()).unwrap();
+    assert!(shell.session.as_ref().unwrap().doc().by_uuid(id).is_some(), "the package is in the shell's model");
+}
+
+/// What the narrow context asks of the rest of the shell is carried out after the call returns, in
+/// the order asked, once: the rows a selected element sits under open in Models only then, and
+/// the next call does not open them again.
+#[test]
+fn the_narrow_contexts_requests_run_in_order_once_after_the_call() {
+    use crate::cx::Request;
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let (pkg, class) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let pkg = id(s.execute("uml.package.add", &serde_json::json!({ "name": "sales" })).unwrap().value);
+        (pkg, id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg.to_string(), "name": "Order" })).unwrap().value))
+    };
+    let other = archforge_mof::Uuid([7; 16]);
+    let shell = h.state_mut();
+    shell.explorer.expanded.clear();
+    let asked = shell.cx(|cx| {
+        cx.requests.push(Request::ExpandRows(vec![other]));
+        crate::panels::select_element_cx(cx, class);
+        cx.requests.push(Request::HideVersionDetails);
+        cx.requests.clone()
+    });
+    let [Request::ExpandRows(first), Request::ExpandRows(under), Request::HideVersionDetails] = &asked[..] else {
+        panic!("kept in the order asked: {asked:?}")
+    };
+    assert!(first == &vec![other] && under.contains(&pkg), "the rows asked first, then the rows the class sits under: {asked:?}");
+    assert!(under.iter().chain([&other]).all(|row| shell.explorer.expanded.contains(row)), "carried out once the call returned");
+    let s = shell.session.as_ref().unwrap();
+    assert_eq!(s.view().selection.first().and_then(|o| s.doc().uuid(*o).ok()), Some(class), "the selection ran at once");
+    shell.explorer.expanded.clear();
+    shell.cx(|cx| assert!(cx.requests.is_empty(), "a new call starts with nothing asked"));
+    assert!(shell.explorer.expanded.is_empty(), "a request runs once");
+    // The old way in asks the same through the context.
+    crate::panels::select_element(shell, class);
+    assert!(shell.explorer.expanded.contains(&pkg), "the shell's way in carries the request out too");
+}
+
 /// The shared removals ask the removed element's notation what to say (AR-789): Delete on a line
 /// toasts the sketch's own words for it, then what the sketch worked out before the removal; the
 /// Models tree's dialog says the same after its own lead; each notation is asked of its own

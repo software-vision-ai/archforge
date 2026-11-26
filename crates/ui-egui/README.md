@@ -79,7 +79,18 @@ role with one stroke weight (`ux::icon_weighted`: chrome 15-17 pt, rows 13-15, s
 chevrons 8); rows, fields and bars centre their content on their middle line (`ux::text_mid`,
 `ux::icon_mid`, `panels::field_inner`), and the macOS title strip is 32 pt tall with its controls
 78 pt in, clear of the traffic lights. An open project has an in-memory ER session (`Shell::session`); nothing reaches the
-project's database yet, and the status bar says so once there is something unsaved.
+project's database yet, and the status bar says so once there is something unsaved. A notation's
+screens and the shared controls reach the shell through the narrow context (`cx`, crate-private,
+`forge-ux/adr/0002`): `cx::Ctx`, the parts they change, each borrowed apart by `Shell::cx` (the
+session, the panels' and the canvas's state, the automation registry, the notations, the problems,
+the frame count, the menu bar's hold on an inline editor, whether a version shows), its read-only
+twin `cx::CtxRef` (`Shell::cx_ref`), and `cx::Request`, what lies outside it, which the shell
+carries out once the call returns, in order, each once: the Models tree's rows opened over a
+selected element, and the centre leaving a version's details for what was opened (`canvas::open`
+opens at once). The controls that take it end in `_cx` (`panels::section_cx`,
+`panels::control_cx`, `menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old
+names over the whole shell forward to them until every caller has moved, and `home::control`
+stays the shell's own way to `panels::control_cx`.
 
 **Layer.** 11, the top of the interface's layers, above the shell's interfaces
 (`archforge-shell-api`, 9) and the notations' screens (10); over `archforge-notations` (8),

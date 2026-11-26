@@ -24,6 +24,7 @@ use archforge_shell_api::canvas::{beside, beside_pair, mark_outline, mark_shape,
 pub use archforge_shell_api::kinds::ExtraLabel;
 pub(crate) use archforge_shell_api::kinds::LineDrawn;
 
+use crate::cx::{Ctx, Request};
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::notation_ui::{Layer, Overlaid};
@@ -87,10 +88,11 @@ fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_j
     crate::panels::run(shell, id, params)
 }
 
-fn select(shell: &mut Shell, ids: Vec<Uuid>) {
+/// Selects `ids` for the canvas; a refusal is the canvas's notice.
+fn select(cx: &mut Ctx, ids: Vec<Uuid>) {
     let ids: Vec<String> = ids.iter().map(Uuid::to_string).collect();
-    if let Err(e) = run(shell, "view.select", json!({ "ids": ids })) {
-        shell.canvas.notice = Some(e);
+    if let Err(e) = crate::panels::run_cx(cx, "view.select", json!({ "ids": ids })) {
+        cx.canvas.notice = Some(e);
     }
 }
 
@@ -132,24 +134,30 @@ fn settle_view(state: &mut State, next: Option<Uuid>) {
 /// in its own tab the same way, with its text in place of the canvas. The view of the tab left is
 /// kept first; a landing or fit still pending for it never places the diagram opened.
 pub fn open(shell: &mut Shell, id: Uuid) {
-    keep_left_view(&mut shell.canvas);
+    shell.cx(|cx| open_cx(cx, id));
+}
+
+/// [`open`] through the narrow context: the centre's half runs at once; the centre stops showing a
+/// version's details once the call returns ([`Request::HideVersionDetails`]).
+pub(crate) fn open_cx(cx: &mut Ctx, id: Uuid) {
+    keep_left_view(cx.canvas);
     // What is opened shows in the centre, where a version's details or a changed element would hide it.
-    (shell.versions.details, shell.versions.element) = (None, None);
-    if shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), id)) {
-        crate::skill_tab::open(shell, id);
+    cx.requests.push(Request::HideVersionDetails);
+    if cx.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), id)) {
+        crate::skill_tab::open_cx(cx, id);
         return;
     }
-    shell.canvas.notice = None;
-    if let Err(e) = run(shell, "view.open-diagram", json!({ "diagram": id.to_string() })) {
-        shell.canvas.notice = Some(e);
+    cx.canvas.notice = None;
+    if let Err(e) = crate::panels::run_cx(cx, "view.open-diagram", json!({ "diagram": id.to_string() })) {
+        cx.canvas.notice = Some(e);
         return;
     }
-    select(shell, vec![id]);
-    settle_view(&mut shell.canvas, Some(id));
-    if !shell.canvas.tabs.contains(&id) {
-        shell.canvas.tabs.push(id);
+    select(cx, vec![id]);
+    settle_view(cx.canvas, Some(id));
+    if !cx.canvas.tabs.contains(&id) {
+        cx.canvas.tabs.push(id);
     }
-    shell.canvas.active = Some(id);
+    cx.canvas.active = Some(id);
 }
 
 /// Closes a tab; when it was the active one, the tab before it (else after it) takes over and

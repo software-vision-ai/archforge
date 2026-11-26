@@ -25,6 +25,7 @@ pub mod checks;
 pub mod close_ask;
 pub mod connect;
 pub mod control;
+mod cx;
 pub mod diagrams;
 mod edit_menu;
 pub mod editing;

@@ -13,6 +13,7 @@ use serde_json::json;
 
 pub use archforge_shell_api::skill_tab::Doc;
 
+use crate::cx::Ctx;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::markdown::{self, Format};
@@ -50,11 +51,16 @@ fn body_of(store: &Store, s: Obj) -> String {
 
 /// Opens a skill in its tab, added when it has none.
 pub fn open(shell: &mut Shell, id: Uuid) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    shell.cx(|cx| open_cx(cx, id));
+}
+
+/// [`open`] through the narrow context.
+pub(crate) fn open_cx(cx: &mut Ctx, id: Uuid) {
+    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(s) = skill_obj(store, id) else { return };
-    if !shell.canvas.skills.iter().any(|d| d.skill == id) {
+    if !cx.canvas.skills.iter().any(|d| d.skill == id) {
         let body = body_of(store, s);
-        shell.canvas.skills.push(Doc {
+        cx.canvas.skills.push(Doc {
             name: archforge_core::skills::name_of(store, s),
             focus_name: false,
             settings_refused: None,
@@ -69,12 +75,12 @@ pub fn open(shell: &mut Shell, id: Uuid) {
             link: None,
         });
     }
-    if !shell.canvas.tabs.contains(&id) {
-        shell.canvas.tabs.push(id);
+    if !cx.canvas.tabs.contains(&id) {
+        cx.canvas.tabs.push(id);
     }
-    shell.canvas.active = Some(id);
-    shell.canvas.notice = None;
-    shell.canvas.focused = false;
+    cx.canvas.active = Some(id);
+    cx.canvas.notice = None;
+    cx.canvas.focused = false;
 }
 
 /// The text a new skill starts from, shaped as an agent's skill is, in the interface's language:

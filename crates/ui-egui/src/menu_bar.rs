@@ -21,6 +21,7 @@ use crate::actions::{
     self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, COPY, CUT, GENERATE, Keys, NEW, NEW_BRANCH, NEWER, OPEN, PASTE, REDO, SAVE, SAVE_VERSION,
     SELECT_ALL, UNDO, VERSIONS,
 };
+use crate::cx::Ctx;
 use crate::home::{control, off_words};
 use crate::i18n::{fmt, tr, tr_ctx};
 use crate::ux::{self, Palette, types};
@@ -81,6 +82,24 @@ pub(crate) struct Bar {
     closed_by_title: bool,
 }
 
+/// What the narrow context ([`crate::cx::Ctx`]) holds of the bar: what it took the keyboard for, the
+/// field it took it from, where it was drawn, and the inline editor it holds open, to change.
+pub(crate) struct Hold<'a> {
+    open: Option<&'static str>,
+    chosen: Option<&'static str>,
+    back: Option<egui::Id>,
+    rect: Option<Rect>,
+    /// The inline editor the bar keeps open after taking its keyboard, to change.
+    pub held: &'a mut Option<egui::Id>,
+}
+
+impl Bar {
+    /// The bar's hold, for the narrow context, over this bar.
+    pub(crate) fn hold(&mut self) -> Hold<'_> {
+        Hold { open: self.open, chosen: self.chosen, back: self.back, rect: self.rect, held: &mut self.held }
+    }
+}
+
 /// Once a frame: runs the row chosen, then closes a menu the window lost the focus under, as Esc
 /// closes it, and one a dialog now covers or the bar no longer draws.
 pub(crate) fn keep_valid(shell: &mut Shell, ctx: &egui::Context) {
@@ -123,10 +142,17 @@ fn give_back(shell: &Shell, ctx: &egui::Context) {
 
 /// Whether the pointer is down on the bar, or let go on it this frame.
 fn on_bar(shell: &Shell, ctx: &egui::Context) -> bool {
-    ctx.input(|i| {
-        (i.pointer.any_down() || i.pointer.any_released())
-            && shell.menu_bar.rect.zip(i.pointer.interact_pos()).is_some_and(|(bar, at)| bar.contains(at))
-    })
+    on(shell.menu_bar.rect, ctx)
+}
+
+/// Whether the pointer is down on the bar drawn at `rect`, or let go on it this frame.
+fn on(rect: Option<Rect>, ctx: &egui::Context) -> bool {
+    ctx.input(|i| (i.pointer.any_down() || i.pointer.any_released()) && rect.zip(i.pointer.interact_pos()).is_some_and(|(bar, at)| bar.contains(at)))
+}
+
+/// [`ends_cx`] over the whole shell, for code not on the narrow context yet.
+pub(crate) fn ends(shell: &mut Shell, ctx: &egui::Context, id: egui::Id, lost: bool, focused: bool) -> bool {
+    shell.cx(|cx| ends_cx(cx, ctx, id, lost, focused))
 }
 
 /// Whether the inline editor `id`, which commits when it loses the keyboard, commits now: on `lost`,
@@ -135,14 +161,14 @@ fn on_bar(shell: &Shell, ctx: &egui::Context) -> bool {
 /// menu is open, or a row of another menu is chosen, so that row finds it committed when it runs
 /// the frame after, as with no menu; an Edit row or a press that opens nothing gives it the
 /// keyboard back instead.
-pub(crate) fn ends(shell: &mut Shell, ctx: &egui::Context, id: egui::Id, lost: bool, focused: bool) -> bool {
-    let bar = &shell.menu_bar;
-    let edit = bar.open == Some("edit") || bar.chosen.is_some_and(|r| r.starts_with("edit.")) || (bar.open.is_none() && on_bar(shell, ctx));
+pub(crate) fn ends_cx(cx: &mut Ctx, ctx: &egui::Context, id: egui::Id, lost: bool, focused: bool) -> bool {
+    let bar = &mut cx.menu_bar;
+    let edit = bar.open == Some("edit") || bar.chosen.is_some_and(|r| r.starts_with("edit.")) || (bar.open.is_none() && on(bar.rect, ctx));
     if bar.back == Some(id) && edit {
-        shell.menu_bar.held = Some(id);
+        *bar.held = Some(id);
         return false;
     }
-    let held = shell.menu_bar.held.take_if(|h| *h == id).is_some();
+    let held = bar.held.take_if(|h| *h == id).is_some();
     lost || (held && !focused)
 }
 
