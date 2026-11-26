@@ -4,6 +4,10 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+/// The row check of the shell's interfaces' translations machinery (`archforge_shell_api::i18n::check`).
+#[path = "../shell-api/src/i18n/check.rs"]
+mod check;
+
 /// The faces of the fonts input the interface draws with: the design's Inter, in the two weights
 /// it uses.
 const FACES: &[(&str, &str)] = &[("Inter", "Regular"), ("Inter", "SemiBold")];
@@ -29,12 +33,9 @@ fn main() {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap_or_default();
-        for (n, line) in text.lines().enumerate().filter(|(_, l)| !l.is_empty() && !l.starts_with('#')) {
-            let cols = line.split('\t').count();
-            if cols != 4 {
-                println!("cargo:warning={}:{}: a catalogue row has 4 tab-separated columns, found {cols}", path.display(), n + 1);
-                std::process::exit(1);
-            }
+        if let Some((line, cols)) = check::malformed_row(&text) {
+            println!("cargo:warning={}:{line}: a catalogue row has 4 tab-separated columns, found {cols}", path.display());
+            std::process::exit(1);
         }
     }
 }

@@ -4,10 +4,10 @@
 from the shell, so a notation's screens build on this crate and never on the shell crate
 (`archforge-ui-egui`) itself (`forge-ux/adr/0002`, "Notations are plugins", and `0003`, "Two
 registries"). It holds the automation-id registry, the design (`ux`), the canvas geometry that
-names no shell (`canvas`) and the data types the interfaces `NotationUi` and `DiagramKind` hand
-across that name no shell (`notation_ui`, `kinds`); story AR-780 moves the shared controls, the
-interfaces themselves with the data types that still name the shell, and the translations
-machinery here, unchanged.
+names no shell (`canvas`), the data types the interfaces `NotationUi` and `DiagramKind` hand
+across that name no shell (`notation_ui`, `kinds`) and the translations machinery (`i18n`), with
+which each crate registers its own catalogues; story AR-780 moves the shared controls and the
+interfaces themselves with the data types that still name the shell here, unchanged.
 
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code
@@ -45,7 +45,13 @@ notations a press on the canvas carries.
 | `kinds::{ToolUse, KindTool}` | what a diagram kind's tool does (`Place`, `Connect`); a tool it brings to the toolbar (key, icon, hint, use, chevron, width) |
 | `kinds::Press` | a press on the canvas as a diagram kind reads it: where, click or double click, the store and notations, the diagram and selection, and the node and line under a screen point |
 | `kinds::{LineDrawn, ExtraLabel}` | a line as the canvas drew it this frame, for its diagram kind to draw what goes with it (line, element, points on screen from source to target, whether selected); a label a kind drew of no one node or line (the element, where it was on screen, the node that holds where it was moved, its hover text) |
+| `i18n::{tr, tr_ctx, trn, fmt}` | a literal translated in this thread's language, one under a context, a plural with its count filled in, named placeholders filled in one pass; a key without a registered row is its own English text |
+| `i18n::{Language, LANGUAGES, plural_forms, codes, set_language, language}` | the languages (code, native name, plural rule, complete or not), English first; how many plural forms a language's catalogue holds; the codes for a message; this thread's language |
+| `i18n::{Rows, register, Unregistered}` | one language's rows in a crate's catalogue (code, file name, text); registering a crate's catalogues, once, a later table's row replacing an earlier one's under the same key; the refusal of a table with a catalogue for a code no language has, before anything is registered |
+| `i18n::{Catalogue, parse}` | a catalogue's `str` and `plural` rows, as the lookups read them; malformed rows skipped |
+| `i18n::check::malformed_row` | `pub fn malformed_row(text: &str) -> Option<(usize, usize)>`: the build-time row check, the first row without four tab-separated columns (line, columns found); a build script takes the file as a module of its own (`#[path]`) |
 
 **Non-goals.** Installing fonts and the app icon, which stay in the shell, as do the icons only one
-notation draws until its screens crate takes them; anything that touches the file system or
-the operating system, which the host does through `Services`.
+notation draws until its screens crate takes them; the catalogues, which each crate that brings
+text keeps, embeds and registers (the shell's are in `crates/ui-egui/src/i18n/`); anything that
+touches the file system or the operating system, which the host does through `Services`.
