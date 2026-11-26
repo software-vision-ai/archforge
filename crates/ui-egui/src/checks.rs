@@ -8,12 +8,12 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
+use crate::cx::Ctx;
 use crate::er_state::{er, er_mut};
-use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, icon_button, run, section, text_field};
+use crate::panels::{FIELD, PAD, control_cx, icon_button_cx, run_cx, section_cx, text_field_cx};
 use crate::ux::{self, Palette, icons, types};
-use crate::{Shell, widgets};
+use crate::widgets;
 
 /// A check being edited: the check, or none for one about to be added.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,52 +51,52 @@ pub fn rows(store: &Store, e: Obj) -> Vec<CheckRow> {
 }
 
 /// Opens the editor on a check, or on one to add to `entity`.
-pub fn open(shell: &mut Shell, entity: Uuid, target: Option<&CheckRow>) {
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+pub(crate) fn open(cx: &mut Ctx, entity: Uuid, target: Option<&CheckRow>) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.check = Some(match target {
             Some(c) => CheckEdit { target: Some(c.id), entity, name: c.name.clone(), expression: c.expression.clone(), refused: None, opened: true },
             None => CheckEdit { target: None, entity, name: String::new(), expression: String::new(), refused: None, opened: true },
         });
     }
-    shell.panels.menu = None;
+    cx.panels.menu = None;
 }
 
 /// The Checks section with its rows and the editor; gives the y under it.
-pub(crate) fn checks_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, entity: Obj, entity_id: Uuid) -> f32 {
+pub(crate) fn checks_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, entity: Obj, entity_id: Uuid) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let checks = match shell.session.as_ref() {
+    let checks = match cx.session.as_ref() {
         Some(s) => rows(s.doc(), entity),
         None => return y,
     };
     let title = fmt(&tr("Checks · {n}"), &[("n", &checks.len().to_string())]);
-    let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.checks.add", "Add check constraint"))) else {
-        open(shell, entity_id, None);
+    let Some(next) = section_cx(cx, ui, p, r, y, &title, Some(("workspace.properties.checks.add", "Add check constraint"))) else {
+        open(cx, entity_id, None);
         return y;
     };
     y = next - 6.0;
-    let editing_new = er(&shell.notation_states).and_then(|er| er.check.as_ref()).is_some_and(|c| c.target.is_none() && c.entity == entity_id);
+    let editing_new = er(cx.notation_states).and_then(|er| er.check.as_ref()).is_some_and(|c| c.target.is_none() && c.entity == entity_id);
     for check in &checks {
-        if er(&shell.notation_states).and_then(|er| er.check.as_ref()).is_some_and(|c| c.target == Some(check.id)) {
-            y = editor(shell, ui, p, r, y);
+        if er(cx.notation_states).and_then(|er| er.check.as_ref()).is_some_and(|c| c.target == Some(check.id)) {
+            y = editor(cx, ui, p, r, y);
             continue;
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 44.0));
         let id = format!("workspace.properties.check.row.{}", check.id);
-        let resp = control(shell, ui, &id, "row", row, true);
+        let resp = control_cx(cx, ui, &id, "row", row, true);
         if resp.contains_pointer() {
             paint.rect_filled(row, 6.0, p.page);
         }
         badge(&paint, row.min + vec2(2.0, 6.0), "CK", p.green_tint, p.green);
         ux::text(&paint, row.min + vec2(38.0, 4.0), &check.label, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, row.min + vec2(38.0, 23.0), &check.expression, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if crate::panels::edit_button(shell, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
-            open(shell, entity_id, Some(check));
+        if crate::panels::edit_button_cx(cx, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
+            open(cx, entity_id, Some(check));
         }
         y += 44.0;
     }
     if editing_new {
-        y = editor(shell, ui, p, r, y);
+        y = editor(cx, ui, p, r, y);
     }
     y
 }
@@ -111,7 +111,7 @@ pub(crate) fn badge(paint: &egui::Painter, at: egui::Pos2, text: &str, tint: ux:
 
 /// A label over a filled multiline field of `height`; gives whether it has the keyboard.
 pub(crate) fn text_area(
-    shell: &mut Shell,
+    cx: &mut Ctx,
     ui: &mut egui::Ui,
     p: &Palette,
     at: egui::Pos2,
@@ -125,7 +125,7 @@ pub(crate) fn text_area(
     ux::text(&paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
     let body = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), height));
     paint.rect_filled(body, 6.0, p.field);
-    widgets::record_visible(ui, &mut shell.registry, id, "field", body);
+    widgets::record_visible(ui, cx.registry, id, "field", body);
     let inner = body.shrink2(vec2(8.0, 6.0));
     let out = egui::TextEdit::multiline(text)
         .id(widgets::egui_id(id))
@@ -143,21 +143,21 @@ pub(crate) fn text_area(
 }
 
 /// The check editor card; gives the y under it.
-fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
+fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.check.clone()) else { return y };
+    let Some(mut edit) = er(cx.notation_states).and_then(|er| er.check.clone()) else { return y };
     let refused_h = if edit.refused.is_some() { 20.0 } else { 0.0 };
     let height = 12.0 + 17.0 + FIELD + 14.0 + 17.0 + 64.0 + 14.0 + FIELD + 12.0 + refused_h;
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::er_state::CHECK, card);
+    crate::panels::reveal_cx(cx, ui, crate::er_state::CHECK, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
-    let name_done = text_field(
-        shell,
+    let name_done = text_field_cx(
+        cx,
         ui,
         p,
         at(0.0, 12.0),
@@ -170,14 +170,14 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         false,
     );
     let mut cy = 12.0 + 17.0 + FIELD + 14.0;
-    text_area(shell, ui, p, at(0.0, cy), inner, 64.0, "workspace.properties.check.expression", &tr("Expression"), &mut edit.expression);
+    text_area(cx, ui, p, at(0.0, cy), inner, 64.0, "workspace.properties.check.expression", &tr("Expression"), &mut edit.expression);
     cy += 17.0 + 64.0 + 14.0;
     let mut remove = false;
     if edit.target.is_some() {
-        remove = icon_button(shell, ui, p, at(0.0, cy), "workspace.properties.check.remove", &icons::TRASH, p.danger, None, "Remove");
+        remove = icon_button_cx(cx, ui, p, at(0.0, cy), "workspace.properties.check.remove", &icons::TRASH, p.danger, None, "Remove");
     }
-    let cancel = icon_button(
-        shell,
+    let cancel = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - 2.0 * FIELD - 8.0, card.top() + cy),
@@ -187,8 +187,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         None,
         "Cancel",
     );
-    let apply = icon_button(
-        shell,
+    let apply = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - FIELD, card.top() + cy),
@@ -201,55 +201,55 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     if let Some(why) = &edit.refused {
         ux::text(&paint, at(0.0, cy + FIELD + 8.0), why, types::CAPTION, p.amber, Some(inner));
     }
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.check = Some(edit.clone());
     }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+        if let Some(er) = er_mut(cx.notation_states) {
             er.check = None;
         }
     } else if remove {
-        match run(shell, "er.check.remove", json!({ "check": edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
+        match run_cx(cx, "er.check.remove", json!({ "check": edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
             Ok(_) => {
-                if let Some(er) = er_mut(&mut shell.notation_states) {
+                if let Some(er) = er_mut(cx.notation_states) {
                     er.check = None;
                 }
             }
-            Err(e) => refuse(shell, e),
+            Err(e) => refuse(cx, e),
         }
     } else if apply || name_done {
-        commit(shell, &edit);
+        commit(cx, &edit);
     }
     card.bottom() + 8.0
 }
 
 /// Shows `why` on the open check editor's card, which stays open with what was typed.
-fn refuse(shell: &mut Shell, why: String) {
-    if let Some(c) = er_mut(&mut shell.notation_states).and_then(|er| er.check.as_mut()) {
+fn refuse(cx: &mut Ctx, why: String) {
+    if let Some(c) = er_mut(cx.notation_states).and_then(|er| er.check.as_mut()) {
         c.refused = Some(why);
     }
 }
 
 /// Writes the check through its command; the table stays selected.
-fn commit(shell: &mut Shell, edit: &CheckEdit) {
+fn commit(cx: &mut Ctx, edit: &CheckEdit) {
     let name = edit.name.trim().to_string();
     let expression = edit.expression.trim().to_string();
     let (cmd, params) = match edit.target {
         None => ("er.check.add", json!({ "entity": edit.entity.to_string(), "expression": expression, "name": name })),
         Some(t) => ("er.check.set", json!({ "check": t.to_string(), "expression": expression, "name": name })),
     };
-    match run(shell, cmd, params) {
+    match run_cx(cx, cmd, params) {
         Ok(_) => {
-            if let Some(er) = er_mut(&mut shell.notation_states) {
+            if let Some(er) = er_mut(cx.notation_states) {
                 er.check = None;
             }
-            shell.panels.notice = None;
+            cx.panels.notice = None;
             let entity = edit.entity.to_string();
-            if let Err(e) = run(shell, "view.select", json!({ "ids": [entity] })) {
-                shell.panels.notice = Some(e);
+            if let Err(e) = run_cx(cx, "view.select", json!({ "ids": [entity] })) {
+                cx.panels.notice = Some(e);
             }
         }
-        Err(e) => refuse(shell, e),
+        Err(e) => refuse(cx, e),
     }
 }
 

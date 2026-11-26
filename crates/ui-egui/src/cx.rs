@@ -13,7 +13,8 @@ use std::collections::BTreeMap;
 use archforge_mof::{Obj, Uuid};
 use archforge_notations::Session;
 
-use crate::notation_ui::NotationUi;
+use crate::notation_ui::{NotationStates, NotationUi};
+use crate::state::Panel;
 use crate::{Shell, canvas, menu_bar, panels, widgets};
 
 /// The shell's parts a notation's screens and the shared controls change, each borrowed apart, so
@@ -30,6 +31,8 @@ pub(crate) struct Ctx<'a> {
     pub registry: &'a mut widgets::Registry,
     /// The notations the shell knows.
     pub notation_uis: &'static [&'static dyn NotationUi],
+    /// Each notation's own state: its editors, menus, drawings and tools.
+    pub notation_states: &'a mut NotationStates,
     /// The problems the rules find, by element, read once this frame.
     pub problems: &'a BTreeMap<Obj, Vec<String>>,
     /// Frames run so far.
@@ -48,6 +51,8 @@ pub(crate) struct CtxRef<'a> {
     pub session: &'a Option<Session>,
     /// The notations the shell knows.
     pub notation_uis: &'static [&'static dyn NotationUi],
+    /// Each notation's own state: its editors, menus, drawings and tools.
+    pub notation_states: &'a NotationStates,
     /// Whether a version shows, so that looking at it is all that is on.
     pub looking_only: bool,
 }
@@ -60,12 +65,14 @@ pub(crate) enum Request {
     ExpandRows(Vec<Uuid>),
     /// The centre stops showing a version's details or a changed element, so what was opened shows.
     HideVersionDetails,
+    /// The right side shows this panel, unfolded.
+    ShowPanel(Panel),
 }
 
 impl Ctx<'_> {
     /// The read-only twin of this context, over the same parts.
     pub(crate) fn cx_ref(&self) -> CtxRef<'_> {
-        CtxRef { session: self.session, notation_uis: self.notation_uis, looking_only: self.looking_only }
+        CtxRef { session: self.session, notation_uis: self.notation_uis, notation_states: self.notation_states, looking_only: self.looking_only }
     }
 }
 
@@ -80,6 +87,7 @@ impl Shell {
             canvas: &mut self.canvas,
             registry: &mut self.registry,
             notation_uis: self.notation_uis,
+            notation_states: &mut self.notation_states,
             problems: &self.problems,
             frames: self.frames,
             menu_bar: self.menu_bar.hold(),
@@ -94,7 +102,7 @@ impl Shell {
 
     /// The read-only twin of the narrow context over this shell's parts.
     pub(crate) fn cx_ref(&self) -> CtxRef<'_> {
-        CtxRef { session: &self.session, notation_uis: self.notation_uis, looking_only: self.looking_only() }
+        CtxRef { session: &self.session, notation_uis: self.notation_uis, notation_states: &self.notation_states, looking_only: self.looking_only() }
     }
 
     /// Carries out the context's `requests`, in their order.
@@ -103,6 +111,7 @@ impl Shell {
             match request {
                 Request::ExpandRows(rows) => self.explorer.expanded.extend(rows),
                 Request::HideVersionDetails => (self.versions.details, self.versions.element) = (None, None),
+                Request::ShowPanel(panel) => self.state.show_panel(panel),
             }
         }
     }

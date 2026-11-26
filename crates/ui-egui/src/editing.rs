@@ -19,6 +19,7 @@ use serde_json::json;
 pub use archforge_shell_api::editing::{Corner, EntityMenu, Gesture, NodeRename, NoteEdit};
 
 use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_ROW, Tool, View};
+use crate::cx::Ctx;
 use crate::home::control;
 use crate::i18n::tr;
 use crate::notation_ui::{Layer, Overlaid};
@@ -94,11 +95,16 @@ pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Res
     crate::panels::run(shell, id, params)
 }
 
-/// Selects `ids`, as a click does; a refusal is said at the canvas's top.
+/// [`select_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn select(shell: &mut Shell, ids: Vec<Uuid>) {
+    shell.cx(|cx| select_cx(cx, ids));
+}
+
+/// Selects `ids`, as a click does; a refusal is said at the canvas's top.
+pub(crate) fn select_cx(cx: &mut Ctx, ids: Vec<Uuid>) {
     let ids: Vec<String> = ids.iter().map(Uuid::to_string).collect();
-    if let Err(e) = run(shell, "view.select", json!({ "ids": ids })) {
-        shell.canvas.notice = Some(e);
+    if let Err(e) = crate::panels::run_cx(cx, "view.select", json!({ "ids": ids })) {
+        cx.canvas.notice = Some(e);
     }
 }
 
@@ -1062,8 +1068,7 @@ pub(crate) fn on_diagram(store: &Store, d: Obj, e: Obj) -> bool {
     nodes_of(store, d).into_iter().any(|n| element_of(store, n) == Some(e))
 }
 
-/// Places element `e` dropped on diagram `d`, centred on `at` at `size`, with those of `links`
-/// that join it to an element the diagram shows, as one undo step named `label`; then selects it.
+/// [`place_with_lines_cx`] over the whole shell, for code not on the narrow context yet.
 #[allow(clippy::too_many_arguments, reason = "a drop is placed with its size, its lines and its step's name")]
 pub(crate) fn place_with_lines(
     shell: &mut Shell,
@@ -1075,7 +1080,23 @@ pub(crate) fn place_with_lines(
     notation: &dyn archforge_diagram::Notation,
     label: &str,
 ) {
-    let Some(session) = shell.session.as_ref() else { return };
+    shell.cx(|cx| place_with_lines_cx(cx, d, e, at, size, links, notation, label));
+}
+
+/// Places element `e` dropped on diagram `d`, centred on `at` at `size`, with those of `links`
+/// that join it to an element the diagram shows, as one undo step named `label`; then selects it.
+#[allow(clippy::too_many_arguments, reason = "a drop is placed with its size, its lines and its step's name")]
+pub(crate) fn place_with_lines_cx(
+    cx: &mut Ctx,
+    d: Obj,
+    e: Obj,
+    at: (f64, f64),
+    size: (f64, f64),
+    links: &[Obj],
+    notation: &dyn archforge_diagram::Notation,
+    label: &str,
+) {
+    let Some(session) = cx.session.as_ref() else { return };
     let store = session.doc();
     let (Some(diagram_id), Some(entity)) = (uuid(store, d), uuid(store, e)) else { return };
     let (x, y) = ((at.0 - size.0 / 2.0).round(), (at.1 - size.1 / 2.0).round());
@@ -1092,7 +1113,7 @@ pub(crate) fn place_with_lines(
             lines.push((id, a, b));
         }
     }
-    let out = shell.session.as_mut().map(|session| {
+    let out = cx.session.as_mut().map(|session| {
         session.batch(label, |b| {
             let placed = b.execute("diagram.place", &place)?;
             let node = placed.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
@@ -1107,8 +1128,8 @@ pub(crate) fn place_with_lines(
         })
     });
     match out {
-        Some(Ok(_)) => select(shell, vec![entity]),
-        Some(Err(e)) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
+        Some(Ok(_)) => select_cx(cx, vec![entity]),
+        Some(Err(e)) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
         None => {}
     }
 }

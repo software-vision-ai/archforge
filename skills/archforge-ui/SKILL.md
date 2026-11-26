@@ -57,9 +57,9 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
 - A notation's screens and the shared controls reach the shell through the narrow context
   (`crates/ui-egui/src/cx.rs`), never the whole `Shell`: `Ctx` borrows the parts they change apart
   (`Shell::cx`), `CtxRef` is its read-only twin (`Shell::cx_ref`), and what lies outside it (the
-  Models tree's rows, the centre leaving a version's details) is a `Request` the shell carries out
-  once the call returns. The controls taking it end in `_cx`; the old ones over the whole shell
-  forward to them until every caller has moved.
+  Models tree's rows, the centre leaving a version's details, a panel of the right side shown) is
+  a `Request` the shell carries out once the call returns. The controls taking it end in `_cx`;
+  the old ones over the whole shell forward to them until every caller has moved.
 - A control whose screen does not exist yet says "Not available yet" on hover. A canvas tool that
   is not built is left out of the toolbar instead.
 - The interface never touches the file system: what it needs from the host comes through

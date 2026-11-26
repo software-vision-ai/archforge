@@ -10,12 +10,11 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
+use crate::cx::Ctx;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
-use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, check, icon_button, menu, run, section, text_field};
+use crate::panels::{FIELD, PAD, check_cx, control_cx, icon_button_cx, menu_cx, run_cx, section_cx, text_field_cx};
 use crate::ux::{self, Palette, icons, types};
 
 /// A key being edited: the key, or none for a unique constraint about to be added.
@@ -65,8 +64,8 @@ pub fn rows(store: &Store, e: Obj) -> Vec<KeyRow> {
 }
 
 /// Opens the editor on a key, or on a unique constraint to add to `entity`.
-pub fn open(shell: &mut Shell, entity: Uuid, target: Option<&KeyRow>) {
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+pub(crate) fn open(cx: &mut Ctx, entity: Uuid, target: Option<&KeyRow>) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.key = Some(match target {
             Some(k) => KeyEdit {
                 target: Some(k.id),
@@ -90,32 +89,32 @@ pub fn open(shell: &mut Shell, entity: Uuid, target: Option<&KeyRow>) {
             },
         });
     }
-    shell.panels.menu = None;
+    cx.panels.menu = None;
 }
 
 /// The Keys section with its rows and the editor; gives the y under it.
-pub(crate) fn keys_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, entity: Obj, entity_id: Uuid) -> f32 {
+pub(crate) fn keys_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, entity: Obj, entity_id: Uuid) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let keys = match shell.session.as_ref() {
+    let keys = match cx.session.as_ref() {
         Some(s) => rows(s.doc(), entity),
         None => return y,
     };
     let title = fmt(&tr("Keys · {n}"), &[("n", &keys.len().to_string())]);
-    let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.keys.add", "Add unique constraint"))) else {
-        open(shell, entity_id, None);
+    let Some(next) = section_cx(cx, ui, p, r, y, &title, Some(("workspace.properties.keys.add", "Add unique constraint"))) else {
+        open(cx, entity_id, None);
         return y;
     };
     y = next - 6.0;
-    let editing_new = er(&shell.notation_states).and_then(|er| er.key.as_ref()).is_some_and(|k| k.target.is_none() && k.entity == entity_id);
+    let editing_new = er(cx.notation_states).and_then(|er| er.key.as_ref()).is_some_and(|k| k.target.is_none() && k.entity == entity_id);
     for key in &keys {
-        if er(&shell.notation_states).and_then(|er| er.key.as_ref()).is_some_and(|k| k.target == Some(key.id)) {
-            y = editor(shell, ui, p, r, y);
+        if er(cx.notation_states).and_then(|er| er.key.as_ref()).is_some_and(|k| k.target == Some(key.id)) {
+            y = editor(cx, ui, p, r, y);
             continue;
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 44.0));
         let id = format!("workspace.properties.key.row.{}", key.id);
-        let resp = control(shell, ui, &id, "row", row, true);
+        let resp = control_cx(cx, ui, &id, "row", row, true);
         if resp.contains_pointer() {
             paint.rect_filled(row, 6.0, p.page);
         }
@@ -128,24 +127,24 @@ pub(crate) fn keys_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         let columns = key.columns.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>().join(", ");
         ux::text(&paint, row.min + vec2(38.0, 4.0), &label, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, row.min + vec2(38.0, 23.0), &columns, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if crate::panels::edit_button(shell, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
-            open(shell, entity_id, Some(key));
+        if crate::panels::edit_button_cx(cx, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
+            open(cx, entity_id, Some(key));
         }
         y += 44.0;
     }
     if editing_new {
-        y = editor(shell, ui, p, r, y);
+        y = editor(cx, ui, p, r, y);
     }
     y
 }
 
 /// The key editor card; gives the y under it.
-fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
+fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.key.clone()) else { return y };
+    let Some(mut edit) = er(cx.notation_states).and_then(|er| er.key.clone()) else { return y };
     // The table's columns, named, for the rows and the menu.
-    let all_columns: Vec<(Uuid, String, String)> = match shell.session.as_ref().and_then(|s| s.doc().by_uuid(edit.entity).map(|e| (s.doc(), e))) {
+    let all_columns: Vec<(Uuid, String, String)> = match cx.session.as_ref().and_then(|s| s.doc().by_uuid(edit.entity).map(|e| (s.doc(), e))) {
         Some((store, e)) => store
             .list(e, archforge_er::entity::ATTRIBUTE)
             .unwrap_or_default()
@@ -163,12 +162,12 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::er_state::KEY, card);
+    crate::panels::reveal_cx(cx, ui, crate::er_state::KEY, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
-    let name_done = text_field(
-        shell,
+    let name_done = text_field_cx(
+        cx,
         ui,
         p,
         at(0.0, 12.0),
@@ -200,7 +199,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         );
         let x = Rect::from_min_size(pos2(row.right() - 26.0, row.top() + 6.0), Vec2::splat(16.0));
         ux::icon_in(&paint, x, &icons::CLOSE, p.text_secondary);
-        if control(shell, ui, &format!("workspace.properties.key.column.{i}.remove"), "button", x.expand(4.0), true)
+        if control_cx(cx, ui, &format!("workspace.properties.key.column.{i}.remove"), "button", x.expand(4.0), true)
             .on_hover_text(tr("Remove"))
             .clicked()
         {
@@ -213,21 +212,21 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     paint.rect_filled(add, 6.0, p.field);
     ux::text(&paint, add.min + vec2(8.0, 5.0), &tr("Add a column"), types::SMALL, p.text_secondary, Some((inner - 36.0).max(0.0)));
     ux::icon_mid(&paint, pos2(add.right() - 14.0, add.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
-    if control(shell, ui, "workspace.properties.key.column.add", "select", add, true).clicked() {
-        shell.panels.menu = if shell.panels.menu == Some(menus::KEY_COLUMN) { None } else { Some(menus::KEY_COLUMN) };
+    if control_cx(cx, ui, "workspace.properties.key.column.add", "select", add, true).clicked() {
+        cx.panels.menu = if cx.panels.menu == Some(menus::KEY_COLUMN) { None } else { Some(menus::KEY_COLUMN) };
     }
     cy += FIELD + 12.0;
     if !edit.primary {
-        check(shell, ui, p, at(0.0, cy), "workspace.properties.key.nulls-distinct", &tr("Nulls distinct"), &mut edit.nulls_distinct);
+        check_cx(cx, ui, p, at(0.0, cy), "workspace.properties.key.nulls-distinct", &tr("Nulls distinct"), &mut edit.nulls_distinct);
         cy += 28.0;
     }
     cy += 14.0;
     let mut remove = false;
     if edit.target.is_some() {
-        remove = icon_button(shell, ui, p, at(0.0, cy), "workspace.properties.key.remove", &icons::TRASH, p.danger, None, "Remove");
+        remove = icon_button_cx(cx, ui, p, at(0.0, cy), "workspace.properties.key.remove", &icons::TRASH, p.danger, None, "Remove");
     }
-    let cancel = icon_button(
-        shell,
+    let cancel = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - 2.0 * FIELD - 8.0, card.top() + cy),
@@ -237,8 +236,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         None,
         "Cancel",
     );
-    let apply = icon_button(
-        shell,
+    let apply = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - FIELD, card.top() + cy),
@@ -257,22 +256,22 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         edit.columns.remove(i);
     }
     // The column menu, over the card.
-    if shell.panels.menu == Some(menus::KEY_COLUMN) {
+    if cx.panels.menu == Some(menus::KEY_COLUMN) {
         let free: Vec<&(Uuid, String, String)> = all_columns.iter().filter(|(c, _, _)| !edit.columns.contains(c)).collect();
         let items: Vec<String> = free.iter().map(|(_, n, t)| if t.is_empty() { n.clone() } else { format!("{n} · {t}") }).collect();
         if items.is_empty() {
-            shell.panels.menu = None;
-        } else if let Some(i) = menu(shell, ui, p, add, "workspace.properties.key.column.add", &items)
+            cx.panels.menu = None;
+        } else if let Some(i) = menu_cx(cx, ui, p, add, "workspace.properties.key.column.add", &items)
             && let Some((id, _, _)) = free.get(i)
         {
             edit.columns.push(*id);
         }
     }
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.key = Some(edit.clone());
     }
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+        if let Some(er) = er_mut(cx.notation_states) {
             er.key = None;
         }
     } else if remove {
@@ -281,29 +280,29 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         } else {
             ("er.unique.remove", json!({ "unique": edit.target.map(|t| t.to_string()).unwrap_or_default() }))
         };
-        match run(shell, cmd, params) {
+        match run_cx(cx, cmd, params) {
             Ok(_) => {
-                if let Some(er) = er_mut(&mut shell.notation_states) {
+                if let Some(er) = er_mut(cx.notation_states) {
                     er.key = None;
                 }
             }
-            Err(e) => refuse(shell, e),
+            Err(e) => refuse(cx, e),
         }
     } else if apply || name_done {
-        commit(shell, &edit);
+        commit(cx, &edit);
     }
     card.bottom() + 8.0
 }
 
 /// Shows `why` on the open key editor's card, which stays open with what was typed.
-fn refuse(shell: &mut Shell, why: String) {
-    if let Some(k) = er_mut(&mut shell.notation_states).and_then(|er| er.key.as_mut()) {
+fn refuse(cx: &mut Ctx, why: String) {
+    if let Some(k) = er_mut(cx.notation_states).and_then(|er| er.key.as_mut()) {
         k.refused = Some(why);
     }
 }
 
 /// Writes the key through the commands.
-fn commit(shell: &mut Shell, edit: &KeyEdit) {
+fn commit(cx: &mut Ctx, edit: &KeyEdit) {
     let columns: Vec<String> = edit.columns.iter().map(Uuid::to_string).collect();
     let name = edit.name.trim().to_string();
     let (cmd, params) = match (edit.primary, edit.target) {
@@ -315,19 +314,19 @@ fn commit(shell: &mut Shell, edit: &KeyEdit) {
             ("er.unique.set", json!({ "unique": t.to_string(), "columns": columns, "name": name, "nulls_distinct": edit.nulls_distinct }))
         }
     };
-    match run(shell, cmd, params) {
+    match run_cx(cx, cmd, params) {
         Ok(_) => {
-            if let Some(er) = er_mut(&mut shell.notation_states) {
+            if let Some(er) = er_mut(cx.notation_states) {
                 er.key = None;
             }
-            shell.panels.notice = None;
+            cx.panels.notice = None;
             // The command selected the key; the table is what the panel shows.
             let entity = edit.entity.to_string();
-            if let Err(e) = run(shell, "view.select", json!({ "ids": [entity] })) {
-                shell.panels.notice = Some(e);
+            if let Err(e) = run_cx(cx, "view.select", json!({ "ids": [entity] })) {
+                cx.panels.notice = Some(e);
             }
         }
-        Err(e) => refuse(shell, e),
+        Err(e) => refuse(cx, e),
     }
 }
 

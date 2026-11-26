@@ -10,12 +10,11 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
 use crate::checks::badge;
+use crate::cx::Ctx;
 use crate::er_state::menus;
-use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, check, menu, run, section, select_field};
+use crate::panels::{FIELD, PAD, check_cx, control_cx, menu_cx, run_cx, section_cx, select_field_cx};
 use crate::ux::{self, Palette, icons, types};
 
 /// The mappings as the select offers them: the engine's word and the label.
@@ -77,14 +76,7 @@ fn candidates(store: &Store, e: Obj) -> Vec<(Uuid, String)> {
 }
 
 /// Runs `er.entity.set-subtyping` with the values given, then keeps the panel on `subject`.
-fn set_subtyping(
-    shell: &mut Shell,
-    entity: Uuid,
-    complete: bool,
-    disjoint: bool,
-    discriminator: Option<Uuid>,
-    mapping: archforge_er::SubtypeMapping,
-) {
+fn set_subtyping(cx: &mut Ctx, entity: Uuid, complete: bool, disjoint: bool, discriminator: Option<Uuid>, mapping: archforge_er::SubtypeMapping) {
     let params = json!({
         "entity": entity.to_string(),
         "complete": complete,
@@ -92,26 +84,26 @@ fn set_subtyping(
         "discriminator": discriminator.map(|d| d.to_string()).unwrap_or_default(),
         "mapping": archforge_er::commands::mapping_name(mapping),
     });
-    match run(shell, "er.entity.set-subtyping", params) {
-        Ok(_) => shell.panels.notice = None,
-        Err(e) => shell.panels.notice = Some(e),
+    match run_cx(cx, "er.entity.set-subtyping", params) {
+        Ok(_) => cx.panels.notice = None,
+        Err(e) => cx.panels.notice = Some(e),
     }
 }
 
 /// Keeps the panel on `subject` after a command selected what it made.
-fn reselect(shell: &mut Shell, subject: Uuid) {
-    if let Err(e) = run(shell, "view.select", json!({ "ids": [subject.to_string()] })) {
-        shell.panels.notice = Some(e);
+fn reselect(cx: &mut Ctx, subject: Uuid) {
+    if let Err(e) = run_cx(cx, "view.select", json!({ "ids": [subject.to_string()] })) {
+        cx.panels.notice = Some(e);
     }
 }
 
 /// The Subtypes section of supertype `e`, with the set's fields when it has subtypes; `keep` is
 /// what the panel shows, kept selected after a change. Gives the y under it.
-pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, e: Obj, e_id: Uuid, keep: Uuid) -> f32 {
+pub(crate) fn subtypes_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, e: Obj, e_id: Uuid, keep: Uuid) -> f32 {
     use archforge_er::rules as rr;
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let (list, cands, (complete, disjoint), discriminator, mapping, columns) = match shell.session.as_ref() {
+    let (list, cands, (complete, disjoint), discriminator, mapping, columns) = match cx.session.as_ref() {
         Some(s) => {
             let store = s.doc();
             let columns: Vec<(Uuid, String)> = store
@@ -125,7 +117,7 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
             (
                 rows(store, e),
                 // Only while the menu is open: it walks every table's chain.
-                if shell.panels.menu == Some(menus::SUBTYPE_ADD) { candidates(store, e) } else { Vec::new() },
+                if cx.panels.menu == Some(menus::SUBTYPE_ADD) { candidates(store, e) } else { Vec::new() },
                 rr::subtyping_flags(store, e),
                 rr::discriminator_of(store, e).and_then(|a| store.uuid(a).ok()),
                 rr::mapping_of(store, e),
@@ -136,8 +128,8 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
     };
     let title = fmt(&tr("Subtypes · {n}"), &[("n", &list.len().to_string())]);
     let add_at = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
-    let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.subtypes.add", "Add subtype"))) else {
-        shell.panels.menu = if shell.panels.menu == Some(menus::SUBTYPE_ADD) { None } else { Some(menus::SUBTYPE_ADD) };
+    let Some(next) = section_cx(cx, ui, p, r, y, &title, Some(("workspace.properties.subtypes.add", "Add subtype"))) else {
+        cx.panels.menu = if cx.panels.menu == Some(menus::SUBTYPE_ADD) { None } else { Some(menus::SUBTYPE_ADD) };
         return y + 50.0;
     };
     y = next - 6.0;
@@ -145,7 +137,7 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
     let mut open: Option<Uuid> = None;
     for row in &list {
         let rect = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 44.0));
-        let resp = control(shell, ui, &format!("workspace.properties.subtype.row.{}", row.generalization), "row", rect, true);
+        let resp = control_cx(cx, ui, &format!("workspace.properties.subtype.row.{}", row.generalization), "row", rect, true);
         if resp.hovered() {
             paint.rect_filled(rect, 6.0, p.page);
         }
@@ -154,7 +146,7 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
         ux::text(&paint, rect.min + vec2(38.0, 23.0), &row.detail, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
         let x = Rect::from_min_size(pos2(rect.right() - 24.0, rect.top() + 14.0), Vec2::splat(16.0));
         ux::icon_in(&paint, x, &icons::CLOSE, p.text_secondary);
-        if control(shell, ui, &format!("workspace.properties.subtype.row.{}.remove", row.generalization), "button", x.expand(4.0), true)
+        if control_cx(cx, ui, &format!("workspace.properties.subtype.row.{}.remove", row.generalization), "button", x.expand(4.0), true)
             .on_hover_text(tr("Remove"))
             .clicked()
         {
@@ -167,16 +159,16 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
     if !list.is_empty() {
         y += 6.0;
         let mut c = complete;
-        let right = check(shell, ui, p, pos2(r.left() + PAD, y), "workspace.properties.subtypes.complete", &tr("Complete"), &mut c);
+        let right = check_cx(cx, ui, p, pos2(r.left() + PAD, y), "workspace.properties.subtypes.complete", &tr("Complete"), &mut c);
         let mut d = disjoint;
-        check(shell, ui, p, pos2(right.max(r.left() + PAD + 110.0), y), "workspace.properties.subtypes.disjoint", &tr("Disjoint"), &mut d);
+        check_cx(cx, ui, p, pos2(right.max(r.left() + PAD + 110.0), y), "workspace.properties.subtypes.disjoint", &tr("Disjoint"), &mut d);
         if c != complete || d != disjoint {
-            set_subtyping(shell, e_id, c, d, discriminator, mapping);
+            set_subtyping(cx, e_id, c, d, discriminator, mapping);
         }
         y += 30.0;
         let disc_word = discriminator.and_then(|id| columns.iter().find(|(c, _)| *c == id)).map(|(_, n)| n.clone()).unwrap_or_else(|| tr("None"));
-        let disc_field = select_field(
-            shell,
+        let disc_field = select_field_cx(
+            cx,
             ui,
             p,
             pos2(r.left() + PAD, y),
@@ -187,8 +179,8 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
             menus::DISCRIMINATOR,
         );
         y += 17.0 + FIELD + 12.0;
-        let map_field = select_field(
-            shell,
+        let map_field = select_field_cx(
+            cx,
             ui,
             p,
             pos2(r.left() + PAD, y),
@@ -199,55 +191,55 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
             menus::MAPPING,
         );
         y += 17.0 + FIELD + 12.0;
-        if shell.panels.menu == Some(menus::DISCRIMINATOR) {
+        if cx.panels.menu == Some(menus::DISCRIMINATOR) {
             let mut items = vec![tr("None")];
             items.extend(columns.iter().map(|(_, n)| n.clone()));
-            if let Some(i) = menu(shell, ui, p, disc_field, "workspace.properties.subtypes.discriminator", &items) {
+            if let Some(i) = menu_cx(cx, ui, p, disc_field, "workspace.properties.subtypes.discriminator", &items) {
                 let picked = if i == 0 { None } else { columns.get(i - 1).map(|(id, _)| *id) };
-                set_subtyping(shell, e_id, complete, disjoint, picked, mapping);
+                set_subtyping(cx, e_id, complete, disjoint, picked, mapping);
             }
         }
-        if shell.panels.menu == Some(menus::MAPPING) {
+        if cx.panels.menu == Some(menus::MAPPING) {
             let items: Vec<String> = MAPPINGS.iter().map(|(_, l)| tr(l)).collect();
-            if let Some(i) = menu(shell, ui, p, map_field, "workspace.properties.subtypes.mapping", &items)
+            if let Some(i) = menu_cx(cx, ui, p, map_field, "workspace.properties.subtypes.mapping", &items)
                 && let Some((m, _)) = MAPPINGS.get(i)
             {
-                set_subtyping(shell, e_id, complete, disjoint, discriminator, *m);
+                set_subtyping(cx, e_id, complete, disjoint, discriminator, *m);
             }
         }
     }
     // The tables that can become subtypes, under the +.
-    if shell.panels.menu == Some(menus::SUBTYPE_ADD) {
+    if cx.panels.menu == Some(menus::SUBTYPE_ADD) {
         if cands.is_empty() {
-            shell.panels.menu = None;
+            cx.panels.menu = None;
         } else {
             let items: Vec<String> = cands.iter().map(|(_, n)| n.clone()).collect();
             let anchor = Rect::from_min_size(pos2(r.right() - PAD - 200.0, add_at.top()), vec2(200.0, 28.0));
-            if let Some(i) = menu(shell, ui, p, anchor, "workspace.properties.subtypes.add", &items)
+            if let Some(i) = menu_cx(cx, ui, p, anchor, "workspace.properties.subtypes.add", &items)
                 && let Some((sub, _)) = cands.get(i)
             {
                 let params = json!({ "supertype": e_id.to_string(), "subtype": sub.to_string() });
-                match crate::er_place::run_fitting(shell, &tr("Add subtype"), "er.generalization.add", params, &[*sub]) {
+                match crate::er_place::run_fitting(cx, &tr("Add subtype"), "er.generalization.add", params, &[*sub]) {
                     Ok(_) => {
-                        shell.panels.notice = None;
-                        reselect(shell, keep);
+                        cx.panels.notice = None;
+                        reselect(cx, keep);
                     }
-                    Err(err) => shell.panels.notice = Some(err),
+                    Err(err) => cx.panels.notice = Some(err),
                 }
             }
         }
     }
     if let Some(g) = remove {
-        match run(shell, "er.generalization.remove", json!({ "generalization": g.to_string() })) {
+        match run_cx(cx, "er.generalization.remove", json!({ "generalization": g.to_string() })) {
             Ok(_) => {
-                shell.panels.notice = None;
+                cx.panels.notice = None;
                 // A removed generalization cannot stay selected; the supertype can.
-                reselect(shell, if keep == g { e_id } else { keep });
+                reselect(cx, if keep == g { e_id } else { keep });
             }
-            Err(err) => shell.panels.notice = Some(err),
+            Err(err) => cx.panels.notice = Some(err),
         }
     } else if let Some(sub) = open {
-        reselect(shell, sub);
+        reselect(cx, sub);
     }
     y
 }

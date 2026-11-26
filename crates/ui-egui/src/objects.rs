@@ -14,13 +14,13 @@ use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
+use crate::cx::Ctx;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
-use crate::home::control;
 use crate::i18n::{fmt, tr, tr_ctx};
-use crate::panels::{FIELD, PAD, check, icon_button, menu, run, section, select_field, text_field};
+use crate::panels::{FIELD, PAD, check_cx, control_cx, icon_button_cx, menu_cx, run_cx, section_cx, select_field_cx, text_field_cx};
 use crate::ux::{self, Palette, icons, types};
-use crate::{Shell, widgets};
+use crate::widgets;
 
 /// The most columns the Owned by menu offers.
 const MAX_OWNERS: usize = 30;
@@ -118,7 +118,7 @@ pub fn view_rows(store: &Store, schema: Obj) -> Vec<ObjectRow> {
 }
 
 /// Opens the editor on a sequence or view, or on one of `kind` to add to `schema`.
-pub fn open(shell: &mut Shell, schema: Uuid, kind: ObjectKind, target: Option<Uuid>) {
+pub(crate) fn open(cx: &mut Ctx, schema: Uuid, kind: ObjectKind, target: Option<Uuid>) {
     let mut edit = ObjectEdit {
         kind,
         target,
@@ -135,7 +135,7 @@ pub fn open(shell: &mut Shell, schema: Uuid, kind: ObjectKind, target: Option<Uu
         refused: None,
         opened: true,
     };
-    if let (Some(t), Some(store)) = (target, shell.session.as_ref().map(|s| s.doc()))
+    if let (Some(t), Some(store)) = (target, cx.session.as_ref().map(|s| s.doc()))
         && let Some(o) = store.by_uuid(t)
     {
         use archforge_er::rules as r;
@@ -156,10 +156,10 @@ pub fn open(shell: &mut Shell, schema: Uuid, kind: ObjectKind, target: Option<Uu
             }
         }
     }
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.object_edit = Some(edit);
     }
-    shell.panels.menu = None;
+    cx.panels.menu = None;
 }
 
 /// The kind of a schema object, when it is one.
@@ -172,19 +172,10 @@ pub fn kind_of(store: &Store, o: Obj) -> Option<ObjectKind> {
 }
 
 /// The Sequences or Views section with its rows and the editor; gives the y under it.
-pub(crate) fn section_of(
-    shell: &mut Shell,
-    ui: &mut egui::Ui,
-    p: &Palette,
-    r: Rect,
-    mut y: f32,
-    schema: Obj,
-    schema_id: Uuid,
-    kind: ObjectKind,
-) -> f32 {
+pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, schema: Obj, schema_id: Uuid, kind: ObjectKind) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let list = match shell.session.as_ref() {
+    let list = match cx.session.as_ref() {
         Some(s) if kind == ObjectKind::Sequence => sequence_rows(s.doc(), schema),
         Some(s) => view_rows(s.doc(), schema),
         None => return y,
@@ -196,22 +187,22 @@ pub(crate) fn section_of(
         ObjectKind::View => (tr("Views · {n}"), "workspace.properties.views.add", "Add view", "workspace.properties.view.row", "VW"),
     };
     let title = fmt(&title, &[("n", &list.len().to_string())]);
-    let Some(next) = section(shell, ui, p, r, y, &title, Some((add, hint))) else {
-        open(shell, schema_id, kind, None);
+    let Some(next) = section_cx(cx, ui, p, r, y, &title, Some((add, hint))) else {
+        open(cx, schema_id, kind, None);
         return y + 50.0;
     };
     y = next - 6.0;
-    let editing = |shell: &Shell| er(&shell.notation_states).and_then(|er| er.object_edit.as_ref()).filter(|e| e.kind == kind).cloned();
-    let editing_new = editing(shell).is_some_and(|e| e.target.is_none() && e.schema == schema_id);
-    let chosen = crate::panels::selected_id(shell);
+    let editing = |cx: &Ctx| er(cx.notation_states).and_then(|er| er.object_edit.as_ref()).filter(|e| e.kind == kind).cloned();
+    let editing_new = editing(cx).is_some_and(|e| e.target.is_none() && e.schema == schema_id);
+    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
     for row in &list {
-        if editing(shell).is_some_and(|e| e.target == Some(row.id)) {
-            y = editor(shell, ui, p, r, y, schema);
+        if editing(cx).is_some_and(|e| e.target == Some(row.id)) {
+            y = editor(cx, ui, p, r, y, schema);
             continue;
         }
         let rect = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 44.0));
         let id = format!("{row_id}.{}", row.id);
-        let resp = control(shell, ui, &id, "row", rect, true);
+        let resp = control_cx(cx, ui, &id, "row", rect, true);
         if Some(row.id) == chosen {
             paint.rect_filled(rect, 6.0, p.accent_tint);
         } else if resp.contains_pointer() {
@@ -220,16 +211,16 @@ pub(crate) fn section_of(
         badge(&paint, rect.min + vec2(2.0, 6.0), label, p.field, p.text_secondary);
         ux::text(&paint, rect.min + vec2(38.0, 4.0), &row.name, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, rect.min + vec2(38.0, 23.0), &row.detail, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if crate::panels::edit_button(shell, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
-            crate::panels::select_element(shell, row.id);
-            open(shell, schema_id, kind, Some(row.id));
+        if crate::panels::edit_button_cx(cx, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
+            crate::panels::select_element_cx(cx, row.id);
+            open(cx, schema_id, kind, Some(row.id));
         } else if resp.clicked() {
-            crate::panels::select_element(shell, row.id);
+            crate::panels::select_element_cx(cx, row.id);
         }
         y += 44.0;
     }
     if editing_new {
-        y = editor(shell, ui, p, r, y, schema);
+        y = editor(cx, ui, p, r, y, schema);
     }
     y
 }
@@ -258,10 +249,10 @@ fn owners(store: &Store, schema: Obj, chosen: Option<Uuid>) -> (Vec<(Uuid, Strin
 }
 
 /// The sequence or view editor card; gives the y under it.
-fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, schema: Obj) -> f32 {
+fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, schema: Obj) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(mut edit) = er(&shell.notation_states).and_then(|er| er.object_edit.clone()) else { return y };
+    let Some(mut edit) = er(cx.notation_states).and_then(|er| er.object_edit.clone()) else { return y };
     let row = 17.0 + FIELD + 10.0;
     let height = match edit.kind {
         ObjectKind::Sequence => 12.0 + row * 3.0 + 28.0 + row + 4.0 + FIELD + 12.0,
@@ -270,13 +261,13 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, crate::er_state::OBJECT, card);
+    crate::panels::reveal_cx(cx, ui, crate::er_state::OBJECT, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
     let mut cy = 12.0;
-    let mut enter = text_field(
-        shell,
+    let mut enter = text_field_cx(
+        cx,
         ui,
         p,
         at(0.0, cy),
@@ -301,21 +292,21 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
                 (0.0, half, "workspace.properties.sequence.minimum", tr("Minimum"), &mut edit.minimum, row),
                 (half + 8.0, half, "workspace.properties.sequence.maximum", tr("Maximum"), &mut edit.maximum, row),
             ] {
-                enter |= text_field(shell, ui, p, at(x, cy + dy), w, id, &label, text, 20, false, false);
+                enter |= text_field_cx(cx, ui, p, at(x, cy + dy), w, id, &label, text, 20, false, false);
             }
             cy += 2.0 * row;
-            check(shell, ui, p, at(0.0, cy), "workspace.properties.sequence.cycle", &tr("Cycle"), &mut edit.cycle);
+            check_cx(cx, ui, p, at(0.0, cy), "workspace.properties.sequence.cycle", &tr("Cycle"), &mut edit.cycle);
             cy += 28.0;
-            let (list, more) = shell.session.as_ref().map(|s| owners(s.doc(), schema, edit.owned_by)).unwrap_or_default();
+            let (list, more) = cx.session.as_ref().map(|s| owners(s.doc(), schema, edit.owned_by)).unwrap_or_default();
             let value = edit.owned_by.and_then(|o| list.iter().find(|(id, _)| *id == o).map(|(_, l)| l.clone())).unwrap_or_else(|| tr("None"));
             let field =
-                select_field(shell, ui, p, at(0.0, cy), inner, "workspace.properties.sequence.owned-by", &tr("Owned by"), &value, menus::OWNED_BY);
+                select_field_cx(cx, ui, p, at(0.0, cy), inner, "workspace.properties.sequence.owned-by", &tr("Owned by"), &value, menus::OWNED_BY);
             cy += row + 4.0;
-            if shell.panels.menu == Some(menus::OWNED_BY) {
+            if cx.panels.menu == Some(menus::OWNED_BY) {
                 // Past the most the menu lists, it says how many it leaves out; the command takes any.
                 let tail = (more > 0).then(|| crate::i18n::trn("{n} more column, not listed", "{n} more columns, not listed", more as u64));
                 let items: Vec<String> = std::iter::once(tr("None")).chain(list.iter().map(|(_, l)| l.clone())).chain(tail).collect();
-                if let Some(i) = menu(shell, ui, p, field, "workspace.properties.sequence.owned-by", &items) {
+                if let Some(i) = menu_cx(cx, ui, p, field, "workspace.properties.sequence.owned-by", &items) {
                     if i == 0 {
                         edit.owned_by = None;
                     } else if let Some((id, _)) = list.get(i - 1) {
@@ -325,13 +316,13 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
             }
         }
         ObjectKind::View => {
-            check(shell, ui, p, at(0.0, cy), "workspace.properties.view.materialized", &tr("Materialized"), &mut edit.materialized);
+            check_cx(cx, ui, p, at(0.0, cy), "workspace.properties.view.materialized", &tr("Materialized"), &mut edit.materialized);
             cy += 28.0;
             ux::text(&paint, at(0.0, cy), &tr("Query"), types::CAPTION, p.text_secondary, Some(inner));
             let body = Rect::from_min_size(at(0.0, cy + 17.0), vec2(inner, QUERY_HEIGHT));
             paint.rect_filled(body, 6.0, p.field);
             let id = "workspace.properties.view.query";
-            widgets::record_visible(ui, &mut shell.registry, id, "field", body);
+            widgets::record_visible(ui, cx.registry, id, "field", body);
             let field = body.shrink2(vec2(8.0, 6.0));
             let out = egui::ScrollArea::vertical().id_salt(widgets::egui_id(&format!("{id}.scroll"))).max_height(field.height()).show(
                 &mut ui.new_child(egui::UiBuilder::new().max_rect(field)),
@@ -356,10 +347,10 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
     }
     let mut remove = false;
     if edit.target.is_some() {
-        remove = icon_button(shell, ui, p, at(0.0, cy), "workspace.properties.object.remove", &icons::TRASH, p.danger, None, "Remove");
+        remove = icon_button_cx(cx, ui, p, at(0.0, cy), "workspace.properties.object.remove", &icons::TRASH, p.danger, None, "Remove");
     }
-    let cancel = icon_button(
-        shell,
+    let cancel = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - 2.0 * FIELD - 8.0, card.top() + cy),
@@ -369,8 +360,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
         None,
         "Cancel",
     );
-    let apply = icon_button(
-        shell,
+    let apply = icon_button_cx(
+        cx,
         ui,
         p,
         pos2(card.right() - 12.0 - FIELD, card.top() + cy),
@@ -383,11 +374,11 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
     if let Some(why) = &edit.refused {
         ux::text(&paint, at(0.0, cy + FIELD + 8.0), why, types::CAPTION, p.amber, Some(inner));
     }
-    if let Some(er) = er_mut(&mut shell.notation_states) {
+    if let Some(er) = er_mut(cx.notation_states) {
         er.object_edit = Some(edit.clone());
     }
-    if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-        if let Some(er) = er_mut(&mut shell.notation_states) {
+    if cancel || (cx.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
+        if let Some(er) = er_mut(cx.notation_states) {
             er.object_edit = None;
         }
     } else if remove {
@@ -395,32 +386,32 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
             ObjectKind::Sequence => ("er.sequence.remove", "sequence"),
             ObjectKind::View => ("er.view.remove", "view"),
         };
-        match run(shell, cmd, json!({ key: edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
+        match run_cx(cx, cmd, json!({ key: edit.target.map(|t| t.to_string()).unwrap_or_default() })) {
             Ok(_) => {
-                if let Some(er) = er_mut(&mut shell.notation_states) {
+                if let Some(er) = er_mut(cx.notation_states) {
                     er.object_edit = None;
                 }
-                reselect(shell, edit.schema);
+                reselect(cx, edit.schema);
             }
-            Err(e) => refuse(shell, e),
+            Err(e) => refuse(cx, e),
         }
     } else if apply || enter {
-        commit(shell, &edit);
+        commit(cx, &edit);
     }
     card.bottom() + 8.0
 }
 
 /// Shows `why` on the open sequence or view editor's card, which stays open with what was typed.
-fn refuse(shell: &mut Shell, why: String) {
-    if let Some(t) = er_mut(&mut shell.notation_states).and_then(|er| er.object_edit.as_mut()) {
+fn refuse(cx: &mut Ctx, why: String) {
+    if let Some(t) = er_mut(cx.notation_states).and_then(|er| er.object_edit.as_mut()) {
         t.refused = Some(why);
     }
 }
 
 /// The schema is what the panel shows after a command selected the sequence or view.
-fn reselect(shell: &mut Shell, schema: Uuid) {
-    if let Err(e) = run(shell, "view.select", json!({ "ids": [schema.to_string()] })) {
-        shell.panels.notice = Some(e);
+fn reselect(cx: &mut Ctx, schema: Uuid) {
+    if let Err(e) = run_cx(cx, "view.select", json!({ "ids": [schema.to_string()] })) {
+        cx.panels.notice = Some(e);
     }
 }
 
@@ -430,7 +421,7 @@ fn whole(text: &str, field: &str) -> Result<i64, String> {
 }
 
 /// Writes the sequence or view through its command; the schema stays selected.
-fn commit(shell: &mut Shell, edit: &ObjectEdit) {
+fn commit(cx: &mut Ctx, edit: &ObjectEdit) {
     let name = edit.name.trim().to_string();
     let (cmd, params) = match edit.kind {
         ObjectKind::Sequence => {
@@ -438,7 +429,7 @@ fn commit(shell: &mut Shell, edit: &ObjectEdit) {
             let (start, increment) = match numbers {
                 Ok(n) => n,
                 Err(e) => {
-                    refuse(shell, e);
+                    refuse(cx, e);
                     return;
                 }
             };
@@ -471,15 +462,15 @@ fn commit(shell: &mut Shell, edit: &ObjectEdit) {
             }
         }
     };
-    match run(shell, cmd, params) {
+    match run_cx(cx, cmd, params) {
         Ok(_) => {
-            if let Some(er) = er_mut(&mut shell.notation_states) {
+            if let Some(er) = er_mut(cx.notation_states) {
                 er.object_edit = None;
             }
-            shell.panels.notice = None;
-            reselect(shell, edit.schema);
+            cx.panels.notice = None;
+            reselect(cx, edit.schema);
         }
-        Err(e) => refuse(shell, e),
+        Err(e) => refuse(cx, e),
     }
 }
 
