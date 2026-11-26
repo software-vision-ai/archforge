@@ -10,14 +10,9 @@ use std::collections::BTreeMap;
 
 use archforge_mof::{Obj, Store};
 
-use crate::notation_ui::NotationUi;
+pub use archforge_shell_api::notation_ui::Problem;
 
-/// One problem, on the element it sits on.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Problem {
-    pub element: Obj,
-    pub text: String,
-}
+use crate::notation_ui::NotationUi;
 
 /// Every problem of the store, each notation's in turn, on the element the user would fix it on.
 pub(crate) fn all(uis: &[&'static dyn NotationUi], store: &Store) -> Vec<Problem> {

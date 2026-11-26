@@ -39,8 +39,12 @@ notations a press on the canvas carries.
 | `notation_ui::{Entry, Words}` | an element as the project search lists it (icon, order, label, detail); how Properties names an element (kind line, word, "This table", "On this table · {n}", heading's name) |
 | `notation_ui::Removal` | `pub struct Removal { pub went: Vec<String>, pub after: Option<String> }`: what a notation works out about a removal of its own elements before it runs, for what is said once it went through |
 | `notation_ui::{Layer, Overlaid}` | where among the canvas's own overlays a notation's go (`Drafts`, `Rows`, `Menus`, `Offers`); the canvas an overlay is drawn over (palette, rectangle, `View`, diagram, the nodes a gesture previews) |
+| `notation_ui::{Row, Problem}` | a row of the Models tree as drawn (id, element, depth, kind and icon, muted, label, detail, note, whether it opens, is open and drags onto the canvas); a problem on the element it sits on (element, text) |
+| `notation_ui::{Editor, Place, OpenEditor}` | a Properties editor's card (its notation's metamodel and the card's name); where an open editor edits (the item, or none for one being added, and its list); an open editor (where it edits, the refusal its card shows) |
+| `notation_ui::{MenuId, Scope}` | a menu of the shell's one open-menu slot: whose it is (`Scope::Shell`, `Scope::Notation` by metamodel), its key and its index among a kind shown more than once; `shell`, `of`, `at`, `index_in` |
 | `kinds::{ToolUse, KindTool}` | what a diagram kind's tool does (`Place`, `Connect`); a tool it brings to the toolbar (key, icon, hint, use, chevron, width) |
 | `kinds::Press` | a press on the canvas as a diagram kind reads it: where, click or double click, the store and notations, the diagram and selection, and the node and line under a screen point |
+| `kinds::{LineDrawn, ExtraLabel}` | a line as the canvas drew it this frame, for its diagram kind to draw what goes with it (line, element, points on screen from source to target, whether selected); a label a kind drew of no one node or line (the element, where it was on screen, the node that holds where it was moved, its hover text) |
 
 **Non-goals.** Installing fonts and the app icon, which stay in the shell, as do the icons only one
 notation draws until its screens crate takes them; anything that touches the file system or

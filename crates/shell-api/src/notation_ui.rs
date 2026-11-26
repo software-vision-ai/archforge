@@ -1,9 +1,11 @@
-//! The data types the interface `NotationUi` hands between the shell and a notation, which name no
-//! shell: what `+` in Models adds, what an addition gives back, what New inside ▸ offers, a project
-//! search entry, Properties' words, what is said of a removal, and an overlay's layer and the
-//! canvas it is drawn over. The trait itself stays in the shell until it no longer hands a
-//! notation the whole `Shell` (`archforge_ui_egui::notation_ui` re-exports these under their old
-//! paths).
+//! The data types the interfaces `NotationUi` and `NotationState` hand between the shell and a
+//! notation, which name no shell: what `+` in Models adds, what an addition gives back, what New
+//! inside ▸ offers, a row of the Models tree, a project search entry, a problem, Properties' words,
+//! what is said of a removal, an overlay's layer and the canvas it is drawn over, a Properties
+//! editor's card and where it edits, and a menu of the shell's one open-menu slot. The traits
+//! themselves stay in the shell until they no longer hand a notation the whole `Shell`
+//! (`archforge_ui_egui::notation_ui`, `explorer`, `problems` and `panels` re-export these under
+//! their old paths).
 
 use std::collections::BTreeMap;
 
@@ -11,7 +13,7 @@ use archforge_mof::{Obj, Uuid};
 use egui::Rect;
 
 use crate::canvas::View;
-use crate::ux::{Icon, Palette};
+use crate::ux::{self, Icon, Palette};
 
 /// Something `+` in the Models tree can add: its automation key and its word.
 pub struct Offer {
@@ -97,4 +99,91 @@ pub struct Overlaid<'a> {
     pub view: View,
     pub d: Obj,
     pub overrides: &'a BTreeMap<Uuid, Rect>,
+}
+
+/// One row of the tree as drawn.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Row {
+    pub id: Uuid,
+    pub obj: Obj,
+    pub depth: u8,
+    /// What the row is, as its notation names it (`schema`, `table`, `column`, `skill`), and its
+    /// icon, drawn muted for a row under another's (a column).
+    pub kind: &'static str,
+    pub icon: &'static ux::Icon,
+    pub muted: bool,
+    pub label: String,
+    /// A column's type, after its name.
+    pub detail: Option<String>,
+    /// What the row is, muted after its name (a UML generalization set's `generalization set`).
+    pub note: Option<String>,
+    pub expandable: bool,
+    pub expanded: bool,
+    /// Whether the row drags onto the canvas (a table).
+    pub draggable: bool,
+}
+
+/// One problem, on the element it sits on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Problem {
+    pub element: Obj,
+    pub text: String,
+}
+
+/// A Properties editor's card, which `reveal` brings into view: several can be open at once, and
+/// each card answers only for its own editor. It is named by the metamodel of the notation whose
+/// editor it is and the card's own name there, so two notations' cards never meet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Editor {
+    pub notation: u16,
+    pub card: &'static str,
+}
+
+/// Where an open editor edits: the item, or none for one being added, and the list it belongs to (a
+/// kind of member, type, object or key, or an association's end), so a move to either is new.
+pub type Place = (Option<Uuid>, usize);
+
+/// An open editor: where it edits, and the refusal its card shows.
+pub type OpenEditor = Option<(Place, Option<String>)>;
+
+/// Whose a menu is: the shell's own (Home's, the Versions panel's), or a notation's, by the index
+/// of its metamodel, so two owners' menus never meet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    Shell,
+    Notation(u16),
+}
+
+/// A menu of the shell's one open-menu slot (`State::menu`): whose it is, which of its owner's
+/// menus by key, and which one of a kind shown more than once (a key pair's, an association end's;
+/// 0 for a menu shown once). Only its owner opens, recognises and closes it: the shell keeps its
+/// own beside the screens they belong to, each notation its own beside its state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MenuId {
+    pub scope: Scope,
+    pub key: &'static str,
+    pub index: usize,
+}
+
+impl MenuId {
+    /// The shell's own menu `key`, the first of its kind.
+    pub const fn shell(key: &'static str) -> MenuId {
+        MenuId { scope: Scope::Shell, key, index: 0 }
+    }
+
+    /// The menu `key` of the notation whose metamodel is `notation`, the first of its kind.
+    pub const fn of(notation: u16, key: &'static str) -> MenuId {
+        MenuId { scope: Scope::Notation(notation), key, index: 0 }
+    }
+
+    /// The menu of the same owner and key, number `index` of its kind.
+    pub const fn at(self, index: usize) -> MenuId {
+        MenuId { index, ..self }
+    }
+
+    /// Which one of `kind` it is, when it is one of them: the same owner's menu of the same key,
+    /// whatever its index; none for any other menu.
+    pub fn index_in(self, kind: MenuId) -> Option<usize> {
+        (self.scope == kind.scope && self.key == kind.key).then_some(self.index)
+    }
 }
