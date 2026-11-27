@@ -3,6 +3,7 @@
 
 use egui_kittest::Harness;
 
+use crate::testing::{click, ids};
 use crate::theme::ThemeKind;
 use crate::{Picked, Services, Shell, UiState};
 
@@ -19,20 +20,11 @@ mod properties_keys;
 mod read_only;
 mod skill_chords;
 mod switch_ask;
-/// A click of the primary button at `at`, pointer moved there first.
 mod version_chip;
 mod version_details;
 mod versions_keys;
 mod versions_menu;
 mod view_menu;
-
-fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
-    h.event(egui::Event::PointerMoved(at));
-    for pressed in [true, false] {
-        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
-    }
-    h.run();
-}
 
 /// ER's own state in `shell`, whose notations hold ER.
 fn er_of(shell: &Shell) -> &crate::er_state::ErState {
@@ -54,24 +46,9 @@ fn uml_of_mut(shell: &mut Shell) -> &mut crate::uml_state::UmlState {
     crate::uml_state::uml_mut(&mut shell.notation_states).expect("the shell's notations hold UML")
 }
 
-/// The real shell in the harness at the design's frame size.
+/// The real shell in the harness at the design's frame size, given the app's screens parts.
 fn harness(theme: ThemeKind) -> Harness<'static, Shell> {
-    crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ..Services::default() }, &SCREENS);
-    shell.state.theme = theme;
-    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
-        |ui, shell: &mut Shell| {
-            shell.logic(ui.ctx());
-            shell.ui(ui);
-        },
-        shell,
-    );
-    h.run();
-    h
-}
-
-fn ids(h: &Harness<'static, Shell>) -> Vec<String> {
-    h.state().widgets().iter().map(|w| w.id.clone()).collect()
+    crate::testing::harness(&SCREENS, theme)
 }
 
 #[test]

@@ -54,7 +54,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - the command engine: `crates/engine/tests/engine.rs` with its toy notation; a notation's own
     commands are checked with `archforge_engine::testing::round_trip` (feature `testing`)
 - A screen test builds the real `Shell` in an `egui_kittest` harness, draws it in both appearances
-  and finds controls by automation id (`harness` and `click` in `crates/ui-egui/src/tests.rs`).
+  and finds controls by automation id (`harness` and `click` in `crates/ui-egui/src/testing.rs`,
+  behind the feature `testing` for the app's window tests as well).
   Every harness pins the language with `set_language`; `every_harness_pins_the_language` fails a
   harness that does not.
 - A screen test scrolls to a control before it presses it, at the design's window height, and never
