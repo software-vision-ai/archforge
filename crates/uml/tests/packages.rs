@@ -1085,6 +1085,71 @@ fn a_package_with_no_parent_removed_reports_its_bindings_and_relationships() {
     assert_eq!(problems(s.doc()), []);
 }
 
+/// What `relationships_going` names is what `element.remove` counts among the relationships that
+/// went, those named aside (AR-843). The nested package Billing goes alone, with the dependency on
+/// it and its profile application, Invoice's association and the dependency Billing holds between
+/// survivors being handed up; Sales, nested too, takes none of what it holds; Invoice takes its
+/// association and its dependency; the association named alone takes nothing; the profile takes
+/// its extension and its application, and the stereotype its extension. A package with no parent
+/// takes every relationship in it and at it along: a dependency on a class in it, one a package in it
+/// holds, and one on it from a package that stays, and the application elsewhere of a profile in it;
+/// that nested package takes the one at it alone.
+#[test]
+fn the_relationships_going_are_those_element_remove_counts() {
+    let going = |s: &S, ids: &[&str]| {
+        let objs: Vec<Obj> = ids.iter().map(|id| obj(s, id)).collect();
+        archforge_uml::commands::relationships_going(s.doc(), &objs).len() as u64
+    };
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing", "parent": sales }));
+    let [customer, order] = ["Customer", "Order"].map(|name| run(&mut s, "uml.class.add", json!({ "package": sales, "name": name })));
+    let invoice = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Invoice" }));
+    let association = run(&mut s, "uml.association.add", json!({ "from": invoice, "to": customer }));
+    run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": billing }));
+    run(&mut s, "uml.dependency.add", json!({ "client": invoice, "supplier": order }));
+    let layers = run(&mut s, "uml.profile.add", json!({ "name": "Layers" }));
+    let module = run(&mut s, "uml.stereotype.add", json!({ "profile": layers, "name": "Module", "extends": ["Package"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": billing, "profile": layers }));
+    let cases: [(&[&str], u64, u64); 7] = [
+        (&[&billing], 2, 0),
+        (&[&sales], 0, 0),
+        (&[&invoice], 2, 0),
+        (&[&association], 0, 1),
+        (&[&billing, &invoice], 4, 0),
+        (&[&layers], 2, 0),
+        (&[&module], 1, 0),
+    ];
+    for (ids, want, named) in cases {
+        assert_eq!(going(&s, ids), want, "{ids:?}");
+        let answer = s.execute("element.remove", &json!({ "ids": ids })).unwrap_or_else(|e| panic!("{ids:?}: {e}")).value;
+        assert_eq!(counts(&answer).3, want + named, "{ids:?}: {answer}");
+        s.undo().unwrap();
+    }
+    // A package with no parent, as a loaded document may hold.
+    let mut st = store(100);
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let [top, other] = [0x50, 0x60].map(|id| {
+        let p = st.create_with_uuid(PACKAGE, Uuid([id; 16])).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
+        p
+    });
+    let inner = packaged(&mut st, PACKAGE, "inner", top);
+    let (party, guest) = (packaged(&mut st, archforge_uml::CLASS, "Party", inner), packaged(&mut st, archforge_uml::CLASS, "Guest", other));
+    depending(&mut st, guest, party, other);
+    depending(&mut st, inner, guest, inner);
+    depending(&mut st, other, top, other);
+    let tracing = packaged(&mut st, archforge_uml::PROFILE, "Tracing", top);
+    let mut s = over(st);
+    let [top, inner, other, tracing] = [top, inner, other, tracing].map(|o| s.doc().uuid(o).unwrap().to_string());
+    run(&mut s, "uml.profile.apply", json!({ "package": other, "profile": tracing }));
+    assert_eq!(going(&s, &[&top]), 4, "everything in it and at it, and its profile's application elsewhere");
+    assert_eq!(counts(&s.execute("element.remove", &json!({ "ids": [top] })).unwrap().value).3, 4);
+    s.undo().unwrap();
+    assert_eq!(going(&s, &[&inner]), 1, "nested, it goes with the dependency at it alone");
+    assert_eq!(counts(&removal(&mut s, &[&inner])).3, 1);
+}
+
 /// Two packages of one chain removed in one call, `Root > Parent > Child` with a class and a bound
 /// diagram under Child: whichever is named first, the class and the diagram are handed up through
 /// both to Root and each is counted once, and Child's binding is the one that goes. With Root,
