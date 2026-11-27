@@ -33148,6 +33148,35 @@ fn a_popover_holds_the_keys_as_its_kind_says() {
     }
 }
 
+/// The kind of a diagram, the kind of the diagram shown and whether the open popover takes the
+/// keys are asked of the kinds the shell registered, and the kind shown is the active tab's. In the
+/// sketch shell, whose kinds are ER's and the sketch's, the sketch diagram is the sketch kind's,
+/// which the app's list (`KINDS`) does not know; UML's classifier kinds, which the app's UML kind
+/// walks with the keys, hold none there, as UML is not the shell's. With no tab active, or no
+/// project open, no kind shows.
+#[test]
+fn the_kinds_asked_are_the_shells_and_the_kind_shown_is_the_active_tabs() {
+    let (mut h, d, ..) = sketch_harness();
+    let shell = h.state_mut();
+    let id = archforge_mof::Uuid::parse(&d).unwrap();
+    let store = shell.session.as_ref().unwrap().doc();
+    let diagram = store.by_uuid(id).unwrap();
+    assert_eq!(crate::kinds::kind_of(shell, store, diagram).map(|k| k.kind()), Some(SKETCH));
+    assert!(archforge_shell_api::kinds::kind_of(crate::kinds::KINDS, store, diagram).is_none(), "the app's list knows no sketch");
+    assert_eq!(crate::kinds::active_kind(shell).map(|k| k.kind()), Some(SKETCH));
+    assert!(archforge_shell_api::kinds::active_kind(crate::kinds::KINDS, &shell.canvas, shell.session.as_ref()).is_none());
+    shell.canvas.popover = Some(crate::uml_classifier::KINDS);
+    assert!(!crate::kinds::popover_takes_keys(shell), "UML is not the sketch shell's");
+    assert!(archforge_shell_api::kinds::popover_takes_keys(crate::kinds::KINDS, &shell.canvas), "the app's UML walks them");
+    shell.canvas.popover = None;
+    assert_eq!(shell.canvas.tabs, vec![id]);
+    shell.canvas.active = None;
+    assert!(crate::kinds::active_kind(shell).is_none(), "the diagram is open in a tab, but no tab is active");
+    shell.canvas.active = Some(id);
+    shell.session = None;
+    assert!(crate::kinds::active_kind(shell).is_none(), "no project open");
+}
+
 /// Select all takes in what the diagram's kind adds beside its boxes and lines (AR-789): UML the
 /// generalization set its generalizations belong to, ER's kind nothing. In light and dark.
 #[test]

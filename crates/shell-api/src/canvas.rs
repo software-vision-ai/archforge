@@ -3,18 +3,20 @@
 //! nested card to its owner's, a point along a line, the outline of a line's end mark, where a
 //! qualifier, a template's signature, a selected line's end handles and its end texts sit; and what
 //! the centre keeps between frames (`State`: the tabs, the view, the tool, the toggles, the editing
-//! under way and what the last frame drew that takes a press). The shell draws the canvas with it
+//! under way and what the last frame drew that takes a press), and what one frame's drawing reads
+//! (`Drawing`), from which a diagram's kind draws its own figures. The shell draws the canvas with it
 //! (`archforge_ui_egui::canvas` re-exports it under its old paths), and so will a notation's
 //! screens, without the shell.
 
 use std::collections::HashMap;
 
 use archforge_diagram::figure::EndMark;
-use archforge_mof::Uuid;
+use archforge_diagram::grid::bounds_of;
+use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Vec2, pos2, vec2};
 
 use crate::kinds::ExtraLabel;
-use crate::ux;
+use crate::ux::{self, Palette};
 
 /// The view's mapping between diagram units and the screen.
 #[derive(Debug, Clone, Copy)]
@@ -638,6 +640,61 @@ impl State {
 /// A colour as `#rrggbb`.
 pub fn hex(c: ux::Colour) -> String {
     format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b())
+}
+
+/// What one frame's drawing reads: the palette, the store, the view, the selection, the rectangles
+/// a gesture previews, the key status toggle and the node whose name is being typed. A diagram's
+/// kind draws its own figures from it ([`crate::kinds::DiagramKind::draw_extras`]).
+pub struct Drawing<'a> {
+    pub p: &'a Palette,
+    pub store: &'a Store,
+    pub view: &'a View,
+    pub selection: &'a [Obj],
+    pub overrides: &'a std::collections::BTreeMap<Uuid, Rect>,
+    pub key_status: bool,
+    pub looking_only: bool,
+    pub renaming: Option<Uuid>,
+    /// The problems the rules find, by the element they sit on.
+    pub problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
+    /// The diagram drawn, the notations that describe its nodes and lines, and its kind.
+    pub diagram: Obj,
+    pub notations: &'a archforge_diagram::ProjectView,
+    pub kind: Option<&'static dyn crate::kinds::DiagramKind>,
+    /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
+    /// and where each line's ends sit along their sides: worked out once a frame.
+    pub boxes: Vec<(Obj, archforge_diagram::Rect)>,
+    pub spreads: std::collections::HashMap<Obj, (f64, f64)>,
+    /// The line under the pointer, drawn with a halo so its route reads.
+    pub hovered: Option<Obj>,
+    /// A drag under way: a cardinality text's line, end and centre, or a line's route with a
+    /// segment moved.
+    pub end_drag: Option<(Uuid, u8, Pos2)>,
+    pub segment_drag: Option<(Uuid, Vec<(f64, f64)>)>,
+    /// The cardinality texts drawn this frame, for the next frame's press.
+    pub ends: std::cell::RefCell<Vec<EndText>>,
+    /// The line ends moved out to a qualifier box this frame, for the next frame's end handles.
+    pub qualified_ends: std::cell::RefCell<Vec<(Pos2, Pos2)>>,
+    /// A row typed in place on a card: its element, compartment and row (none for a new one).
+    pub draft: Option<(Obj, usize, Option<usize>)>,
+    /// The name being typed in place, which a package's tab follows as it is typed.
+    pub rename_text: Option<&'a str>,
+    /// The packages' tabs drawn this frame, for the next frame's press and hover.
+    pub tabs: std::cell::RefCell<Vec<PackageTab>>,
+    /// The packages' owning paths drawn this frame, for their tooltips and screen readers.
+    pub paths: std::cell::RefCell<Vec<PathBadge>>,
+    /// The diagram each element leads to, by the element: worked out once a frame, when a card
+    /// first shows one (a package's own diagram, AR-113).
+    pub led: std::cell::OnceCell<std::collections::HashMap<Obj, Obj>>,
+    /// A label of the figures of no one node or line being dragged where no node holds it yet: the
+    /// element it stands for and how far it moved.
+    pub label_drag: Option<(Uuid, Vec2)>,
+}
+
+impl Drawing<'_> {
+    /// A node's rectangle on screen: the gesture's preview when it has one, else as stored.
+    pub fn node_rect(&self, n: Obj) -> Rect {
+        self.store.uuid(n).ok().and_then(|id| self.overrides.get(&id).copied()).unwrap_or_else(|| self.view.rect(&bounds_of(self.store, n)))
+    }
 }
 
 /// A short end text, four characters at zoom 1, sits 30 points along a level or an upright line

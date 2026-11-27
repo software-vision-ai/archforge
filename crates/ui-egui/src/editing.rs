@@ -16,6 +16,7 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+pub(crate) use archforge_shell_api::editing::Action;
 pub use archforge_shell_api::editing::{Corner, EntityMenu, Gesture, NodeRename, NoteEdit};
 
 use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_ROW, Tool, View};
@@ -58,30 +59,6 @@ const NOTE_SIZE: (f64, f64) = (200.0, 72.0);
 /// showing none of its set's lines, is never hit.
 pub(crate) fn hit(store: &Store, notations: &ProjectView, grid: &Grid, x: f64, y: f64) -> Option<Hit> {
     grid.hit_keeping(x, y, |n| !notations.node_is_label(store, n))
-}
-
-/// What the pointer asked for this frame, decided over the store and applied after.
-pub(crate) enum Action {
-    Nothing,
-    Select(Vec<Uuid>),
-    Toggle(Uuid),
-    Start(Gesture, Option<Uuid>),
-    Commit,
-    Place(&'static str, f64, f64),
-    Menu(EntityMenu),
-    Rename(Uuid, Uuid),
-    Open(Uuid, Option<usize>),
-    PlaceNote(f64, f64),
-    EditNote(Uuid),
-    /// A cardinality text put back in its place, and a line's route worked out anew.
-    ResetEnd(Uuid, u8),
-    ResetRoute(Uuid),
-    /// Something refused before it began, said at the canvas's top: a line the tool starts nowhere.
-    Notice(String),
-    /// What the diagram's kind makes of the press ([`crate::kinds::DiagramKind::pointer`],
-    /// [`crate::kinds::DiagramKind::secondary_click`]), run through the narrow context once
-    /// decided: a UML n-ary association's next end, or a menu of its own opened.
-    Own(Box<dyn FnOnce(&mut Ctx)>),
 }
 
 /// Whether a canvas action changes nothing, so that it stays on while a version shows.

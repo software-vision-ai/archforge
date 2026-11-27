@@ -18,7 +18,7 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-pub(crate) use archforge_shell_api::canvas::{END_HANDLE, View, along, end_handles_at, exit_point, nesting_route};
+pub(crate) use archforge_shell_api::canvas::{Drawing, END_HANDLE, View, along, end_handles_at, exit_point, nesting_route};
 pub use archforge_shell_api::canvas::{EndText, MinimapDrag, PackageTab, PathBadge, State, Toast, Tool, self_loop};
 use archforge_shell_api::canvas::{beside, beside_pair, mark_outline, mark_shape, qualifier_place, signature_place};
 pub use archforge_shell_api::kinds::ExtraLabel;
@@ -868,61 +868,6 @@ fn grid_dots(paint: &egui::Painter, p: &Palette, r: Rect, view: &View) {
             y += step;
         }
         x += step;
-    }
-}
-
-/// What one frame's drawing reads: the palette, the store, the view, the selection, the rectangles
-/// a gesture previews, the key status toggle and the node whose name is being typed. A diagram's
-/// kind draws its own figures from it ([`crate::kinds::DiagramKind::draw_extras`]).
-pub(crate) struct Drawing<'a> {
-    pub(crate) p: &'a Palette,
-    pub(crate) store: &'a Store,
-    pub(crate) view: &'a View,
-    pub(crate) selection: &'a [Obj],
-    overrides: &'a std::collections::BTreeMap<Uuid, Rect>,
-    key_status: bool,
-    looking_only: bool,
-    renaming: Option<Uuid>,
-    /// The problems the rules find, by the element they sit on.
-    problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
-    /// The diagram drawn, the notations that describe its nodes and lines, and its kind.
-    pub(crate) diagram: Obj,
-    notations: &'a archforge_diagram::ProjectView,
-    kind: Option<&'static dyn crate::kinds::DiagramKind>,
-    /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
-    /// and where each line's ends sit along their sides: worked out once a frame.
-    boxes: Vec<(Obj, archforge_diagram::Rect)>,
-    spreads: std::collections::HashMap<Obj, (f64, f64)>,
-    /// The line under the pointer, drawn with a halo so its route reads.
-    hovered: Option<Obj>,
-    /// A drag under way: a cardinality text's line, end and centre, or a line's route with a
-    /// segment moved.
-    end_drag: Option<(Uuid, u8, Pos2)>,
-    segment_drag: Option<(Uuid, Vec<(f64, f64)>)>,
-    /// The cardinality texts drawn this frame, for the next frame's press.
-    ends: std::cell::RefCell<Vec<EndText>>,
-    /// The line ends moved out to a qualifier box this frame, for the next frame's end handles.
-    qualified_ends: std::cell::RefCell<Vec<(Pos2, Pos2)>>,
-    /// A row typed in place on a card: its element, compartment and row (none for a new one).
-    draft: Option<(Obj, usize, Option<usize>)>,
-    /// The name being typed in place, which a package's tab follows as it is typed.
-    rename_text: Option<&'a str>,
-    /// The packages' tabs drawn this frame, for the next frame's press and hover.
-    tabs: std::cell::RefCell<Vec<PackageTab>>,
-    /// The packages' owning paths drawn this frame, for their tooltips and screen readers.
-    paths: std::cell::RefCell<Vec<PathBadge>>,
-    /// The diagram each element leads to, by the element: worked out once a frame, when a card
-    /// first shows one (a package's own diagram, AR-113).
-    led: std::cell::OnceCell<std::collections::HashMap<Obj, Obj>>,
-    /// A label of the figures of no one node or line being dragged where no node holds it yet: the
-    /// element it stands for and how far it moved.
-    pub(crate) label_drag: Option<(Uuid, Vec2)>,
-}
-
-impl Drawing<'_> {
-    /// A node's rectangle on screen: the gesture's preview when it has one, else as stored.
-    pub(crate) fn node_rect(&self, n: Obj) -> Rect {
-        self.store.uuid(n).ok().and_then(|id| self.overrides.get(&id).copied()).unwrap_or_else(|| self.view.rect(&bounds_of(self.store, n)))
     }
 }
 
