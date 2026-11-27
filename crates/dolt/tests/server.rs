@@ -489,11 +489,11 @@ fn take_the_port(run_root: &Path, dir: &Path, dolt: &Path) -> (u16, bool) {
 
 /// Another program took the port a start chose before the server listened on it, and let it go
 /// again before the start looked: the server said so in its log and stopped, and the start tried
-/// again on another port. The first start's dolt is the script [`LOSING_START`], which keeps that
-/// order (its start sees the server end only once the port is free again); every later start runs
-/// dolt itself, by the same path, so the server that runs is the one its record names.
+/// again, on a port it chose anew. The first start's dolt is the script [`LOSING_START`], which
+/// keeps that order (its start sees the server end only once the port is free again); every later
+/// start runs dolt itself, by the same path, so the server that runs is the one its record names.
 #[test]
-fn a_start_whose_port_was_taken_and_let_go_again_starts_on_another_port() {
+fn a_start_whose_port_was_taken_and_let_go_again_is_tried_again() {
     // An apostrophe and a space in its folders, which the script must take as they are.
     let env = Env::new("port's race");
     let program = env.base.join("dolt");
@@ -512,7 +512,12 @@ fn a_start_whose_port_was_taken_and_let_go_again_starts_on_another_port() {
     let server = started.unwrap();
     let _guard = KillOnDrop(server.pid());
     assert!(checked, "dolt checked the port {port} while it was taken");
-    assert_ne!(server.port(), port, "the server runs on another port");
+    // The losing start's script ran to its end, and the server that answers was started after it:
+    // dolt itself at the script's path, not the script. Its port may well be the same number again.
+    assert!(["waiting", "taken", "released"].iter().all(|f| env.base.join(f).is_file()), "the losing start ran to its end");
+    let line = Command::new("/bin/ps").args(["-ww", "-o", "args=", "-p", &server.pid().to_string()]).output().unwrap();
+    let line = String::from_utf8_lossy(&line.stdout);
+    assert!(line.starts_with(&format!("{} sql-server --config ", program.display())), "a later start's dolt answers: {line}");
     assert_eq!(one(&mut server.connect().unwrap()), 1);
     assert_eq!(env.leftovers(), (1, 1), "one record and one run folder");
     server.stop().unwrap();
