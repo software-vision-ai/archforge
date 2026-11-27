@@ -2,6 +2,7 @@
 str		Table	Table
 str		Column	Column
 str		Columns	Columns
+str		Schema	Schema
 str		Schema · model	Schema · model
 str		Table · model, in every diagram	Table · model, in every diagram
 str		Column · model	Column · model
@@ -22,10 +23,14 @@ str		Columns · {n}	Columns · {n}
 str		Keys · {n}	Keys · {n}
 str		Add a column	Add a column
 str		Add unique constraint	Add unique constraint
+str		Nulls distinct	Nulls distinct
 str		Columns, in key order	Columns, in key order
 str		Types · {n}	Types · {n}
 plural		{n} check	{n} check|{n} checks
 str		Add type	Add type
+str		Domain	Domain
+str		Enum type	Enum type
+str		Base type	Base type
 str		Checks	Checks
 str		Add a check	Add a check
 str		Literals, in order	Literals, in order
@@ -33,6 +38,12 @@ str		Subtypes · {n}	Subtypes · {n}
 str		Add subtype	Add subtype
 str		Discriminator	Discriminator
 str		Mapping	Mapping
+str		Table per type	Table per type
+str		Single table	Single table
+str		Table per concrete type	Table per concrete type
+str		complete	complete
+str		disjoint	disjoint
+str		overlapping	overlapping
 str		key on {columns}	key on {columns}
 str		Add a literal	Add a literal
 plural		{n} column takes {name}: {columns}. Retype it first.	{n} column takes {name}: {columns}. Retype it first.|{n} columns take {name}: {columns}. Retype them first.
@@ -62,6 +73,14 @@ str		The start {start} is below the minimum {minimum}.	The start {start} is belo
 str		The start {start} is above the maximum {maximum}.	The start {start} is above the maximum {maximum}.
 str	sequence	Start	Start
 str		Owned by	Owned by
+str		Sequence	Sequence
+str		Increment	Increment
+str		Minimum	Minimum
+str		Maximum	Maximum
+str		Cycle	Cycle
+str		View	View
+str		Materialized	Materialized
+str		Query	Query
 plural		{n} more column, not listed	{n} more column, not listed|{n} more columns, not listed
 str		{field} takes a whole number	{field} takes a whole number
 str		Views · {n}	Views · {n}
@@ -80,6 +99,10 @@ str		Indexes · {n}	Indexes · {n}
 str		Add check constraint	Add check constraint
 str		Add index	Add index
 str		Columns, in index order	Columns, in index order
+str		Where	Where
+str		Method	Method
+str		Ascending	Ascending
+str		Descending	Descending
 str		An expression	An expression
 str		Nulls default	Nulls default
 str		Nulls first	Nulls first
@@ -95,6 +118,14 @@ plural		{n} key goes with it.	{n} key goes with it.|{n} keys go with it.
 plural		{n} foreign key goes with it.	{n} foreign key goes with it.|{n} foreign keys go with it.
 str		Add column	Add column
 str		Edit column	Edit column
+str		Regular	Regular
+str		Primary key	Primary key
+str		Not null	Not null
+str		Length	Length
+str		Precision	Precision
+str		Scale	Scale
+str		Generation	Generation
+str		Collation	Collation
 str		Mapping table	Mapping table
 str		Follows {target}	Follows {target}
 str		Unlink	Unlink
@@ -127,6 +158,34 @@ str		Identity, always	Identity, always
 str		Identity, by default	Identity, by default
 str		Computed, stored	Computed, stored
 str		Computed, virtual	Computed, virtual
+str		Associative	Associative
+str		Check constraint	Check constraint
+str		Computed stored	Computed stored
+str		Computed virtual	Computed virtual
+str		Domain check	Domain check
+str		Exactly one	Exactly one
+str		First	First
+str		From end	From end
+str		From role	From role
+str		Identity always	Identity always
+str		Identity by default	Identity by default
+str		Index column	Index column
+str		Initially deferred	Initially deferred
+str		Initially immediate	Initially immediate
+str		Last	Last
+str		Not deferrable	Not deferrable
+str		Nullable	Nullable
+str		Nulls	Nulls
+str		One or more	One or more
+str		Subtype mapping	Subtype mapping
+str		Subtypes complete	Subtypes complete
+str		Subtypes disjoint	Subtypes disjoint
+str		Table index	Table index
+str		To end	To end
+str		To role	To role
+str		Unique constraint	Unique constraint
+str		Zero or more	Zero or more
+str		Zero or one	Zero or one
 str		New ER diagram	New ER diagram
 str		Tables, their columns and keys, and the relationships between them.	Tables, their columns and keys, and the relationships between them.
 str		ER diagram	ER diagram
@@ -210,6 +269,8 @@ str	refusal	a subtype	a subtype
 str	refusal	a key column	a key column
 str		Entity · {schema}	Entity · {schema}
 str		Add table	Add table
+str		Entity	Entity
+str		Relationship types	Relationship types
 str		Place table	Place table
 str		Show related tables	Show related tables
 str		The diagram is of no schema	The diagram is of no schema
@@ -218,6 +279,8 @@ str		Add relationship	Add relationship
 str		Cardinality	Cardinality
 str		Presets	Presets
 str		End	End
+str		Start	Start
+str		Identifying	Identifying
 str		Identifying needs the parent's primary key; drawn as not identifying	Identifying needs the parent's primary key; drawn as not identifying
 str		Many to many · add a mapping table	Many to many · add a mapping table
 str		Many to many · {from} and {to}	Many to many · {from} and {to}
@@ -240,6 +303,19 @@ str		This relationship	This relationship
 str		On this relationship · {n}	On this relationship · {n}
 str		Add foreign key	Add foreign key
 str		Remove foreign key	Remove foreign key
+str		Foreign key	Foreign key
+str		On delete	On delete
+str		On update	On update
+str		No action	No action
+str		Restrict	Restrict
+str		Cascade	Cascade
+str		Set null	Set null
+str		Set default	Set default
+str		Deferrable	Deferrable
+str		Match	Match
+str		Simple	Simple
+str		Full	Full
+str		Partial	Partial
 str		Add id column	Add id column
 str		Choose key columns	Choose key columns
 str		Ends	Ends
