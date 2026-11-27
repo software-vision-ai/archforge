@@ -7,8 +7,8 @@ use std::path::Path;
 #[path = "src/i18n/check.rs"]
 mod check;
 
-/// Fails the build at a catalogue row in `src/i18n` that does not have four columns, or at a
-/// listing of the catalogues that fails part way.
+/// Fails the build at a catalogue row in `src/i18n` that does not have four columns, at a
+/// catalogue that cannot be read as text, or at a listing of the catalogues that fails part way.
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
     let i18n = Path::new(&manifest).join("src").join("i18n");
@@ -26,7 +26,14 @@ fn main() {
         if path.extension().is_none_or(|e| e != "tsv") {
             continue;
         }
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        // A catalogue that cannot be read as text, invalid UTF-8 among it, cannot be checked.
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(e) => {
+                println!("cargo:warning={}: the catalogue could not be read, so it cannot be checked: {e}", path.display());
+                std::process::exit(1);
+            }
+        };
         if let Some((line, cols)) = check::malformed_row(&text) {
             println!("cargo:warning={}:{line}: a catalogue row has 4 tab-separated columns, found {cols}", path.display());
             std::process::exit(1);

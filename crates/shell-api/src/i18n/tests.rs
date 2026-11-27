@@ -1,7 +1,8 @@
 //! The machinery's tests: each language's plural rule, placeholders, the registering of a crate's
-//! catalogues and what the lookups find in them, the interfaces' own catalogue registered by the
-//! lookups, and the build-time row check. The rows of every catalogue, the interfaces' own among
-//! them, are tested in the shell (`archforge_ui_egui::i18n`).
+//! catalogues and what the lookups find in them, the interfaces' own catalogue table, and the
+//! build-time row check. That each lookup registers the interfaces' own catalogue
+//! when it is the process's first is tested in binaries of their own (`tests/`). The rows of every
+//! catalogue, the interfaces' own among them, are tested in the shell (`archforge_ui_egui::i18n`).
 
 use super::*;
 
@@ -131,33 +132,6 @@ fn every_catalogue_in_the_folder_is_registered() {
     let codes: Vec<&str> = CATALOGUES.iter().map(|rows| rows.code).collect();
     assert_eq!(codes, LANGUAGES.iter().map(|l| l.code).collect::<Vec<_>>(), "one catalogue for each language, in the languages' order");
     assert_eq!(register(CATALOGUES), Ok(()), "the machinery takes the interfaces' catalogues");
-}
-
-/// `tr` finds the interfaces' own rows when it is the process's first lookup (as it is when this
-/// test runs alone): it registers their catalogues itself.
-#[test]
-fn tr_registers_the_interfaces_catalogues() {
-    set_language("de");
-    assert_eq!(tr("There is nothing to undo."), "Es gibt nichts rückgängig zu machen.");
-    set_language("en");
-}
-
-/// `tr_ctx` finds the interfaces' own rows when it is the process's first lookup (as it is when
-/// this test runs alone): it registers their catalogues itself.
-#[test]
-fn tr_ctx_registers_the_interfaces_catalogues() {
-    set_language("de");
-    assert_eq!(tr_ctx("refusal", "a skill"), "ein Skill");
-    set_language("en");
-}
-
-/// `trn` registers the interfaces' catalogues when it is the process's first lookup (as it is when
-/// this test runs alone). The interfaces say no plural of their own, so the registry is asked.
-#[test]
-fn trn_registers_the_interfaces_catalogues() {
-    assert_eq!(trn("{n} unregistered day", "{n} unregistered days", 2), "2 unregistered days");
-    let registry = REGISTRY.read().unwrap_or_else(PoisonError::into_inner);
-    assert!(registry.tables.iter().any(|table| std::ptr::eq(*table, CATALOGUES)), "the interfaces' table is registered");
 }
 
 /// The build-time row check names the first row without four tab-separated columns, by its line
