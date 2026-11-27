@@ -559,6 +559,20 @@ impl DiagramKind for UmlKind {
         crate::uml_nary::leg_start(d.store, source, || d.node_rect(source), tip, next)
     }
 
+    /// An association end's qualifier box against its class, the line starting from its outer side
+    /// (AR-127).
+    fn line_ends(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineEnds<'_>,
+        points: &mut [egui::Pos2],
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> Vec<egui::Shape> {
+        crate::uml_adornments::qualifier_boxes(paint, d, line, points, registry, ui)
+    }
+
     /// An association class's tie to its card, or its name while the card is not here (AR-125).
     fn line_extras(
         &self,
@@ -569,6 +583,19 @@ impl DiagramKind for UmlKind {
         ui: &egui::Ui,
     ) -> Option<Rect> {
         crate::uml_relate::association_class_extras(paint, d, line, registry, ui)
+    }
+
+    /// A line's stereotypes, above its name (AR-135).
+    fn line_caption(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineDrawn<'_>,
+        name: Option<Rect>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) {
+        crate::uml_adornments::stereotypes(paint, d, line, name, registry, ui);
     }
 
     /// The generalization sets across their members' lines (AR-129).
@@ -583,7 +610,7 @@ impl DiagramKind for UmlKind {
     }
 
     /// A package's card: its tab, the path of its owners and its own diagram's thumbnail (AR-113,
-    /// AR-565).
+    /// AR-565); an n-ary association's, its diamond (AR-128).
     fn draw_card(
         &self,
         paint: &egui::Painter,
@@ -592,7 +619,19 @@ impl DiagramKind for UmlKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) -> bool {
-        crate::uml_package::draw_card(paint, d, card, registry, ui)
+        crate::uml_package::draw_card(paint, d, card, registry, ui) || crate::uml_nary::draw_card(paint, d, card)
+    }
+
+    /// A template's signature over its card's top-right corner (AR-130).
+    fn card_extras(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) {
+        crate::uml_adornments::signature(paint, d, card, registry, ui);
     }
 
     /// A generalization set's label gets a node where it is let go, on this diagram alone (AR-129).

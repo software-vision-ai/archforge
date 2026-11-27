@@ -18081,6 +18081,74 @@ impl crate::kinds::DiagramKind for SketchKind {
         });
         true
     }
+    /// Draws [`SKETCH_OVER`] over the top right corner of every card, recorded.
+    fn card_extras(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) {
+        let at = card.rect.right_top() - egui::vec2(90.0, 8.0);
+        let rect = crate::ux::text(paint, at, SKETCH_OVER, crate::ux::types::SMALL, d.p.text, None);
+        if let Ok(id) = d.store.uuid(card.node) {
+            crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.sketch-over.{id}"), "label", rect);
+        }
+    }
+    /// Its lines' ends take handles, which move nothing.
+    fn reconnects(&self) -> bool {
+        true
+    }
+    /// Moves each line's source end [`SKETCH_END_SHIFT`] on along the line, writing it down as
+    /// moved, and gives a square in the line's ink at the moved end, recorded.
+    fn line_ends(
+        &self,
+        _: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineEnds<'_>,
+        points: &mut [egui::Pos2],
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> Vec<egui::Shape> {
+        let (Some(start), Some(next)) = (points.first().copied(), points.get(1).copied()) else { return Vec::new() };
+        let moved = start + (next - start).normalized() * SKETCH_END_SHIFT;
+        d.moved_ends.borrow_mut().push((start, moved));
+        points[0] = moved;
+        let square = egui::Rect::from_center_size(moved, egui::Vec2::splat(8.0));
+        if let Ok(id) = d.store.uuid(line.line) {
+            crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.sketch-end.{id}"), "label", square);
+        }
+        vec![egui::Shape::rect_filled(square, 0.0, line.stroke.color)]
+    }
+    /// Says its line's name sits over the line's middle, drawing nothing there.
+    fn line_extras(
+        &self,
+        _: &egui::Painter,
+        _: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineDrawn<'_>,
+        _: &mut crate::widgets::Registry,
+        _: &egui::Ui,
+    ) -> Option<egui::Rect> {
+        Some(egui::Rect::from_center_size(crate::canvas::along(line.points, 0.5) - egui::vec2(0.0, 30.0), egui::vec2(60.0, 14.0)))
+    }
+    /// Draws [`SKETCH_CAPTION`] above where its line's name sits, recorded; nothing for a line
+    /// without a name.
+    fn line_caption(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineDrawn<'_>,
+        name: Option<egui::Rect>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) {
+        let Some(name) = name else { return };
+        let rect = crate::ux::text(paint, name.left_top() - egui::vec2(0.0, 20.0), SKETCH_CAPTION, crate::ux::types::SMALL, d.p.text, None);
+        if let Ok(id) = d.store.uuid(line.line) {
+            crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.sketch-caption.{id}"), "label", rect);
+        }
+    }
 }
 
 /// The name of a class whose card the sketch kind draws itself, the word it draws on it, and what
@@ -18089,6 +18157,11 @@ const SKETCH_DRAWN: &str = "Drawn by the sketch";
 const SKETCH_WORD: &str = "Sketched";
 const SKETCH_PART_SAYS: &str = "The sketch's part";
 const SKETCH_LABEL_SAYS: &str = "The sketch's label, whole";
+/// What the sketch kind draws over every card, and over a line's name; how far it moves a line's
+/// source end on along the line.
+const SKETCH_OVER: &str = "Over the card";
+const SKETCH_CAPTION: &str = "Over the name";
+const SKETCH_END_SHIFT: f32 = 30.0;
 
 /// The part over the top left of a card at `rect` that the sketch kind draws itself, at zoom `z`.
 fn sketch_part(rect: egui::Rect, z: f32) -> egui::Rect {
@@ -18330,6 +18403,110 @@ fn the_name_typed_on_a_card_its_kind_draws_goes_where_the_kind_says_from_the_fir
         double_click(&mut h, party.left_top() + egui::vec2(60.0, 30.0));
         let field = rect_of(&h, "workspace.canvas.rename");
         assert!(party.contains_rect(field) && field.top() > party.top() + 20.0, "{theme:?}: in Party's header: {field:?} {party:?}");
+    }
+}
+
+/// The colour a line is painted in, by its path's stroke.
+fn path_colour(s: &egui::Shape) -> Option<egui::Color32> {
+    match s {
+        egui::Shape::Path(p) => match p.stroke.color {
+            egui::epaint::ColorMode::Solid(c) => Some(c),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The kinds move a line's ends before the canvas draws it: the line starts where the sketch moved
+/// its end, the end is written down as moved, and what the kind gave is painted right after the
+/// line, in its ink; a selected line's end handle sits at the moved end. What a kind draws by the
+/// line's name goes over it, from where the name sits. In light and dark.
+#[test]
+fn a_lines_ends_move_as_the_kinds_say_and_what_they_draw_goes_over_the_line_and_by_its_name() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _d, _a, _b, e) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        h.run();
+        let end = rect_of(&h, &format!("workspace.canvas.sketch-end.{e}"));
+        let moved = end.center();
+        let [(from, to)] = h.state().canvas.moved_ends[..] else { panic!("{theme:?}: {:?}", h.state().canvas.moved_ends) };
+        assert!(to.distance(moved) < 0.5 && (from.distance(to) - SKETCH_END_SHIFT).abs() < 0.5, "{theme:?}: {from:?} to {to:?}");
+        let shapes: Vec<&egui::Shape> = h.output().shapes.iter().map(|c| &c.shape).collect();
+        let at = shapes
+            .iter()
+            .position(|s| matches!(s, egui::Shape::Path(p) if p.points.first().is_some_and(|q| q.distance(moved) < 0.5)))
+            .unwrap_or_else(|| panic!("{theme:?}: the line starts at the moved end"));
+        let ink = path_colour(shapes[at]);
+        assert!(
+            matches!(shapes.get(at + 1), Some(egui::Shape::Rect(r)) if r.rect == end && Some(r.fill) == ink),
+            "{theme:?}: the kind's square right after the line, in its ink: {:?}",
+            shapes.get(at + 1)
+        );
+        assert!(ids(&h).iter().any(|i| *i == format!("workspace.canvas.sketch-caption.{e}")), "{theme:?}: drawn by the line's name");
+        assert!(painted(&h).iter().any(|t| t == SKETCH_CAPTION), "{theme:?}");
+        // Selected, the line's source handle sits where its end moved to.
+        let element = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let edge = st.by_uuid(archforge_mof::Uuid::parse(&e).unwrap()).unwrap();
+            st.uuid(crate::canvas::element_of(st, edge, archforge_diagram::edge::ELEMENT).unwrap()).unwrap()
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [element.to_string()] })).unwrap();
+        h.run();
+        let handle = rect_of(&h, "workspace.canvas.line-end.source").center();
+        assert!(handle.distance(moved) < 0.5, "{theme:?}: {handle:?} at {moved:?}");
+    }
+}
+
+/// What a kind draws over a card goes over the card and its selection ring, for the canvas's own
+/// cards and those a kind drew itself alike. In light and dark.
+#[test]
+fn what_the_kinds_draw_over_a_card_goes_over_every_card_and_its_ring() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _d, a, b) = sketch_drawn_harness(theme);
+        for node in [&a, &b] {
+            assert!(ids(&h).iter().any(|i| *i == format!("workspace.canvas.sketch-over.{node}")), "{theme:?}: over {node}");
+        }
+        assert_eq!(painted(&h).iter().filter(|t| *t == SKETCH_OVER).count(), 2, "{theme:?}");
+        // Party selected: its ring, then what the kind draws over it.
+        let party = rect_of(&h, &format!("workspace.canvas.node.{a}"));
+        click(&mut h, party.center());
+        h.run();
+        let over = rect_of(&h, &format!("workspace.canvas.sketch-over.{a}"));
+        let accent = egui::Color32::from(crate::ux::palette(theme == ThemeKind::Dark).accent);
+        let ring = party.expand(4.0);
+        let shapes: Vec<&egui::Shape> = h.output().shapes.iter().map(|c| &c.shape).collect();
+        let ringed = shapes.iter().position(|s| {
+            matches!(s, egui::Shape::Rect(r) if r.stroke.color == accent && r.rect.min.distance(ring.min) < 0.5 && r.rect.max.distance(ring.max) < 0.5)
+        });
+        let written =
+            shapes.iter().position(|s| matches!(s, egui::Shape::Text(t) if t.galley.text() == SKETCH_OVER && t.pos.distance(over.min) < 0.5));
+        assert!(ringed.is_some() && written > ringed, "{theme:?}: the ring at {ringed:?}, the kind's text at {written:?}");
+    }
+}
+
+/// The kinds are asked what they draw of a card and a line whatever kind the diagram is of, each
+/// once: drawn with no kind of its own, the sketch still draws over the cards and moves the line's
+/// end; drawn as a sketch, it does each once, its line's name included.
+#[test]
+fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
+    let (mut h, d, a, b, e) = sketch_harness();
+    let session = h.state_mut().session.take().unwrap();
+    drop(h);
+    let count = |recorded: &[(String, egui::Rect)], id: &str| recorded.iter().filter(|(i, _)| i == id).count();
+    let wanted = |caption: usize| {
+        [
+            (format!("workspace.canvas.sketch-over.{a}"), 1),
+            (format!("workspace.canvas.sketch-over.{b}"), 1),
+            (format!("workspace.canvas.sketch-end.{e}"), 1),
+            (format!("workspace.canvas.sketch-caption.{e}"), caption),
+        ]
+    };
+    let none = std::collections::BTreeMap::new();
+    for (kind, caption) in [(None, 0), (Some(&SketchKind as &'static dyn crate::kinds::DiagramKind), 1)] {
+        let (_, recorded, _) = drawn_alone_at(&session, &d, (kind, SKETCH_KINDS), false, 1000.0, &Default::default(), &none);
+        for (id, times) in wanted(caption) {
+            assert_eq!(count(&recorded, &id), times, "{id} as {:?}", kind.map(|k| k.kind()));
+        }
     }
 }
 
@@ -32491,7 +32668,7 @@ fn qualifiers_are_added_moved_and_removed_in_properties_and_boxed_on_the_line() 
         click(&mut h, at);
         assert!(uml_of(h.state()).qualifier.is_none(), "applied, the editor closes");
         assert_eq!(qualifier_rows(&h, &a), [vec!["lineNo : Integer".to_string()], Vec::new()]);
-        assert_eq!(h.state().canvas.qualified_ends.len(), 1, "its end moved out to the box, for the next frame's handle");
+        assert_eq!(h.state().canvas.moved_ends.len(), 1, "its end moved out to the box, for the next frame's handle");
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add qualifier"));
         h.run();
         let shown = painted(&h);
