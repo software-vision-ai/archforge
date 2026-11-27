@@ -1098,6 +1098,8 @@ pub(crate) fn place_with_lines_cx(
     }
 }
 
+/// Opens the name field in the header of `node` for the element it shows, holding the element's
+/// name as it is; nothing opens when no project is open or the element is gone.
 fn open_rename(shell: &mut Shell, node: Uuid, element: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(element) else { return };
