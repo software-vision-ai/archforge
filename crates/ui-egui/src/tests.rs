@@ -509,7 +509,7 @@ impl crate::ProjectHost for SavingHost {
         _commit: String,
         (saved_at, before_at): (String, String),
         _by: crate::SavedBy,
-        _repair: fn(&mut archforge_mof::Store),
+        _repair: crate::Repair,
     ) -> crate::replace::Job {
         let (answer, answers) = std::sync::mpsc::channel();
         let (reading, readings) = std::sync::mpsc::channel();
@@ -5835,7 +5835,7 @@ fn a_binding_rule_broken_is_said_in_the_chosen_language() {
         ] {
             let st = h.state().session.as_ref().unwrap().doc();
             let at = |key: &str| st.by_uuid(archforge_mof::Uuid::parse(params[key].as_str().unwrap()).unwrap()).unwrap();
-            let drawn = crate::uml_bindings::refusal(st, at("bound"), at("template"), None);
+            let drawn = crate::uml_bindings::refusal(h.state().notation_uis, st, at("bound"), at("template"), None);
             assert_eq!(drawn.as_ref(), Some(&said), "{theme:?}: the canvas says it as the engine's refusal is said");
             let refused = crate::panels::run(h.state_mut(), "uml.template-binding.add", params).err().unwrap_or_default();
             assert_eq!(refused, said, "{theme:?}: in German");
@@ -6073,7 +6073,8 @@ fn a_use_that_refuses_is_said_in_the_chosen_language() {
         }
         // What Models says before it asks, and what Properties says under Extends, are those words.
         let st = h.state().session.as_ref().unwrap().doc();
-        let before_asking = crate::uml_profiles::removal_refusal(st, st.by_uuid(archforge_mof::Uuid::parse(&entity).unwrap()).unwrap());
+        let before_asking =
+            crate::uml_profiles::removal_refusal(h.state().notation_uis, st, st.by_uuid(archforge_mof::Uuid::parse(&entity).unwrap()).unwrap());
         assert_eq!(before_asking, Some(named.clone()), "{theme:?}");
         crate::panels::run(h.state_mut(), "view.select", json!({ "ids": [entity] })).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
@@ -7628,7 +7629,7 @@ fn an_er_id_key_column_or_constraint_name_refused_is_said_in_the_chosen_language
         let clash = json!({ "entity": table, "columns": [column], "name": "UQ_NUMMER" });
         assert_eq!(refused(&mut h, "er.unique.add", clash).to_lowercase(), taken.to_lowercase(), "{theme:?}");
         // A kind ER does not name, though the catalogues have its word, is not ER's to say.
-        assert_eq!(crate::er_said::said(&Reason::NotA { kind: "attribute", name: "x".into() }), None, "{theme:?}");
+        assert_eq!(crate::er_said::said(crate::notation_ui::UIS, &Reason::NotA { kind: "attribute", name: "x".into() }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -7665,7 +7666,7 @@ fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
             word: "x".into(),
             known: vec![archforge_er::DIAGRAM_KIND.into()],
         };
-        assert_eq!(crate::er_said::said(&archforge_engine::Reason::NotOneOf(Box::new(diagram))), None, "{theme:?}");
+        assert_eq!(crate::er_said::said(crate::notation_ui::UIS, &archforge_engine::Reason::NotOneOf(Box::new(diagram))), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -7700,10 +7701,10 @@ fn an_er_keys_columns_refused_are_said_in_the_chosen_language() {
         let in_use = "Der Fremdschlüssel fk_kunde verweist auf diesen Schlüssel von Kunde. Ändern oder entfernen Sie ihn zuerst.";
         assert_eq!(refused("er.attribute.set-flags", flags), in_use, "{theme:?}");
         assert_eq!(refused("er.primary-key.remove", json!({ "entity": order })), "Bestellung hat keinen Primärschlüssel.", "{theme:?}");
-        let nullable = crate::er_said::said(&Reason::NullableKeyColumn { name: "notiz".into() });
+        let nullable = crate::er_said::said(crate::notation_ui::UIS, &Reason::NullableKeyColumn { name: "notiz".into() });
         assert_eq!(nullable.as_deref(), Some("notiz darf leer sein, was eine Primärschlüsselspalte nie darf."), "{theme:?}");
         // At least two columns is no rule of a key's.
-        assert_eq!(crate::er_said::said(&Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
+        assert_eq!(crate::er_said::said(crate::notation_ui::UIS, &Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -7851,10 +7852,10 @@ fn the_key_a_foreign_key_points_at_refused_is_said_in_the_chosen_language() {
         ] {
             assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
         }
-        let no_columns = crate::er_said::said(&Reason::NoKeyColumns { table: "Lager".into() });
+        let no_columns = crate::er_said::said(crate::notation_ui::UIS, &Reason::NoKeyColumns { table: "Lager".into() });
         assert_eq!(no_columns.as_deref(), Some("Der Schlüssel von Lager hat keine Spalten, auf die verwiesen werden kann."), "{theme:?}");
         // Another kind pointed at again is not a foreign key's.
-        assert_eq!(crate::er_said::said(&Reason::Again { relationship: "index" }), None, "{theme:?}");
+        assert_eq!(crate::er_said::said(crate::notation_ui::UIS, &Reason::Again { relationship: "index" }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -7914,11 +7915,11 @@ fn a_foreign_keys_columns_refused_are_said_in_the_chosen_language() {
             (Reason::TooMany { kind, max: 32 }, "Ein Fremdschlüssel umfasst höchstens 32 Spalten."),
             (Reason::NamedTwice { kind, name: "c0".into() }, "c0 kommt im Fremdschlüssel zweimal vor."),
         ] {
-            assert_eq!(crate::er_said::said(&reason).as_deref(), Some(said), "{theme:?}");
+            assert_eq!(crate::er_said::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said), "{theme:?}");
         }
         // Two columns without a type never differ: that is left to the engine's English.
         let untyped = Reason::TypesDiffer { column: "a".into(), target: "b".into(), types: Box::new([None, None]) };
-        assert_eq!(crate::er_said::said(&untyped), None, "{theme:?}");
+        assert_eq!(crate::er_said::said(crate::notation_ui::UIS, &untyped), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -7988,7 +7989,7 @@ fn a_foreign_keys_actions_and_relationship_refused_are_said_in_the_chosen_langua
             (Reason::NotA { kind: "key", name: "nummer".into() }, "nummer passt hier nicht: erwartet wird ein Schlüssel."),
             (Reason::NoKeyColumns { table: "Kunde".into() }, "Der Schlüssel von Kunde hat keine Spalten, auf die verwiesen werden kann."),
         ] {
-            assert_eq!(crate::er_said::said(&reason).as_deref(), Some(said), "{theme:?}");
+            assert_eq!(crate::er_said::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said), "{theme:?}");
         }
         h.run();
     }
@@ -8039,10 +8040,10 @@ fn a_subtype_refused_is_said_in_the_chosen_language() {
         ] {
             assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
         }
-        let deep = crate::er_said::said(&Reason::TooDeep { kind: "subtype", max: 32 });
+        let deep = crate::er_said::said(crate::notation_ui::UIS, &Reason::TooDeep { kind: "subtype", max: 32 });
         assert_eq!(deep.as_deref(), Some("Untertypen würden hier tiefer als 32 Ebenen reichen."), "{theme:?}");
         // A cycle of another relationship is not a subtype's.
-        assert_eq!(crate::er_said::said(&Reason::Cycle { relationship: "foreign key" }), None, "{theme:?}");
+        assert_eq!(crate::er_said::said(crate::notation_ui::UIS, &Reason::Cycle { relationship: "foreign key" }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -8728,7 +8729,7 @@ fn no_two_notations_claim_the_same_refusal() {
     let claimants = |claims: &dyn Fn(&dyn NotationUi) -> bool| UIS.iter().filter(|ui| claims(**ui)).map(|ui| ui.metamodel()).collect::<Vec<_>>();
     let mut claimed = [0; 3];
     for reason in every_reason() {
-        let by = claimants(&|ui| ui.said(&reason).is_some());
+        let by = claimants(&|ui| ui.said(UIS, &reason).is_some());
         assert!(by.len() <= 1, "{reason:?} is said by the notations of the metamodels {by:?}");
         claimed[0] += by.len();
     }
@@ -8761,6 +8762,8 @@ fn no_two_notations_claim_the_same_refusal() {
 /// notations name, and one notation's for each of the rest; a kind no row names is none.
 #[test]
 fn each_kind_a_refusal_names_is_said_by_the_shell_or_one_notation() {
+    // The app's shell registers its notations' catalogues, whose rows this says.
+    let _shell = crate::Shell::new(crate::Services::default());
     use crate::i18n::{set_language, tr_ctx};
     use crate::notation_ui::UIS;
     let own = [("element", "an element"), ("constraint", "a constraint"), ("skill", "a skill")];
@@ -18453,7 +18456,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
     }
     /// Its one refusal of its own, something that is no sketch, signed with its name, so a test
     /// sees it asked.
-    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
+    fn said(&self, _: &[&'static dyn crate::notation_ui::NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
         match reason {
             archforge_engine::Reason::NotA { kind: "sketch", name } => Some(format!("{name} is not drawn in the {}.", self.0)),
             _ => None,
@@ -18509,7 +18512,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
     }
     /// A class's attributes go with it, counted in its own words and signed with its name, so a
     /// test sees it asked and the dialog say it; nothing goes with anything else.
-    fn consequences(&self, store: &archforge_mof::Store, obj: archforge_mof::Obj) -> Vec<String> {
+    fn consequences(&self, _: &[&'static dyn crate::notation_ui::NotationUi], store: &archforge_mof::Store, obj: archforge_mof::Obj) -> Vec<String> {
         let attributes = store.list(obj, archforge_uml::class::OWNED_ATTRIBUTE).map(|l| l.len()).unwrap_or_default();
         let class = store.class_of(obj).ok() == Some(archforge_uml::CLASS);
         (class && attributes > 0).then(|| format!("{attributes} attributes go with it in the {}.", self.0)).into_iter().collect()
@@ -18607,6 +18610,129 @@ static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErU
 static FIRST_SKETCH: SketchUi = SketchUi("first");
 static SECOND_SKETCH: SketchUi = SketchUi("second");
 static TWO_SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi, &FIRST_SKETCH, &SECOND_SKETCH];
+
+/// A notation that answers for no element, as no class is of its metamodel, and only says words of
+/// its own: an association with its article, a sentence for an enum type without literals, a row
+/// of its own catalogue, and a repair that leaves a tag in the model. Registered before ER and UML,
+/// it is asked before them, so a test sees that the words a notation says inside its own sentences,
+/// a model's kind words, the catalogues and an opening's repair ask the notations the shell
+/// registered, not the app's own list.
+struct WordsUi;
+
+/// The worded notation's word for an association with its article.
+const WORDED_ASSOCIATION: &str = "a worded association";
+
+/// The worded notation's sentence for an enum type without literals.
+const WORDED_LITERALS: &str = "The words want a literal.";
+
+/// The worded notation's own catalogue row, the same in every language but German.
+const WORDED_ROW: &str = "A worded row";
+
+/// The worded notation's catalogues: its one row in every language, German's own text.
+static WORDED_CATALOGUES: &[crate::i18n::Rows] = &[
+    crate::i18n::Rows { code: "en", catalogue: "words/en.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "de", catalogue: "words/de.tsv", text: "str\t\tA worded row\tEine Wortzeile\n" },
+    crate::i18n::Rows { code: "es", catalogue: "words/es.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "fr", catalogue: "words/fr.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "pt-PT", catalogue: "words/pt-PT.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "ja", catalogue: "words/ja.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "zh-Hans", catalogue: "words/zh-Hans.tsv", text: "str\t\tA worded row\tA worded row\n" },
+];
+
+impl crate::notation_ui::NotationUi for WordsUi {
+    /// A metamodel no class is of, so it answers for no element.
+    fn metamodel(&self) -> u16 {
+        u16::MAX
+    }
+    /// No element, so no top of Models.
+    fn is_top(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        false
+    }
+    /// No rows in Models.
+    fn tree(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: &crate::explorer::Tree<'_>) -> Vec<crate::explorer::Row> {
+        Vec::new()
+    }
+    /// Nothing for Models' `+`.
+    fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
+        Vec::new()
+    }
+    /// Adds nothing, as it offers nothing.
+    fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
+        None
+    }
+    /// Renames nothing.
+    fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
+        None
+    }
+    /// Nothing worked out, as none of its elements is removed.
+    fn before_removal(&self, _: &archforge_mof::Store, _: &[archforge_mof::Obj]) -> crate::notation_ui::Removal {
+        crate::notation_ui::Removal::default()
+    }
+    /// The word alone, as none of its elements is removed.
+    fn removed_text(&self, what: &str, _: &crate::notation_ui::Removal) -> String {
+        what.to_string()
+    }
+    /// No row opens.
+    fn foldable(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        Vec::new()
+    }
+    /// No rows to open.
+    fn parents(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        Vec::new()
+    }
+    /// No search entry.
+    fn entry(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
+        None
+    }
+    /// No words for Properties.
+    fn words(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<crate::notation_ui::Words> {
+        None
+    }
+    /// Draws nothing, as Properties shows none of its elements.
+    fn body(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: f32, _: &crate::panels::Subject) {}
+    /// Its one row ([`WORDED_CATALOGUES`]).
+    fn catalogues(&self) -> &'static [crate::i18n::Rows] {
+        WORDED_CATALOGUES
+    }
+    /// Creates nothing.
+    fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
+        &[]
+    }
+    /// None of its own, so the longest of the shell's is another notation's.
+    fn name_limit(&self) -> usize {
+        0
+    }
+    /// None of its own, so the longest of the shell's is another notation's.
+    fn description_limit(&self) -> usize {
+        0
+    }
+    /// Deletes nothing on the canvas.
+    fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
+        false
+    }
+    /// Draws nothing over the canvas.
+    fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
+    /// The sketch's state, unused.
+    fn new_state(&self) -> Box<dyn crate::notation_ui::NotationState> {
+        Box::new(SketchState::default())
+    }
+    /// Its sentence for an enum type without literals ([`WORDED_LITERALS`]), so a test sees it asked
+    /// before ER.
+    fn said(&self, _: &[&'static dyn crate::notation_ui::NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        matches!(reason, archforge_engine::Reason::TooFew { kind: "enum literal", min: 1 }).then(|| WORDED_LITERALS.to_string())
+    }
+    /// Its word for an association ([`WORDED_ASSOCIATION`]), so a test sees it asked before UML.
+    fn a_kind(&self, kind: &str) -> Option<String> {
+        (kind == "association").then(|| WORDED_ASSOCIATION.to_string())
+    }
+    /// Leaves a tag in the model, so a test sees an opening's repair ask it.
+    fn open_repair(&self, store: &mut archforge_mof::Store) {
+        let _ = store.create(archforge_core::TAG);
+    }
+}
+
+/// The worded notation before the app's two.
+static WORDS_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &crate::er_ui::ErUi, &crate::uml_ui::UmlUi];
 
 /// The second sketch's one catalogue, a row only it says.
 static SECOND_SKETCH_ROWS: &[crate::i18n::Rows] =
@@ -18846,6 +18972,179 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
     let mut listed: Vec<String> = changes.changed.iter().map(|e| e.metaclass.clone()).collect();
     listed.sort();
     assert_eq!(listed, ["uml_class", "uml_comment"]);
+}
+
+/// What a notation says inside its own refusals, a reason it holds or a kind it names, is said by
+/// the notations the shell registered, not the app's own list: with the worded notation registered
+/// before ER and UML, ER's sentences say why a key, a foreign key, a column, a table or a literal
+/// would break in its words, and UML's name an association, which no name names, by its word, each
+/// through an engine's refusal as the shell says it; over the app's notations, ER's and UML's own
+/// words.
+#[test]
+fn a_notations_refusals_say_their_parts_by_the_notations_the_shell_registered() {
+    use archforge_engine::{AppliedTo, CommandError, EngineError, InUse, LiteralValued, Named, Reason, Used};
+    crate::i18n::set_language("en");
+    let mut shell = Shell::new(Services::default());
+    shell.notation_uis = WORDS_UIS;
+    let no_literal = || Box::new(Reason::TooFew { kind: "enum literal", min: 1 });
+    let unnamed = || Named::Unnamed { kind: "association" };
+    let types = archforge_uml::members::TYPES;
+    let reasons = || {
+        [
+            Reason::WouldBreak { kind: "primary key", name: "pk".into(), why: no_literal() },
+            Reason::WouldBreak { kind: "foreign key", name: "fk".into(), why: no_literal() },
+            Reason::WouldBreak { kind: "column", name: "id".into(), why: no_literal() },
+            Reason::WouldBreak { kind: "table", name: "Order".into(), why: no_literal() },
+            Reason::LiteralName { name: "x".into(), why: no_literal() },
+            Reason::DependsOnItself { kind: "association" },
+            Reason::HoldsBuiltInName { kind: "association", name: "String".into() },
+            Reason::BuiltInTaken { kind: "association", name: "String".into() },
+            Reason::InUse(Box::new(InUse { what: Used::Element("Trace".into()), uses: vec![("Trace".into(), vec![unnamed()], 1)] })),
+            Reason::LiteralValued(Box::new(LiteralValued {
+                literal: "lazy".into(),
+                property: "fetch".into(),
+                stereotype: "Entity".into(),
+                element: AppliedTo::Element(unnamed()),
+            })),
+        ]
+    };
+    let failed = |reason| EngineError::Failed { id: "element.add".into(), error: CommandError::new("refused in English").because(reason) };
+    let sentences = |what: &str, why: &str| {
+        [
+            format!("The key pk would break: {why}"),
+            format!("The foreign key fk would break: {why}"),
+            format!("The column id would break: {why}"),
+            format!("The table Order would break: {why}"),
+            format!("The literal \"x\" is not a valid name. {why}"),
+            format!("{}{} cannot depend on itself.", what[..1].to_uppercase(), &what[1..]),
+            format!("The package holds {what} named String, a built-in type's name, which in {types} would mean that type. Rename String first."),
+            format!("The package {types} holds {what} named String, where that built-in type is kept: rename it to use the built-in type."),
+            format!("Trace is in use: «Trace» on {what}. Remove those first."),
+            format!("The literal lazy is the value of fetch in «Entity» on {what}. Set another value there first."),
+        ]
+    };
+    let said = shell.cx(|cx| reasons().map(|r| crate::panels::refusal(cx.notation_uis, &failed(r))));
+    assert_eq!(said, sentences(WORDED_ASSOCIATION, WORDED_LITERALS));
+    let app = reasons().map(|r| crate::panels::refusal(crate::notation_ui::UIS, &failed(r)));
+    assert_eq!(app, sentences("an association", "An enum type needs at least one literal."));
+}
+
+/// The problems the shell shows are said by the notations it registered, not the app's own list:
+/// an enum type without literals is ER's problem, said in the worded notation's words when it is
+/// registered before ER, in ER's over the app's notations.
+#[test]
+fn a_notations_problems_are_said_by_the_notations_the_shell_registered() {
+    crate::i18n::set_language("en");
+    let mut st = archforge_notations::store(Box::new({
+        let ids = test_ids();
+        move || ids()
+    }))
+    .unwrap();
+    let schema = st.create(archforge_er::SCHEMA).unwrap();
+    st.set(schema, archforge_er::named_element::NAME, archforge_mof::Value::str("shop")).unwrap();
+    let status = st.create(archforge_er::ENUM_TYPE).unwrap();
+    st.set(status, archforge_er::named_element::NAME, archforge_mof::Value::str("Status")).unwrap();
+    st.push(schema, archforge_er::schema::ENUM_TYPE, archforge_mof::Value::Ref(status)).unwrap();
+    let mut shell = Shell::new(Services::default());
+    let said = |shell: &Shell| crate::problems::all(shell.notation_uis, &st).into_iter().map(|p| (p.element, p.text)).collect::<Vec<_>>();
+    assert_eq!(said(&shell), [(status, "Status: An enum type needs at least one literal.".to_string())], "the app's notations");
+    shell.notation_uis = WORDS_UIS;
+    assert_eq!(said(&shell), [(status, format!("Status: {WORDED_LITERALS}"))], "the worded notation first");
+}
+
+/// What goes with a removal and what keeps one from happening name an element without a name by its
+/// kind as the notations the shell registered name it, not the app's own list: deleting a class
+/// says that «Trace» on its unnamed association goes with it, and removing the stereotype Trace is
+/// refused for that use, each asked of the class's or the stereotype's notation as the delete
+/// dialog and Models ask, in the worded notation's word when it is registered first and in UML's
+/// otherwise.
+#[test]
+fn what_goes_with_a_removal_is_worded_by_the_notations_the_shell_registered() {
+    use serde_json::json;
+    crate::i18n::set_language("en");
+    let mut s = archforge_notations::new_project_session(
+        "Shop",
+        Box::new({
+            let ids = test_ids();
+            move || ids()
+        }),
+    )
+    .unwrap();
+    let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
+    let commerce = run("uml.package.add", json!({ "name": "Commerce" }));
+    let order = run("uml.class.add", json!({ "package": commerce, "name": "Order" }));
+    let customer = run("uml.class.add", json!({ "package": commerce, "name": "Customer" }));
+    let audit = run("uml.profile.add", json!({ "name": "Audit" }));
+    let trace = run("uml.stereotype.add", json!({ "profile": audit, "name": "Trace", "extends": ["Association"] }));
+    run("uml.profile.apply", json!({ "package": commerce, "profile": audit }));
+    let link = run("uml.association.add", json!({ "from": order, "to": customer }));
+    s.execute("uml.stereotype.apply", &json!({ "element": link, "stereotype": trace })).unwrap();
+    let st = s.doc();
+    let at = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+    let (order, trace) = (at(&order), at(&trace));
+    let mut shell = Shell::new(Services::default());
+    let worded = |shell: &Shell| {
+        let uis = shell.notation_uis;
+        let along = crate::notation_ui::of(uis, st, order).map(|ui| ui.consequences(uis, st, order)).unwrap_or_default();
+        let refused = crate::notation_ui::of(uis, st, trace).and_then(|ui| ui.remove_refusal(uis, st, trace));
+        (along, refused)
+    };
+    let said = |what: &str| {
+        let along = vec!["1 relationship goes with it.".to_string(), format!("1 stereotype application goes with it: «Trace» on {what}.")];
+        (along, Some(format!("Trace is in use: «Trace» on {what}. Remove those first.")))
+    };
+    assert_eq!(worded(&shell), said("an association"), "the app's notations");
+    shell.notation_uis = WORDS_UIS;
+    assert_eq!(worded(&shell), said(WORDED_ASSOCIATION), "the worded notation first");
+}
+
+/// A model's kind words ask the notations the shell registered, not the app's own list: over the
+/// app's notations UML's attribute is an Attribute and its interface an Interface; with the sketch
+/// answering for UML's metamodel, which has no word of its own and creates only classes, the
+/// attribute and the interface are Elements and the class keeps its name.
+#[test]
+fn a_models_kind_words_ask_the_notations_the_shell_registered() {
+    crate::i18n::set_language("en");
+    let universe = archforge_notations::universe().unwrap();
+    let mut shell = Shell::new(Services::default());
+    let classes = [archforge_uml::PROPERTY, archforge_uml::INTERFACE, archforge_uml::CLASS];
+    let words = |shell: &Shell| classes.map(|c| crate::model_words::kind_label(shell.notation_uis, &universe, c));
+    assert_eq!(words(&shell), ["Attribute", "Interface", "Class"], "the app's notations");
+    shell.notation_uis = SKETCH_UIS;
+    assert_eq!(words(&shell), ["Element", "Element", "Class"], "the sketch for UML's metamodel");
+}
+
+/// The catalogues registered are those of the notations a shell is given: the worded notation's
+/// row, which no notation of the app holds, is found in German once its catalogues are registered
+/// with the notations it comes with, as a shell registers its own.
+#[test]
+fn the_catalogues_of_the_notations_a_shell_is_given_are_registered() {
+    crate::i18n::register_notations(WORDS_UIS);
+    crate::i18n::set_language("de");
+    let row = WORDED_ROW;
+    assert_eq!(crate::i18n::tr(row), "Eine Wortzeile");
+    crate::i18n::set_language("en");
+}
+
+/// An opening repairs a model with the shell's notations, not the app's own list: the shell's
+/// repair over the app's notations leaves an empty model as it is; with the worded notation
+/// registered, its repair runs too and leaves its tag.
+#[test]
+fn an_opening_repairs_a_model_with_the_notations_the_shell_registered() {
+    let mut shell = Shell::new(Services::default());
+    let repaired = |shell: &Shell| {
+        let mut st = archforge_notations::store(Box::new({
+            let ids = test_ids();
+            move || ids()
+        }))
+        .unwrap();
+        st.create(archforge_core::MODEL).unwrap();
+        (shell.open_repair())(&mut st);
+        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_core::TAG)).count()
+    };
+    assert_eq!(repaired(&shell), 0, "the app's notations");
+    shell.notation_uis = WORDS_UIS;
+    assert_eq!(repaired(&shell), 1, "the worded notation's repair runs too");
 }
 
 #[test]

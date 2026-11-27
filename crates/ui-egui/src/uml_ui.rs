@@ -840,9 +840,9 @@ impl NotationUi for UmlUi {
 
     /// The package Types stays while it keeps the built-in types, which Models does not show: said
     /// under the tree before anything is asked.
-    fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {
+    fn remove_refusal(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<String> {
         // A profile, a stereotype or a package whose profiles its elements use stays (AR-134).
-        if let Some(why) = crate::uml_profiles::removal_refusal(store, obj) {
+        if let Some(why) = crate::uml_profiles::removal_refusal(uis, store, obj) {
             return Some(why);
         }
         let package = class(store, obj) == Some(archforge_uml::PACKAGE);
@@ -856,8 +856,9 @@ impl NotationUi for UmlUi {
     /// class going along taking what touches it too; a package with no parent's with everything in
     /// it; a nested package's own alone, as it hands what it holds up. Then a classifier's nested
     /// classifiers at any depth, by the names they read by, `Order::Priority` (AR-132), and the
-    /// stereotype applications on it and on what it takes along, `«Entity» on Order` (AR-135).
-    fn consequences(&self, store: &Store, obj: Obj) -> Vec<String> {
+    /// stereotype applications on it and on what it takes along, `«Entity» on Order` (AR-135), an
+    /// element without a name by its kind as the notations of `uis` name it.
+    fn consequences(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Vec<String> {
         let n = |count: usize| u64::try_from(count).unwrap_or(u64::MAX);
         let relationships = archforge_uml::commands::relationships_going(store, &[obj]).len();
         let nested: Vec<String> = if classifier(store, obj) {
@@ -865,7 +866,7 @@ impl NotationUi for UmlUi {
         } else {
             Vec::new()
         };
-        let applications = crate::uml_stereotypes::going_along(store, obj);
+        let applications = crate::uml_stereotypes::going_along(uis, store, obj);
         let mut said = Vec::new();
         if relationships > 0 {
             said.push(trn("{n} relationship goes with it.", "{n} relationships go with it.", n(relationships)));
@@ -1287,8 +1288,8 @@ impl NotationUi for UmlUi {
     }
 
     /// UML's own refusals: those its commands alone give, in its editors' and the canvas's words.
-    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
-        crate::uml_said::said(reason)
+    fn said(&self, uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        crate::uml_said::said(uis, reason)
     }
 
     /// No element yet of the kind a UML command needs: a package, a classifier, a relationship, a

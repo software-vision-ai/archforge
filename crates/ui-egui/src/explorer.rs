@@ -380,12 +380,12 @@ pub fn remove_selection(shell: &mut Shell) {
     let Some(id) = uuid_of(store, obj) else { return };
     let ui = crate::notation_ui::of(shell.notation_uis, store, obj);
     // What its notation keeps (UML's package Types with the built-in types) is said, not removed.
-    if let Some(why) = ui.and_then(|u| u.remove_refusal(store, obj)) {
+    if let Some(why) = ui.and_then(|u| u.remove_refusal(shell.notation_uis, store, obj)) {
         shell.explorer.notice = Some(why);
         return;
     }
     // What goes with it, as its notation says it: removing it is never silent (AR-135).
-    let consequences = ui.map(|u| u.consequences(store, obj)).unwrap_or_default();
+    let consequences = ui.map(|u| u.consequences(shell.notation_uis, store, obj)).unwrap_or_default();
     // What it holds moves up to its parent (a nested package): no dialog, the toast says where;
     // the dialog when anything would go with it.
     if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)).filter(|_| consequences.is_empty()) {

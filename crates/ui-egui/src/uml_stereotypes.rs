@@ -22,6 +22,7 @@ use serde_json::json;
 
 use crate::cx::Ctx;
 use crate::i18n::{fmt, tr, tr_ctx, trn};
+use crate::notation_ui::NotationUi;
 use crate::panels::{FIELD, PAD, ROW, control_cx, run_cx, section_cx};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
@@ -184,22 +185,23 @@ fn out_of_scope(profile: &str, package: &str) -> String {
 }
 
 /// A literal a value names, refused, in the user's words: the element its stereotype is applied to
-/// by its name or, having none, its kind ([`crate::uml_profiles::element_text`]), or none at all,
-/// which only the file reaches (AR-808).
-fn literal_valued(v: &LiteralValued) -> String {
+/// by its name or, having none, its kind as the notations of `uis` name it
+/// ([`crate::uml_profiles::element_text`]), or none at all, which only the file reaches (AR-808).
+fn literal_valued(uis: &[&'static dyn NotationUi], v: &LiteralValued) -> String {
     let valued = [("literal", v.literal.as_str()), ("property", v.property.as_str()), ("stereotype", v.stereotype.as_str())];
     let AppliedTo::Element(e) = &v.element else {
         let text = tr("The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.");
         return fmt(&text, &valued);
     };
-    let element = crate::uml_profiles::element_text(e);
+    let element = crate::uml_profiles::element_text(uis, e);
     let text = tr("The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.");
     fmt(&text, &[valued.as_slice(), &[("element", element.as_str())]].concat())
 }
 
 /// An engine's refusal to apply a stereotype in the user's words, the picker's own where it has
-/// them; none for any other reason.
-pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
+/// them, an element without a name by its kind as the notations of `uis` name it; none for any
+/// other reason.
+pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
     use archforge_engine::Reason;
     let offered = || profiles::METACLASSES.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ");
     Some(match reason {
@@ -245,7 +247,7 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
                 &[("name", name), ("bounds", bounds)],
             )
         }
-        Reason::LiteralValued(v) => literal_valued(v),
+        Reason::LiteralValued(v) => literal_valued(uis, v),
         _ => return None,
     })
 }
@@ -877,8 +879,9 @@ fn picker(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &str, 
 
 /// What a stereotype application on `element`, and on what it holds and takes along, says in the
 /// delete dialog: `«Entity» on Order`, `«Id» on id`, each application once, one on an element with
-/// no name naming its kind, as `«Trace» on an association` (AR-807).
-pub(crate) fn going_along(store: &Store, element: Obj) -> Vec<String> {
+/// no name naming its kind as the notations of `uis` name it, as `«Trace» on an association`
+/// (AR-807).
+pub(crate) fn going_along(uis: &[&'static dyn NotationUi], store: &Store, element: Obj) -> Vec<String> {
     let mut going = vec![element];
     if store.class_of(element).is_ok_and(archforge_uml::is_classifier) {
         going.extend(archforge_uml::commands::going_with(store, &[element]));
@@ -890,7 +893,7 @@ pub(crate) fn going_along(store: &Store, element: Obj) -> Vec<String> {
         .filter_map(|i| {
             let s = applications::stereotype_of(store, i)?;
             let e = profiles::element_of(store, i).filter(|e| !hands_up || *e == element)?;
-            let on = crate::uml_profiles::element_text(&profiles::named(store, e));
+            let on = crate::uml_profiles::element_text(uis, &profiles::named(store, e));
             Some(fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", &name(store, s)), ("elements", &on)]))
         })
         .collect()

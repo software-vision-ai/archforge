@@ -248,7 +248,7 @@ fn next(shell: &mut Shell, sides: Sides) {
     // The frame only copies current work's objects; their rows are built with the comparison.
     let got = |side: &Option<String>| side.as_ref().map_or_else(|| shell.current_work().map(|s| Got::Live(Box::new(s.doc().freeze()))), held);
     let (Some(before), Some(after)) = (got(&key.sides.0), got(&key.sides.1)) else { return };
-    let started = compare(before, after);
+    let started = compare(before, after, shell.open_repair());
     let r = &mut shell.versions.compare_results;
     match started {
         Ok(answer) => r.comparing = Some((key, answer)),
@@ -295,8 +295,9 @@ enum Got {
 
 /// Compares `before` with `after` on a thread of its own, building current work's rows there; rows
 /// that cannot be built fail the comparison with their reason, and one past the comparison's budget
-/// is too large, with no partial list. The model's root is no change of its own.
-fn compare(before: Got, after: Got) -> std::io::Result<Receiver<Answer>> {
+/// is too large, with no partial list. Both are repaired by `repair` as an opening repairs a model.
+/// The model's root is no change of its own.
+fn compare(before: Got, after: Got, repair: impl Fn(&mut archforge_mof::Store) + Send + 'static) -> std::io::Result<Receiver<Answer>> {
     let (tx, rx) = channel();
     let (tables, junctions) = archforge_notations::storage();
     let work = move || {
@@ -306,7 +307,7 @@ fn compare(before: Got, after: Got) -> std::io::Result<Receiver<Answer>> {
         };
         let found = rows(before)
             .and_then(|before| Ok((before, rows(after)?)))
-            .and_then(|(before, after)| classified(&before, &after, crate::open_repair).map_err(failure));
+            .and_then(|(before, after)| classified(&before, &after, repair).map_err(failure));
         // Model elements come first, then diagrams, then skills, each in the order found.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);

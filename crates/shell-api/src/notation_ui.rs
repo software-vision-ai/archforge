@@ -349,10 +349,12 @@ pub trait NotationUi: Sync {
     }
     /// What goes with `obj` when it is removed, as the delete dialog says it: one finished
     /// sentence each, counted and worded by the notation in the user's language (`2 relationships
-    /// go with it.`), in the order the dialog lists them, after the diagrams it disappears from.
-    /// None by default; the removal asks first when there is any.
-    fn consequences(&self, store: &Store, obj: Obj) -> Vec<String> {
-        let _ = (store, obj);
+    /// go with it.`), in the order the dialog lists them, after the diagrams it disappears from;
+    /// an element it names without a name by its kind in the words of the notations the shell was
+    /// given, `uis` ([`crate::panels::a_kind`]). None by default; the removal asks first when there
+    /// is any.
+    fn consequences(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Vec<String> {
+        let _ = (uis, store, obj);
         Vec::new()
     }
     /// What the Models context menu's New inside ▸ offers on `obj`; None for no such row.
@@ -366,9 +368,11 @@ pub trait NotationUi: Sync {
         None
     }
     /// Why `obj` cannot be removed, in the user's words, checked before the removal or its dialog
-    /// (UML's package Types while it keeps the built-in types); none lets the command decide.
-    fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {
-        let _ = (store, obj);
+    /// (UML's package Types while it keeps the built-in types), an element it names without a name
+    /// by its kind in the words of the notations the shell was given, `uis`
+    /// ([`crate::panels::a_kind`]); none lets the command decide.
+    fn remove_refusal(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<String> {
+        let _ = (uis, store, obj);
         None
     }
     /// The element that takes what `obj` holds when `obj` is removed (a nested package's
@@ -443,9 +447,10 @@ pub trait NotationUi: Sync {
 
     // Problems.
 
-    /// Its problems in the store, each on the element the user would fix it on.
-    fn problems(&self, store: &Store, out: &mut Vec<Problem>) {
-        let _ = (store, out);
+    /// Its problems in the store, each on the element the user would fix it on, a typed rule's
+    /// problem in the words of the notations the shell was given, `uis` ([`crate::panels::said`]).
+    fn problems(&self, uis: &[&'static dyn NotationUi], store: &Store, out: &mut Vec<Problem>) {
+        let _ = (uis, store, out);
     }
     /// The element whose problems a selection of `obj` shows (a column's table).
     fn problem_holder(&self, store: &Store, obj: Obj) -> Obj {
@@ -502,9 +507,11 @@ pub trait NotationUi: Sync {
     // diagrams or both notations give is the shell's own ([`crate::panels::said`]).
 
     /// A typed refusal only its own commands give, in the user's words; none for any other reason
-    /// or for a kind of element the catalogues don't name.
-    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
-        let _ = reason;
+    /// or for a kind of element the catalogues don't name. A reason or a kind of element it names
+    /// inside its sentence is said by the notations the shell was given, `uis`
+    /// ([`crate::panels::said`], [`crate::panels::a_kind`]).
+    fn said(&self, uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        let _ = (uis, reason);
         None
     }
     /// Why one of its own commands is not available now, in the user's words, by the reason its

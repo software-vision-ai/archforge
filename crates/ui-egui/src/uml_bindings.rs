@@ -24,6 +24,7 @@ use serde_json::{Map, Value as Json, json};
 
 use crate::cx::{Ctx, CtxRef, Request};
 use crate::i18n::{fmt, tr, trn};
+use crate::notation_ui::NotationUi;
 use crate::panels::{FIELD, PAD, Subject, run_cx, section_cx, select_field_cx};
 use crate::state::Panel;
 use crate::uml_state::menus;
@@ -661,12 +662,11 @@ pub(crate) fn start_problem(store: &Store, element: Obj) -> Option<String> {
 }
 
 /// Why `bound` may not bind `template`, in the user's words, when it may not: the model's rule said
-/// as a refusal of the engine is. `except` is a binding being reconnected.
-pub(crate) fn refusal(store: &Store, bound: Obj, template: Obj, except: Option<Obj>) -> Option<String> {
+/// as a refusal of the engine is, by the notations of `uis`. `except` is a binding being
+/// reconnected.
+pub(crate) fn refusal(uis: &[&'static dyn NotationUi], store: &Store, bound: Obj, template: Obj, except: Option<Obj>) -> Option<String> {
     let problem = bindings::problem(store, bound, template, except)?;
-    Some(
-        crate::panels::said(crate::notation_ui::UIS, &problem.reason(store, bound, template)).unwrap_or_else(|| problem.said(store, bound, template)),
-    )
+    Some(crate::panels::said(uis, &problem.reason(store, bound, template)).unwrap_or_else(|| problem.said(store, bound, template)))
 }
 
 /// Whether moving binding `b`'s template end onto `template` needs arguments first: a parameter

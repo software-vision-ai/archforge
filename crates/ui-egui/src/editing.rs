@@ -1175,12 +1175,12 @@ fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
     // What its notation keeps (UML's package Types with the built-in types) is said, not asked.
-    if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(store, e)) {
+    if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(cx.notation_uis, store, e)) {
         cx.canvas.notice = Some(why);
         cx.canvas.menu = None;
         return;
     }
-    let consequences = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.consequences(store, e)).unwrap_or_default();
+    let consequences = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.consequences(cx.notation_uis, store, e)).unwrap_or_default();
     let diagrams = diagrams_showing(store, e);
     // A nested package hands what it holds up: the dialog says where, and so does the toast.
     let hands_to = crate::notation_ui::of(cx.notation_uis, store, e)

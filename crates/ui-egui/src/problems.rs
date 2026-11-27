@@ -19,7 +19,7 @@ use crate::notation_ui::NotationUi;
 pub(crate) fn all(uis: &[&'static dyn NotationUi], store: &Store) -> Vec<Problem> {
     let mut out = Vec::new();
     for ui in uis {
-        ui.problems(store, &mut out);
+        ui.problems(uis, store, &mut out);
     }
     out
 }
