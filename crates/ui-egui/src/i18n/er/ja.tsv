@@ -16,6 +16,9 @@ str		Subtype · {sub} is a {super}	サブタイプ · {sub} は {super} の一�
 str		Subtype	サブタイプ
 str		This subtype	このサブタイプ
 str		On this subtype · {n}	このサブタイプに · {n}
+str		every table	すべてのテーブル
+str		every relationship	すべてのリレーションシップ
+str		every column	すべての列
 str		Columns · {n}	列 · {n}
 str		Keys · {n}	キー · {n}
 str		Add a column	列を追加

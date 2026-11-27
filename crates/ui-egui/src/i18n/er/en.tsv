@@ -15,6 +15,9 @@ str		Subtype · {sub} is a {super}	Subtype · {sub} is a {super}
 str		Subtype	Subtype
 str		This subtype	This subtype
 str		On this subtype · {n}	On this subtype · {n}
+str		every table	every table
+str		every relationship	every relationship
+str		every column	every column
 str		Columns · {n}	Columns · {n}
 str		Keys · {n}	Keys · {n}
 str		Add a column	Add a column

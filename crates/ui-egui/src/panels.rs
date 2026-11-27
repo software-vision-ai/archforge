@@ -385,38 +385,26 @@ struct SkillRow {
     own: bool,
 }
 
-/// What a skill aims at, as Properties says it: every class, every interface, every enumeration,
-/// every data type, every primitive type, every association class, its type pattern, or nothing.
-pub(crate) fn target_word(store: &Store, s: Obj) -> String {
+/// What a skill aims at, as the Skills panel says it: the words of the notation among `uis` whose
+/// kind it names ([`NotationUi::skill_target`](crate::notation_ui::NotationUi::skill_target));
+/// where that notation has none, the skill's type pattern; nothing for a skill that names no kind.
+pub(crate) fn target_word(uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store, s: Obj) -> String {
     let applies = string_of(store, s, archforge_core::skill::APPLIES_TO);
     let pattern = string_of(store, s, archforge_core::skill::TYPE_PATTERN);
-    match archforge_core::skills::kind_by_key(&archforge_notations::view(), store, &applies).map(|(_, w)| w) {
-        Some("table") => tr("every table"),
-        Some("relationship") => tr("every relationship"),
-        Some("class") => tr("every class"),
-        Some("interface") => tr("every interface"),
-        Some("enumeration") => tr("every enumeration"),
-        Some("data type") => tr("every data type"),
-        Some("primitive type") => tr("every primitive type"),
-        Some("association class") => tr("every association class"),
-        Some("attribute") => tr("every attribute"),
-        Some("operation") => tr("every operation"),
-        Some("association") => tr("every association"),
-        Some(_) if !pattern.is_empty() => pattern,
-        Some("column") => tr("every column"),
-        Some(_) | None => String::new(),
-    }
+    let Some((kind, _)) = archforge_core::skills::kind_by_key(&archforge_notations::view(), store, &applies) else { return String::new() };
+    crate::notation_ui::of_class(uis, kind).and_then(|ui| ui.skill_target(kind, &pattern)).unwrap_or(pattern)
 }
 
-/// The selection's own skills and those it inherits, each as its row says it.
-fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>) {
+/// The selection's own skills and those it inherits, each as its row says it, the targets in the
+/// words of the notations among `uis` ([`target_word`]).
+fn skill_rows(uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>) {
     let this = subject.this.clone();
     let subject = subject.obj;
     let own: Vec<SkillRow> = archforge_core::skills::skills(store)
         .into_iter()
         .filter(|s| archforge_core::skills::subject_of(store, *s) == subject)
         .filter_map(|s| {
-            let target = target_word(store, s);
+            let target = target_word(uis, store, s);
             Some(SkillRow {
                 id: store.uuid(s).ok()?,
                 name: archforge_core::skills::name_of(store, s),
@@ -463,7 +451,7 @@ fn skills(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
     let (own, inherited) = match shell.session.as_ref() {
-        Some(s) => skill_rows(s.doc(), subject),
+        Some(s) => skill_rows(shell.notation_uis, s.doc(), subject),
         None => return,
     };
     let none = no_skills(shell, subject);

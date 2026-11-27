@@ -18141,6 +18141,11 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn list_heading(&self, class: archforge_mof::ClassId) -> Option<String> {
         (class == archforge_uml::PROPERTY).then(|| format!("Fields of the {}", self.0))
     }
+    /// A skill for every class, signed with its name, so a test sees it asked; none for the other
+    /// kinds of its metamodel, which leaves the shell's words.
+    fn skill_target(&self, kind: archforge_mof::ClassId, _: &str) -> Option<String> {
+        (kind == archforge_uml::CLASS).then(|| format!("every class of the {}", self.0))
+    }
     /// Chat counts its class as a kind of its own, its attribute as a line and its operation as a
     /// part of its class, unlike UML, so a test sees each asked; a description's comment it leaves
     /// to be counted as an element.
@@ -18314,6 +18319,72 @@ fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
     assert_eq!(shell.panels.notice, None);
     assert!(shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, "uml.relationship.rename", "  ")), "UML is not the shell's here");
     assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
+}
+
+/// What a skill aims at is said by the notation the shell registered for its kind, not the app's
+/// own list: over the app's notations each of ER's and UML's kinds in its notation's words, a
+/// column's type pattern in place of its word and a skill that names no kind with nothing; with
+/// the sketch answering for UML's metamodel, its own words for a skill for every class and, for
+/// every interface, which it has no words for, the shell's: nothing, as the skill has no type
+/// pattern. ER, which both lists hold, still says its own. The Skills panel's row says the same.
+/// In light and dark.
+#[test]
+fn a_skills_target_is_said_by_the_notation_the_shell_registered() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        skill_targets_ask_the_notation(theme);
+    }
+}
+
+/// [`a_skills_target_is_said_by_the_notation_the_shell_registered`] in one appearance: skills of
+/// the whole model, one for each kind, and one on the sample class diagram's package.
+fn skill_targets_ask_the_notation(theme: ThemeKind) {
+    let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let add = |h: &mut Harness<'static, Shell>, subject: &str, name: &str, applies: &str, pattern: &str| {
+        let params = serde_json::json!({ "subject": subject, "name": name, "applies_to": applies, "type_pattern": pattern });
+        let out = h.state_mut().session.as_mut().unwrap().execute("skill.add", &params).unwrap();
+        archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+    };
+    let cases = [
+        ("table", "", "every table"),
+        ("relationship", "", "every relationship"),
+        ("column", "", "every column"),
+        ("column", "VARCHAR", "VARCHAR"),
+        ("class", "", "every class"),
+        ("interface", "", "every interface"),
+        ("enumeration", "", "every enumeration"),
+        ("data type", "", "every data type"),
+        ("primitive type", "", "every primitive type"),
+        ("association class", "", "every association class"),
+        ("attribute", "", "every attribute"),
+        ("operation", "", "every operation"),
+        ("association", "", "every association"),
+        ("", "", ""),
+    ];
+    let skills: Vec<_> =
+        cases.iter().enumerate().map(|(i, (applies, pattern, _))| add(&mut h, "", &format!("Skill {i}"), applies, pattern)).collect();
+    let said = |h: &Harness<'static, Shell>, uis: &[&'static dyn crate::notation_ui::NotationUi]| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        skills.iter().map(|s| crate::panels::target_word(uis, st, st.by_uuid(*s).unwrap())).collect::<Vec<_>>()
+    };
+    assert_eq!(said(&h, h.state().notation_uis), cases.map(|(_, _, w)| w), "{theme:?}: the app's notations");
+    let sketched = said(&h, SKETCH_UIS);
+    let want = ["every table", "every relationship", "every column", "VARCHAR", "every class of the sketch", "", "", "", "", "", "", "", "", ""];
+    assert_eq!(sketched, want, "{theme:?}: the sketch for UML's metamodel");
+    // The panel's row, on the package of the sample's classes.
+    let pkg = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let order = st.by_uuid(named(&h, archforge_uml::CLASS, "Order")).unwrap();
+        st.uuid(st.container(order).unwrap().unwrap().0).unwrap()
+    };
+    add(&mut h, &pkg.to_string(), "Classes", "class", "");
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [pkg.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Skills);
+    h.run();
+    assert!(painted(&h).iter().any(|t| t == "every class"), "{theme:?}: {:?}", painted(&h));
+    h.state_mut().notation_uis = SKETCH_UIS;
+    h.run();
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "every class of the sketch") && !texts.iter().any(|t| t == "every class"), "{theme:?}: {texts:?}");
 }
 
 /// Chat counts what a tool row names as the notations the shell registered say, not the app's own
@@ -24757,6 +24828,73 @@ fn a_nested_package_deleted_through_the_dialog_says_where_its_contents_went_and_
     }
 }
 
+/// The delete dialog of a nested package counts what goes with the package alone, as
+/// `element.remove` takes it (AR-843): Billing hands Invoice up with its two associations, which
+/// stay, so ⇧⌫ on its card asks with no relationship line; with a dependency on Billing from
+/// Payment it says that one goes, and once confirmed the dependency has gone and the associations
+/// stay. Removed from Models with a stereotype applied to it, it counts the dependency alone too.
+/// In light and dark.
+#[test]
+fn a_nested_package_s_delete_dialog_counts_only_what_goes_with_the_package() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let payment = named(&h, archforge_uml::CLASS, "Payment").to_string();
+        let (pkg, d) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&payment).unwrap()).unwrap()).unwrap();
+            (st.uuid(p).unwrap().to_string(), h.state().canvas.active.unwrap().to_string())
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let billing = run("uml.package.add", serde_json::json!({ "parent": pkg, "name": "Billing" }));
+        let invoice = run("uml.class.add", serde_json::json!({ "package": billing, "name": "Invoice" }));
+        let audit = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Audit" }));
+        let associations = [&payment, &audit].map(|to| run("uml.association.add", serde_json::json!({ "from": invoice, "to": to })));
+        let node = run("diagram.place", serde_json::json!({ "diagram": d, "element": billing, "x": 900, "y": 640 }));
+        let ask = |h: &mut Harness<'static, Shell>| {
+            crate::editing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [node] })).unwrap();
+            h.state_mut().canvas.focused = true;
+            h.run();
+            key(h, egui::Key::Delete, egui::Modifiers::SHIFT);
+            h.run();
+            h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: the dialog asks"))
+        };
+        let said = |h: &Harness<'static, Shell>| painted(h).into_iter().filter(|t| t.contains("relationship")).collect::<Vec<_>>();
+        assert_eq!(ask(&mut h).relationships, 0, "{theme:?}: Invoice's associations stay, handed up with it");
+        assert_eq!(said(&h), Vec::<String>::new(), "{theme:?}: no relationship line");
+        h.state_mut().explorer.delete = None;
+        let s = h.state_mut().session.as_mut().unwrap();
+        let p = serde_json::json!({ "client": payment, "supplier": billing });
+        let dependency = s.execute("uml.dependency.add", &p).unwrap().value["id"].as_str().unwrap().to_string();
+        assert_eq!(ask(&mut h).relationships, 1, "{theme:?}: the dependency on Billing goes with it");
+        assert!(said(&h).iter().any(|t| t.contains("1 relationship goes with it.")), "{theme:?}: {:?}", said(&h));
+        let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+        click(&mut h, at);
+        let alive = |h: &Harness<'static, Shell>, id: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).is_some_and(|o| st.is_alive(o))
+        };
+        assert!(!alive(&h, &billing) && !alive(&h, &dependency), "{theme:?}: Billing went with its dependency");
+        assert!(associations.iter().all(|a| alive(&h, a)), "{theme:?}: the associations stayed, as the dialog said");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        // Removed from Models, which asks as a stereotype is applied to it.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let profile = run("uml.profile.add", serde_json::json!({ "name": "Layers" }));
+        let module = run("uml.stereotype.add", serde_json::json!({ "profile": profile, "name": "Module", "extends": ["Package"] }));
+        run("uml.profile.apply", serde_json::json!({ "package": pkg, "profile": profile }));
+        run("uml.stereotype.apply", serde_json::json!({ "element": billing, "stereotype": module }));
+        run("view.select", serde_json::json!({ "ids": [billing] }));
+        h.run();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: its stereotype application makes Models ask"));
+        assert_eq!(asked.relationships, 1, "{theme:?}: the dependency alone");
+        assert!(said(&h).iter().any(|t| t.contains("1 relationship goes with it.")), "{theme:?}: {:?}", said(&h));
+    }
+}
+
 /// No redefinition (leaf) in Properties (AR-138), in light and dark: on a classifier after No
 /// subclasses (final), described by its explanation, ticked it makes the classifier leaf in one undo
 /// step and its card says `{leaf}`, `{final, leaf}` beside final; in the operation editor, applied,
@@ -26650,7 +26788,7 @@ fn a_data_type_in_properties_takes_attributes_and_operations_and_is_offered_as_a
             archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
         };
         let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(crate::panels::target_word(st, st.by_uuid(skill).unwrap()), "every data type");
+        assert_eq!(crate::panels::target_word(h.state().notation_uis, st, st.by_uuid(skill).unwrap()), "every data type");
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [money.to_string()] })).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Skills);
         h.run();
@@ -27026,7 +27164,7 @@ fn primitive_types_are_listed_added_with_the_plus_found_and_dragged_while_the_bu
             archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
         };
         let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(crate::panels::target_word(st, st.by_uuid(skill).unwrap()), "every primitive type");
+        assert_eq!(crate::panels::target_word(h.state().notation_uis, st, st.by_uuid(skill).unwrap()), "every primitive type");
         // A built-in type, selected, carries none: the panel says so in place of +.
         let integer = {
             let st = h.state().session.as_ref().unwrap().doc();

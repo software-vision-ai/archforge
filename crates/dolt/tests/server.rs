@@ -1,11 +1,13 @@
 //! The server against a real dolt: start, the password, no usage records, a second start, a killed
-//! owner, crash recovery, leftovers, the socket limit, an odd folder name, and a lock that names another
-//! program. These tests need dolt 2.6 or later; without it they fail and say how to install it.
+//! owner, crash recovery, leftovers, the socket limit, an odd folder name, a lock that names another
+//! program, and a port another program took. These tests need dolt 2.6 or later; without it they
+//! fail and say how to install it.
 //! Measured on macOS; the Linux and Windows runs are still to be done.
 #![cfg(unix)]
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
-use std::io::BufRead;
+use std::io::{BufRead, Read};
+use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -416,6 +418,110 @@ fn a_lock_naming_another_program_does_not_stop_a_start_and_that_program_lives_on
     server.stop().unwrap();
     sleeper.kill().unwrap();
     sleeper.wait().unwrap();
+}
+
+/// The dolt of a start that loses its port: a script that says it is `waiting`, runs dolt (the
+/// link `real-dolt`) once the port is `taken`, and ends with dolt's status only once the port is
+/// `released`, all three files beside it. It names every path through its own, never one written
+/// into it, so any folder name works.
+const LOSING_START: &str = r#"#!/bin/sh
+dir=${0%/*}
+: > "$dir/waiting"
+while [ ! -e "$dir/taken" ]; do /bin/sleep 0.01; done
+"$dir/real-dolt" "$@"
+status=$?
+while [ ! -e "$dir/released" ]; do /bin/sleep 0.01; done
+exit "$status"
+"#;
+
+/// Another program on this machine, against the start whose dolt is the script [`LOSING_START`]
+/// at `dir/dolt`: once the script is `waiting`, it listens on the port the start chose, puts dolt
+/// itself at `dir/dolt` for every later start, lets the script run dolt (`taken`), accepts the
+/// connection with which dolt checks whether the port is taken and waits until dolt has closed
+/// it, lets the port go, binds it once more as the start's own check does, and only then lets
+/// the script end (`released`): the start comes to look at a port that a bind finds free, so only
+/// its server's log can make it try again. Returns the port and whether dolt checked it while it
+/// was taken.
+fn take_the_port(run_root: &Path, dir: &Path, dolt: &Path) -> (u16, bool) {
+    let until = Instant::now() + Duration::from_secs(30);
+    while !dir.join("waiting").exists() {
+        assert!(Instant::now() < until, "the start never ran its server");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let config = std::fs::read_dir(run_root).unwrap().map(|e| e.unwrap().path().join("server.yaml")).find(|c| c.is_file()).unwrap();
+    let text = std::fs::read_to_string(&config).unwrap();
+    let port: u16 = text.split_once("  port: ").and_then(|(_, rest)| rest.split_once('\n')).and_then(|(p, _)| p.parse().ok()).unwrap();
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).unwrap();
+    std::fs::remove_file(dir.join("dolt")).unwrap();
+    std::os::unix::fs::symlink(dolt, dir.join("dolt")).unwrap();
+    std::fs::write(dir.join("taken"), "").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let probe = loop {
+        match listener.accept() {
+            Ok((probe, _)) => break Some(probe),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < until => std::thread::sleep(Duration::from_millis(5)),
+            Err(_) => break None,
+        }
+    };
+    let checked = probe.is_some();
+    // Dolt closes its probe first: this side then closes last, and leaves the port no connection
+    // of its own that waits out its close.
+    if let Some(mut probe) = probe {
+        probe.set_nonblocking(false).unwrap();
+        let mut bytes = [0u8; 64];
+        while let Some(left) = until.checked_duration_since(Instant::now()).filter(|d| !d.is_zero()) {
+            probe.set_read_timeout(Some(left)).unwrap();
+            if !matches!(probe.read(&mut bytes), Ok(n) if n > 0) {
+                break;
+            }
+        }
+    }
+    drop(listener);
+    // The start's own check, the same bind, must find the port free before the script ends. The
+    // listener a bind that works makes goes at once.
+    while let Err(e) = TcpListener::bind((Ipv4Addr::LOCALHOST, port)) {
+        assert!(Instant::now() < until, "the port {port} stayed taken after it was let go: {e}");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    std::fs::write(dir.join("released"), "").unwrap();
+    (port, checked)
+}
+
+/// Another program took the port a start chose before the server listened on it, and let it go
+/// again before the start looked: the server said so in its log and stopped, and the start tried
+/// again, on a port it chose anew. The first start's dolt is the script [`LOSING_START`], which
+/// keeps that order (its start sees the server end only once the port is free again); every later
+/// start runs dolt itself, by the same path, so the server that runs is the one its record names.
+#[test]
+fn a_start_whose_port_was_taken_and_let_go_again_is_tried_again() {
+    // An apostrophe and a space in its folders, which the script must take as they are.
+    let env = Env::new("port's race");
+    let program = env.base.join("dolt");
+    std::os::unix::fs::symlink(env.dolt.path(), &program).unwrap();
+    let dolt = Dolt::at(&program, &env.home).unwrap();
+    std::os::unix::fs::symlink(env.dolt.path(), env.base.join("real-dolt")).unwrap();
+    std::fs::remove_file(&program).unwrap();
+    std::fs::write(&program, LOSING_START).unwrap();
+    std::fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+    let other = {
+        let (run_root, dir, real) = (env.run_root.clone(), env.base.clone(), env.dolt.path().to_path_buf());
+        std::thread::spawn(move || take_the_port(&run_root, &dir, &real))
+    };
+    let started = Server::start(&dolt, &env.data(), &env.opts());
+    let (port, checked) = other.join().unwrap();
+    let server = started.unwrap();
+    let _guard = KillOnDrop(server.pid());
+    assert!(checked, "dolt checked the port {port} while it was taken");
+    // The losing start's script ran to its end, and the server that answers was started after it:
+    // dolt itself at the script's path, not the script. Its port may well be the same number again.
+    assert!(["waiting", "taken", "released"].iter().all(|f| env.base.join(f).is_file()), "the losing start ran to its end");
+    let line = Command::new("/bin/ps").args(["-ww", "-o", "args=", "-p", &server.pid().to_string()]).output().unwrap();
+    let line = String::from_utf8_lossy(&line.stdout);
+    assert!(line.starts_with(&format!("{} sql-server --config ", program.display())), "a later start's dolt answers: {line}");
+    assert_eq!(one(&mut server.connect().unwrap()), 1);
+    assert_eq!(env.leftovers(), (1, 1), "one record and one run folder");
+    server.stop().unwrap();
+    assert_eq!(env.leftovers(), (0, 0));
 }
 
 /// Runs the test's dolt in `dir` with the test's home, failing the test on an error.
