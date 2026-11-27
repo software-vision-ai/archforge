@@ -33,9 +33,12 @@ key, which delete a diagram that is no package's default), the centre (`canvas`:
 diagram tabs, the open diagram drawn read-only from the diagram metamodel in the design's style
 with each notation's cards and lines as it describes them (`archforge_diagram::figure`: ER's
 table cards and crow's foot lines; its geometry that names no shell, the view's mapping and where lines, marks, handles and end texts sit, is `archforge-shell-api`'s `canvas`), notes, links and labels, pan and zoom, the minimap with the zoom control, the canvas
-toolbar, whose tools after Select and Pan are the open diagram kind's (`kinds::DiagramKind`, with
-the tool and the press it reads from `archforge-shell-api`'s `kinds`, re-exported under their old
-paths: its tools, each placing or connecting, and the hooks the gestures run: place, connect, a line dropped
+toolbar, whose tools after Select and Pan are the open diagram kind's (`kinds::DiagramKind`, the
+interface in `archforge-shell-api`'s `kinds` with the data types it hands across, what one frame's
+drawing reads (`canvas::Drawing`) and what a press asks for (`editing::Action`), re-exported under
+their old paths, while the shell keeps the kinds it knows (`kinds::KINDS`, ER's and UML's) and
+asks them through thin forwarders over the whole shell (`kinds::kind_of`, `kinds::active_kind`,
+`kinds::popover_takes_keys`): its tools, each placing or connecting, and the hooks the gestures run: place, connect, a line dropped
 on empty canvas, rename in place, open at a card's row, its adorner, the rows its element menu adds
 with what each does, the live line, a
 press and a right click it reads first, the keys a drawing under way takes, whether its popover's

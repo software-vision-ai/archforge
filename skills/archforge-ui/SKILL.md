@@ -69,7 +69,12 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   notation. A kind's rows of the Model menu are data (`kinds::ModelRow`), from which the shell
   makes the menu's entries. The controls taking it end in `_cx`; the old ones over the whole
   shell forward to them for the shell's own screens. `NotationUi` and what a notation keeps
-  (`NotationState`) are in `crates/shell-api/src/notation_ui.rs`. The refusal words
+  (`NotationState`) are in `crates/shell-api/src/notation_ui.rs`; `DiagramKind`, with its rows
+  (`MenuRow`, `ModelRow`) and the kind of a diagram (`kind_of`, `active_kind`, `diagram_icon`,
+  `popover_takes_keys`, each asked of the kinds it is handed), is in
+  `crates/shell-api/src/kinds.rs`, beside what a frame's drawing reads (`canvas::Drawing`) and
+  what a press asks for (`editing::Action`). A notation adds a diagram kind by implementing
+  `DiagramKind`; the shell's list of kinds (`KINDS`, `crates/ui-egui/src/kinds.rs`) registers it. The refusal words
   (`panels::refusal`, `said`, `a_kind`, `engine_said::disabled`, in `crates/shell-api/src/`) and
   Chat's counts of the elements a tool row names (`chat_words::tool_words`, by
   `NotationUi::chat_kind` and `chat_count`) ask the notations they are handed: pass

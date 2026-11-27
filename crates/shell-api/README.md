@@ -12,10 +12,11 @@ shared controls reach the shell (`cx`, with what it is built of: the right panel
 the user's words, which ask the notations they are handed (`panels`, `engine_said`), the shared
 controls the shell's panels and a notation's screens draw through the narrow context (`panels`),
 with the problems a selection shows (`problems`) and the key presses they take (`actions`), the
-data types `DiagramKind` hands across that name no shell (`kinds`), how a search or a filter
-matches what is typed (`search`) and the translations machinery (`i18n`), with which each crate
-registers its own catalogues; story AR-780 moves `DiagramKind` with the data types that still name
-the shell here, unchanged.
+interface `DiagramKind` with the data types it hands across (`kinds`, with what one frame's
+drawing reads, `canvas::Drawing`, and what the pointer asked for, `editing::Action`), how a search
+or a filter matches what is typed (`search`) and the translations machinery (`i18n`), with which
+each crate registers its own catalogues. The lists of notations and diagram kinds the app
+registers, which name ER and UML, stay in the shell.
 
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code
@@ -24,7 +25,7 @@ parameters of a command a tree row dropped on another runs (`NotationUi::drop_on
 commands the shared controls run, `log`, where an
 engine error said as an internal one is kept,
 `archforge-engine` (3), whose `Revision` a line end being dragged carries (the model's revision
-the drag began on), whose session the context holds and whose errors and reasons the refusals say, `archforge-mof` (4), whose elements, ids and store the interfaces' data types name,
+the drag began on), whose session the context holds (and `kinds::active_kind` reads) and whose errors and reasons the refusals say, `archforge-mof` (4), whose elements, ids and store the interfaces' data types name,
 `archforge-core` (5), whose skills a row of the Models tree lists under its element,
 `archforge-diagram` (6), whose rectangles and line-end marks the canvas geometry reads, whose
 notations a press on the canvas carries and whose project view the context's session is over, craft-i18n, whose `Folder` folds what a search is typed
@@ -52,8 +53,10 @@ against, and `icu_properties`, which says where a letter ends so a search never 
 | `canvas::State` | what the centre keeps between frames, every field public: the tabs and the active one, the tool, the view (pan, zoom, size) and what the next frame does to it, the toggles, the notice and a refused step's words, the editing under way, the popover, the toast, the skills' texts, what the last frame drew that takes a press, and the views kept by diagram; `Default` (Select, grid and minimap on, zoom 1); `say_refused_step`, `notice_is_refused_step` |
 | `canvas::{Tool, Toast, MinimapDrag}` | the canvas tools (`Select`, `Pan`, a kind's `Place` and `Connect` by key, `Note`, `Link`); a line of text at the canvas's foot for a while, with the undo step it speaks of; a drag of the minimap's viewport (`shown`, `scale`, `origin`, `grab`: its mapping frozen as the drag began and where the pointer took hold) |
 | `canvas::hex` | `pub fn hex(c: ux::Colour) -> String`: a colour as `#rrggbb` |
+| `canvas::Drawing` | what one frame's drawing reads, every field public: the palette, the store, the view, the selection, the rectangles a gesture previews, the toggles, the name typed, the problems, the diagram with its notations and kind, the boxes and line spreads worked out once a frame, the line hovered, the drags under way, and what the frame drew that the next takes a press on; `node_rect`, a node's rectangle on screen, the gesture's preview when it has one |
 | `canvas::{EndText, PackageTab, PathBadge}` | what the last frame drew that takes a press: a cardinality text (line, end, rectangle, anchor); a package's tab (rectangle, node, the whole name when cut); a package's owning path under its card (rectangle, node, text shown, whole sentence) |
 | `editing::{NodeRename, NoteEdit, EntityMenu}` | a name being typed in a node's header; a note's text being typed in place; the element menu, open at a screen point |
+| `editing::Action` | what the pointer asked for this frame, decided over the store and applied after (`Nothing`, `Select`, `Toggle`, `Start` a gesture, `Commit`, `Place`, `Menu`, `Rename`, `Open`, `PlaceNote`, `EditNote`, `ResetEnd`, `ResetRoute`, `Notice`, and `Own`, what a diagram kind makes of a press, run through the narrow context) |
 | `editing::{Gesture, Corner}` | a pointer gesture in progress, previewed and committed on release (`Move`, `Resize` by a `Corner`, `Marquee`, `Connect`, `LinkNote`, `EndText`, `Segment`, `Reconnect` with the revision it began on, `ExtraLabel`) |
 | `skill_tab::Doc` | one skill's text while its tab is open: the text as typed and as kept, when it changed, Preview, the selection, what was refused, the notice, a link waiting, the name as typed |
 | `notation_ui::{Offer, Added, Inside}` | what `+` in Models can add (key and word); what an addition gave back (the element and the rows opened to show it); what New inside ▸ offers on an element (its kinds, the rows refused with their reason, why none, where a line parts them) |
@@ -91,6 +94,9 @@ against, and `icu_properties`, which says where a letter ends so a search never 
 | `search::{fold, joins, starts}` | `pub fn fold(text: &str) -> Folded`: a text folded as a search folds what is typed; `pub fn joins(prev: Option<char>, next: char) -> bool`: whether `next` goes on the letter before it; `pub fn starts<'a>(name: &'a Folded, word: &'a str) -> impl Iterator<Item = usize> + 'a`: where a folded word starts in a folded name, never inside a letter |
 | `kinds::{ToolUse, KindTool}` | what a diagram kind's tool does (`Place`, `Connect`); a tool it brings to the toolbar (key, icon, hint, use, chevron, width) |
 | `kinds::Press` | a press on the canvas as a diagram kind reads it: where, click or double click, the store and notations, the diagram and selection, and the node and line under a screen point |
+| `kinds::DiagramKind` | what a diagram kind does with the canvas's tools and gestures and what it draws: its tools and its rows of the Model menu, its words and its owners in the New diagram dialog, the hooks the gestures run (place, connect, a line dropped on empty canvas, rename in place, open at a card's row, its adorners, its element menu, a press and a right click it reads first, the keys a drawing under way takes, whether its popover's menu takes the keys, what Select all takes in, where a label of its own figures is let go) and the hooks the canvas runs as it draws (before and after a diagram, where a line starts, what goes with a line, the figures of no one node or line, the hint bar, the live line); each method that reaches the shell takes `&mut Ctx` or `&CtxRef` |
+| `kinds::{MenuRow, ModelRow}` | a row a kind adds to its elements' menu, with what it does when picked (`run: fn(&mut Ctx, &EntityMenu)`); a row it gives the Model menu, as data (id, word, the tool it arms, the choice of the tool's popover it makes first) |
+| `kinds::{kind_of, active_kind, diagram_icon, popover_takes_keys}` | `pub fn kind_of(kinds: &[&'static dyn DiagramKind], store: &Store, d: Obj) -> Option<&'static dyn DiagramKind>`: the kind of a diagram among `kinds`; the kind of the diagram `canvas` shows in the open project's session (`active_kind(kinds, canvas, session)`); a diagram's icon, its kind's (`diagram_icon(kinds, store, d)`); whether the canvas's open popover is a menu the keys walk, every kind of `kinds` asked (`popover_takes_keys(kinds, canvas)`) |
 | `kinds::{LineDrawn, ExtraLabel}` | a line as the canvas drew it this frame, for its diagram kind to draw what goes with it (line, element, points on screen from source to target, whether selected); a label a kind drew of no one node or line (the element, where it was on screen, the node that holds where it was moved, its hover text) |
 | `i18n::{tr, tr_ctx, trn, fmt}` | a literal translated in this thread's language, one under a context, a plural with its count filled in, named placeholders filled in one pass; a key without a registered row is its own English text |
 | `i18n::{Language, LANGUAGES, plural_forms, codes, set_language, language}` | the languages (code, native name, plural rule, complete or not), English first; how many plural forms a language's catalogue holds; the codes for a message; this thread's language |
