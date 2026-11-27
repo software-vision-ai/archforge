@@ -1124,3 +1124,34 @@ fn packages_of_one_chain_removed_together_count_what_they_hand_up_once() {
     assert!(!alive(&s, &class) && !alive(&s, &diagram), "both go with Root");
     assert_eq!(problems(s.doc()), []);
 }
+
+/// An enumeration removed with an element whose stereotype value names one of its literals, beside
+/// a property that stays with a default naming another, counts every object that went: the value,
+/// which goes with the element's application, and the default, which goes with its literal, the
+/// property keeping its place. Named in either order, each answer is the same after Undo and Redo.
+#[test]
+fn an_enumeration_removed_counts_the_values_and_defaults_naming_its_literals() {
+    let mut s = session();
+    let shop = run(&mut s, "uml.package.add", json!({ "name": "Shop" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Order" }));
+    let customer = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Customer" }));
+    let level = run(&mut s, "uml.enumeration.add", json!({ "package": shop, "name": "Level" }));
+    for l in ["high", "low"] {
+        run(&mut s, "uml.literal.add", json!({ "enumeration": level, "name": l }));
+    }
+    let tracing = run(&mut s, "uml.profile.add", json!({ "name": "Tracing" }));
+    let trace = run(&mut s, "uml.stereotype.add", json!({ "profile": tracing, "name": "Trace", "extends": ["Class"] }));
+    run(&mut s, "uml.attribute.add", json!({ "class": trace, "name": "level", "type": level }));
+    run(&mut s, "uml.profile.apply", json!({ "package": shop, "profile": tracing }));
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": trace }));
+    run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": trace, "property": "level", "values": ["high"] }));
+    let rank = run(&mut s, "uml.attribute.add", json!({ "class": customer, "name": "rank", "type": level, "default": "low" }));
+    assert_eq!(count(&s, archforge_uml::INSTANCE_VALUE), 2, "the value and the default");
+    for ids in [[level.as_str(), order.as_str()], [order.as_str(), level.as_str()]] {
+        removal(&mut s, &ids);
+        assert_eq!(count(&s, archforge_uml::INSTANCE_VALUE), 0, "{ids:?}: the value and the default went");
+        assert!(alive(&s, &rank) && alive(&s, &customer), "{ids:?}: the property keeps its place");
+        assert_eq!(problems(s.doc()), []);
+        s.undo().unwrap();
+    }
+}

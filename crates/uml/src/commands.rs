@@ -830,7 +830,8 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// typed, as [`Reason::ElementNotRemovable`] (AR-530). It counts what went and what was handed up
 /// ([`archforge_diagram::Removed`], AR-675): the elements and diagrams handed up that are still in
 /// the model at the end, each once, so not those that went with a package removed in the same call;
-/// the bindings that went; and every relationship that went, of whatever kind ([`is_relationship_kind`]).
+/// the bindings that went; every relationship that went, of whatever kind ([`is_relationship_kind`]);
+/// and how many objects went in all, a default that went with its literal among them.
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diagram::Removed, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     // Where each nested package's diagrams go, worked out on the model as it is before anything moves.
@@ -1037,7 +1038,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
     // The bindings of everything that goes go first, so none names a diagram that goes before its
     // owner, in whatever order the elements were selected (AR-578).
     gone += archforge_diagram::defaults::remove_bindings_of(store, plan).map_err(fail)?;
-    // A default that is a literal goes with the literal: an InstanceValue needs its instance.
+    // A default that is a literal goes with the literal: an InstanceValue needs its instance. It
+    // counts among what went, as everything else the removal takes does.
     let defaults = crate::modifiers::literal_defaults(store);
     for o in all {
         if !store.is_alive(o) {
@@ -1051,13 +1053,14 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<archforge_diag
         }
         gone += store
             .transaction(|st| {
+                let mut values = 0;
                 for (value, literal) in &defaults {
                     if st.is_alive(*value) && (*literal == o || st.contains(o, *literal)) {
-                        st.destroy(*value)?;
+                        values += st.destroy(*value)?;
                     }
                 }
                 let views = archforge_diagram::remove_views_of(st, o)?;
-                Ok(views + archforge_core::destroy_with_links(st, o)?)
+                Ok(values + views + archforge_core::destroy_with_links(st, o)?)
             })
             .map_err(fail)?;
     }
