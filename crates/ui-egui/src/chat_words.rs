@@ -368,7 +368,7 @@ pub fn tool_words(uis: &[&'static dyn NotationUi], facts: &ToolFacts) -> (String
 mod tests {
     use super::*;
     use crate::chat_store::Anchor;
-    use crate::notation_ui::UIS;
+    use crate::tests::SCREENS;
     use archforge_mof::Uuid;
 
     /// An anchor of the test's own.
@@ -435,6 +435,7 @@ mod tests {
     /// A tool row's words come from its kept facts: verb, subject, what was read, refused or failed.
     #[test]
     fn a_row_is_worded_from_what_the_channel_answered() {
+        let uis = SCREENS.notation_uis();
         crate::i18n::set_language("en");
         let facts = |tool: &str, command: Option<&str>, changed: bool, anchors: Vec<Anchor>| ToolFacts {
             tool: tool.into(),
@@ -450,12 +451,12 @@ mod tests {
         diagram.push(at(20, AnchorRole::Target, "diagram_diagram", "Commerce"));
         diagram.push(at(21, AnchorRole::Read, "diagram_node", ""));
         assert_eq!(
-            tool_words(UIS, &facts("engine.execute", Some("diagram.get"), false, diagram)),
+            tool_words(uis, &facts("engine.execute", Some("diagram.get"), false, diagram)),
             ("Read diagram Commerce".into(), Some("8 classes".into()))
         );
         let mut listed = facts("engine.execute", Some("uml.class.list"), false, classes);
         listed.detail = Some("descriptions".into());
-        assert_eq!(tool_words(UIS, &listed), ("Read 8 classes".into(), Some("descriptions".into())));
+        assert_eq!(tool_words(uis, &listed), ("Read 8 classes".into(), Some("descriptions".into())));
         let payment = vec![
             at(1, AnchorRole::Target, "uml_class", "Payment"),
             at(2, AnchorRole::Read, "uml_property", "amount"),
@@ -463,25 +464,25 @@ mod tests {
             at(4, AnchorRole::Read, "uml_association", ""),
             at(5, AnchorRole::Read, "uml_generalization", ""),
         ];
-        assert_eq!(tool_words(UIS, &facts("engine.execute", Some("uml.class.get"), false, payment)).1.as_deref(), Some("2 attributes, 2 lines"));
+        assert_eq!(tool_words(uis, &facts("engine.execute", Some("uml.class.get"), false, payment)).1.as_deref(), Some("2 attributes, 2 lines"));
         let mut changed = facts("engine.execute", Some("uml.class.set"), true, vec![at(1, AnchorRole::Target, "uml_class", "Customer")]);
         changed.detail = Some("description".into());
-        assert_eq!(tool_words(UIS, &changed), ("Changed Customer".into(), Some("description".into())));
+        assert_eq!(tool_words(uis, &changed), ("Changed Customer".into(), Some("description".into())));
         let added = facts("engine.execute", Some("uml.class.add"), true, vec![at(1, AnchorRole::Target, "uml_class", "Invoice")]);
-        assert_eq!(tool_words(UIS, &added).0, "Added Invoice");
+        assert_eq!(tool_words(uis, &added).0, "Added Invoice");
         let removed = facts("engine.execute", Some("er.entity.remove"), true, vec![at(1, AnchorRole::Target, "er_entity", "Tag")]);
-        assert_eq!(tool_words(UIS, &removed).0, "Removed Tag");
+        assert_eq!(tool_words(uis, &removed).0, "Removed Tag");
         let mut refused = removed.clone();
         refused.status = ToolStatus::Refused;
-        assert_eq!(tool_words(UIS, &refused), ("Removed Tag".into(), Some("refused".into())));
+        assert_eq!(tool_words(uis, &refused), ("Removed Tag".into(), Some("refused".into())));
         let mut failed = added;
         failed.status = ToolStatus::Failed;
-        assert_eq!(tool_words(UIS, &failed).1.as_deref(), Some("failed"));
-        assert_eq!(tool_words(UIS, &facts("engine.undo", None, true, Vec::new())).0, "Undid a step");
+        assert_eq!(tool_words(uis, &failed).1.as_deref(), Some("failed"));
+        assert_eq!(tool_words(uis, &facts("engine.undo", None, true, Vec::new())).0, "Undid a step");
         // More named than kept: the count in all.
         let mut many = facts("engine.execute", Some("uml.class.list"), false, vec![at(1, AnchorRole::Read, "uml_class", "A")]);
         many.element_count = Some(700);
-        assert_eq!(tool_words(UIS, &many).0, "Read 700 elements");
+        assert_eq!(tool_words(uis, &many).0, "Read 700 elements");
     }
 
     /// The app's notations count each of their kinds in its own words, every relationship of
@@ -489,6 +490,7 @@ mod tests {
     /// a description's comment; the shell counts diagrams, skills and the rest as elements.
     #[test]
     fn the_app_notations_count_their_kinds_in_their_words() {
+        let uis = SCREENS.notation_uis();
         crate::i18n::set_language("en");
         let read = |metaclasses: &[&str]| ToolFacts {
             tool: "engine.execute".into(),
@@ -516,7 +518,7 @@ mod tests {
             ("core_skill", "2 skills"),
             ("uml_constraint", "2 elements"),
         ] {
-            assert_eq!(tool_words(UIS, &read(&[table, table])).0, format!("Read {two}"), "{table}");
+            assert_eq!(tool_words(uis, &read(&[table, table])).0, format!("Read {two}"), "{table}");
         }
         let lines = [
             "uml_association",
@@ -530,11 +532,11 @@ mod tests {
             "er_relationship",
             "er_generalization",
         ];
-        assert_eq!(tool_words(UIS, &read(&lines)).0, "Read 10 lines", "every relationship of either notation");
-        assert_eq!(tool_words(UIS, &read(&["uml_data_type", "uml_primitive_type", "er_entity"])).0, "Read 2 data types, 1 table");
+        assert_eq!(tool_words(uis, &read(&lines)).0, "Read 10 lines", "every relationship of either notation");
+        assert_eq!(tool_words(uis, &read(&["uml_data_type", "uml_primitive_type", "er_entity"])).0, "Read 2 data types, 1 table");
         let parts = ["diagram_node", "diagram_edge", "core_comment", "uml_comment", "er_entity"];
-        assert_eq!(tool_words(UIS, &read(&parts)).0, "Read 1 table", "a diagram's parts and a description's comment are not counted");
+        assert_eq!(tool_words(uis, &read(&parts)).0, "Read 1 table", "a diagram's parts and a description's comment are not counted");
         // Elements of tables no one counts are told apart by their table.
-        assert_eq!(tool_words(UIS, &read(&["core_folder", "core_folder", "core_model"])).0, "Read 2 elements, 1 element");
+        assert_eq!(tool_words(uis, &read(&["core_folder", "core_folder", "core_model"])).0, "Read 2 elements, 1 element");
     }
 }

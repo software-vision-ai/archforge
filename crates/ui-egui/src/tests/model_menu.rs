@@ -217,15 +217,16 @@ fn each_kind_answers_its_own_rows() {
     ];
     let uml: Vec<Vec<&str>> = std::iter::once(classifiers.to_vec()).chain(relate).collect();
     assert_eq!(ids_of(crate::uml_ui::UmlKind.menu_rows()), uml);
-    let all: Vec<&str> = crate::model_menu::rows(crate::kinds::KINDS).map(|(_, row)| row.key).collect();
+    let all: Vec<&str> = crate::model_menu::rows(crate::tests::SCREENS.kinds()).map(|(_, row)| row.key).collect();
     assert_eq!(all, [ER_ROWS.to_vec(), uml.concat(), SHARED.to_vec()].concat());
     assert!(all.iter().enumerate().all(|(n, id)| !all[n + 1..].contains(id)), "{all:?}");
     assert!(all.iter().all(|id| crate::actions::keys(id).is_none() && !crate::actions::ACTIONS.iter().any(|a| a.id == *id)), "{all:?}");
     assert_eq!(crate::model_menu::every_menu(), [[ER_ROWS.to_vec(), SHARED.to_vec()].concat(), [uml.concat(), SHARED.to_vec()].concat()]);
     // The data itself: each row's word, the tool it arms, whether it makes a choice first, and the
     // kind it is of.
-    let data: Vec<(&str, String, Tool, bool, Option<&str>)> =
-        crate::model_menu::rows(crate::kinds::KINDS).map(|(kind, row)| (row.key, (row.word)(), row.tool, row.choice.is_some(), kind)).collect();
+    let data: Vec<(&str, String, Tool, bool, Option<&str>)> = crate::model_menu::rows(crate::tests::SCREENS.kinds())
+        .map(|(kind, row)| (row.key, (row.word)(), row.tool, row.choice.is_some(), kind))
+        .collect();
     let (er, structure) = (Some(archforge_er::DIAGRAM_KIND), Some(archforge_uml::STRUCTURE_DIAGRAM));
     let mut wanted = vec![
         ("model.entity", "Entity".to_string(), Tool::Place("entity"), false, er),
