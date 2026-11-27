@@ -24753,6 +24753,73 @@ fn a_nested_package_deleted_through_the_dialog_says_where_its_contents_went_and_
     }
 }
 
+/// The delete dialog of a nested package counts what goes with the package alone, as
+/// `element.remove` takes it (AR-843): Billing hands Invoice up with its two associations, which
+/// stay, so ⇧⌫ on its card asks with no relationship line; with a dependency on Billing from
+/// Payment it says that one goes, and once confirmed the dependency has gone and the associations
+/// stay. Removed from Models with a stereotype applied to it, it counts the dependency alone too.
+/// In light and dark.
+#[test]
+fn a_nested_package_s_delete_dialog_counts_only_what_goes_with_the_package() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let payment = named(&h, archforge_uml::CLASS, "Payment").to_string();
+        let (pkg, d) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&payment).unwrap()).unwrap()).unwrap();
+            (st.uuid(p).unwrap().to_string(), h.state().canvas.active.unwrap().to_string())
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let billing = run("uml.package.add", serde_json::json!({ "parent": pkg, "name": "Billing" }));
+        let invoice = run("uml.class.add", serde_json::json!({ "package": billing, "name": "Invoice" }));
+        let audit = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Audit" }));
+        let associations = [&payment, &audit].map(|to| run("uml.association.add", serde_json::json!({ "from": invoice, "to": to })));
+        let node = run("diagram.place", serde_json::json!({ "diagram": d, "element": billing, "x": 900, "y": 640 }));
+        let ask = |h: &mut Harness<'static, Shell>| {
+            crate::editing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [node] })).unwrap();
+            h.state_mut().canvas.focused = true;
+            h.run();
+            key(h, egui::Key::Delete, egui::Modifiers::SHIFT);
+            h.run();
+            h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: the dialog asks"))
+        };
+        let said = |h: &Harness<'static, Shell>| painted(h).into_iter().filter(|t| t.contains("relationship")).collect::<Vec<_>>();
+        assert_eq!(ask(&mut h).relationships, 0, "{theme:?}: Invoice's associations stay, handed up with it");
+        assert_eq!(said(&h), Vec::<String>::new(), "{theme:?}: no relationship line");
+        h.state_mut().explorer.delete = None;
+        let s = h.state_mut().session.as_mut().unwrap();
+        let p = serde_json::json!({ "client": payment, "supplier": billing });
+        let dependency = s.execute("uml.dependency.add", &p).unwrap().value["id"].as_str().unwrap().to_string();
+        assert_eq!(ask(&mut h).relationships, 1, "{theme:?}: the dependency on Billing goes with it");
+        assert!(said(&h).iter().any(|t| t.contains("1 relationship goes with it.")), "{theme:?}: {:?}", said(&h));
+        let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+        click(&mut h, at);
+        let alive = |h: &Harness<'static, Shell>, id: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).is_some_and(|o| st.is_alive(o))
+        };
+        assert!(!alive(&h, &billing) && !alive(&h, &dependency), "{theme:?}: Billing went with its dependency");
+        assert!(associations.iter().all(|a| alive(&h, a)), "{theme:?}: the associations stayed, as the dialog said");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        // Removed from Models, which asks as a stereotype is applied to it.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let profile = run("uml.profile.add", serde_json::json!({ "name": "Layers" }));
+        let module = run("uml.stereotype.add", serde_json::json!({ "profile": profile, "name": "Module", "extends": ["Package"] }));
+        run("uml.profile.apply", serde_json::json!({ "package": pkg, "profile": profile }));
+        run("uml.stereotype.apply", serde_json::json!({ "element": billing, "stereotype": module }));
+        run("view.select", serde_json::json!({ "ids": [billing] }));
+        h.run();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: its stereotype application makes Models ask"));
+        assert_eq!(asked.relationships, 1, "{theme:?}: the dependency alone");
+        assert!(said(&h).iter().any(|t| t.contains("1 relationship goes with it.")), "{theme:?}: {:?}", said(&h));
+    }
+}
+
 /// No redefinition (leaf) in Properties (AR-138), in light and dark: on a classifier after No
 /// subclasses (final), described by its explanation, ticked it makes the classifier leaf in one undo
 /// step and its card says `{leaf}`, `{final, leaf}` beside final; in the operation editor, applied,

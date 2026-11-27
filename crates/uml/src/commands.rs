@@ -708,6 +708,42 @@ pub fn going_along(store: &Store, objs: &[Obj]) -> Vec<Obj> {
     dependencies_going(store, objs).into_iter().chain(going_with(store, &classes)).collect()
 }
 
+/// The relationships of every kind ([`is_relationship_kind`]) that [`remove_elements`] takes along
+/// when `objs` are removed, beside those among `objs`, each once, worked out on the model as it is:
+/// what it counts among the relationships that went (AR-675), and what the delete dialog says goes
+/// with an element (AR-843). They are those inside what goes, as each element goes with what it
+/// holds, but a nested package goes alone, as it hands what it holds up; those inside what goes
+/// along ([`going_along`]): the dependencies at the packages that go and the relationships of the
+/// classifiers that go; the applications, wherever they are, of the profiles that go, named or
+/// inside a package with no parent that goes; and the extensions of the stereotypes named.
+pub fn relationships_going(store: &Store, objs: &[Obj]) -> Vec<Obj> {
+    let alive: Vec<Obj> = objs.iter().copied().filter(|o| store.is_alive(*o)).collect();
+    let class = |o: Obj| store.class_of(o).ok();
+    let within = |o: Obj| archforge_diagram::within(store, o).unwrap_or_default();
+    let mut going: Vec<Obj> = Vec::new();
+    for o in alive.iter().copied() {
+        // A nested package goes alone: what it holds, and what that holds, is handed up.
+        let held = if class(o) == Some(PACKAGE) && package_of(store, o).is_some() { held(store, o) } else { Vec::new() };
+        going.extend(within(o).into_iter().filter(|x| !held.iter().any(|h| h == x || store.contains(*h, *x))));
+    }
+    going.extend(going_along(store, objs).into_iter().flat_map(within));
+    // A profile's applications go before it, from every package applying it (AR-134).
+    let profiles = alive.iter().copied().flat_map(|o| match class(o) {
+        Some(c) if c == crate::PROFILE => vec![o],
+        Some(c) if c == PACKAGE && package_of(store, o).is_none() => crate::profiles::profiles_within(store, o),
+        _ => Vec::new(),
+    });
+    for profile in profiles {
+        let applying = crate::profiles::applying(store, profile);
+        going.extend(applying.into_iter().flat_map(|p| crate::profiles::applied(store, p)).filter(|(_, x)| *x == profile).map(|(a, _)| a));
+    }
+    // A stereotype's extensions, kept in its profile, go before it (AR-134).
+    let stereotypes = alive.iter().copied().filter(|o| class(*o) == Some(crate::STEREOTYPE));
+    going.extend(stereotypes.flat_map(|s| crate::profiles::extensions(store, s)).map(|e| e.extension));
+    let mut seen: std::collections::BTreeSet<Obj> = objs.iter().copied().collect();
+    going.into_iter().filter(|r| class(*r).is_some_and(|c| is_relationship_kind(store, c)) && seen.insert(*r)).collect()
+}
+
 /// Every classifier inside a package, at any depth, those nested in its classifiers among them
 /// (AR-132).
 pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
