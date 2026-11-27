@@ -76,6 +76,7 @@ pub mod support;
 mod switch_ask;
 pub mod theme;
 pub mod types;
+mod uml_adornments;
 mod uml_bindings;
 mod uml_classifier;
 mod uml_constraints;

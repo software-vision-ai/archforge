@@ -1,5 +1,9 @@
 //! N-ary associations in the shell (AR-128, design page 08, frames A2 to A5).
 //!
+//! On the canvas (A2): its diamond, its name and stereotypes above it, is drawn in place of the
+//! canvas's card for it by UML's diagram kind (`DiagramKind::draw_card`), and its legs start at
+//! the diamond's outline (`DiagramKind::line_start`).
+//!
 //! Drawing (A3): the Relationship tool's N-ary association is drawn by clicking each class in
 //! turn. The ends picked so far are a draft the shell keeps and draws alone (a preview diamond at
 //! their cards' centroid from the second end, its legs, and a dashed leg to the pointer), with the
@@ -21,12 +25,14 @@
 //! three, two would remain, so the panel asks to keep the three ends (focused, and what Escape
 //! does) or to make the association binary, one undo step.
 
+use archforge_diagram::figure::{Text, Tone};
+use archforge_diagram::node;
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::nary;
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::canvas::{Tool, View};
+use crate::canvas::{CardDrawn, Drawing, Look, Tool, View, look_of};
 use crate::cx::{Ctx, CtxRef};
 use crate::editing::Action;
 use crate::i18n::{fmt, tr, trn};
@@ -404,6 +410,48 @@ fn leg_points(diamond: Rect, card: Rect) -> Vec<Pos2> {
     vec![from, pos2(c.x, m.y), pos2(c.x, if c.y < m.y { card.bottom() } else { card.top() })]
 }
 
+/// Draws an n-ary association's card as its diamond, its name and stereotypes above it (AR-128),
+/// in place of the canvas's own figure for it (`DiagramKind::draw_card`); false for any other card,
+/// which UML's package card or the canvas draws.
+pub(crate) fn draw_card(paint: &egui::Painter, d: &Drawing<'_>, c: &CardDrawn<'_>) -> bool {
+    if c.card.tone != Tone::Diamond {
+        return false;
+    }
+    let keyword = match &c.card.eyebrow {
+        Text::Plain(k) => Some(k.as_str()),
+        Text::Said(..) => None,
+    };
+    draw_diamond(paint, d.p, c.rect, &c.card.name, keyword, d.view.zoom, c.selected, &look_of(d.store, c.node, node::STYLE));
+    true
+}
+
+/// A hollow diamond filling `rect`, over `fill`.
+pub(crate) fn diamond_shape(paint: &egui::Painter, rect: Rect, fill: ux::Colour, stroke: Stroke) {
+    let points = vec![rect.left_center(), rect.center_top(), rect.right_center(), rect.center_bottom()];
+    paint.add(egui::Shape::convex_polygon(points, fill, stroke));
+}
+
+/// Draws an n-ary association's diamond node at `rect` (AR-128): a hollow diamond in the line's
+/// ink, the accent while it is selected, its name above it, its stereotypes `keyword` above that.
+#[allow(clippy::too_many_arguments, reason = "a diamond is drawn with its name, its stereotypes and its look")]
+fn draw_diamond(paint: &egui::Painter, p: &Palette, rect: Rect, name: &str, keyword: Option<&str>, z: f32, selected: bool, look: &Look) {
+    let ink = if selected { p.accent } else { look.stroke.unwrap_or(p.text_secondary) };
+    let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
+    diamond_shape(paint, rect, look.fill.unwrap_or(p.canvas), Stroke::new(width, ink));
+    let text_ink = look.text.unwrap_or(p.text_secondary);
+    let mut top = rect.top() - 8.0 * z;
+    if !name.is_empty() {
+        let g = ux::galley(paint, name, types::SMALL.scaled(z), text_ink, None);
+        top -= g.size().y;
+        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top), g, text_ink.into());
+    }
+    // Its stereotypes above its name, `«Reference»`, as a line's are (AR-135).
+    if let Some(k) = keyword {
+        let g = ux::galley(paint, k, types::CAPTION.scaled(z), text_ink, None);
+        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top - g.size().y - 1.0 * z), g, text_ink.into());
+    }
+}
+
 /// Where a leg leaves the node `source` when it is an n-ary association's diamond: where the leg
 /// from `tip`, on the node's border, towards `next` meets the diamond's outline in the node's
 /// rectangle on screen, which `rect` gives only then ([`onto_diamond`]); none for a node of
@@ -501,7 +549,7 @@ fn draw_draft(cx: &Ctx, paint: &egui::Painter, p: &Palette, view: View, d: Obj, 
         paint.galley(role_at, role_g, p.text_secondary.into());
         paint.galley(many_at, many_g, p.text_secondary.into());
     }
-    crate::canvas::diamond_shape(paint, diamond, p.canvas, stroke);
+    diamond_shape(paint, diamond, p.canvas, stroke);
     if let Some(at) = pointer.filter(|at| !diamond.contains(*at)) {
         let end = target.map_or(at, |t| crate::canvas::exit_point(t, diamond.center()));
         let from = onto_diamond(diamond, crate::canvas::exit_point(diamond, end), end).unwrap_or(diamond.center());

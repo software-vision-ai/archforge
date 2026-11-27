@@ -1,7 +1,7 @@
 //! The interface `DiagramKind`, what a diagram kind does with the canvas's tools and gestures and
 //! what it draws, with the data types it hands between the shell's canvas and a kind: what a kind's
-//! tool does, the tool itself, a press on the canvas as the kind reads it, a line as the canvas drew
-//! it, a card the kind may draw itself, a label the kind drew of no one node or line, a row a kind
+//! tool does, the tool itself, a press on the canvas as the kind reads it, a line as the canvas is
+//! about to draw it and as it drew it, a card the kind may draw itself, a label the kind drew of no one node or line, a row a kind
 //! adds to its elements' menu and a row it gives the Model menu; and the kind of a diagram, of the
 //! diagram the canvas shows and whether the open popover takes the keys, each asked of the kinds it
 //! is handed. The shell keeps its list of kinds (`archforge_ui_egui::kinds::KINDS`, which names
@@ -76,14 +76,27 @@ pub struct ExtraLabel {
     pub hover: String,
 }
 
-/// A line as drawn this frame, for its diagram's kind to draw what goes with it
-/// (`DiagramKind::line_extras`): the line, its element, its points on screen from
-/// its source to its target, and whether it is drawn selected.
+/// A line as drawn this frame, for a kind to draw what goes with it
+/// ([`DiagramKind::line_extras`], [`DiagramKind::line_caption`]): the line, its element, its points
+/// on screen from its source to its target, whether it is drawn selected, and the figure its
+/// notation describes for it.
 pub struct LineDrawn<'a> {
     pub line: Obj,
     pub element: Obj,
     pub points: &'a [Pos2],
     pub selected: bool,
+    pub figure: &'a archforge_diagram::figure::Line,
+}
+
+/// A line the canvas is about to draw this frame, for a kind to move its ends and give what goes
+/// over it there ([`DiagramKind::line_ends`]): the line, its element, the figure its notation
+/// describes for it, and the stroke it is drawn with (its width and its ink, which says whether it
+/// is selected, under the pointer or complete).
+pub struct LineEnds<'a> {
+    pub line: Obj,
+    pub element: Obj,
+    pub figure: &'a archforge_diagram::figure::Line,
+    pub stroke: Stroke,
 }
 
 /// A node's card as the canvas is about to draw it this frame, for its diagram's kind to draw it
@@ -330,13 +343,42 @@ pub trait DiagramKind: Sync {
         let _ = (d, source, tip, next);
         None
     }
+    /// Moves the ends of the line `line` off its nodes' borders before the canvas draws it, in
+    /// `points` (on screen, from its source to its target, where the diagram's kind already started
+    /// it, [`DiagramKind::line_start`]), writing each end it moved in `Drawing::moved_ends`, and
+    /// gives what goes over the line there, recording each in `registry` (UML's qualifier boxes,
+    /// AR-127): the canvas paints it right after the line, under its marks and texts, which sit at
+    /// the ends as moved. The canvas asks the diagram's own kind first, then every other kind it
+    /// knows in turn, each after the one before, so a line is drawn as the kind that draws its
+    /// element says whatever diagram shows it. Nothing by default: the ends stay where they are.
+    fn line_ends(
+        &self,
+        paint: &egui::Painter,
+        d: &Drawing<'_>,
+        line: &LineEnds<'_>,
+        points: &mut [Pos2],
+        registry: &mut Registry,
+        ui: &egui::Ui,
+    ) -> Vec<egui::Shape> {
+        let _ = (paint, d, line, points, registry, ui);
+        Vec::new()
+    }
     /// Draws what goes with a line beyond what its notation's figure for it says, over the line,
     /// recording each in `registry` (a UML association class's tie to its card, or its name while
-    /// the card is not on the diagram). Gives where it drew the line's name, for the line's
-    /// stereotypes to go above it; none by default, drawing nothing.
+    /// the card is not on the diagram). Gives where it drew the line's name, for what the kinds draw
+    /// by the name ([`DiagramKind::line_caption`]) where the canvas draws no name label; none by
+    /// default, drawing nothing.
     fn line_extras(&self, paint: &egui::Painter, d: &Drawing<'_>, line: &LineDrawn<'_>, registry: &mut Registry, ui: &egui::Ui) -> Option<Rect> {
         let _ = (paint, d, line, registry, ui);
         None
+    }
+    /// Draws what goes with a line over its labels, once the canvas drew them, recording each in
+    /// `registry`: `name` is where the line's name sits when it shows one, the label the canvas drew
+    /// or else the name the diagram's kind drew with it ([`DiagramKind::line_extras`]) (UML's
+    /// stereotypes, above the name, AR-135). The canvas asks the diagram's own kind first, then every
+    /// other kind it knows in turn. Nothing by default.
+    fn line_caption(&self, paint: &egui::Painter, d: &Drawing<'_>, line: &LineDrawn<'_>, name: Option<Rect>, registry: &mut Registry, ui: &egui::Ui) {
+        let _ = (paint, d, line, name, registry, ui);
     }
     /// Draws the figures of the diagram that belong to no one node or line, over the lines and
     /// under the cards, recording each in `registry` (UML's generalization sets across their
@@ -353,11 +395,20 @@ pub trait DiagramKind: Sync {
     /// it and its own diagram's thumbnail). The canvas asks the diagram's own kind first, then every
     /// other kind it knows in turn, so a card is drawn by the kind that draws its element whatever
     /// diagram shows it. True when it drew the card; the canvas then draws only what goes over any
-    /// card: the selection ring, a template's signature and the problem badge. False, and by
-    /// default: the next kind is asked, and when none draws it, the canvas does.
+    /// card: the selection ring, what the kinds draw over it ([`DiagramKind::card_extras`]) and the
+    /// problem badge. False, and by default: the next kind is asked, and when none draws it, the
+    /// canvas does.
     fn draw_card(&self, paint: &egui::Painter, d: &Drawing<'_>, card: &CardDrawn<'_>, registry: &mut Registry, ui: &egui::Ui) -> bool {
         let _ = (paint, d, card, registry, ui);
         false
+    }
+    /// Draws what goes with the card `card` over it and its selection ring, recording each in
+    /// `registry` (UML's template signature over its top-right corner, AR-130). Asked for every card,
+    /// the canvas's own and those a kind drew itself, of the diagram's own kind first, then every
+    /// other kind it knows in turn, so what goes with a card is drawn whatever diagram shows it.
+    /// Nothing by default.
+    fn card_extras(&self, paint: &egui::Painter, d: &Drawing<'_>, card: &CardDrawn<'_>, registry: &mut Registry, ui: &egui::Ui) {
+        let _ = (paint, d, card, registry, ui);
     }
     /// Places a label of those figures that no node holds yet on diagram `d` alone, its top left
     /// corner at `(x, y)`, as a drag lets it go there: `element` is the element the label stands
