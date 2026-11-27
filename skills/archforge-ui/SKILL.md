@@ -120,7 +120,9 @@ after every visible change, in both appearances, beside the design.
   names (`model_words`, the change view's labels) follow their metamodel: the core's in the
   shell's table, a word only one notation's metamodel names in that notation's, which the shell
   says only for the notations it was given; the hover text of a diagram kind's tool is its
-  notation's too. Each is keyed by the English
+  notation's too. `every_row_is_in_the_catalogue_of_the_code_that_reads_it` holds every row to
+  this. To it, a source file is a notation's code when, its tests aside, it names that notation's
+  crate (`archforge_er`) and no other notation's; a test reading a row places it nowhere. Each is keyed by the English
   text, four tab-separated columns: kind, context, key, text. All seven languages are complete,
   so a new string needs its row in every language of its table. Rows go beside related entries,
   never at the end of the file. A key is in a language's catalogues once (a `str` row by context
