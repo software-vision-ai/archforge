@@ -483,4 +483,58 @@ mod tests {
         many.element_count = Some(700);
         assert_eq!(tool_words(UIS, &many).0, "Read 700 elements");
     }
+
+    /// The app's notations count each of their kinds in its own words, every relationship of
+    /// either as a line, a primitive type as a data type, and leave out the parts of a diagram and
+    /// a description's comment; the shell counts diagrams, skills and the rest as elements.
+    #[test]
+    fn the_app_notations_count_their_kinds_in_their_words() {
+        crate::i18n::set_language("en");
+        let read = |metaclasses: &[&str]| ToolFacts {
+            tool: "engine.execute".into(),
+            command: Some("model.find".into()),
+            detail: None,
+            status: ToolStatus::Done,
+            changed_model: false,
+            element_count: None,
+            anchors: metaclasses.iter().zip(1u8..).map(|(m, n)| at(n, AnchorRole::Read, m, "")).collect(),
+        };
+        for (table, two) in [
+            ("uml_class", "2 classes"),
+            ("uml_interface", "2 interfaces"),
+            ("uml_enumeration", "2 enumerations"),
+            ("uml_data_type", "2 data types"),
+            ("uml_primitive_type", "2 data types"),
+            ("uml_package", "2 packages"),
+            ("uml_property", "2 attributes"),
+            ("uml_operation", "2 operations"),
+            ("uml_enumeration_literal", "2 literals"),
+            ("er_entity", "2 tables"),
+            ("er_attribute", "2 columns"),
+            ("er_schema", "2 schemas"),
+            ("diagram_diagram", "2 diagrams"),
+            ("core_skill", "2 skills"),
+            ("uml_constraint", "2 elements"),
+        ] {
+            assert_eq!(tool_words(UIS, &read(&[table, table])).0, format!("Read {two}"), "{table}");
+        }
+        let lines = [
+            "uml_association",
+            "uml_association_class",
+            "uml_generalization",
+            "uml_dependency",
+            "uml_realization",
+            "uml_abstraction",
+            "uml_usage",
+            "uml_interface_realization",
+            "er_relationship",
+            "er_generalization",
+        ];
+        assert_eq!(tool_words(UIS, &read(&lines)).0, "Read 10 lines", "every relationship of either notation");
+        assert_eq!(tool_words(UIS, &read(&["uml_data_type", "uml_primitive_type", "er_entity"])).0, "Read 2 data types, 1 table");
+        let parts = ["diagram_node", "diagram_edge", "core_comment", "uml_comment", "er_entity"];
+        assert_eq!(tool_words(UIS, &read(&parts)).0, "Read 1 table", "a diagram's parts and a description's comment are not counted");
+        // Elements of tables no one counts are told apart by their table.
+        assert_eq!(tool_words(UIS, &read(&["core_folder", "core_folder", "core_model"])).0, "Read 2 elements, 1 element");
+    }
 }
