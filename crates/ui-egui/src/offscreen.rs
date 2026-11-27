@@ -788,7 +788,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         crate::diagrams::open_new(&mut shell);
         if let Some(edit) = shell.diagrams.new.as_mut() {
             edit.kind = archforge_uml::STRUCTURE_DIAGRAM;
-            edit.schema = None;
+            edit.owner = None;
             edit.name = "Domain model".into();
             if screen == Screen::WorkspaceNewDiagramDetails {
                 edit.step = crate::diagrams::Step::Details;
@@ -3016,7 +3016,7 @@ fn sample_subtypes(shell: &mut Shell) -> Result<(), String> {
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
     let store = session.doc();
     let diagram = shell.canvas.active.and_then(|id| store.by_uuid(id)).ok_or_else(|| "the sample has no open diagram".to_string())?;
-    let schema = crate::diagrams::schema_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
+    let schema = crate::diagrams::owner_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
     let (schema, diagram) = (store.uuid(schema).map_err(|e| e.to_string())?.to_string(), store.uuid(diagram).map_err(|e| e.to_string())?.to_string());
     let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
@@ -3054,7 +3054,7 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
     let store = session.doc();
     let diagram = shell.canvas.active.and_then(|id| store.by_uuid(id)).ok_or_else(|| "the sample has no open diagram".to_string())?;
-    let schema = crate::diagrams::schema_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
+    let schema = crate::diagrams::owner_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
     let (schema_id, diagram_id) = (store.uuid(schema).map_err(|e| e.to_string())?, store.uuid(diagram).map_err(|e| e.to_string())?);
     let out = session
         .batch("Add table", |b| {

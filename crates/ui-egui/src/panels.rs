@@ -96,9 +96,9 @@ fn subject(shell: &Shell, project: &str) -> Subject {
                     name: archforge_core::skills::name_of(store, o),
                 },
                 Some(c) if c == archforge_diagram::DIAGRAM => {
-                    let schema = crate::diagrams::schema_of(store, o).map(|s| archforge_core::name_of(store, s)).unwrap_or_default();
+                    let owner = crate::diagrams::owner_of(store, o).map(|s| archforge_core::name_of(store, s)).unwrap_or_default();
                     Words {
-                        kind: fmt(&tr("Diagram · of {schema}"), &[("schema", &schema)]),
+                        kind: fmt(&tr("Diagram · of {owner}"), &[("owner", &owner)]),
                         word: tr("Diagram"),
                         this: tr("This diagram"),
                         on_this: tr("On this diagram · {n}"),
@@ -252,25 +252,15 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             control(shell, ui, "workspace.properties.name", "button", field, false);
         }
         Some(c) if c == archforge_diagram::DIAGRAM => {
-            // A diagram: its name, and the schema it is of, which does not change.
+            // A diagram: its name, and the element it is of, which does not change.
             let half = (width - 16.0) / 2.0;
             name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, "diagram.rename", "diagram");
-            // The element it is of, named by its notation's word (ER's Schema).
-            let (schema, word) = shell
-                .session
-                .as_ref()
-                .and_then(|s| {
-                    let store = s.doc();
-                    let of = crate::diagrams::schema_of(store, subject.obj?)?;
-                    let word = crate::notation_ui::of(shell.notation_uis, store, of).and_then(|ui| ui.words(store, of)).map(|w| w.word);
-                    Some((archforge_core::name_of(store, of), word))
-                })
-                .unwrap_or_default();
+            let (owner, word) = owner_words(shell, subject.obj);
             let at = pos2(r.left() + PAD + half + 16.0, y);
-            ux::text(&paint, at, &word.unwrap_or_else(|| tr("Schema")), types::CAPTION, p.text_secondary, Some(half.max(0.0)));
+            ux::text(&paint, at, &word, types::CAPTION, p.text_secondary, Some(half.max(0.0)));
             let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(half.max(0.0), FIELD));
             paint.rect_filled(field, 6.0, p.field);
-            ux::text_mid(&paint, field.left() + 8.0, field.center().y, &schema, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
+            ux::text_mid(&paint, field.left() + 8.0, field.center().y, &owner, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
             ux::icon_mid(&paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_muted);
             control(shell, ui, "workspace.properties.schema", "select", field, false);
             if let Some(o) = subject.obj {
@@ -284,6 +274,21 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             }
         }
     }
+}
+
+/// The name of the element diagram `d` is of, and the word Properties labels it with: the word
+/// the element's notation gives it, else the word of the diagram's kind for what its diagrams
+/// are of ([`DiagramKind::owner_word`](crate::kinds::DiagramKind::owner_word)), else "Element"
+/// for a diagram of a kind the shell does not know.
+fn owner_words(shell: &Shell, d: Option<Obj>) -> (String, String) {
+    let store = shell.session.as_ref().map(|s| s.doc());
+    let owner = store.zip(d).and_then(|(store, d)| Some((store, crate::diagrams::owner_of(store, d)?)));
+    let name = owner.map(|(store, of)| archforge_core::name_of(store, of)).unwrap_or_default();
+    let word = owner
+        .and_then(|(store, of)| crate::notation_ui::of(shell.notation_uis, store, of).and_then(|ui| ui.words(store, of)).map(|w| w.word))
+        .or_else(|| store.zip(d).and_then(|(store, d)| crate::kinds::kind_of(shell, store, d)).map(|k| k.owner_word()))
+        .unwrap_or_else(|| tr("Element"));
+    (name, word)
 }
 
 /// [`problems_section_cx`] over the whole shell, for code not on the narrow context yet.

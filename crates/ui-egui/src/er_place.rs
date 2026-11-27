@@ -52,7 +52,7 @@ pub(crate) fn place_entity(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
     cx.canvas.notice = None;
     let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
-    let Some(schema) = crate::diagrams::schema_of(store, d) else {
+    let Some(schema) = crate::diagrams::owner_of(store, d) else {
         cx.canvas.notice = Some(tr("The diagram is of no schema"));
         return;
     };
@@ -96,7 +96,7 @@ pub(crate) fn connect_to_new(cx: &mut Ctx, d: Obj, from_node: Uuid, x: f64, y: f
     let kind = er(cx.notation_states).map(|er| er.relationship).unwrap_or_default();
     let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
-    let Some(schema) = crate::diagrams::schema_of(store, d) else {
+    let Some(schema) = crate::diagrams::owner_of(store, d) else {
         cx.canvas.notice = Some(tr("The diagram is of no schema"));
         return;
     };
@@ -184,7 +184,7 @@ fn free_place(cx: &Ctx, schema: Obj) -> Option<(Uuid, f64, f64)> {
     let session = cx.session.as_ref()?;
     let store = session.doc();
     let d = cx.canvas.active.and_then(|id| store.by_uuid(id)).filter(|d| store.is_alive(*d))?;
-    if crate::diagrams::schema_of(store, d) != Some(schema) {
+    if crate::diagrams::owner_of(store, d) != Some(schema) {
         return None;
     }
     let nodes = nodes_of(store, d);
