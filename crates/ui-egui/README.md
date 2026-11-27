@@ -39,14 +39,15 @@ drawing reads (`canvas::Drawing`) and what a press asks for (`editing::Action`),
 their old paths, while the shell keeps the kinds it knows (`kinds::KINDS`, ER's and UML's) and
 asks them through thin forwarders over the whole shell (`kinds::kind_of`, `kinds::active_kind`,
 `kinds::popover_takes_keys`): its tools, each placing or connecting, and the hooks the gestures run: place, connect, a line dropped
-on empty canvas, rename in place, open at a card's row, its adorner, the rows its element menu adds
+on empty canvas, rename in place and where the name typed goes on a card it draws, open at a card's row, its adorner, the rows its element menu adds
 with what each does, the live line, a
 press and a right click it reads first, the keys a drawing under way takes, whether its popover's
 menu takes the keys, what Select all takes in beside the boxes and lines, and where a label of
 its own figures is let go; and
 the hooks the canvas runs as it draws: before and after a diagram is drawn, where a line starts,
-what goes with a line, the figures of no one node or line, and the hint bar, through which UML
-draws its association classes' ties and names, its generalization sets, its n-ary legs and hint,
+what goes with a line, the figures of no one node or line, a card it draws itself, and the hint
+bar, through which UML draws its association classes' ties and names, its generalization sets,
+its package cards with their tabs, owning paths and thumbnails (`uml_package`), its n-ary legs and hint,
 and runs its package navigation, whose state is UML's own; and its rows of the Model menu, as
 data (`kinds::ModelRow`: the row's id, its word, the tool it arms and the choice of the tool's
 popover it makes first), from which `model_menu` makes the menu's entries, Note and Link note after them;

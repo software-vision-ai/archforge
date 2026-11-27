@@ -954,8 +954,8 @@ fn draw_node(
             draw_diamond(paint, p, rect, &card.name, keyword, z, selected, &look_of(store, n, node::STYLE));
         }
         Some(_) if let Some(card) = card => {
-            // A tinted card (an entity) takes the entity's tint; any other, the surface, the border
-            // and the muted eyebrow.
+            // A tinted card takes the palette's tint; any other, the surface, the border and the
+            // muted eyebrow.
             let (p, border) = card_palette(p, store, n, card.elsewhere, card.tone != Tone::Tinted, z);
             let p = &p;
             paint.rect_filled(rect, 6.0 * z, p.entity);
@@ -1033,7 +1033,7 @@ fn draw_node(
 }
 
 /// The palette a card of the node `n` is drawn in, and its border's width at zoom `z`: a `plain`
-/// card (a class) takes the surface, the border and the muted eyebrow, any other the entity's tint;
+/// card takes the surface, the border and the muted eyebrow, any other the palette's tint;
 /// the node's own look on its diagram goes over either, its own fill bringing the text that reads
 /// on it unless it has its own text colour too; an element of another scope (`elsewhere`) is
 /// dimmed.

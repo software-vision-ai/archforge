@@ -591,8 +591,8 @@ fn decide(
             }
             if resp.clicked() {
                 let (x, y) = view.to_canvas(pos);
-                // A package's tab is its card's (AR-113), over any line that crosses it; a card and a
-                // tab over each other give the one drawn on top.
+                // A part of a card its kind drew outside it is the card's, over any line that crosses
+                // it; a card and a part over each other give the one drawn on top.
                 let hit = hit(store, notations, grid, x, y);
                 let card = match hit {
                     Some(Hit::Node(n)) => Some(n),
@@ -936,8 +936,8 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
 }
 
 /// The topmost node of `d` under a screen point whose element takes part in the diagram kind's
-/// gestures: on its card, or on its package's tab, the one drawn on top where a card covers a tab
-/// (AR-570).
+/// gestures: on its card, or on a part of one its kind drew outside it, the one drawn on top where
+/// a card covers a part (AR-570).
 fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
     let session = shell.session.as_ref()?;
     let store = session.doc();

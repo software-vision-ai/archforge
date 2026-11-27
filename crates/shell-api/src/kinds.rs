@@ -2,10 +2,11 @@
 //! what it draws, with the data types it hands between the shell's canvas and a kind: what a kind's
 //! tool does, the tool itself, a press on the canvas as the kind reads it, a line as the canvas drew
 //! it, a card the kind may draw itself, a label the kind drew of no one node or line, a row a kind
-//! adds to its elements' menu and a row it gives the Model menu; and the kind of a diagram, of the diagram the canvas shows and
-//! whether the open popover takes the keys, each asked of the kinds it is handed. The shell keeps
-//! its list of kinds (`archforge_ui_egui::kinds::KINDS`, which names ER's and UML's) and
-//! re-exports these under their old paths (`archforge_ui_egui::kinds` and `canvas`).
+//! adds to its elements' menu and a row it gives the Model menu; and the kind of a diagram, of the
+//! diagram the canvas shows and whether the open popover takes the keys, each asked of the kinds it
+//! is handed. The shell keeps its list of kinds (`archforge_ui_egui::kinds::KINDS`, which names
+//! ER's and UML's) and re-exports these under their old paths (`archforge_ui_egui::kinds` and
+//! `canvas`).
 
 use archforge_diagram::ProjectView;
 use archforge_mof::{Obj, Store, Uuid};
@@ -227,7 +228,6 @@ pub trait DiagramKind: Sync {
     /// `text`, and in which text style, laid out with `paint` (a UML package's name in its tab, which
     /// grows with it). Asked as the field is drawn, so it follows a rename opened after the card was
     /// drawn. None, and by default: in the card's header, where the canvas's own cards hold it.
-    #[allow(clippy::too_many_arguments, reason = "the field is placed from the node, its card's place, the text typed and the zoom")]
     fn name_field(&self, paint: &egui::Painter, store: &Store, node: Obj, rect: Rect, text: &str, z: f32) -> Option<(Rect, crate::ux::Type)> {
         let _ = (paint, store, node, rect, text, z);
         None
