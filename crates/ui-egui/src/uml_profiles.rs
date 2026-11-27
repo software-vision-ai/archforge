@@ -80,7 +80,7 @@ pub struct ProfileRefusal {
 pub(crate) fn element_text(named: &Named) -> String {
     match named {
         Named::Name(name) => name.clone(),
-        Named::Unnamed { kind } => crate::panels::a_kind(kind).unwrap_or_else(|| tr_ctx("refusal", "an element")),
+        Named::Unnamed { kind } => crate::panels::a_kind(crate::notation_ui::UIS, kind).unwrap_or_else(|| tr_ctx("refusal", "an element")),
     }
 }
 
@@ -997,7 +997,7 @@ pub(crate) fn drop_stereotype(cx: &mut Ctx, d: Obj, s: Obj, at: (f64, f64)) {
         Ok(())
     });
     if let Err(e) = out {
-        cx.canvas.notice = Some(crate::panels::refusal(&e));
+        cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e));
     }
 }
 
@@ -1087,7 +1087,7 @@ mod tests {
         let said = |names: Vec<Named>| {
             let n = names.len();
             let held = Used::HeldProfile { package: "Tools".into(), profile: "Audit".into() };
-            crate::panels::said(&Reason::InUse(Box::new(InUse { what: held, uses: vec![("Tracked".into(), names, n)] })))
+            crate::panels::said(crate::notation_ui::UIS, &Reason::InUse(Box::new(InUse { what: held, uses: vec![("Tracked".into(), names, n)] })))
         };
         let cases = [
             (vec!["bills".into(), unnamed("generalization")], "bills and a generalization", "bills und eine Generalisierung"),
@@ -1115,7 +1115,7 @@ mod tests {
         use archforge_engine::{AppliedTo, LiteralValued};
         let said = |element| {
             let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Entity".into(), element };
-            crate::panels::said(&Reason::LiteralValued(Box::new(valued)))
+            crate::panels::said(crate::notation_ui::UIS, &Reason::LiteralValued(Box::new(valued)))
         };
         let on = |element: &str, french: &str| {
             (

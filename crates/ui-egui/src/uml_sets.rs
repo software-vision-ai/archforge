@@ -473,7 +473,7 @@ fn remove_lines(cx: &mut Ctx, d: Obj, elements: &[Obj]) {
         Ok(())
     });
     if let Err(e) = out {
-        cx.canvas.notice = Some(crate::panels::refusal(&e));
+        cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e));
     }
 }
 

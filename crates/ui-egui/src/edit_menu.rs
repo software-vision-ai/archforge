@@ -136,7 +136,7 @@ fn step(shell: &mut Shell, modifiers: Modifiers, command: &str, has: fn(&Session
         && let Some(session) = shell.session.as_mut()
         && let Err(e) = session.execute(command, &serde_json::Value::Null)
     {
-        shell.canvas.notice = Some(crate::panels::refusal(&e));
+        shell.canvas.notice = Some(crate::panels::refusal(shell.notation_uis, &e));
     }
 }
 

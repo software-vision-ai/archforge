@@ -669,7 +669,7 @@ fn write_values(cx: &mut Ctx, element: Uuid, s_id: Uuid, p_id: Uuid, values: Vec
                     stereotype: s_id,
                     property: p_id,
                     text: typed.unwrap_or_else(|| values.join(", ")),
-                    refused: Some(crate::panels::refusal(&e)),
+                    refused: Some(crate::panels::refusal(cx.notation_uis, &e)),
                 });
             }
         }
@@ -708,7 +708,7 @@ pub(crate) fn show_values(cx: &mut Ctx, d: Uuid, on: bool) -> Result<(), String>
     session
         .execute("uml.stereotype.show-values", &json!({ "diagram": d.to_string(), "show": on }))
         .map(|_| cx.panels.notice = None)
-        .map_err(|e| crate::panels::refusal(&e))
+        .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
 }
 
 /// The picker under `anchor` (F4): headed `APPLY TO ORDER`, then the filter as typed, the

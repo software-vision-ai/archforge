@@ -853,7 +853,7 @@ fn commit_column(cx: &mut Ctx, edit: &ColumnEdit) {
                 steps.push(("er.attribute.set-generation", json!({ "attribute": id, "generation": generation, "expression": expression })));
             }
             if steps.len() == 1 {
-                session.execute(steps[0].0, &steps[0].1).map(|_| ()).map_err(|e| refusal(&e))
+                session.execute(steps[0].0, &steps[0].1).map(|_| ()).map_err(|e| refusal(cx.notation_uis, &e))
             } else {
                 session
                     .batch(&tr("Edit column"), |b| {
@@ -863,7 +863,7 @@ fn commit_column(cx: &mut Ctx, edit: &ColumnEdit) {
                         Ok(())
                     })
                     .map(|_| ())
-                    .map_err(|e| refusal(&e))
+                    .map_err(|e| refusal(cx.notation_uis, &e))
             }
         }
     };

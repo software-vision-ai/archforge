@@ -12,13 +12,14 @@
 use archforge_engine::{BindingFault, EngineError, Reason};
 
 use crate::i18n::{fmt, tr};
+use crate::notation_ui::NotationUi;
 
 /// Why a command is not available now, in the user's words, by the reason its availability check
 /// gives: the shell's own for the engine's, the skills' and the diagrams' commands, then the one
-/// notation's whose command it is
+/// notation of `uis` whose command it is
 /// ([`NotationUi::disabled`](crate::notation_ui::NotationUi::disabled)); none for a reason the
 /// catalogues don't hold, which the engine's English then says.
-pub(crate) fn disabled(reason: &str) -> Option<String> {
+pub fn disabled(uis: &[&'static dyn NotationUi], reason: &str) -> Option<String> {
     Some(match reason {
         archforge_engine::cmd::edit::NOTHING_TO_UNDO => tr("There is nothing to undo."),
         archforge_engine::cmd::edit::NOTHING_TO_REDO => tr("There is nothing to redo."),
@@ -26,7 +27,7 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
         archforge_core::skills::NO_SKILLS => tr("There is no skill yet."),
         archforge_diagram::commands::NO_DIAGRAMS => tr("There is no diagram yet."),
         archforge_diagram::project::NO_ELEMENTS => tr("There is nothing to remove or describe yet."),
-        _ => return crate::notation_ui::UIS.iter().find_map(|ui| ui.disabled(reason)),
+        _ => return uis.iter().find_map(|ui| ui.disabled(reason)),
     })
 }
 

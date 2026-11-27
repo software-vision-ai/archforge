@@ -564,7 +564,7 @@ fn apply_draft(cx: &mut Ctx) {
                     Ok(())
                 })
                 .map(|o| o.value.get(0).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse))
-                .map_err(|e| crate::panels::refusal(&e))
+                .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
         }
         _ => return,
     };
@@ -664,7 +664,9 @@ pub(crate) fn start_problem(store: &Store, element: Obj) -> Option<String> {
 /// as a refusal of the engine is. `except` is a binding being reconnected.
 pub(crate) fn refusal(store: &Store, bound: Obj, template: Obj, except: Option<Obj>) -> Option<String> {
     let problem = bindings::problem(store, bound, template, except)?;
-    Some(crate::panels::said(&problem.reason(store, bound, template)).unwrap_or_else(|| problem.said(store, bound, template)))
+    Some(
+        crate::panels::said(crate::notation_ui::UIS, &problem.reason(store, bound, template)).unwrap_or_else(|| problem.said(store, bound, template)),
+    )
 }
 
 /// Whether moving binding `b`'s template end onto `template` needs arguments first: a parameter

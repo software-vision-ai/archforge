@@ -31,9 +31,11 @@ pub(crate) fn tables() -> impl Iterator<Item = &'static [Rows]> {
     std::iter::once(CATALOGUES).chain(crate::notation_ui::UIS.iter().map(|ui| ui.catalogues()))
 }
 
-/// Registers every catalogue table ([`tables`]) once, before the first lookup; a refusal, which
-/// the tests rule out, is said in the log.
-fn registered() {
+/// Registers every catalogue table ([`tables`]) once: as the shell's notations are set up
+/// ([`Shell::new`](crate::Shell::new)), so nothing the shell's interfaces say, a refusal among them,
+/// is looked up before they are in, and before the first lookup through this module, for what is
+/// said without a shell; a refusal, which the tests rule out, is said in the log.
+pub(crate) fn registered() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         for table in tables() {

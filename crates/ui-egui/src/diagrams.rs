@@ -23,6 +23,7 @@ use serde_json::json;
 use crate::home::control;
 use crate::home_search::Typed;
 use crate::i18n::tr;
+use crate::notation_ui::NotationUi;
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -702,11 +703,12 @@ fn row_keys(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, id: Uuid, h
     }
 }
 
-/// Why the diagram `d` is not deleted from the explorer, in the user's words: it is a package's
-/// default, which only the default-deletion dialog replaces ([`archforge_diagram::defaults`]).
-fn kept_because(store: &Store, d: Obj) -> Option<String> {
+/// Why the diagram `d` is not deleted from the explorer, in the user's words, as the notations of
+/// `uis` say a refusal: it is a package's default, which only the default-deletion dialog replaces
+/// ([`archforge_diagram::defaults`]).
+fn kept_because(uis: &[&'static dyn NotationUi], store: &Store, d: Obj) -> Option<String> {
     let refused = archforge_diagram::defaults::diagram_removal_problem(store, d, "diagram", |_| false)?;
-    Some(refused.reason.as_ref().and_then(crate::panels::said).unwrap_or(refused.message))
+    Some(refused.reason.as_ref().and_then(|r| crate::panels::said(uis, r)).unwrap_or(refused.message))
 }
 
 /// Deletes the diagram `id` at once, as one undo step, and says so in a toast with Undo; what it
@@ -739,7 +741,7 @@ fn row_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
         shell.diagrams.menu = None;
         return;
     };
-    let why = kept_because(store, d);
+    let why = kept_because(shell.notation_uis, store, d);
     let (down_up, enter, escape) = ui.input_mut(|i| {
         let down_up = crate::actions::take_alone(i, egui::Key::ArrowDown) | crate::actions::take_alone(i, egui::Key::ArrowUp);
         (down_up, crate::actions::take_alone(i, egui::Key::Enter), crate::actions::take_alone(i, egui::Key::Escape))

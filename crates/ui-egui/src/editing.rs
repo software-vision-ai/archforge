@@ -784,7 +784,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 Ok(())
             });
             if let Err(e) = out {
-                shell.canvas.notice = Some(crate::panels::refusal(&e));
+                shell.canvas.notice = Some(crate::panels::refusal(shell.notation_uis, &e));
             }
         }
         Gesture::EndText { edge, end, from, centre, anchor } => {
@@ -804,7 +804,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 Ok(())
             });
             if let Err(e) = out {
-                shell.canvas.notice = Some(crate::panels::refusal(&e));
+                shell.canvas.notice = Some(crate::panels::refusal(shell.notation_uis, &e));
             }
         }
         Gesture::Segment { edge, index, route, from } => {
@@ -945,7 +945,7 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
     // that gives the toast answers, so the toast names only what that notation worked out.
     let removal = ui.map_or_else(crate::notation_ui::Removal::default, |ui| ui.before_removal(store, &[element]));
     let Some(session) = shell.session.as_mut() else { return false };
-    let removed = session.execute("element.remove", &json!({ "ids": [id.to_string()] })).map_err(|e| crate::panels::refusal(&e));
+    let removed = session.execute("element.remove", &json!({ "ids": [id.to_string()] })).map_err(|e| crate::panels::refusal(shell.notation_uis, &e));
     match removed {
         Ok(_) => {
             let text = ui.map_or_else(|| crate::i18n::fmt(&tr("{what} removed"), &[("what", &word)]), |ui| ui.removed_text(&word, &removal));
@@ -1115,7 +1115,7 @@ pub(crate) fn place_with_lines_cx(
     });
     match out {
         Some(Ok(_)) => select_cx(cx, vec![entity]),
-        Some(Err(e)) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Some(Err(e)) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
         None => {}
     }
 }
@@ -1570,7 +1570,7 @@ fn arrange_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: Vie
         Ok(())
     });
     if let Err(e) = out {
-        shell.canvas.notice = Some(crate::panels::refusal(&e));
+        shell.canvas.notice = Some(crate::panels::refusal(shell.notation_uis, &e));
     }
 }
 
@@ -1943,7 +1943,7 @@ fn remove_lines_here(shell: &mut Shell, d: Obj) {
         Ok(())
     });
     if let Err(e) = out {
-        shell.canvas.notice = Some(crate::panels::refusal(&e));
+        shell.canvas.notice = Some(crate::panels::refusal(shell.notation_uis, &e));
     }
 }
 

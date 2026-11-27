@@ -82,7 +82,7 @@ pub(crate) fn place_entity(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
             }
             cx.canvas.tool = Tool::Select;
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -148,7 +148,7 @@ pub(crate) fn connect_to_new(cx: &mut Ctx, d: Obj, from_node: Uuid, x: f64, y: f
                 cx.canvas.focused = true;
             }
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -202,7 +202,7 @@ pub(crate) fn add_entity(cx: &mut Ctx, schema: Uuid, name: &str) -> Result<Uuid,
     let session = cx.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
     let add = json!({ "schema": schema.to_string(), "name": name });
     let entity = match placed {
-        None => session.execute("er.entity.add", &add).map(|o| o.value).map_err(|e| crate::panels::refusal(&e))?,
+        None => session.execute("er.entity.add", &add).map(|o| o.value).map_err(|e| crate::panels::refusal(cx.notation_uis, &e))?,
         Some((diagram, x, y)) => {
             let out = session
                 .batch(&tr("Add table"), |b| {
@@ -214,7 +214,7 @@ pub(crate) fn add_entity(cx: &mut Ctx, schema: Uuid, name: &str) -> Result<Uuid,
                     )?;
                     Ok(())
                 })
-                .map_err(|e| crate::panels::refusal(&e))?;
+                .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))?;
             out.value.get(0).cloned().unwrap_or(serde_json::Value::Null)
         }
     };
@@ -241,7 +241,7 @@ pub(crate) fn run_growing(cx: &mut Ctx, label: &str, cmd: &str, params: serde_js
         })
         .collect();
     if grow.is_empty() {
-        return session.execute(cmd, &params).map(|o| o.value).map_err(|e| crate::panels::refusal(&e));
+        return session.execute(cmd, &params).map(|o| o.value).map_err(|e| crate::panels::refusal(cx.notation_uis, &e));
     }
     session
         .batch(label, |b| {
@@ -252,7 +252,7 @@ pub(crate) fn run_growing(cx: &mut Ctx, label: &str, cmd: &str, params: serde_js
             Ok(())
         })
         .map(|o| o.value.get(0).cloned().unwrap_or(serde_json::Value::Null))
-        .map_err(|e| crate::panels::refusal(&e))
+        .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
 }
 
 /// Grows every table box of the model read that is too short for its columns, before the project's
@@ -327,5 +327,5 @@ pub(crate) fn run_fitting(cx: &mut Ctx, label: &str, cmd: &str, params: serde_js
             grow_to_fit(b, entities)
         })
         .map(|o| o.value.get(0).cloned().unwrap_or(serde_json::Value::Null))
-        .map_err(|e| crate::panels::refusal(&e))
+        .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
 }

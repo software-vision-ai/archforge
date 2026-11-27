@@ -442,7 +442,9 @@ dependencies = [
  "craft-i18n",
  "egui",
  "icu_properties",
+ "log",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

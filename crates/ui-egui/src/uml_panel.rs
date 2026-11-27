@@ -1599,7 +1599,7 @@ pub(crate) fn target_refusals(
 
 /// Why a default does not read, in the user's words: the value and the form its type takes.
 pub(crate) fn default_refusal(store: &Store, e: &archforge_uml::modifiers::DefaultError) -> String {
-    crate::panels::said(&e.reason(store)).unwrap_or_else(|| e.said(store))
+    crate::panels::said(crate::notation_ui::UIS, &e.reason(store)).unwrap_or_else(|| e.said(store))
 }
 
 /// A property's default refused, typed, in the user's words: too long, not read as its type's
@@ -1803,7 +1803,7 @@ pub(crate) fn write_in_sight(cx: &mut Ctx, edit: &MemberEdit, cmd: &str, params:
     {
         return Err(why);
     }
-    session.execute(cmd, &params).map(|o| o.value).map_err(|e| crate::panels::refusal(&e))
+    session.execute(cmd, &params).map(|o| o.value).map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
 }
 
 /// Drops the editor whose class or member is gone.

@@ -163,7 +163,7 @@ pub(crate) fn go(shell: &mut Shell, found: Found) {
             if let Some(session) = shell.session.as_mut()
                 && let Err(e) = session.execute("view.select", &json!({ "ids": [id.to_string()] }))
             {
-                shell.canvas.notice = Some(crate::panels::refusal(&e));
+                shell.canvas.notice = Some(crate::panels::refusal(shell.notation_uis, &e));
             }
         }
     }

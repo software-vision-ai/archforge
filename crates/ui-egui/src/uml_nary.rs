@@ -348,7 +348,7 @@ pub(crate) fn finish(cx: &mut Ctx, d: Obj) {
             }
         }
         // Refused, the draft stays for another try and the model is as it was.
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -1156,7 +1156,7 @@ fn commit(cx: &mut Ctx, edit: &EndEdit) {
         }
         Err(e) => {
             if let Some(ed) = uml_mut(cx.notation_states).and_then(|uml| uml.nary_end.as_mut()) {
-                ed.refused = Some((None, crate::panels::refusal(&e)));
+                ed.refused = Some((None, crate::panels::refusal(cx.notation_uis, &e)));
             }
         }
     }

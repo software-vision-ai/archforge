@@ -43,7 +43,7 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
     Some(match reason {
         Reason::DependsOnItself { kind } => {
             let template = tr("{what} cannot depend on itself.");
-            let what = crate::panels::a_kind(kind)?;
+            let what = crate::panels::a_kind(crate::notation_ui::UIS, kind)?;
             // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
             let what = if template.starts_with("{what}") {
                 what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect()
@@ -68,7 +68,7 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         }
         Reason::HoldsBuiltInName { kind, name } => fmt(
             &tr("The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first."),
-            &[("what", &crate::panels::a_kind(kind)?), ("name", name), ("types", types)],
+            &[("what", &crate::panels::a_kind(crate::notation_ui::UIS, kind)?), ("name", name), ("types", types)],
         ),
         Reason::InvalidBinding(BindingFault::Missing) => {
             tr("The package has class diagrams, but none is its default. Choose one of them as its default diagram.")
@@ -317,7 +317,7 @@ fn template_said(reason: &Reason) -> Option<String> {
         ),
         Reason::BuiltInTaken { kind, name } => fmt(
             &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type."),
-            &[("what", &crate::panels::a_kind(kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
+            &[("what", &crate::panels::a_kind(crate::notation_ui::UIS, kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
         ),
         _ => return None,
     })

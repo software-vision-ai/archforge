@@ -237,11 +237,6 @@ pub(crate) fn colour(hex: &str) -> Option<ux::Colour> {
     Some(crate::ux::data_colour(byte(0)?, byte(2)?, byte(4)?))
 }
 
-/// A colour as `#rrggbb`.
-pub(crate) fn hex(c: ux::Colour) -> String {
-    format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b())
-}
-
 /// The palette whose text reads on `fill`: Light's dark text on a light fill, Dark's light text on
 /// a dark one, so a node's own fill never hides its words.
 pub(crate) fn ink_for(fill: ux::Colour) -> &'static Palette {
@@ -2478,7 +2473,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     {
         match session.execute("diagram.arrange", &json!({ "diagram": d.to_string() })) {
             Ok(_) => shell.canvas.fit_pending = true,
-            Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
+            Err(e) => shell.canvas.notice = Some(crate::panels::refusal(shell.notation_uis, &e)),
         }
     }
     if let (Some(kind), Some((key, chevron))) = (kind, open_at) {

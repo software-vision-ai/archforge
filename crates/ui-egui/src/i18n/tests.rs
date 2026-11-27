@@ -439,7 +439,11 @@ fn every_reason_a_command_is_not_available_has_its_row() {
         reasons.extend(session.registry().infos(&session.facts()).into_iter().filter_map(|i| i.disabled_reason));
     }
     for reason in &reasons {
-        assert_eq!(crate::engine_said::disabled(reason).as_deref(), Some(*reason), "no row keyed by {reason:?}");
+        assert_eq!(
+            archforge_shell_api::engine_said::disabled(crate::notation_ui::UIS, reason).as_deref(),
+            Some(*reason),
+            "no row keyed by {reason:?}"
+        );
     }
     assert_eq!(reasons.len(), 26, "the reasons found: {reasons:?}");
 }

@@ -144,10 +144,10 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
             fmt(&tr("An identifying relationship's foreign key columns are part of the primary key, and {column} is not."), &[("column", column)])
         }
         Reason::WouldBreak { kind: "primary key" | "unique constraint", name, why } => {
-            fmt(&tr("The key {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
+            fmt(&tr("The key {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(crate::notation_ui::UIS, why)?)])
         }
         Reason::WouldBreak { kind: "foreign key", name, why } => {
-            fmt(&tr("The foreign key {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
+            fmt(&tr("The foreign key {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(crate::notation_ui::UIS, why)?)])
         }
         Reason::TooDeep { kind: "key", max } => {
             fmt(&tr("Keys built on each other run deeper than {max} levels here, or in a loop."), &[("max", &max.to_string())])
@@ -156,10 +156,10 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::SubtypeKeyPart => tr("This is part of a subtype's key, which goes only with its subtype."),
         Reason::Mapping(rule) => mapping_said(rule),
         Reason::WouldBreak { kind: "column", name, why } => {
-            fmt(&tr("The column {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
+            fmt(&tr("The column {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(crate::notation_ui::UIS, why)?)])
         }
         Reason::WouldBreak { kind: "table", name, why } => {
-            fmt(&tr("The table {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
+            fmt(&tr("The table {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(crate::notation_ui::UIS, why)?)])
         }
         Reason::Sequence(rule) => sequence_said(rule),
         Reason::ColumnOfOtherSchema { column } => {
@@ -210,9 +210,10 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::TooFew { kind: LITERAL, min: 1 } => tr("An enum type needs at least one literal."),
         Reason::TooMany { kind: LITERAL, max } => fmt(&tr("An enum type has at most {max} literals."), &[("max", &max.to_string())]),
         Reason::LiteralName { name, .. } if name.is_empty() => tr("A literal can't be empty."),
-        Reason::LiteralName { name, why } => {
-            fmt(&tr("The literal \"{name}\" is not a valid name. {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
-        }
+        Reason::LiteralName { name, why } => fmt(
+            &tr("The literal \"{name}\" is not a valid name. {why}"),
+            &[("name", name), ("why", &crate::panels::said(crate::notation_ui::UIS, why)?)],
+        ),
         Reason::NamedTwice { kind: LITERAL, name } => fmt(&tr("The literal \"{name}\" is given twice. Give each literal once."), &[("name", name)]),
         _ => return None,
     })

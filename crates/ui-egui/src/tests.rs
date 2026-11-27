@@ -5540,6 +5540,25 @@ fn the_dividers_resize_within_their_ranges_and_the_state_keeps_the_widths() {
     assert_eq!(back.explorer_width, after);
 }
 
+/// The saved interface state names the left side's explorer and the right side's panel by each
+/// one's own name, as it always has, and reads every one back as it was saved.
+#[test]
+fn the_saved_state_names_each_explorer_and_panel_by_its_own_name() {
+    use crate::state::{Explorer, Panel, UiState};
+    for (explorer, name) in [(Explorer::Models, "Models"), (Explorer::Diagrams, "Diagrams"), (Explorer::SourceControl, "SourceControl")] {
+        let state = UiState { explorer, ..UiState::default() };
+        let saved = serde_json::to_string(&state).unwrap();
+        assert!(saved.contains(&format!(r#""explorer":"{name}""#)), "{saved}");
+        assert_eq!(serde_json::from_str::<UiState>(&saved).unwrap(), state);
+    }
+    for (panel, name) in [(Panel::Agent, "Agent"), (Panel::Appearance, "Appearance"), (Panel::Properties, "Properties"), (Panel::Skills, "Skills")] {
+        let state = UiState { panel, ..UiState::default() };
+        let saved = serde_json::to_string(&state).unwrap();
+        assert!(saved.contains(&format!(r#""panel":"{name}""#)), "{saved}");
+        assert_eq!(serde_json::from_str::<UiState>(&saved).unwrap(), state);
+    }
+}
+
 #[test]
 fn without_an_id_source_the_status_bar_says_the_model_could_not_open_once() {
     crate::i18n::set_language("en");
@@ -5899,10 +5918,14 @@ fn an_argument_rule_broken_is_said_in_the_chosen_language() {
         let words = &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.");
         assert_ne!(words, "The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.");
         let what = tr_ctx("refusal", "a class");
-        assert_eq!(crate::panels::said(&taken), Some(fmt(words, &[("types", "Types"), ("what", &what), ("name", "Integer")])), "{theme:?}");
+        assert_eq!(
+            crate::panels::said(crate::notation_ui::UIS, &taken),
+            Some(fmt(words, &[("types", "Types"), ("what", &what), ("name", "Integer")])),
+            "{theme:?}"
+        );
         let constrained = Parameter { name: "T".into(), kind: "class", constraint: Some("Entity".into()), ..Parameter::default() };
         let words = fmt(&tr("Arguments for {name} must be {constraint} or specialise it."), &[("name", "T"), ("constraint", "Entity")]);
-        assert_eq!(crate::panels::said(&Reason::Misfit(Box::new(constrained))), Some(words), "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &Reason::Misfit(Box::new(constrained))), Some(words), "{theme:?}");
     }
     crate::i18n::set_language("en");
 }
@@ -5964,7 +5987,7 @@ fn a_set_or_an_association_end_rule_broken_is_said_in_the_chosen_language() {
             assert_eq!(refused(&mut h, cmd, p), said, "{theme:?}: in German");
         }
         // A set's most members, said with the plural form its count takes: one and many differ.
-        let most = |max: usize| crate::panels::said(&Reason::TooMany { kind: "generalization", max });
+        let most = |max: usize| crate::panels::said(crate::notation_ui::UIS, &Reason::TooMany { kind: "generalization", max });
         let form = |n| trn("A set groups at most {n} generalization.", "A set groups at most {n} generalizations.", n);
         assert_eq!((most(256), most(1)), (Some(form(256)), Some(form(1))), "{theme:?}");
         assert_ne!(form(1), form(256).replace("256", "1"), "{theme:?}: German has a singular");
@@ -6044,7 +6067,10 @@ fn a_use_that_refuses_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "uml.profile.unapply", unapply), in_package(&on(&trn("{n} element", "{n} elements", 3))), "{theme:?}");
         // A package that would take a used profile along has no parent, which no command makes.
         let held = Used::HeldProfile { package: "Tools".into(), profile: "Audit".into() };
-        let said = crate::panels::said(&Reason::InUse(Box::new(InUse { what: held, uses: vec![("Entity".into(), vec!["Order".into()], 1)] })));
+        let said = crate::panels::said(
+            crate::notation_ui::UIS,
+            &Reason::InUse(Box::new(InUse { what: held, uses: vec![("Entity".into(), vec!["Order".into()], 1)] })),
+        );
         let holds = tr("{name} holds the profile {profile}, which is in use: {uses}. Remove those first.");
         assert_eq!(said, Some(fmt(&holds, &[("name", "Tools"), ("profile", "Audit"), ("uses", &on("Order"))])), "{theme:?}");
         // UML's own: a metaclass, named, and the library that keeps it.
@@ -6122,7 +6148,7 @@ fn a_profile_rule_refused_is_said_in_the_chosen_language() {
             assert_eq!(refused(&mut h, "element.remove", json!({ "ids": [table] })), set, "{theme:?}");
         }
         // A full profile, which takes 256 stereotypes to reach, is said from its reason.
-        let full = crate::panels::said(&Reason::TooMany { kind: "stereotype", max: 256 });
+        let full = crate::panels::said(crate::notation_ui::UIS, &Reason::TooMany { kind: "stereotype", max: 256 });
         assert_eq!(full, Some(fmt(&tr("A profile holds at most {max} stereotypes."), &[("max", "256")])), "{theme:?}");
         assert_eq!(full.as_deref(), Some("Ein Profil fasst höchstens 256 Stereotypen."), "{theme:?}");
     }
@@ -6181,9 +6207,9 @@ fn an_application_refused_is_said_in_the_chosen_language() {
         let application = tr("A stereotype application takes no stereotype. Stereotypes apply to the model's elements.");
         assert_eq!(refused(&mut h, &instance, &entity), application, "{theme:?}");
         // The model itself, and an element that carries the most, are said from their reasons.
-        let outside = crate::panels::said(&Reason::NotInModel);
+        let outside = crate::panels::said(crate::notation_ui::UIS, &Reason::NotInModel);
         assert_eq!(outside, Some(tr("This is no element of the model, so no stereotype applies to it.")), "{theme:?}");
-        let most = crate::panels::said(&Reason::TooMany { kind: "applied stereotype", max: 32 });
+        let most = crate::panels::said(crate::notation_ui::UIS, &Reason::TooMany { kind: "applied stereotype", max: 32 });
         assert_eq!(most, Some(fmt(&tr("An element carries at most {max} stereotypes."), &[("max", "32")])), "{theme:?}");
         assert_eq!(most.as_deref(), Some("Ein Element trägt höchstens 32 Stereotypen."), "{theme:?}");
     }
@@ -6267,7 +6293,11 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "element.describe", json!({ "element": order, "text": "x".repeat(4097) })), long, "{theme:?}");
         // An element with 64 comments, which only a file holds, is said from its reason.
         let comments = tr("This element owns {max} comments or more, so its description can't be found. Remove some in the file first.");
-        assert_eq!(crate::panels::said(&Reason::TooManyComments { max: 64 }), Some(fmt(&comments, &[("max", "64")])), "{theme:?}");
+        assert_eq!(
+            crate::panels::said(crate::notation_ui::UIS, &Reason::TooManyComments { max: 64 }),
+            Some(fmt(&comments, &[("max", "64")])),
+            "{theme:?}"
+        );
         // Braces picked in the editor for a class the diagram no longer shows: said under the form.
         crate::panels::run(h.state_mut(), "diagram.unplace", json!({ "nodes": [node] })).unwrap();
         crate::panels::run(h.state_mut(), "view.select", json!({ "ids": [order] })).unwrap();
@@ -6357,9 +6387,9 @@ fn a_constraint_parameter_refused_is_said_in_the_chosen_language() {
         let far = refused(&mut h, "uml.constraint.show", json!({ "diagram": diagram, "constraint": c, "x": 0, "y": 2e6 }));
         assert_eq!(far, fmt(&tr("The {axis} is farther than {max} from the origin."), &[("axis", "y"), ("max", "1000000")]), "{theme:?}");
         // No number and a constraint outside any element's constraints, which only a file or a caller gives.
-        let nan = crate::panels::said(&Reason::CoordinateNotANumber { axis: "x" });
+        let nan = crate::panels::said(crate::notation_ui::UIS, &Reason::CoordinateNotANumber { axis: "x" });
         assert_eq!(nan, Some(fmt(&tr("The {axis} is not a number."), &[("axis", "x")])), "{theme:?}");
-        let unlisted = crate::panels::said(&Reason::NoContext);
+        let unlisted = crate::panels::said(crate::notation_ui::UIS, &Reason::NoContext);
         assert_eq!(unlisted, Some(tr("This constraint is among no element's constraints.")), "{theme:?}");
     }
     crate::i18n::set_language("en");
@@ -6763,9 +6793,9 @@ fn a_default_or_target_refused_is_said_in_the_chosen_language() {
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
         // A default no other type reads, and one that does not fit having no type.
         let text = Reason::DefaultUnread { value: "x".into(), kind: DefaultKind::Text };
-        assert_eq!(crate::panels::said(&text), Some(value(tr("{value} cannot be read as a default."), "x")), "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &text), Some(value(tr("{value} cannot be read as a default."), "x")), "{theme:?}");
         let untyped = Reason::DefaultUnfit { value: "3".into(), ty: None };
-        assert_eq!(crate::panels::said(&untyped), Some(unfit(&tr("None"))), "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &untyped), Some(unfit(&tr("None"))), "{theme:?}");
     }
     crate::i18n::set_language("en");
 }
@@ -6833,8 +6863,12 @@ fn a_move_that_strands_stereotypes_is_said_in_the_chosen_language() {
         let extends = json!({ "stereotype": entity, "extends": [7] });
         let names = crate::panels::run(h.state_mut(), "uml.stereotype.set", extends).err();
         assert_eq!(names.as_deref(), Some("Die Metaklassen als Liste von Namen angeben."), "{theme:?}");
-        assert_eq!(names, crate::panels::said(&Reason::NamesExpected { kind: "metaclass" }), "{theme:?}");
-        assert_eq!(crate::panels::said(&Reason::InNoProfile).as_deref(), Some("Dieser Stereotyp liegt in keinem Profil."), "{theme:?}");
+        assert_eq!(names, crate::panels::said(crate::notation_ui::UIS, &Reason::NamesExpected { kind: "metaclass" }), "{theme:?}");
+        assert_eq!(
+            crate::panels::said(crate::notation_ui::UIS, &Reason::InNoProfile).as_deref(),
+            Some("Dieser Stereotyp liegt in keinem Profil."),
+            "{theme:?}"
+        );
     }
     crate::i18n::set_language("en");
 }
@@ -6905,12 +6939,16 @@ fn a_value_refused_is_said_in_the_chosen_language() {
         ];
         for (accepted, words) in types {
             let misfit = ValueMisfit::Unread { value: "x".into(), accepted };
-            let said = crate::panels::said(&Reason::Values(Box::new(Values { property: "n".into(), misfit })));
+            let said = crate::panels::said(crate::notation_ui::UIS, &Reason::Values(Box::new(Values { property: "n".into(), misfit })));
             let unread = fmt(&tr("{value} is no value of {name}. {accepted}"), &[("value", "x"), ("name", "n"), ("accepted", &words)]);
             assert_eq!(said, Some(unread), "{theme:?}");
         }
         let most = Reason::Values(Box::new(Values { property: "tags".into(), misfit: ValueMisfit::TooMany { max: 256 } }));
-        assert_eq!(crate::panels::said(&most), Some(fmt(&tr("{name} holds at most {n} values."), &[("name", "tags"), ("n", "256")])), "{theme:?}");
+        assert_eq!(
+            crate::panels::said(crate::notation_ui::UIS, &most),
+            Some(fmt(&tr("{name} holds at most {n} values."), &[("name", "tags"), ("n", "256")])),
+            "{theme:?}"
+        );
         // A property reshaped so the values set would not fit, and a literal a value names.
         for (property, values) in [("tags", json!(["a", "b"])), ("state", json!(["open"]))] {
             let (cmd, p) = set(property, values);
@@ -7000,7 +7038,7 @@ fn an_application_parameter_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, cmd, p), tr("Give the values as a list of texts."), "{theme:?}");
         let (cmd, p) = set(&order, &entity, "table", json!(vec!["x"; 257]));
         assert_eq!(refused(&mut h, cmd, p), fmt(&tr("{name} holds at most {n} values."), &[("name", "table"), ("n", "256")]), "{theme:?}");
-        assert_eq!(crate::panels::said(&archforge_engine::Reason::Gone), Some(tr("This element is gone.")), "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &archforge_engine::Reason::Gone), Some(tr("This element is gone.")), "{theme:?}");
     }
     crate::i18n::set_language("en");
 }
@@ -7045,7 +7083,7 @@ fn a_diagram_refusal_is_said_in_the_chosen_language() {
         let straight = tr("A note's link is a straight line and does not bend.");
         assert_eq!(refused(&mut h, "diagram.route", json!({ "edge": link, "points": [] })), straight, "{theme:?}");
         // The rest, which a file or a caller gives, said from the reason alone.
-        let said = |r: Reason| crate::panels::said(&r).unwrap_or_default();
+        let said = |r: Reason| crate::panels::said(crate::notation_ui::UIS, &r).unwrap_or_default();
         let size = [("min", "20"), ("max", "10000")];
         for (reason, words) in [
             (Reason::IdEmpty { kind: "node" }, tr("No box is given. Give its id.")),
@@ -7117,7 +7155,7 @@ fn a_kind_word_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": generalization, "kind": "name" })), none, "{theme:?}");
         assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [nodes["Order"]], "name": "Akzent" })), plain, "{theme:?}");
         let bare = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "uml.class".into(), known: Vec::new() };
-        let no_notation = crate::panels::said(&archforge_engine::Reason::NotOneOf(Box::new(bare)));
+        let no_notation = crate::panels::said(crate::notation_ui::UIS, &archforge_engine::Reason::NotOneOf(Box::new(bare)));
         let no_kind = "Dieses Projekt enthält keine Notation und kennt daher keine Diagrammart.";
         assert_eq!(no_notation.as_deref(), Some(no_kind), "{theme:?}");
     }
@@ -7198,7 +7236,7 @@ fn a_line_link_or_label_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &other)), unlinkable, "{theme:?}");
         let anchor = id(&mut h, "diagram.link-note", link(&note, &nodes["Order"]));
         assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &nodes["Order"])), "Die Notiz ist bereits damit verbunden.", "{theme:?}");
-        let elsewhere = crate::panels::said(&archforge_engine::Reason::TargetOtherDiagram);
+        let elsewhere = crate::panels::said(crate::notation_ui::UIS, &archforge_engine::Reason::TargetOtherDiagram);
         assert_eq!(elsewhere.as_deref(), Some("Womit die Notiz verbunden wird, liegt in einem anderen Diagramm."), "{theme:?}");
         // Labels.
         let label = |edge: &str| json!({ "edge": edge, "kind": "from_end" });
@@ -7306,7 +7344,7 @@ fn a_shared_commands_element_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused("element.describe", json!({ "element": "nope" })), "Es gibt kein Element mit der ID nope.", "{theme:?}");
         assert_eq!(refused("element.remove", json!({ "ids": [&d] })), not_of, "{theme:?}");
         assert_eq!(refused("element.describe", json!({ "element": &d })), not_of, "{theme:?}");
-        let undescribed = crate::panels::said(&archforge_engine::Reason::NotDescribable { notation: "ER" });
+        let undescribed = crate::panels::said(crate::notation_ui::UIS, &archforge_engine::Reason::NotDescribable { notation: "ER" });
         assert_eq!(undescribed.as_deref(), Some("ER-Elemente lassen sich noch nicht beschreiben."), "{theme:?}");
     }
     crate::i18n::set_language("en");
@@ -7373,28 +7411,28 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         crate::panels::run(h.state_mut(), "diagram.style", fill.clone()).unwrap();
         assert_eq!(refused(&mut h, "edit.redo", json!({})), "Es gibt nichts zu wiederholen.", "{theme:?}");
         let unheld = EngineError::Disabled { id: "edit.redo".into(), reason: "a reason no catalogue holds" };
-        assert_eq!(crate::panels::refusal(&unheld), "A reason no catalogue holds.", "{theme:?}");
+        assert_eq!(crate::panels::refusal(crate::notation_ui::UIS, &unheld), "A reason no catalogue holds.", "{theme:?}");
         let session = h.state_mut().session.as_mut().unwrap();
         let in_batch = session.batch("Undo inside", |b| b.execute("edit.undo", &json!({})).map(|_| ())).unwrap_err();
         assert!(matches!(in_batch, EngineError::NotInBatch { .. }), "{theme:?}: {in_batch:?}");
         let said = "Rückgängig und Wiederholen können nicht Teil einer anderen Änderung sein.";
-        assert_eq!(crate::panels::refusal(&in_batch), said, "{theme:?}");
+        assert_eq!(crate::panels::refusal(crate::notation_ui::UIS, &in_batch), said, "{theme:?}");
         session.begin_interaction("er.schema.add").unwrap();
         let running = "Eine andere Änderung läuft noch. Versuchen Sie es erneut, sobald sie beendet ist.";
         assert_eq!(refused(&mut h, "diagram.style", fill.clone()), running, "{theme:?}");
         h.state_mut().session.as_mut().unwrap().cancel().unwrap();
         let poisoned = EngineError::Poisoned { message: "the rollback failed".into() };
         let reopen = "Das Modell konnte nach einem Fehler nicht wiederhergestellt werden. Öffnen Sie das Projekt erneut, um fortzufahren.";
-        assert_eq!(crate::panels::refusal(&poisoned), reopen, "{theme:?}");
+        assert_eq!(crate::panels::refusal(crate::notation_ui::UIS, &poisoned), reopen, "{theme:?}");
         assert_eq!(refused(&mut h, "no.such.command", json!({})), internal, "{theme:?}");
         assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [&nodes["Order"]], "shade": 1 })), internal, "{theme:?}");
         let stopped = EngineError::Internal { id: "diagram.style".into(), message: "a handler panicked".into() };
-        assert_eq!(crate::panels::refusal(&stopped), internal, "{theme:?}");
+        assert_eq!(crate::panels::refusal(crate::notation_ui::UIS, &stopped), internal, "{theme:?}");
         let at = archforge_engine::Revision { history: 2, revision: 5 };
         let stale = |expected| {
             let reason = archforge_engine::Reason::StaleRevision { expected, current: at };
             let error = archforge_engine::CommandError::about("expected_revision", "stale").because(reason);
-            crate::panels::refusal(&EngineError::Failed { id: "uml.package.default.set".into(), error })
+            crate::panels::refusal(crate::notation_ui::UIS, &EngineError::Failed { id: "uml.package.default.set".into(), error })
         };
         let changed = "Das Modell hat sich geändert, seit es gelesen wurde, oder ein anderes Projekt wurde gelesen. \
                        Lesen Sie es erneut und versuchen Sie es noch einmal. Es wurde nichts geändert.";
@@ -7405,7 +7443,7 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         use archforge_engine::BindingFault::{DeadTarget, Duplicate, Missing, WrongKind, WrongOwner};
         let unsound = [Missing, Duplicate, DeadTarget, WrongKind, WrongOwner].map(|fault| {
             let error = archforge_engine::CommandError::about("package", "unsound").because(archforge_engine::Reason::InvalidBinding(fault));
-            crate::panels::refusal(&EngineError::Failed { id: "uml.package.default.get".into(), error })
+            crate::panels::refusal(crate::notation_ui::UIS, &EngineError::Failed { id: "uml.package.default.get".into(), error })
         });
         let missing = "Das Paket hat Klassendiagramme, aber keines ist sein Standarddiagramm. Wählen Sie eines davon als Standarddiagramm.";
         assert_eq!(unsound[0], missing, "{theme:?}");
@@ -7417,7 +7455,7 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let kept = |fault| {
             let reason = archforge_engine::Reason::DefaultDiagramOf { package: "Vertrieb".into(), fault };
             let error = archforge_engine::CommandError::about("diagram", "kept").because(reason);
-            crate::panels::refusal(&EngineError::Failed { id: "diagram.remove".into(), error })
+            crate::panels::refusal(crate::notation_ui::UIS, &EngineError::Failed { id: "diagram.remove".into(), error })
         };
         let own = "Dieses Diagramm ist das Standarddiagramm von Vertrieb. \
                    Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von Vertrieb.";
@@ -7429,7 +7467,7 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let up = |fault| {
             let error = archforge_engine::CommandError::about("ids", "up")
                 .because(archforge_engine::Reason::ParentDefaultUnsound { parent: "Vertrieb".into(), fault });
-            crate::panels::refusal(&EngineError::Failed { id: "element.remove".into(), error })
+            crate::panels::refusal(crate::notation_ui::UIS, &EngineError::Failed { id: "element.remove".into(), error })
         };
         let none_yet = "Vertrieb hat noch kein Diagramm, das die Diagramme dieses Pakets aufnehmen kann. Erstellen Sie zuerst eines dafür. Es wurde nichts geändert.";
         let invalid = "Vertrieb hat kein gültiges Standarddiagramm, das die Diagramme dieses Pakets aufnehmen kann. Wählen Sie zuerst sein Standarddiagramm. Es wurde nichts geändert.";
@@ -7437,19 +7475,20 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         // A dependency moved onto the client and supplier another has (AR-697).
         let exists = "Diese Verbindung besteht bereits: die Abhängigkeit zahlt. Wählen Sie die bestehende Beziehung aus.";
         let repeated = archforge_engine::Reason::ConnectionExists { dependency: "zahlt".into() };
-        assert_eq!(crate::panels::said(&repeated), Some(exists.to_string()), "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &repeated), Some(exists.to_string()), "{theme:?}");
         // A relationship chosen to reuse that does not join the two (any more): none left, or some to choose among (AR-699).
         let stale = "Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr. \
                      Wählen Sie erneut unter denen, die sie verbinden. Es wurde nichts geändert.";
         let none_left = "Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr, und keine andere tut es jetzt. \
                          Es wurde nichts geändert.";
         let chosen = [Box::default(), vec!["d-2".into()].into_boxed_slice()]
-            .map(|candidates| crate::panels::said(&archforge_engine::Reason::StaleChoice { candidates }));
+            .map(|candidates| crate::panels::said(crate::notation_ui::UIS, &archforge_engine::Reason::StaleChoice { candidates }));
         assert_eq!(chosen, [Some(none_left.to_string()), Some(stale.to_string())], "{theme:?}: none left, or some to choose among");
         // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
         use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
         let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
-        let chosen = [IdEmpty { kind: "package" }, NotA { kind: "package", name: "Vertrieb".into() }, other].map(|r| crate::panels::said(&r));
+        let chosen = [IdEmpty { kind: "package" }, NotA { kind: "package", name: "Vertrieb".into() }, other]
+            .map(|r| crate::panels::said(crate::notation_ui::UIS, &r));
         let theirs =
             "Rechnungen ist keines der Klassendiagramme von Vertrieb. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.";
         let chosen_said = ["Es ist kein Paket angegeben. Geben Sie seine ID an.", "Vertrieb ist kein Paket.", theirs].map(|s| Some(s.to_string()));
@@ -7457,18 +7496,24 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         // A replacement that is the diagram removed, or one named for a diagram that is no default (AR-640).
         use archforge_engine::Reason::{NotReplacement, ReplacementIsRemoved, ReplacementNotNeeded};
         let foreign = NotReplacement { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
-        let replaced = [ReplacementIsRemoved, ReplacementNotNeeded { diagram: "Rechnungen".into() }, foreign].map(|r| crate::panels::said(&r));
+        let replaced = [ReplacementIsRemoved, ReplacementNotNeeded { diagram: "Rechnungen".into() }, foreign]
+            .map(|r| crate::panels::said(crate::notation_ui::UIS, &r));
         let itself = "Ein Diagramm kann sich beim Entfernen nicht selbst ersetzen. Wählen Sie ein anderes Diagramm als Ersatz.";
         let not_needed = "Rechnungen ist kein Standarddiagramm und wird daher ohne Ersatz entfernt.";
         let not_own = "Rechnungen ist kein anderes Diagramm derselben Art von Vertrieb und kann das zu entfernende Diagramm daher nicht ersetzen.";
         assert_eq!(replaced, [itself, not_needed, not_own].map(|s| Some(s.to_string())), "{theme:?}");
         let both = "Wählen Sie als Ersatz entweder ein vorhandenes Diagramm oder ein neues, nicht beides.";
-        assert_eq!(crate::panels::said(&archforge_engine::Reason::OneReplacement), Some(both.to_string()), "{theme:?}");
-        assert_eq!(crate::panels::said(&archforge_engine::Reason::NameNotText), Some("Ein Name muss Text sein.".to_string()), "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &archforge_engine::Reason::OneReplacement), Some(both.to_string()), "{theme:?}");
+        assert_eq!(
+            crate::panels::said(crate::notation_ui::UIS, &archforge_engine::Reason::NameNotText),
+            Some("Ein Name muss Text sein.".to_string()),
+            "{theme:?}"
+        );
         // A package move or rename the root package or the package Types refuses, each its own sentence.
         use archforge_engine::Reason::{HoldsBuiltInName, RootPackageStays, TypesPackageExists, TypesPackageKept};
         let held = HoldsBuiltInName { kind: "class", name: "String".into() };
-        let package = [RootPackageStays, TypesPackageKept, TypesPackageExists, held].map(|r| crate::panels::said(&r).unwrap_or_default());
+        let package = [RootPackageStays, TypesPackageKept, TypesPackageExists, held]
+            .map(|r| crate::panels::said(crate::notation_ui::UIS, &r).unwrap_or_default());
         let mut distinct = package.to_vec();
         distinct.sort();
         distinct.dedup();
@@ -7984,7 +8029,8 @@ fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
         h.state_mut().state.language = "de".into();
         h.run();
-        let breaks = |kind, why| crate::panels::said(&Reason::WouldBreak { kind, name: "pk_kunde".into(), why: Box::new(why) });
+        let breaks =
+            |kind, why| crate::panels::said(crate::notation_ui::UIS, &Reason::WouldBreak { kind, name: "pk_kunde".into(), why: Box::new(why) });
         let nullable = || Reason::NullableKeyColumn { name: "notiz".into() };
         let said = "Der Schlüssel pk_kunde wäre danach ungültig: notiz darf leer sein, was eine Primärschlüsselspalte nie darf.";
         assert_eq!(breaks("primary key", nullable()).as_deref(), Some(said), "{theme:?}");
@@ -7993,13 +8039,13 @@ fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
         assert_eq!(breaks("unique constraint", not_column).as_deref(), Some(other), "{theme:?}");
         assert_eq!(breaks("check", nullable()), None, "{theme:?}");
         assert_eq!(breaks("primary key", Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
-        let deep = crate::panels::said(&Reason::TooDeep { kind: "key", max: 32 });
+        let deep = crate::panels::said(crate::notation_ui::UIS, &Reason::TooDeep { kind: "key", max: 32 });
         assert_eq!(
             deep.as_deref(),
             Some("Aufeinander aufbauende Schlüssel reichen hier tiefer als 32 Ebenen oder bilden eine Schleife."),
             "{theme:?}"
         );
-        assert_eq!(crate::panels::said(&Reason::TooDeep { kind: "untyped kind", max: 32 }), None, "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &Reason::TooDeep { kind: "untyped kind", max: 32 }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -8018,7 +8064,7 @@ fn an_er_removal_refused_is_said_in_the_chosen_language() {
             (Reason::RemovedWhereEdited, "Dieses Element wird dort entfernt, wo es bearbeitet wird."),
             (Reason::SubtypeKeyPart, "Dies ist Teil des Schlüssels eines Untertyps und wird nur mit diesem Untertyp entfernt."),
         ] {
-            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
         h.run();
     }
@@ -8055,12 +8101,12 @@ fn an_er_mapping_table_refused_is_said_in_the_chosen_language() {
             (keys(0), "Posten hat keinen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei."),
             (keys(1), "Posten hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei."),
         ] {
-            assert_eq!(crate::panels::said(&Reason::Mapping(rule.clone())).as_deref(), Some(said), "{rule:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &Reason::Mapping(rule.clone())).as_deref(), Some(said), "{rule:?} {theme:?}");
         }
         let breaks = Reason::WouldBreak { kind: "table", name: "Verknüpfung".into(), why: Box::new(Reason::Mapping(keys(1))) };
         let said = "Die Tabelle Verknüpfung wäre danach ungültig: Posten hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. \
                     Eine Zuordnungstabelle braucht zwei.";
-        assert_eq!(crate::panels::said(&breaks).as_deref(), Some(said), "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &breaks).as_deref(), Some(said), "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -8086,13 +8132,14 @@ fn an_er_columns_generation_refused_is_said_in_the_chosen_language() {
             (G::IdentityTakesNoDefault, "Eine Identitätsspalte hat keinen Standardwert."),
             (G::IdentityTakesNoExpression, "Eine Identitätsspalte hat keinen Ausdruck."),
         ] {
-            assert_eq!(crate::panels::said(&Reason::Generation(rule)).as_deref(), Some(said), "{rule:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &Reason::Generation(rule)).as_deref(), Some(said), "{rule:?} {theme:?}");
         }
-        let breaks = |why| crate::panels::said(&Reason::WouldBreak { kind: "column", name: "nummer".into(), why: Box::new(why) });
+        let breaks =
+            |why| crate::panels::said(crate::notation_ui::UIS, &Reason::WouldBreak { kind: "column", name: "nummer".into(), why: Box::new(why) });
         let said = "Die Spalte nummer wäre danach ungültig: Eine Identitätsspalte braucht einen Ganzzahltyp.";
         assert_eq!(breaks(Reason::Generation(G::IdentityNeedsInteger)).as_deref(), Some(said), "{theme:?}");
         assert_eq!(breaks(Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
-        let null = crate::panels::said(&Reason::NotNullable);
+        let null = crate::panels::said(crate::notation_ui::UIS, &Reason::NotNullable);
         assert_eq!(null.as_deref(), Some("Eine Schlüssel- oder Identitätsspalte darf nie leer sein."), "{theme:?}");
         h.run();
     }
@@ -8123,7 +8170,7 @@ fn an_er_size_refused_is_said_in_the_chosen_language() {
             (R::ScaleWithoutPrecision, "NUMERIC", 2, "Nachkommastellen brauchen eine Genauigkeit."),
         ] {
             let reason = Reason::SizeMisfit { rule, ty: ty.into(), value };
-            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
         h.run();
     }
@@ -8162,7 +8209,7 @@ fn an_er_type_in_use_and_its_literals_refused_are_said_in_the_chosen_language() 
                 "Das Literal „OFFEN“ ist doppelt angegeben. Geben Sie jedes Literal nur einmal an.",
             ),
         ] {
-            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
         // A loaded enum type's literal twice, which no command makes, is a problem in the same words.
         let mut n = 0u64;
@@ -8205,9 +8252,9 @@ fn an_er_columns_default_collation_place_and_link_refused_are_said_in_the_chosen
             (Reason::PastLastColumn { columns: 3 }, "Die Tabelle hat 3 Spalten."),
             (Reason::FollowsNoColumn { name: "kunde_id".into() }, "kunde_id folgt keiner Spalte."),
         ] {
-            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
-        assert_eq!(crate::panels::said(&Reason::DomainGives { what: "check" }), None, "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &Reason::DomainGives { what: "check" }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -8231,9 +8278,9 @@ fn what_an_er_column_is_typed_by_refused_is_said_in_the_chosen_language() {
             (Reason::EnumTypeTakesNo { what: "type" }, "Eine Spalte eines Aufzählungstyps hat keinen eigenen Typnamen."),
             (Reason::EnumTypeTakesNo { what: "size" }, "Eine Spalte eines Aufzählungstyps hat keine Größe."),
         ] {
-            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
-        assert_eq!(crate::panels::said(&Reason::EnumTypeTakesNo { what: "default" }), None, "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &Reason::EnumTypeTakesNo { what: "default" }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -8261,9 +8308,9 @@ fn an_er_checks_refused_are_said_in_the_chosen_language() {
             (Reason::UnknownKey { key: "expresion".into(), takes }, "Ein Eintrag kennt keinen Schlüssel expresion. Er kennt expression, name."),
             (Reason::UnknownKey { key: String::new(), takes }, "Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt expression, name."),
         ] {
-            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
-        assert_eq!(crate::panels::said(&Reason::ItemsExpected { kind: "gadget" }), None, "{theme:?}");
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &Reason::ItemsExpected { kind: "gadget" }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -8607,13 +8654,13 @@ fn each_kind_a_refusal_names_is_said_by_the_shell_or_one_notation() {
     assert_ne!(tr_ctx("refusal", "a table"), "a table", "the rows checked are really translations");
     for (owner, kinds) in [(None, &own[..]), (Some(archforge_er::INDEX), &er[..]), (Some(archforge_uml::INDEX), &uml[..])] {
         for (kind, row) in kinds {
-            assert_eq!(crate::panels::a_kind(kind), Some(tr_ctx("refusal", row)), "{kind}");
+            assert_eq!(crate::panels::a_kind(crate::notation_ui::UIS, kind), Some(tr_ctx("refusal", row)), "{kind}");
             let by: Vec<u16> = UIS.iter().filter(|ui| ui.a_kind(kind).is_some()).map(|ui| ui.metamodel()).collect();
             assert_eq!(by, owner.into_iter().collect::<Vec<_>>(), "{kind} is said by the notations of the metamodels {by:?}");
         }
     }
     for kind in ["waypoint", "nesting level", "Table", ""] {
-        assert_eq!(crate::panels::a_kind(kind), None, "{kind:?}");
+        assert_eq!(crate::panels::a_kind(crate::notation_ui::UIS, kind), None, "{kind:?}");
     }
     set_language("en");
 }
@@ -9045,7 +9092,7 @@ fn an_er_indexs_columns_refused_are_said_in_the_chosen_language() {
             ),
             (Reason::NoAttributeNorExpression, "Eine Indexspalte braucht eine Spalte oder einen Ausdruck, nach dem sie sortiert."),
         ] {
-            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
         // A loaded index without columns, which no command makes, is a problem in the same words.
         let mut n = 0u64;
@@ -9167,7 +9214,7 @@ fn an_er_sequences_numbers_owner_and_views_query_refused_are_said_in_the_chosen_
             (Rule::StartBelow { start: 1, minimum: 10 }, "Der Startwert 1 liegt unter dem Minimum 10.".into()),
             (Rule::StartAbove { start: 50, maximum: 10 }, "Der Startwert 50 liegt über dem Maximum 10.".into()),
         ] {
-            assert_eq!(crate::panels::said(&Reason::Sequence(reason.clone())), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &Reason::Sequence(reason.clone())), Some(said), "{reason:?} {theme:?}");
         }
         let owner = "Eine Sequenz gehört zu einer Spalte";
         for (reason, said) in [
@@ -9182,7 +9229,7 @@ fn an_er_sequences_numbers_owner_and_views_query_refused_are_said_in_the_chosen_
             (Reason::TextEmpty, "Der Text darf nicht leer sein.".into()),
             (Reason::ControlCharacter, "Steuerzeichen und unsichtbare Zeichen sind nicht erlaubt.".into()),
         ] {
-            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said.as_str()), "{reason:?} {theme:?}");
+            assert_eq!(crate::panels::said(crate::notation_ui::UIS, &reason).as_deref(), Some(said.as_str()), "{reason:?} {theme:?}");
         }
         h.run();
     }
@@ -10986,7 +11033,7 @@ fn a_diagram_rows_menu_deletes_the_diagram_at_once_and_undo_brings_it_back() {
         assert_eq!(undo_label(&h), before, "{theme:?}: nothing new to undo");
         assert_eq!(h.state().diagrams.menu.as_ref().map(|m| m.diagram), Some(default), "{theme:?}: still open");
         // It says why, to a screen reader too: the engine's reason for keeping a default.
-        let why = crate::panels::said(&archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
+        let why = crate::panels::said(crate::notation_ui::UIS, &archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
         let off = {
             use egui_kittest::kittest::{NodeT, Queryable};
             h.get_by_label("Delete diagram").accesskit_node().data().clone()
@@ -11037,7 +11084,7 @@ fn a_focused_diagram_row_deletes_its_diagram_by_key_and_says_why_a_default_stays
         key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
         assert!(alive_in(&h, default), "{theme:?}");
         assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo, "{theme:?}");
-        let why = crate::panels::said(&archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
+        let why = crate::panels::said(crate::notation_ui::UIS, &archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
         assert_eq!(h.state().diagrams.notice, why, "{theme:?}");
         let why = why.unwrap();
         let whole = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Text(t) if t.galley.text() == why && !t.galley.elided));
@@ -14716,7 +14763,10 @@ fn the_column_editor_makes_a_computed_or_identity_column_plain_with_a_default() 
         // A default on a column that stays computed is still refused, and nothing changes.
         let (mut h, _) = table_harness_in(theme);
         let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 3, |c| c.default = "'x'".into());
-        let said = crate::panels::said(&archforge_engine::Reason::Generation(archforge_engine::GenerationRule::ComputedTakesNoDefault));
+        let said = crate::panels::said(
+            crate::notation_ui::UIS,
+            &archforge_engine::Reason::Generation(archforge_engine::GenerationRule::ComputedTakesNoDefault),
+        );
         assert_eq!(refused, said, "a computed column takes no default");
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(rules::generation_of(st, email), Generation::ComputedStored);
@@ -14850,7 +14900,10 @@ fn the_column_editor_changes_type_nullability_and_generation_in_one_apply() {
         // Identity left nullable is still refused, and the column keeps what it had.
         let (mut h, _) = table_harness_in(theme);
         let (email, refused) = apply_email_edit(&mut h, &[], 1, |c| c.ty = "BIGINT".into());
-        let said = crate::panels::said(&archforge_engine::Reason::Generation(archforge_engine::GenerationRule::IdentityNotNullable));
+        let said = crate::panels::said(
+            crate::notation_ui::UIS,
+            &archforge_engine::Reason::Generation(archforge_engine::GenerationRule::IdentityNotNullable),
+        );
         assert_eq!(refused, said, "an identity column cannot be nullable");
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
@@ -14863,7 +14916,10 @@ fn the_column_editor_changes_type_nullability_and_generation_in_one_apply() {
         let session = h.state().session.as_ref().unwrap();
         let before = (session.undo_label().map(str::to_string), session.revision());
         let (email, refused) = apply_email_edit(&mut h, &[], 1, |c| c.ty = "BIGINT".into());
-        let said = crate::panels::said(&archforge_engine::Reason::Generation(archforge_engine::GenerationRule::IdentityNotNullable));
+        let said = crate::panels::said(
+            crate::notation_ui::UIS,
+            &archforge_engine::Reason::Generation(archforge_engine::GenerationRule::IdentityNotNullable),
+        );
         assert_eq!(refused, said, "an identity column cannot be nullable");
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(rules::generation_of(st, email), Generation::ComputedStored);
@@ -17957,6 +18013,22 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
         &[archforge_uml::CLASS]
     }
+    /// Its one refusal of its own, something that is no sketch, signed with its name, so a test
+    /// sees it asked.
+    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
+        match reason {
+            archforge_engine::Reason::NotA { kind: "sketch", name } => Some(format!("{name} is not drawn in the {}.", self.0)),
+            _ => None,
+        }
+    }
+    /// Why its one command is not available, signed with its name, so a test sees it asked.
+    fn disabled(&self, reason: &str) -> Option<String> {
+        (reason == SKETCH_UNAVAILABLE).then(|| format!("The {} has nothing to draw yet.", self.0))
+    }
+    /// Its one kind with its article, by its name, so a test sees it asked.
+    fn a_kind(&self, kind: &str) -> Option<String> {
+        (kind == "sketch").then(|| format!("a {}", self.0))
+    }
     /// Shorter than any other notation's, so a field that takes it is told apart.
     fn name_limit(&self) -> usize {
         SKETCH_NAME_LIMIT
@@ -18051,6 +18123,31 @@ static TWO_SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui:
 /// told apart from one that takes another's.
 const SKETCH_NAME_LIMIT: usize = 40;
 const SKETCH_DESCRIPTION_LIMIT: usize = 100;
+
+/// Why the sketch's one command is not available, as its availability check would give it.
+const SKETCH_UNAVAILABLE: &str = "nothing to draw";
+
+/// The refusal words ask the notations the shell registered, not the app's own list: the sketch,
+/// which the shell knows here and the app does not, says its own refusal, names its own kind in the
+/// shell's sentence and says why its command is not available, each through an engine's refusal as
+/// the shell says it; the app's notations, which do not know the sketch, leave the engine's English.
+#[test]
+fn the_refusal_words_ask_the_notations_the_shell_registered() {
+    use archforge_engine::{CommandError, EngineError, Reason};
+    let (mut h, ..) = sketch_harness();
+    let failed = |reason| EngineError::Failed { id: "uml.class.add".into(), error: CommandError::new("refused in English").because(reason) };
+    let refusals = || {
+        [
+            failed(Reason::NotA { kind: "sketch", name: "Party".into() }),
+            failed(Reason::NameTaken { kind: "sketch", name: "Party".into() }),
+            EngineError::Disabled { id: "sketch.draw".into(), reason: SKETCH_UNAVAILABLE },
+        ]
+    };
+    let said = h.state_mut().cx(|cx| refusals().map(|e| crate::panels::refusal(cx.notation_uis, &e)));
+    assert_eq!(said, ["Party is not drawn in the sketch.", "There is a sketch named Party already.", "The sketch has nothing to draw yet."]);
+    let app = refusals().map(|e| crate::panels::refusal(crate::notation_ui::UIS, &e));
+    assert_eq!(app, ["Refused in English.", "Refused in English.", "Nothing to draw."]);
+}
 
 #[test]
 fn a_second_notations_elements_show_in_the_tree_are_found_and_get_their_own_properties() {

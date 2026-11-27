@@ -15,7 +15,10 @@ use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 use ux::Colour;
 
-use crate::canvas::{Look, colour, hex, look_of};
+pub use archforge_shell_api::appearance::{Group, Picker};
+use archforge_shell_api::canvas::hex;
+
+use crate::canvas::{Look, colour, look_of};
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::panels::{FIELD, PAD, section};
@@ -32,47 +35,6 @@ const LINES: [&str; 5] = ["#1B2B3C", "#C25E0A", "#345EDB", "#27816D", "#7A56B5"]
 const WIDTHS: [f32; 4] = [1.0, 1.5, 2.0, 3.0];
 /// The routings by `Routing` literal, as `diagram.style` names them.
 const ROUTINGS: [&str; 4] = ["as-diagram", "straight", "right-angled", "curved"];
-
-/// What a colour row sets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Group {
-    Fill,
-    Border,
-    Text,
-    Line,
-}
-
-impl Group {
-    fn key(self) -> &'static str {
-        match self {
-            Group::Fill => "fill",
-            Group::Border => "border",
-            Group::Text => "text",
-            Group::Line => "line",
-        }
-    }
-}
-
-/// The colour picker open on a row: the colour being chosen as hue, saturation and brightness
-/// (so the hue stays while the colour is grey), and its code as typed.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Picker {
-    pub group: Group,
-    pub hsv: [f32; 3],
-    pub code: String,
-}
-
-impl Picker {
-    /// The picker for `group`, open on `colour`: its hue, saturation and brightness, and its code.
-    pub fn new(group: Group, colour: Colour) -> Self {
-        Picker { group, hsv: ux::to_hsv(colour), code: hex(colour) }
-    }
-
-    /// The colour chosen so far.
-    fn colour(&self) -> Colour {
-        ux::from_hsv(self.hsv[0], self.hsv[1], self.hsv[2])
-    }
-}
 
 /// The nodes and edges of the open diagram the selection names: the selected nodes and edges
 /// themselves, and the ones that show a selected element. A generalization's line and a note's
@@ -218,7 +180,7 @@ fn restyle(shell: &mut Shell, targets: &[Obj], edit: impl Fn(&mut serde_json::Va
         }
         Ok(())
     });
-    shell.panels.notice = outcome.err().map(|e| crate::panels::refusal(&e));
+    shell.panels.notice = outcome.err().map(|e| crate::panels::refusal(shell.notation_uis, &e));
 }
 
 /// The routing `o`'s own style gives (a `Routing` literal past as-diagram) and whether it avoids
@@ -309,7 +271,7 @@ fn defaults(shell: &mut Shell, targets: &[Obj]) {
     let Some(session) = shell.session.as_mut() else { return };
     let ids: Vec<String> = targets.iter().filter_map(|o| session.doc().uuid(*o).ok()).map(|u| u.to_string()).collect();
     let outcome = session.execute("diagram.style", &json!({ "ids": ids }));
-    shell.panels.notice = outcome.err().map(|e| crate::panels::refusal(&e));
+    shell.panels.notice = outcome.err().map(|e| crate::panels::refusal(shell.notation_uis, &e));
 }
 
 /// The heading's two lines for the targets: a name and what it is, on this diagram.

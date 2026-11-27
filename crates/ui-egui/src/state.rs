@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use archforge_shell_api::state::{Explorer, Panel};
+
 use crate::theme::ThemeKind;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -337,23 +339,4 @@ pub enum RecentSort {
     #[default]
     LastOpened,
     Name,
-}
-
-/// The explorers of the workspace's activity rail.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum Explorer {
-    #[default]
-    Models,
-    Diagrams,
-    SourceControl,
-}
-
-/// The panels of the workspace's right rail.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum Panel {
-    Agent,
-    Appearance,
-    #[default]
-    Properties,
-    Skills,
 }

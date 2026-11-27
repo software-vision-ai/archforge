@@ -29,7 +29,6 @@ mod cx;
 pub mod diagrams;
 mod edit_menu;
 pub mod editing;
-mod engine_said;
 mod er_kind;
 pub mod er_place;
 mod er_said;
@@ -1025,7 +1024,11 @@ pub(crate) fn typing_unkept(panels: &panels::State, canvas: &canvas::State) -> b
 }
 
 impl Shell {
+    /// A shell over the host's `services`, on Home, with the notations it knows
+    /// ([`notation_ui::UIS`]) and their catalogues and its own registered.
     pub fn new(services: Services) -> Self {
+        // The catalogues go in with the notations the shell knows, before anything is said.
+        i18n::registered();
         Self {
             services,
             state: UiState::default(),

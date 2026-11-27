@@ -311,7 +311,7 @@ impl NotationUi for ErUi {
                 for k in r::primary_key_of(store, o).into_iter().chain(r::unique_constraints(store, o)) {
                     let primary = store.class_of(k).ok() == Some(archforge_er::PRIMARY_KEY);
                     if let Some(p) = r::key_columns_problem(store, o, &r::key_columns(store, k), primary) {
-                        let said = crate::panels::said(&p.reason()).unwrap_or_else(|| p.said());
+                        let said = crate::panels::said(crate::notation_ui::UIS, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &said)]) });
                     }
                 }
@@ -323,13 +323,13 @@ impl NotationUi for ErUi {
                 }
                 for a in children(store, o, archforge_er::entity::ATTRIBUTE) {
                     if let Some(p) = r::enum_default_problem(store, a) {
-                        let said = crate::panels::said(&p.reason()).unwrap_or_else(|| p.said());
+                        let said = crate::panels::said(crate::notation_ui::UIS, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, a)), ("problem", &said)]) });
                     }
                 }
                 for c in r::checks_of(store, o) {
                     if let Some(p) = r::check_problem(&r::text_of(store, c, archforge_er::check_constraint::EXPRESSION)) {
-                        let said = crate::panels::said(&p.reason()).unwrap_or_else(|| p.said());
+                        let said = crate::panels::said(crate::notation_ui::UIS, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem {
                             element: o,
                             text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, c)), ("problem", &said)]),
@@ -340,7 +340,7 @@ impl NotationUi for ErUi {
                     if let Some(p) = r::index_columns_problem(store, o, &r::index_specs(store, ix)) {
                         // The columns' problem is typed, so it is said in the user's words, the English
                         // only for a reason the interface doesn't say.
-                        let said = crate::panels::said(&p.reason()).unwrap_or_else(|| p.said());
+                        let said = crate::panels::said(crate::notation_ui::UIS, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem {
                             element: o,
                             text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, ix)), ("problem", &said)]),
@@ -352,7 +352,7 @@ impl NotationUi for ErUi {
                     let text = match (parts.entity, parts.key) {
                         // A key or a foreign key in no table or schema has no typed reason, so its English.
                         (Some(e), Some(k)) => r::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship)
-                            .map(|p| p.reason().and_then(|reason| crate::panels::said(&reason)).unwrap_or_else(|| p.said())),
+                            .map(|p| p.reason().and_then(|reason| crate::panels::said(crate::notation_ui::UIS, &reason)).unwrap_or_else(|| p.said())),
                         _ => Some(tr("lacks its table or its key")),
                     };
                     if let Some(p) = text {
@@ -370,7 +370,7 @@ impl NotationUi for ErUi {
             {
                 // The literals' rule is typed, so it is said in the user's words, the English only
                 // for a reason the interface doesn't say.
-                let said = crate::panels::said(&p.reason).unwrap_or_else(|| p.to_string());
+                let said = crate::panels::said(crate::notation_ui::UIS, &p.reason).unwrap_or_else(|| p.to_string());
                 out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, o)), ("problem", &said)]) });
             }
             if class == archforge_er::RELATIONSHIP {

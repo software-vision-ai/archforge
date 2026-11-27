@@ -17,6 +17,7 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+pub use archforge_shell_api::explorer::Delete;
 pub use archforge_shell_api::notation_ui::Row;
 pub(crate) use archforge_shell_api::notation_ui::Tree;
 
@@ -224,31 +225,6 @@ impl Rename {
     pub(crate) fn fresh(target: Uuid, text: String) -> Self {
         Self::new(target, text, true)
     }
-}
-
-/// A removal the dialog asks about: what goes, named, and what goes with it.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Delete {
-    pub ids: Vec<Uuid>,
-    pub name: String,
-    pub relationships: usize,
-    pub keys: usize,
-    pub foreign_keys: usize,
-    /// The diagrams it disappears from: those that show it as a card or a line, each once
-    /// ([`crate::editing::diagrams_showing`]), not the diagrams that belong to it.
-    pub diagrams: usize,
-    /// The node the canvas asked from, when it did.
-    pub node: Option<Uuid>,
-    /// What goes with it by name, the dialog naming each: a UML classifier's nested classifiers
-    /// (AR-132).
-    pub along: Vec<String>,
-    /// The stereotype applications that go with it and what it takes along, `«Entity» on Order`,
-    /// the dialog naming each (AR-135).
-    pub applications: Vec<String>,
-    /// The package what it holds moves up to, a nested package's parent, and whether it holds
-    /// anything: the dialog says so instead of saying what it holds goes with it, and the toast
-    /// says where it went, as a removal without the dialog does.
-    pub hands_to: Option<(String, bool)>,
 }
 
 fn uuid_of(store: &Store, obj: Obj) -> Option<Uuid> {

@@ -585,7 +585,7 @@ pub(crate) fn move_package(cx: &mut Ctx, package: Obj, to: Obj) -> Result<(), St
     let Some(session) = cx.session.as_mut() else { return Ok(()) };
     let moved =
         session.batch(&label, |b| b.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() })).map(|_| ()));
-    moved.map_err(|e| crate::panels::refusal(&e))?;
+    moved.map_err(|e| crate::panels::refusal(cx.notation_uis, &e))?;
     let text = crate::i18n::fmt(&tr("{what} moved into {where}"), &[("what", what.as_str()), ("where", into.as_str())]);
     cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(300), undo_label: Some(label) });
     Ok(())
