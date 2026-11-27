@@ -431,7 +431,7 @@ fn braces_on_one_diagram_and_a_note_on_another_share_the_content() {
     assert_eq!(on_d.compartments[0][0].text, "{lines->notEmpty()}");
     assert_eq!(on_d2.name, "nonEmpty");
     assert_eq!(on_d2.compartments[0][0].text, "{ lines->notEmpty() }");
-    let links = |s: &S, d: &str| archforge_diagram::Notation::links(&archforge_uml::UmlNotation, s.doc(), obj(s.doc(), &c), obj(s.doc(), d));
+    let links = |s: &S, d: &str| archforge_uml::constraints::note_links(s.doc(), obj(s.doc(), &c), obj(s.doc(), d));
     assert!(links(&s, &d).is_empty(), "braces have no links");
     assert_eq!(links(&s, &d2), vec![obj(s.doc(), &on2)]);
     // The content is shared: one edit shows on both diagrams, and the braces fit their new text.

@@ -17986,6 +17986,9 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
 /// What the sketch kind's hooks were asked, in order.
 static SKETCH_CALLS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
+/// The rows the sketch kind was asked to open a class named [`SKETCH_OPENS`] at, in order.
+static SKETCH_OPENED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
 /// The sketch diagram kind in the shell, for the tests alone: a Class tool that places and an
 /// Inherit tool that connects, each hook writing down what it was asked. It serves the diagram kind
 /// it is given ([`SKETCH`] for the canvas's tests), so two of them are told apart.
@@ -18103,9 +18106,12 @@ impl crate::kinds::DiagramKind for SketchKind {
         SKETCH_CALLS.lock().unwrap().push(format!("rename {name}"));
         Ok(())
     }
-    /// Writes down the row it was asked to open at.
-    fn open(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, row: Option<usize>) {
-        SKETCH_CALLS.lock().unwrap().push(format!("open {row:?}"));
+    /// Writes down the row it was asked to open at: for a class named [`SKETCH_OPENS`] apart, so
+    /// the tests that read what the other hooks were asked never see it.
+    fn open(&self, cx: &mut crate::cx::Ctx, element: archforge_mof::Uuid, row: Option<usize>) {
+        let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(element).map(|e| archforge_core::name_of(s.doc(), e)));
+        let calls = if name.as_deref() == Some(SKETCH_OPENS) { &SKETCH_OPENED } else { &SKETCH_CALLS };
+        calls.lock().unwrap().push(format!("open {row:?}"));
     }
     /// Its lines' ends take handles, which move nothing and say its own words on hover, so a test
     /// sees it asked.
@@ -18135,6 +18141,12 @@ impl crate::kinds::DiagramKind for SketchKind {
             },
         };
         (archforge_core::name_of(store, element) == "Party").then(|| vec![first, own])
+    }
+    /// A class named [`SKETCH_OPENS`] opens whole with a double click, as a sketch kind other than
+    /// the canvas's tests' own ([`SKETCH`]) answers, so a test sees the kinds asked beside the
+    /// diagram's own.
+    fn opens_on_double_click(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
+        self.0 != SKETCH && archforge_core::name_of(store, element) == SKETCH_OPENS
     }
     /// The name typed on a card the sketch draws itself goes in the card's part over its top left,
     /// in the small style; any other card's in its header.
@@ -18183,6 +18195,14 @@ impl crate::kinds::DiagramKind for SketchKind {
             whole: SKETCH_LABEL_SAYS.into(),
         });
         true
+    }
+    /// Draws [`SKETCH_LINKS`] under the first node's card, recorded under its own kind once each
+    /// time it is asked.
+    fn draw_links(&self, paint: &egui::Painter, d: &crate::canvas::Drawing<'_>, registry: &mut crate::widgets::Registry, ui: &egui::Ui) {
+        let Some((n, _)) = d.boxes.first() else { return };
+        let at = d.node_rect(*n).left_bottom() + egui::vec2(0.0, 30.0);
+        let rect = crate::ux::text(paint, at, SKETCH_LINKS, crate::ux::types::SMALL, d.p.text, None);
+        crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.sketch-links.{}", self.0), "label", rect);
     }
     /// Draws [`SKETCH_OVER`] over the top right corner of every card, recorded.
     fn card_extras(
@@ -18260,6 +18280,10 @@ const SKETCH_LABEL_SAYS: &str = "The sketch's label, whole";
 /// source end on along the line.
 const SKETCH_OVER: &str = "Over the card";
 const SKETCH_CAPTION: &str = "Over the name";
+/// What the sketch kind draws among the links between nodes, and the name of a class whose card
+/// another sketch kind opens whole with a double click.
+const SKETCH_LINKS: &str = "Among the links";
+const SKETCH_OPENS: &str = "Opened whole";
 const SKETCH_END_SHIFT: f32 = 30.0;
 
 /// The part over the top left of a card at `rect` that the sketch kind draws itself, at zoom `z`.
@@ -18640,9 +18664,66 @@ fn what_the_kinds_draw_over_a_card_goes_over_every_card_and_its_ring() {
     }
 }
 
-/// The kinds are asked what they draw of a card and a line whatever kind the diagram is of, each
-/// once: drawn with no kind of its own, the sketch still draws over the cards and moves the line's
-/// end; drawn as a sketch, it does each once, its line's name included.
+/// What the kinds draw among the links between nodes goes over the lines, after what a kind gave
+/// to go over a line's end, and under the cards. In light and dark.
+#[test]
+fn what_the_kinds_draw_among_the_links_goes_over_the_lines_and_under_the_cards() {
+    in_both_appearances(|theme| {
+        let (mut h, _d, _a, _b, e) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        h.run();
+        let end = rect_of(&h, &format!("workspace.canvas.sketch-end.{e}"));
+        let shapes: Vec<&egui::Shape> = h.output().shapes.iter().map(|c| &c.shape).collect();
+        let text = |words: &str| shapes.iter().position(|s| matches!(s, egui::Shape::Text(t) if t.galley.text() == words));
+        let square = shapes.iter().position(|s| matches!(s, egui::Shape::Rect(r) if r.rect == end));
+        let (links, card) = (text(SKETCH_LINKS), text("Party"));
+        assert!(square.is_some() && links > square, "{theme:?}: over the line's end, {square:?} then {links:?}");
+        assert!(card.is_some() && links < card, "{theme:?}: under the cards, {links:?} then {card:?}");
+    });
+}
+
+/// The sketch kind that opens [`SKETCH_OPENS`] whole, beside the diagram's own kind, which does not.
+static OPENING_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH), &SketchKind("test.opening")];
+
+/// A double click on a card a kind of the shell opens whole opens its element's editor with no row,
+/// though the diagram's own kind does not say so; with no kind saying so, a double click on the
+/// card's header names it in place. In light and dark.
+#[test]
+fn a_double_click_on_a_card_a_kind_opens_whole_opens_its_editor() {
+    in_both_appearances(|theme| {
+        let (mut h, _d, _a, b, _e) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let customer = st
+            .uuid(
+                crate::canvas::element_of(st, st.by_uuid(archforge_mof::Uuid::parse(&b).unwrap()).unwrap(), archforge_diagram::node::ELEMENT)
+                    .unwrap(),
+            )
+            .unwrap();
+        s.execute("uml.class.rename", &serde_json::json!({ "class": customer.to_string(), "name": SKETCH_OPENS })).unwrap();
+        h.run();
+        let header = rect_of(&h, &format!("workspace.canvas.node.{b}")).left_top() + egui::vec2(60.0, 30.0);
+        // No kind of the shell opens it whole: its header names it in place.
+        double_click(&mut h, header);
+        assert!(h.state().canvas.rename.as_ref().is_some_and(|r| r.text == SKETCH_OPENS), "{theme:?}: {:?}", h.state().canvas.rename);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // The other sketch kind opens it whole: the editor opens with no row, and nothing is named.
+        h.state_mut().kinds = OPENING_KINDS;
+        for _ in 0..45 {
+            h.step();
+        }
+        SKETCH_OPENED.lock().unwrap().clear();
+        double_click(&mut h, header);
+        assert!(h.state().canvas.rename.is_none(), "{theme:?}: {:?}", h.state().canvas.rename);
+        assert_eq!(*SKETCH_OPENED.lock().unwrap(), ["open None"], "{theme:?}");
+    });
+}
+
+/// The kinds are asked what they draw of a card and a line, and the links between nodes, whatever
+/// kind the diagram is of, each once: drawn with no kind of its own, the sketch still draws its
+/// links, draws over the cards and moves the line's end; drawn as a sketch, it does each once, its
+/// line's name included.
 #[test]
 fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
     let (mut h, d, a, b, e) = sketch_harness();
@@ -18655,6 +18736,7 @@ fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
             (format!("workspace.canvas.sketch-over.{b}"), 1),
             (format!("workspace.canvas.sketch-end.{e}"), 1),
             (format!("workspace.canvas.sketch-caption.{e}"), caption),
+            (format!("workspace.canvas.sketch-links.{SKETCH}"), 1),
         ]
     };
     let none = std::collections::BTreeMap::new();
@@ -26907,8 +26989,8 @@ fn constraint_rows(h: &Harness<'static, Shell>, name: &str) -> Vec<String> {
 /// Constraints (AR-133) in Properties and on the canvas: `+` in Constraints opens the editor, an
 /// empty expression is refused in place with nothing written, Apply adds one in one undo step and
 /// shows it on the open diagram as braces for a short expression; the pencil reopens it, a second
-/// constrained element and Linked note make it a constraint note linked to both cards, which says
-/// it is not evaluated; deleting a constrained element drops it and the toast says so, and a
+/// constrained element and Linked note make it a constraint note linked to both cards by dashes,
+/// which says it is not evaluated; deleting a constrained element drops it and the toast says so, and a
 /// constraint left naming nothing goes with it, said too; a double click on the note opens its
 /// editor, Properties shown on the right side. In light and dark, every control found by its
 /// automation id.
@@ -26995,6 +27077,28 @@ fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_de
         assert!(painted_now.iter().any(|t| t == "CONSTRAINT · NOT EVALUATED"), "{painted_now:?}");
         assert!(painted_now.iter().any(|t| t == "{ payment.amount = total()"));
         assert!(ids(&h).contains(&format!("workspace.canvas.node.{note}")));
+        // Its dashed links, in purple while it is not selected: a dash along the route from the
+        // note's border to each of Order's and Payment's cards.
+        let purple = egui::Color32::from(crate::ux::palette(theme == ThemeKind::Dark).purple);
+        let dashes: Vec<[egui::Pos2; 2]> = h
+            .output()
+            .shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::LineSegment { points, stroke } if stroke.color == purple => Some(*points),
+                _ => None,
+            })
+            .collect();
+        let note_rect = rect_of(&h, &format!("workspace.canvas.node.{note}"));
+        for name in ["Order", "Payment"] {
+            let card = rect_of(&h, &format!("workspace.canvas.node.{}", nodes[name]));
+            let (from, to) = (crate::canvas::exit_point(note_rect, card.center()), crate::canvas::exit_point(card, note_rect.center()));
+            let on_route = |q: egui::Pos2| {
+                let along = ((q - from).dot(to - from) / (to - from).length_sq()).clamp(0.0, 1.0);
+                (from + (to - from) * along).distance(q) < 0.5
+            };
+            assert!(dashes.iter().any(|[a, b]| on_route(*a) && on_route(*b)), "{theme:?}: a dash from the note to {name}'s card: {dashes:?}");
+        }
         // A double click on the note opens its editor, in Properties brought to the right side.
         h.state_mut().state.show_panel(crate::state::Panel::Skills);
         h.state_mut().canvas.fit_pending = true;

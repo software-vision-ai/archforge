@@ -240,6 +240,14 @@ pub trait DiagramKind: Sync {
     }
     /// Renames the element as typed in place.
     fn rename(&self, cx: &mut Ctx, element: Uuid, name: &str) -> Result<(), String>;
+    /// Whether a double click anywhere on the card of `element` opens its editor with no row, where
+    /// the canvas's own cards rename in their header and open the editor at the row under the
+    /// pointer (a UML constraint's braces and note, AR-133). Every kind the shell knows is asked, so
+    /// the kind that draws the element answers whatever diagram shows it; false by default.
+    fn opens_on_double_click(&self, store: &Store, element: Obj) -> bool {
+        let _ = (store, element);
+        false
+    }
     /// Where the name typed in place on the node `node`, whose card the kind drew itself in the last
     /// frame ([`DiagramKind::draw_card`]), goes on its card at `rect` at zoom `z` while it reads
     /// `text`, and in which text style, laid out with `paint` (a UML package's name in its tab, which
@@ -383,6 +391,13 @@ pub trait DiagramKind: Sync {
     /// other kind it knows in turn. Nothing by default.
     fn line_caption(&self, paint: &egui::Painter, d: &Drawing<'_>, line: &LineDrawn<'_>, name: Option<Rect>, registry: &mut Registry, ui: &egui::Ui) {
         let _ = (paint, d, line, name, registry, ui);
+    }
+    /// Draws the links the diagram's nodes are tied by, worked out from the model and never stored,
+    /// over the lines and under the diagram's other figures and its cards (UML's constraint notes'
+    /// dashed links to the elements they constrain, AR-133). The canvas asks the diagram's own kind
+    /// first, then every other kind it knows in turn, each once a frame. Nothing by default.
+    fn draw_links(&self, paint: &egui::Painter, d: &Drawing<'_>, registry: &mut Registry, ui: &egui::Ui) {
+        let _ = (paint, d, registry, ui);
     }
     /// Draws the figures of the diagram that belong to no one node or line, over the lines and
     /// under the cards, recording each in `registry` (UML's generalization sets across their

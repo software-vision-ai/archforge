@@ -237,19 +237,6 @@ impl Notation for UmlNotation {
         figures::line(store, element)
     }
 
-    /// A constraint note's dashed links to the nodes of the elements it constrains, worked out from
-    /// the model on every frame (AR-133); braces have none.
-    fn links(&self, store: &Store, element: Obj, diagram: Obj) -> Vec<Obj> {
-        // Asked of every node each frame: only a constraint has links, so nothing else is looked up.
-        if !constraints::is_constraint(store, element) {
-            return Vec::new();
-        }
-        match constraints::shown_on(store, diagram, element) {
-            Some((_, constraints::Form::Note)) => constraints::linked_nodes(store, diagram, element),
-            _ => Vec::new(),
-        }
-    }
-
     /// A nested classifier's owner, tied to it on a diagram by a line ending in ⊕ at the owner
     /// (AR-132).
     fn nested_in(&self, store: &Store, element: Obj) -> Option<Obj> {

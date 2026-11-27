@@ -837,7 +837,11 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
     for e in &visible.edges {
         badges.extend(draw_edge(clip, &draw, *e, registry, ui));
     }
-    draw_constraint_links(clip, &draw);
+    // The links between nodes the kinds work out from the model, over the lines, each kind asked
+    // in turn.
+    for k in draw.kinds_asked() {
+        k.draw_links(clip, &draw, registry, ui);
+    }
     draw_nesting_lines(clip, &draw);
     let extra_labels = draw.kind.map(|k| k.draw_extras(clip, &draw, registry, ui)).unwrap_or_default();
     for n in &visible.nodes {
@@ -933,7 +937,6 @@ fn draw_node(
     }
     // Clipped to the card as drawn, so a draft's growing keeps the rows it moved down in sight.
     let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
-    let annotation = card.as_ref().is_some_and(|c| matches!(c.tone, Tone::Constraint | Tone::Braces));
     // The card as the kinds are handed it, to draw it themselves or what goes over it.
     let handed = match (element, card.as_ref()) {
         (Some(element), Some(card)) => Some(CardDrawn { node: n, element, card, rect, selected }),
@@ -949,7 +952,6 @@ fn draw_node(
     let by_kind = drawn_by.is_some();
     match element {
         _ if by_kind => {}
-        Some(_) if annotation && let Some(card) = card.as_ref() => draw_constraint(paint, &inner, d, n, card, rect),
         Some(_) if let Some(card) = card.as_ref() => {
             // A tinted card takes the palette's tint; any other, the surface, the border and the
             // muted eyebrow.
@@ -1061,76 +1063,6 @@ pub(crate) fn name_from_afar(inner: &egui::Painter, name: &str, rect: Rect, z: f
     let room = Some((rect.width() - 2.0 * CARD_INSET * z).max(0.0));
     let g = ux::galley(inner, name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), ink, room);
     inner.galley(rect.center() - g.size() / 2.0, g, ink.into());
-}
-
-/// A constraint as its diagram shows it (AR-133): braces, `{expression}` in purple beside its
-/// element with no card around it; or a constraint note, the surface with a purple border and a
-/// folded corner, `CONSTRAINT · NOT EVALUATED` in its purple eyebrow, its name, then its expression
-/// between braces, as written. Its own look on the diagram wins, as a note's does.
-fn draw_constraint(paint: &egui::Painter, inner: &egui::Painter, d: &Drawing<'_>, n: Obj, card: &archforge_diagram::figure::Card, rect: Rect) {
-    let (p, z) = (d.p, d.view.zoom);
-    let look = look_of(d.store, n, node::STYLE);
-    let text_ink = look.text.unwrap_or_else(|| look.fill.map_or(p.text, |f| ink_for(f).text));
-    let rows: Vec<&str> = card.compartments.iter().flatten().map(|r| r.text.as_str()).collect();
-    if card.tone == Tone::Braces {
-        let text = rows.first().copied().unwrap_or_default();
-        let ink = look.text.unwrap_or(p.purple);
-        ux::text(paint, rect.min + vec2(2.0, 2.0) * z, text, types::CAPTION.scaled(z), ink, None);
-        return;
-    }
-    let edge = look.stroke.unwrap_or(p.purple);
-    let border = look.width.map_or(1.25 * z, |w| w * z).max(1.0);
-    paint.rect_filled(rect, 0.0, look.fill.unwrap_or(p.surface));
-    paint.rect_stroke(rect, 0.0, Stroke::new(border, edge), StrokeKind::Inside);
-    // The folded corner at the top right.
-    let fold = (14.0 * z).min(rect.width() / 2.0).min(rect.height() / 2.0);
-    let (tr_, fl, fb) = (rect.right_top(), rect.right_top() - vec2(fold, 0.0), rect.right_top() + vec2(0.0, fold));
-    paint.add(egui::Shape::convex_polygon(vec![fl, pos2(fl.x, fb.y), fb], p.purple_tint, Stroke::new(border, edge)));
-    paint.line_segment([fl, tr_], Stroke::new(border, look.fill.unwrap_or(p.canvas)));
-    let room = Some((rect.width() - 24.0 * z - fold).max(0.0));
-    if z < DETAIL_ZOOM {
-        let g = ux::galley(inner, &card.name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), text_ink, room);
-        inner.galley(rect.center() - g.size() / 2.0, g, text_ink.into());
-        return;
-    }
-    let eyebrow = eyebrow_case(&say(&card.eyebrow));
-    ux::text(inner, rect.min + vec2(12.0, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), look.stroke.unwrap_or(p.purple), room);
-    let mut y = 30.0;
-    if !card.name.is_empty() {
-        ux::text(inner, rect.min + vec2(12.0, y) * z, &card.name, types::SMALL_STRONG.scaled(z), text_ink, room);
-        y += 21.0;
-    }
-    for row in rows {
-        if rect.top() + (y + 17.0) * z > rect.bottom() {
-            break;
-        }
-        ux::text(inner, rect.min + vec2(12.0, y) * z, row, types::SMALL.scaled(z), text_ink, Some((rect.width() - 24.0 * z).max(0.0)));
-        y += 18.0;
-    }
-}
-
-/// The dashed links of the diagram's constraint notes to the nodes of the elements they constrain
-/// (AR-133), worked out from the model each frame: purple, the accent while the note is selected.
-fn draw_constraint_links(paint: &egui::Painter, d: &Drawing<'_>) {
-    let (p, store, z) = (d.p, d.store, d.view.zoom);
-    for (n, _) in &d.boxes {
-        let Some(e) = element_of(store, *n, node::ELEMENT) else { continue };
-        let Some(notation) = d.notations.of_element(store, e) else { continue };
-        let targets = notation.links(store, e, d.diagram);
-        if targets.is_empty() {
-            continue;
-        }
-        let from_rect = d.node_rect(*n);
-        let selected = d.selection.contains(n) || d.selection.contains(&e);
-        let stroke = Stroke::new((1.25 * z).clamp(1.0, 2.5), if selected { p.accent } else { p.purple });
-        for t in targets {
-            let to_rect = d.node_rect(t);
-            let (from, to) = (exit_point(from_rect, to_rect.center()), exit_point(to_rect, from_rect.center()));
-            if from.is_finite() && to.is_finite() {
-                paint.extend(egui::Shape::dashed_line(&[from, to], stroke, (3.0 * z).max(1.5), (3.0 * z).max(1.5)));
-            }
-        }
-    }
 }
 
 /// The radius of the ⊕ at an owner's end of a nesting line, in diagram units (AR-132).
@@ -1317,7 +1249,7 @@ pub(crate) fn eyebrow_case(text: &str) -> String {
 }
 
 /// A text a notation describes, in the user's language.
-fn say(t: &archforge_diagram::figure::Text) -> String {
+pub(crate) fn say(t: &archforge_diagram::figure::Text) -> String {
     match t {
         archforge_diagram::figure::Text::Said(template, args) => {
             let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
