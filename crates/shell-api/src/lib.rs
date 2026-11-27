@@ -4,17 +4,16 @@
 //!
 //! It holds the automation-id registry (`widgets`), the design (`ux`: the colours, the type, the
 //! icons the shell and both notations draw, and the helpers that draw them), the canvas's
-//! geometry and state that name no shell (`canvas`), with the editing under way on it (`editing`)
-//! and the skills open in its tabs (`skill_tab`), the data types the interfaces `NotationUi`
-//! (`notation_ui`) and `DiagramKind` (`kinds`) hand across that name no shell, how a search or a
+//! geometry and state that name no shell (`canvas`, with what one frame's drawing reads), with the
+//! editing under way on it (`editing`) and the skills open in its tabs (`skill_tab`), the interfaces
+//! `NotationUi` (`notation_ui`) and `DiagramKind` (`kinds`) with the data types they hand across,
+//! the narrow context through which they reach the shell (`cx`), how a search or a
 //! filter matches what is typed (`search`), and the translations machinery (`i18n`), with which
 //! each crate registers its own catalogues. The shared controls the panels and a notation's screens
 //! draw are in `panels`, with the problems a selection shows (`problems`) and the key presses they
-//! take (`actions`). Story
-//! AR-780 moves the rest into it, step by step and unchanged: the interfaces themselves with the
-//! data types that still name the shell. It sits on the shell
-//! interfaces' layer (9), below the notations' screens (10) and the shell (11), and builds for the
-//! portable target.
+//! take (`actions`). The lists of notations and kinds the app registers stay in the shell. It sits
+//! on the shell interfaces' layer (9), below the notations' screens (10) and the shell (11), and
+//! builds for the portable target.
 
 pub mod actions;
 pub mod appearance;
