@@ -137,7 +137,7 @@ str		Sort recent projects by name	最近のプロジェクトを名前で並べ�
 str		Sort recent projects by last opened	最近のプロジェクトを最後に開いた順で並べ替え
 # ワークスペース
 str		Find an element, view, or action	要素、ビュー、操作を検索
-str		No schemas yet	スキーマはまだありません
+str		Nothing in the model yet	モデルにはまだ何もありません
 str		Add	追加
 str		Schema	スキーマ
 str		Folder	フォルダー
@@ -992,7 +992,7 @@ str		Relationships carry no skills	関係はスキルを持ちません
 str		This element carries no skills	この要素はスキルを持ちません
 str		Diagram	図
 str		Default diagram	既定の図
-str		Diagram · of {schema}	図 · {schema} の
+str		Diagram · of {owner}	図 · {owner} の
 str		This diagram	この図
 str		On this diagram · {n}	この図に · {n}
 str		Role	ロール

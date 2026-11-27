@@ -137,7 +137,7 @@ str		Sort recent projects by name	按名称排序最近的项目
 str		Sort recent projects by last opened	按上次打开时间排序最近的项目
 # 工作区
 str		Find an element, view, or action	查找元素、视图或操作
-str		No schemas yet	还没有架构
+str		Nothing in the model yet	模型中还没有内容
 str		Add	添加
 str		Schema	架构
 str		Folder	文件夹
@@ -992,7 +992,7 @@ str		Relationships carry no skills	关系不带技能
 str		This element carries no skills	此元素不带技能
 str		Diagram	图
 str		Default diagram	默认图
-str		Diagram · of {schema}	图 · 属于 {schema}
+str		Diagram · of {owner}	图 · 属于 {owner}
 str		This diagram	此图
 str		On this diagram · {n}	此图上 · {n}
 str		Role	角色

@@ -3,8 +3,8 @@
 //! · AR-103"): the tree of the open project's diagrams, a group for each diagram kind, in the
 //! folders the model keeps them in, with the model behind the open diagram named under the tree.
 //! A click opens the diagram in the centre and selects it, so Properties shows it. The `+`, like
-//! the one in the tab strip, opens the New diagram dialog: a name, the kind and the schema the
-//! diagram is of, or a new schema when the model has none yet (owner decision).
+//! the one in the tab strip, opens the New diagram dialog: a name, the kind and the element the
+//! diagram is of, or a new one when the model has none yet (owner decision).
 //! A diagram row's menu, or Delete on the row, deletes a diagram that is no package's default at
 //! once, with Undo in a toast; a default's row says why it stays (AR-644).
 //! Every change goes through the engine, so undo and redo cover it.
@@ -73,14 +73,14 @@ pub struct RowMenu {
 }
 
 /// The New diagram dialog's fields: the step it is at, the name, the kind, the element the
-/// diagram is of (a schema, a package; none for a new one named like the diagram), the select that
-/// is open, a refusal in plain words.
+/// diagram is of (none for a new one named like the diagram), the select that is open, a refusal
+/// in plain words.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewDiagram {
     pub step: Step,
     pub name: String,
     pub kind: &'static str,
-    pub schema: Option<Uuid>,
+    pub owner: Option<Uuid>,
     pub menu: Option<Field>,
     pub refused: Option<String>,
     /// True until the name field has taken the keyboard once on the second step.
@@ -98,7 +98,7 @@ pub enum Step {
 /// The dialog's selects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
-    Schema,
+    Owner,
 }
 
 /// What a row shows.
@@ -141,8 +141,8 @@ pub fn subject_name(store: &Store, o: Obj) -> String {
     if name.is_empty() { tr("Unnamed diagram") } else { name }
 }
 
-/// The schema a diagram is of, when it has one.
-pub fn schema_of(store: &Store, d: Obj) -> Option<Obj> {
+/// The element a diagram is of, its owner, when it has one.
+pub fn owner_of(store: &Store, d: Obj) -> Option<Obj> {
     store.get(d, diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|o| store.is_alive(*o))
 }
 
@@ -371,8 +371,8 @@ fn kind_named(shell: &Shell, kind: &str) -> Option<&'static dyn crate::kinds::Di
 }
 
 /// Opens the New diagram dialog at its first step, the kind: the kind and what it is of start from
-/// the selection (its schema or package), else the first kind and its first element, else a new
-/// one named like the diagram.
+/// the selection (the element a kind takes it to be of), else the first kind and its first
+/// element, else a new one named like the diagram.
 pub fn open_new(shell: &mut Shell) {
     open_new_of(shell, None);
 }
@@ -388,32 +388,32 @@ pub(crate) fn open_new_of(shell: &mut Shell, kind: Option<&'static dyn crate::ki
     let from_selection = selected
         .and_then(|o| shell.kinds.iter().filter(|k| kind.is_none_or(|w| w.kind() == k.kind())).find_map(|k| k.owner_of(store, o).map(|of| (*k, of))));
     let Some(kind) = from_selection.map(|(k, _)| k).or(kind).or_else(|| shell.kinds.first().copied()) else { return };
-    let schema = from_selection.map(|(_, of)| of).or_else(|| kind.owners(store).first().copied());
+    let owner = from_selection.map(|(_, of)| of).or_else(|| kind.owners(store).first().copied());
     let taken = store.alive().filter(|o| store.class_of(*o).ok() == Some(DIAGRAM)).map(|d| diagram_name(store, d));
-    let name = match schema {
+    let name = match owner {
         Some(s) => archforge_core::name_of(store, s),
         None => crate::explorer::fresh_name(&tr("Diagram"), taken, false).unwrap_or_default(),
     };
     // A group's + has chosen the kind already: the dialog opens on its details, Back before them.
     let step = if from_group { Step::Details } else { Step::Kind };
     shell.diagrams.new =
-        Some(NewDiagram { step, name, kind: kind.kind(), schema: schema.and_then(|s| store.uuid(s).ok()), menu: None, refused: None, opened: true });
+        Some(NewDiagram { step, name, kind: kind.kind(), owner: owner.and_then(|s| store.uuid(s).ok()), menu: None, refused: None, opened: true });
     shell.diagrams.notice = None;
 }
 
 /// What a diagram of `kind` is of when nothing else says, and the name it starts with: the kind's
 /// first element and its name, else none and a free "Diagram" name.
 fn defaults(store: &Store, kind: &dyn crate::kinds::DiagramKind) -> (Option<Uuid>, String) {
-    let schema = kind.owners(store).first().copied();
+    let owner = kind.owners(store).first().copied();
     let taken = store.alive().filter(|o| store.class_of(*o).ok() == Some(DIAGRAM)).map(|d| diagram_name(store, d));
-    let name = match schema {
+    let name = match owner {
         Some(s) => archforge_core::name_of(store, s),
         None => crate::explorer::fresh_name(&tr("Diagram"), taken, false).unwrap_or_default(),
     };
-    (schema.and_then(|s| store.uuid(s).ok()), name)
+    (owner.and_then(|s| store.uuid(s).ok()), name)
 }
 
-/// Creates the diagram the dialog describes: the schema first when a new one is asked for, then
+/// Creates the diagram the dialog describes: what it is of first when a new one is asked for, then
 /// the diagram of it, opened in the centre. A refusal stays in the dialog.
 fn create(shell: &mut Shell) {
     let Some(edit) = shell.diagrams.new.clone() else { return };
@@ -425,16 +425,16 @@ fn create(shell: &mut Shell) {
         return;
     }
     let Some(kind) = kind_named(shell, edit.kind) else { return };
-    let fresh_schema = edit.schema.is_none();
-    let schema = match edit.schema {
+    let fresh_owner = edit.owner.is_none();
+    let owner = match edit.owner {
         Some(s) => Ok(s.to_string()),
         None => shell.cx(|cx| kind.add_owner(cx, &name)),
     };
-    let made = schema.and_then(|schema| {
-        let made = run(shell, "diagram.add", json!({ "kind": kind.kind(), "element": &schema, "name": name }));
-        // A schema made for a diagram that was then refused goes again, so nothing is left behind.
-        if made.is_err() && fresh_schema {
-            let _ = run(shell, "element.remove", json!({ "ids": [schema] }));
+    let made = owner.and_then(|owner| {
+        let made = run(shell, "diagram.add", json!({ "kind": kind.kind(), "element": &owner, "name": name }));
+        // An owner made for a diagram that was then refused goes again, so nothing is left behind.
+        if made.is_err() && fresh_owner {
+            let _ = run(shell, "element.remove", json!({ "ids": [owner] }));
         }
         made
     });
@@ -457,9 +457,9 @@ fn create(shell: &mut Shell) {
 pub fn retain_valid(state: &mut State, store: &Store) {
     state.collapsed.retain(|id| store.by_uuid(*id).is_some());
     if let Some(n) = state.new.as_mut()
-        && n.schema.is_some_and(|s| store.by_uuid(s).is_none())
+        && n.owner.is_some_and(|s| store.by_uuid(s).is_none())
     {
-        n.schema = None;
+        n.owner = None;
     }
 }
 
@@ -536,14 +536,13 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     }
 }
 
-/// The model behind the open diagram: the project and where the schema or package the diagram is
-/// of sits.
+/// The model behind the open diagram: the project and where the element the diagram is of sits.
 fn footer_lines(shell: &Shell, paint: &egui::Painter, p: &Palette, r: Rect) {
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
     let Some(d) = shell.canvas.active.and_then(|id| store.by_uuid(id)) else { return };
     let project = shell.project.as_ref().map(|o| o.name.clone()).unwrap_or_default();
-    let trail = schema_of(store, d).map_or_else(|| project.clone(), |s| trail(store, &project, s));
+    let trail = owner_of(store, d).map_or_else(|| project.clone(), |s| trail(store, &project, s));
     paint.rect_filled(Rect::from_min_size(pos2(r.left() + 16.0, r.bottom() - FOOTER_LINE), vec2((r.width() - 32.0).max(0.0), 1.0)), 0.0, p.border);
     let room = Some((r.width() - 40.0).max(0.0));
     ux::text(
@@ -607,7 +606,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
     let mut resp = control(shell, ui, &id, "row", hit, true);
     if row.kind == Kind::Diagram
         && let Some(s) = shell.session.as_ref()
-        && let Some(of) = schema_of(s.doc(), row.obj)
+        && let Some(of) = owner_of(s.doc(), row.obj)
     {
         let project = shell.project.as_ref().map(|o| o.name.clone()).unwrap_or_default();
         resp = resp.on_hover_text(trail(s.doc(), &project, of));
@@ -975,11 +974,11 @@ fn choose_kind(shell: &mut Shell, kind: &'static str) {
         return;
     }
     let given = kind_named(shell, edit.kind).map(|k| defaults(store, k).1);
-    let (schema, name) = defaults(store, picked);
+    let (owner, name) = defaults(store, picked);
     let keep = given.is_none_or(|g| g != edit.name) && !edit.name.trim().is_empty();
     if let Some(edit) = shell.diagrams.new.as_mut() {
         edit.kind = kind;
-        edit.schema = schema;
+        edit.owner = owner;
         if !keep {
             edit.name = name;
         }
@@ -1008,7 +1007,7 @@ fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui:
     let at = |x: f32, y: f32| dialog.min + vec2(x, y);
     let inner_w = width - 40.0;
     // The elements the diagram may be of, read once.
-    let (schemas, taken_focus) = match (shell.session.as_ref(), shell.diagrams.new.as_ref()) {
+    let (owners, taken_focus) = match (shell.session.as_ref(), shell.diagrams.new.as_ref()) {
         (Some(s), Some(n)) => {
             let store = s.doc();
             (
@@ -1048,12 +1047,11 @@ fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui:
     let enter = out.response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
     // What it is of, the whole width.
     let new_word = shell.session.as_ref().map(|s| kind.new_owner_in(s.doc())).unwrap_or_else(|| kind.new_owner());
-    let schema_word = match shell.diagrams.new.as_ref().and_then(|e| e.schema) {
-        Some(id) => schemas.iter().find(|(s, _)| *s == id).map(|(_, n)| n.clone()).unwrap_or_else(|| new_word.clone()),
+    let chosen = match shell.diagrams.new.as_ref().and_then(|e| e.owner) {
+        Some(id) => owners.iter().find(|(s, _)| *s == id).map(|(_, n)| n.clone()).unwrap_or_else(|| new_word.clone()),
         None => new_word.clone(),
     };
-    let schema_field =
-        select(shell, ui, p, at(20.0, 133.0), inner_w, "workspace.new-diagram.schema", &kind.owner_word(), &schema_word, Field::Schema);
+    let owner_field = select(shell, ui, p, at(20.0, 133.0), inner_w, "workspace.new-diagram.schema", &kind.owner_word(), &chosen, Field::Owner);
     if let Some(refused) = &refused {
         let r = Rect::from_min_size(at(20.0, 190.0), vec2(inner_w, 24.0));
         paint.rect_filled(r, 6.0, p.amber_tint);
@@ -1079,13 +1077,13 @@ fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui:
     );
     // The open select's menu, over the rest.
     let open = shell.diagrams.new.as_ref().and_then(|e| e.menu);
-    if open == Some(Field::Schema) {
-        let mut items: Vec<String> = schemas.iter().map(|(_, n)| n.clone()).collect();
+    if open == Some(Field::Owner) {
+        let mut items: Vec<String> = owners.iter().map(|(_, n)| n.clone()).collect();
         items.push(new_word.clone());
-        if let Some(i) = menu(shell, ui, p, schema_field, "workspace.new-diagram.schema", &items)
+        if let Some(i) = menu(shell, ui, p, owner_field, "workspace.new-diagram.schema", &items)
             && let Some(edit) = shell.diagrams.new.as_mut()
         {
-            edit.schema = schemas.get(i).map(|(id, _)| *id);
+            edit.owner = owners.get(i).map(|(id, _)| *id);
             edit.refused = None;
         }
     }
