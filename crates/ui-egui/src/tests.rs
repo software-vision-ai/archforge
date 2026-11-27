@@ -11575,7 +11575,7 @@ fn a_package_of_another_branch_dropped_from_models_is_shown_once_and_keeps_its_o
         let (owner, cards) = owner_and_cards(&h);
         let [(card, Some(on))] = cards[..] else { panic!("{theme:?}: one card of Archive: {cards:?}") };
         assert_eq!((owner, on), (Some(operations), shown), "{theme:?}: on Commerce's diagram, still owned by Operations");
-        let line = h.state().canvas.path_badges.iter().find(|b| b.node == card).map(|b| b.whole.clone());
+        let line = h.state().canvas.card_labels.iter().find(|b| b.node == card).map(|b| b.whole.clone());
         assert_eq!(line.as_deref(), Some("Owner: Commerce platform › Operations"), "{theme:?}: its owner line");
         // Dropped again: said so, nothing changed.
         let state = |h: &Harness<'static, Shell>| {
@@ -11946,7 +11946,7 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
             for (d, card) in [(overview, sales_card2), (top, sales_card)] {
                 crate::canvas::open(h.state_mut(), d);
                 h.run();
-                said.push(h.state().canvas.path_badges.iter().find(|b| b.node == card).map(|b| b.whole.clone()));
+                said.push(h.state().canvas.card_labels.iter().find(|b| b.node == card).map(|b| b.whole.clone()));
             }
             let st = h.state().session.as_ref().unwrap().doc();
             let mut on: Vec<_> = archforge_diagram::views_of(st, st.by_uuid(sales).unwrap()).2.into_iter().map(|n| st.uuid(n).unwrap()).collect();
@@ -12387,7 +12387,7 @@ fn a_package_card_names_its_package_in_a_tab_that_fits_the_name_and_follows_a_re
         let in_tab = texts_in(&h, longest);
         assert!(in_tab.iter().any(|(t, glyphs)| t == whole && *glyphs < whole.chars().count()), "cut: {in_tab:?}");
         let before = painted(&h).iter().filter(|t| *t == whole).count();
-        assert!(h.state().canvas.package_tabs.iter().any(|t| t.cut.as_deref() == Some("Customer Relationship Management Integrations")));
+        assert!(h.state().canvas.card_parts.iter().any(|t| t.hover.as_deref() == Some("Customer Relationship Management Integrations")));
         // On the tab, the pointer shows the whole name.
         h.event(egui::Event::PointerMoved(longest.center()));
         for _ in 0..40 {
@@ -12407,12 +12407,12 @@ fn a_package_cards_thumbnail_is_its_own_diagram_scaled_and_follows_it() {
     let shown = |h: &Harness<'static, Shell>| {
         let s = h.state().session.as_ref().unwrap();
         let st = s.doc();
-        crate::canvas::preview(st, s.view(), st.by_uuid(own).unwrap(), area).expect("a thumbnail")
+        crate::uml_package::preview(st, s.view(), st.by_uuid(own).unwrap(), area).expect("a thumbnail")
     };
     let first = shown(&h);
     assert_eq!(first.cards.len(), 2, "both classes");
     assert_eq!(first.lines.len(), 1, "and the association between them");
-    assert!(first.cards.iter().all(|c| area.contains_rect(c.rect) && c.look == crate::canvas::MiniLook::Plain && c.rows == vec![0, 0]));
+    assert!(first.cards.iter().all(|c| area.contains_rect(c.rect) && c.look == crate::uml_package::MiniLook::Plain && c.rows == vec![0, 0]));
     let (a, b) = (first.cards[0].rect, first.cards[1].rect);
     assert!(a.right() < b.left() && (a.top() - b.top()).abs() < 0.5, "laid out as on the diagram: side by side");
     assert!(first.scale > 0.0 && first.scale <= 0.5);
@@ -12428,7 +12428,7 @@ fn a_package_cards_thumbnail_is_its_own_diagram_scaled_and_follows_it() {
     s.execute("diagram.unplace", &serde_json::json!({ "nodes": [order.to_string(), line.to_string()] })).unwrap();
     h.run();
     let st = h.state().session.as_ref().unwrap();
-    assert!(crate::canvas::preview(st.doc(), st.view(), st.doc().by_uuid(own).unwrap(), area).is_none());
+    assert!(crate::uml_package::preview(st.doc(), st.view(), st.doc().by_uuid(own).unwrap(), area).is_none());
     assert!(painted(&h).iter().any(|t| t == "Empty diagram"));
 }
 
@@ -12513,7 +12513,7 @@ fn a_long_owning_path_folds_its_first_owners_and_a_narrow_card_keeps_the_nearest
         h.run();
         let whole = "Owner: Commerce platform › Operations and logistics › Regional fulfilment";
         let badge = |h: &Harness<'static, Shell>, card: &str| {
-            h.state().canvas.path_badges.iter().find(|b| b.node.to_string() == card).cloned().unwrap_or_else(|| panic!("a path under {card}"))
+            h.state().canvas.card_labels.iter().find(|b| b.node.to_string() == card).cloned().unwrap_or_else(|| panic!("a path under {card}"))
         };
         // Too long for its card: the first owners fold, the nearest stays.
         let long = badge(&h, &wide);

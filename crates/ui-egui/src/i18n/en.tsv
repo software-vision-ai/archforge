@@ -1045,7 +1045,6 @@ str		Association class	Association class
 str		Classifier kinds	Classifier kinds
 str		Package	Package
 # Class members in Properties
-str		Owner: {path}	Owner: {path}
 str		Stereotype	Stereotype
 str		{first} and {second}	{first} and {second}
 str		{first}, {second} and {third}	{first}, {second} and {third}

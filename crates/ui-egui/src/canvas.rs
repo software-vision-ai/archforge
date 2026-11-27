@@ -18,11 +18,11 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+pub use archforge_shell_api::canvas::{CardLabel, CardPart, EndText, MinimapDrag, State, Toast, Tool, self_loop};
 pub(crate) use archforge_shell_api::canvas::{Drawing, END_HANDLE, View, along, end_handles_at, exit_point, nesting_route};
-pub use archforge_shell_api::canvas::{EndText, MinimapDrag, PackageTab, PathBadge, State, Toast, Tool, self_loop};
 use archforge_shell_api::canvas::{beside, beside_pair, mark_outline, mark_shape, qualifier_place, signature_place};
 pub use archforge_shell_api::kinds::ExtraLabel;
-pub(crate) use archforge_shell_api::kinds::LineDrawn;
+pub(crate) use archforge_shell_api::kinds::{CardDrawn, LineDrawn};
 
 use crate::cx::{Ctx, Request};
 use crate::home::control;
@@ -76,7 +76,7 @@ pub(crate) const COMPARTMENT_GAP: f32 = archforge_diagram::figure::COMPARTMENT_G
 /// How far a compartment's first row is under the line over it: as far as a card's first row is
 /// under its header's line.
 const COMPARTMENT_TOP: f32 = ENTITY_FIRST_ROW - ENTITY_HEADER;
-const ENTITY_INSET: f32 = 18.0;
+pub(crate) const ENTITY_INSET: f32 = 18.0;
 pub(crate) const ENTITY_TEXT: f32 = 42.0;
 /// How strongly a table of another schema shows: the design's 60 %.
 const FOREIGN_ALPHA: f32 = 0.6;
@@ -609,8 +609,9 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         shell.canvas.ends = drawn.ends;
         shell.canvas.qualified_ends = drawn.qualified_ends;
         shell.canvas.extra_labels = drawn.extra_labels;
-        shell.canvas.package_tabs = drawn.package_tabs;
-        shell.canvas.path_badges = drawn.path_badges;
+        shell.canvas.card_parts = drawn.card_parts;
+        shell.canvas.card_labels = drawn.card_labels;
+        shell.canvas.kind_cards = drawn.kind_cards;
         // Such a label says its hover text while the pointer is on it.
         if let Some(at) = ui.input(|i| i.pointer.hover_pos())
             && shell.canvas.gesture.is_none()
@@ -618,23 +619,24 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         {
             let _ = resp.clone().on_hover_text_at_pointer(l.hover.as_str());
         }
-        // A name its tab shows cut is shown whole while the pointer is on the tab.
+        // What the part of a card under the pointer says, the topmost part's, a gesture under way
+        // or not (the whole of a text the part shows cut).
         if let Some(at) = ui.input(|i| i.pointer.hover_pos())
-            && let Some(name) = shell.canvas.package_tabs.iter().rev().find(|t| t.rect.contains(at)).and_then(|t| t.cut.clone())
+            && let Some(words) = shell.canvas.card_parts.iter().rev().find(|t| t.rect.contains(at)).and_then(|t| t.hover.clone())
         {
-            let _ = resp.clone().on_hover_text_at_pointer(name);
+            let _ = resp.clone().on_hover_text_at_pointer(words);
         }
-        // A package's owning path says its whole sentence to a screen reader, as a label's value,
-        // and on hover.
-        for b in shell.canvas.path_badges.iter().filter(|b| b.rect.intersects(r)) {
-            ui.ctx().accesskit_node_builder(widgets::egui_id(&format!("workspace.canvas.node.{}.path", b.node)), |node| {
+        // A label drawn with a card says its whole sentence to a screen reader, as a label's value,
+        // and on hover while no gesture runs.
+        for b in shell.canvas.card_labels.iter().filter(|b| b.rect.intersects(r)) {
+            ui.ctx().accesskit_node_builder(widgets::egui_id(&b.id), |node| {
                 node.set_role(egui::accesskit::Role::Label);
                 node.set_value(b.whole.as_str());
             });
         }
         if let Some(at) = ui.input(|i| i.pointer.hover_pos())
             && shell.canvas.gesture.is_none()
-            && let Some(b) = shell.canvas.path_badges.iter().rev().find(|b| b.rect.contains(at))
+            && let Some(b) = shell.canvas.card_labels.iter().rev().find(|b| b.rect.contains(at))
         {
             let _ = resp.clone().on_hover_text_at_pointer(b.whole.as_str());
         }
@@ -774,8 +776,9 @@ pub(crate) struct Drawn {
     pub(crate) ends: Vec<EndText>,
     pub(crate) qualified_ends: Vec<(Pos2, Pos2)>,
     pub(crate) extra_labels: Vec<ExtraLabel>,
-    pub(crate) package_tabs: Vec<PackageTab>,
-    pub(crate) path_badges: Vec<PathBadge>,
+    pub(crate) card_parts: Vec<CardPart>,
+    pub(crate) card_labels: Vec<CardLabel>,
+    pub(crate) kind_cards: Vec<Uuid>,
     pub(crate) badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)>,
 }
 
@@ -821,8 +824,9 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
         qualified_ends: std::cell::RefCell::new(Vec::new()),
         draft: live.draft,
         rename_text: live.rename_text,
-        tabs: std::cell::RefCell::new(Vec::new()),
-        paths: std::cell::RefCell::new(Vec::new()),
+        parts: std::cell::RefCell::new(Vec::new()),
+        labels: std::cell::RefCell::new(Vec::new()),
+        kind_cards: std::cell::RefCell::new(Vec::new()),
         led: std::cell::OnceCell::new(),
         label_drag: live.label_drag,
     };
@@ -840,8 +844,9 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
         ends: draw.ends.take(),
         qualified_ends: draw.qualified_ends.take(),
         extra_labels,
-        package_tabs: draw.tabs.take(),
-        path_badges: draw.paths.take(),
+        card_parts: draw.parts.take(),
+        card_labels: draw.labels.take(),
+        kind_cards: draw.kind_cards.take(),
         badges,
     }
 }
@@ -929,7 +934,16 @@ fn draw_node(
     // A template's signature rows, drawn over the card and its selection (AR-130).
     let signature = card.as_ref().filter(|c| !annotation && !c.template.is_empty() && z >= DETAIL_ZOOM).map(|c| c.template.clone());
     let diamond = card.as_ref().is_some_and(|c| c.tone == Tone::Diamond);
+    // A card its diagram's kind draws itself takes the place of the canvas's own figure for it.
+    let by_kind = match (element, card.as_ref(), d.kind) {
+        (Some(element), Some(card), Some(kind)) => kind.draw_card(paint, d, &CardDrawn { node: n, element, card, rect, selected }, registry, ui),
+        _ => false,
+    };
+    if by_kind && let Some(id) = id {
+        d.kind_cards.borrow_mut().push(id);
+    }
     match element {
+        _ if by_kind => {}
         Some(_) if annotation && let Some(card) = card => draw_constraint(paint, &inner, d, n, &card, rect),
         // An n-ary association's diamond, its name above it (AR-128).
         Some(_) if diamond && let Some(card) = card => {
@@ -940,82 +954,18 @@ fn draw_node(
             draw_diamond(paint, p, rect, &card.name, keyword, z, selected, &look_of(store, n, node::STYLE));
         }
         Some(_) if let Some(card) = card => {
-            // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
-            let dim = |c: ux::Colour| if card.elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
-            // The node's own look on this diagram, where it has one.
-            let look = look_of(store, n, node::STYLE);
-            // Its own fill brings the text that reads on it, unless it has its own text colour too.
-            let ink: &Palette = match look.fill {
-                Some(f) => ink_for(f),
-                None => p,
-            };
-            // A plain card (a class) takes the surface, the border and the muted eyebrow.
-            let tabbed = card.tone == archforge_diagram::figure::Tone::Tabbed;
-            let plain = tabbed || card.tone == archforge_diagram::figure::Tone::Plain;
-            let (fill, edge, eyebrow, line) =
-                if plain { (p.surface, p.border, ink.text_secondary, p.border) } else { (p.entity, p.entity_edge, ink.entity_ink, p.entity_line) };
-            let p = &Palette {
-                entity: dim(look.fill.unwrap_or(fill)),
-                entity_edge: dim(look.stroke.unwrap_or(edge)),
-                entity_ink: dim(eyebrow),
-                entity_line: dim(look.stroke.map_or(line, |c| c.gamma_multiply(0.5))),
-                text: dim(look.text.unwrap_or(ink.text)),
-                text_muted: dim(ink.text_muted),
-                text_secondary: dim(ink.text_secondary),
-                ..*p
-            };
-            let border = look.width.map_or(1.0, |w| (w * z).max(1.0));
-            // A package's tab, as a folder's, over its top left, holding its name: the name as it
-            // is typed while it is renamed (AR-113).
-            let tab = tabbed.then(|| {
-                let name = if renaming { d.rename_text.unwrap_or(&card.name) } else { card.name.as_str() };
-                package_tab(paint, rect, name, z, p.text)
-            });
-            if let Some((tab, _, _)) = &tab {
-                paint.rect_filled(*tab, 5.0 * z, p.entity);
-                paint.rect_stroke(*tab, 5.0 * z, Stroke::new(border, if selected { p.accent } else { p.entity_edge }), StrokeKind::Inside);
-            }
+            // A tinted card (an entity) takes the entity's tint; any other, the surface, the border
+            // and the muted eyebrow.
+            let (p, border) = card_palette(p, store, n, card.elsewhere, card.tone != Tone::Tinted, z);
+            let p = &p;
             paint.rect_filled(rect, 6.0 * z, p.entity);
             if card.elsewhere {
                 dashed_rect(paint, rect, Stroke::new(border, p.entity_edge), 4.0 * z, 3.0 * z);
             } else {
                 paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, p.entity_edge), StrokeKind::Inside);
             }
-            if let Some((tab, name, cut)) = tab {
-                // The tab joins the card: no border between them.
-                paint.rect_filled(
-                    Rect::from_min_max(pos2(tab.left() + border, rect.top() - z), pos2(tab.right() - border, rect.top() + border)),
-                    0.0,
-                    p.entity,
-                );
-                if z >= DETAIL_ZOOM && !renaming {
-                    paint.galley(tab.min + vec2(PACKAGE_TAB_PAD * z, (tab.height() - name.size().y) / 2.0), name, p.text.into());
-                }
-                if let Some(id) = id {
-                    widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.tab"), "tab", tab);
-                    d.tabs.borrow_mut().push(PackageTab { rect: tab, node: id, cut: cut.then(|| card.name.clone()) });
-                }
-            }
-            // Where the package lives, under its card; the root, which no package owns, has none.
-            if tabbed
-                && z >= DETAIL_ZOOM
-                && !card.owner_path.is_empty()
-                && let Some(id) = id
-            {
-                let badge = path_badge(paint, rect, &card.owner_path, z, d.p.text_secondary, id);
-                widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.path"), "label", badge.rect);
-                d.paths.borrow_mut().push(badge);
-            }
             let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
-            if z >= DETAIL_ZOOM && tabbed {
-                // The package's own diagram, scaled into its card.
-                if let Some(e) = element {
-                    let area = draw_preview(&inner, d, e, rect, z);
-                    if let Some(id) = id {
-                        widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.preview"), "image", area);
-                    }
-                }
-            } else if z >= DETAIL_ZOOM {
+            if z >= DETAIL_ZOOM {
                 let eyebrow = eyebrow_case(&say(&card.eyebrow));
                 ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), p.entity_ink, room);
                 if !renaming {
@@ -1036,8 +986,7 @@ fn draw_node(
                 }
                 draw_rows(&inner, p, &card, rect, z, key_status, room);
             } else {
-                let g = ux::galley(&inner, &card.name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), p.text, room);
-                inner.galley(rect.center() - g.size() / 2.0, g, p.text.into());
+                name_from_afar(&inner, &card.name, rect, z, p.text);
             }
         }
         Some(e) => {
@@ -1081,6 +1030,41 @@ fn draw_node(
     }
     let e = element.filter(|e| d.problems.contains_key(e))?;
     Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
+}
+
+/// The palette a card of the node `n` is drawn in, and its border's width at zoom `z`: a `plain`
+/// card (a class) takes the surface, the border and the muted eyebrow, any other the entity's tint;
+/// the node's own look on its diagram goes over either, its own fill bringing the text that reads
+/// on it unless it has its own text colour too; an element of another scope (`elsewhere`) is
+/// dimmed.
+pub(crate) fn card_palette(p: &Palette, store: &Store, n: Obj, elsewhere: bool, plain: bool, z: f32) -> (Palette, f32) {
+    let dim = |c: ux::Colour| if elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
+    let look = look_of(store, n, node::STYLE);
+    let ink: &Palette = match look.fill {
+        Some(f) => ink_for(f),
+        None => p,
+    };
+    let (fill, edge, eyebrow, line) =
+        if plain { (p.surface, p.border, ink.text_secondary, p.border) } else { (p.entity, p.entity_edge, ink.entity_ink, p.entity_line) };
+    let palette = Palette {
+        entity: dim(look.fill.unwrap_or(fill)),
+        entity_edge: dim(look.stroke.unwrap_or(edge)),
+        entity_ink: dim(eyebrow),
+        entity_line: dim(look.stroke.map_or(line, |c| c.gamma_multiply(0.5))),
+        text: dim(look.text.unwrap_or(ink.text)),
+        text_muted: dim(ink.text_muted),
+        text_secondary: dim(ink.text_secondary),
+        ..*p
+    };
+    (palette, look.width.map_or(1.0, |w| (w * z).max(1.0)))
+}
+
+/// A card's name as a card at `rect` shows it below [`DETAIL_ZOOM`]: alone, in `ink`, in the
+/// middle of the card, in the section style no smaller than at that zoom, cut to the card's inset.
+pub(crate) fn name_from_afar(inner: &egui::Painter, name: &str, rect: Rect, z: f32, ink: ux::Colour) {
+    let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
+    let g = ux::galley(inner, name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), ink, room);
+    inner.galley(rect.center() - g.size() / 2.0, g, ink.into());
 }
 
 /// A hollow diamond filling `rect`, over `fill`.
@@ -1210,229 +1194,6 @@ fn draw_nesting_lines(paint: &egui::Painter, d: &Drawing<'_>) {
         let arm = r * 0.62;
         paint.line_segment([centre - vec2(arm, 0.0), centre + vec2(arm, 0.0)], stroke);
         paint.line_segment([centre - vec2(0.0, arm), centre + vec2(0.0, arm)], stroke);
-    }
-}
-
-/// A package's tab: its height, the room either side of its name and its least width (AR-113).
-pub(crate) const PACKAGE_TAB_HEIGHT: f32 = 22.0;
-const PACKAGE_TAB_PAD: f32 = 12.0;
-const PACKAGE_TAB_MIN: f32 = 56.0;
-/// The margin between a package's card and the thumbnail of its diagram, and the room inside the
-/// thumbnail around what it shows.
-const PREVIEW_MARGIN: f32 = 10.0;
-const PREVIEW_INSET: f32 = 8.0;
-/// The most a thumbnail enlarges its diagram, so a few small cards still read as a thumbnail.
-const PREVIEW_MOST: f32 = 0.5;
-
-/// The tab over the top left of the package card at `rect` (AR-113): as wide as `name` and its
-/// padding, never narrower than [`PACKAGE_TAB_MIN`] nor wider than the card, with the name laid out to
-/// fit it (cut with an ellipsis where the card is narrower than the name), and whether it was cut.
-pub(crate) fn package_tab(paint: &egui::Painter, rect: Rect, name: &str, z: f32, ink: ux::Colour) -> (Rect, std::sync::Arc<egui::Galley>, bool) {
-    let ty = types::SMALL_STRONG.scaled(z);
-    let pad = PACKAGE_TAB_PAD * z;
-    let whole = ux::galley(paint, name, ty, ink, None);
-    let room = (rect.width() - 2.0 * pad).max(0.0);
-    let cut = whole.size().x > room;
-    let shown = if cut { ux::galley(paint, name, ty, ink, Some(room)) } else { whole };
-    let width = (shown.size().x + 2.0 * pad).max(PACKAGE_TAB_MIN * z).min(rect.width().max(0.0));
-    let tab = Rect::from_min_size(pos2(rect.left(), rect.top() - (PACKAGE_TAB_HEIGHT - 1.0) * z), vec2(width, PACKAGE_TAB_HEIGHT * z));
-    (tab, shown, cut)
-}
-
-/// How far a package's owning path is under its card.
-const PATH_BADGE_GAP: f32 = 6.0;
-
-/// Draws a package's owning path under its card, `Owner: Commerce platform › Operations`, in the
-/// caption style and the canvas's secondary ink: its words say what it is, never its colour alone.
-/// It is as wide as the card at most: its first owners fold into `…` so the nearest stay, and the
-/// nearest alone is cut at its end ([`ux::cut_front`]).
-fn path_badge(paint: &egui::Painter, card: Rect, owners: &[String], z: f32, ink: ux::Colour, node: Uuid) -> PathBadge {
-    let ty = types::CAPTION.scaled(z);
-    let template = tr("Owner: {path}");
-    let say = |path: &str| fmt(&template, &[("path", path)]);
-    let width = card.width().max(0.0);
-    let (shown, _) = ux::cut_front(owners, crate::panels::PATH_SEP, |t| ux::galley(paint, &say(t), ty, ink, None).size().x <= width);
-    let shown = say(&shown);
-    let rect = ux::text(paint, pos2(card.left(), card.bottom() + PATH_BADGE_GAP * z), &shown, ty, ink, Some(width));
-    PathBadge { rect, node, shown, whole: say(&owners.join(crate::panels::PATH_SEP)) }
-}
-
-/// How a card of a thumbnail is drawn: as the card it stands for is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MiniLook {
-    Plain,
-    Tinted,
-    Tabbed,
-    Note,
-    /// A constraint note and a constraint's braces (AR-133).
-    Constraint,
-    Braces,
-    /// An n-ary association's diamond (AR-128).
-    Diamond,
-}
-
-/// One card of a thumbnail, on screen: its look and how many rows each of its compartments has.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct MiniCard {
-    pub rect: Rect,
-    pub look: MiniLook,
-    pub rows: Vec<usize>,
-}
-
-/// A diagram scaled into a thumbnail (AR-113): its cards and its lines as they are laid out, and
-/// the scale it was drawn at.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Preview {
-    pub cards: Vec<MiniCard>,
-    pub lines: Vec<Vec<Pos2>>,
-    pub scale: f32,
-}
-
-/// The diagram each element leads to, by the element: a package's own class diagram.
-fn leads(store: &Store) -> std::collections::HashMap<Obj, Obj> {
-    let mut out = std::collections::HashMap::new();
-    for d in store.alive().filter(|o| store.class_of(*o).ok() == Some(DIAGRAM)) {
-        if let Some(e) = element_of(store, d, diagram::ELEMENT) {
-            out.entry(e).or_insert(d);
-        }
-    }
-    out
-}
-
-/// `d` scaled to fit `area`, centred, enlarged at most [`PREVIEW_MOST`]: none when it shows
-/// nothing.
-pub(crate) fn preview(store: &Store, notations: &archforge_diagram::ProjectView, d: Obj, area: Rect) -> Option<Preview> {
-    let grid = grid(store, notations, d);
-    let all = grid.visible(archforge_diagram::Rect::new(-1.0e9, -1.0e9, 2.0e9, 2.0e9));
-    let mut boxes: Vec<(Rect, MiniLook, Vec<usize>)> = Vec::new();
-    for n in &all.nodes {
-        let b = bounds_of(store, *n);
-        let r = Rect::from_min_size(pos2(b.x as f32, b.y as f32), vec2(b.width as f32, b.height as f32));
-        if !r.is_finite() || r.width() <= 0.0 || r.height() <= 0.0 {
-            continue;
-        }
-        let (look, rows) = match element_of(store, *n, node::ELEMENT) {
-            None => (MiniLook::Note, Vec::new()),
-            Some(e) => match notations.of_element(store, e).and_then(|nt| nt.card(store, e, d)) {
-                Some(card) => {
-                    let look = match card.tone {
-                        archforge_diagram::figure::Tone::Tabbed => MiniLook::Tabbed,
-                        archforge_diagram::figure::Tone::Plain => MiniLook::Plain,
-                        archforge_diagram::figure::Tone::Tinted => MiniLook::Tinted,
-                        archforge_diagram::figure::Tone::Constraint => MiniLook::Constraint,
-                        archforge_diagram::figure::Tone::Braces => MiniLook::Braces,
-                        archforge_diagram::figure::Tone::Diamond => MiniLook::Diamond,
-                    };
-                    (look, card.compartments.iter().map(Vec::len).collect())
-                }
-                None => (MiniLook::Plain, Vec::new()),
-            },
-        };
-        boxes.push((r, look, rows));
-    }
-    // Every line's route in one pass over the index, not a lookup per line.
-    let lines: Vec<Vec<Pos2>> = grid
-        .lines()
-        .map(|(_, points)| points.iter().map(|(x, y)| pos2(*x as f32, *y as f32)).collect::<Vec<_>>())
-        .filter(|points| points.len() >= 2 && points.iter().all(|q| q.is_finite()))
-        .collect();
-    // A package's tab stands above its card, so it is in the bounds too.
-    let mut bounds = boxes
-        .iter()
-        .map(|(r, look, _)| if *look == MiniLook::Tabbed { r.with_min_y(r.top() - PACKAGE_TAB_HEIGHT) } else { *r })
-        .reduce(|a, b| a.union(b))?;
-    for q in lines.iter().flatten() {
-        bounds.extend_with(*q);
-    }
-    let scale = (area.width() / bounds.width().max(1.0)).min(area.height() / bounds.height().max(1.0)).min(PREVIEW_MOST);
-    if !scale.is_finite() || scale <= 0.0 {
-        return None;
-    }
-    let origin = area.center() - bounds.size() * scale / 2.0;
-    let map = |q: Pos2| origin + (q - bounds.min) * scale;
-    let cards = boxes.into_iter().map(|(r, look, rows)| MiniCard { rect: Rect::from_min_max(map(r.min), map(r.max)), look, rows }).collect();
-    let lines = lines.into_iter().map(|l| l.into_iter().map(map).collect()).collect();
-    Some(Preview { cards, lines, scale })
-}
-
-/// The thumbnail of the package `package`'s own diagram on its card at `rect` (AR-113), on the
-/// page tint inside the card's margin; Empty diagram when the diagram shows nothing or there is
-/// none. Gives the thumbnail's area.
-fn draw_preview(paint: &egui::Painter, d: &Drawing<'_>, package: Obj, rect: Rect, z: f32) -> Rect {
-    let p = d.p;
-    let area = rect.shrink(PREVIEW_MARGIN * z);
-    if area.width() <= 0.0 || area.height() <= 0.0 {
-        return area;
-    }
-    paint.rect_filled(area, 4.0 * z, p.page);
-    let led = d.led.get_or_init(|| leads(d.store));
-    let shown = led.get(&package).and_then(|g| preview(d.store, d.notations, *g, area.shrink(PREVIEW_INSET * z)));
-    let Some(shown) = shown else {
-        let g = ux::galley(paint, &tr("Empty diagram"), types::CAPTION.scaled(z), p.text_muted, Some(area.width()));
-        paint.galley(area.center() - g.size() / 2.0, g, p.text_muted.into());
-        return area;
-    };
-    let clip = paint.with_clip_rect(area.intersect(paint.clip_rect()));
-    for line in &shown.lines {
-        clip.add(egui::Shape::line(line.clone(), Stroke::new(1.0, p.text_secondary)));
-    }
-    for c in &shown.cards {
-        // The preview's scale is already the screen's: the area it was fitted to is zoomed.
-        mini_card(&clip, p, c, shown.scale);
-    }
-    area
-}
-
-/// One card of a thumbnail drawn at `s` (its diagram's scale on screen): its outline, a bar for
-/// its name, a line under its header, and a bar for each row that fits.
-fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
-    let r = c.rect;
-    if c.look == MiniLook::Braces {
-        paint.rect_filled(Rect::from_min_size(r.left_top(), vec2(r.width(), (5.0 * s).max(1.0))), 1.0, p.purple);
-        return;
-    }
-    // An n-ary association's diamond, hollow in the lines' ink (AR-128).
-    if c.look == MiniLook::Diamond {
-        let points = vec![r.left_center(), r.center_top(), r.right_center(), r.center_bottom()];
-        paint.add(egui::Shape::convex_polygon(points, p.surface, Stroke::new(1.0, p.text_secondary)));
-        return;
-    }
-    let (fill, edge) = match c.look {
-        MiniLook::Tinted => (p.entity, p.entity_edge),
-        MiniLook::Note => (p.amber_tint, p.amber),
-        MiniLook::Constraint => (p.surface, p.purple),
-        MiniLook::Plain | MiniLook::Tabbed | MiniLook::Braces | MiniLook::Diamond => (p.surface, p.border),
-    };
-    if c.look == MiniLook::Tabbed {
-        let tab =
-            Rect::from_min_size(pos2(r.left(), r.top() - (PACKAGE_TAB_HEIGHT - 1.0) * s), vec2((r.width() * 0.4).max(2.0), PACKAGE_TAB_HEIGHT * s));
-        paint.rect_filled(tab, 2.0, fill);
-        paint.rect_stroke(tab, 2.0, Stroke::new(1.0, edge), StrokeKind::Inside);
-    }
-    paint.rect_filled(r, 2.0, fill);
-    paint.rect_stroke(r, 2.0, Stroke::new(1.0, edge), StrokeKind::Inside);
-    if matches!(c.look, MiniLook::Note | MiniLook::Tabbed | MiniLook::Constraint) {
-        return;
-    }
-    let bar = |y: f32, w: f32, h: f32, colour: ux::Colour| {
-        if y + h <= r.bottom() - 1.0 {
-            paint.rect_filled(Rect::from_min_size(pos2(r.left() + ENTITY_INSET * s, y), vec2((r.width() * w).max(1.0), h.max(1.0))), 1.0, colour);
-        }
-    };
-    bar(r.top() + 30.0 * s, 0.5, 8.0 * s, p.text_muted);
-    let header = r.top() + ENTITY_HEADER * s;
-    if header < r.bottom() {
-        paint.rect_filled(Rect::from_min_size(pos2(r.left(), header), vec2(r.width(), 1.0)), 0.0, edge);
-    }
-    let mut y = r.top() + ENTITY_FIRST_ROW * s;
-    for (i, rows) in c.rows.iter().enumerate() {
-        if i > 0 {
-            y += COMPARTMENT_GAP * ENTITY_ROW * s;
-        }
-        for _ in 0..*rows {
-            bar(y + 4.0 * s, 0.45, 5.0 * s, p.border);
-            y += ENTITY_ROW * s;
-        }
     }
 }
 
@@ -1599,7 +1360,7 @@ fn say(t: &archforge_diagram::figure::Text) -> String {
 
 /// A rectangle's outline in dashes of `dash` with gaps of `gap`, as the design draws a table of
 /// another schema.
-fn dashed_rect(paint: &egui::Painter, rect: Rect, stroke: Stroke, dash: f32, gap: f32) {
+pub(crate) fn dashed_rect(paint: &egui::Painter, rect: Rect, stroke: Stroke, dash: f32, gap: f32) {
     let r = rect.shrink(stroke.width / 2.0);
     let path = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
     paint.extend(egui::Shape::dashed_line(&path, stroke, dash.max(1.0), gap.max(1.0)));

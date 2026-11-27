@@ -949,19 +949,20 @@ fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
         .and_then(|n| uuid(store, n))
 }
 
-/// Of the card under a point and the package tab under it, the one drawn on top: the later in
+/// Of the card under a point and the part of a card under it, the one drawn on top: the later in
 /// the grid's drawing order, nested nodes included, as the canvas draws them (AR-113).
 fn on_top(shell: &Shell, store: &Store, grid: &Grid, card: Option<Obj>, at: Pos2) -> Option<Obj> {
-    match (card, tab_at(shell, store, at)) {
+    match (card, part_at(shell, store, at)) {
         (Some(c), Some(t)) if c != t => Some(if grid.drawn_at(t) > grid.drawn_at(c) { t } else { c }),
         (c, t) => c.or(t),
     }
 }
 
-/// The package whose tab the last frame drew under a screen point, the topmost first: the tab is
-/// part of its card (AR-113).
-fn tab_at(shell: &Shell, store: &Store, at: Pos2) -> Option<Obj> {
-    shell.canvas.package_tabs.iter().rev().find(|t| t.rect.contains(at)).and_then(|t| store.by_uuid(t.node)).filter(|n| store.is_alive(*n))
+/// The node of the part of a card its kind drew outside it in the last frame under a screen point,
+/// the topmost first: the part takes a press as its card does
+/// (`archforge_shell_api::kinds::DiagramKind::draw_card`).
+fn part_at(shell: &Shell, store: &Store, at: Pos2) -> Option<Obj> {
+    shell.canvas.card_parts.iter().rev().find(|t| t.rect.contains(at)).and_then(|t| store.by_uuid(t.node)).filter(|n| store.is_alive(*n))
 }
 
 /// Places a note at `(x, y)`, its centre under the click, and opens its text for typing.
@@ -1555,20 +1556,20 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
     pos2(x as f32, y as f32)
 }
 
-/// The name typed in the node's header: the design's tinted field over the name, the text
-/// selected when the entity is new; Enter commits, Escape closes, a refusal stays under it.
+/// The name typed in the node's header, or where its diagram's kind places it on a card the kind
+/// drew itself in the last frame: the design's tinted field over the name, the text selected when
+/// the entity is new; Enter commits, Escape closes, a refusal stays under it.
 fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
     let paint = ui.painter().clone();
-    // A package's name is typed in its tab, which grows with it (AR-113).
-    let in_tab = shell.canvas.rename.as_ref().is_some_and(|rn| shell.canvas.package_tabs.iter().any(|t| t.node == rn.node));
-    let field = if in_tab {
-        let text = shell.canvas.rename.as_ref().map(|rn| rn.text.clone()).unwrap_or_default();
-        let (tab, _, _) = crate::canvas::package_tab(&paint, rect, &text, z, p.text);
-        tab.shrink2(vec2(4.0, 3.0) * z)
-    } else {
-        Rect::from_min_size(rect.min + vec2(14.0, 28.0) * z, vec2((rect.width() - 28.0 * z).max(0.0), 30.0 * z))
-    };
-    let font = if in_tab { types::SMALL_STRONG.scaled(z) } else { types::SECTION.scaled(z) };
+    let placed = shell.canvas.rename.as_ref().filter(|rn| shell.canvas.kind_cards.contains(&rn.node)).and_then(|rn| {
+        let store = shell.session.as_ref()?.doc();
+        let n = store.by_uuid(rn.node)?;
+        let kind = crate::kinds::kind_of(shell, store, archforge_diagram::diagram_of(store, n)?)?;
+        kind.name_field(&paint, store, n, rect, &rn.text, z)
+    });
+    let (field, font) = placed.unwrap_or_else(|| {
+        (Rect::from_min_size(rect.min + vec2(14.0, 28.0) * z, vec2((rect.width() - 28.0 * z).max(0.0), 30.0 * z)), types::SECTION.scaled(z))
+    });
     paint.rect_filled(field, 2.0 * z, p.accent_tint);
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.rename", "field", field);
     let Some(entity) = shell.canvas.rename.as_ref().map(|rn| rn.entity) else { return };

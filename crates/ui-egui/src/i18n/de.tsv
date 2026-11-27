@@ -1046,7 +1046,6 @@ str		Association class	Assoziationsklasse
 str		Classifier kinds	Klassifikatorarten
 str		Package	Paket
 # Klassenmerkmale in den Eigenschaften
-str		Owner: {path}	Besitzer: {path}
 str		Stereotype	Stereotyp
 str		{first} and {second}	{first} und {second}
 str		{first}, {second} and {third}	{first}, {second} und {third}
