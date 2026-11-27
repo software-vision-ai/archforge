@@ -3,6 +3,7 @@
 str		Table	テーブル
 str		Column	列
 str		Columns	列
+str		Schema	スキーマ
 str		Schema · model	スキーマ · モデル
 str		Table · model, in every diagram	テーブル · モデル、すべての図に
 str		Column · model	列 · モデル
@@ -23,10 +24,14 @@ str		Columns · {n}	列 · {n}
 str		Keys · {n}	キー · {n}
 str		Add a column	列を追加
 str		Add unique constraint	一意制約を追加
+str		Nulls distinct	NULL を区別
 str		Columns, in key order	キーの順の列
 str		Types · {n}	型 · {n}
 plural		{n} check	{n} 件のチェック制約
 str		Add type	型を追加
+str		Domain	ドメイン
+str		Enum type	列挙型
+str		Base type	基底型
 str		Checks	チェック制約
 str		Add a check	チェック制約を追加
 str		Literals, in order	リテラル（順序どおり）
@@ -34,6 +39,12 @@ str		Subtypes · {n}	サブタイプ · {n}
 str		Add subtype	サブタイプを追加
 str		Discriminator	識別子
 str		Mapping	マッピング
+str		Table per type	型ごとのテーブル
+str		Single table	単一テーブル
+str		Table per concrete type	具象型ごとのテーブル
+str		complete	完全
+str		disjoint	排他
+str		overlapping	重複あり
 str		key on {columns}	{columns} のキー
 str		Add a literal	リテラルを追加
 plural		{n} column takes {name}: {columns}. Retype it first.	{n} 個の列が {name} を使っています: {columns}。先に型を変更してください。
@@ -63,6 +74,14 @@ str		The start {start} is below the minimum {minimum}.	開始値 {start} が最�
 str		The start {start} is above the maximum {maximum}.	開始値 {start} が最大値 {maximum} を上回っています。
 str	sequence	Start	開始値
 str		Owned by	所有者
+str		Sequence	シーケンス
+str		Increment	増分
+str		Minimum	最小値
+str		Maximum	最大値
+str		Cycle	循環する
+str		View	ビュー
+str		Materialized	マテリアライズド
+str		Query	クエリ
 plural		{n} more column, not listed	ほか {n} 列（一覧にありません）
 str		{field} takes a whole number	{field} には整数を入力してください
 str		Views · {n}	ビュー · {n}
@@ -81,6 +100,10 @@ str		Indexes · {n}	インデックス · {n}
 str		Add check constraint	チェック制約を追加
 str		Add index	インデックスを追加
 str		Columns, in index order	インデックス順の列
+str		Where	Where
+str		Method	メソッド
+str		Ascending	昇順
+str		Descending	降順
 str		An expression	式
 str		Nulls default	NULL の順序: 既定
 str		Nulls first	NULL を先頭に
@@ -96,6 +119,14 @@ plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
 plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
 str		Add column	列を追加
 str		Edit column	列を編集
+str		Regular	通常
+str		Primary key	主キー
+str		Not null	NOT NULL
+str		Length	長さ
+str		Precision	精度
+str		Scale	小数桁
+str		Generation	生成
+str		Collation	照合順序
 str		Mapping table	対応テーブル
 str		Follows {target}	{target} に追従
 str		Unlink	リンクを解除
@@ -128,6 +159,34 @@ str		Identity, always	識別列、常に
 str		Identity, by default	識別列、既定で
 str		Computed, stored	計算列、保存
 str		Computed, virtual	計算列、仮想
+str		Associative	連関
+str		Check constraint	チェック制約
+str		Computed stored	計算列、保存
+str		Computed virtual	計算列、仮想
+str		Domain check	ドメインチェック制約
+str		Exactly one	ちょうど 1
+str		First	先頭
+str		From end	開始側
+str		From role	開始側ロール
+str		Identity always	識別列、常に
+str		Identity by default	識別列、既定で
+str		Index column	インデックス列
+str		Initially deferred	初期状態で遅延
+str		Initially immediate	初期状態で即時
+str		Last	末尾
+str		Not deferrable	遅延不可
+str		Nullable	NULL 許容
+str		Nulls	NULL
+str		One or more	1 以上
+str		Subtype mapping	サブタイプマッピング
+str		Subtypes complete	サブタイプ完全
+str		Subtypes disjoint	サブタイプ排他
+str		Table index	テーブルインデックス
+str		To end	終了側
+str		To role	終了側ロール
+str		Unique constraint	一意制約
+str		Zero or more	0 以上
+str		Zero or one	0 または 1
 str		New ER diagram	新しいER図
 str		Tables, their columns and keys, and the relationships between them.	テーブルとその列やキー、そしてテーブル間のリレーションシップ。
 str		ER diagram	ER図
@@ -211,6 +270,8 @@ str	refusal	a subtype	サブタイプ
 str	refusal	a key column	キー列
 str		Entity · {schema}	エンティティ · {schema}
 str		Add table	テーブルを追加
+str		Entity	エンティティ
+str		Relationship types	リレーションシップの種類
 str		Place table	テーブルを配置
 str		Show related tables	関連テーブルを表示
 str		The diagram is of no schema	この図はどのスキーマにも属していません
@@ -219,6 +280,8 @@ str		Add relationship	リレーションシップを追加
 str		Cardinality	カーディナリティ
 str		Presets	プリセット
 str		End	終点
+str		Start	始点
+str		Identifying	識別
 str		Identifying needs the parent's primary key; drawn as not identifying	識別には親テーブルの主キーが必要です。非識別として描きました
 str		Many to many · add a mapping table	多対多 · マッピングテーブルを追加
 str		Many to many · {from} and {to}	多対多 · {from} と {to}
@@ -241,6 +304,19 @@ str		This relationship	このリレーションシップ
 str		On this relationship · {n}	このリレーションシップに · {n}
 str		Add foreign key	外部キーを追加
 str		Remove foreign key	外部キーを削除
+str		Foreign key	外部キー
+str		On delete	削除時
+str		On update	更新時
+str		No action	何もしない
+str		Restrict	制限
+str		Cascade	カスケード
+str		Set null	NULL に設定
+str		Set default	既定値に設定
+str		Deferrable	遅延可能
+str		Match	一致
+str		Simple	単純
+str		Full	完全
+str		Partial	部分
 str		Add id column	id 列を追加
 str		Choose key columns	キー列を選択
 str		Ends	端

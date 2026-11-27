@@ -85,17 +85,18 @@ fn differences(uis: &[&'static dyn NotationUi], universe: &Universe, (was, is): 
     if was.class != is.class {
         said.push(from_to(&tr("The kind changed from {from} to {to}."), &kind_label(uis, universe, was.class), &kind_label(uis, universe, is.class)));
     }
-    said.extend(fields.iter().filter(|f| f.changed).map(|f| field_said(universe, f)));
+    said.extend(fields.iter().filter(|f| f.changed).map(|f| field_said(uis, universe, f)));
     said
 }
 
-/// The sentence for one field that differs; a property only one side's class has is said to be there alone.
-fn field_said(universe: &Universe, field: &CardField) -> String {
-    let property = property_label(universe, field.prop).unwrap_or_else(|| tr("Unknown"));
+/// The sentence for one field that differs, its property and values worded as the notations of
+/// `uis` say them; a property only one side's class has is said to be there alone.
+fn field_said(uis: &[&'static dyn NotationUi], universe: &Universe, field: &CardField) -> String {
+    let property = property_label(uis, universe, field.prop).unwrap_or_else(|| tr("Unknown"));
     let named = |template: String| fmt(&template, &[("property", &property)]);
     match (&field.before, &field.after) {
         (Some(was), Some(is)) => {
-            let value = |v| short(&worded(universe, field.prop, v));
+            let value = |v| short(&worded(uis, universe, field.prop, v));
             from_to(&named(tr("{property} changed from {from} to {to}.")), &value(was), &value(is))
         }
         (Some(_), None) => named(tr("{property} is only on the Before side.")),

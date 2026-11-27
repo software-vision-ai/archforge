@@ -531,8 +531,10 @@ pub trait NotationUi: Sync {
     // diagrams and both notations.
 
     /// Its own catalogues, one per language in the order of `LANGUAGES`: the rows only its own
-    /// screens name. The shell registers them with its own before its first lookup
-    /// (the shell's `i18n::tables`), as the shared screens look some of them up too.
+    /// screens name, the words for what only its metamodel names (its properties, literals and
+    /// kinds, which the shell's `model_words` says for the notations it was given) and the hover
+    /// texts of its diagram kinds' tools. The shell registers them with its own before its first
+    /// lookup (the shell's `i18n::tables`), as the shared screens look some of them up too.
     fn catalogues(&self) -> &'static [crate::i18n::Rows];
     /// The classes of its metamodel it creates, the only ones of it that get a kind word of their
     /// own (the shell's `model_words::kind_label`); the rest of its classes say Element.
