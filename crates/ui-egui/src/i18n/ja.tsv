@@ -205,18 +205,6 @@ str		Remove	削除
 str		Edit	編集
 str		Apply	適用
 str		Inherited · {n}	継承 · {n}
-str		every table	すべてのテーブル
-str		every relationship	すべてのリレーションシップ
-str		every column	すべての列
-str		every class	すべてのクラス
-str		every interface	すべてのインターフェース
-str		every enumeration	すべての列挙
-str		every data type	すべてのデータ型
-str		every primitive type	すべてのプリミティブ型
-str		every association class	すべての関連クラス
-str		every attribute	すべての属性
-str		every operation	すべての操作
-str		every association	すべての関連
 str		project	プロジェクト
 str		overridden below	下で上書き
 str		Open the skill	スキルを開く

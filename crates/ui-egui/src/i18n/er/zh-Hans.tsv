@@ -15,6 +15,9 @@ str		Subtype · {sub} is a {super}	子类型 · {sub} 是一种 {super}
 str		Subtype	子类型
 str		This subtype	此子类型
 str		On this subtype · {n}	此子类型上 · {n}
+str		every table	所有表
+str		every relationship	所有关系
+str		every column	所有列
 str		Columns · {n}	列 · {n}
 str		Keys · {n}	键 · {n}
 str		Add a column	添加一列

@@ -413,6 +413,14 @@ pub trait NotationUi: Sync {
         let _ = (store, obj);
         None
     }
+    /// What the Skills panel says a skill aims at when it aims at `kind`, one of its own skill
+    /// kinds, in the user's words ("every table"), `pattern` being the skill's type pattern, empty
+    /// when it has none; none for a kind it has no words for, or where the pattern says it better
+    /// (a column's type), which leaves the shell's: the pattern, or nothing.
+    fn skill_target(&self, kind: ClassId, pattern: &str) -> Option<String> {
+        let _ = (kind, pattern);
+        None
+    }
     /// Whether `obj` holds elements that go with it.
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
         let _ = (store, obj);

@@ -65,6 +65,15 @@ str		Literals carry no skills	Literale tragen keine Skills
 str		Built-in types carry no skills	Eingebaute Typen tragen keine Skills
 str		Types keeps the built-in types, so it stays while it holds them	Types enthält die eingebauten Typen und bleibt daher, solange es sie enthält
 str		Generalization sets carry no skills	Generalisierungsmengen tragen keine Skills
+str		every class	jede Klasse
+str		every interface	jede Schnittstelle
+str		every enumeration	jede Aufzählung
+str		every data type	jeder Datentyp
+str		every primitive type	jeder primitive Typ
+str		every association class	jede Assoziationsklasse
+str		every attribute	jedes Attribut
+str		every operation	jede Operation
+str		every association	jede Assoziation
 str		Add class	Klasse hinzufügen
 str		Add interface	Schnittstelle hinzufügen
 str		Add enumeration	Aufzählung hinzufügen

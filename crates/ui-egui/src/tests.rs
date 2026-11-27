@@ -18169,6 +18169,11 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn a_kind(&self, kind: &str) -> Option<String> {
         (kind == "sketch").then(|| format!("a {}", self.0))
     }
+    /// A skill for every class, signed with its name, so a test sees it asked; none for the other
+    /// kinds of its metamodel, which leaves the shell's words.
+    fn skill_target(&self, kind: archforge_mof::ClassId, _: &str) -> Option<String> {
+        (kind == archforge_uml::CLASS).then(|| format!("every class of the {}", self.0))
+    }
     /// Chat counts its class as a kind of its own, its attribute as a line and its operation as a
     /// part of its class, unlike UML, so a test sees each asked; a description's comment it leaves
     /// to be counted as an element.
@@ -18349,6 +18354,72 @@ fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
     assert_eq!(shell.panels.notice, None);
     assert!(shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, "uml.relationship.rename", "  ")), "UML is not the shell's here");
     assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
+}
+
+/// What a skill aims at is said by the notation the shell registered for its kind, not the app's
+/// own list: over the app's notations each of ER's and UML's kinds in its notation's words, a
+/// column's type pattern in place of its word and a skill that names no kind with nothing; with
+/// the sketch answering for UML's metamodel, its own words for a skill for every class and, for
+/// every interface, which it has no words for, the shell's: nothing, as the skill has no type
+/// pattern. ER, which both lists hold, still says its own. The Skills panel's row says the same.
+/// In light and dark.
+#[test]
+fn a_skills_target_is_said_by_the_notation_the_shell_registered() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        skill_targets_ask_the_notation(theme);
+    }
+}
+
+/// [`a_skills_target_is_said_by_the_notation_the_shell_registered`] in one appearance: skills of
+/// the whole model, one for each kind, and one on the sample class diagram's package.
+fn skill_targets_ask_the_notation(theme: ThemeKind) {
+    let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let add = |h: &mut Harness<'static, Shell>, subject: &str, name: &str, applies: &str, pattern: &str| {
+        let params = serde_json::json!({ "subject": subject, "name": name, "applies_to": applies, "type_pattern": pattern });
+        let out = h.state_mut().session.as_mut().unwrap().execute("skill.add", &params).unwrap();
+        archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+    };
+    let cases = [
+        ("table", "", "every table"),
+        ("relationship", "", "every relationship"),
+        ("column", "", "every column"),
+        ("column", "VARCHAR", "VARCHAR"),
+        ("class", "", "every class"),
+        ("interface", "", "every interface"),
+        ("enumeration", "", "every enumeration"),
+        ("data type", "", "every data type"),
+        ("primitive type", "", "every primitive type"),
+        ("association class", "", "every association class"),
+        ("attribute", "", "every attribute"),
+        ("operation", "", "every operation"),
+        ("association", "", "every association"),
+        ("", "", ""),
+    ];
+    let skills: Vec<_> =
+        cases.iter().enumerate().map(|(i, (applies, pattern, _))| add(&mut h, "", &format!("Skill {i}"), applies, pattern)).collect();
+    let said = |h: &Harness<'static, Shell>, uis: &[&'static dyn crate::notation_ui::NotationUi]| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        skills.iter().map(|s| crate::panels::target_word(uis, st, st.by_uuid(*s).unwrap())).collect::<Vec<_>>()
+    };
+    assert_eq!(said(&h, h.state().notation_uis), cases.map(|(_, _, w)| w), "{theme:?}: the app's notations");
+    let sketched = said(&h, SKETCH_UIS);
+    let want = ["every table", "every relationship", "every column", "VARCHAR", "every class of the sketch", "", "", "", "", "", "", "", "", ""];
+    assert_eq!(sketched, want, "{theme:?}: the sketch for UML's metamodel");
+    // The panel's row, on the package of the sample's classes.
+    let pkg = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let order = st.by_uuid(named(&h, archforge_uml::CLASS, "Order")).unwrap();
+        st.uuid(st.container(order).unwrap().unwrap().0).unwrap()
+    };
+    add(&mut h, &pkg.to_string(), "Classes", "class", "");
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [pkg.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Skills);
+    h.run();
+    assert!(painted(&h).iter().any(|t| t == "every class"), "{theme:?}: {:?}", painted(&h));
+    h.state_mut().notation_uis = SKETCH_UIS;
+    h.run();
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "every class of the sketch") && !texts.iter().any(|t| t == "every class"), "{theme:?}: {texts:?}");
 }
 
 /// Chat counts what a tool row names as the notations the shell registered say, not the app's own
@@ -26858,7 +26929,7 @@ fn a_data_type_in_properties_takes_attributes_and_operations_and_is_offered_as_a
             archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
         };
         let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(crate::panels::target_word(st, st.by_uuid(skill).unwrap()), "every data type");
+        assert_eq!(crate::panels::target_word(h.state().notation_uis, st, st.by_uuid(skill).unwrap()), "every data type");
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [money.to_string()] })).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Skills);
         h.run();
@@ -27234,7 +27305,7 @@ fn primitive_types_are_listed_added_with_the_plus_found_and_dragged_while_the_bu
             archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
         };
         let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(crate::panels::target_word(st, st.by_uuid(skill).unwrap()), "every primitive type");
+        assert_eq!(crate::panels::target_word(h.state().notation_uis, st, st.by_uuid(skill).unwrap()), "every primitive type");
         // A built-in type, selected, carries none: the panel says so in place of +.
         let integer = {
             let st = h.state().session.as_ref().unwrap().doc();

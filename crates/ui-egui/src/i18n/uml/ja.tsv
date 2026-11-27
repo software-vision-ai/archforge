@@ -65,6 +65,15 @@ str		Literals carry no skills	リテラルはスキルを持ちません
 str		Built-in types carry no skills	組み込み型はスキルを持ちません
 str		Types keeps the built-in types, so it stays while it holds them	Types は組み込み型を保持しているため、保持している間は残ります
 str		Generalization sets carry no skills	汎化セットはスキルを持ちません
+str		every class	すべてのクラス
+str		every interface	すべてのインターフェース
+str		every enumeration	すべての列挙
+str		every data type	すべてのデータ型
+str		every primitive type	すべてのプリミティブ型
+str		every association class	すべての関連クラス
+str		every attribute	すべての属性
+str		every operation	すべての操作
+str		every association	すべての関連
 str		Add class	クラスを追加
 str		Add interface	インターフェースを追加
 str		Add enumeration	列挙を追加
