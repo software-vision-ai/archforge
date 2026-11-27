@@ -20,9 +20,9 @@ use serde_json::json;
 
 pub use archforge_shell_api::canvas::{CardLabel, CardPart, EndText, MinimapDrag, State, Toast, Tool, self_loop};
 pub(crate) use archforge_shell_api::canvas::{Drawing, END_HANDLE, View, along, end_handles_at, exit_point, nesting_route};
-use archforge_shell_api::canvas::{beside, beside_pair, mark_outline, mark_shape, qualifier_place, signature_place};
+use archforge_shell_api::canvas::{beside, beside_pair, mark_outline, mark_shape};
 pub use archforge_shell_api::kinds::ExtraLabel;
-pub(crate) use archforge_shell_api::kinds::{CardDrawn, LineDrawn};
+pub(crate) use archforge_shell_api::kinds::{CardDrawn, LineDrawn, LineEnds};
 
 use crate::cx::{Ctx, Request};
 use crate::home::control;
@@ -607,7 +607,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         let scene = Scene { p, store, notations: session.view(), kind, kinds: shell.kinds, diagram: d, view: &view, grid, area: r };
         let drawn = draw_scene(ui, &clip, &scene, live, &mut shell.registry);
         shell.canvas.ends = drawn.ends;
-        shell.canvas.qualified_ends = drawn.qualified_ends;
+        shell.canvas.moved_ends = drawn.moved_ends;
         shell.canvas.extra_labels = drawn.extra_labels;
         shell.canvas.card_parts = drawn.card_parts;
         shell.canvas.card_labels = drawn.card_labels;
@@ -776,7 +776,7 @@ pub(crate) struct Live<'a> {
 /// problem badges to draw over everything (their place, ids, element and whether there are many).
 pub(crate) struct Drawn {
     pub(crate) ends: Vec<EndText>,
-    pub(crate) qualified_ends: Vec<(Pos2, Pos2)>,
+    pub(crate) moved_ends: Vec<(Pos2, Pos2)>,
     pub(crate) extra_labels: Vec<ExtraLabel>,
     pub(crate) card_parts: Vec<CardPart>,
     pub(crate) card_labels: Vec<CardLabel>,
@@ -824,7 +824,7 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
         end_drag: live.end_drag,
         segment_drag: live.segment_drag,
         ends: std::cell::RefCell::new(Vec::new()),
-        qualified_ends: std::cell::RefCell::new(Vec::new()),
+        moved_ends: std::cell::RefCell::new(Vec::new()),
         draft: live.draft,
         rename_text: live.rename_text,
         parts: std::cell::RefCell::new(Vec::new()),
@@ -845,7 +845,7 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
     }
     Drawn {
         ends: draw.ends.take(),
-        qualified_ends: draw.qualified_ends.take(),
+        moved_ends: draw.moved_ends.take(),
         extra_labels,
         card_parts: draw.parts.take(),
         card_labels: draw.labels.take(),
@@ -934,36 +934,23 @@ fn draw_node(
     // Clipped to the card as drawn, so a draft's growing keeps the rows it moved down in sight.
     let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
     let annotation = card.as_ref().is_some_and(|c| matches!(c.tone, Tone::Constraint | Tone::Braces));
-    // A template's signature rows, drawn over the card and its selection (AR-130).
-    let signature = card.as_ref().filter(|c| !annotation && !c.template.is_empty() && z >= DETAIL_ZOOM).map(|c| c.template.clone());
-    let diamond = card.as_ref().is_some_and(|c| c.tone == Tone::Diamond);
+    // The card as the kinds are handed it, to draw it themselves or what goes over it.
+    let handed = match (element, card.as_ref()) {
+        (Some(element), Some(card)) => Some(CardDrawn { node: n, element, card, rect, selected }),
+        _ => None,
+    };
     // A card a kind draws itself takes the place of the canvas's own figure for it: the diagram's
     // own kind is asked first, then every other the shell knows, so the kind that draws the
     // element draws it whatever diagram shows it.
-    let drawn_by = match (element, card.as_ref()) {
-        (Some(element), Some(card)) => {
-            let card = CardDrawn { node: n, element, card, rect, selected };
-            let others = d.kinds.iter().copied().filter(|k| d.kind.is_none_or(|own| own.kind() != k.kind()));
-            d.kind.into_iter().chain(others).find(|k| k.draw_card(paint, d, &card, registry, ui))
-        }
-        _ => None,
-    };
+    let drawn_by = handed.as_ref().and_then(|c| d.kinds_asked().find(|k| k.draw_card(paint, d, c, registry, ui)));
     if let (Some(kind), Some(id)) = (drawn_by, id) {
         d.kind_cards.borrow_mut().push((id, kind.kind()));
     }
     let by_kind = drawn_by.is_some();
     match element {
         _ if by_kind => {}
-        Some(_) if annotation && let Some(card) = card => draw_constraint(paint, &inner, d, n, &card, rect),
-        // An n-ary association's diamond, its name above it (AR-128).
-        Some(_) if diamond && let Some(card) = card => {
-            let keyword = match &card.eyebrow {
-                archforge_diagram::figure::Text::Plain(k) => Some(k.as_str()),
-                archforge_diagram::figure::Text::Said(..) => None,
-            };
-            draw_diamond(paint, p, rect, &card.name, keyword, z, selected, &look_of(store, n, node::STYLE));
-        }
-        Some(_) if let Some(card) = card => {
+        Some(_) if annotation && let Some(card) = card.as_ref() => draw_constraint(paint, &inner, d, n, card, rect),
+        Some(_) if let Some(card) = card.as_ref() => {
             // A tinted card takes the palette's tint; any other, the surface, the border and the
             // muted eyebrow.
             let (p, border) = card_palette(p, store, n, card.elsewhere, card.tone != Tone::Tinted, z);
@@ -994,7 +981,7 @@ fn draw_node(
                 if line_y < rect.bottom() {
                     inner.rect_filled(Rect::from_min_size(pos2(rect.left(), line_y), vec2(rect.width(), 1.0)), 0.0, p.entity_line);
                 }
-                draw_rows(&inner, p, &card, rect, z, key_status, room);
+                draw_rows(&inner, p, card, rect, z, key_status, room);
             } else {
                 name_from_afar(&inner, &card.name, rect, z, p.text);
             }
@@ -1031,12 +1018,11 @@ fn draw_node(
     if selected {
         selection_ring(paint, p, rect, d.looking_only);
     }
-    // A template's signature over the card's top-right corner (AR-130).
-    if let Some(rows) = signature
-        && let Some(sig) = signature_box(paint, p, &rows, rect, z)
-        && let Some(id) = id
-    {
-        widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.signature"), "label", sig);
+    // What the kinds draw over the card and its ring, each kind asked in turn.
+    if let Some(c) = handed.as_ref() {
+        for k in d.kinds_asked() {
+            k.card_extras(paint, d, c, registry, ui);
+        }
     }
     let e = element.filter(|e| d.problems.contains_key(e))?;
     Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
@@ -1075,33 +1061,6 @@ pub(crate) fn name_from_afar(inner: &egui::Painter, name: &str, rect: Rect, z: f
     let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
     let g = ux::galley(inner, name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), ink, room);
     inner.galley(rect.center() - g.size() / 2.0, g, ink.into());
-}
-
-/// A hollow diamond filling `rect`, over `fill`.
-pub(crate) fn diamond_shape(paint: &egui::Painter, rect: Rect, fill: ux::Colour, stroke: Stroke) {
-    let points = vec![rect.left_center(), rect.center_top(), rect.right_center(), rect.center_bottom()];
-    paint.add(egui::Shape::convex_polygon(points, fill, stroke));
-}
-
-/// Draws an n-ary association's diamond node at `rect` (AR-128): a hollow diamond in the line's
-/// ink, the accent while it is selected, its name above it.
-#[allow(clippy::too_many_arguments, reason = "a diamond is drawn with its name, its stereotypes and its look")]
-pub(crate) fn draw_diamond(paint: &egui::Painter, p: &Palette, rect: Rect, name: &str, keyword: Option<&str>, z: f32, selected: bool, look: &Look) {
-    let ink = if selected { p.accent } else { look.stroke.unwrap_or(p.text_secondary) };
-    let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
-    diamond_shape(paint, rect, look.fill.unwrap_or(p.canvas), Stroke::new(width, ink));
-    let text_ink = look.text.unwrap_or(p.text_secondary);
-    let mut top = rect.top() - 8.0 * z;
-    if !name.is_empty() {
-        let g = ux::galley(paint, name, types::SMALL.scaled(z), text_ink, None);
-        top -= g.size().y;
-        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top), g, text_ink.into());
-    }
-    // Its stereotypes above its name, `«Reference»`, as a line's are (AR-135).
-    if let Some(k) = keyword {
-        let g = ux::galley(paint, k, types::CAPTION.scaled(z), text_ink, None);
-        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top - g.size().y - 1.0 * z), g, text_ink.into());
-    }
 }
 
 /// A constraint as its diagram shows it (AR-133): braces, `{expression}` in purple beside its
@@ -1430,15 +1389,13 @@ fn draw_edge(
     let line = notation.and_then(|nt| nt.line(store, element)).unwrap_or_default();
     let mut points = edge_points(d, e)?;
     let n = points.len();
-    // A selected element marks the line its notation draws selected with it (a qualifier its
-    // association's, as a selected member marks its card), and a line draws selected with what a
-    // click on it selects (an n-ary association's leg with its association, AR-128).
+    // A selected element marks the line its notation draws selected with it, as a selected member
+    // marks its card, and a line draws selected with what a click on it selects.
     let selected = selection.contains(&e)
         || selection.contains(&element)
         || selection.iter().any(|o| d.notations.line_selected_with(store, *o) == Some(element))
         || selection.contains(&d.notations.selects_as(store, element));
-    // A line starts where the diagram's kind says, when not at its source node's border (a leg of
-    // a UML n-ary association at its diamond's outline).
+    // A line starts where the diagram's kind says, when not at its source node's border.
     if let Some(kind) = d.kind
         && let Some(source) = element_of(store, e, edge::SOURCE)
         && let (Some(tip), Some(next)) = (points.first().copied(), points.get(1).copied())
@@ -1446,8 +1403,6 @@ fn draw_edge(
     {
         points[0] = on;
     }
-    // A qualified end's box sits against its node, the line starting from its outer side (AR-127).
-    let boxes = qualifier_boxes(paint, d, e, &line, &mut points);
     let hovered = d.hovered == Some(e);
     let stroke = if line.styled {
         // The line's colour says its status while the marks are on: green when complete, orange
@@ -1466,6 +1421,13 @@ fn draw_edge(
     } else {
         Stroke::new((1.3 * z).clamp(1.0, 3.0), if selected || hovered { p.accent } else { p.text_secondary })
     };
+    // The kinds move the line's ends off its nodes where they draw something there, each asked in
+    // turn, and give what goes over the line there, painted right after it.
+    let ends = LineEnds { line: e, element, figure: &line, stroke };
+    let mut over = Vec::new();
+    for k in d.kinds_asked() {
+        over.extend(k.line_ends(paint, d, &ends, &mut points, registry, ui));
+    }
     // The line under the pointer: a soft halo under it.
     if hovered {
         halo(paint, &points, stroke, p);
@@ -1479,16 +1441,13 @@ fn draw_edge(
         drawn[n - 1] = shape(line.ends[1].mark, points[n - 1], points[n - 2]).1;
     }
     self::line(paint, &drawn, stroke, !line.dashed, z);
-    for (i, rect, rows) in boxes {
-        draw_qualifier_box(paint, p, rect, rows, Stroke::new((1.0 * z).clamp(1.0, 2.0), stroke.color), z);
-        if let Ok(id) = store.uuid(e) {
-            widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.qualifiers.{i}"), "label", rect);
-        }
+    for shape in over {
+        paint.add(shape);
     }
-    // What the diagram's kind draws with the line beyond its figure (a UML association class's
-    // tie to its card, or its name while the card is not here).
-    let named = d.kind.and_then(|k| k.line_extras(paint, d, &LineDrawn { line: e, element, points: &points, selected }, registry, ui));
-    // Where the line's name label sits, when it shows one: its stereotypes go above it.
+    let shown = LineDrawn { line: e, element, points: &points, selected, figure: &line };
+    // What the diagram's kind draws with the line beyond its figure.
+    let named = d.kind.and_then(|k| k.line_extras(paint, d, &shown, registry, ui));
+    // Where the line's name sits, when it shows one, for what the kinds draw by it.
     let mut name_at: Option<Rect> = named;
     for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
         let (dir, base, _, _) = shape(end.mark, tip, back);
@@ -1609,11 +1568,9 @@ fn draw_edge(
             }
         }
     }
-    if let Some(keyword) = line.keyword.as_deref() {
-        let at = keyword_text(paint, d, keyword, &points, name_at);
-        if let Ok(id) = store.uuid(e) {
-            widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.stereotypes"), "label", at);
-        }
+    // What the kinds draw over the line's labels, by its name, each asked in turn.
+    for k in d.kinds_asked() {
+        k.line_caption(paint, d, &shown, name_at, registry, ui);
     }
     badge
 }
@@ -1624,91 +1581,6 @@ pub fn line(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, identifying:
         paint.add(egui::Shape::line(points.to_vec(), stroke));
     } else {
         paint.add(egui::Shape::dashed_line(points, stroke, 6.0 * z.max(0.5), 4.0 * z.max(0.5)));
-    }
-}
-
-/// A line's stereotypes, `«Reference»` (AR-135, F3), in the caption style: just above its name
-/// label `name` where it shows one, else at its middle where a name would sit. Gives where it is.
-fn keyword_text(paint: &egui::Painter, d: &Drawing<'_>, keyword: &str, points: &[Pos2], name: Option<Rect>) -> Rect {
-    let (p, z) = (d.p, d.view.zoom);
-    let g = ux::galley(paint, keyword, types::CAPTION.scaled(z), p.text_secondary, None);
-    let at = match name {
-        Some(r) => pos2(r.center().x - g.size().x / 2.0, r.top() - g.size().y - 1.0 * z),
-        None => {
-            let upright = {
-                let v = along(points, 0.51) - along(points, 0.49);
-                v.y.abs() > v.x.abs()
-            };
-            let offset = if upright { vec2(8.0 * z, -g.size().y / 2.0) } else { vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z) };
-            along(points, 0.5) + offset
-        }
-    };
-    let rect = Rect::from_min_size(at, g.size());
-    paint.galley(at, g, p.text_secondary.into());
-    rect
-}
-
-/// The qualifier boxes of `line`'s ends (AR-127), each with its end's index, its rectangle and its
-/// rows laid out: a box sits against the side of its node where the line leaves it, centred on the
-/// line, and the line's end in `points` moves to the box's outer side, so the end's mark, role and
-/// text sit there. A line from a node to itself draws none.
-fn qualifier_boxes(
-    paint: &egui::Painter,
-    d: &Drawing<'_>,
-    e: Obj,
-    line: &archforge_diagram::figure::Line,
-    points: &mut [Pos2],
-) -> Vec<(usize, Rect, Vec<std::sync::Arc<egui::Galley>>)> {
-    let (store, z, n) = (d.store, d.view.zoom, points.len());
-    let nodes = [element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)];
-    if n < 2 || nodes[0] == nodes[1] {
-        return Vec::new();
-    }
-    let mut out = Vec::new();
-    for (i, end) in line.ends.iter().enumerate() {
-        let (Some(node), false) = (nodes[i], end.qualifiers.is_empty()) else { continue };
-        let k = if i == 0 { 0 } else { n - 1 };
-        let rows: Vec<_> = end.qualifiers.iter().map(|t| ux::galley(paint, t, types::SMALL.scaled(z), d.p.text, None)).collect();
-        let width = rows.iter().map(|g| g.size().x).fold(0.0_f32, f32::max) + 16.0 * z;
-        let height = rows.iter().map(|g| g.size().y).sum::<f32>() + 8.0 * z;
-        let (rect, outer) = qualifier_place(d.node_rect(node), points[k], vec2(width, height));
-        d.qualified_ends.borrow_mut().push((points[k], outer));
-        points[k] = outer;
-        out.push((i, rect, rows));
-    }
-    out
-}
-
-/// A template's signature (AR-130): a dashed box on the surface over the card's top-right corner,
-/// one parameter a row in their order; gives its rectangle, none for a card that is no template.
-fn signature_box(paint: &egui::Painter, p: &Palette, rows: &[String], card: Rect, z: f32) -> Option<Rect> {
-    if rows.is_empty() {
-        return None;
-    }
-    let galleys: Vec<_> = rows.iter().map(|t| ux::galley(paint, t, types::CAPTION.scaled(z), p.text, None)).collect();
-    let width = galleys.iter().map(|g| g.size().x).fold(0.0_f32, f32::max) + 16.0 * z;
-    let height = galleys.iter().map(|g| g.size().y).sum::<f32>() + 8.0 * z;
-    let rect = signature_place(card, vec2(width, height), z);
-    paint.rect_filled(rect, 0.0, p.surface);
-    dashed_rect(paint, rect, Stroke::new(1.0, p.text_secondary), 4.0 * z, 3.0 * z);
-    let mut y = rect.top() + 4.0 * z;
-    for g in galleys {
-        let h = g.size().y;
-        paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text.into());
-        y += h;
-    }
-    Some(rect)
-}
-
-/// A qualifier box: the surface, framed in the line's ink, its rows in model order.
-fn draw_qualifier_box(paint: &egui::Painter, p: &Palette, rect: Rect, rows: Vec<std::sync::Arc<egui::Galley>>, stroke: Stroke, z: f32) {
-    paint.rect_filled(rect, 1.0, p.surface);
-    paint.rect_stroke(rect, 1.0, stroke, StrokeKind::Inside);
-    let mut y = rect.top() + 4.0 * z;
-    for g in rows {
-        let h = g.size().y;
-        paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text.into());
-        y += h;
     }
 }
 

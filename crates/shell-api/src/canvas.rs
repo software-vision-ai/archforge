@@ -1,7 +1,7 @@
 //! The canvas's geometry and state, which name no shell: the view's mapping between diagram units
 //! and the screen, where a line leaves a card, a self relationship's loop and the line that ties a
 //! nested card to its owner's, a point along a line, the outline of a line's end mark, where a
-//! qualifier, a template's signature, a selected line's end handles and its end texts sit; and what
+//! selected line's end handles and its end texts sit; and what
 //! the centre keeps between frames (`State`: the tabs, the view, the tool, the toggles, the editing
 //! under way and what the last frame drew that takes a press), and what one frame's drawing reads
 //! (`Drawing`), from which a diagram's kind draws its own figures. The shell draws the canvas with it
@@ -183,30 +183,6 @@ pub fn mark_outline(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> Vec<Pos2> {
         }
         _ => Vec::new(),
     }
-}
-
-/// Where a qualifier box of `size` sits against `node` for a line leaving it at `tip`: on the side
-/// `tip` is nearest, centred on it, and the point on its outer side the line starts from.
-pub fn qualifier_place(node: Rect, tip: Pos2, size: Vec2) -> (Rect, Pos2) {
-    let gaps = [(tip.x - node.left()).abs(), (tip.x - node.right()).abs(), (tip.y - node.top()).abs(), (tip.y - node.bottom()).abs()];
-    let side = (0..4).min_by(|a, b| gaps[*a].total_cmp(&gaps[*b])).unwrap_or(1);
-    let (w, h) = (size.x, size.y);
-    match side {
-        0 => (Rect::from_min_size(pos2(node.left() - w, tip.y - h / 2.0), size), pos2(node.left() - w, tip.y)),
-        1 => (Rect::from_min_size(pos2(node.right(), tip.y - h / 2.0), size), pos2(node.right() + w, tip.y)),
-        2 => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.top() - h), size), pos2(tip.x, node.top() - h)),
-        _ => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.bottom()), size), pos2(tip.x, node.bottom() + h)),
-    }
-}
-
-/// How far a template's signature box reaches past its card's right side and above its top, in
-/// diagram units, as the design draws it (page 08, C1).
-const SIGNATURE_OUT: Vec2 = vec2(28.0, 24.0);
-
-/// Where a template signature box of `size` sits on `card`: over its top-right corner, reaching
-/// [`SIGNATURE_OUT`] past it, scaled by `z`.
-pub fn signature_place(card: Rect, size: Vec2, z: f32) -> Rect {
-    Rect::from_min_size(pos2(card.right() + SIGNATURE_OUT.x * z - size.x, card.top() - SIGNATURE_OUT.y * z), size)
 }
 
 /// The radius of a selected line's end handle, and the room between it and the end's mark.
@@ -527,10 +503,10 @@ pub struct State {
     /// The labels of the figures of no one node or line the last frame drew, which take a press
     /// (a UML generalization set's, AR-129).
     pub extra_labels: Vec<ExtraLabel>,
-    /// The line ends the last frame moved out to a qualifier box's outer side (AR-127): where the
-    /// route ended on its node, and where the line now starts, on screen; a selected line's end
-    /// handle follows.
-    pub qualified_ends: Vec<(Pos2, Pos2)>,
+    /// The line ends a kind moved off their nodes' borders in the last frame
+    /// ([`crate::kinds::DiagramKind::line_ends`]): where the route ended on its node, and where the
+    /// line now starts, on screen; a selected line's end handle follows.
+    pub moved_ends: Vec<(Pos2, Pos2)>,
     /// The view each diagram was last left with, by diagram, kept for some ways back to it, not
     /// for every one: a diagram's kind may restore it as it moves between diagrams (UML's package
     /// navigation), and a tab taking over before the view of the tab left was drawn shows it
@@ -624,7 +600,7 @@ impl Default for State {
             card_labels: Vec::new(),
             kind_cards: Vec::new(),
             extra_labels: Vec::new(),
-            qualified_ends: Vec::new(),
+            moved_ends: Vec::new(),
             views: HashMap::new(),
             shown: None,
             settled: 0,
@@ -673,9 +649,10 @@ pub struct Drawing<'a> {
     pub diagram: Obj,
     pub notations: &'a archforge_diagram::ProjectView,
     pub kind: Option<&'static dyn crate::kinds::DiagramKind>,
-    /// Every kind the shell knows: after the diagram's own, each is asked in turn to draw a card
-    /// itself ([`crate::kinds::DiagramKind::draw_card`]), so a card is drawn by the kind that
-    /// draws its element whatever diagram shows it.
+    /// Every kind the shell knows: after the diagram's own, each is asked in turn what it draws
+    /// ([`Drawing::kinds_asked`]: a card it draws itself, what goes over a card, a line's ends and
+    /// what goes over its labels), so a figure is drawn as the kind that draws its element says
+    /// whatever diagram shows it.
     pub kinds: &'a [&'static dyn crate::kinds::DiagramKind],
     /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
     /// and where each line's ends sit along their sides: worked out once a frame.
@@ -689,8 +666,10 @@ pub struct Drawing<'a> {
     pub segment_drag: Option<(Uuid, Vec<(f64, f64)>)>,
     /// The cardinality texts drawn this frame, for the next frame's press.
     pub ends: std::cell::RefCell<Vec<EndText>>,
-    /// The line ends moved out to a qualifier box this frame, for the next frame's end handles.
-    pub qualified_ends: std::cell::RefCell<Vec<(Pos2, Pos2)>>,
+    /// The line ends the kinds moved off their nodes' borders this frame
+    /// ([`crate::kinds::DiagramKind::line_ends`]), each where the route ended and where the line
+    /// starts now, for the next frame's end handles.
+    pub moved_ends: std::cell::RefCell<Vec<(Pos2, Pos2)>>,
     /// A row typed in place on a card: its element, compartment and row (none for a new one).
     pub draft: Option<(Obj, usize, Option<usize>)>,
     /// The name being typed in place on the node `renaming`, as typed when the frame began, which
@@ -715,6 +694,13 @@ impl Drawing<'_> {
     /// A node's rectangle on screen: the gesture's preview when it has one, else as stored.
     pub fn node_rect(&self, n: Obj) -> Rect {
         self.store.uuid(n).ok().and_then(|id| self.overrides.get(&id).copied()).unwrap_or_else(|| self.view.rect(&bounds_of(self.store, n)))
+    }
+
+    /// The kinds asked in turn what they draw of a card or a line: the diagram's own first, then
+    /// every other kind the shell knows, each once.
+    pub fn kinds_asked(&self) -> impl Iterator<Item = &'static dyn crate::kinds::DiagramKind> + '_ {
+        let own = self.kind;
+        own.into_iter().chain(self.kinds.iter().copied().filter(move |k| own.is_none_or(|o| o.kind() != k.kind())))
     }
 }
 
