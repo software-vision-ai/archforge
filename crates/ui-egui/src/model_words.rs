@@ -107,23 +107,26 @@ pub fn kind_label(uis: &[&'static dyn NotationUi], universe: &Universe, class: C
     }
 }
 
-/// Every key these labels look up, for the catalogue tests: each property a card shows and each
-/// literal of the core and of each notation's metamodel the tests register as the app does, and the kinds ([`kinds`]) but
-/// those with a notation's word, whose rows the scan reads from each notation's
-/// [`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word).
+/// Every key these labels look up, for the catalogue tests, each with the index of the metamodel
+/// that names it, so the tests can tell whose catalogue holds its row: each property a card shows
+/// and each literal of the core and of each notation's metamodel the tests register as the app
+/// does, and the kinds ([`kinds`]) but those with a notation's word, whose rows the scan reads from
+/// each notation's [`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word).
 #[cfg(test)]
-pub(crate) fn texts() -> Vec<String> {
+pub(crate) fn texts() -> Vec<(u16, String)> {
     let Ok(universe) = archforge_notations::universe() else { return Vec::new() };
     let uis = crate::tests::SCREENS.notation_uis();
     let mut all = Vec::new();
     for metamodel in universe.metamodels().filter(|m| in_the_model(uis, m.index)) {
-        all.extend(metamodel.props.iter().filter(|p| archforge_notations::differences::on_a_card(p)).map(|p| words(&p.name)));
+        let named = |name: &str| (metamodel.index, words(name));
+        all.extend(metamodel.props.iter().filter(|p| archforge_notations::differences::on_a_card(p)).map(|p| named(&p.name)));
         for ty in &metamodel.data_types {
             if let DataKind::Enumeration(literals) = &ty.kind {
-                all.extend(literals.iter().map(|l| words(l)));
+                all.extend(literals.iter().map(|l| named(l)));
             }
         }
     }
-    all.extend(kinds().into_iter().filter(|c| notation_word(uis, *c).is_none()).filter_map(|c| universe.class(c)).map(|c| words(&c.name)));
+    let worded = kinds().into_iter().filter(|c| notation_word(uis, *c).is_none());
+    all.extend(worded.filter_map(|c| universe.class(c).map(|known| (c.metamodel(), words(&known.name)))));
     all
 }
