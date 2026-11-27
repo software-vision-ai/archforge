@@ -88,6 +88,14 @@ str		«metaclass»	«metaclass»
 str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Classifier	Klassifikator
+str		Class	Klasse
+str		Interface	Schnittstelle
+str		Enumeration	Aufzählung
+str		Data type	Datentyp
+str		Primitive type	Primitiver Typ
+str		Association class	Assoziationsklasse
+str		Classifier kinds	Klassifikatorarten
+str		Package	Paket
 str		UML structure diagram	UML-Strukturdiagramm
 str		UML structure diagrams	UML-Strukturdiagramme
 str		Class · model, in every diagram	Klasse · Modell, in jedem Diagramm
@@ -137,6 +145,11 @@ str		There is a literal named {name} already.	Es gibt bereits ein Literal namens
 str		An enumeration holds at most {n} literals.	Eine Aufzählung enthält höchstens {n} Literale.
 str		Several types are named {name}; pick one from the menu.	Mehrere Typen heißen {name}; wählen Sie einen aus dem Menü.
 str		Add parameter	Parameter hinzufügen
+str		Parameter	Parameter
+str		Operation	Operation
+str		Private	Privat
+str		Protected	Geschützt
+str		Public	Öffentlich
 str		Attribute	Attribut
 str		Attributes	Attribute
 str		Operations	Operationen
@@ -189,6 +202,7 @@ plural		Values on {n} element don't fit {name} [{bounds}].	Die Werte an {n} Elem
 str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	Das Literal {literal} ist der Wert von {property} in «{stereotype}» auf {element}. Setzen Sie dort zuerst einen anderen Wert.
 str		The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.	Das Literal {literal} ist der Wert von {property} in «{stereotype}», das auf kein Element angewendet ist. Ändern Sie diesen Wert zuerst in der Datei.
 str		Stereotypes · {n}	Stereotypen · {n}
+str		Stereotype	Stereotyp
 str		Add stereotype	Stereotyp hinzufügen
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Noch keiner. Hier hinzufügen oder in Modelle ▸ Neu ▸ Stereotyp.
 str		Open profile diagram	Profildiagramm öffnen
@@ -307,6 +321,7 @@ str		The package {owner} keeps the name {name} for a built-in type.	Das Paket {o
 str		{name} is a built-in type and stays in Types.	{name} ist ein eingebauter Typ und bleibt in Types.
 str		{name} is a built-in type, which is never made leaf.	{name} ist ein eingebauter Typ und wird nie als leaf markiert.
 str		Constraints · {n}	Einschränkungen · {n}
+str		Constraint	Einschränkung
 str		Add constraint	Einschränkung hinzufügen
 str		Edit constraint	Einschränkung bearbeiten
 str		Describe the rule…	Regel beschreiben …
@@ -356,7 +371,9 @@ str		Parameters	Parameter
 str		Remove parameter	Parameter entfernen
 str		Return type	Rückgabetyp
 str		Static	Statisch
+str		Ordered	Geordnet
 str		Modifiers	Modifikatoren
+str		Visibility	Sichtbarkeit
 str		Default value	Standardwert
 str		Derived	Abgeleitet
 str		Subsets	Teilmenge von
@@ -399,6 +416,11 @@ str		Place association class	Assoziationsklasse platzieren
 str		Add package	Paket hinzufügen
 str		Place package	Paket platzieren
 str		Parent package	Übergeordnetes Paket
+str		Move package	Paket verschieben
+str		{what} moved into {where}	{what} nach {where} verschoben
+str		Open this package's diagram	Diagramm dieses Pakets öffnen
+str		Open this package's diagram (⌘↓)	Diagramm dieses Pakets öffnen (⌘↓)
+str		This is the top package: zooming out goes no further	Dies ist das oberste Paket: weiter hinauszoomen führt nirgendwohin
 str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
 str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnittstelle
 str		A relationship joins two classes or interfaces	Eine Beziehung verbindet zwei Klassen oder Schnittstellen
@@ -431,12 +453,18 @@ str		Association · model	Assoziation · Modell
 str		Clear	Leeren
 str		Client	Client
 str		Composition	Komposition
+str		Aggregation	Aggregation
+str		Association	Assoziation
+str		Composite	Komposition
+str		Dependency	Abhängigkeit
 str		The other end has an aggregation already: only the part's end has one.	Das andere Ende hat bereits eine Aggregation: Nur das Ende des Teils hat eine.
 str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	Das Ganze einer Komposition lässt höchstens eins zu: Setzen Sie zuerst die Multiplizität des anderen Endes auf 1 oder 0..1.
 str		This end is a composition's whole, which allows one at most.	Dieses Ende ist das Ganze einer Komposition, das höchstens eins zulässt.
 str		The whole's end of an aggregation or composition is not navigable.	Das Ende des Ganzen einer Aggregation oder Komposition ist nicht navigierbar.
 str		Dependency · model	Abhängigkeit · Modell
 str		Directed association	Gerichtete Assoziation
+str		Relationship kinds	Beziehungsarten
+str		Shared	Geteilt
 str		Drag a line end onto another class.	Ziehen Sie ein Linienende auf eine andere Klasse.
 str		Drag the class end onto another class, the interface end onto another interface.	Ziehen Sie das Klassenende auf eine andere Klasse, das Schnittstellenende auf eine andere Schnittstelle.
 str		End at {class}	Ende bei {class}
@@ -481,6 +509,7 @@ str		template parameter	Template-Parameter
 str		template	Template
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · Template, {n} Parameter · Modell, in jedem Diagramm|{kind} · Template, {n} Parameter · Modell, in jedem Diagramm
 str		Template binding: from the bound class to its template	Template-Bindung: von der gebundenen Klasse zu ihrem Template
+str		Template binding	Template-Bindung
 str		«bind»	«bind»
 str		Add template binding	Template-Bindung hinzufügen
 str		This template binding	Diese Template-Bindung
@@ -560,6 +589,8 @@ str		Make it binary turns {name} into a plain association between {first} and {s
 plural		N-ary association · {n} end · model, in every diagram	N-äre Assoziation · {n} Ende · Modell, in jedem Diagramm|N-äre Assoziation · {n} Enden · Modell, in jedem Diagramm
 plural		N-ary association · {n} end — click a class for the next end	N-äre Assoziation · {n} Ende — Klasse für das nächste Ende anklicken|N-äre Assoziation · {n} Enden — Klasse für das nächste Ende anklicken
 str		General	Allgemein
+str		Generalization	Generalisierung
+str		Interface realization	Schnittstellenrealisierung
 str		Generalization · model	Generalisierung · Modell
 str		Implementing class	Implementierende Klasse
 str		Interface realization · model	Schnittstellenrealisierung · Modell
@@ -592,6 +623,7 @@ str		General class	Allgemeine Klasse
 str		Generalization set {label}	Generalisierungsmenge {label}
 str		Generalization set · model, in every diagram	Generalisierungsmenge · Modell, in jedem Diagramm
 str		Generalization sets	Generalisierungsmengen
+str		Generalization set	Generalisierungsmenge
 str		Generalization sets · {n}	Generalisierungsmengen · {n}
 str		Incomplete	Unvollständig
 str		Members · {n}	Mitglieder · {n}
@@ -661,6 +693,135 @@ str		This generalization	Diese Generalisierung
 str		This interface realization	Diese Schnittstellenrealisierung
 str		To	Nach
 str		Type a whole number, a range such as 2..5, or *.	Geben Sie eine ganze Zahl, einen Bereich wie 2..5 oder * ein.
+str		Alias	Alias
+str		Allow substitutable	Ersetzbarkeit erlauben
+str		Alt	Alternative
+str		Assembly	Montage
+str		Assert	Zusicherung
+str		Asynch call	Asynchroner Aufruf
+str		Asynch signal	Asynchrones Signal
+str		Break	Abbruch
+str		Choice	Auswahl
+str		Classifier template parameter	Klassifizierer-Template-Parameter
+str		Comment	Kommentar
+str		Concurrency	Nebenläufigkeit
+str		Concurrent	Nebenläufig
+str		Consider	Berücksichtigen
+str		Content	Inhalt
+str		Create message	Erzeugungsnachricht
+str		Critical	Kritisch
+str		Deep history	Tiefe Historie
+str		Delegation	Delegation
+str		Delete message	Löschnachricht
+str		Deployment location	Bereitstellungsort
+str		Effect	Effekt
+str		Entry point	Eintrittspunkt
+str		Execution location	Ausführungsort
+str		Exit point	Austrittspunkt
+str		Extension	Erweiterung
+str		Extension end	Erweiterungsende
+str		External	Extern
+str		FIFO	FIFO
+str		File name	Dateiname
+str		First event	Erstes Ereignis
+str		Fork	Gabelung
+str		Format	Format
+str		Found	Gefunden
+str		Guarded	Überwacht
+str		Ignore	Ignorieren
+str		In	Eingabe
+str		Initial	Anfangszustand
+str		Inout	Ein-/Ausgabe
+str		Instance specification	Instanzspezifikation
+str		Instance value	Instanzwert
+str		Interaction operator	Interaktionsoperator
+str		Internal	Intern
+str		Is ID	Ist ID
+str		Is abstract	Ist abstrakt
+str		Is active	Ist aktiv
+str		Is assured	Ist zugesichert
+str		Is behavior	Ist Verhalten
+str		Is combine duplicate	Duplikate zusammenführen
+str		Is conjugated	Ist konjugiert
+str		Is control	Ist Steuerung
+str		Is control type	Ist Steuerungstyp
+str		Is covering	Ist vollständig
+str		Is derived	Ist abgeleitet
+str		Is derived union	Ist abgeleitete Vereinigung
+str		Is destroy duplicates	Duplikate zerstören
+str		Is destroy links	Verknüpfungen zerstören
+str		Is destroy owned objects	Eigene Objekte zerstören
+str		Is determinate	Ist deterministisch
+str		Is dimension	Ist Dimension
+str		Is direct	Ist direkt
+str		Is disjoint	Ist disjunkt
+str		Is exception	Ist Ausnahme
+str		Is external	Ist extern
+str		Is final specialization	Ist finale Spezialisierung
+str		Is indirectly instantiated	Indirekt instanziiert
+str		Is leaf	Ist Blatt
+str		Is locally reentrant	Lokal ablaufinvariant
+str		Is multicast	Ist Multicast
+str		Is multireceive	Ist Mehrfachempfang
+str		Is ordered	Ist geordnet
+str		Is query	Ist Abfrage
+str		Is read only	Ist schreibgeschützt
+str		Is reentrant	Ist ablaufinvariant
+str		Is relative	Ist relativ
+str		Is remove duplicates	Duplikate entfernen
+str		Is replace all	Alle ersetzen
+str		Is service	Ist Dienst
+str		Is single execution	Einzelausführung
+str		Is static	Ist statisch
+str		Is stream	Ist Strom
+str		Is strict	Ist strikt
+str		Is substitutable	Ist ersetzbar
+str		Is synchronous	Ist synchron
+str		Is tested first	Zuerst prüfen
+str		Is unique	Ist eindeutig
+str		Is unmarshall	Entpacken
+str		Iterative	Iterativ
+str		Join	Zusammenführung
+str		Junction	Kreuzung
+str		LIFO	LIFO
+str		Literal boolean	Boolesches Literal
+str		Literal integer	Ganzzahl-Literal
+str		Literal real	Reelles Literal
+str		Literal string	Zeichenketten-Literal
+str		Literal unlimited natural	Literal für unbegrenzte natürliche Zahl
+str		Local	Lokal
+str		Loop	Schleife
+str		Lost	Verloren
+str		Message sort	Nachrichtenart
+str		Mode	Modus
+str		Must isolate	Muss isolieren
+str		Neg	Negativ
+str		Opaque expression	Opaker Ausdruck
+str		Opt	Option
+str		Ordering	Reihenfolge
+str		Out	Ausgabe
+str		Par	Parallel
+str		Parallel	Parallel
+str		Profile application	Profilanwendung
+str		Read	Lesen
+str		Redefinable template signature	Redefinierbare Template-Signatur
+str		Reply	Antwort
+str		Return	Rückgabe
+str		Seq	Schwache Reihenfolge
+str		Sequential	Sequenziell
+str		Setting	Setzend
+str		Shallow history	Flache Historie
+str		Slot	Slot
+str		Stream	Strom
+str		Strict	Strikte Reihenfolge
+str		Symbol	Symbol
+str		Synch call	Synchroner Aufruf
+str		Template parameter substitution	Template-Parameter-Ersetzung
+str		Terminate	Beendigung
+str		URI	URI
+str		Unordered	Ungeordnet
+str		Update	Aktualisieren
+str		Viewpoint	Standpunkt
 str		Class · {package}	Klasse · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}

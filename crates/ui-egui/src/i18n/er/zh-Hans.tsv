@@ -3,6 +3,7 @@
 str		Table	表
 str		Column	列
 str		Columns	列
+str		Schema	架构
 str		Schema · model	架构 · 模型
 str		Table · model, in every diagram	表 · 模型，出现在每张图中
 str		Column · model	列 · 模型
@@ -23,10 +24,14 @@ str		Columns · {n}	列 · {n}
 str		Keys · {n}	键 · {n}
 str		Add a column	添加一列
 str		Add unique constraint	添加唯一约束
+str		Nulls distinct	空值视为不同
 str		Columns, in key order	按键顺序的列
 str		Types · {n}	类型 · {n}
 plural		{n} check	{n} 个检查约束
 str		Add type	添加类型
+str		Domain	域
+str		Enum type	枚举类型
+str		Base type	基础类型
 str		Checks	检查约束
 str		Add a check	添加检查约束
 str		Literals, in order	按顺序排列的字面量
@@ -34,6 +39,12 @@ str		Subtypes · {n}	子类型 · {n}
 str		Add subtype	添加子类型
 str		Discriminator	鉴别列
 str		Mapping	映射
+str		Table per type	每类型一表
+str		Single table	单表
+str		Table per concrete type	每具体类型一表
+str		complete	完全
+str		disjoint	互斥
+str		overlapping	重叠
 str		key on {columns}	键在 {columns}
 str		Add a literal	添加字面量
 plural		{n} column takes {name}: {columns}. Retype it first.	{n} 个列使用 {name}：{columns}。请先更改它们的类型。
@@ -63,6 +74,14 @@ str		The start {start} is below the minimum {minimum}.	起始值 {start} 低于�
 str		The start {start} is above the maximum {maximum}.	起始值 {start} 高于最大值 {maximum}。
 str	sequence	Start	起始值
 str		Owned by	所属列
+str		Sequence	序列
+str		Increment	增量
+str		Minimum	最小值
+str		Maximum	最大值
+str		Cycle	循环
+str		View	视图
+str		Materialized	物化
+str		Query	查询
 plural		{n} more column, not listed	另有 {n} 列未列出
 str		{field} takes a whole number	{field} 须为整数
 str		Views · {n}	视图 · {n}
@@ -81,6 +100,10 @@ str		Indexes · {n}	索引 · {n}
 str		Add check constraint	添加检查约束
 str		Add index	添加索引
 str		Columns, in index order	按索引顺序的列
+str		Where	Where
+str		Method	方法
+str		Ascending	升序
+str		Descending	降序
 str		An expression	表达式
 str		Nulls default	空值默认顺序
 str		Nulls first	空值在前
@@ -96,6 +119,14 @@ plural		{n} key goes with it.	{n} 个键将一并删除。
 plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
 str		Add column	添加列
 str		Edit column	编辑列
+str		Regular	常规
+str		Primary key	主键
+str		Not null	非空
+str		Length	长度
+str		Precision	精度
+str		Scale	小数位数
+str		Generation	生成方式
+str		Collation	排序规则
 str		Mapping table	映射表
 str		Follows {target}	跟随 {target}
 str		Unlink	取消链接
@@ -128,6 +159,34 @@ str		Identity, always	标识列，始终
 str		Identity, by default	标识列，默认
 str		Computed, stored	计算列，存储
 str		Computed, virtual	计算列，虚拟
+str		Associative	关联型
+str		Check constraint	检查约束
+str		Computed stored	计算列，存储
+str		Computed virtual	计算列，虚拟
+str		Domain check	域检查约束
+str		Exactly one	恰好一个
+str		First	最先
+str		From end	起始端
+str		From role	起始角色
+str		Identity always	标识列，始终
+str		Identity by default	标识列，默认
+str		Index column	索引列
+str		Initially deferred	初始延迟
+str		Initially immediate	初始立即
+str		Last	最后
+str		Not deferrable	不可延迟
+str		Nullable	可为空
+str		Nulls	空值
+str		One or more	一个或多个
+str		Subtype mapping	子类型映射
+str		Subtypes complete	子类型完全
+str		Subtypes disjoint	子类型互斥
+str		Table index	表索引
+str		To end	目标端
+str		To role	目标角色
+str		Unique constraint	唯一约束
+str		Zero or more	零个或多个
+str		Zero or one	零个或一个
 str		New ER diagram	新建ER图
 str		Tables, their columns and keys, and the relationships between them.	表及其列和键，以及表之间的关系。
 str		ER diagram	ER图
@@ -211,6 +270,8 @@ str	refusal	a subtype	子类型
 str	refusal	a key column	键列
 str		Entity · {schema}	实体 · {schema}
 str		Add table	添加表
+str		Entity	实体
+str		Relationship types	关系类型
 str		Place table	放置表
 str		Show related tables	显示相关表
 str		The diagram is of no schema	此图不属于任何架构
@@ -219,6 +280,8 @@ str		Add relationship	添加关系
 str		Cardinality	基数
 str		Presets	预设
 str		End	终点
+str		Start	起点
+str		Identifying	标识
 str		Identifying needs the parent's primary key; drawn as not identifying	标识关系需要父表的主键；已按非标识绘制
 str		Many to many · add a mapping table	多对多 · 添加映射表
 str		Many to many · {from} and {to}	多对多 · {from} 和 {to}
@@ -241,6 +304,19 @@ str		This relationship	此关系
 str		On this relationship · {n}	此关系上 · {n}
 str		Add foreign key	添加外键
 str		Remove foreign key	移除外键
+str		Foreign key	外键
+str		On delete	删除时
+str		On update	更新时
+str		No action	无操作
+str		Restrict	限制
+str		Cascade	级联
+str		Set null	设为空
+str		Set default	设为默认
+str		Deferrable	可延迟
+str		Match	匹配
+str		Simple	简单
+str		Full	完全
+str		Partial	部分
 str		Add id column	添加 id 列
 str		Choose key columns	选择键列
 str		Ends	端点

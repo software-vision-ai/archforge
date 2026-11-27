@@ -129,7 +129,8 @@ fn card(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (b
     lists(shell, clip, p, universe, (body, before), sides);
 }
 
-/// The values of one side, one row a field; a field this side has no such property for leaves its row empty.
+/// The values of one side, one row a field, labelled and worded as the shell's notations say them;
+/// a field this side has no such property for leaves its row empty.
 fn rows(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (body, before): (Rect, bool), sides: &ElementSides) {
     let side = if before { "before" } else { "after" };
     let value_at = body.left() + INSET + (body.width() - 2.0 * INSET) * 0.45;
@@ -144,8 +145,8 @@ fn rows(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (b
         if field.changed {
             mark(&paint, p, row, before);
         }
-        let label = property_label(universe, field.prop).unwrap_or_else(|| tr("Unknown"));
-        let value = worded(universe, field.prop, value);
+        let label = property_label(shell.notation_uis, universe, field.prop).unwrap_or_else(|| tr("Unknown"));
+        let value = worded(shell.notation_uis, universe, field.prop, value);
         let x = body.left() + INSET + if field.changed { MARK } else { 0.0 };
         ux::text_mid(&paint, x, row.center().y, &label, types::UI, p.text_secondary, Some((value_at - x - 8.0).max(0.0)));
         ux::text_mid(&paint, value_at, row.center().y, &value, types::UI, p.text, Some((row.right() - 8.0 - value_at).max(0.0)));
@@ -235,8 +236,9 @@ fn mark(paint: &egui::Painter, p: &Palette, row: Rect, before: bool) {
     ux::text_mid(paint, row.left() + 8.0, row.center().y, sign, types::UI, ink, None);
 }
 
-/// `value` of `prop` for a person to read in the language shown; a literal the metamodel does not know is Unknown.
-pub(super) fn worded(universe: &Universe, prop: PropId, value: &Value) -> String {
+/// `value` of `prop` for a person to read in the language shown, a literal as the notations of `uis`
+/// word it; a literal the metamodel does not know, or none of them words, is Unknown.
+pub(super) fn worded(uis: &[&'static dyn NotationUi], universe: &Universe, prop: PropId, value: &Value) -> String {
     match value {
         Value::Null => tr("Not set"),
         Value::Bool(true) => tr("Yes"),
@@ -248,7 +250,7 @@ pub(super) fn worded(universe: &Universe, prop: PropId, value: &Value) -> String
         Value::Unlimited(None) => "*".to_owned(),
         Value::Unlimited(Some(n)) => n.to_string(),
         Value::Enum(i) => match universe.prop(prop).map(|p| &p.ty) {
-            Some(TypeRef::Data(ty)) => literal_label(universe, *ty, *i).unwrap_or_else(|| tr("Unknown")),
+            Some(TypeRef::Data(ty)) => literal_label(uis, universe, *ty, *i).unwrap_or_else(|| tr("Unknown")),
             _ => tr("Unknown"),
         },
         Value::Ref(_) => tr("Unknown"),

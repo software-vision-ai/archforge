@@ -110,7 +110,11 @@ after every visible change, in both appearances, beside the design.
   the first lookup; a shell registers those of the notations it is given as it sets them up
   (`Shell::new`, from its screens parts, `i18n::register_notations`), so nothing a notation says is looked up before them.
   A test that says a notation's words without a shell makes one first, as the app does. A row only one notation's screens name goes in that notation's table;
-  a row the shell names, or both notations, goes in the shell's. Each is keyed by the English
+  a row the shell names, or both notations, goes in the shell's. The words for what the metamodel
+  names (`model_words`, the change view's labels) follow their metamodel: the core's in the
+  shell's table, a word only one notation's metamodel names in that notation's, which the shell
+  says only for the notations it was given; the hover text of a diagram kind's tool is its
+  notation's too. Each is keyed by the English
   text, four tab-separated columns: kind, context, key, text. All seven languages are complete,
   so a new string needs its row in every language of its table. Rows go beside related entries,
   never at the end of the file. A key is in a language's catalogues once (a `str` row by context
