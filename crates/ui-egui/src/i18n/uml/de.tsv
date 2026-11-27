@@ -139,6 +139,7 @@ str		Owner is a package or a classifier. Changing it keeps {name}'s identity, me
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · verschachtelt in {owner} · Modell, in jedem Diagramm
 str		Nested classifiers · {n}	Verschachtelte Klassifizierer · {n}
 str		Add nested classifier	Verschachtelten Klassifizierer hinzufügen
+plural		{n} nested classifier goes with it: {names}.	{n} verschachtelter Klassifizierer geht mit: {names}.|{n} verschachtelte Klassifizierer gehen mit: {names}.
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	Noch keine. Hier oder über Modelle ▸ Neu in {name} hinzufügen; beide bieten dieselben Arten.
 str		New	Neu
 str		New in {name}	Neu in {name}
@@ -205,6 +206,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} enthält das Profil {profile}, das verwendet wird: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» auf {metaclass} wird verwendet: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {elements}	«{stereotype}» auf {elements}
+plural		{n} stereotype application goes with it: {names}.	{n} Stereotyp-Anwendung geht mit: {names}.|{n} Stereotyp-Anwendungen gehen mit: {names}.
 plural		Show the use	Die Verwendung zeigen|Die {n} Verwendungen zeigen
 str		A stereotype is shown on its profile's diagram	Ein Stereotyp erscheint im Diagramm seines Profils
 str		Place stereotype	Stereotyp platzieren

@@ -139,6 +139,7 @@ str		Owner is a package or a classifier. Changing it keeps {name}'s identity, me
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · 嵌套于 {owner} · 模型，所有图中
 str		Nested classifiers · {n}	嵌套分类器 · {n}
 str		Add nested classifier	添加嵌套分类器
+plural		{n} nested classifier goes with it: {names}.	{n} 个嵌套分类器将一并删除：{names}。
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	暂无。可在此处或从“模型 ▸ 在 {name} 中新建”添加；两者提供相同的种类。
 str		New	新建
 str		New in {name}	在 {name} 中新建
@@ -205,6 +206,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} 包含正在使用的配置文件 {profile}：{uses}。请先移除这些使用。
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} 上的 «{stereotype}» 正在使用：{uses}。请先移除这些使用。
 str		«{stereotype}» on {elements}	{elements} 上的 «{stereotype}»
+plural		{n} stereotype application goes with it: {names}.	{n} 个构造型应用将一并删除：{names}。
 plural		Show the use	显示 {n} 处使用
 str		A stereotype is shown on its profile's diagram	构造型显示在其配置文件的图中
 str		Place stereotype	放置构造型
