@@ -105,7 +105,12 @@ the method returns, so ER's and UML's kinds and Properties (`er_kind`, `er_ui`, 
 none. The controls that take it end in `_cx` (`panels::section_cx`, `panels::control_cx`,
 `menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old names over the whole
 shell forward to them for the shell's own screens, and `home::control` stays the shell's own way
-to `panels::control_cx`. The refusal words (`panels::refusal`, `panels::said`, `panels::a_kind`
+to `panels::control_cx`. The shared controls (the `_cx` controls of `panels`, from `section_cx`
+and `control_cx` to `name_field_cx` and `reveal_cx`, with their geometry `PAD`, `FIELD`, `ROW` and
+`PATH_SEP`), the problems a selection shows (`problems::of`) and the key presses they take
+(`actions::{Keys, take, take_alone, held_exactly}`) are `archforge-shell-api`'s, re-exported
+crate-private under their old paths where the shell uses them (`actions::Keys` public, as
+`actions::Action` names it). The refusal words (`panels::refusal`, `panels::said`, `panels::a_kind`
 and `engine_said::disabled`, `archforge-shell-api`'s) ask the notations they are handed for their
 own: the context's or the shell's (`notation_uis`), and the app's (`notation_ui::UIS`) where a
 notation's code holds neither (its own refusal words, its problems and the checks that take only
@@ -184,7 +189,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `types::{TypeKind, TypeEdit, TypeRow, rows, open, kind_of}` | a schema's domains and enum types with the domain and enum editors (slice S5); the column editor's type menu lists them before the base types |
 | `er_table::{ColumnEdit, column_edit, column_edit_mut}` | a table's Properties, ER's own: the column editor's state, which is ER's state and which `column_edit` reads for the app's journeys |
 | `er_table::ColumnEdit::linked` | the column a key column follows, shown as a link mark on its row and on the canvas, with Unlink in its editor (slice S4); a pure mapping table's Properties offer to collapse it |
-| `problems::{Problem, all, by_element, of}` | the problems the shell shows, on the element the user would fix them on; `Problem` is `archforge-shell-api`'s `notation_ui::Problem`, re-exported under its old path |
+| `problems::{Problem, all, by_element}` | the problems the shell shows, on the element the user would fix them on; `Problem` is `archforge-shell-api`'s `notation_ui::Problem`, re-exported under its old path, and what a selection shows is its `problems::of` |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |
 | `Picked` | how a folder pick ended (the folder, nothing, or why no picker could appear), sent once on the channel `Services::pick_project` and `Services::pick_folder` answer with; the shell takes it on a later frame, one pick at a time, with New project, Open project (Home's Open card, title-strip button and pinned folders, which act only while Open can), Home's recent projects, the search's projects and pinned folders, Pin a folder and Create project off while it waits, no other opening starting meanwhile, and no Open project pick starting while an opening runs or waits for a hold, nor any other folder pick while an opening waits for a hold, which a pick waiting would turn away; closing New project lets its Change… pick go, a quit asked for keeps the answer waiting until it is called off and lets the pick go once it goes ahead, a pick let go of is withdrawn from the host (`Services::withdraw_pick`), so a picker for it not yet shown never shows, while one already on screen stays until the user closes it, its answer unused, and the host shows a pick asked meanwhile once it closes, and a host gone without answering is a cancel; `Picked::at_once` is a pick already answered |
