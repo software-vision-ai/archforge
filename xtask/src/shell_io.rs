@@ -8,6 +8,11 @@
 //! and its comments blanked, any path through `std::process`, `std::net` or `std::os::unix::net`
 //! (written out, or inside a grouped import such as `use std::{io, net::TcpStream}`), and any of the
 //! socket types by name ([`SOCKETS`]), is a finding with its file and line.
+//!
+//! The walk judges each entry by itself and never follows a symbolic link: a link, and a `.rs`
+//! entry that is not a plain file (a pipe, a socket, a device), is a finding and is never opened.
+//! It reads at most 16 MiB of one source and 256 MiB of one crate's sources together; a source
+//! over either is a finding and is not read.
 
 use std::path::{Path, PathBuf};
 
@@ -356,30 +361,115 @@ pub fn findings(source: &str) -> Vec<String> {
     out
 }
 
-/// Every `.rs` file under `dir`, sorted.
-fn sources(dir: &Path) -> Result<Vec<PathBuf>, String> {
+/// The most the scan reads: of one source, and of one crate's sources together. A source over the
+/// first, or one that would take the scan past the second, is a finding and is not read, so a
+/// damaged or planted file cannot make the gate read without end. The largest source of the
+/// interface's crates is about 2 MiB and the largest crate's sources about 6 MiB together, so both
+/// leave room for many times today's code.
+#[derive(Debug, Clone, Copy)]
+struct Limits {
+    /// The bytes one source may have.
+    source: u64,
+    /// The bytes the scan reads from one crate's sources together.
+    total: u64,
+}
+
+/// The limits the gate scans with: 16 MiB a source, 256 MiB in all.
+const LIMITS: Limits = Limits { source: 16 * 1024 * 1024, total: 256 * 1024 * 1024 };
+
+/// The tail of the finding for an entry the scan never follows or opens.
+const PLAIN: &str = "a source of the interface is a plain file";
+
+/// What the walk found at one path: a source with its size as listed, a symbolic link, or a `.rs`
+/// entry that is neither a folder nor a plain file (a pipe, a socket, a device).
+#[derive(Debug, Clone, Copy)]
+enum Entry {
+    Source(u64),
+    Link,
+    NotPlain,
+}
+
+/// Every `.rs` entry and every symbolic link under `dir`, sorted, each judged by the entry itself
+/// (`DirEntry::file_type`), so a link is never followed and no loop of links can make the walk
+/// endless. A folder that cannot be listed, or an entry whose kind or size cannot be read, is an
+/// error naming its path.
+fn entries(dir: &Path) -> Result<Vec<(PathBuf, Entry)>, String> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
         for entry in std::fs::read_dir(&d).map_err(|e| format!("{}: {e}", d.display()))? {
-            let path = entry.map_err(|e| format!("{}: {e}", d.display()))?.path();
-            if path.is_dir() {
+            let entry = entry.map_err(|e| format!("{}: {e}", d.display()))?;
+            let path = entry.path();
+            let kind = entry.file_type().map_err(|e| format!("{}: {e}", path.display()))?;
+            if kind.is_symlink() {
+                out.push((path, Entry::Link));
+            } else if kind.is_dir() {
                 stack.push(path);
             } else if path.extension().is_some_and(|x| x == "rs") {
-                out.push(path);
+                if kind.is_file() {
+                    let size = entry.metadata().map_err(|e| format!("{}: {e}", path.display()))?.len();
+                    out.push((path, Entry::Source(size)));
+                } else {
+                    out.push((path, Entry::NotPlain));
+                }
             }
         }
     }
-    out.sort();
+    out.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(out)
 }
 
-/// The process and network uses in every source under `dir`, each named with its file.
+/// The bytes of `reader`, read only up to one byte past `size`, or none when it has more than
+/// `size`: a file that grew after it was listed is never read without end.
+fn read_capped(reader: impl std::io::Read, size: u64) -> std::io::Result<Option<Vec<u8>>> {
+    use std::io::Read as _;
+    let mut bytes = Vec::new();
+    reader.take(size.saturating_add(1)).read_to_end(&mut bytes)?;
+    Ok((u64::try_from(bytes.len()).unwrap_or(u64::MAX) <= size).then_some(bytes))
+}
+
+/// The process and network uses in every source under `dir`, each named with its file, and every
+/// entry the scan does not read: a symbolic link, a `.rs` entry that is not a plain file, and a
+/// source over the [`LIMITS`].
 pub fn scan(dir: &Path) -> Result<Vec<String>, String> {
+    scan_within(dir, LIMITS)
+}
+
+/// [`scan`] with the limits given.
+fn scan_within(dir: &Path, limits: Limits) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
-    for file in sources(dir)? {
-        let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let mut read = 0u64;
+    for (file, entry) in entries(dir)? {
         let rel = file.strip_prefix(dir).unwrap_or(&file).display().to_string();
+        let size = match entry {
+            Entry::Link => {
+                out.push(format!("{rel}: a symbolic link, which this check never follows; {PLAIN}"));
+                continue;
+            }
+            Entry::NotPlain => {
+                out.push(format!("{rel}: not a plain file, which this check never opens; {PLAIN}"));
+                continue;
+            }
+            Entry::Source(size) => size,
+        };
+        if size > limits.source {
+            out.push(format!("{rel}: {size} bytes, over the {} bytes one source may have, so this check does not read it", limits.source));
+            continue;
+        }
+        if size > limits.total.saturating_sub(read) {
+            out.push(format!("{rel}: not read, as it would take this check past the {} bytes it reads from one crate's sources", limits.total));
+            continue;
+        }
+        let opened = std::fs::File::open(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+        let bytes = read_capped(opened, size).map_err(|e| format!("{}: {e}", file.display()))?;
+        // What was read counts, the one byte past the size that tells a grown file included.
+        let taken = bytes.as_ref().map_or(size.saturating_add(1), |b| u64::try_from(b.len()).unwrap_or(u64::MAX));
+        read = read.saturating_add(taken);
+        let Some(bytes) = bytes else {
+            out.push(format!("{rel}: grew past its listed {size} bytes while this check read it, so it is not scanned"));
+            continue;
+        };
+        let text = String::from_utf8(bytes).map_err(|e| format!("{}: {e}", file.display()))?;
         out.extend(
             findings(&text)
                 .into_iter()
@@ -487,6 +577,113 @@ mod tests {
         let _ = findings("'");
         let _ = findings("r#\"never closed");
         let _ = findings("/* never closed");
+    }
+
+    /// [`scan`] on its own thread, failed when it has not answered within a generous time, so a
+    /// scan that hangs fails its test instead of stopping the run.
+    fn scan_in_time(dir: &Path) -> Result<Vec<String>, String> {
+        let (send, answer) = std::sync::mpsc::channel();
+        let dir = dir.to_path_buf();
+        std::thread::spawn(move || send.send(scan(&dir)));
+        answer.recv_timeout(std::time::Duration::from_secs(60)).expect("the scan hung")
+    }
+
+    /// A link to a file is a finding and is never followed, whatever it links to: here a file
+    /// outside the crate whose socket type would otherwise be found in its place.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_file_is_a_finding_and_never_followed() {
+        let src = crate::util::Scratch::new("shell-io-file-link").unwrap();
+        let outside = crate::util::Scratch::new("shell-io-file-link-outside").unwrap();
+        src.file("lib.rs", "pub fn draw() {}\n").unwrap();
+        outside.file("far.rs", "fn f(_: TcpStream) {}\n").unwrap();
+        std::os::unix::fs::symlink(outside.path.join("far.rs"), src.path.join("near.rs")).unwrap();
+        assert_eq!(scan_in_time(&src.path), Ok(vec![format!("near.rs: a symbolic link, which this check never follows; {PLAIN}")]));
+    }
+
+    /// A link back to a folder above it is a finding and is never followed, so the loop it makes
+    /// cannot stop or hang the walk; a link is a finding whatever its name.
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_loop_is_a_finding_and_never_followed() {
+        let src = crate::util::Scratch::new("shell-io-folder-loop").unwrap();
+        src.file("panel/mod.rs", "pub fn draw() {}\n").unwrap();
+        std::os::unix::fs::symlink(&src.path, src.path.join("panel").join("again")).unwrap();
+        assert_eq!(
+            scan_in_time(&src.path),
+            Ok(vec![format!("{}: a symbolic link, which this check never follows; {PLAIN}", Path::new("panel").join("again").display())])
+        );
+    }
+
+    /// A pipe named as a source is a finding and is never opened, so the scan does not wait on it;
+    /// one with another name is not a source and is passed over, as any other file is.
+    #[cfg(unix)]
+    #[test]
+    fn a_pipe_named_as_a_source_is_a_finding_and_never_opened() {
+        let src = crate::util::Scratch::new("shell-io-pipe").unwrap();
+        src.file("lib.rs", "pub fn draw() {}\n").unwrap();
+        for name in ["queue.rs", "notes"] {
+            let made = std::process::Command::new("mkfifo").arg(src.path.join(name)).status().unwrap();
+            assert!(made.success(), "mkfifo {name}");
+        }
+        assert_eq!(scan_in_time(&src.path), Ok(vec![format!("queue.rs: not a plain file, which this check never opens; {PLAIN}")]));
+    }
+
+    /// A source over the 16 MiB one source may have is a finding and is not read.
+    #[test]
+    fn a_source_over_the_limit_is_a_finding_and_not_read() {
+        let src = crate::util::Scratch::new("shell-io-over-limit").unwrap();
+        let size = 16 * 1024 * 1024 + 1;
+        std::fs::File::create(src.path.join("huge.rs")).unwrap().set_len(size).unwrap();
+        src.file("lib.rs", "use std::net::TcpStream;\n").unwrap();
+        assert_eq!(
+            scan_in_time(&src.path),
+            Ok(vec![
+                format!("huge.rs: {size} bytes, over the 16777216 bytes one source may have, so this check does not read it"),
+                "lib.rs line 1: std::net::TcpStream: the interface holds no process or network code; the host does it through Services".to_string(),
+            ])
+        );
+    }
+
+    /// The gate scans with 16 MiB a source and 256 MiB in all.
+    #[test]
+    fn the_gate_scans_with_16_mib_a_source_and_256_mib_in_all() {
+        assert_eq!((LIMITS.source, LIMITS.total), (16 * 1024 * 1024, 256 * 1024 * 1024));
+    }
+
+    /// A source that would take the scan past the bytes it reads from one crate's sources is a
+    /// finding and is not read; one over the limit of a source is not counted, so the sources
+    /// after it are read while they fit.
+    #[test]
+    fn a_source_past_the_total_is_a_finding_and_not_read() {
+        let src = crate::util::Scratch::new("shell-io-total").unwrap();
+        let line = "use std::net::TcpStream;\n";
+        for name in ["a.rs", "c.rs", "d.rs"] {
+            src.file(name, line).unwrap();
+        }
+        src.file("b.rs", &" ".repeat(41)).unwrap();
+        let said = ": the interface holds no process or network code; the host does it through Services";
+        let limits = Limits { source: 40, total: 2 * line.len() as u64 };
+        assert_eq!(
+            scan_within(&src.path, limits),
+            Ok(vec![
+                format!("a.rs line 1: std::net::TcpStream{said}"),
+                "b.rs: 41 bytes, over the 40 bytes one source may have, so this check does not read it".to_string(),
+                format!("c.rs line 1: std::net::TcpStream{said}"),
+                format!("d.rs: not read, as it would take this check past the {} bytes it reads from one crate's sources", limits.total),
+            ])
+        );
+    }
+
+    /// A read stops one byte past the size the file was listed with, and a file that has more is
+    /// not read; one of that size or less is read whole.
+    #[test]
+    fn a_read_stops_one_byte_past_the_listed_size() {
+        assert_eq!(read_capped(&b"abcd"[..], 4).unwrap(), Some(b"abcd".to_vec()));
+        assert_eq!(read_capped(&b"abc"[..], 4).unwrap(), Some(b"abc".to_vec()));
+        assert_eq!(read_capped(&b"abcde"[..], 4).unwrap(), None);
+        // A reader with no end is read only up to that byte.
+        assert_eq!(read_capped(std::io::repeat(b'x'), 4).unwrap(), None);
     }
 
     /// The process and network crates are known, the shell's own are not among them.
