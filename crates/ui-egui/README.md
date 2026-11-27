@@ -75,9 +75,10 @@ the heading of every model element (a diagram's heading has none): an ER element
 writes as its comment, a UML element's a Comment it owns) and Skills (the skills on the
 selection, the inherited ones, the skill editor) following the selection, the status bar), drawn
 from the design with its own palette, type and icons (`ux`, the design of `archforge-shell-api` re-exported with the shell's app icon, its fonts and the icons only ER or only UML draws); its colours are `ux::Colour` values, which only `ux` makes. Icons are drawn crisp: each is rasterised once per size into an alpha mask at the screen's own pixels, its
-strokes a whole number of pixels on the pixel grid (`ux::raster`), and drawn at a standard size by
-role with one stroke weight (`ux::icon_weighted`: chrome 15-17 pt, rows 13-15, small actions 10-14,
-chevrons 8); rows, fields and bars centre their content on their middle line (`ux::text_mid`,
+strokes a whole number of pixels on the pixel grid (`ux::raster`), and drawn at the standard size
+each icon carries, by role, with one stroke weight (`ux::Icon::standard_size`, drawn by
+`ux::icon_weighted`: chrome 15-17 pt, rows 13-15, small actions 10-14, chevrons 8); rows, fields
+and bars centre their content on their middle line (`ux::text_mid`,
 `ux::icon_mid`, `panels::field_inner`), and the macOS title strip is 32 pt tall with its controls
 78 pt in, clear of the traffic lights. An open project has an in-memory ER session (`Shell::session`); nothing reaches the
 project's database yet, and the status bar says so once there is something unsaved. A notation's

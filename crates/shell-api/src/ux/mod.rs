@@ -584,11 +584,14 @@ pub enum Seg {
 }
 
 /// An icon as the design draws it: strokes in a box of `size`, `stroke` wide, with round ends and
-/// joins.
+/// joins. `standard_size` is the longer side, in points, an interface icon is drawn at (chrome
+/// 15-17, rows and fields 13-15, small actions 10-14, chevrons 8); none for the canvas's own
+/// glyphs, the brand mark and illustrations, which keep the size they are given.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Icon {
     pub size: [f32; 2],
     pub stroke: f32,
+    pub standard_size: Option<f32>,
     pub segments: &'static [Seg],
 }
 
@@ -599,12 +602,13 @@ pub fn icon(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, color: C
     icon_weighted(painter, at, icon, width, icon.stroke, color);
 }
 
-/// [`icon`] with a stroke weight of its own, where the design gives an instance one.
+/// [`icon`] with a stroke weight of its own, where the design gives an instance one; an icon with
+/// a standard size is drawn at that size instead, centred on the box asked for, with the
+/// interface's stroke weight ([`STROKE`]).
 pub fn icon_weighted(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, weight: f32, color: Colour) {
-    // An interface icon is drawn at its role's size, centred where the caller put its box, with
-    // one stroke weight, so no screen draws one larger or heavier than another (chrome 15-17,
-    // rows and fields 13-15, small actions 10-14, chevrons 8).
-    let (at, width, weight) = match standard_size(icon) {
+    // An interface icon is drawn at its standard size, centred where the caller put its box, with
+    // one stroke weight, so no screen draws one larger or heavier than another.
+    let (at, width, weight) = match icon.standard_size {
         Some(side) => {
             let requested = Vec2::new(width, if icon.size[0] > 0.0 { width * icon.size[1] / icon.size[0] } else { width });
             let k = side / icon.size[0].max(icon.size[1]).max(f32::EPSILON);
@@ -619,67 +623,6 @@ pub fn icon_weighted(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32,
 /// The stroke weight of every interface icon: two pixels on a retina screen, one on a standard
 /// one.
 pub const STROKE: f32 = 1.2;
-
-/// The longer side, in points, an interface icon is drawn at; none for the canvas's own glyphs,
-/// the brand mark and illustrations, which keep the size they are given.
-fn standard_size(icon: &Icon) -> Option<f32> {
-    use icons::*;
-    let table: [(&Icon, f32); 51] = [
-        (&COLUMN, 11.0),
-        (&PLUS, 10.0),
-        (&CLOSE, 9.0),
-        (&MINUS, 8.0),
-        (&TICK, 13.0),
-        (&EDIT, 14.0),
-        (&TRASH, 14.0),
-        (&CHEVRON_DOWN, 8.0),
-        (&CHEVRON_SMALL, 8.0),
-        (&CHEVRON_RIGHT, 9.0),
-        (&CHEVRON_LEFT, 9.0),
-        (&OPEN_IN, 10.0),
-        (&COLLAPSE, 14.0),
-        (&EXPAND_ALL, 9.0),
-        (&ARRANGE_DIAGRAM, 16.0),
-        (&ROUTE_STRAIGHT, 18.0),
-        (&ROUTE_RIGHT_ANGLED, 18.0),
-        (&ROUTE_CURVED, 18.0),
-        (&COLLAPSE_ALL, 9.0),
-        (&SEARCH, 12.0),
-        (&HOME, 15.0),
-        (&HELP, 16.0),
-        (&MOON, 14.0),
-        (&SUN, 14.0),
-        (&FOLDER, 14.0),
-        (&ARROW, 14.0),
-        (&MORE, 14.0),
-        (&MAP, 14.0),
-        (&LIST, 14.0),
-        (&GRID, 14.0),
-        (&IMPORT, 16.0),
-        (&CHAT, 16.0),
-        (&BRUSH, 16.0),
-        (&EXPORT, 20.0),
-        (&ISSUE, 17.0),
-        (&BUBBLE, 17.0),
-        (&HISTORY, 17.0),
-        (&VERSION_CLOCK, 14.0),
-        (&CUBE, 17.0),
-        (&DIAGRAM, 17.0),
-        (&BRANCH, 17.0),
-        (&TABLE, 15.0),
-        (&SCHEMA, 16.0),
-        (&SKILL, 17.0),
-        (&NAMING, 17.0),
-        (&ER_DIAGRAM, 13.0),
-        (&DOMAIN, 11.0),
-        (&ENUM, 9.5),
-        (&SEQUENCE, 10.0),
-        (&VIEW, 12.0),
-        (&GRIP, 8.0),
-    ];
-    // By value: a `const` used in two places need not share one address.
-    table.iter().find(|(i, _)| i.size == icon.size && i.segments == icon.segments).map(|(_, side)| *side)
-}
 
 /// [`icon_weighted`] at exactly the size and weight given: the canvas's zoomed glyphs and
 /// illustrations.
@@ -711,4 +654,33 @@ pub fn icon_exact(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, we
 pub fn icon_in(painter: &egui::Painter, rect: Rect, icon_: &Icon, color: Colour) {
     let size = Vec2::new(icon_.size[0], icon_.size[1]);
     icon(painter, rect.center() - size / 2.0, icon_, icon_.size[0], color);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The boxes of what `draw` paints in one frame.
+    fn painted(mut draw: impl FnMut(&egui::Painter)) -> Vec<Rect> {
+        let mut output = egui::Context::default().run_ui(egui::RawInput::default(), |ui| draw(&ui.ctx().layer_painter(egui::LayerId::background())));
+        // The masks' textures go nowhere without a renderer.
+        output.textures_delta.clear();
+        output.shapes.iter().map(|s| s.shape.visual_bounding_rect()).collect()
+    }
+
+    /// An icon with a standard size is drawn at it, centred on the box asked for, with the
+    /// interface's stroke weight, whatever width and weight it is asked for; the same strokes
+    /// without one are drawn at the width and weight asked for.
+    #[test]
+    fn an_icon_is_drawn_at_its_standard_size_or_as_asked_without_one() {
+        assert_eq!(icons::PLUS.standard_size, Some(10.0));
+        let asked = painted(|p| icon_weighted(p, Pos2::ZERO, &icons::PLUS, 18.0, 3.0, MARK));
+        let standard = painted(|p| icon_exact(p, Pos2::new(4.0, 4.0), &icons::PLUS, 10.0, STROKE, MARK));
+        assert_eq!(asked, standard, "ten points wide in the middle of eighteen, at the interface's weight");
+        let plain = Icon { standard_size: None, ..icons::PLUS };
+        let asked = painted(|p| icon_weighted(p, Pos2::ZERO, &plain, 18.0, 3.0, MARK));
+        let as_given = painted(|p| icon_exact(p, Pos2::ZERO, &plain, 18.0, 3.0, MARK));
+        assert_eq!(asked, as_given, "eighteen points wide at the weight asked for");
+        assert_ne!(asked, standard);
+    }
 }

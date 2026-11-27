@@ -2,9 +2,10 @@
 //! mark's A, the model thumbnail's links and the chevron. Each is a set of strokes in the box the
 //! design draws it in: `L` a straight segment, `C` a cubic curve with its two control points. The
 //! stroke is the design's weight; drawing an icon larger or smaller keeps it, as the design does.
-//! These are the icons the shell and both notations draw, and those the standard sizes name; an
-//! icon only one notation draws, ER's or UML's, stays in the shell until that notation's screens
-//! crate takes it.
+//! These are the icons the shell and both notations draw, and six only one notation draws (ER's
+//! column, domain, enumeration, sequence and grip, UML's issue), which leave with their notation;
+//! any other icon only one notation draws, ER's or UML's, stays in the shell until that notation's
+//! screens crate takes it. Each icon carries its standard size, if it has one.
 
 #![allow(clippy::approx_constant, reason = "path coordinates measured from the design; one that happens to be near 1/π is not that constant")]
 
@@ -14,6 +15,7 @@ use super::{Icon, Seg::C, Seg::L};
 pub const MARK_A: Icon = Icon {
     size: [11.33, 10.67],
     stroke: 1.6,
+    standard_size: None,
     segments: &[L([0.0, 10.67], [5.332, 0.0]), L([5.332, 0.0], [11.33, 10.67]), L([2.666, 6.669], [8.664, 6.669])],
 };
 
@@ -21,6 +23,7 @@ pub const MARK_A: Icon = Icon {
 pub const HOME: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.5,
+    standard_size: Some(15.0),
     segments: &[
         L([0.0, 6.4], [8.0, 0.0]),
         L([8.0, 0.0], [16.0, 6.4]),
@@ -35,12 +38,14 @@ pub const HOME: Icon = Icon {
 };
 
 /// The plus icon.
-pub const PLUS: Icon = Icon { size: [18.0, 18.0], stroke: 1.7, segments: &[L([9.0, 0.0], [9.0, 18.0]), L([0.0, 9.0], [18.0, 9.0])] };
+pub const PLUS: Icon =
+    Icon { size: [18.0, 18.0], stroke: 1.7, standard_size: Some(10.0), segments: &[L([9.0, 0.0], [9.0, 18.0]), L([0.0, 9.0], [18.0, 9.0])] };
 
 /// The search icon.
 pub const SEARCH: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.7,
+    standard_size: Some(12.0),
     segments: &[
         C([13.091, 6.545], [13.091, 10.16], [10.16, 13.091], [6.545, 13.091]),
         C([6.545, 13.091], [2.93, 13.091], [0.0, 10.16], [0.0, 6.545]),
@@ -54,6 +59,7 @@ pub const SEARCH: Icon = Icon {
 pub const HELP: Icon = Icon {
     size: [20.0, 20.0],
     stroke: 1.6,
+    standard_size: Some(16.0),
     segments: &[
         C([10.005, 0.0], [15.527, 0.003], [20.001, 4.481], [20.0, 10.002]),
         C([20.0, 10.002], [19.999, 15.524], [15.522, 20.0], [10.0, 20.0]),
@@ -70,13 +76,18 @@ pub const HELP: Icon = Icon {
 };
 
 /// The more icon, three dots.
-pub const MORE: Icon =
-    Icon { size: [17.0, 0.0], stroke: 1.7, segments: &[L([0.0, 0.0], [1.0, 0.0]), L([8.0, 0.0], [9.0, 0.0]), L([16.0, 0.0], [17.0, 0.0])] };
+pub const MORE: Icon = Icon {
+    size: [17.0, 0.0],
+    stroke: 1.7,
+    standard_size: Some(14.0),
+    segments: &[L([0.0, 0.0], [1.0, 0.0]), L([8.0, 0.0], [9.0, 0.0]), L([16.0, 0.0], [17.0, 0.0])],
+};
 
 /// The folder icon.
 pub const FOLDER: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.7,
+    standard_size: Some(14.0),
     segments: &[
         L([0.0, 0.0], [7.2, 0.0]),
         L([7.2, 0.0], [9.9, 3.6]),
@@ -91,6 +102,7 @@ pub const FOLDER: Icon = Icon {
 pub const CHAT: Icon = Icon {
     size: [22.0, 22.0],
     stroke: 1.7,
+    standard_size: Some(16.0),
     segments: &[
         L([0.0, 0.0], [22.0, 0.0]),
         L([22.0, 0.0], [22.0, 16.211]),
@@ -103,13 +115,15 @@ pub const CHAT: Icon = Icon {
 };
 
 /// The close icon.
-pub const CLOSE: Icon = Icon { size: [14.0, 14.0], stroke: 1.7, segments: &[L([0.0, 0.0], [14.0, 14.0]), L([14.0, 0.0], [0.0, 14.0])] };
+pub const CLOSE: Icon =
+    Icon { size: [14.0, 14.0], stroke: 1.7, standard_size: Some(9.0), segments: &[L([0.0, 0.0], [14.0, 14.0]), L([14.0, 0.0], [0.0, 14.0])] };
 
 /// The link mark of a key column that follows the column it points at (the design's Icon / Link):
 /// two chain links.
 pub const LINK: Icon = Icon {
     size: [12.0, 6.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         L([4.5, 0.0], [3.0, 0.0]),
         C([3.0, 0.0], [1.343, 0.0], [0.0, 1.343], [0.0, 3.0]),
@@ -127,6 +141,7 @@ pub const LINK: Icon = Icon {
 pub const DOMAIN: Icon = Icon {
     size: [11.0, 7.0],
     stroke: 1.1,
+    standard_size: Some(11.0),
     segments: &[
         L([0.0, 0.0], [11.0, 0.0]),
         L([11.0, 0.0], [11.0, 7.0]),
@@ -140,6 +155,7 @@ pub const DOMAIN: Icon = Icon {
 pub const COLUMN: Icon = Icon {
     size: [12.0, 8.0],
     stroke: 1.2,
+    standard_size: Some(11.0),
     segments: &[
         L([0.0, 0.0], [12.0, 0.0]),
         L([12.0, 0.0], [12.0, 8.0]),
@@ -153,6 +169,7 @@ pub const COLUMN: Icon = Icon {
 pub const GRIP: Icon = Icon {
     size: [4.0, 8.0],
     stroke: 1.6,
+    standard_size: Some(8.0),
     segments: &[
         L([0.0, 0.0], [0.0, 0.0]),
         L([4.0, 0.0], [4.0, 0.0]),
@@ -167,6 +184,7 @@ pub const GRIP: Icon = Icon {
 pub const SEQUENCE: Icon = Icon {
     size: [10.0, 8.5],
     stroke: 1.1,
+    standard_size: Some(10.0),
     segments: &[
         L([0.0, 0.0], [10.0, 0.0]),
         L([0.0, 3.5], [10.0, 3.5]),
@@ -180,6 +198,7 @@ pub const SEQUENCE: Icon = Icon {
 pub const VIEW: Icon = Icon {
     size: [12.0, 9.0],
     stroke: 1.1,
+    standard_size: Some(12.0),
     segments: &[
         C([0.0, 4.5], [2.0, 1.0], [4.0, 0.0], [6.0, 0.0]),
         C([6.0, 0.0], [8.0, 0.0], [10.0, 1.0], [12.0, 4.5]),
@@ -196,6 +215,7 @@ pub const VIEW: Icon = Icon {
 pub const ENUM: Icon = Icon {
     size: [9.5, 7.0],
     stroke: 1.1,
+    standard_size: Some(9.5),
     segments: &[
         L([0.0, 0.0], [0.5, 0.0]),
         L([3.0, 0.0], [9.5, 0.0]),
@@ -207,13 +227,18 @@ pub const ENUM: Icon = Icon {
 };
 
 /// The arrow pointing right.
-pub const ARROW: Icon =
-    Icon { size: [16.0, 16.0], stroke: 1.7, segments: &[L([0.0, 8.0], [16.0, 8.0]), L([9.778, 0.0], [16.0, 8.0]), L([16.0, 8.0], [9.778, 16.0])] };
+pub const ARROW: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.7,
+    standard_size: Some(14.0),
+    segments: &[L([0.0, 8.0], [16.0, 8.0]), L([9.778, 0.0], [16.0, 8.0]), L([16.0, 8.0], [9.778, 16.0])],
+};
 
 /// The two opposed arrows of Swap.
 pub const SWAP: Icon = Icon {
     size: [10.0, 8.8],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([0.0, 2.4], [9.0, 2.4]),
         L([6.6, 0.0], [9.0, 2.4]),
@@ -228,6 +253,7 @@ pub const SWAP: Icon = Icon {
 pub const MAP: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.7,
+    standard_size: Some(14.0),
     segments: &[
         L([0.0, 0.0], [6.0, 0.0]),
         L([6.0, 0.0], [6.0, 6.0]),
@@ -251,6 +277,7 @@ pub const MAP: Icon = Icon {
 pub const IMPORT: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.7,
+    standard_size: Some(16.0),
     segments: &[
         L([9.0, 0.0], [9.0, 12.6]),
         L([3.0, 7.2], [9.0, 12.6]),
@@ -262,12 +289,14 @@ pub const IMPORT: Icon = Icon {
 };
 
 /// The chevron under a menu.
-pub const CHEVRON_DOWN: Icon = Icon { size: [8.0, 4.0], stroke: 1.25, segments: &[L([0.0, 0.0], [4.0, 4.0]), L([4.0, 4.0], [8.0, 0.0])] };
+pub const CHEVRON_DOWN: Icon =
+    Icon { size: [8.0, 4.0], stroke: 1.25, standard_size: Some(8.0), segments: &[L([0.0, 0.0], [4.0, 4.0]), L([4.0, 4.0], [8.0, 0.0])] };
 
 /// The list icon.
 pub const LIST: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.7,
+    standard_size: Some(14.0),
     segments: &[
         L([0.0, 0.0], [1.778, 0.0]),
         L([5.333, 0.0], [16.0, 0.0]),
@@ -282,6 +311,7 @@ pub const LIST: Icon = Icon {
 pub const GRID: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.7,
+    standard_size: Some(14.0),
     segments: &[
         L([0.0, 0.0], [5.333, 0.0]),
         L([5.333, 0.0], [5.333, 5.333]),
@@ -306,6 +336,7 @@ pub const GRID: Icon = Icon {
 pub const MOON: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.5,
+    standard_size: Some(14.0),
     segments: &[
         C([14.0, 8.67], [13.131, 12.026], [9.968, 14.267], [6.514, 13.974]),
         C([6.514, 13.974], [3.059, 13.682], [0.318, 10.941], [0.026, 7.486]),
@@ -319,6 +350,7 @@ pub const MOON: Icon = Icon {
 pub const SUN: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.5,
+    standard_size: Some(14.0),
     segments: &[
         C([10.2, 7.0], [10.2, 8.767], [8.767, 10.2], [7.0, 10.2]),
         C([7.0, 10.2], [5.233, 10.2], [3.8, 8.767], [3.8, 7.0]),
@@ -339,6 +371,7 @@ pub const SUN: Icon = Icon {
 pub const MODEL_LINKS: Icon = Icon {
     size: [36.0, 20.0],
     stroke: 1.0,
+    standard_size: None,
     segments: &[L([0.0, 0.0], [36.0, 0.0]), L([36.0, 0.0], [36.0, 20.0]), L([0.0, 0.0], [0.0, 20.0]), L([0.0, 20.0], [36.0, 20.0])],
 };
 
@@ -346,6 +379,7 @@ pub const MODEL_LINKS: Icon = Icon {
 pub const ISSUE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.5,
+    standard_size: Some(17.0),
     segments: &[
         C([8.0, 1.5], [11.59, 1.5], [14.5, 4.41], [14.5, 8.0]),
         C([14.5, 8.0], [14.5, 11.59], [11.59, 14.5], [8.0, 14.5]),
@@ -360,6 +394,7 @@ pub const ISSUE: Icon = Icon {
 pub const WARNING: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         L([7.0, 1.5], [13.0, 12.5]),
         L([13.0, 12.5], [1.0, 12.5]),
@@ -373,6 +408,7 @@ pub const WARNING: Icon = Icon {
 pub const KEY: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([6.3, 7.7], [11.5, 2.5]),
         L([9.5, 4.5], [11.0, 6.0]),
@@ -388,6 +424,7 @@ pub const KEY: Icon = Icon {
 pub const LOCK: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([5.0, 6.5], [5.0, 4.5]),
         C([5.0, 4.5], [5.0, 3.395], [5.895, 2.5], [7.0, 2.5]),
@@ -404,6 +441,7 @@ pub const LOCK: Icon = Icon {
 pub const TERMINAL: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([4.0, 5.5], [6.0, 7.0]),
         L([6.0, 7.0], [4.0, 8.5]),
@@ -423,6 +461,7 @@ pub const TERMINAL: Icon = Icon {
 pub const COPY: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([3.0, 9.0], [2.5, 9.0]),
         L([2.5, 9.0], [2.5, 2.5]),
@@ -439,6 +478,7 @@ pub const COPY: Icon = Icon {
 pub const EXTERNAL: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([8.0, 2.5], [11.5, 2.5]),
         L([11.5, 2.5], [11.5, 6.0]),
@@ -454,6 +494,7 @@ pub const EXTERNAL: Icon = Icon {
 pub const LOOK_AGAIN: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         C([11.6, 7.0], [11.603, 9.188], [10.063, 11.075], [7.919, 11.512]),
         C([7.919, 11.512], [5.775, 11.949], [3.62, 10.815], [2.766, 8.801]),
@@ -468,6 +509,7 @@ pub const LOOK_AGAIN: Icon = Icon {
 pub const AGENT: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([8.0, 1.8], [13.4, 4.9]),
         L([13.4, 4.9], [13.4, 11.1]),
@@ -486,6 +528,7 @@ pub const AGENT: Icon = Icon {
 pub const PERSON: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         C([3.0, 13.5], [3.6, 10.8], [5.6, 9.5], [8.0, 9.5]),
         C([8.0, 9.5], [10.4, 9.5], [12.4, 10.8], [13.0, 13.5]),
@@ -500,6 +543,7 @@ pub const PERSON: Icon = Icon {
 pub const BUBBLE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.5,
+    standard_size: Some(17.0),
     segments: &[
         L([2.0, 3.0], [14.0, 3.0]),
         L([14.0, 3.0], [14.0, 11.0]),
@@ -515,6 +559,7 @@ pub const BUBBLE: Icon = Icon {
 pub const CONVERSATIONS: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: Some(14.0),
     segments: &[
         C([2.2, 7.0], [2.206, 9.29], [3.828, 11.257], [6.074, 11.698]),
         C([6.074, 11.698], [8.321, 12.14], [10.567, 10.933], [11.438, 8.816]),
@@ -531,6 +576,7 @@ pub const CONVERSATIONS: Icon = Icon {
 pub const READ: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         C([1.5, 7.0], [3.2, 4.0], [10.8, 4.0], [12.5, 7.0]),
         C([12.5, 7.0], [10.8, 10.0], [3.2, 10.0], [1.5, 7.0]),
@@ -542,13 +588,18 @@ pub const READ: Icon = Icon {
 };
 
 /// Send (the design's Icon / Send): an arrow up.
-pub const SEND: Icon =
-    Icon { size: [14.0, 14.0], stroke: 1.2, segments: &[L([7.0, 12.0], [7.0, 2.5]), L([3.0, 6.5], [7.0, 2.5]), L([7.0, 2.5], [11.0, 6.5])] };
+pub const SEND: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.2,
+    standard_size: None,
+    segments: &[L([7.0, 12.0], [7.0, 2.5]), L([3.0, 6.5], [7.0, 2.5]), L([7.0, 2.5], [11.0, 6.5])],
+};
 
 /// Stop (the design's Icon / Stop): a small rounded square.
 pub const STOP: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([4.6, 4.0], [9.4, 4.0]),
         C([9.4, 4.0], [9.8, 4.0], [10.0, 4.2], [10.0, 4.6]),
@@ -562,12 +613,14 @@ pub const STOP: Icon = Icon {
 };
 
 /// Applied (the design's Icon / Apply): a small check, before a turn's changes to the model.
-pub const APPLIED: Icon = Icon { size: [14.0, 14.0], stroke: 1.2, segments: &[L([2.94, 7.005], [5.782, 10.05]), L([5.782, 10.05], [11.06, 3.96])] };
+pub const APPLIED: Icon =
+    Icon { size: [14.0, 14.0], stroke: 1.2, standard_size: None, segments: &[L([2.94, 7.005], [5.782, 10.05]), L([5.782, 10.05], [11.06, 3.96])] };
 
 /// History: a clock face.
 pub const HISTORY: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.5,
+    standard_size: Some(17.0),
     segments: &[
         C([8.0, 1.5], [11.59, 1.5], [14.5, 4.41], [14.5, 8.0]),
         C([14.5, 8.0], [14.5, 11.59], [11.59, 14.5], [8.0, 14.5]),
@@ -582,6 +635,7 @@ pub const HISTORY: Icon = Icon {
 pub const VERSION_CLOCK: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: Some(14.0),
     segments: &[
         C([2.2, 7.0], [2.206, 9.29], [3.828, 11.257], [6.074, 11.698]),
         C([6.074, 11.698], [8.321, 12.14], [10.567, 10.933], [11.438, 8.816]),
@@ -595,12 +649,13 @@ pub const VERSION_CLOCK: Icon = Icon {
 };
 
 /// Restore: the versions' clock without its hands, the counter-clockwise arrow alone.
-pub const RESTORE: Icon = Icon { segments: VERSION_CLOCK.segments.split_at(6).0, ..VERSION_CLOCK };
+pub const RESTORE: Icon = Icon { segments: VERSION_CLOCK.segments.split_at(6).0, standard_size: None, ..VERSION_CLOCK };
 
 /// A cube: the Models explorer and a model element.
 pub const CUBE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.4,
+    standard_size: Some(17.0),
     segments: &[
         L([8.0, 0.6], [15.0, 4.3]),
         L([15.0, 4.3], [15.0, 11.7]),
@@ -618,6 +673,7 @@ pub const CUBE: Icon = Icon {
 pub const BRANCH: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.4,
+    standard_size: Some(17.0),
     segments: &[
         L([4.0, 5.0], [4.0, 11.0]),
         C([6.0, 3.0], [6.0, 4.1], [5.1, 5.0], [4.0, 5.0]),
@@ -640,6 +696,7 @@ pub const BRANCH: Icon = Icon {
 pub const TABLE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: Some(15.0),
     segments: &[
         L([1.0, 2.0], [15.0, 2.0]),
         L([15.0, 2.0], [15.0, 14.0]),
@@ -654,6 +711,7 @@ pub const TABLE: Icon = Icon {
 pub const BRUSH: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.4,
+    standard_size: Some(16.0),
     segments: &[
         L([14.5, 1.5], [7.5, 8.5]),
         L([7.5, 8.5], [9.0, 10.0]),
@@ -669,6 +727,7 @@ pub const BRUSH: Icon = Icon {
 pub const PROPERTIES: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.4,
+    standard_size: None,
     segments: &[
         L([1.5, 4.5], [9.7, 4.5]),
         L([13.3, 4.5], [16.5, 4.5]),
@@ -695,6 +754,7 @@ pub const PROPERTIES: Icon = Icon {
 pub const SKILLS: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         L([3.0, 1.5], [11.5, 1.5]),
         L([11.5, 1.5], [15.0, 5.0]),
@@ -716,6 +776,7 @@ pub const SKILLS: Icon = Icon {
 pub const CHAT_BUBBLE: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.4,
+    standard_size: None,
     segments: &[
         L([4.5, 2.0], [13.5, 2.0]),
         C([13.5, 2.0], [15.157, 2.0], [16.5, 3.343], [16.5, 5.0]),
@@ -737,6 +798,7 @@ pub const CHAT_BUBBLE: Icon = Icon {
 pub const PALETTE: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         C([9.0, 1.5], [13.5, 1.5], [16.5, 4.5], [16.5, 8.3]),
         C([16.5, 8.3], [16.5, 10.6], [15.0, 11.4], [13.4, 11.0]),
@@ -763,6 +825,7 @@ pub const PALETTE: Icon = Icon {
 pub const SKILL: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.2,
+    standard_size: Some(17.0),
     segments: &[
         L([4.0, 2.5], [10.5, 2.5]),
         L([10.5, 2.5], [14.0, 6.0]),
@@ -786,6 +849,7 @@ pub const SKILL: Icon = Icon {
 pub const COLLAPSE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.4,
+    standard_size: Some(14.0),
     segments: &[L([3.0, 4.0], [7.0, 8.0]), L([7.0, 8.0], [3.0, 12.0]), L([9.0, 4.0], [13.0, 8.0]), L([13.0, 8.0], [9.0, 12.0])],
 };
 
@@ -793,6 +857,7 @@ pub const COLLAPSE: Icon = Icon {
 pub const ARRANGE_DIAGRAM: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.2,
+    standard_size: Some(16.0),
     segments: &[
         L([5.0, 1.0], [11.0, 1.0]),
         L([11.0, 1.0], [11.0, 5.0]),
@@ -814,19 +879,25 @@ pub const ARRANGE_DIAGRAM: Icon = Icon {
 };
 
 /// The design's `Icon / Routing · Straight`: a line straight across.
-pub const ROUTE_STRAIGHT: Icon = Icon { size: [18.0, 10.0], stroke: 1.2, segments: &[L([0.0, 10.0], [18.0, 0.0])] };
+pub const ROUTE_STRAIGHT: Icon = Icon { size: [18.0, 10.0], stroke: 1.2, standard_size: Some(18.0), segments: &[L([0.0, 10.0], [18.0, 0.0])] };
 
 /// The design's `Icon / Routing · Orthogonal`: across, up, across.
-pub const ROUTE_RIGHT_ANGLED: Icon =
-    Icon { size: [18.0, 10.0], stroke: 1.2, segments: &[L([0.0, 10.0], [9.0, 10.0]), L([9.0, 10.0], [9.0, 0.0]), L([9.0, 0.0], [18.0, 0.0])] };
+pub const ROUTE_RIGHT_ANGLED: Icon = Icon {
+    size: [18.0, 10.0],
+    stroke: 1.2,
+    standard_size: Some(18.0),
+    segments: &[L([0.0, 10.0], [9.0, 10.0]), L([9.0, 10.0], [9.0, 0.0]), L([9.0, 0.0], [18.0, 0.0])],
+};
 
 /// The design's `Icon / Routing · Curved`: one curve, flat at both ends.
-pub const ROUTE_CURVED: Icon = Icon { size: [18.0, 10.0], stroke: 1.2, segments: &[C([0.0, 10.0], [9.0, 10.0], [9.0, 0.0], [18.0, 0.0])] };
+pub const ROUTE_CURVED: Icon =
+    Icon { size: [18.0, 10.0], stroke: 1.2, standard_size: Some(18.0), segments: &[C([0.0, 10.0], [9.0, 10.0], [9.0, 0.0], [18.0, 0.0])] };
 
 /// Two chevrons pointing apart: open every row of a tree (the design's `Icon / Expand all`).
 pub const EXPAND_ALL: Icon = Icon {
     size: [6.0, 9.0],
     stroke: 1.2,
+    standard_size: Some(9.0),
     segments: &[L([0.0, 3.0], [3.0, 0.0]), L([3.0, 0.0], [6.0, 3.0]), L([0.0, 6.0], [3.0, 9.0]), L([3.0, 9.0], [6.0, 6.0])],
 };
 
@@ -834,6 +905,7 @@ pub const EXPAND_ALL: Icon = Icon {
 pub const COLLAPSE_ALL: Icon = Icon {
     size: [6.0, 9.0],
     stroke: 1.2,
+    standard_size: Some(9.0),
     segments: &[L([0.0, 0.0], [3.0, 3.0]), L([3.0, 3.0], [6.0, 0.0]), L([0.0, 9.0], [3.0, 6.0]), L([3.0, 6.0], [6.0, 9.0])],
 };
 
@@ -841,6 +913,7 @@ pub const COLLAPSE_ALL: Icon = Icon {
 pub const DIAGRAM: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.4,
+    standard_size: Some(17.0),
     segments: &[
         L([1.0, 1.0], [7.0, 1.0]),
         L([7.0, 1.0], [7.0, 6.0]),
@@ -859,6 +932,7 @@ pub const DIAGRAM: Icon = Icon {
 pub const SCHEMA: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: Some(16.0),
     segments: &[
         C([2.0, 4.0], [2.0, 2.6], [4.7, 1.5], [8.0, 1.5]),
         C([8.0, 1.5], [11.3, 1.5], [14.0, 2.6], [14.0, 4.0]),
@@ -875,21 +949,29 @@ pub const SCHEMA: Icon = Icon {
 
 /// A chevron pointing right: a folded row.
 /// Open: an arrow out to the top right, into what it opens.
-pub const OPEN_IN: Icon =
-    Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([3.0, 13.0], [13.0, 3.0]), L([6.0, 3.0], [13.0, 3.0]), L([13.0, 3.0], [13.0, 10.0])] };
+pub const OPEN_IN: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.5,
+    standard_size: Some(10.0),
+    segments: &[L([3.0, 13.0], [13.0, 3.0]), L([6.0, 3.0], [13.0, 3.0]), L([13.0, 3.0], [13.0, 10.0])],
+};
 
-pub const CHEVRON_RIGHT: Icon = Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([6.0, 3.0], [11.0, 8.0]), L([11.0, 8.0], [6.0, 13.0])] };
+pub const CHEVRON_RIGHT: Icon =
+    Icon { size: [16.0, 16.0], stroke: 1.5, standard_size: Some(9.0), segments: &[L([6.0, 3.0], [11.0, 8.0]), L([11.0, 8.0], [6.0, 13.0])] };
 
 /// The chevron of Back, pointing left.
-pub const CHEVRON_LEFT: Icon = Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([10.0, 3.0], [5.0, 8.0]), L([5.0, 8.0], [10.0, 13.0])] };
+pub const CHEVRON_LEFT: Icon =
+    Icon { size: [16.0, 16.0], stroke: 1.5, standard_size: Some(9.0), segments: &[L([10.0, 3.0], [5.0, 8.0]), L([5.0, 8.0], [10.0, 13.0])] };
 
 /// A tick: apply, a check that is on.
-pub const TICK: Icon = Icon { size: [16.0, 16.0], stroke: 1.6, segments: &[L([3.0, 8.5], [6.5, 12.0]), L([6.5, 12.0], [13.0, 4.5])] };
+pub const TICK: Icon =
+    Icon { size: [16.0, 16.0], stroke: 1.6, standard_size: Some(13.0), segments: &[L([3.0, 8.5], [6.5, 12.0]), L([6.5, 12.0], [13.0, 4.5])] };
 
 /// A bin: remove.
 pub const TRASH: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: Some(14.0),
     segments: &[
         L([2.0, 4.0], [14.0, 4.0]),
         L([6.0, 4.0], [6.0, 2.0]),
@@ -907,6 +989,7 @@ pub const TRASH: Icon = Icon {
 pub const EDIT: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: Some(14.0),
     segments: &[
         L([2.5, 13.5], [5.5, 13.0]),
         L([5.5, 13.0], [13.5, 5.0]),
@@ -921,6 +1004,7 @@ pub const EDIT: Icon = Icon {
 pub const NAMING: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.2,
+    standard_size: Some(17.0),
     segments: &[
         L([2.5, 13.5], [6.5, 4.0]),
         L([6.5, 4.0], [10.5, 13.5]),
@@ -937,6 +1021,7 @@ pub const NAMING: Icon = Icon {
 pub const EXPORT: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.2,
+    standard_size: Some(20.0),
     segments: &[
         L([9.0, 11.5], [9.0, 2.5]),
         L([5.8, 5.7], [9.0, 2.5]),
@@ -951,6 +1036,7 @@ pub const EXPORT: Icon = Icon {
 pub const TOOL_SELECT: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[L([0.0, 0.0], [5.0, 18.0]), L([5.0, 18.0], [9.0, 10.8]), L([9.0, 10.8], [18.0, 8.1]), L([18.0, 8.1], [0.0, 0.0])],
 };
 
@@ -958,6 +1044,7 @@ pub const TOOL_SELECT: Icon = Icon {
 pub const TOOL_PAN: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         L([4.286, 8.609], [4.286, 2.348]),
         C([4.286, 2.348], [5.429, 1.304], [6.571, 1.304], [7.714, 2.348]),
@@ -982,6 +1069,7 @@ pub const TOOL_PAN: Icon = Icon {
 pub const TOOL_RELATIONSHIP: Icon = Icon {
     size: [15.0, 10.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[L([0.0, 5.0], [15.0, 5.0]), L([3.0, 0.0], [3.0, 10.0]), L([10.5, 5.0], [15.0, 0.5]), L([10.5, 5.0], [15.0, 9.5])],
 };
 
@@ -989,6 +1077,7 @@ pub const TOOL_RELATIONSHIP: Icon = Icon {
 pub const TOOL_NOTE: Icon = Icon {
     size: [12.0, 14.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         L([0.0, 0.0], [8.0, 0.0]),
         L([8.0, 0.0], [12.0, 4.0]),
@@ -1005,19 +1094,22 @@ pub const TOOL_NOTE: Icon = Icon {
 pub const TOOL_LINK_NOTE: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[L([0.0, 14.0], [2.404, 11.596]), L([5.798, 8.202], [8.202, 5.798]), L([11.596, 2.404], [14.0, 0.0])],
 };
 
 /// The small chevron beside a tool that has kinds.
-pub const CHEVRON_SMALL: Icon = Icon { size: [8.0, 4.0], stroke: 1.25, segments: &[L([0.0, 0.0], [4.0, 4.0]), L([4.0, 4.0], [8.0, 0.0])] };
+pub const CHEVRON_SMALL: Icon =
+    Icon { size: [8.0, 4.0], stroke: 1.25, standard_size: Some(8.0), segments: &[L([0.0, 0.0], [4.0, 4.0]), L([4.0, 4.0], [8.0, 0.0])] };
 
 /// The key status toggle's line; its two dots are filled by the toolbar.
-pub const KEY_STATUS: Icon = Icon { size: [14.0, 12.0], stroke: 1.2, segments: &[L([0.0, 6.0], [14.0, 6.0])] };
+pub const KEY_STATUS: Icon = Icon { size: [14.0, 12.0], stroke: 1.2, standard_size: None, segments: &[L([0.0, 6.0], [14.0, 6.0])] };
 
 /// The ER diagram icon of a tab and a Diagrams row: two tables joined one to many.
 pub const ER_DIAGRAM: Icon = Icon {
     size: [13.0, 12.0],
     stroke: 1.5,
+    standard_size: Some(13.0),
     segments: &[
         L([0.0, 0.0], [6.0, 0.0]),
         L([6.0, 0.0], [6.0, 5.0]),
@@ -1037,28 +1129,49 @@ pub const ER_DIAGRAM: Icon = Icon {
 };
 
 /// The minus of the minimap's collapse button.
-pub const MINUS: Icon = Icon { size: [6.0, 1.0], stroke: 1.0, segments: &[L([0.0, 0.5], [6.0, 0.5])] };
+pub const MINUS: Icon = Icon { size: [6.0, 1.0], stroke: 1.0, standard_size: Some(8.0), segments: &[L([0.0, 0.5], [6.0, 0.5])] };
 
 /// The Arrange bar's actions, from the design's `Chrome / Selection toolbar`: align left.
-pub const ARRANGE_LEFT: Icon =
-    Icon { size: [16.0, 14.0], stroke: 1.2, segments: &[L([0.0, 0.0], [0.0, 14.0]), L([3.0, 4.0], [16.0, 4.0]), L([3.0, 10.0], [11.0, 10.0])] };
+pub const ARRANGE_LEFT: Icon = Icon {
+    size: [16.0, 14.0],
+    stroke: 1.2,
+    standard_size: None,
+    segments: &[L([0.0, 0.0], [0.0, 14.0]), L([3.0, 4.0], [16.0, 4.0]), L([3.0, 10.0], [11.0, 10.0])],
+};
 /// Align centres.
-pub const ARRANGE_CENTRE: Icon =
-    Icon { size: [14.0, 14.0], stroke: 1.2, segments: &[L([7.0, 0.0], [7.0, 14.0]), L([0.0, 4.0], [14.0, 4.0]), L([3.0, 10.0], [11.0, 10.0])] };
+pub const ARRANGE_CENTRE: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.2,
+    standard_size: None,
+    segments: &[L([7.0, 0.0], [7.0, 14.0]), L([0.0, 4.0], [14.0, 4.0]), L([3.0, 10.0], [11.0, 10.0])],
+};
 /// Align right.
-pub const ARRANGE_RIGHT: Icon =
-    Icon { size: [16.0, 14.0], stroke: 1.2, segments: &[L([16.0, 0.0], [16.0, 14.0]), L([0.0, 4.0], [13.0, 4.0]), L([5.0, 10.0], [13.0, 10.0])] };
+pub const ARRANGE_RIGHT: Icon = Icon {
+    size: [16.0, 14.0],
+    stroke: 1.2,
+    standard_size: None,
+    segments: &[L([16.0, 0.0], [16.0, 14.0]), L([0.0, 4.0], [13.0, 4.0]), L([5.0, 10.0], [13.0, 10.0])],
+};
 /// Distribute horizontally.
-pub const ARRANGE_DISTRIBUTE: Icon =
-    Icon { size: [14.0, 10.0], stroke: 1.6, segments: &[L([0.0, 0.0], [0.0, 10.0]), L([7.0, 0.0], [7.0, 10.0]), L([14.0, 0.0], [14.0, 10.0])] };
+pub const ARRANGE_DISTRIBUTE: Icon = Icon {
+    size: [14.0, 10.0],
+    stroke: 1.6,
+    standard_size: None,
+    segments: &[L([0.0, 0.0], [0.0, 10.0]), L([7.0, 0.0], [7.0, 10.0]), L([14.0, 0.0], [14.0, 10.0])],
+};
 /// Stack vertically.
-pub const ARRANGE_STACK: Icon =
-    Icon { size: [12.0, 10.0], stroke: 1.6, segments: &[L([0.0, 0.0], [12.0, 0.0]), L([0.0, 5.0], [12.0, 5.0]), L([0.0, 10.0], [12.0, 10.0])] };
+pub const ARRANGE_STACK: Icon = Icon {
+    size: [12.0, 10.0],
+    stroke: 1.6,
+    standard_size: None,
+    segments: &[L([0.0, 0.0], [12.0, 0.0]), L([0.0, 5.0], [12.0, 5.0]), L([0.0, 10.0], [12.0, 10.0])],
+};
 
 /// A selected entity's adorners: connect (two boxes joined), from the design's "New entity".
 pub const ADORN_CONNECT: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.25,
+    standard_size: None,
     segments: &[
         L([5.0, 2.5], [11.5, 2.5]),
         L([11.5, 2.5], [11.5, 9.0]),
@@ -1076,6 +1189,7 @@ pub const ADORN_CONNECT: Icon = Icon {
 pub const ADORN_ADD: Icon = Icon {
     size: [13.0, 12.0],
     stroke: 1.25,
+    standard_size: None,
     segments: &[
         L([0.0, 0.0], [10.0, 0.0]),
         L([0.0, 4.0], [7.0, 4.0]),
@@ -1084,3 +1198,108 @@ pub const ADORN_ADD: Icon = Icon {
         L([7.0, 9.0], [13.0, 9.0]),
     ],
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every icon is drawn at the standard size the table of sizes in `ux` gave it before each
+    /// icon carried its own (AR-842), or at the size it is given when the table named none. The
+    /// table matched by value, so the conversations' clock, drawn as the versions' clock, has its
+    /// 14, and Restore, the versions' clock without its hands, none.
+    #[test]
+    fn every_icon_keeps_its_standard_size() {
+        let icons: [(&str, Icon, Option<f32>); 87] = [
+            ("MARK_A", MARK_A, None),
+            ("HOME", HOME, Some(15.0)),
+            ("PLUS", PLUS, Some(10.0)),
+            ("SEARCH", SEARCH, Some(12.0)),
+            ("HELP", HELP, Some(16.0)),
+            ("MORE", MORE, Some(14.0)),
+            ("FOLDER", FOLDER, Some(14.0)),
+            ("CHAT", CHAT, Some(16.0)),
+            ("CLOSE", CLOSE, Some(9.0)),
+            ("LINK", LINK, None),
+            ("DOMAIN", DOMAIN, Some(11.0)),
+            ("COLUMN", COLUMN, Some(11.0)),
+            ("GRIP", GRIP, Some(8.0)),
+            ("SEQUENCE", SEQUENCE, Some(10.0)),
+            ("VIEW", VIEW, Some(12.0)),
+            ("ENUM", ENUM, Some(9.5)),
+            ("ARROW", ARROW, Some(14.0)),
+            ("SWAP", SWAP, None),
+            ("MAP", MAP, Some(14.0)),
+            ("IMPORT", IMPORT, Some(16.0)),
+            ("CHEVRON_DOWN", CHEVRON_DOWN, Some(8.0)),
+            ("LIST", LIST, Some(14.0)),
+            ("GRID", GRID, Some(14.0)),
+            ("MOON", MOON, Some(14.0)),
+            ("SUN", SUN, Some(14.0)),
+            ("MODEL_LINKS", MODEL_LINKS, None),
+            ("ISSUE", ISSUE, Some(17.0)),
+            ("WARNING", WARNING, None),
+            ("KEY", KEY, None),
+            ("LOCK", LOCK, None),
+            ("TERMINAL", TERMINAL, None),
+            ("COPY", COPY, None),
+            ("EXTERNAL", EXTERNAL, None),
+            ("LOOK_AGAIN", LOOK_AGAIN, None),
+            ("AGENT", AGENT, None),
+            ("PERSON", PERSON, None),
+            ("BUBBLE", BUBBLE, Some(17.0)),
+            ("CONVERSATIONS", CONVERSATIONS, Some(14.0)),
+            ("READ", READ, None),
+            ("SEND", SEND, None),
+            ("STOP", STOP, None),
+            ("APPLIED", APPLIED, None),
+            ("HISTORY", HISTORY, Some(17.0)),
+            ("VERSION_CLOCK", VERSION_CLOCK, Some(14.0)),
+            ("RESTORE", RESTORE, None),
+            ("CUBE", CUBE, Some(17.0)),
+            ("BRANCH", BRANCH, Some(17.0)),
+            ("TABLE", TABLE, Some(15.0)),
+            ("BRUSH", BRUSH, Some(16.0)),
+            ("PROPERTIES", PROPERTIES, None),
+            ("SKILLS", SKILLS, None),
+            ("CHAT_BUBBLE", CHAT_BUBBLE, None),
+            ("PALETTE", PALETTE, None),
+            ("SKILL", SKILL, Some(17.0)),
+            ("COLLAPSE", COLLAPSE, Some(14.0)),
+            ("ARRANGE_DIAGRAM", ARRANGE_DIAGRAM, Some(16.0)),
+            ("ROUTE_STRAIGHT", ROUTE_STRAIGHT, Some(18.0)),
+            ("ROUTE_RIGHT_ANGLED", ROUTE_RIGHT_ANGLED, Some(18.0)),
+            ("ROUTE_CURVED", ROUTE_CURVED, Some(18.0)),
+            ("EXPAND_ALL", EXPAND_ALL, Some(9.0)),
+            ("COLLAPSE_ALL", COLLAPSE_ALL, Some(9.0)),
+            ("DIAGRAM", DIAGRAM, Some(17.0)),
+            ("SCHEMA", SCHEMA, Some(16.0)),
+            ("OPEN_IN", OPEN_IN, Some(10.0)),
+            ("CHEVRON_RIGHT", CHEVRON_RIGHT, Some(9.0)),
+            ("CHEVRON_LEFT", CHEVRON_LEFT, Some(9.0)),
+            ("TICK", TICK, Some(13.0)),
+            ("TRASH", TRASH, Some(14.0)),
+            ("EDIT", EDIT, Some(14.0)),
+            ("NAMING", NAMING, Some(17.0)),
+            ("EXPORT", EXPORT, Some(20.0)),
+            ("TOOL_SELECT", TOOL_SELECT, None),
+            ("TOOL_PAN", TOOL_PAN, None),
+            ("TOOL_RELATIONSHIP", TOOL_RELATIONSHIP, None),
+            ("TOOL_NOTE", TOOL_NOTE, None),
+            ("TOOL_LINK_NOTE", TOOL_LINK_NOTE, None),
+            ("CHEVRON_SMALL", CHEVRON_SMALL, Some(8.0)),
+            ("KEY_STATUS", KEY_STATUS, None),
+            ("ER_DIAGRAM", ER_DIAGRAM, Some(13.0)),
+            ("MINUS", MINUS, Some(8.0)),
+            ("ARRANGE_LEFT", ARRANGE_LEFT, None),
+            ("ARRANGE_CENTRE", ARRANGE_CENTRE, None),
+            ("ARRANGE_RIGHT", ARRANGE_RIGHT, None),
+            ("ARRANGE_DISTRIBUTE", ARRANGE_DISTRIBUTE, None),
+            ("ARRANGE_STACK", ARRANGE_STACK, None),
+            ("ADORN_CONNECT", ADORN_CONNECT, None),
+            ("ADORN_ADD", ADORN_ADD, None),
+        ];
+        for (name, icon, side) in icons {
+            assert_eq!(icon.standard_size, side, "{name}");
+        }
+    }
+}
