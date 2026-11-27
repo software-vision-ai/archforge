@@ -36,7 +36,7 @@ table cards and crow's foot lines; its geometry that names no shell, the view's 
 toolbar, whose tools after Select and Pan are the open diagram kind's (`kinds::DiagramKind`, the
 interface in `archforge-shell-api`'s `kinds` with the data types it hands across, what one frame's
 drawing reads (`canvas::Drawing`) and what a press asks for (`editing::Action`), re-exported under
-their old paths, while the shell keeps the kinds it knows (`kinds::KINDS`, ER's and UML's) and
+their old paths, while the shell keeps the kinds of the screens parts it is given (`Shell::new`) and
 asks them through thin forwarders over the whole shell (`kinds::kind_of`, `kinds::active_kind`,
 `kinds::popover_takes_keys`): its tools, each placing or connecting, and the hooks the gestures run: place, connect, a line dropped
 on empty canvas, rename in place and where the name typed goes on a card it draws, open at a card's row, its adorner, the rows its element menu adds
@@ -119,9 +119,8 @@ and `control_cx` to `name_field_cx` and `reveal_cx`, with their geometry `PAD`, 
 crate-private under their old paths where the shell uses them (`actions::Keys` public, as
 `actions::Action` names it). The refusal words (`panels::refusal`, `panels::said`, `panels::a_kind`
 and `engine_said::disabled`, `archforge-shell-api`'s) ask the notations they are handed for their
-own: the context's or the shell's (`notation_uis`), and the app's (`notation_ui::UIS`) where a
-notation's code holds neither (its own refusal words, its problems and the checks that take only
-the store).
+own: the context's or the shell's (`notation_uis`), those of the screens parts the shell is
+given.
 
 **Layer.** 11, the top of the interface's layers, above the shell's interfaces
 (`archforge-shell-api`, 9) and the notations' screens (10); over `archforge-notations` (8),
@@ -138,7 +137,8 @@ or explorer with nothing to show says so in one line, never with a help text.
 
 | Item | Signature |
 |---|---|
-| `Shell::new` | `pub fn new(services: Services) -> Shell` |
+| `Shell::new` | `pub fn new(services: Services, screens: &'static ScreensRegistry) -> Shell`: on Home, with the notations and diagram kinds of the screens parts the app registered (`archforge_shell_api::screens`), each notation's state made from them and their catalogues registered |
+| `ER`, `UML` | `pub const ER: ScreensPart`, `pub const UML: ScreensPart`: ER's and UML's screens parts, each its `NotationUi` with its diagram kind, which the app registers (`static SCREENS: ScreensRegistry = ScreensRegistry::new(&[ER, UML])`); here until each notation's screens have a crate of their own |
 | `Shell::logic` | `pub fn logic(&mut self, ctx: &egui::Context)` (once per frame, before drawing) |
 | `Shell::ui` | `pub fn ui(&mut self, ui: &mut egui::Ui)` (draws the whole window) |
 | `Shell::request_quit` | `pub fn request_quit(&mut self)` (closes the window at the next frame) |
@@ -173,7 +173,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `Opened`, `CreateError` | an open project; why a creation or an opening failed, in the kinds the dialog explains; `UnsupportedKinds` names a project's diagram kinds Archforge does not support, worded on Home and in the status bar |
 | `UiState` | the stored appearance, language, Home's closed banner, the workspace's explorer and panel and their widths |
 | the title strip's controls | `strip.home`, `strip.open-project`, `strip.theme` on every screen; on the workspace `strip.home` closes the project |
-| `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time: the translations machinery of `archforge-shell-api`, re-exported under the path the shell's code and its tests name it by, with the shell's catalogues (`i18n::CATALOGUES`, `src/i18n/<code>.tsv`) and each notation's (`NotationUi::catalogues`: ER's in `src/i18n/er/`, UML's in `src/i18n/uml/`, the rows only that notation's screens name), which `Shell::new` registers as it sets up the notations it knows, so nothing the shell's interfaces say is looked up before them, and `tr`, `tr_ctx` and `trn` before their first lookup |
+| `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time: the translations machinery of `archforge-shell-api`, re-exported under the path the shell's code and its tests name it by, with the shell's catalogues (`i18n::CATALOGUES`, `src/i18n/<code>.tsv`) and each notation's (`NotationUi::catalogues`: ER's in `src/i18n/er/`, UML's in `src/i18n/uml/`, the rows only that notation's screens name), which `Shell::new` registers from the screens parts it is given (`ScreensRegistry::catalogues`), so nothing the shell's interfaces say is looked up before them, and `tr`, `tr_ctx` and `trn` before their first lookup |
 | `model_words::{words, property_label, literal_label, kind_label}` | the labels for what the metamodel names, looked up in the catalogues on the interface thread: every card property and literal of the model area, the kinds the notations create, in each notation's own word (a table, a column, a subtype), and `Element` for the rest |
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |

@@ -14,8 +14,6 @@
 
 pub use archforge_shell_api::i18n::*;
 
-use crate::notation_ui::NotationUi;
-
 /// The shell's catalogue of each language, in the order of `LANGUAGES`, embedded.
 pub static CATALOGUES: &[Rows] = &[
     Rows { code: "en", catalogue: "en.tsv", text: include_str!("en.tsv") },
@@ -27,11 +25,11 @@ pub static CATALOGUES: &[Rows] = &[
     Rows { code: "zh-Hans", catalogue: "zh-Hans.tsv", text: include_str!("zh-Hans.tsv") },
 ];
 
-/// Every catalogue table a shell with the notations `uis` registers: its own, then each notation's
-/// of `uis`, in the order of the notations, so a notation's row under a key of the shell's would
+/// Every catalogue table a shell with the notations' tables `notations` registers: its own, then
+/// each of `notations`, in their order, so a notation's row under a key of the shell's would
 /// replace the shell's.
-pub(crate) fn tables<'a>(uis: &'a [&'static dyn NotationUi]) -> impl Iterator<Item = &'static [Rows]> + 'a {
-    std::iter::once(CATALOGUES).chain(uis.iter().map(|ui| ui.catalogues()))
+pub(crate) fn tables(notations: impl IntoIterator<Item = &'static [Rows]>) -> impl Iterator<Item = &'static [Rows]> {
+    std::iter::once(CATALOGUES).chain(notations)
 }
 
 /// Registers the shell's own catalogue table once, before the first lookup through this module:
@@ -48,15 +46,16 @@ pub(crate) fn registered() {
     });
 }
 
-/// Registers the catalogue tables of a shell with the notations `uis` ([`tables`]), the shell's own
-/// first: as a shell sets up its notations ([`Shell::new`](crate::Shell::new)), so nothing the
-/// shell's interfaces or the notations say, a refusal among them, is looked up before they are in.
-/// The registry is the whole process's and a table registered already changes nothing, so each
-/// shell adds only the tables of notations no shell gave it before. A refusal, which the tests
-/// rule out, is said in the log.
-pub(crate) fn register_notations(uis: &[&'static dyn NotationUi]) {
+/// Registers the catalogue tables of a shell with the notations' tables `notations` ([`tables`]),
+/// the shell's own first: as a shell sets up the notations of the screens parts it is given
+/// ([`Shell::new`](crate::Shell::new), `ScreensRegistry::catalogues`), so nothing the shell's
+/// interfaces or the notations say, a refusal among them, is looked up before they are in. The
+/// registry is the whole process's and a table registered already changes nothing, so each shell
+/// adds only the tables of notations no shell gave it before. A refusal, which the tests rule out,
+/// is said in the log.
+pub(crate) fn register_notations(notations: impl IntoIterator<Item = &'static [Rows]>) {
     registered();
-    for table in tables(uis) {
+    for table in tables(notations) {
         if let Err(e) = register(table) {
             log::warn!("{e}");
         }

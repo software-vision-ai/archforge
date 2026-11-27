@@ -151,7 +151,7 @@ fn start(journey: &str) -> (H, Sandbox) {
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services),
+        Shell::new(services, &crate::SCREENS),
     );
     h.run();
     (h, sandbox)
@@ -559,7 +559,7 @@ fn an_api_key_goes_to_the_secure_store_and_never_into_the_preferences() {
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services),
+        Shell::new(services, &crate::SCREENS),
     );
     h.run();
     until(&mut h, "the look at start", |s| !s.agents.looking() && s.agents.look.claude != archforge_ui_egui::ai_agents::Program::NotLooked);

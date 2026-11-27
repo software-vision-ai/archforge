@@ -563,7 +563,8 @@ pub(crate) mod tests {
             Picked::at_once(None)
         }) as _);
         let pick_folder = Some(Arc::new(|_: &str| Picked::at_once(Some("/pinned".into()))) as _);
-        let mut shell = Shell::new(Services { projects: Some(host.clone()), pick_project, pick_folder, ..Default::default() });
+        let mut shell =
+            Shell::new(Services { projects: Some(host.clone()), pick_project, pick_folder, ..Default::default() }, &crate::tests::SCREENS);
         shell.session = Some(session());
         shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false, notice: None });
         shell.tabs = vec![tab()];
@@ -663,7 +664,7 @@ pub(crate) mod tests {
 
     /// Which actions' effects show in `shell`, in the table's order.
     fn effects(shell: &Shell, saves: &CountingHost, picks: &AtomicUsize) -> Vec<&'static str> {
-        let fresh = Shell::new(Services::default()).state;
+        let fresh = Shell::new(Services::default(), &crate::tests::SCREENS).state;
         let shown = [
             (ABOUT, shell.about.is_some()),
             (QUIT, shell.quit_requested),
@@ -1030,7 +1031,9 @@ pub(crate) mod tests {
             assert_eq!(effects(&shown, &saves, &picks), [CLOSE], "{system}");
             let (mut parked, ..) = shell();
             parked.go_home();
-            for (home, mut on_home, tabs) in [("a project parked", parked, 1), ("nothing open", Shell::new(Services::default()), 0)] {
+            for (home, mut on_home, tabs) in
+                [("a project parked", parked, 1), ("nothing open", Shell::new(Services::default(), &crate::tests::SCREENS), 0)]
+            {
                 assert_eq!(press(&mut on_home, cmd, Key::W), [down(cmd, Key::W)], "{system}, {home}: the press stays");
                 assert!(on_home.tabs.len() == tabs && on_home.tabs.iter().all(|t| t.closing.is_none()), "{system}, {home}: no tab closes");
             }

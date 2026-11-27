@@ -31,7 +31,12 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use archforge_ui_egui::Shell;
+use archforge_shell_api::screens::ScreensRegistry;
+use archforge_ui_egui::{ER, Shell, UML};
+
+/// The notations' screens parts the app registers at start-up (ADR 0003, "Two registries"), in
+/// the order the shell lists them: ER's, then UML's. Every shell the app makes is given them.
+static SCREENS: ScreensRegistry = ScreensRegistry::new(&[ER, UML]);
 
 const USAGE: &str = "usage: archforge [--version | --help | --control <port>]
   --control <port>  turn agent access on for this start: archforge-cli mcp --bridge <port> drives this window";
@@ -237,7 +242,7 @@ fn run() -> i32 {
                 let agents = std::sync::Arc::new(agents::Agents::new(&settings, window.clone()));
                 let ctx = cc.egui_ctx.clone();
                 let pickers = services::Pickers::new(std::sync::Arc::new(move || ctx.request_repaint()));
-                let mut shell = Shell::new(services::native(projects.clone(), agents.clone(), pickers.asks()));
+                let mut shell = Shell::new(services::native(projects.clone(), agents.clone(), pickers.asks()), &SCREENS);
                 prefs::apply(&stored, &mut shell);
                 if let Some(rx) = requests.borrow_mut().take() {
                     shell.attach_control(rx, window.generation());
@@ -325,10 +330,20 @@ mod tests {
         parse_args(list.iter().map(|s| s.to_string()))
     }
 
+    /// The app registers ER's screens part, then UML's: the shell lists ER's notation and kind
+    /// first, then UML's, as it did before it was given parts.
+    #[test]
+    fn the_app_registers_ers_screens_part_then_umls() {
+        let metamodels: Vec<u16> = SCREENS.notation_uis().iter().map(|ui| ui.metamodel()).collect();
+        assert_eq!(metamodels, [archforge_er::INDEX, archforge_uml::INDEX]);
+        let kinds: Vec<&str> = SCREENS.kinds().iter().map(|kind| kind.kind()).collect();
+        assert_eq!(kinds, [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]);
+    }
+
     /// The window draws its own menu bar only where the system has none.
     #[test]
     fn the_in_window_menu_bar_is_drawn_only_without_a_native_one() {
-        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
         choose_menu_bar(&mut shell);
         assert_eq!(shell.in_window_menu, !cfg!(target_os = "macos"));
     }
@@ -376,7 +391,7 @@ mod tests {
         let session = archforge_notations::new_project_session("Shop", ids).unwrap();
         let infos: Vec<Value> = session.registry().infos(&session.facts()).into_iter().map(|i| serde_json::to_value(i).unwrap()).collect();
         let catalog = archforge_mcp::Catalog::new(&infos, false);
-        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
         shell.session = Some(session);
         let agent = Direct(std::cell::RefCell::new(shell));
         let revision = || agent.0.borrow().session.as_ref().unwrap().revision();
@@ -424,9 +439,11 @@ mod tests {
         assert_eq!(left, json!([]), "the project is empty again");
     }
 
+    /// The control channel's save is refused while no project is open, and refused with a key it
+    /// does not take.
     #[test]
     fn save_needs_an_open_project() {
-        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
         let refused = archforge_ui_egui::control::answer(&mut shell, "app.save", &serde_json::json!({})).unwrap_err();
         assert!(refused.contains("no project is open"), "{refused}");
         assert!(archforge_ui_egui::control::answer(&mut shell, "app.save", &serde_json::json!({ "path": "x" })).is_err(), "it takes no such key");
@@ -443,7 +460,7 @@ mod tests {
         let session = archforge_notations::new_project_session("Shop", ids).unwrap();
         let infos: Vec<Value> = session.registry().infos(&session.facts()).into_iter().map(|i| serde_json::to_value(i).unwrap()).collect();
         let catalog = archforge_mcp::Catalog::new(&infos, false);
-        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
         shell.session = Some(session);
         let agent = Direct(std::cell::RefCell::new(shell));
         let rpc = |method: &str, params: Value| {
@@ -541,7 +558,7 @@ mod tests {
             n += 1;
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
         shell.session = Some(archforge_notations::new_project_session("Shop", ids).unwrap());
         shell
     }
@@ -677,7 +694,7 @@ mod tests {
                 ..archforge_ui_egui::UiState::default()
             },
         };
-        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
         prefs::apply(&stored, &mut shell);
         assert_eq!(prefs::capture(&shell), stored);
         // A recent entry the window does not take (here a relative folder) is dropped on applying.
