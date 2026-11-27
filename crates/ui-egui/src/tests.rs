@@ -18392,44 +18392,57 @@ impl crate::notation_ui::NotationUi for WordsUi {
     fn metamodel(&self) -> u16 {
         u16::MAX
     }
+    /// No element, so no top of Models.
     fn is_top(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
         false
     }
+    /// No rows in Models.
     fn tree(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: &crate::explorer::Tree<'_>) -> Vec<crate::explorer::Row> {
         Vec::new()
     }
+    /// Nothing for Models' `+`.
     fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
         Vec::new()
     }
+    /// Adds nothing, as it offers nothing.
     fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
         None
     }
+    /// Renames nothing.
     fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
         None
     }
+    /// Nothing worked out, as none of its elements is removed.
     fn before_removal(&self, _: &archforge_mof::Store, _: &[archforge_mof::Obj]) -> crate::notation_ui::Removal {
         crate::notation_ui::Removal::default()
     }
+    /// The word alone, as none of its elements is removed.
     fn removed_text(&self, what: &str, _: &crate::notation_ui::Removal) -> String {
         what.to_string()
     }
+    /// No row opens.
     fn foldable(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
         Vec::new()
     }
+    /// No rows to open.
     fn parents(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
         Vec::new()
     }
+    /// No search entry.
     fn entry(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
         None
     }
+    /// No words for Properties.
     fn words(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<crate::notation_ui::Words> {
         None
     }
+    /// Draws nothing, as Properties shows none of its elements.
     fn body(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: f32, _: &crate::panels::Subject) {}
     /// Its one row ([`WORDED_CATALOGUES`]).
     fn catalogues(&self) -> &'static [crate::i18n::Rows] {
         WORDED_CATALOGUES
     }
+    /// Creates nothing.
     fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
         &[]
     }
@@ -18441,10 +18454,13 @@ impl crate::notation_ui::NotationUi for WordsUi {
     fn description_limit(&self) -> usize {
         0
     }
+    /// Deletes nothing on the canvas.
     fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
         false
     }
+    /// Draws nothing over the canvas.
     fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
+    /// The sketch's state, unused.
     fn new_state(&self) -> Box<dyn crate::notation_ui::NotationState> {
         Box::new(SketchState::default())
     }
