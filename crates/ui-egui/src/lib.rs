@@ -80,6 +80,7 @@ mod uml_constraints;
 mod uml_inline;
 mod uml_nary;
 mod uml_nesting;
+mod uml_package;
 mod uml_panel;
 mod uml_profiles;
 mod uml_qualifiers;

@@ -295,7 +295,8 @@ fn pane(
 fn scene(shell: &mut Shell, clip: &egui::Ui, p: &Palette, (side, area, view): (&str, Rect, &View), on_it: &DiagramSide) {
     let (notations, none, clean) = (archforge_notations::view(), BTreeMap::new(), BTreeMap::new());
     let kind = crate::kinds::kind_of(shell, &on_it.store, on_it.diagram);
-    let scene = Scene { p, store: &on_it.store, notations: &notations, kind, diagram: on_it.diagram, view, grid: &on_it.grid, area };
+    let scene =
+        Scene { p, store: &on_it.store, notations: &notations, kind, kinds: shell.kinds, diagram: on_it.diagram, view, grid: &on_it.grid, area };
     let live = Live {
         selection: &[],
         overrides: &none,

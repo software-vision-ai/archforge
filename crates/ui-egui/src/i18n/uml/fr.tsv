@@ -146,6 +146,7 @@ str		Literal · model	Littéral · modèle
 str		Attributes · {n}	Attributs · {n}
 str		Literals · {n}	Littéraux · {n}
 str		Owner	Propriétaire
+str		Owner: {path}	Propriétaire : {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Le propriétaire est un paquetage ou un classificateur. Le changer conserve l’identité, les membres et les relations de {name}, et chaque type qui l’utilise.
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · imbriqué dans {owner} · modèle, dans chaque diagramme
 str		Nested classifiers · {n}	Classificateurs imbriqués · {n}

@@ -146,6 +146,7 @@ str		Literal · model	リテラル · モデル
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	リテラル · {n}
 str		Owner	所有者
+str		Owner: {path}	所有者: {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者はパッケージまたは分類子です。変更しても {name} の同一性、メンバー、リレーションシップ、それを使うすべての型は保たれます。
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · {owner} の中に入れ子 · モデル、すべての図で
 str		Nested classifiers · {n}	入れ子の分類子 · {n}
