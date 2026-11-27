@@ -176,6 +176,48 @@ fn the_new_project_line_lists_the_kinds_the_shell_was_given() {
     });
 }
 
+/// Twelve kinds, so the New project line runs past the two rows the design leaves it.
+static SKETCH_DOZEN: [&dyn crate::kinds::DiagramKind; 12] = [&SketchKind(SKETCH); 12];
+
+/// A New project line longer than the design's two rows, in a narrow dialog, is drawn whole, in
+/// as many rows as it takes, and what every project holds starts below it, not over it. In light
+/// and dark.
+#[test]
+fn a_long_new_project_line_is_drawn_whole_and_moves_the_strip_below_it() {
+    in_both_appearances(|theme| {
+        crate::i18n::set_language("en");
+        let mut shell = Shell::new(Services::default());
+        shell.state.theme = theme;
+        shell.kinds = &SKETCH_DOZEN;
+        let mut h = Harness::builder().with_size(egui::vec2(640.0, 1100.0)).build_ui_state(
+            |ui, shell: &mut Shell| {
+                shell.logic(ui.ctx());
+                shell.ui(ui);
+            },
+            shell,
+        );
+        h.run();
+        crate::new_project::open(h.state_mut());
+        h.run();
+        h.run();
+        // Every text painted, with where it starts, its rows and whether it was cut.
+        fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Rect, usize, bool)>) {
+            match s {
+                egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.visual_bounding_rect(), t.galley.rows.len(), t.galley.elided)),
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                _ => {}
+            }
+        }
+        let mut texts = Vec::new();
+        h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
+        let line = texts.iter().find(|(t, ..)| t.ends_with("Every diagram shows the same model.")).expect("the line");
+        assert!(line.0.starts_with("Add Sketches, Sketches,"), "{theme:?}: {}", line.0);
+        assert!(line.2 > 2 && !line.3, "{theme:?}: whole, in {} rows, cut: {}", line.2, line.3);
+        let strip = texts.iter().find(|(t, ..)| t == "In every project").expect("the strip's heading");
+        assert!(strip.1.top() >= line.1.bottom() + 8.0, "{theme:?}: the strip at {:?} starts below the line at {:?}", strip.1, line.1);
+    });
+}
+
 #[test]
 fn the_name_field_has_the_keyboard_and_takes_a_name() {
     let mut h = harness(ThemeKind::Light);

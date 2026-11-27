@@ -43,6 +43,9 @@ const LOCATION_FIELD: f32 = 138.0;
 const LOCATION_HINT: f32 = 188.0;
 const DIAGRAMS: f32 = 232.0;
 const DIAGRAMS_LINE: f32 = 254.0;
+/// The rows the design leaves the diagrams line before the strip; a longer line moves the strip
+/// down by its rows past these.
+const DIAGRAMS_ROWS: f32 = 2.0;
 const PARTS: f32 = 298.0;
 const PARTS_TOP: f32 = 324.0;
 const FIELD: f32 = 44.0;
@@ -305,7 +308,7 @@ fn body_scroll(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, di
     });
 }
 
-/// The name, the location, the diagrams line and the strip; gives their height.
+/// The name, the location, the diagrams line, whole, and the strip below it; gives their height.
 fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inner: f32, dialog: &mut Dialog) -> f32 {
     let at = |y: f32| pos2(origin.x, origin.y + y);
     let paint = ui.painter().clone();
@@ -419,16 +422,20 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
             ux::text(&paint, at(LOCATION_HINT), &file_line, types::SMALL, p.text_muted, Some(inner));
         }
     }
-    // Diagrams come as the user works: the kinds the shell was given, by their groups' names.
+    // Diagrams come as the user works: the kinds the shell was given, by their groups' names, the
+    // whole line in as many rows as it takes; what follows moves down by those past the design's.
     ux::text(&paint, at(DIAGRAMS), &tr("Diagrams"), types::UI_STRONG, p.text, Some(inner));
     let groups: Vec<String> = shell.kinds.iter().map(|k| k.group_word()).collect();
+    let mut past = 0.0;
     if let Some(diagrams) = listed(&groups) {
         let said = fmt(&tr("Add {diagrams} as you go. Every diagram shows the same model."), &[("diagrams", &diagrams)]);
-        let line = ux::galley_rows(&paint, &said, types::SMALL, p.text_secondary, Some(inner), 2);
+        let line = ux::galley_rows(&paint, &said, types::SMALL, p.text_secondary, Some(inner), usize::MAX);
+        past = (line.size().y - DIAGRAMS_ROWS * types::SMALL.line).max(0.0);
         paint.galley(at(DIAGRAMS_LINE), line, p.text_secondary.into());
     }
+    let (parts_at, parts_top) = (PARTS + past, PARTS_TOP + past);
     // What every project holds.
-    ux::text(&paint, at(PARTS), &tr("In every project"), types::UI_STRONG, p.text, Some(inner));
+    ux::text(&paint, at(parts_at), &tr("In every project"), types::UI_STRONG, p.text, Some(inner));
     let parts = [
         (tr("Skills"), tr("Guidance for agents, written on the elements it applies to."), &icons::SKILL, p.purple, p.purple_tint),
         (tr("Agent access"), tr("Agents work on the open model through MCP; undo covers their changes."), &icons::LINK, p.amber, p.amber_tint),
@@ -437,7 +444,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     let three = inner >= THREE_UP;
     let (w, h) = if three { ((inner - 2.0 * GAP) / 3.0, 92.0) } else { (inner, 64.0) };
     for (i, (title, body, icon, ink, tint)) in parts.iter().enumerate() {
-        let (x, y) = if three { (i as f32 * (w + GAP), PARTS_TOP) } else { (0.0, PARTS_TOP + i as f32 * (h + GAP)) };
+        let (x, y) = if three { (i as f32 * (w + GAP), parts_top) } else { (0.0, parts_top + i as f32 * (h + GAP)) };
         let r = Rect::from_min_size(at(y) + vec2(x, 0.0), vec2(w, h));
         paint.rect_filled(r, 10.0, p.page);
         let tile = Rect::from_min_size(r.min + vec2(14.0, 14.0), Vec2::splat(32.0));
@@ -448,7 +455,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         let g = ux::galley_rows(&paint, body, types::SMALL, p.text_secondary, Some((w - 70.0).max(0.0)), rows);
         paint.galley(r.min + vec2(56.0, 36.0), g, p.text_secondary.into());
     }
-    if three { PARTS_TOP + h } else { PARTS_TOP + 3.0 * h + 2.0 * GAP }
+    if three { parts_top + h } else { parts_top + 3.0 * h + 2.0 * GAP }
 }
 
 /// The divider, Cancel and Create project; gives whether Cancel was clicked, and starts a creation
