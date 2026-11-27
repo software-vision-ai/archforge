@@ -81,12 +81,6 @@ pub trait Notation: Send + Sync + 'static {
         let _ = (store, element, diagram);
         None
     }
-    /// The nodes of `diagram` a node of `element` is tied to by dashed links worked out from the
-    /// model, never stored: a constraint note's to its constrained elements' nodes (AR-133).
-    fn links(&self, store: &Store, element: Obj, diagram: Obj) -> Vec<Obj> {
-        let _ = (store, element, diagram);
-        Vec::new()
-    }
     /// The element that owns `element` as a nested member, its node tied to `element`'s by a line
     /// ending in ⊕ at it where a diagram shows both, worked out from the model, never stored: a
     /// nested classifier's owner (AR-132). None for an element nested in nothing.

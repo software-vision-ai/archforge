@@ -43,14 +43,16 @@ on empty canvas, rename in place and where the name typed goes on a card it draw
 with what each does, the live line, a
 press and a right click it reads first, the keys a drawing under way takes, whether its popover's
 menu takes the keys, what Select all takes in beside the boxes and lines, and where a label of
-its own figures is let go; and
+its own figures is let go, and whether a double click anywhere on a card opens its editor; and
 the hooks the canvas runs as it draws: before and after a diagram is drawn, where a line starts,
 where a line's ends move to and what goes over the line there, what goes with a line, what goes
-over its labels by its name, the figures of no one node or line, a card it draws itself, what goes
-over a card and its ring, and the hint
+over its labels by its name, the links between nodes, the figures of no one node or line, a card
+it draws itself, what goes over a card and its ring, and the hint
 bar, through which UML draws its association classes' ties and names, its generalization sets,
 its package cards with their tabs, owning paths and thumbnails (`uml_package`), its qualifier
-boxes, line stereotypes and template signatures (`uml_adornments`), its n-ary diamonds, legs and hint,
+boxes, line stereotypes and template signatures (`uml_adornments`), its constraints' braces and
+notes with the notes' dashed links, opened whole by a double click (`uml_constraint_draw`), its
+n-ary diamonds, legs and hint,
 and runs its package navigation, whose state is UML's own; and its rows of the Model menu, as
 data (`kinds::ModelRow`: the row's id, its word, the tool it arms and the choice of the tool's
 popover it makes first), from which `model_menu` makes the menu's entries, Note and Link note after them;

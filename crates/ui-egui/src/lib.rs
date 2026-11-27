@@ -79,6 +79,7 @@ pub mod types;
 mod uml_adornments;
 mod uml_bindings;
 mod uml_classifier;
+mod uml_constraint_draw;
 mod uml_constraints;
 mod uml_inline;
 mod uml_nary;
