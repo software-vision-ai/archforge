@@ -26803,8 +26803,8 @@ fn constraint_rows(h: &Harness<'static, Shell>, name: &str) -> Vec<String> {
 /// Constraints (AR-133) in Properties and on the canvas: `+` in Constraints opens the editor, an
 /// empty expression is refused in place with nothing written, Apply adds one in one undo step and
 /// shows it on the open diagram as braces for a short expression; the pencil reopens it, a second
-/// constrained element and Linked note make it a constraint note linked to both cards, which says
-/// it is not evaluated; deleting a constrained element drops it and the toast says so, and a
+/// constrained element and Linked note make it a constraint note linked to both cards by dashes,
+/// which says it is not evaluated; deleting a constrained element drops it and the toast says so, and a
 /// constraint left naming nothing goes with it, said too; a double click on the note opens its
 /// editor, Properties shown on the right side. In light and dark, every control found by its
 /// automation id.
@@ -26891,6 +26891,11 @@ fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_de
         assert!(painted_now.iter().any(|t| t == "CONSTRAINT · NOT EVALUATED"), "{painted_now:?}");
         assert!(painted_now.iter().any(|t| t == "{ payment.amount = total()"));
         assert!(ids(&h).contains(&format!("workspace.canvas.node.{note}")));
+        // Its dashed links to Order's and Payment's cards, in purple while it is not selected.
+        let purple = egui::Color32::from(crate::ux::palette(theme == ThemeKind::Dark).purple);
+        let dashes =
+            h.output().shapes.iter().filter(|c| matches!(&c.shape, egui::Shape::LineSegment { stroke, .. } if stroke.color == purple)).count();
+        assert!(dashes >= 2, "{theme:?}: the note's dashed links: {dashes}");
         // A double click on the note opens its editor, in Properties brought to the right side.
         h.state_mut().state.show_panel(crate::state::Panel::Skills);
         h.state_mut().canvas.fit_pending = true;
