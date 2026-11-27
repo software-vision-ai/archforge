@@ -79,13 +79,13 @@ an aggregation or a composition; a generalization's triangle; a dependency dashe
 arrow; an interface realization dashed in the muted ink to a hollow triangle at its interface; an
 association class's line an association's and its card a class's under `Association class`),
 `constraints::{specs, constraints_of, context_of, constrained, expression, language, braces, is_context, is_constrainable,
-in_model, expression_problem, suggested_form, form_for, shown_on, form_of, linked_nodes, show, dropped_by, Dropped, Form, BRACES, NOTE,
+in_model, expression_problem, suggested_form, form_for, shown_on, form_of, note_links, linked_nodes, show, dropped_by, Dropped, Form, BRACES, NOTE,
 MAX_CONSTRAINED, NO_CONSTRAINTS}` (AR-133: `uml.constraint.{add, set, move, show, list}`; a Constraint owned by a classifier of the model's own
 or a package, naming the elements it constrains in order and stating its rule as an OpaqueExpression of one body and at most one
 language, kept exactly as typed and never evaluated; the only refusals an empty expression and an element outside the model,
 each with its reason typed for an interface to say, as is every parameter of these commands refused (AR-447, AR-476);
 shown per diagram as a node of the kind `uml.constraint.braces`, nested in its element's node, or `uml.constraint.note`, linked
-to its elements by `Notation::links`; removed through `element.remove`, and a constraint left naming nothing by a removal goes
+to its elements' nodes by dashed links `note_links` works out from the model, which UML's diagram kind draws; removed through `element.remove`, and a constraint left naming nothing by a removal goes
 with it in the same step), `generalization_sets::{specs, is_set, is_generalization, members, sets_of, general, specific,
 general_of, sets_for, flags, braces, label, shared_general, Grouping, generalization_name, reconnect_problem, emptied_by,
 label_node, place, set_json, LABEL, MAX_MEMBERS, NO_SETS}` (AR-129: `uml.generalization-set.{add, set, place, list}`; a

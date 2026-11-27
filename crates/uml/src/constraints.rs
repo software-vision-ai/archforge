@@ -400,6 +400,20 @@ fn node_for(store: &Store, d: Obj, e: Obj) -> Option<Obj> {
     None
 }
 
+/// The nodes of `diagram` the node of `element` is tied to by dashed links, worked out from the
+/// model on every frame and never stored (AR-133): a constraint note's, to the nodes of the
+/// elements it constrains; none for braces, nor for an element that is no constraint.
+pub fn note_links(store: &Store, element: Obj, diagram: Obj) -> Vec<Obj> {
+    // Asked of every node each frame: only a constraint has links, so nothing else is looked up.
+    if !is_constraint(store, element) {
+        return Vec::new();
+    }
+    match shown_on(store, diagram, element) {
+        Some((_, Form::Note)) => linked_nodes(store, diagram, element),
+        _ => Vec::new(),
+    }
+}
+
 /// The nodes on `d` of `c`'s elements, each once, in its order: what a note links to.
 pub fn linked_nodes(store: &Store, d: Obj, c: Obj) -> Vec<Obj> {
     let mut out = Vec::new();

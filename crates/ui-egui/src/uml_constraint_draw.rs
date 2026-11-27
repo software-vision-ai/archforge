@@ -5,7 +5,7 @@
 //! either opens its editor (`DiagramKind::opens_on_double_click`).
 
 use archforge_diagram::figure::{Card, Tone};
-use archforge_diagram::{Notation, node};
+use archforge_diagram::node;
 use archforge_mof::{Obj, Store};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
@@ -77,13 +77,13 @@ fn draw_constraint(paint: &egui::Painter, inner: &egui::Painter, d: &Drawing<'_>
 }
 
 /// The dashed links of the diagram's constraint notes to the nodes of the elements they constrain
-/// (AR-133), as UML's notation works them out from the model each frame: purple, the accent while
+/// (AR-133), as UML works them out from the model each frame (`constraints::note_links`): purple, the accent while
 /// the note is selected.
 pub(crate) fn draw_links(paint: &egui::Painter, d: &Drawing<'_>) {
     let (p, store, z) = (d.p, d.store, d.view.zoom);
     for (n, _) in &d.boxes {
         let Some(e) = element_of(store, *n, node::ELEMENT) else { continue };
-        let targets = archforge_uml::UmlNotation.links(store, e, d.diagram);
+        let targets = archforge_uml::constraints::note_links(store, e, d.diagram);
         if targets.is_empty() {
             continue;
         }

@@ -26940,11 +26940,28 @@ fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_de
         assert!(painted_now.iter().any(|t| t == "CONSTRAINT · NOT EVALUATED"), "{painted_now:?}");
         assert!(painted_now.iter().any(|t| t == "{ payment.amount = total()"));
         assert!(ids(&h).contains(&format!("workspace.canvas.node.{note}")));
-        // Its dashed links to Order's and Payment's cards, in purple while it is not selected.
+        // Its dashed links, in purple while it is not selected: a dash along the route from the
+        // note's border to each of Order's and Payment's cards.
         let purple = egui::Color32::from(crate::ux::palette(theme == ThemeKind::Dark).purple);
-        let dashes =
-            h.output().shapes.iter().filter(|c| matches!(&c.shape, egui::Shape::LineSegment { stroke, .. } if stroke.color == purple)).count();
-        assert!(dashes >= 2, "{theme:?}: the note's dashed links: {dashes}");
+        let dashes: Vec<[egui::Pos2; 2]> = h
+            .output()
+            .shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::LineSegment { points, stroke } if stroke.color == purple => Some(*points),
+                _ => None,
+            })
+            .collect();
+        let note_rect = rect_of(&h, &format!("workspace.canvas.node.{note}"));
+        for name in ["Order", "Payment"] {
+            let card = rect_of(&h, &format!("workspace.canvas.node.{}", nodes[name]));
+            let (from, to) = (crate::canvas::exit_point(note_rect, card.center()), crate::canvas::exit_point(card, note_rect.center()));
+            let on_route = |q: egui::Pos2| {
+                let along = ((q - from).dot(to - from) / (to - from).length_sq()).clamp(0.0, 1.0);
+                (from + (to - from) * along).distance(q) < 0.5
+            };
+            assert!(dashes.iter().any(|[a, b]| on_route(*a) && on_route(*b)), "{theme:?}: a dash from the note to {name}'s card: {dashes:?}");
+        }
         // A double click on the note opens its editor, in Properties brought to the right side.
         h.state_mut().state.show_panel(crate::state::Panel::Skills);
         h.state_mut().canvas.fit_pending = true;
