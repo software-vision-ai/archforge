@@ -6,7 +6,7 @@
 #![cfg(unix)]
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
-use std::io::BufRead;
+use std::io::{BufRead, Read};
 use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -437,9 +437,11 @@ exit "$status"
 /// Another program on this machine, against the start whose dolt is the script [`LOSING_START`]
 /// at `dir/dolt`: once the script is `waiting`, it listens on the port the start chose, puts dolt
 /// itself at `dir/dolt` for every later start, lets the script run dolt (`taken`), accepts the
-/// connection with which dolt checks whether the port is taken, lets the port go, and only then
-/// lets the script end (`released`): the start comes to look at the port once it is free again.
-/// Returns the port and whether dolt checked it while it was taken.
+/// connection with which dolt checks whether the port is taken and waits until dolt has closed
+/// it, lets the port go, binds it once more as the start's own check does, and only then lets
+/// the script end (`released`): the start comes to look at a port that a bind finds free, so only
+/// its server's log can make it try again. Returns the port and whether dolt checked it while it
+/// was taken.
 fn take_the_port(run_root: &Path, dir: &Path, dolt: &Path) -> (u16, bool) {
     let until = Instant::now() + Duration::from_secs(30);
     while !dir.join("waiting").exists() {
@@ -454,14 +456,33 @@ fn take_the_port(run_root: &Path, dir: &Path, dolt: &Path) -> (u16, bool) {
     std::os::unix::fs::symlink(dolt, dir.join("dolt")).unwrap();
     std::fs::write(dir.join("taken"), "").unwrap();
     listener.set_nonblocking(true).unwrap();
-    let checked = loop {
+    let probe = loop {
         match listener.accept() {
-            Ok(_) => break true,
+            Ok((probe, _)) => break Some(probe),
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < until => std::thread::sleep(Duration::from_millis(5)),
-            Err(_) => break false,
+            Err(_) => break None,
         }
     };
+    let checked = probe.is_some();
+    // Dolt closes its probe first: this side then closes last, and leaves the port no connection
+    // of its own that waits out its close.
+    if let Some(mut probe) = probe {
+        probe.set_nonblocking(false).unwrap();
+        let mut bytes = [0u8; 64];
+        while let Some(left) = until.checked_duration_since(Instant::now()).filter(|d| !d.is_zero()) {
+            probe.set_read_timeout(Some(left)).unwrap();
+            if !matches!(probe.read(&mut bytes), Ok(n) if n > 0) {
+                break;
+            }
+        }
+    }
     drop(listener);
+    // The start's own check, the same bind, must find the port free before the script ends. The
+    // listener a bind that works makes goes at once.
+    while let Err(e) = TcpListener::bind((Ipv4Addr::LOCALHOST, port)) {
+        assert!(Instant::now() < until, "the port {port} stayed taken after it was let go: {e}");
+        std::thread::sleep(Duration::from_millis(5));
+    }
     std::fs::write(dir.join("released"), "").unwrap();
     (port, checked)
 }

@@ -707,13 +707,16 @@ fn free_port() -> Result<u16, Error> {
 }
 
 /// Whether the server's log tail says another program had `port` when the server came to it, as
-/// dolt 2.7.5 and 2.7.7 say it: dolt's own check found something listening there (`Port 50123
-/// already in use.`), or its listen failed there (`listen tcp 127.0.0.1:50123: bind: address
-/// already in use`, the words of unix). A port that is free again by now was still lost.
+/// dolt 2.7.5 and 2.7.7 say it, each on a line of its own: dolt's own check found something
+/// listening there (the line `Port 50123 already in use.`), or its listen failed there (a line
+/// ending in Go's words for that on unix, `listen tcp 127.0.0.1:50123: bind: address already in
+/// use`, before which an error wrapping it would add its own). The same words inside another
+/// line, a path the start-up line names say, are not those lines. A port that is free again by
+/// now was still lost.
 fn port_taken(log_tail: &str, port: u16) -> bool {
     let checked = format!("Port {port} already in use.");
     let listened = format!("listen tcp {}:{port}: bind: address already in use", Ipv4Addr::LOCALHOST);
-    log_tail.contains(&checked) || log_tail.contains(&listened)
+    log_tail.lines().map(str::trim).any(|line| line == checked || line.ends_with(&listened))
 }
 
 /// Ready means: the child still runs, the project's lock names it, and a connection with the
@@ -1600,8 +1603,9 @@ mod tests {
     }
 
     /// The log tails dolt 2.7.7 left here when another program had its port, listening there or
-    /// holding it without listening, say the port was taken; the same words for another port, the
-    /// warning about a socket in use (on which dolt goes on) and a tail without them do not.
+    /// holding it without listening, say the port was taken; the same words for another port, or
+    /// inside a path the start-up line names, the warning about a socket in use (on which dolt goes
+    /// on) and a tail without them do not.
     #[test]
     fn a_log_tail_says_whether_the_port_was_taken() {
         let head = "Starting server with Config HP=\"127.0.0.1:55323\"|T=\"28800000\"|R=\"false\"|L=\"warning\"|S=\"/t/af-x/db.sock\"";
@@ -1613,6 +1617,10 @@ mod tests {
         }
         let socket = format!("{head}\nunix socket set up failed: file already in use: /t/af-x/db.sock");
         assert!(!port_taken(&socket, 55323) && !port_taken(head, 55323));
+        for inside in ["Port 55323 already in use.", "listen tcp 127.0.0.1:55323: bind: address already in use"] {
+            let banner = head.replace("/t/af-x/", &format!("/t/{inside}/"));
+            assert!(!port_taken(&banner, 55323), "words inside a path: {banner}");
+        }
     }
 
     /// A record another start wrote after this one was read stays; the one read goes.
