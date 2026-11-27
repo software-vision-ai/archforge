@@ -57,7 +57,7 @@ pub(crate) enum Act {
 }
 
 /// Every text this module passes to `tr` through a variable, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     [WAIT, "Conversations", "New conversation", "Send", "Stop", "Remove", "Agent and model", "Allow changes to the model"].into_iter()
 }

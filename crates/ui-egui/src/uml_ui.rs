@@ -1492,7 +1492,7 @@ impl NotationUi for UmlUi {
 
 /// The words of UML's figures, which reach `tr` through the figures' descriptions, for the
 /// catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     archforge_uml::WORDS.iter().copied()
 }

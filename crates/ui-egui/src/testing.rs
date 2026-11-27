@@ -2,7 +2,8 @@
 //! harness with its click and its automation ids, the shell's parts those tests read, and the
 //! steps of its own they call. With these, the crate's other public items, the screenshot tool's
 //! (`crate::snapshot`) and the shell's interfaces, a test that drives the whole window can be
-//! built outside the crate.
+//! built outside the crate. Here too are the words the shell hands its lookups through a table
+//! rather than as a literal, which the app's tests across every catalogue read.
 //!
 //! Each item hands over to the shell's own code unchanged: none draws, reads or decides anything
 //! of its own. What a notation's screens reach is not here.
@@ -173,4 +174,33 @@ pub fn install_session(shell: &mut Shell, session: Session, repaired: bool) {
 /// makes when it does stays inside the shell.
 pub fn clear_to_leave(shell: &mut Shell, then: Option<Leaving>) -> Result<(), HoldRefused> {
     shell.clear_to_leave(then).map(|_| ())
+}
+
+/// Every word a module of the shell hands `tr` through a table rather than as a literal, which a
+/// scan of the source cannot find, each list with the name of the module that says it (its file,
+/// `src/<name>.rs`): the start cards' texts (`home`), then each module's own list of them.
+pub fn word_lists() -> Vec<(&'static str, Vec<&'static str>)> {
+    macro_rules! lists {
+        ($($name:ident),* $(,)?) => {
+            [$((stringify!($name), crate::$name::texts().into_iter().collect::<Vec<&'static str>>())),*]
+        };
+    }
+    let mut all = vec![("home", crate::home::start_texts().collect())];
+    all.extend(lists!(workspace, panels, chat_view, appearance, skill_tab, canvas));
+    all.extend(lists!(er_ui, er_kind, uml_ui, editing, connect, relation, er_table, keys, checks, indexes, types, subtypes, objects));
+    all.extend(lists!(uml_panel, uml_relate, uml_sets, settings_agents, uml_qualifiers, uml_templates, uml_bindings, uml_nary, uml_nesting));
+    all.extend(lists!(uml_profiles, uml_stereotypes));
+    all
+}
+
+/// Every key the labels for what the metamodel names look up for the notations `uis`, each with
+/// the index of the metamodel that names it.
+pub fn model_words(uis: &[&'static dyn NotationUi]) -> Vec<(u16, String)> {
+    crate::model_words::texts(uis)
+}
+
+/// The keys of the in-window menu bar's access letters, with the diagram kinds `kinds`: each
+/// title's and each row's, once.
+pub fn access_keys(kinds: &[&'static dyn DiagramKind]) -> Vec<String> {
+    crate::menu_bar::access_keys(kinds)
 }

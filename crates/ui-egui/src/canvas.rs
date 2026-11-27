@@ -1626,7 +1626,7 @@ fn a_cards_height_is_where_the_canvas_ends_its_last_place() {
 
 /// Every hover text of the toolbar's own tables, for the catalogue tests: a diagram kind's tools
 /// say their own words, which the scan reads from each kind (`kinds::DiagramKind::tools`).
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     TOOLS.iter().map(|(_, _, hint)| *hint).chain(["Grid", "Arrange diagram"])
 }

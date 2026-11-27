@@ -408,7 +408,7 @@ pub(crate) fn refuse_sample(cx: &mut Ctx, association: Uuid, end: usize, typed: 
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add qualifier"].into_iter()
 }

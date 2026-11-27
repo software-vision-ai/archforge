@@ -1607,7 +1607,7 @@ fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos
 }
 
 /// Every word the kinds' menu and the panels say through `tr` at run time, for the catalogue.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     Relate::ALL.iter().flat_map(|k| std::iter::once(k.word()).chain(k.hint())).chain([
         "Add association",

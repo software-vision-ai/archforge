@@ -1008,7 +1008,7 @@ pub(crate) fn drop_stereotype(cx: &mut Ctx, d: Obj, s: Obj, at: (f64, f64)) {
 
 /// The words this module hands to `tr` by a name rather than a literal, for the catalogue's
 /// coverage test: the sections' `+` hints and the editors' buttons.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Apply profile", "Add stereotype", "Add extended metaclass", "Unapply profile", APPLIED_HELP, TYPES_HELP].into_iter()
 }

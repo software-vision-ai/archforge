@@ -449,7 +449,7 @@ pub(crate) fn remove_selected_relationship(cx: &mut Ctx) -> bool {
 }
 
 /// Every hover text to translate, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Presets", "Start", "End"].into_iter()
 }

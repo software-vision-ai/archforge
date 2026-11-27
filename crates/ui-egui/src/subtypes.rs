@@ -250,7 +250,7 @@ pub(crate) fn supertype_of_link(store: &Store, g: Obj) -> Option<Obj> {
 }
 
 /// Every text of the tables, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add subtype"].into_iter().chain(MAPPINGS.iter().map(|(_, l)| *l))
 }

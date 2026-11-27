@@ -1425,7 +1425,7 @@ pub(crate) fn put_recommends(cx: &mut Ctx, drawn: bool) -> Result<std::collectio
 }
 
 /// Every word this module says through `tr` other than as a literal call, for the catalogue.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add end", "Remove", "Cancel", "Apply", FINISHES, SELECTING, BINARY_UNNAMED, BINARY_NAMED].into_iter()
 }

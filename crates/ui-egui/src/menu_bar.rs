@@ -515,18 +515,19 @@ fn cued(shell: &Shell, ctx: &egui::Context) -> bool {
 }
 
 /// Every set of rows a menu of the bar can show at once, by its group's id: the Model menu once per
-/// notation, File with Settings… and Exit, as in the window.
-#[cfg(test)]
-pub(crate) fn every_menu() -> Vec<(&'static str, Vec<&'static str>)> {
+/// diagram kind of `kinds`, File with Settings… and Exit, as in the window.
+#[cfg(any(test, feature = "testing"))]
+pub(crate) fn every_menu(kinds: &[&'static dyn crate::kinds::DiagramKind]) -> Vec<(&'static str, Vec<&'static str>)> {
     let fixed = [("file", actions::FILE_MENU.concat()), ("edit", EDIT_MENU.concat()), ("view", crate::view_menu::VIEW_MENU.concat())];
     let rest = [("versions", actions::VERSIONS_MENU.concat()), ("help", vec![ABOUT])];
-    fixed.into_iter().chain(crate::model_menu::every_menu().into_iter().map(|rows| ("model", rows))).chain(rest).collect()
+    fixed.into_iter().chain(crate::model_menu::every_menu(kinds).into_iter().map(|rows| ("model", rows))).chain(rest).collect()
 }
 
-/// The keys of every access letter: each title's and each row's, once.
-#[cfg(test)]
-pub(crate) fn access_keys() -> Vec<String> {
-    let rows = every_menu().into_iter().flat_map(|(_, rows)| rows).map(String::from);
+/// The keys of every access letter, with the diagram kinds `kinds`: each title's and each row's,
+/// once.
+#[cfg(any(test, feature = "testing"))]
+pub(crate) fn access_keys(kinds: &[&'static dyn crate::kinds::DiagramKind]) -> Vec<String> {
+    let rows = every_menu(kinds).into_iter().flat_map(|(_, rows)| rows).map(String::from);
     let mut keys: Vec<String> = GROUPS.iter().map(|g| format!("menu.{}", g.id)).chain(rows).collect();
     keys.sort();
     keys.dedup();
@@ -624,7 +625,7 @@ mod tests {
     fn every_title_and_row_has_its_own_letter_in_every_language() {
         let (mut s, ..) = shell();
         s.in_window_menu = true;
-        let menus = every_menu();
+        let menus = every_menu(crate::tests::SCREENS.kinds());
         assert!(GROUPS.iter().all(|g| menus.iter().any(|(id, _)| *id == g.id)), "every menu is checked");
         for lang in crate::i18n::LANGUAGES {
             crate::i18n::set_language(lang.code);

@@ -694,7 +694,7 @@ pub(crate) fn apply_sample(cx: &mut Ctx) {
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     [DRAFT_HELP, SELECTOR_HELP, LINE_HELP].into_iter()
 }

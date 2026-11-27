@@ -1055,7 +1055,7 @@ pub(crate) fn place_label(cx: &mut Ctx, d: Obj, set: Uuid, x: f64, y: f64) {
 }
 
 /// Every text that reaches `tr` through a variable, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add member", "Remove from set", "Add to a generalization set"].into_iter()
 }

@@ -546,7 +546,7 @@ fn commit(cx: &mut Ctx, edit: &TypeEdit) {
 }
 
 /// Every hover text to translate, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add type"].into_iter()
 }

@@ -34,7 +34,7 @@ const OWN_FILES: &str =
     "The codex program keeps its ChatGPT sign-in in its own files, so this works without the secure store. An API key for Codex would need it.";
 
 /// The sentences the page looks up by name, for the catalogue test.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> [&'static str; 5] {
     [INTRO, NOT_ON_WINDOWS, NO_STORE, MISSING, OWN_FILES]
 }

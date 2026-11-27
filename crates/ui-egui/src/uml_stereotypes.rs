@@ -931,7 +931,7 @@ pub(crate) fn put_values(cx: &mut Ctx) -> Result<Uuid, String> {
 
 /// The words this module hands to `tr` by a name rather than a literal, for the catalogue's
 /// coverage test: the section's `+` hint and its helps.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Apply stereotype", VALUES_HELP, NONE_HELP].into_iter()
 }

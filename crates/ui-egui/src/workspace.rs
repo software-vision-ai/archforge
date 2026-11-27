@@ -54,7 +54,7 @@ const PANELS: [(&str, Panel, &ux::Icon, &str); 4] = [
 
 /// Every text of the tables to translate: they reach `tr` through the tables, where the catalogue
 /// tests cannot find them as literals.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     EXPLORERS.iter().map(|(_, _, _, t)| *t).chain(PANELS.iter().map(|(_, _, _, t)| *t))
 }

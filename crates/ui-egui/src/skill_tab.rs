@@ -632,7 +632,7 @@ fn glyph(paint: &egui::Painter, b: Rect, f: Format, ink: ux::Colour) {
 }
 
 /// Every text that reaches `tr` through a variable, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     Format::ALL.iter().map(|(_, _, hint)| *hint).chain(["Write", "Preview", "Open link", "Remove"])
 }

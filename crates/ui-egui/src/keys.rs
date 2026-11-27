@@ -331,7 +331,7 @@ fn commit(cx: &mut Ctx, edit: &KeyEdit) {
 }
 
 /// Every hover text to translate, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add unique constraint", "Remove", "Cancel", "Apply"].into_iter()
 }

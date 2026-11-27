@@ -246,7 +246,7 @@ impl DiagramKind for ErKind {
 }
 
 /// The entity menu's rows to translate, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Show related tables", "Add column", "Collapse into a relationship"].into_iter()
 }

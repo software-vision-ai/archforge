@@ -1836,7 +1836,7 @@ pub(crate) fn retain_valid(edit: &mut Option<MemberEdit>, store: &Store) {
 }
 
 /// The hover texts given by key and the visibilities' words, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add attribute", "Add property", "Add operation", "Add literal", "Remove", "Remove parameter", "Move up", "Move down", "Cancel", "Apply"]
         .into_iter()
