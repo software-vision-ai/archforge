@@ -794,11 +794,32 @@ pub(crate) fn types_named(store: &Store, name: &str, within: Option<Obj>) -> Vec
     params.chain(builtin).chain(own).collect()
 }
 
+/// A type menu's choices kept between frames: whose and which state of it they were built for (a
+/// revision means something only in its session's history, as another session of the same model,
+/// a version shown or a replacement, starts its revisions anew), in which interface language (the
+/// labels are translated), their labels, the values the commands take and the muted notes that
+/// tell same-named ones apart, in the same order.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TypeChoices {
+    pub project: Option<Uuid>,
+    pub history: u64,
+    pub revision: u64,
+    pub language: &'static str,
+    /// The classifier whose member is typed, whose template parameters the menu offers (AR-130).
+    pub within: Option<Uuid>,
+    pub labels: Vec<String>,
+    pub values: Vec<String>,
+    pub notes: Vec<String>,
+    /// Each note's parts, a package's path by its names, folded from its front when its row is
+    /// too narrow; empty for none.
+    pub note_parts: Vec<Vec<String>>,
+}
+
 /// The open type menu's choices for a member of `within`, built by [`type_choices`] only when the
 /// project, the session, its state, the classifier or the interface language changed since they
 /// were last built; taken out of the shell for the frame, to be handed back with [`keep_choices`].
-pub(crate) fn choices_for_menu(cx: &mut Ctx, within: Option<Uuid>) -> crate::panels::TypeChoices {
-    let Some(session) = cx.session.as_ref() else { return crate::panels::TypeChoices::default() };
+pub(crate) fn choices_for_menu(cx: &mut Ctx, within: Option<Uuid>) -> TypeChoices {
+    let Some(session) = cx.session.as_ref() else { return TypeChoices::default() };
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
     let (history, revision) = (session.history(), session.revision());
@@ -818,13 +839,13 @@ pub(crate) fn choices_for_menu(cx: &mut Ctx, within: Option<Uuid>) -> crate::pan
             let note_parts = type_notes(store, &choices);
             let notes = note_parts.iter().map(|parts| parts.join(crate::panels::PATH_SEP)).collect();
             let (labels, values) = choices.into_iter().unzip();
-            crate::panels::TypeChoices { project, history, revision, language, within, labels, values, notes, note_parts }
+            TypeChoices { project, history, revision, language, within, labels, values, notes, note_parts }
         }
     }
 }
 
 /// Hands the type menu's choices back to the shell for the next frame.
-pub(crate) fn keep_choices(cx: &mut Ctx, choices: crate::panels::TypeChoices) {
+pub(crate) fn keep_choices(cx: &mut Ctx, choices: TypeChoices) {
     if let Some(uml) = uml_mut(cx.notation_states) {
         uml.type_choices = Some(choices);
     }

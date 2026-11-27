@@ -102,7 +102,7 @@ pub(crate) struct UmlState {
     /// A type menu's choices as built for one state of one project (its model root and its
     /// revision), each label with the value the commands take: the model is walked for them once
     /// per change, not on every frame the menu is open.
-    pub type_choices: Option<crate::panels::TypeChoices>,
+    pub type_choices: Option<crate::uml_panel::TypeChoices>,
     /// The properties a property's Subsets and Redefines offer, each list built once for one state
     /// of the project and one shape of the property being edited, not on every frame (AR-126).
     pub targets: Vec<crate::uml_panel::TargetChoices>,
