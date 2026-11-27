@@ -1127,9 +1127,9 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
         if let Some(uml) = uml_mut(cx.notation_states) {
             uml.member = None;
         }
-    } else if remove && let Some(asked) = ask_for_applications(cx, &edit) {
-        // Its stereotype applications would go with it: the delete dialog names them first, as
-        // every other delete of a carrier does (AR-135).
+    } else if remove && let Some(asked) = ask_for_consequences(cx, &edit) {
+        // Something would go with it, its stereotype applications: the delete dialog names them
+        // first, as every other delete of a carrier does (AR-135).
         if let Some(uml) = uml_mut(cx.notation_states) {
             uml.member = None;
         }
@@ -1155,24 +1155,22 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
     card.bottom() + 8.0
 }
 
-/// The delete dialog for the member `edit` edits, when stereotype applications would go with it
-/// (AR-135): naming them, so removing it never takes them along unasked. None when none would.
-fn ask_for_applications(cx: &Ctx, edit: &MemberEdit) -> Option<crate::explorer::Delete> {
+/// The delete dialog for the member `edit` edits, when anything would go with it, as UML says
+/// what goes ([`NotationUi::consequences`]): its stereotype applications (AR-135), named, so
+/// removing it never takes them along unasked. None when nothing would.
+///
+/// [`NotationUi::consequences`]: crate::notation_ui::NotationUi::consequences
+fn ask_for_consequences(cx: &Ctx, edit: &MemberEdit) -> Option<crate::explorer::Delete> {
+    use crate::notation_ui::NotationUi;
     let target = edit.target?;
     let store = cx.session.as_ref()?.doc();
     let member = store.by_uuid(target)?;
-    let applications = crate::uml_stereotypes::going_along(store, member);
-    (!applications.is_empty()).then(|| crate::explorer::Delete {
+    let consequences = crate::uml_ui::UmlUi.consequences(store, member);
+    (!consequences.is_empty()).then(|| crate::explorer::Delete {
         ids: vec![target],
         name: crate::notation_ui::label(cx.notation_uis, store, member),
-        relationships: 0,
-        keys: 0,
-        foreign_keys: 0,
-        diagrams: 0,
-        node: None,
-        along: Vec::new(),
-        applications,
-        hands_to: None,
+        consequences,
+        ..crate::explorer::Delete::default()
     })
 }
 

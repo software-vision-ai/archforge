@@ -91,6 +91,8 @@ str		Every {one} has at least one {many} only on the diagram: no database key ca
 str		{name} has no primary key	{name} has no primary key
 str		{name} has subtypes but no primary key to share	{name} has subtypes but no primary key to share
 str		{name} removed · {keys} went with it	{name} removed · {keys} went with it
+plural		{n} key goes with it.	{n} key goes with it.|{n} keys go with it.
+plural		{n} foreign key goes with it.	{n} foreign key goes with it.|{n} foreign keys go with it.
 str		Add column	Add column
 str		Edit column	Edit column
 str		Mapping table	Mapping table

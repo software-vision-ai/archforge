@@ -152,10 +152,6 @@ str		What it holds moves to {parent}.	What it holds moves to {parent}.
 str		Remove from this diagram only	Remove from this diagram only
 plural		It disappears from {n} diagram.	It disappears from {n} diagram.|It disappears from {n} diagrams.
 plural		{n} relationship goes with it.	{n} relationship goes with it.|{n} relationships go with it.
-plural		{n} key goes with it.	{n} key goes with it.|{n} keys go with it.
-plural		{n} foreign key goes with it.	{n} foreign key goes with it.|{n} foreign keys go with it.
-plural		{n} nested classifier goes with it: {names}.	{n} nested classifier goes with it: {names}.|{n} nested classifiers go with it: {names}.
-plural		{n} stereotype application goes with it: {names}.	{n} stereotype application goes with it: {names}.|{n} stereotype applications go with it: {names}.
 str		Delete	Delete
 str		Element · model	Element · model
 str		Skill · model	Skill · model

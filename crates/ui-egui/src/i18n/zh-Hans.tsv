@@ -153,10 +153,6 @@ str		What it holds moves to {parent}.	其所含内容将移到 {parent}。
 str		Remove from this diagram only	仅从此图中移除
 plural		It disappears from {n} diagram.	将从 {n} 个图中消失。
 plural		{n} relationship goes with it.	{n} 个关系将一并删除。
-plural		{n} key goes with it.	{n} 个键将一并删除。
-plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
-plural		{n} nested classifier goes with it: {names}.	{n} 个嵌套分类器将一并删除：{names}。
-plural		{n} stereotype application goes with it: {names}.	{n} 个构造型应用将一并删除：{names}。
 str		Delete	删除
 str		Element · model	元素 · 模型
 str		Skill · model	技能 · 模型

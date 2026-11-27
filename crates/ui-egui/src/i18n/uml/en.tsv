@@ -149,6 +149,7 @@ str		Owner is a package or a classifier. Changing it keeps {name}'s identity, me
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · nested in {owner} · model, in every diagram
 str		Nested classifiers · {n}	Nested classifiers · {n}
 str		Add nested classifier	Add nested classifier
+plural		{n} nested classifier goes with it: {names}.	{n} nested classifier goes with it: {names}.|{n} nested classifiers go with it: {names}.
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.
 str		New	New
 str		New in {name}	New in {name}
@@ -215,6 +216,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} holds the profile {profile}, which is in use: {uses}. Remove those first.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.
 str		«{stereotype}» on {elements}	«{stereotype}» on {elements}
+plural		{n} stereotype application goes with it: {names}.	{n} stereotype application goes with it: {names}.|{n} stereotype applications go with it: {names}.
 plural		Show the use	Show the use|Show the {n} uses
 str		A stereotype is shown on its profile's diagram	A stereotype is shown on its profile's diagram
 str		Place stereotype	Place stereotype

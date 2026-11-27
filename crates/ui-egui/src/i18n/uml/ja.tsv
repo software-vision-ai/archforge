@@ -150,6 +150,7 @@ str		Owner is a package or a classifier. Changing it keeps {name}'s identity, me
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · {owner} の中に入れ子 · モデル、すべての図で
 str		Nested classifiers · {n}	入れ子の分類子 · {n}
 str		Add nested classifier	入れ子の分類子を追加
+plural		{n} nested classifier goes with it: {names}.	{n} 個の入れ子の分類子も一緒に削除されます：{names}。
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	まだありません。ここか、モデル ▸ {name} の中に新規作成から追加します。どちらも同じ種類を提供します。
 str		New	新規
 str		New in {name}	{name} に新規
@@ -216,6 +217,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} には使われているプロファイル {profile} があります: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {elements}	{elements} に «{stereotype}»
+plural		{n} stereotype application goes with it: {names}.	{n} 件のステレオタイプの適用も一緒に削除されます：{names}。
 plural		Show the use	{n} 件の使用箇所を表示
 str		A stereotype is shown on its profile's diagram	ステレオタイプはそのプロファイルの図に表示されます
 str		Place stereotype	ステレオタイプを配置

@@ -92,6 +92,8 @@ str		Every {one} has at least one {many} only on the diagram: no database key ca
 str		{name} has no primary key	{name} não tem chave primária
 str		{name} has subtypes but no primary key to share	{name} tem subtipos mas nenhuma chave primária para partilhar
 str		{name} removed · {keys} went with it	{name} removida · {keys} foi com ela
+plural		{n} key goes with it.	{n} chave vai com ele.|{n} chaves vão com ele.
+plural		{n} foreign key goes with it.	{n} chave estrangeira vai com ele.|{n} chaves estrangeiras vão com ele.
 str		Add column	Adicionar coluna
 str		Edit column	Editar coluna
 str		Mapping table	Tabela de associação

@@ -347,10 +347,13 @@ pub trait NotationUi: Sync {
         let _ = (store, obj, name);
         None
     }
-    /// What goes with `obj` when it is removed: relationships, keys and foreign keys.
-    fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
+    /// What goes with `obj` when it is removed, as the delete dialog says it: one finished
+    /// sentence each, counted and worded by the notation in the user's language (`2 relationships
+    /// go with it.`), in the order the dialog lists them, after the diagrams it disappears from.
+    /// None by default; the removal asks first when there is any.
+    fn consequences(&self, store: &Store, obj: Obj) -> Vec<String> {
         let _ = (store, obj);
-        (0, 0, 0)
+        Vec::new()
     }
     /// What the Models context menu's New inside ▸ offers on `obj`; None for no such row.
     fn inside(&self, store: &Store, obj: Obj) -> Option<Inside> {
@@ -361,18 +364,6 @@ pub trait NotationUi: Sync {
     fn add_inside(&self, cx: &mut Ctx, key: &str, obj: Obj) -> Option<Result<Uuid, String>> {
         let _ = (cx, key, obj);
         None
-    }
-    /// What goes with `obj` when it is removed, by name, for the dialog to name each: a UML
-    /// classifier's nested classifiers (AR-132).
-    fn goes_along(&self, store: &Store, obj: Obj) -> Vec<String> {
-        let _ = (store, obj);
-        Vec::new()
-    }
-    /// The stereotype applications that go when `obj` is removed, by name, for the delete
-    /// dialog (AR-135); none by default.
-    fn applications_along(&self, store: &Store, obj: Obj) -> Vec<String> {
-        let _ = (store, obj);
-        Vec::new()
     }
     /// Why `obj` cannot be removed, in the user's words, checked before the removal or its dialog
     /// (UML's package Types while it keeps the built-in types); none lets the command decide.

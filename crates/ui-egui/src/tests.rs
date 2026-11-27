@@ -7768,6 +7768,38 @@ fn an_er_foreign_key_column_given_twice_is_said_as_the_foreign_keys_in_the_chose
     crate::i18n::set_language("en");
 }
 
+/// The delete dialog of a column a key lists, which a foreign key points at, says in the chosen
+/// language that the key and the foreign key go with it, in ER's own words, under its question and
+/// above what it holds. In light and dark.
+#[test]
+fn the_delete_dialog_says_the_keys_that_go_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
+        let bestellung = id("er.entity.add", json!({ "schema": schema, "name": "Bestellung" }));
+        let nummer = id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        let column = id("er.attribute.add", json!({ "entity": bestellung, "name": "kunde_nummer", "type": "BIGINT", "nullable": "no" }));
+        id("er.foreign-key.add", json!({ "entity": bestellung, "references": kunde, "columns": [column], "name": "fk_kunde" }));
+        crate::panels::run(h.state_mut(), "view.select", json!({ "ids": [nummer] })).unwrap();
+        h.run();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: the dialog asks"));
+        assert_eq!(asked.consequences, ["1 Schlüssel geht mit.", "1 Fremdschlüssel geht mit."], "{theme:?}");
+        for line in ["1 Schlüssel geht mit.", "1 Fremdschlüssel geht mit.", "Was es enthält, geht mit."] {
+            assert!(painted_has(&h, line), "{theme:?}: {line} in {:?}", painted(&h));
+        }
+        h.state_mut().explorer.delete = None;
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The key a foreign key points at, refused, is said in the chosen language, never in the engine's
 /// English: a key of another table, a table without a primary key, the key it points at already
 /// and identifying relationships that would run in a cycle; a key without columns, which only a
@@ -18227,6 +18259,13 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
         false
     }
+    /// A class's attributes go with it, counted in its own words and signed with its name, so a
+    /// test sees it asked and the dialog say it; nothing goes with anything else.
+    fn consequences(&self, store: &archforge_mof::Store, obj: archforge_mof::Obj) -> Vec<String> {
+        let attributes = store.list(obj, archforge_uml::class::OWNED_ATTRIBUTE).map(|l| l.len()).unwrap_or_default();
+        let class = store.class_of(obj).ok() == Some(archforge_uml::CLASS);
+        (class && attributes > 0).then(|| format!("{attributes} attributes go with it in the {}.", self.0)).into_iter().collect()
+    }
     /// Names each element it is asked about and counts them, signed with its name, so a test sees
     /// what reached it and which of two answered.
     fn before_removal(&self, store: &archforge_mof::Store, objs: &[archforge_mof::Obj]) -> crate::notation_ui::Removal {
@@ -18953,6 +18992,60 @@ fn shared_removals_ask_the_notation(theme: ThemeKind) {
     click(&mut h, at);
     let toast = h.state().canvas.toast.as_ref().map(|t| t.text.clone());
     assert_eq!(toast.as_deref(), Some("Order deleted · the sketch saw 1 go"), "{theme:?}");
+}
+
+/// The delete dialog says what goes with an element as the element's notation says it, in its own
+/// words, and asks only when something goes: a sketch class shown on no diagram goes at once from
+/// Models when the sketch says nothing goes with it, and asks with the sketch's sentence when it
+/// has an attribute; the canvas's Delete from the model says the same. In light and dark.
+#[test]
+fn the_delete_dialog_says_what_the_notation_says_goes_with_it() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().notation_uis = SKETCH_UIS;
+        h.run();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let pkg = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap()).unwrap();
+            st.uuid(p).unwrap().to_string()
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut id = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
+        let lone = id("uml.class.add", serde_json::json!({ "package": pkg, "name": "Lone" }));
+        let held = id("uml.class.add", serde_json::json!({ "package": pkg, "name": "Held" }));
+        id("uml.attribute.add", serde_json::json!({ "class": held, "name": "kept" }));
+        let remove = |h: &mut Harness<'static, Shell>, id: &str| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+            h.run();
+            crate::explorer::remove_selection(h.state_mut());
+            h.run();
+        };
+        let alive = |h: &Harness<'static, Shell>, id: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).is_some_and(|o| st.is_alive(o))
+        };
+        remove(&mut h, &lone);
+        assert!(h.state().explorer.delete.is_none(), "{theme:?}: nothing goes with Lone, so nothing is asked");
+        assert!(!alive(&h, &lone), "{theme:?}: Lone went at once");
+        remove(&mut h, &held);
+        let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: the sketch says its attribute goes with it"));
+        assert_eq!(asked.consequences, ["1 attributes go with it in the sketch."], "{theme:?}");
+        assert!(alive(&h, &held), "{theme:?}: nothing removed unasked");
+        assert!(painted_has(&h, "1 attributes go with it in the sketch."), "{theme:?}: {:?}", painted(&h));
+        h.state_mut().explorer.delete = None;
+        // Order on the canvas, through Delete from the model: its attributes, as the sketch says.
+        let (attributes, order, node) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
+            let node = archforge_diagram::views_of(st, o).2[0];
+            (st.list(o, archforge_uml::class::OWNED_ATTRIBUTE).unwrap().len(), st.uuid(o).unwrap(), st.uuid(node).unwrap())
+        };
+        crate::editing::ask_delete(h.state_mut(), node, order);
+        h.run();
+        let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: Delete from the model asks"));
+        assert_eq!(asked.consequences, [format!("{attributes} attributes go with it in the sketch.")], "{theme:?}");
+    }
 }
 
 /// A row Properties selects opens the rows its element sits under in Models, as its notation names
@@ -23687,7 +23780,8 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
     click(&mut h, at);
     key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
     let ask = h.state().explorer.delete.clone().expect("the dialog asks");
-    assert_eq!((ask.name.as_str(), ask.diagrams, ask.relationships), ("Customer", 2, 1), "its association goes with it");
+    assert_eq!((ask.name.as_str(), ask.diagrams), ("Customer", 2));
+    assert_eq!(ask.consequences, ["1 relationship goes with it."], "its association goes with it");
     let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
     click(&mut h, at);
     let st = h.state().session.as_ref().unwrap().doc();
@@ -24910,13 +25004,13 @@ fn a_nested_package_s_delete_dialog_counts_only_what_goes_with_the_package() {
             h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: the dialog asks"))
         };
         let said = |h: &Harness<'static, Shell>| painted(h).into_iter().filter(|t| t.contains("relationship")).collect::<Vec<_>>();
-        assert_eq!(ask(&mut h).relationships, 0, "{theme:?}: Invoice's associations stay, handed up with it");
+        assert_eq!(ask(&mut h).consequences, Vec::<String>::new(), "{theme:?}: Invoice's associations stay, handed up with it");
         assert_eq!(said(&h), Vec::<String>::new(), "{theme:?}: no relationship line");
         h.state_mut().explorer.delete = None;
         let s = h.state_mut().session.as_mut().unwrap();
         let p = serde_json::json!({ "client": payment, "supplier": billing });
         let dependency = s.execute("uml.dependency.add", &p).unwrap().value["id"].as_str().unwrap().to_string();
-        assert_eq!(ask(&mut h).relationships, 1, "{theme:?}: the dependency on Billing goes with it");
+        assert_eq!(ask(&mut h).consequences, ["1 relationship goes with it."], "{theme:?}: the dependency on Billing goes with it");
         assert!(said(&h).iter().any(|t| t.contains("1 relationship goes with it.")), "{theme:?}: {:?}", said(&h));
         let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
         click(&mut h, at);
@@ -24940,8 +25034,59 @@ fn a_nested_package_s_delete_dialog_counts_only_what_goes_with_the_package() {
         crate::explorer::remove_selection(h.state_mut());
         h.run();
         let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: its stereotype application makes Models ask"));
-        assert_eq!(asked.relationships, 1, "{theme:?}: the dependency alone");
+        assert_eq!(
+            asked.consequences,
+            ["1 relationship goes with it.", "1 stereotype application goes with it: «Module» on Billing."],
+            "{theme:?}: the dependency alone"
+        );
         assert!(said(&h).iter().any(|t| t.contains("1 relationship goes with it.")), "{theme:?}: {:?}", said(&h));
+    }
+}
+
+/// A nested package removed from Models goes at once, what it holds moved up, only while nothing
+/// goes with it: with a dependency on it from Payment, Models asks first and says the dependency
+/// goes, as Delete from the model does, and nothing is removed unasked; an empty nested package
+/// beside it goes without a dialog, the toast naming it. In light and dark.
+#[test]
+fn a_nested_package_with_a_dependency_on_it_asks_from_models() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let payment = named(&h, archforge_uml::CLASS, "Payment").to_string();
+        let (pkg, outer) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&payment).unwrap()).unwrap()).unwrap();
+            (st.uuid(p).unwrap().to_string(), archforge_core::name_of(st, p))
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let billing = run("uml.package.add", serde_json::json!({ "parent": pkg, "name": "Billing" }));
+        run("uml.class.add", serde_json::json!({ "package": billing, "name": "Invoice" }));
+        let calm = run("uml.package.add", serde_json::json!({ "parent": pkg, "name": "Calm" }));
+        run("uml.dependency.add", serde_json::json!({ "client": payment, "supplier": billing }));
+        let remove = |h: &mut Harness<'static, Shell>, id: &str| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+            h.run();
+            crate::explorer::remove_selection(h.state_mut());
+            h.run();
+        };
+        let alive = |h: &Harness<'static, Shell>, id: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).is_some_and(|o| st.is_alive(o))
+        };
+        remove(&mut h, &billing);
+        let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: the dependency on Billing makes Models ask"));
+        assert_eq!(asked.consequences, ["1 relationship goes with it."], "{theme:?}");
+        assert!(alive(&h, &billing), "{theme:?}: nothing removed unasked");
+        assert!(painted_has(&h, "1 relationship goes with it."), "{theme:?}: {:?}", painted(&h));
+        assert!(painted_has(&h, &format!("What it holds moves to {outer}.")), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, "workspace.explorer.delete.cancel").center();
+        click(&mut h, at);
+        assert!(h.state().explorer.delete.is_none() && alive(&h, &billing), "{theme:?}: cancelled, Billing stays");
+        remove(&mut h, &calm);
+        assert!(h.state().explorer.delete.is_none(), "{theme:?}: nothing goes with Calm, so nothing is asked");
+        assert!(!alive(&h, &calm), "{theme:?}: Calm went at once");
+        let toast = h.state().canvas.toast.as_ref().map(|t| t.text.clone());
+        assert_eq!(toast.as_deref(), Some("Calm removed"), "{theme:?}");
     }
 }
 
@@ -28202,7 +28347,7 @@ fn the_delete_dialog_counts_what_goes_with_an_association_class_too() {
         click(&mut r.h, at);
         key(&mut r.h, egui::Key::Delete, egui::Modifiers::SHIFT);
         let asked = r.h.state().explorer.delete.clone().expect("the dialog asks");
-        assert_eq!(asked.relationships, 2, "Review and the dependency on it");
+        assert_eq!(asked.consequences, ["2 relationships go with it."], "Review and the dependency on it");
         let at = rect_of(&r.h, "workspace.explorer.delete.confirm").center();
         click(&mut r.h, at);
         let st = r.h.state().session.as_ref().unwrap().doc();
@@ -30068,7 +30213,10 @@ fn a_class_is_deleted_from_the_model_through_its_menu_and_comes_back_with_undo()
     let at = rect_of(&h, "workspace.canvas.menu.delete").center();
     click(&mut h, at);
     let ask = h.state().explorer.delete.clone().expect("the dialog asks");
-    assert_eq!((ask.name.as_str(), ask.relationships, ask.diagrams), ("Customer", 1, 1));
+    assert_eq!(
+        (ask.name.as_str(), ask.consequences.as_slice(), ask.diagrams),
+        ("Customer", ["1 relationship goes with it.".to_string()].as_slice(), 1)
+    );
     let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
     click(&mut h, at);
     assert!(class_named(&h, "Customer").is_none(), "the class left the model");
@@ -32406,7 +32554,7 @@ fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_
         crate::explorer::remove_selection(h.state_mut());
         h.run();
         let asked = h.state().explorer.delete.clone().expect("a dialog");
-        assert_eq!(asked.along, ["Order::Enumeration 1"]);
+        assert_eq!(asked.consequences, ["4 relationships go with it.", "1 nested classifier goes with it: Order::Enumeration 1."]);
         assert!(painted(&h).iter().any(|t| t == "1 nested classifier goes with it: Order::Enumeration 1."), "{:?}", painted(&h));
         let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
         click(&mut h, at);
@@ -35115,8 +35263,8 @@ fn deleting_a_stereotyped_element_names_its_applications() {
         crate::explorer::remove_selection(h.state_mut());
         h.run();
         let asked = h.state().explorer.delete.clone().expect("a dialog");
-        assert_eq!(asked.applications, ["«Entity» on Order", "«Id» on id", "«Reference» on places"]);
         let said = "3 stereotype applications go with it: «Entity» on Order, «Id» on id, «Reference» on places.";
+        assert_eq!(asked.consequences, ["4 relationships go with it.", said]);
         assert!(painted_has(&h, said), "{theme:?}: {:?}", painted(&h));
         let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
         click(&mut h, at);
@@ -35128,6 +35276,31 @@ fn deleting_a_stereotyped_element_names_its_applications() {
             .collect();
         assert_eq!(left, ["Customer", "id"], "{theme:?}: Customer's stay");
     }
+}
+
+/// The delete dialog of an element its stereotypes are applied to names the applications that go
+/// with it in the chosen language, in UML's own words, after the relationships that go. In light and
+/// dark.
+#[test]
+fn the_delete_dialog_names_the_applications_in_the_chosen_language() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        h.state_mut().state.language = "de".into();
+        h.run();
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: the dialog asks"));
+        let said = "3 Stereotyp-Anwendungen gehen mit: «Entity» auf Order, «Id» auf id, «Reference» auf places.";
+        assert_eq!(asked.consequences, ["4 Beziehungen gehen mit.", said], "{theme:?}");
+        for line in asked.consequences.iter().map(String::as_str).chain(["Was es enthält, geht mit."]) {
+            assert!(painted_has(&h, line), "{theme:?}: {line} in {:?}", painted(&h));
+        }
+        h.state_mut().explorer.delete = None;
+        h.run();
+    }
+    crate::i18n::set_language("en");
 }
 
 /// Removing a member from its editor asks first when stereotype applications would go with it, the
@@ -35153,7 +35326,7 @@ fn a_members_remove_asks_before_its_stereotype_applications_go() {
         click(&mut h, at);
         assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "{theme:?}: nothing written before the answer");
         let asked = h.state().explorer.delete.clone().expect("a dialog");
-        assert_eq!(asked.applications, ["«Id» on id"]);
+        assert_eq!(asked.consequences, ["1 stereotype application goes with it: «Id» on id."]);
         assert!(painted_has(&h, "1 stereotype application goes with it: «Id» on id."), "{theme:?}: {:?}", painted(&h));
         let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
         click(&mut h, at);
@@ -35227,7 +35400,7 @@ fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
         h.run();
         assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "{theme:?}: nothing removed unasked");
         let asked = h.state().explorer.delete.clone().expect("a dialog");
-        assert_eq!(asked.applications, ["«Module» on Billing"]);
+        assert_eq!(asked.consequences, ["1 stereotype application goes with it: «Module» on Billing."]);
         assert!(painted_has(&h, "What it holds moves to Commerce."), "{theme:?}: {:?}", painted(&h));
         let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
         click(&mut h, at);

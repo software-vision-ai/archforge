@@ -92,6 +92,8 @@ str		Every {one} has at least one {many} only on the diagram: no database key ca
 str		{name} has no primary key	{name} に主キーがありません
 str		{name} has subtypes but no primary key to share	{name} にはサブタイプがありますが、共有する主キーがありません
 str		{name} removed · {keys} went with it	{name} を削除しました · {keys} も削除されました
+plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
+plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
 str		Add column	列を追加
 str		Edit column	列を編集
 str		Mapping table	対応テーブル

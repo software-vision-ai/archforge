@@ -92,6 +92,8 @@ str		Every {one} has at least one {many} only on the diagram: no database key ca
 str		{name} has no primary key	{name} 没有主键
 str		{name} has subtypes but no primary key to share	{name} 有子类型，但没有可共享的主键
 str		{name} removed · {keys} went with it	已删除 {name} · {keys} 随之删除
+plural		{n} key goes with it.	{n} 个键将一并删除。
+plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
 str		Add column	添加列
 str		Edit column	编辑列
 str		Mapping table	映射表
