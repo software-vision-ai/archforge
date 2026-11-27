@@ -118,8 +118,8 @@ pub const CHAT: Icon = Icon {
 pub const CLOSE: Icon =
     Icon { size: [14.0, 14.0], stroke: 1.7, standard_size: Some(9.0), segments: &[L([0.0, 0.0], [14.0, 14.0]), L([14.0, 0.0], [0.0, 14.0])] };
 
-/// The link mark of a key column that follows the column it points at (the design's Icon / Link):
-/// two chain links.
+/// The link mark (the design's Icon / Link), wherever one thing points at another: two chain
+/// links.
 pub const LINK: Icon = Icon {
     size: [12.0, 6.0],
     stroke: 1.1,
@@ -1167,7 +1167,7 @@ pub const ARRANGE_STACK: Icon = Icon {
     segments: &[L([0.0, 0.0], [12.0, 0.0]), L([0.0, 5.0], [12.0, 5.0]), L([0.0, 10.0], [12.0, 10.0])],
 };
 
-/// A selected entity's adorners: connect (two boxes joined), from the design's "New entity".
+/// A selected card's adorners: connect (two boxes joined), from the design's frame "New entity".
 pub const ADORN_CONNECT: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.25,
@@ -1185,7 +1185,7 @@ pub const ADORN_CONNECT: Icon = Icon {
         L([9.0, 14.0], [9.0, 9.0]),
     ],
 };
-/// Add column: three rows and a plus.
+/// Add a row to the card: three rows and a plus.
 pub const ADORN_ADD: Icon = Icon {
     size: [13.0, 12.0],
     stroke: 1.25,

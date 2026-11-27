@@ -5,7 +5,7 @@
 //! A click opens the diagram in the centre and selects it, so Properties shows it. The `+`, like
 //! the one in the tab strip, opens the New diagram dialog: a name, the kind and the element the
 //! diagram is of, or a new one when the model has none yet (owner decision).
-//! A diagram row's menu, or Delete on the row, deletes a diagram that is no package's default at
+//! A diagram row's menu, or Delete on the row, deletes a diagram that is no element's default at
 //! once, with Undo in a toast; a default's row says why it stays (AR-644).
 //! Every change goes through the engine, so undo and redo cover it.
 //!
@@ -338,7 +338,7 @@ impl Walk<'_> {
 }
 
 /// Where the element `of` sits, for the footer and a diagram's hover text: the project, then the
-/// elements holding it from the model down, then it. The model's root package carries the
+/// elements holding it from the model down, then it. The model's root carries the
 /// project's name, so the name is said once.
 pub fn trail(store: &Store, project: &str, of: Obj) -> String {
     let mut names = Vec::new();
@@ -703,7 +703,7 @@ fn row_keys(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, id: Uuid, h
 }
 
 /// Why the diagram `d` is not deleted from the explorer, in the user's words, as the notations of
-/// `uis` say a refusal: it is a package's default, which only the default-deletion dialog replaces
+/// `uis` say a refusal: it is an element's default, which only the default-deletion dialog replaces
 /// ([`archforge_diagram::defaults`]).
 fn kept_because(uis: &[&'static dyn NotationUi], store: &Store, d: Obj) -> Option<String> {
     let refused = archforge_diagram::defaults::diagram_removal_problem(store, d, "diagram", |_| false)?;
@@ -711,7 +711,7 @@ fn kept_because(uis: &[&'static dyn NotationUi], store: &Store, d: Obj) -> Optio
 }
 
 /// Deletes the diagram `id` at once, as one undo step, and says so in a toast with Undo; what it
-/// showed stays in the model. A package's default is kept: the engine refuses it, and its reason
+/// showed stays in the model. An element's default is kept: the engine refuses it, and its reason
 /// is said under the tree.
 pub(crate) fn delete_diagram(shell: &mut Shell, id: Uuid) {
     shell.diagrams.menu = None;
@@ -729,7 +729,7 @@ pub(crate) fn delete_diagram(shell: &mut Shell, id: Uuid) {
 }
 
 /// The open row menu, at the place it was asked for and inside the window: Delete diagram, with
-/// its key, or off with the reason when the diagram is a package's default. ↓ and ↑ reach the row,
+/// its key, or off with the reason when the diagram is an element's default. ↓ and ↑ reach the row,
 /// Enter picks it and Escape closes the menu and gives the row the keyboard back, each pressed
 /// alone; a press elsewhere closes it.
 fn row_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {

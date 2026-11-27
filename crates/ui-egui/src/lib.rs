@@ -942,8 +942,8 @@ pub struct Shell {
     pub active: Option<usize>,
     /// The project shown, when a tab is.
     pub project: Option<Opened>,
-    /// The open project's model: the ER session over a store with the project's Model root, made
-    /// once when the project opens and dropped when it closes. Nothing reaches the project's
+    /// The open project's model: the notations' session over a store with the project's Model root,
+    /// made once when the project opens and dropped when it closes. Nothing reaches the project's
     /// database yet; the status bar says so.
     pub session: Option<archforge_notations::Session>,
     /// Why the session could not be made, when it could not.

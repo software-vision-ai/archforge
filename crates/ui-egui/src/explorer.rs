@@ -1,11 +1,12 @@
 //! The Models explorer (slice W2 of the workspace chrome, from the design's page 03 frames and
 //! the cards "Models + menu" and "First schema named in place"): the tree of the open project's
 //! model over the session's store, each notation's top elements in the model's order with the
-//! rows its notation puts under them (ER's schemas, their skills and tables, a table's skills and
-//! columns; `notation_ui`). A click selects through `view.select`, the `+` adds what the
-//! selection's notation offers and opens the name for typing in place, Enter or F2 renames, Delete removes through `element.remove` after a dialog when other
-//! things go with it or a diagram shows it. The filter narrows the rows to the names that contain
-//! it, whatever its capitals and accents. Every change goes through the engine, so undo and redo cover it.
+//! rows its notation puts under them (their skills and the elements they hold, and those elements'
+//! own; `notation_ui`). A click selects through `view.select`, the `+` adds what the selection's
+//! notation offers and opens the name for typing in place, Enter or F2 renames, Delete removes
+//! through `element.remove` after a dialog when other things go with it or a diagram shows it. The
+//! filter narrows the rows to the names that contain it, whatever its capitals and accents. Every
+//! change goes through the engine, so undo and redo cover it.
 //!
 //! The geometry is the design's: rows 34 px apart from y 119, a level 13 px deeper than its
 //! parent, the chevron at x 13, the icon at x 31 and the name at x 53 of the first level, the
@@ -39,10 +40,10 @@ const MAX_ROWS: usize = 2000;
 /// What the explorer keeps between frames: nothing the model holds.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct State {
-    /// The rows opened; everything else is folded, so a large model shows its schemas first and
+    /// The rows opened; everything else is folded, so a large model shows its top rows first and
     /// the user drills in.
     pub expanded: BTreeSet<Uuid>,
-    /// The selection whose schema and table were last opened for it, so one made on the canvas or
+    /// The selection whose rows above it were last opened for it, so one made on the canvas or
     /// in the panels shows in the tree once, and folding them again stays folded.
     pub revealed: Option<Uuid>,
     /// The filter field's text.
@@ -59,7 +60,7 @@ pub struct State {
     pub focused: bool,
     /// The last refusal of an add or a removal, shown under the tree until the next action.
     pub notice: Option<String>,
-    /// A table row being dragged towards the canvas, and where one was let go this frame, for the
+    /// A row being dragged towards the canvas, and where one was let go this frame, for the
     /// canvas to place (slice S7).
     pub dragging: Option<Uuid>,
     pub dropped: Option<(Uuid, egui::Pos2)>,
@@ -263,7 +264,8 @@ pub(crate) fn rows(uis: &[&'static dyn NotationUi], store: &Store, state: &State
     out
 }
 
-/// A default name no sibling has: `Schema 1`, `Table 2`, `column_3`; none past ten thousand.
+/// A default name no sibling has, its stem and a number: `Note 2`, or `note_2` when `snake`; none
+/// past ten thousand.
 pub fn fresh_name(stem: &str, taken: impl Iterator<Item = String>, snake: bool) -> Option<String> {
     let taken: BTreeSet<String> = taken.map(|n| n.to_lowercase()).collect();
     (1..=10_000u32).map(|n| if snake { format!("{stem}_{n}") } else { format!("{stem} {n}") }).find(|name| !taken.contains(&name.to_lowercase()))
@@ -379,15 +381,16 @@ pub fn remove_selection(shell: &mut Shell) {
     }
     let Some(id) = uuid_of(store, obj) else { return };
     let ui = crate::notation_ui::of(shell.notation_uis, store, obj);
-    // What its notation keeps (UML's package Types with the built-in types) is said, not removed.
+    // What its notation keeps (an element that holds what the notation itself needs) is said, not
+    // removed.
     if let Some(why) = ui.and_then(|u| u.remove_refusal(shell.notation_uis, store, obj)) {
         shell.explorer.notice = Some(why);
         return;
     }
     // What goes with it, as its notation says it: removing it is never silent (AR-135).
     let consequences = ui.map(|u| u.consequences(shell.notation_uis, store, obj)).unwrap_or_default();
-    // What it holds moves up to its parent (a nested package): no dialog, the toast says where;
-    // the dialog when anything would go with it.
+    // What it holds moves up to its parent (an element nested in another): no dialog, the toast
+    // says where; the dialog when anything would go with it.
     if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)).filter(|_| consequences.is_empty()) {
         let (name, to) = (crate::notation_ui::label(shell.notation_uis, store, obj), name_of(store, parent));
         let held = ui.is_some_and(|u| u.has_children(store, obj));
@@ -422,7 +425,7 @@ pub fn remove_selection(shell: &mut Shell) {
     let hands_to = ui.and_then(|u| u.hands_up(store, obj)).map(|p| (name_of(store, p), has_children));
     shell.explorer.delete = Some(Delete {
         ids: vec![id],
-        // Named as the canvas names it, an unnamed relationship by its ends (AR-216).
+        // Named as the canvas names it, an unnamed line's element by its ends (AR-216).
         name: crate::notation_ui::label(shell.notation_uis, store, obj),
         consequences,
         diagrams,
@@ -454,13 +457,12 @@ fn toggle(state: &mut State, row: &Row) {
     }
 }
 
-/// Every row that can open (ER's schemas and their tables).
+/// Every row that can open.
 fn foldable(uis: &[&'static dyn NotationUi], store: &Store) -> Vec<Uuid> {
     tops(uis, store).into_iter().flat_map(|(top, ui)| ui.foldable(store, top)).filter_map(|o| uuid_of(store, o)).collect()
 }
 
-/// Opens the rows the selected element sits under (ER's schema and table), once per selection, so
-/// its row shows.
+/// Opens the rows the selected element sits under, once per selection, so its row shows.
 fn reveal(uis: &[&'static dyn NotationUi], state: &mut State, store: &Store, selected: Option<Obj>) {
     let id = selected.and_then(|o| uuid_of(store, o));
     if id == state.revealed {
@@ -567,7 +569,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         tree_row(shell, &mut clip, p, r, y, row, selected_obj == Some(row.obj));
     }
     keys_moved(ui, &shell.explorer.scroll);
-    // A row dragged onto another row: what the drop means there (a class into a package), its
+    // A row dragged onto another row: what the drop means there (an element into another), its
     // target ringed while it is held over it.
     let row_at = |at: egui::Pos2| -> Option<&Row> {
         if !tree.contains(at) {
@@ -602,8 +604,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     {
         shell.explorer.dropped = None;
         let todo = row_at(at).filter(|t| t.id != dragged).and_then(|t| drop_of(shell, dragged, t));
-        // The drop runs as the target's notation runs it (a UML package moved as Properties moves
-        // it, AR-568).
+        // The drop runs as the target's notation runs it (as its own Properties field for the same
+        // move does, AR-568).
         let out = todo.map_or(Ok(()), |(notation, cmd, params)| shell.cx(|cx| notation.run_drop(cx, cmd, params)));
         if let Err(e) = out {
             shell.explorer.notice = Some(e);
@@ -645,8 +647,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             sub_reached: None,
         });
     }
-    // A notation's menu that takes typing, Backspace, the arrows and Enter keeps them, as UML's
-    // Stereotypes picker does (AR-135).
+    // A notation's menu that takes typing, Backspace, the arrows and Enter keeps them, as a picker
+    // filtered as it is typed does.
     if tree_keys && shell.explorer.context.is_none() && !shell.notation_states.menu_takes_keys(shell.panels.menu) {
         keyboard(shell, ui, &rows, selected_obj, tree_view(tree, r.top() + FIRST_ROW, ROW));
     }
@@ -711,7 +713,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         paint.rect_filled(hit, 6.0, p.accent_tint);
     }
     let id = format!("workspace.explorer.row.{}", row.id);
-    // A table row drags onto the canvas; its click still selects.
+    // A row that drags onto the canvas does so; its click still selects.
     if row.draggable && !shell.looking_only() {
         let drag = ui.interact(hit, widgets::egui_id(&format!("{id}.drag")), Sense::drag());
         if drag.drag_started() {
@@ -1326,7 +1328,8 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
                 });
                 match run(shell, "element.remove", json!({ "ids": ids })) {
                     Ok(_) => match &d.hands_to {
-                        // A nested package's contents moved up: the toast says where, with Undo.
+                        // What an element nested in another held moved up: the toast says where,
+                        // with Undo.
                         Some((parent, held)) => {
                             let text = if *held {
                                 fmt(&tr("{name} removed; what it held moved to {parent}"), &[("name", &d.name), ("parent", parent)])

@@ -1,10 +1,10 @@
 //! The canvas's geometry and state, which name no shell: the view's mapping between diagram units
-//! and the screen, where a line leaves a card, a self relationship's loop and the line that ties a
-//! nested card to its owner's, a point along a line, the outline of a line's end mark, where a
-//! selected line's end handles and its end texts sit; and what
-//! the centre keeps between frames (`State`: the tabs, the view, the tool, the toggles, the editing
-//! under way and what the last frame drew that takes a press), and what one frame's drawing reads
-//! (`Drawing`), from which a diagram's kind draws its own figures. The shell draws the canvas with it
+//! and the screen, where a line leaves a card, the loop of a line from a card back to itself and
+//! the line that ties a nested card to its owner's, a point along a line, the outline of a line's
+//! end mark, where a selected line's end handles and its end texts sit; and what the centre keeps
+//! between frames (`State`: the tabs, the view, the tool, the toggles, the editing under way and
+//! what the last frame drew that takes a press), and what one frame's drawing reads (`Drawing`),
+//! from which a diagram's kind draws its own figures. The shell draws the canvas with it
 //! (`archforge_ui_egui::canvas` re-exports it under its old paths), and so will a notation's
 //! screens, without the shell.
 
@@ -42,7 +42,7 @@ impl View {
     }
 }
 
-/// The route of the line that ties a nested classifier's card `nested` to its owner's card
+/// The route of the line that ties a nested card `nested` to its owner's card
 /// `owner` (AR-132): straight where the cards face each other across a gap, else leaving the owner
 /// at its side and turning once into the nested card, the elbow crossing fewer of the `others`
 /// cards. Gives the points from the
@@ -117,11 +117,11 @@ pub fn exit_point(rect: Rect, toward: Pos2) -> Pos2 {
     if t.is_finite() { c + d * t } else { c }
 }
 
-/// How far a self relationship's loop reaches out of its entity.
+/// How far the loop of a line from a card back to itself reaches out of the card.
 /// The diagram's self-loop, on screen (the grid hit-tests the same shape).
 const LOOP_REACH: f32 = archforge_diagram::grid::LOOP_REACH as f32;
 const LOOP_HALF: f32 = archforge_diagram::grid::LOOP_HALF as f32;
-/// The points of a self relationship's loop on the entity's right side.
+/// The points of the loop of a line from a card back to itself, on the card's right side.
 pub fn self_loop(rect: Rect, z: f32) -> Vec<Pos2> {
     let cy = rect.center().y;
     vec![
@@ -402,15 +402,13 @@ pub enum Tool {
     #[default]
     Select,
     Pan,
-    /// A diagram kind's tool that places an element where the canvas is clicked (ER's Entity,
-    /// slice E1), by its key.
+    /// A diagram kind's tool that places an element where the canvas is clicked, by its key.
     Place(&'static str),
-    /// A diagram kind's tool that drags a line from one element to another (ER's Relationship,
-    /// slice E2), by its key.
+    /// A diagram kind's tool that drags a line from one element to another, by its key.
     Connect(&'static str),
     /// Places a note where the canvas is clicked (slice E4).
     Note,
-    /// Drags a link from a note to a table or a relationship's line.
+    /// Drags a link from a note to a card or a line.
     Link,
 }
 
@@ -473,13 +471,13 @@ pub struct State {
     pub gesture: Option<crate::editing::Gesture>,
     pub menu: Option<crate::editing::ElementMenu>,
     pub focused: bool,
-    /// Relationships (slice E2): the chevron whose popover is open (the cardinality popover, a menu
-    /// of kinds) and the toast with Undo; the ends a new line gets and the mapping table offer are
-    /// ER's own (the shell's `er_state::ErState`).
+    /// The chevron whose popover is open (a choice a tool makes before it draws, a menu of kinds)
+    /// and the toast with Undo; what a notation gives a new line and offers after it is the
+    /// notation's own (`notation_ui::NotationState`).
     pub popover: Option<&'static str>,
     /// The row of the open popover's menu the arrow keys are on, when they have moved.
     pub menu_focus: Option<usize>,
-    /// A press closed the classifier's menu of kinds: the canvas ignores that press until the
+    /// A press closed a tool's menu of kinds: the canvas ignores that press until the
     /// button lets go, so it places, selects and drags nothing.
     pub dismissing: bool,
     pub toast: Option<Toast>,
@@ -501,34 +499,34 @@ pub struct State {
     /// ([`crate::kinds::DiagramKind::name_field`]).
     pub kind_cards: Vec<(Uuid, &'static str)>,
     /// The labels of the figures of no one node or line the last frame drew, which take a press
-    /// (a UML generalization set's, AR-129).
+    /// (a figure drawn across several lines).
     pub extra_labels: Vec<ExtraLabel>,
     /// The line ends a kind moved off their nodes' borders in the last frame
     /// ([`crate::kinds::DiagramKind::line_ends`]): where the route ended on its node, and where the
     /// line now starts, on screen; a selected line's end handle follows.
     pub moved_ends: Vec<(Pos2, Pos2)>,
     /// The view each diagram was last left with, by diagram, kept for some ways back to it, not
-    /// for every one: a diagram's kind may restore it as it moves between diagrams (UML's package
-    /// navigation), and a tab taking over before the view of the tab left was drawn shows it
-    /// (the shell's `canvas::settle_view`).
+    /// for every one: a diagram's kind may restore it as it moves between diagrams (into an
+    /// element's own diagram and back), and a tab taking over before the view of the tab left was
+    /// drawn shows it (the shell's `canvas::settle_view`).
     pub views: HashMap<Uuid, (Vec2, f32)>,
     /// The tab whose view the canvas has drawn since it was opened: none while the view is still
     /// the one of the tab before, to be fitted or centred on the next frame.
     pub shown: Option<Uuid>,
     /// How many times a tab has taken the active one's place (the shell's `canvas::settle_view`):
-    /// what a diagram's kind sets up for the tab it opened holds only until the next (UML's landing
-    /// after a switch).
+    /// what a diagram's kind sets up for the tab it opened holds only until the next (where a
+    /// switch of diagram lands).
     pub settled: u64,
     /// The zoom the user made since the diagram's kind last ran before the canvas drew, as a
     /// factor; zero for none. The kind follows it there (the shell's
-    /// `kinds::DiagramKind::before_draw`: UML's package navigation across a package's threshold),
+    /// `kinds::DiagramKind::before_draw`: a switch of diagram once the zoom crosses a threshold),
     /// and the canvas clears it right after, so a zoom made later in a frame (the minimap's
     /// buttons) reaches the next one.
     pub zoom_intent: f32,
     /// When a diagram's kind last marked a switch: the canvas fades in from then over the shell's
-    /// `canvas::SWITCH_FADE`. Not proof that the diagram shown changed: UML marks one too when a
-    /// zoom out at the top package goes no further, so the gesture rests and the canvas fades on
-    /// the same diagram.
+    /// `canvas::SWITCH_FADE`. Not proof that the diagram shown changed: a kind may mark one when a
+    /// zoom out at the top goes no further, so the gesture rests and the canvas fades on the same
+    /// diagram.
     pub switched: Option<f64>,
 }
 
@@ -567,7 +565,7 @@ pub struct CardLabel {
 }
 
 impl Default for State {
-    /// A canvas with no diagram open: Select, the grid and minimap on, no menu open, Class as the classifier kind.
+    /// A canvas with no diagram open: Select, the grid and minimap on, no menu open.
     fn default() -> Self {
         Self {
             tabs: Vec::new(),
@@ -654,7 +652,7 @@ pub struct Drawing<'a> {
     /// card, a line's ends and what goes over its labels), so a figure is drawn as the kind that
     /// draws its element says whatever diagram shows it.
     pub kinds: &'a [&'static dyn crate::kinds::DiagramKind],
-    /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
+    /// The diagram's cards and notes in diagram coordinates (a drag's preview where it has one),
     /// and where each line's ends sit along their sides: worked out once a frame.
     pub boxes: Vec<(Obj, archforge_diagram::Rect)>,
     pub spreads: std::collections::HashMap<Obj, (f64, f64)>,
@@ -762,8 +760,8 @@ fn a_short_line_s_two_end_texts_keep_clear_of_each_other() {
     assert_eq!(c, far.map(|(e, t, s, m)| beside(e, t, s, 1.0, m)));
 }
 
-/// A self relationship's loop leaves its entity's right side and comes back to it, around the
-/// entity's centre.
+/// The loop of a line from a card back to itself leaves the card's right side and comes back to
+/// it, around the card's centre.
 #[cfg(test)]
 #[test]
 fn a_self_loop_leaves_and_returns_on_the_right_side_around_the_centre() {

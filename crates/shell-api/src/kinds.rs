@@ -37,7 +37,7 @@ pub struct KindTool {
     pub use_: ToolUse,
     /// A chevron beside it that opens the kind's popover, with its key and hover text.
     pub chevron: Option<(&'static str, &'static str)>,
-    /// Twice as wide, so a face that draws what the tool makes reads (a relationship's line); an
+    /// Twice as wide, so a face that draws what the tool makes reads (a line); an
     /// icon's face is as wide as any tool's.
     pub wide: bool,
 }
@@ -64,7 +64,7 @@ pub struct Press<'a> {
 }
 
 /// A label of the figures of no one node or line as its diagram's kind drew it
-/// (`DiagramKind::draw_extras`; a UML generalization set's, AR-129): the element it
+/// (`DiagramKind::draw_extras`; the label of a figure drawn across several lines): the element it
 /// stands for, where it was on screen, the node that holds where it was moved to on this diagram,
 /// when it was moved, and what it says while the pointer is on it, its whole text in its
 /// notation's words.
@@ -133,14 +133,14 @@ pub struct MenuRow {
 /// the menu's entry from it (`archforge_ui_egui::model_menu`), which arms the tool as the kind's
 /// toolbar button and popover do.
 pub struct ModelRow {
-    /// Its id, in the menu and the table of actions (`model.class`).
+    /// Its id, in the menu and the table of actions.
     pub key: &'static str,
     /// Its name, in the language in use when asked.
     pub word: fn() -> String,
     /// The tool it arms.
     pub tool: Tool,
     /// The choice of the tool's popover it makes before arming the tool, in the notation's own state
-    /// (UML's kind of classifier, or of relationship); none for a tool with no such choice.
+    /// (which of several kinds of element the tool makes); none for a tool with no such choice.
     pub choice: Option<fn(&mut crate::notation_ui::NotationStates)>,
 }
 
@@ -163,7 +163,7 @@ pub trait DiagramKind: Sync {
     fn group_word(&self) -> String;
     /// What its diagrams show, in a sentence: the New diagram dialog's card for it.
     fn description(&self) -> String;
-    /// The New diagram dialog's title once it is chosen ("New UML structure diagram").
+    /// The New diagram dialog's title once it is chosen, which names the kind.
     fn new_word(&self) -> String;
     /// A small picture of one of its diagrams in `r`, for its card in the New diagram dialog.
     fn sketch(&self, paint: &egui::Painter, p: &Palette, r: Rect) {
@@ -233,7 +233,7 @@ pub trait DiagramKind: Sync {
         self.takes_part(store, element)
     }
     /// Whether an element that takes no part in the gestures still renames in place with a double
-    /// click on its card (a package on a UML structure diagram).
+    /// click on its card.
     fn renames_in_place(&self, store: &Store, element: Obj) -> bool {
         let _ = (store, element);
         false
@@ -242,7 +242,7 @@ pub trait DiagramKind: Sync {
     fn rename(&self, cx: &mut Ctx, element: Uuid, name: &str) -> Result<(), String>;
     /// Whether a double click anywhere on the card of `element` opens its editor with no row, where
     /// the canvas's own cards rename in their header and open the editor at the row under the
-    /// pointer (a UML constraint's braces and note, AR-133). Every kind the shell knows is asked, so
+    /// pointer (a card that is one text, with no rows). Every kind the shell knows is asked, so
     /// the kind that draws the element answers whatever diagram shows it; false by default.
     fn opens_on_double_click(&self, store: &Store, element: Obj) -> bool {
         let _ = (store, element);
@@ -250,9 +250,10 @@ pub trait DiagramKind: Sync {
     }
     /// Where the name typed in place on the node `node`, whose card the kind drew itself in the last
     /// frame ([`DiagramKind::draw_card`]), goes on its card at `rect` at zoom `z` while it reads
-    /// `text`, and in which text style, laid out with `paint` (a UML package's name in its tab, which
-    /// grows with it). Asked as the field is drawn, so it follows a rename opened after the card was
-    /// drawn. None, and by default: in the card's header, where the canvas's own cards hold it.
+    /// `text`, and in which text style, laid out with `paint` (a name in a tab on top of the card,
+    /// which grows with it). Asked as the field is drawn, so it follows a rename opened after the
+    /// card was drawn. None, and by default: in the card's header, where the canvas's own cards
+    /// hold it.
     fn name_field(&self, paint: &egui::Painter, store: &Store, node: Obj, rect: Rect, text: &str, z: f32) -> Option<(Rect, crate::ux::Type)> {
         let _ = (paint, store, node, rect, text, z);
         None
@@ -276,8 +277,8 @@ pub trait DiagramKind: Sync {
         let _ = (cx, d, element, at);
     }
     /// The second adorner of the selected `element`, beside Connect: its key and hover text; it
-    /// opens the editor's new row, as its menu's row and ⌘↩ do (a class's attribute, an
-    /// enumeration's literal). None: the card takes no new row from the canvas.
+    /// opens the editor's new row, as its menu's row and ⌘↩ do. None: the card takes no new row
+    /// from the canvas.
     fn adorner(&self, store: &Store, element: Obj) -> Option<(&'static str, &'static str)> {
         let _ = (store, element);
         None
@@ -301,56 +302,57 @@ pub trait DiagramKind: Sync {
     /// What a press of the primary button on diagram `press.d` means to the kind before the shared
     /// gestures read it: with a Connect tool before any line starts, with Select once a gesture
     /// under way had its chance to end and before a drag starts one. Some takes the press, even as
-    /// [`Action::Nothing`] (UML's n-ary association drawn by clicks, Add end waiting on a class);
-    /// none by default, leaving it to the shared gestures.
+    /// [`Action::Nothing`] (a figure drawn click by click, or a step waiting for the element it
+    /// needs); none by default, leaving it to the shared gestures.
     fn pointer(&self, cx: &CtxRef, press: &Press<'_>) -> Option<Action> {
         let _ = (cx, press);
         None
     }
     /// What a right click with Select at `press.at` means to the kind, before its element menu
-    /// opens (UML's menu of an n-ary association, and of generalization lines); none by default,
+    /// opens (a menu of its own for a figure, or for several lines at once); none by default,
     /// leaving the element menu to open where [`DiagramKind::menu`] says.
     fn secondary_click(&self, cx: &CtxRef, press: &Press<'_>) -> Option<Action> {
         let _ = (cx, press);
         None
     }
-    /// Reads the keys a drawing under way on diagram `d` takes before the canvas's own (UML's n-ary
-    /// association: Enter, Backspace and Escape); true when it took them this frame, false by
-    /// default.
+    /// Reads the keys a drawing under way on diagram `d` takes before the canvas's own (Enter,
+    /// Backspace and Escape while a figure is drawn click by click); true when it took them this
+    /// frame, false by default.
     fn keys(&self, cx: &mut Ctx, ui: &egui::Ui, d: Obj) -> bool {
         let _ = (cx, ui, d);
         false
     }
     /// Whether the popover of its chevron `key` is a menu the arrow keys, Enter and Escape walk
-    /// while the canvas keeps the focus (UML's classifier kinds); false for any other key, another
-    /// kind's included, and by default.
+    /// while the canvas keeps the focus (a menu of kinds of element); false for any other key,
+    /// another kind's included, and by default.
     fn popover_takes_keys(&self, key: &str) -> bool {
         let _ = key;
         false
     }
     /// What Select all takes in beside each box and line it draws, from the elements the lines of
-    /// the diagram stand for, `lines` (UML: the generalization sets those lines belong to, whose
-    /// labels are drawn whether a node holds them or not, AR-129); none by default.
+    /// the diagram stand for, `lines` (the elements whose figures span those lines, whose labels
+    /// are drawn whether a node holds them or not); none by default.
     fn also_selects(&self, store: &Store, lines: &[Obj]) -> Vec<Obj> {
         let _ = (store, lines);
         Vec::new()
     }
     /// Runs before the canvas `r` draws diagram `d`: may take keys, follow the zoom made since the
-    /// last drawing ([`crate::canvas::State::zoom_intent`]) and set the view, or open another diagram (UML's
-    /// package navigation); nothing by default.
+    /// last drawing ([`crate::canvas::State::zoom_intent`]) and set the view, or open another
+    /// diagram (a way into an element's own diagram, and back out, by zooming); nothing by default.
     fn before_draw(&self, cx: &mut Ctx, ui: &egui::Ui, r: Rect, d: Obj) {
         let _ = (cx, ui, r, d);
     }
     /// Draws over the canvas `r` once diagram `d` and its gestures are drawn, under the toast, the
-    /// minimap and the toolbar (UML's path bar and a selected package's Open). Gives how much room
-    /// it takes at the canvas's top, for the hint bar to go below; none by default, drawing nothing.
+    /// minimap and the toolbar (a bar with the path to the diagram shown, a button over a selected
+    /// card). Gives how much room it takes at the canvas's top, for the hint bar to go below; none
+    /// by default, drawing nothing.
     fn after_draw(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
         let _ = (cx, ui, p, r, d);
         0.0
     }
     /// Where a line of the drawing `d` leaving the node `source` starts when not where its route
-    /// meets the node's border, at `tip`, heading for `next` (a UML n-ary association's leg at its
-    /// diamond's outline); none by default, the line starting at `tip`.
+    /// meets the node's border, at `tip`, heading for `next` (a line that starts at the outline of
+    /// a figure drawn on its node); none by default, the line starting at `tip`.
     fn line_start(&self, d: &Drawing<'_>, source: Obj, tip: Pos2, next: Pos2) -> Option<Pos2> {
         let _ = (d, source, tip, next);
         None
@@ -358,11 +360,12 @@ pub trait DiagramKind: Sync {
     /// Moves the ends of the line `line` off its nodes' borders before the canvas draws it, in
     /// `points` (on screen, from its source to its target, where the diagram's kind already started
     /// it, [`DiagramKind::line_start`]), writing each end it moved in `Drawing::moved_ends`, and
-    /// gives what goes over the line there, recording each in `registry` (UML's qualifier boxes,
-    /// AR-127): the canvas paints it right after the line, under its marks and texts, which sit at
-    /// the ends as moved. The canvas asks the diagram's own kind first, then every other kind it
-    /// knows in turn, each after the one before, so a line is drawn as the kind that draws its
-    /// element says whatever diagram shows it. Nothing by default: the ends stay where they are.
+    /// gives what goes over the line there, recording each in `registry` (a box at an end, which
+    /// the line leaves from): the canvas paints it right after the line, under its marks and texts,
+    /// which sit at the ends as moved. The canvas asks the diagram's own kind first, then every
+    /// other kind it knows in turn, each after the one before, so a line is drawn as the kind that
+    /// draws its element says whatever diagram shows it. Nothing by default: the ends stay where
+    /// they are.
     fn line_ends(
         &self,
         paint: &egui::Painter,
@@ -376,32 +379,32 @@ pub trait DiagramKind: Sync {
         Vec::new()
     }
     /// Draws what goes with a line beyond what its notation's figure for it says, over the line,
-    /// recording each in `registry` (a UML association class's tie to its card, or its name while
-    /// the card is not on the diagram). Gives where it drew the line's name, for what the kinds draw
-    /// by the name ([`DiagramKind::line_caption`]) where the canvas draws no name label; none by
-    /// default, drawing nothing.
+    /// recording each in `registry` (a dashed tie from the line to a card, or a name standing in
+    /// for that card while it is not on the diagram). Gives where it drew the line's name, for what
+    /// the kinds draw by the name ([`DiagramKind::line_caption`]) where the canvas draws no name
+    /// label; none by default, drawing nothing.
     fn line_extras(&self, paint: &egui::Painter, d: &Drawing<'_>, line: &LineDrawn<'_>, registry: &mut Registry, ui: &egui::Ui) -> Option<Rect> {
         let _ = (paint, d, line, registry, ui);
         None
     }
     /// Draws what goes with a line over its labels, once the canvas drew them, recording each in
     /// `registry`: `name` is where the line's name sits when it shows one, the label the canvas drew
-    /// or else the name the diagram's kind drew with it ([`DiagramKind::line_extras`]) (UML's
-    /// stereotypes, above the name, AR-135). The canvas asks the diagram's own kind first, then every
-    /// other kind it knows in turn. Nothing by default.
+    /// or else the name the diagram's kind drew with it ([`DiagramKind::line_extras`]) (a text
+    /// above the name). The canvas asks the diagram's own kind first, then every other kind it
+    /// knows in turn. Nothing by default.
     fn line_caption(&self, paint: &egui::Painter, d: &Drawing<'_>, line: &LineDrawn<'_>, name: Option<Rect>, registry: &mut Registry, ui: &egui::Ui) {
         let _ = (paint, d, line, name, registry, ui);
     }
     /// Draws the links the diagram's nodes are tied by, worked out from the model and never stored,
-    /// over the lines and under the diagram's other figures and its cards (UML's constraint notes'
-    /// dashed links to the elements they constrain, AR-133). The canvas asks the diagram's own kind
-    /// first, then every other kind it knows in turn, each once a frame. Nothing by default.
+    /// over the lines and under the diagram's other figures and its cards (a note's dashed links to
+    /// the elements it names). The canvas asks the diagram's own kind first, then every other kind
+    /// it knows in turn, each once a frame. Nothing by default.
     fn draw_links(&self, paint: &egui::Painter, d: &Drawing<'_>, registry: &mut Registry, ui: &egui::Ui) {
         let _ = (paint, d, registry, ui);
     }
     /// Draws the figures of the diagram that belong to no one node or line, over the lines and
-    /// under the cards, recording each in `registry` (UML's generalization sets across their
-    /// members' lines). Gives their labels, which take a press on the next frame and say their
+    /// under the cards, recording each in `registry` (a figure drawn across the lines of several
+    /// elements). Gives their labels, which take a press on the next frame and say their
     /// hover text; none by default, drawing nothing.
     fn draw_extras(&self, paint: &egui::Painter, d: &Drawing<'_>, registry: &mut Registry, ui: &egui::Ui) -> Vec<ExtraLabel> {
         let _ = (paint, d, registry, ui);
@@ -410,8 +413,8 @@ pub trait DiagramKind: Sync {
     /// Draws the card `card` itself in place of the canvas's own figure for it, over the lines and
     /// the cards drawn before it, recording each part in `registry`, and in `d` the parts outside
     /// the card that take a press as it does (`Drawing::parts`) and the labels a screen reader and
-    /// the pointer read (`Drawing::labels`) (UML's package: its tab, the path of its owners under
-    /// it and its own diagram's thumbnail). The canvas asks the diagram's own kind first, then every
+    /// the pointer read (`Drawing::labels`) (a card's tab, the path of its owners under it and a
+    /// thumbnail of its own diagram). The canvas asks the diagram's own kind first, then every
     /// other kind it knows in turn, so a card is drawn by the kind that draws its element whatever
     /// diagram shows it. True when it drew the card; the canvas then draws only what goes over any
     /// card: the selection ring, what the kinds draw over it ([`DiagramKind::card_extras`]) and the
@@ -422,7 +425,7 @@ pub trait DiagramKind: Sync {
         false
     }
     /// Draws what goes with the card `card` over it and its selection ring, recording each in
-    /// `registry` (UML's template signature over its top-right corner, AR-130). Asked for every card,
+    /// `registry` (a box over its top-right corner). Asked for every card,
     /// the canvas's own and those a kind drew itself, of the diagram's own kind first, then every
     /// other kind it knows in turn, so what goes with a card is drawn whatever diagram shows it.
     /// Nothing by default.
@@ -431,14 +434,14 @@ pub trait DiagramKind: Sync {
     }
     /// Places a label of those figures that no node holds yet on diagram `d` alone, its top left
     /// corner at `(x, y)`, as a drag lets it go there: `element` is the element the label stands
-    /// for (UML gives a generalization set's label a node there). A refusal is said at the
+    /// for (a kind may give the label a node there). A refusal is said at the
     /// canvas's top. Nothing by default.
     fn place_label(&self, cx: &mut Ctx, d: Obj, element: Uuid, x: f64, y: f64) {
         let _ = (cx, d, element, x, y);
     }
     /// Draws the hint bar at the canvas `r`'s top, `below` the room the canvas's top already
-    /// takes: what a drawing under way has so far and what the keys do (a UML n-ary association's,
-    /// or what its Add end waits for); none by default.
+    /// takes: what a drawing under way has so far and what the keys do (a figure drawn click by
+    /// click, or the element a step waits for); none by default.
     fn hint_bar(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, below: f32) {
         let _ = (cx, ui, p, r, below);
     }

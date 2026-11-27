@@ -1,11 +1,11 @@
 //! The problems the shell shows (from the design's cards "ER ·
-//! Canvas · Problems and a note" and "ER · Properties · Problems"): a table without a primary key,
-//! a many-to-many relationship still waiting for its mapping table, a foreign key the rules
-//! refuse, a key column that may be null, a key whose columns the rules refuse. Each is named by
-//! the element it sits on, so the canvas can badge the node or line and Properties can list and
-//! select it. Each notation finds its own (`NotationUi::problems`; ER's in `er_ui`). The engine's `rules::problems` stays the rule of record for the whole store; this
-//! list is the user's view of it, in the user's words. What a selection shows of it is
-//! `archforge_shell_api::problems::of`, which the shared Problems section reads.
+//! Canvas · Problems and a note" and "ER · Properties · Problems"): what the rules refuse in a
+//! notation's elements, or what an element still waits for. Each is named by the element it sits
+//! on, so the canvas can badge the node or line and Properties can list and select it. Each
+//! notation finds its own (`NotationUi::problems`). The engine's `rules::problems` stays the rule
+//! of record for the whole store; this list is the user's view of it, in the user's words. What a
+//! selection shows of it is `archforge_shell_api::problems::of`, which the shared Problems section
+//! reads.
 
 use std::collections::BTreeMap;
 

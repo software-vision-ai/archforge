@@ -1,10 +1,11 @@
 //! Generate: File → Generate… hands the selection to an agent connected to Archforge,
 //! which writes SQL DDL or documentation from the model and its skills. Nothing is generated in
-//! the window. The dialog shows what it is from (the selected schema, table, class or diagram,
-//! else the open diagram), the output and its dialect, the export skills in effect there with
-//! where each comes from, and the request to give the agent: what to write and the resources it
-//! reads through the MCP server, at the model's revision. Its status line says whether agent
-//! access is on, that the request was copied, and when the model changed after copying.
+//! the window. The dialog shows what it is from (the selected element its notation offers it for,
+//! or the selected diagram, else the open diagram), the output and its dialect, the export skills
+//! in effect there with where each comes from, and the request to give the agent: what to write and
+//! the resources it reads through the MCP server, at the model's revision. Its status line says
+//! whether agent access is on, that the request was copied, and when the model changed after
+//! copying.
 
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
