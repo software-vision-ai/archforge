@@ -554,12 +554,14 @@ pub(crate) struct Out {
     ids: Option<Arc<dyn Fn() -> Uuid + Send + Sync>>,
     /// Whether the composer is empty, so a question can go back to it.
     draft_empty: bool,
+    /// The shell's notations, which say which changed elements a person reads about.
+    uis: &'static [&'static dyn crate::notation_ui::NotationUi],
 }
 
 impl Out {
     /// The writes of the project at `project`, as the shell's services give them.
     pub(crate) fn of(shell: &Shell, project: PathBuf, draft_empty: bool) -> Out {
-        Out { store: store_of(shell), project, clock: clock(shell), ids: shell.services.ids.clone(), draft_empty }
+        Out { store: store_of(shell), project, clock: clock(shell), ids: shell.services.ids.clone(), draft_empty, uis: shell.notation_uis }
     }
 
     /// The writes of the project shown.
@@ -922,7 +924,7 @@ pub(crate) fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::
     if let Some(s) = session
         && let Some(group) = s.end_group(&origin)
     {
-        let (elements, changed) = group.deltas.as_deref().map(|d| changed_elements(s.doc(), d)).unwrap_or((0, Vec::new()));
+        let (elements, changed) = group.deltas.as_deref().map(|d| changed_elements(out.uis, s.doc(), d)).unwrap_or((0, Vec::new()));
         changes = Some(Changes { changes: group.changes, elements, changed });
         turn.change = Some(Change {
             changes: group.changes,
@@ -969,10 +971,14 @@ fn stored_kind(kind: FailureKind) -> FailureKind {
 }
 
 /// The elements a turn's changes touched over the turn's undo steps (`deltas`, each step's own, so
-/// nothing of another's change between them), those a person reads about only: how many in all,
-/// and each with what happened to it. An element added and removed within the turn is left out;
+/// nothing of another's change between them), those a person reads about only, as the notations
+/// `uis` count them: how many in all, and each with what happened to it. An element added and removed within the turn is left out;
 /// one changed and changed back is still changed, as values are not compared.
-pub fn changed_elements(store: &Store, deltas: &[archforge_mof::Delta]) -> (u32, Vec<ChangedElement>) {
+pub fn changed_elements(
+    uis: &[&'static dyn crate::notation_ui::NotationUi],
+    store: &Store,
+    deltas: &[archforge_mof::Delta],
+) -> (u32, Vec<ChangedElement>) {
     use archforge_mof::Op;
     let mut seen: BTreeMap<Uuid, (bool, bool, Obj)> = BTreeMap::new();
     for op in deltas.iter().flat_map(|d| d.0.iter()) {
@@ -996,7 +1002,7 @@ pub fn changed_elements(store: &Store, deltas: &[archforge_mof::Delta]) -> (u32,
             (false, true) => ChangeKind::Removed,
             (false, false) => ChangeKind::Changed,
         };
-        let Some(metaclass) = metaclass(store, obj).filter(|m| crate::chat_words::counted(m)) else { continue };
+        let Some(metaclass) = metaclass(store, obj).filter(|m| crate::chat_words::counted(uis, m)) else { continue };
         let name = Some(archforge_core::name_of(store, obj)).filter(|n| !n.is_empty());
         out.push(ChangedElement { element: id, kind, metaclass: metaclass.to_string(), name });
     }
@@ -2039,7 +2045,7 @@ pub(crate) fn after(shell: &mut Shell, method: &str, before: Before, answer: &Re
                 .into_iter()
                 .filter(|id| !about.contains(id))
                 .filter_map(|id| anchor(shell, s.doc(), id, AnchorRole::Read))
-                .filter(|a| crate::chat_words::counted(&a.metaclass))
+                .filter(|a| crate::chat_words::counted(shell.notation_uis, &a.metaclass))
                 .collect();
             count = Some(u32::try_from(named.len()).unwrap_or(u32::MAX));
             // As many as the project keeps for a row; the count stays exact.

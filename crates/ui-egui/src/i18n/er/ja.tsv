@@ -221,6 +221,9 @@ str		Keep the line	線のままにする
 str		Remove relationship	リレーションシップを削除
 str		Relationship removed	リレーションシップを削除しました
 plural		+ {n} more column	+ 他 {n} 列
+plural		{n} table	{n} 個のテーブル
+plural		{n} column	{n} 個の列
+plural		{n} schema	{n} 個のスキーマ
 str		This schema	このスキーマ
 str		This table	このテーブル
 str		This column	この列

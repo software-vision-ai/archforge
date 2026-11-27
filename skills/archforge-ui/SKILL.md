@@ -70,8 +70,10 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   makes the menu's entries. The controls taking it end in `_cx`; the old ones over the whole
   shell forward to them for the shell's own screens. `NotationUi` and what a notation keeps
   (`NotationState`) are in `crates/shell-api/src/notation_ui.rs`. The refusal words
-  (`panels::refusal`, `said`, `a_kind`, `engine_said::disabled`, in `crates/shell-api/src/`) ask
-  the notations they are handed: pass `cx.notation_uis`, or the shell's `notation_uis`.
+  (`panels::refusal`, `said`, `a_kind`, `engine_said::disabled`, in `crates/shell-api/src/`) and
+  Chat's counts of the elements a tool row names (`chat_words::tool_words`, by
+  `NotationUi::chat_kind` and `chat_count`) ask the notations they are handed: pass
+  `cx.notation_uis`, or the shell's `notation_uis`.
 - A control whose screen does not exist yet says "Not available yet" on hover. A canvas tool that
   is not built is left out of the toolbar instead.
 - The interface never touches the file system: what it needs from the host comes through
