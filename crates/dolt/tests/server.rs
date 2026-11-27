@@ -420,14 +420,29 @@ fn a_lock_naming_another_program_does_not_stop_a_start_and_that_program_lives_on
     sleeper.wait().unwrap();
 }
 
-/// Another program on this machine, for the start of the server at `program`: once that start's
-/// script says it is `waiting`, it listens on the port the start chose, puts dolt itself at
-/// `program` for every later start, lets the script go on by making `taken`, accepts the one
-/// connection with which dolt checks whether the port is taken, and lets the port go. Returns the
-/// port and whether dolt checked it while it was taken.
-fn take_the_port(run_root: &Path, waiting: &Path, taken: &Path, program: &Path, dolt: &Path) -> (u16, bool) {
+/// The dolt of a start that loses its port: a script that says it is `waiting`, runs dolt (the
+/// link `real-dolt`) once the port is `taken`, and ends with dolt's status only once the port is
+/// `released`, all three files beside it. It names every path through its own, never one written
+/// into it, so any folder name works.
+const LOSING_START: &str = r#"#!/bin/sh
+dir=${0%/*}
+: > "$dir/waiting"
+while [ ! -e "$dir/taken" ]; do /bin/sleep 0.01; done
+"$dir/real-dolt" "$@"
+status=$?
+while [ ! -e "$dir/released" ]; do /bin/sleep 0.01; done
+exit "$status"
+"#;
+
+/// Another program on this machine, against the start whose dolt is the script [`LOSING_START`]
+/// at `dir/dolt`: once the script is `waiting`, it listens on the port the start chose, puts dolt
+/// itself at `dir/dolt` for every later start, lets the script run dolt (`taken`), accepts the
+/// connection with which dolt checks whether the port is taken, lets the port go, and only then
+/// lets the script end (`released`): the start comes to look at the port once it is free again.
+/// Returns the port and whether dolt checked it while it was taken.
+fn take_the_port(run_root: &Path, dir: &Path, dolt: &Path) -> (u16, bool) {
     let until = Instant::now() + Duration::from_secs(30);
-    while !waiting.exists() {
+    while !dir.join("waiting").exists() {
         assert!(Instant::now() < until, "the start never ran its server");
         std::thread::sleep(Duration::from_millis(5));
     }
@@ -435,9 +450,9 @@ fn take_the_port(run_root: &Path, waiting: &Path, taken: &Path, program: &Path, 
     let text = std::fs::read_to_string(&config).unwrap();
     let port: u16 = text.split_once("  port: ").and_then(|(_, rest)| rest.split_once('\n')).and_then(|(p, _)| p.parse().ok()).unwrap();
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).unwrap();
-    std::fs::remove_file(program).unwrap();
-    std::os::unix::fs::symlink(dolt, program).unwrap();
-    std::fs::write(taken, "").unwrap();
+    std::fs::remove_file(dir.join("dolt")).unwrap();
+    std::os::unix::fs::symlink(dolt, dir.join("dolt")).unwrap();
+    std::fs::write(dir.join("taken"), "").unwrap();
     listener.set_nonblocking(true).unwrap();
     let checked = loop {
         match listener.accept() {
@@ -446,32 +461,30 @@ fn take_the_port(run_root: &Path, waiting: &Path, taken: &Path, program: &Path, 
             Err(_) => break false,
         }
     };
-    // The listener goes here, and the port is free again before the start can look.
+    drop(listener);
+    std::fs::write(dir.join("released"), "").unwrap();
     (port, checked)
 }
 
 /// Another program took the port a start chose before the server listened on it, and let it go
 /// again before the start looked: the server said so in its log and stopped, and the start tried
-/// again on another port. The first start runs through a script that waits until the port is
-/// taken, as a slow start under load may; every later start runs dolt itself, by the same path.
+/// again on another port. The first start's dolt is the script [`LOSING_START`], which keeps that
+/// order (its start sees the server end only once the port is free again); every later start runs
+/// dolt itself, by the same path, so the server that runs is the one its record names.
 #[test]
 fn a_start_whose_port_was_taken_and_let_go_again_starts_on_another_port() {
-    let env = Env::new("port-race");
-    let (program, waiting, taken) = (env.base.join("dolt"), env.base.join("waiting"), env.base.join("taken"));
+    // An apostrophe and a space in its folders, which the script must take as they are.
+    let env = Env::new("port's race");
+    let program = env.base.join("dolt");
     std::os::unix::fs::symlink(env.dolt.path(), &program).unwrap();
     let dolt = Dolt::at(&program, &env.home).unwrap();
+    std::os::unix::fs::symlink(env.dolt.path(), env.base.join("real-dolt")).unwrap();
     std::fs::remove_file(&program).unwrap();
-    let script = format!(
-        "#!/bin/sh\n: > '{}'\nwhile [ ! -e '{}' ]; do /bin/sleep 0.01; done\nexec '{}' \"$@\"\n",
-        waiting.display(),
-        taken.display(),
-        env.dolt.path().display()
-    );
-    std::fs::write(&program, script).unwrap();
+    std::fs::write(&program, LOSING_START).unwrap();
     std::fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
     let other = {
-        let (run_root, real) = (env.run_root.clone(), env.dolt.path().to_path_buf());
-        std::thread::spawn(move || take_the_port(&run_root, &waiting, &taken, &program, &real))
+        let (run_root, dir, real) = (env.run_root.clone(), env.base.clone(), env.dolt.path().to_path_buf());
+        std::thread::spawn(move || take_the_port(&run_root, &dir, &real))
     };
     let started = Server::start(&dolt, &env.data(), &env.opts());
     let (port, checked) = other.join().unwrap();
