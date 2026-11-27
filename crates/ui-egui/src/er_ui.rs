@@ -60,9 +60,9 @@ fn schemas(store: &Store) -> Vec<Obj> {
     children(store, model, archforge_core::model::MEMBER).into_iter().filter(|o| class(store, *o) == Some(archforge_er::SCHEMA)).collect()
 }
 
-/// What goes with `obj` when it is removed: the relationships that reach it, and the keys and
-/// foreign keys the ER cascade takes.
-pub(crate) fn consequences(store: &Store, obj: Obj) -> (usize, usize, usize) {
+/// What goes with `obj` when it is removed, as the delete dialog says it: the relationships that
+/// reach it, then the keys and the foreign keys the ER cascade takes, a sentence for each there is.
+fn consequences(store: &Store, obj: Obj) -> Vec<String> {
     let reaching = |e: Obj| {
         store.referrers(e).into_iter().filter(|(_, p)| *p == archforge_er::relationship::FROM || *p == archforge_er::relationship::TO).map(|(r, _)| r)
     };
@@ -76,7 +76,15 @@ pub(crate) fn consequences(store: &Store, obj: Obj) -> (usize, usize, usize) {
         _ => 0,
     };
     let (keys, fks) = archforge_er::commands::dependents(store, obj).unwrap_or_default();
-    (relationships, keys.len(), fks.len())
+    let n = |count: usize| u64::try_from(count).unwrap_or(u64::MAX);
+    [
+        (relationships > 0).then(|| trn("{n} relationship goes with it.", "{n} relationships go with it.", n(relationships))),
+        (!keys.is_empty()).then(|| trn("{n} key goes with it.", "{n} keys go with it.", n(keys.len()))),
+        (!fks.is_empty()).then(|| trn("{n} foreign key goes with it.", "{n} foreign keys go with it.", n(fks.len()))),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 impl NotationUi for ErUi {
@@ -217,7 +225,8 @@ impl NotationUi for ErUi {
         }
     }
 
-    fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
+    /// The relationships, keys and foreign keys that go with `obj`, counted and said.
+    fn consequences(&self, _: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Vec<String> {
         consequences(store, obj)
     }
 

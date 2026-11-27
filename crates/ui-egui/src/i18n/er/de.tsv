@@ -91,6 +91,8 @@ str		Every {one} has at least one {many} only on the diagram: no database key ca
 str		{name} has no primary key	{name} hat keinen Primärschlüssel
 str		{name} has subtypes but no primary key to share	{name} hat Untertypen, aber keinen Primärschlüssel zum Teilen
 str		{name} removed · {keys} went with it	{name} entfernt · {keys} ging mit
+plural		{n} key goes with it.	{n} Schlüssel geht mit.|{n} Schlüssel gehen mit.
+plural		{n} foreign key goes with it.	{n} Fremdschlüssel geht mit.|{n} Fremdschlüssel gehen mit.
 str		Add column	Spalte hinzufügen
 str		Edit column	Spalte bearbeiten
 str		Mapping table	Zuordnungstabelle

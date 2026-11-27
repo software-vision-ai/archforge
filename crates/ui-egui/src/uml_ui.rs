@@ -833,12 +833,37 @@ impl NotationUi for UmlUi {
             .map(|_| tr("Types keeps the built-in types, so it stays while it holds them"))
     }
 
-    /// The relationships that go with `obj`, counted as `element.remove` takes them
-    /// (`relationships_going`, AR-843): a classifier's, an association class going along taking
-    /// what touches it too; a package with no parent's with everything in it; a nested package's own
-    /// alone, as it hands what it holds up.
-    fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
-        (archforge_uml::commands::relationships_going(store, &[obj]).len(), 0, 0)
+    /// What goes with `obj`, a sentence for each there is: the relationships, counted as
+    /// `element.remove` takes them (`relationships_going`, AR-843): a classifier's, an association
+    /// class going along taking what touches it too; a package with no parent's with everything in
+    /// it; a nested package's own alone, as it hands what it holds up. Then a classifier's nested
+    /// classifiers at any depth, by the names they read by, `Order::Priority` (AR-132), and the
+    /// stereotype applications on it and on what it takes along, `«Entity» on Order` (AR-135), an
+    /// element without a name by its kind as the notations of `uis` name it.
+    fn consequences(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Vec<String> {
+        let n = |count: usize| u64::try_from(count).unwrap_or(u64::MAX);
+        let relationships = archforge_uml::commands::relationships_going(store, &[obj]).len();
+        let nested: Vec<String> = if classifier(store, obj) {
+            archforge_uml::nesting::nested_within(store, obj).into_iter().map(|c| archforge_uml::nesting::qualified_name(store, c)).collect()
+        } else {
+            Vec::new()
+        };
+        let applications = crate::uml_stereotypes::going_along(uis, store, obj);
+        let mut said = Vec::new();
+        if relationships > 0 {
+            said.push(trn("{n} relationship goes with it.", "{n} relationships go with it.", n(relationships)));
+        }
+        if !nested.is_empty() {
+            let count = n(nested.len());
+            let line = trn("{n} nested classifier goes with it: {names}.", "{n} nested classifiers go with it: {names}.", count);
+            said.push(fmt(&line, &[("names", &nested.join(", "))]));
+        }
+        if !applications.is_empty() {
+            let count = n(applications.len());
+            let line = trn("{n} stereotype application goes with it: {names}.", "{n} stereotype applications go with it: {names}.", count);
+            said.push(fmt(&line, &[("names", &applications.join(", "))]));
+        }
+        said
     }
 
     /// New inside ▸ on a classifier: the kinds it may nest (AR-132).
@@ -855,20 +880,6 @@ impl NotationUi for UmlUi {
             return crate::uml_profiles::add_inside(cx, key, obj);
         }
         crate::uml_nesting::add_inside(cx, key, obj)
-    }
-
-    /// A classifier's nested classifiers at any depth, by the names they read by, `Order::Priority`
-    /// (AR-132): they go with it.
-    fn goes_along(&self, store: &Store, obj: Obj) -> Vec<String> {
-        if !classifier(store, obj) {
-            return Vec::new();
-        }
-        archforge_uml::nesting::nested_within(store, obj).into_iter().map(|n| archforge_uml::nesting::qualified_name(store, n)).collect()
-    }
-
-    /// The stereotype applications that go with `obj` and what it takes along (AR-135).
-    fn applications_along(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Vec<String> {
-        crate::uml_stereotypes::going_along(uis, store, obj)
     }
 
     /// Whether `obj` has rows under it: a package what it holds (the built-in types in Types, which

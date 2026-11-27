@@ -153,10 +153,6 @@ str		What it holds moves to {parent}.	含まれているものは {parent} に�
 str		Remove from this diagram only	この図からのみ削除
 plural		It disappears from {n} diagram.	{n} 個の図から消えます。
 plural		{n} relationship goes with it.	{n} 件のリレーションシップが一緒に削除されます。
-plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
-plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
-plural		{n} nested classifier goes with it: {names}.	{n} 個の入れ子の分類子も一緒に削除されます：{names}。
-plural		{n} stereotype application goes with it: {names}.	{n} 件のステレオタイプの適用も一緒に削除されます：{names}。
 str		Delete	削除
 str		Element · model	要素 · モデル
 str		Skill · model	スキル · モデル

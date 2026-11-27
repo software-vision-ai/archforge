@@ -1179,23 +1179,16 @@ fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
         cx.canvas.menu = None;
         return;
     }
-    let (relationships, keys, foreign_keys) = crate::notation_ui::of(cx.notation_uis, store, e).map_or((0, 0, 0), |ui| ui.consequences(store, e));
+    let consequences = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.consequences(cx.notation_uis, store, e)).unwrap_or_default();
     let diagrams = diagrams_showing(store, e);
-    let along = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.goes_along(store, e)).unwrap_or_default();
-    let applications =
-        crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.applications_along(cx.notation_uis, store, e)).unwrap_or_default();
     // A nested package hands what it holds up: the dialog says where, and so does the toast.
     let hands_to = crate::notation_ui::of(cx.notation_uis, store, e)
         .and_then(|ui| Some((archforge_core::name_of(store, ui.hands_up(store, e)?), ui.has_children(store, e))));
     cx.requests.push(Request::AskDelete(crate::explorer::Delete {
-        along,
-        applications,
         ids: vec![entity],
         // Named as every path that asks names it, an unnamed relationship by its ends (AR-216).
         name: crate::notation_ui::label(cx.notation_uis, store, e),
-        relationships,
-        keys,
-        foreign_keys,
+        consequences,
         diagrams,
         node,
         hands_to,
