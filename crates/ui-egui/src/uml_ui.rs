@@ -1167,6 +1167,29 @@ impl NotationUi for UmlUi {
         owner_of(store, o).and_then(|c| Classifier::of(store, c)).map(Classifier::word)
     }
 
+    /// Writes an association's ends typed for an association that is no longer the selection
+    /// ([`crate::uml_relate::finish_ends`]).
+    fn selection_moved(&self, cx: &mut Ctx, subject: Option<Uuid>) {
+        crate::uml_relate::finish_ends(cx, subject);
+    }
+
+    /// A template binding being drawn (AR-131), then a selection of several elements holding a
+    /// generalization (AR-129), then an n-ary association being drawn (AR-128): the first of them
+    /// takes the panel.
+    fn properties_in_place(&self, cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> bool {
+        // A template binding being drawn: its draft, nothing in the model yet.
+        if crate::uml_bindings::draft_panel(cx, ui, p, r, y) {
+            return true;
+        }
+        // Several elements, generalizations among them: what a set may be made of them.
+        if let Some(all) = crate::uml_sets::selected(&cx.cx_ref()).filter(|all| all.len() >= 2) {
+            crate::uml_sets::selection_body(cx, ui, p, r, y, &all);
+            return true;
+        }
+        // An n-ary association being drawn: its draft, not yet in the model.
+        crate::uml_nary::draft_body(cx, ui, p, r, y)
+    }
+
     /// A package's name; a classifier's panel, which a member's or a literal's selection shows too.
     fn body(&self, cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
         let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
