@@ -158,9 +158,9 @@ pub fn place_with_lines_cx(
 ) {
     let Some(session) = cx.session.as_ref() else { return };
     let store = session.doc();
-    let (Some(diagram_id), Some(entity)) = (uuid(store, d), uuid(store, e)) else { return };
+    let (Some(diagram_id), Some(element_id)) = (uuid(store, d), uuid(store, e)) else { return };
     let (x, y) = ((at.0 - size.0 / 2.0).round(), (at.1 - size.1 / 2.0).round());
-    let place = json!({ "diagram": diagram_id.to_string(), "element": entity.to_string(), "x": x, "y": y, "width": size.0, "height": size.1 });
+    let place = json!({ "diagram": diagram_id.to_string(), "element": element_id.to_string(), "x": x, "y": y, "width": size.0, "height": size.1 });
     // (line's element, source, target), None for the element being placed.
     let shown = |t: Obj| nodes_of(store, d).into_iter().find(|n| element_of(store, *n) == Some(t)).and_then(|n| uuid(store, n));
     let mut lines: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = Vec::new();
@@ -188,7 +188,7 @@ pub fn place_with_lines_cx(
         })
     });
     match out {
-        Some(Ok(_)) => select_cx(cx, vec![entity]),
+        Some(Ok(_)) => select_cx(cx, vec![element_id]),
         Some(Err(e)) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
         None => {}
     }
@@ -217,17 +217,17 @@ pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
 
 /// Asks before an element goes from the model, with what goes with it; what its notation keeps
 /// (an element that holds what the notation itself needs) is said at the canvas's top instead.
-pub fn ask_delete_cx(cx: &mut Ctx, node: Uuid, entity: Uuid) {
-    ask_delete_of(cx, Some(node), entity);
+pub fn ask_delete_cx(cx: &mut Ctx, node: Uuid, element: Uuid) {
+    ask_delete_of(cx, Some(node), element);
 }
 
 /// [`ask_delete_cx`] for an element selected on the diagram by its card `node`, or with none by a
 /// line alone (an element whose card is not on the diagram): the dialog then offers no removal
 /// from the diagram, as the line's own Delete does that. The shell opens the dialog once the call
 /// that asked returns ([`Request::AskDelete`]).
-pub fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
+pub fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, element: Uuid) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
-    let Some(e) = store.by_uuid(entity) else { return };
+    let Some(e) = store.by_uuid(element) else { return };
     // What its notation keeps (an element that holds what the notation itself needs) is said, not
     // asked.
     if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(cx.notation_uis, store, e)) {
@@ -242,7 +242,7 @@ pub fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
     let hands_to = crate::notation_ui::of(cx.notation_uis, store, e)
         .and_then(|ui| Some((archforge_core::name_of(store, ui.hands_up(store, e)?), ui.has_children(store, e))));
     cx.requests.push(Request::AskDelete(crate::explorer::Delete {
-        ids: vec![entity],
+        ids: vec![element],
         // Named as every path that asks names it, an unnamed line's element by its ends (AR-216).
         name: crate::notation_ui::label(cx.notation_uis, store, e),
         consequences,
