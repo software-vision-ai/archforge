@@ -50,9 +50,12 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
 
 ## Controls
 - Every interactive control is registered with an automation id, its kind and its rectangle, as
-  `control_cx` in `crates/ui-egui/src/panels.rs` does through the automation registry,
+  `control_cx` in `crates/shell-api/src/panels.rs` does through the automation registry,
   `crates/shell-api/src/widgets.rs` (`control` in `crates/ui-egui/src/home.rs` is the shell's own
-  way to it). Ids are dotted, lower-case and stable:
+  way to it). The shared controls (the `_cx` controls: a section, the fields and selects, the
+  menus, a check box, the buttons, the name field, the Problems section) are in
+  `crates/shell-api/src/panels.rs`, beside `control_cx`, for the shell and a notation's screens
+  alike. Ids are dotted, lower-case and stable:
   `<screen>.<area>.<thing>`, such as `strip.home`. The tests find controls by id, never by position.
 - A notation's screens and the shared controls reach the shell through the narrow context
   (`crates/shell-api/src/cx.rs`, built by the shell in `crates/ui-egui/src/cx.rs`), never the

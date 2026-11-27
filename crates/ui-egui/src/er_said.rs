@@ -5,7 +5,7 @@
 //! reasons an ER command is not available now are said here too, as are the ER kinds a refusal
 //! names (AR-785). A word none of a choice's words is said under the choice's label. A key's
 //! columns (AR-492): none, a column of another table, one that may be null in a primary key, a key
-//! a foreign key points at, and no primary key.
+//! a foreign key points at, and no primary key; a column twice by its name (AR-544).
 //! Mapping tables (AR-505): a relationship that does not resolve into one, a table that does not
 //! collapse back into a relationship, one that cannot be associative, by the rule it breaks, and
 //! a mapping table a step would break, with why in the same words.
@@ -103,7 +103,7 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::NotA { kind, name } => fmt(&tr("{name} is not {what}."), &[("name", name), ("what", &a_kind(kind)?)]),
         Reason::IdsExpected { kind: KEY_COLUMN } => tr("Give the key's columns as a list of ids."),
         Reason::TooMany { kind: KEY_COLUMN, max } => fmt(&tr("A key holds at most {max} columns."), &[("max", &max.to_string())]),
-        Reason::NamedTwice { kind: KEY_COLUMN, .. } => tr("An element is named twice. Name each element once."),
+        Reason::NamedTwice { kind: KEY_COLUMN, name } => fmt(&tr("{name} appears twice in the key. Give each column once."), &[("name", name)]),
         Reason::TooFew { kind: KEY_COLUMN, min: 1 } => tr("A key needs at least one column."),
         Reason::NotColumnOf { column, table } => fmt(&tr("{column} is not a column of {table}."), &[("column", column), ("table", table)]),
         Reason::NullableKeyColumn { name } => fmt(&tr("{name} may be null, which a primary key column never is."), &[("name", name)]),

@@ -131,6 +131,7 @@ str		No id is given. Give the id of {what}.	ID が指定されていません。
 str		{name} is not {what}.	{name} は{what}ではありません。
 str		Give the key's columns as a list of ids.	キーの列は ID のリストで指定してください。
 str		A key holds at most {max} columns.	キーに含められる列は最大 {max} 個です。
+str		{name} appears twice in the key. Give each column once.	{name} がキーに 2 回含まれています。各列は 1 回だけ指定してください。
 str		A key needs at least one column.	キーには少なくとも 1 つの列が必要です。
 str		{column} is not a column of {table}.	{column} は {table} の列ではありません。
 str		{name} may be null, which a primary key column never is.	{name} は NULL を許可していますが、主キーの列は NULL を許可できません。

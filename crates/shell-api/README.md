@@ -9,16 +9,19 @@ open in its tabs (`skill_tab`), the narrow context through which a notation's sc
 shared controls reach the shell (`cx`, with what it is built of: the right panels' state
 (`panels`, `appearance`), the menu bar's hold (`menu_bar`) and what its requests name (`state`,
 `explorer`)), the interface `NotationUi` with what a notation keeps (`notation_ui`), the refusals in
-the user's words, which ask the notations they are handed (`panels`, `engine_said`), the data types
-`DiagramKind` hands across that name no shell (`kinds`), how a search or a filter matches what is
-typed (`search`) and the translations machinery (`i18n`), with which each crate registers its own
-catalogues; story AR-780 moves the shared controls and `DiagramKind` with the data types that still
-name the shell here, unchanged.
+the user's words, which ask the notations they are handed (`panels`, `engine_said`), the shared
+controls the shell's panels and a notation's screens draw through the narrow context (`panels`),
+with the problems a selection shows (`problems`) and the key presses they take (`actions`), the
+data types `DiagramKind` hands across that name no shell (`kinds`), how a search or a filter
+matches what is typed (`search`) and the translations machinery (`i18n`), with which each crate
+registers its own catalogues; story AR-780 moves `DiagramKind` with the data types that still name
+the shell here, unchanged.
 
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code
 (the gate's `layers` step scans it as it scans the shell). It takes egui, serde, serde_json, the
-parameters of a command a tree row dropped on another runs (`NotationUi::drop_on`), `log`, where an
+parameters of a command a tree row dropped on another runs (`NotationUi::drop_on`) and of the
+commands the shared controls run, `log`, where an
 engine error said as an internal one is kept,
 `archforge-engine` (3), whose `Revision` a line end being dragged carries (the model's revision
 the drag began on), whose session the context holds and whose errors and reasons the refusals say, `archforge-mof` (4), whose elements, ids and store the interfaces' data types name,
@@ -67,6 +70,17 @@ against, and `icu_properties`, which says where a letter ends so a search never 
 | `cx::{Ctx, CtxRef, Request}` | the narrow context, every field public: the session, the panels' and the canvas's state, the automation registry, the notations and their states, the problems, the frame count, the menu bar's hold, whether a version shows and the requests; its read-only twin (`Ctx::cx_ref`); what the shell carries out once the call returns (`ExpandRows`, `HideVersionDetails`, `ShowPanel`, `ShowExplorer`, `NameInModels`, `AskDelete`) |
 | `panels::{State, NameEdit, DescriptionDraft, ReachedRows, MenuOrdinals}` | what the right panels keep between frames: a name or description being typed, the open menu with its scroll, reached row and numbered rows, the colour picker, the last refusal, the body's scroll and the editors to bring into view |
 | `panels::{run_cx, refusal, said, a_kind}` | `pub fn run_cx(cx: &mut Ctx, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String>`: a command on the open session, a refusal in the user's words; an engine's refusal as the panels say it, a typed refusal and a kind with its article, the shell's own first, then the notations of `uis` (`refusal(uis, e)`, `said(uis, reason)`, `a_kind(uis, kind)`) |
+| `panels::{PAD, FIELD, ROW, PATH_SEP}` | the panels' geometry: a section's inset from the panel's edges (16), a field's height (28), a row's (36); what joins a package's path (` › `) |
+| `panels::{control_cx, off_words_cx}` | `pub fn control_cx(cx: &mut Ctx, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> egui::Response`: a control's hit area, recorded for automation; one whose screen is not built yet says so on hover and takes no click; what a control that is off says (`off_words_cx(cx: &CtxRef) -> String`) |
+| `panels::{section_cx, check_cx, icon_button_cx, ghost_button_cx, edit_button_cx}` | a section's full-width line and title row with an optional `+`; a check box with its label; an icon button of 28 px, quiet, bordered or primary; a quiet button of an icon and a label; a list row's edit button at its right end |
+| `panels::{text_field_cx, edit_field_cx, FieldOut, field_inner, keys_at_start}` | a label over a filled text field that commits on Enter, and when it is left if asked; the same saying what it asked for (`FieldOut`: `Idle`, `Commit`, `Cancel`); where a field's one line of text goes; the widget that held the keyboard as the frame began |
+| `panels::{select_field_cx, path_select_field_cx, editable_select_cx, Combo, ComboOut}` | a filled select whose click opens or closes its menu; the same for a package's path, cut from its front; a field that takes typing with a chevron that opens its options (`Combo`: what it shows and offers; `ComboOut`: `Idle`, `Commit`, `Pick`, `Cancel`) |
+| `panels::{menu_cx, menu_noted_cx, menu_paths_cx, menu_row_id}` | a menu under its anchor, giving the index picked; with a muted note after an item; of package paths, folded from their front; the toolkit's id of a menu's row by its text, note and order among its twins |
+| `panels::{name_field_cx, refuse_empty_name_cx, refused_on_cx}` | an element's name field, committed through its rename command; a name of nothing but spaces refused before it is sent, unless the diagrams or a notation of the context let the rename leave it unnamed; a refusal of what was typed on an element, naming it when it is not the one selected |
+| `panels::{problems_section_cx, selected_id_cx, select_element_cx}` | the Problems section of a selection, each row selecting its element; the first selected element's id; an element selected from a Properties row, its rows in Models opened |
+| `panels::{reveal_cx, into_view}` | an editor's card brought into the scrolled body's view once drawn; how far a body scrolls on to bring a part into view |
+| `problems::of` | `pub fn of(uis: &[&'static dyn NotationUi], store: &Store, map: &BTreeMap<Obj, Vec<String>>, subject: Obj) -> Vec<Problem>`: the problems a selection shows, from the frame's map, each with the element a click selects |
+| `actions::{Keys, take, take_alone, held_exactly}` | a keyboard shortcut (`modifiers`, `key`); a press of it taken from the frame's input, matched exactly; a key pressed alone taken; whether exactly the wanted modifiers are held |
 | `engine_said::disabled` | `pub fn disabled(uis: &[&'static dyn NotationUi], reason: &str) -> Option<String>`: why a command is not available, in the user's words, the shell's own first, then the notations of `uis`; the engine's and the diagrams' typed refusals and the engine's own errors are said beside it for `panels::refusal` and `panels::said` |
 | `appearance::{Picker, Group}` | the colour picker open on an Appearance row (`new`, `colour`) and the row's group (`key`) |
 | `menu_bar::Hold` | what the context holds of the in-window menu bar: the group open, the row chosen, the field it took the keyboard from, where it was drawn, the inline editor it holds open |
