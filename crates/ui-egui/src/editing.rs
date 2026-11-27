@@ -549,8 +549,8 @@ fn decide(
             {
                 return Action::Rename(node, e);
             }
-            // A double click on a card a kind opens whole (a UML constraint's braces or note) opens
-            // its editor, every kind the shell knows asked.
+            // A double click on a card a kind of the shell opens whole opens its element's editor,
+            // with no row: every kind the shell knows is asked.
             if (resp.double_clicked() || resp.triple_clicked())
                 && let Some(n) = hit_node(pos)
                 && let Some(e) = element_of(store, n)
