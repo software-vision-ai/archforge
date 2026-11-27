@@ -196,7 +196,7 @@ mod tests {
         id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Customer_order" })).unwrap().value);
         s.execute("er.attribute.add", &json!({ "entity": order, "name": "order_id", "type": "BIGINT" })).unwrap();
         s.execute("diagram.add", &json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Orders" })).unwrap();
-        let index = index(crate::kinds::KINDS, crate::notation_ui::UIS, s.doc());
+        let index = index(crate::tests::SCREENS.kinds(), crate::tests::SCREENS.notation_uis(), s.doc());
         let (diagrams, elements) = hits(&index, "order");
         assert_eq!(diagrams.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(), ["Orders"]);
         // The table named so first, then what starts so, then a word inside a name.
@@ -219,7 +219,7 @@ mod tests {
             s.execute("er.entity.add", &json!({ "schema": schema, "name": name })).unwrap();
         }
         s.execute("er.attribute.add", &json!({ "entity": check, "name": "prüfung_id", "type": "BIGINT" })).unwrap();
-        let index = index(crate::kinds::KINDS, crate::notation_ui::UIS, s.doc());
+        let index = index(crate::tests::SCREENS.kinds(), crate::tests::SCREENS.notation_uis(), s.doc());
         let labels = |query: &str| hits(&index, query).1.iter().map(|e| e.label.clone()).collect::<Vec<_>>();
         assert_eq!(labels("PRUFUNG"), ["Prüfung", "prüfung_id", "Kunde_prüfung"]);
         assert_eq!(labels("bestellung"), ["Bestellungen prüfen"]);
@@ -230,7 +230,7 @@ mod tests {
         // A name past the row's cut is matched in full, its last letter's accent with it.
         let long = format!("{}Cafe\u{301}", "a".repeat(116));
         s.execute("er.entity.add", &json!({ "schema": schema, "name": long })).unwrap();
-        assert_eq!(hits(&super::index(crate::kinds::KINDS, crate::notation_ui::UIS, s.doc()), "cafe").1.len(), 1);
+        assert_eq!(hits(&super::index(crate::tests::SCREENS.kinds(), crate::tests::SCREENS.notation_uis(), s.doc()), "cafe").1.len(), 1);
     }
 
     /// A name starts with the first word only where the search would match it, after what folds

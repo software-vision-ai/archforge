@@ -61,7 +61,7 @@ pub fn sections(shell: &Shell) -> Vec<Vec<&'static str>> {
 /// The rows the menu can show at once, one list per kind, for the access letters' tests.
 #[cfg(test)]
 pub(crate) fn every_menu() -> Vec<Vec<&'static str>> {
-    crate::kinds::KINDS.iter().map(|kind| sections_of(Some(*kind)).flatten().map(|row| row.key).collect()).collect()
+    crate::tests::SCREENS.kinds().iter().map(|kind| sections_of(Some(*kind)).flatten().map(|row| row.key).collect()).collect()
 }
 
 /// Whether a version's details or a changed element covers the canvas.

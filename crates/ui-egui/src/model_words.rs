@@ -17,8 +17,6 @@
 use archforge_mof::{ClassId, DataId, DataKind, PropId, Universe};
 
 use crate::i18n::tr;
-#[cfg(test)]
-use crate::notation_ui::UIS;
 use crate::notation_ui::{NotationUi, of_class};
 
 /// The classes the core creates, the only ones beside those the notations create
@@ -36,7 +34,7 @@ fn is_kind(uis: &[&'static dyn NotationUi], class: ClassId) -> bool {
 /// Every class that gets a kind word of its own, the core's and each notation's of the app.
 #[cfg(test)]
 pub(crate) fn kinds() -> Vec<ClassId> {
-    CORE_KINDS.iter().chain(UIS.iter().flat_map(|ui| ui.created_classes())).copied().collect()
+    CORE_KINDS.iter().chain(crate::tests::SCREENS.notation_uis().iter().flat_map(|ui| ui.created_classes())).copied().collect()
 }
 
 /// Whether `metamodel` is one these words cover: the core's, or the metamodel of a notation of `uis`
@@ -116,8 +114,9 @@ pub fn kind_label(uis: &[&'static dyn NotationUi], universe: &Universe, class: C
 #[cfg(test)]
 pub(crate) fn texts() -> Vec<String> {
     let Ok(universe) = archforge_notations::universe() else { return Vec::new() };
+    let uis = crate::tests::SCREENS.notation_uis();
     let mut all = Vec::new();
-    for metamodel in universe.metamodels().filter(|m| in_the_model(crate::tests::SCREENS.notation_uis(), m.index)) {
+    for metamodel in universe.metamodels().filter(|m| in_the_model(uis, m.index)) {
         all.extend(metamodel.props.iter().filter(|p| archforge_notations::differences::on_a_card(p)).map(|p| words(&p.name)));
         for ty in &metamodel.data_types {
             if let DataKind::Enumeration(literals) = &ty.kind {
@@ -125,6 +124,6 @@ pub(crate) fn texts() -> Vec<String> {
             }
         }
     }
-    all.extend(kinds().into_iter().filter(|c| notation_word(UIS, *c).is_none()).filter_map(|c| universe.class(c)).map(|c| words(&c.name)));
+    all.extend(kinds().into_iter().filter(|c| notation_word(uis, *c).is_none()).filter_map(|c| universe.class(c)).map(|c| words(&c.name)));
     all
 }
