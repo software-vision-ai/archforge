@@ -6,12 +6,12 @@
 //! canvas whatever diagram shows and what a problem badge that offers a way out does, its entries in
 //! the project search, its problems, the heading and the body of Properties for its elements and
 //! which share a page, its commands' refusals in the user's words, the words for the kinds of its
-//! elements and Chat's counts of them, and the limits of their names and descriptions; `NotationState` is what its own
-//! editors, menus and drawings keep between frames, `NotationStates` the shell's one of each, and
-//! the free functions ask the notations the shell registered (`of`, the limits, `label`, what a
-//! removal says). The shells (the tree, the filter, the scroll, the search list, the sections, the
-//! fields, the editors) stay shared; each answer is about the notation's own elements, the classes
-//! of its metamodel.
+//! elements and Chat's counts of them, and the limits of their names and descriptions;
+//! `NotationState` is what its own editors, menus and drawings keep between frames,
+//! `NotationStates` the shell's one of each, and the free functions ask the notations the shell
+//! registered (`of`, the limits, `label`, what a removal says). The shells (the tree, the filter,
+//! the scroll, the search list, the sections, the fields, the editors) stay shared; each answer is
+//! about the notation's own elements, the classes of its metamodel.
 //!
 //! The data types: what `+` in Models adds, what an addition gives back, what New inside ▸ offers,
 //! a row of the Models tree and what a notation's rows are made with (the filter, the rows opened,

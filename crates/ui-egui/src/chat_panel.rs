@@ -972,8 +972,9 @@ fn stored_kind(kind: FailureKind) -> FailureKind {
 
 /// The elements a turn's changes touched over the turn's undo steps (`deltas`, each step's own, so
 /// nothing of another's change between them), those a person reads about only, as the notations
-/// `uis` count them: how many in all, and each with what happened to it. An element added and removed within the turn is left out;
-/// one changed and changed back is still changed, as values are not compared.
+/// `uis` count them: how many in all, and each with what happened to it. An element added and
+/// removed within the turn is left out; one changed and changed back is still changed, as values
+/// are not compared.
 pub fn changed_elements(
     uis: &[&'static dyn crate::notation_ui::NotationUi],
     store: &Store,
