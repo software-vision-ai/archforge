@@ -38,4 +38,7 @@ mod ux;
 #[cfg(feature = "snapshot")]
 pub mod snapshot;
 
+#[cfg(test)]
+mod tests;
+
 pub use uml_ui::UML;

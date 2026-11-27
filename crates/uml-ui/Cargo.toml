@@ -35,6 +35,8 @@ serde_json.workspace = true
 archforge-notations.workspace = true
 # The test context the screens' tests run against without the shell (ADR 0005).
 archforge-shell-api = { workspace = true, features = ["testing"] }
+# The harness the test context draws a screen in, which the tests drive.
+egui_kittest.workspace = true
 
 [lints]
 workspace = true

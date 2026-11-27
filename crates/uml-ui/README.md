@@ -18,7 +18,8 @@ it says goes through the catalogues; the rows only UML's screens name are its ow
 feature `snapshot` lists what the screenshot tool, the app's tests across every catalogue and the
 shell's tests reach in them. Its tests run against the shell's interfaces' test context
 (`archforge_shell_api::testing`, `forge-ux/adr/0005`, "Tests follow the plugin"), without the
-shell.
+shell: what UML's own code draws or decides (its refusal words, its hooks, its Properties bodies
+and editors) in `src/tests.rs`, drawn in both appearances.
 
 **Layer.** 10, the notations' screens' layer: above the shell's interfaces (9), below the shell
 (11). It takes `archforge-uml` (7), UML's model, `archforge-shell-api` (9) and the crates below

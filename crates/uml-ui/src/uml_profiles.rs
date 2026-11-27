@@ -1025,7 +1025,7 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 /// Property and Reference extending Association with `lazy : Boolean = true`; Commerce applies it.
 /// With `uses`, the stereotypes are applied (AR-135): «Entity» on Order and Customer, «Id» on their
 /// id attributes, «Reference» on places (F6). Gives (Commerce, Persistence, Entity) ids.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub fn put_profiles(cx: &mut Ctx, uses: bool) -> Result<(String, String, String), String> {
     let id = |v: serde_json::Value| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
     let store = cx.session.as_ref().ok_or("the profiles need a session")?.doc();
@@ -1057,7 +1057,7 @@ pub fn put_profiles(cx: &mut Ctx, uses: bool) -> Result<(String, String, String)
 /// The sample's stereotype applications (F6), made as the window makes them
 /// (`uml.stereotype.apply`): «Entity» on Order and Customer, «Id» on their id attributes,
 /// «Reference» on places.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 fn apply_samples(cx: &mut Ctx) -> Result<(), String> {
     let session = cx.session.as_mut().ok_or("the sample needs a session")?;
     let uses: Vec<(String, String)> = {
