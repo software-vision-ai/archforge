@@ -7,20 +7,20 @@
 //! the project search, its problems, the heading and the body of Properties for its elements and
 //! which share a page, what of its own Properties ends as the selection moves on and the panel it
 //! draws there in place of the selection's, its commands' refusals in the user's words, the words
-//! for the kinds of its elements, and the limits of their names and descriptions; `NotationState`
-//! is what its own editors, menus and drawings keep between frames, `NotationStates` the shell's
-//! one of each, and the free functions ask the notations the shell registered (`of`, the limits,
-//! `label`, what a removal says). The shells (the tree, the filter, the scroll, the search list,
-//! the sections, the fields, the editors) stay shared; each answer is about the notation's own
-//! elements, the classes of its metamodel.
+//! for the kinds of its elements and Chat's counts of them, and the limits of their names and
+//! descriptions; `NotationState` is what its own editors, menus and drawings keep between frames,
+//! `NotationStates` the shell's one of each, and the free functions ask the notations the shell
+//! registered (`of`, the limits, `label`, what a removal says). The shells (the tree, the filter,
+//! the scroll, the search list, the sections, the fields, the editors) stay shared; each answer is
+//! about the notation's own elements, the classes of its metamodel.
 //!
 //! The data types: what `+` in Models adds, what an addition gives back, what New inside ▸ offers,
 //! a row of the Models tree and what a notation's rows are made with (the filter, the rows opened,
 //! the skills by subject), a project search entry, a problem, Properties' words and the selection
-//! they describe, what is said of a removal, an overlay's layer and the canvas it is drawn over, a
-//! Properties editor's card and where it edits, and a menu of the shell's one open-menu slot
-//! (`archforge_ui_egui::notation_ui`, `explorer`, `problems` and `panels` re-export them under
-//! their old paths).
+//! they describe, what Chat counts an element as, what is said of a removal, an overlay's layer and
+//! the canvas it is drawn over, a Properties editor's card and where it edits, and a menu of the
+//! shell's one open-menu slot (`archforge_ui_egui::notation_ui`, `explorer`, `problems` and
+//! `panels` re-export them under their old paths).
 
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
@@ -77,6 +77,18 @@ pub struct Words {
     pub this: String,
     pub on_this: String,
     pub name: String,
+}
+
+/// What a tool row of Chat counts one of a notation's elements as ([`NotationUi::chat_kind`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatKind {
+    /// Not counted: a part of another element, as a description's comment is.
+    Part,
+    /// A line, summed with the relationships of every notation: "2 lines".
+    Line,
+    /// A kind of its own, by its key: summed with the elements of the same key and said in its
+    /// words ([`NotationUi::chat_count`]).
+    Own(&'static str),
 }
 
 /// The selection the panels describe.
@@ -543,6 +555,19 @@ pub trait NotationUi: Sync {
     /// it (a schema, a table, a class); none for anything else.
     fn scope_word(&self, store: &Store, obj: Obj) -> Option<String> {
         let _ = (store, obj);
+        None
+    }
+    /// What a tool row of Chat counts an element of its table `table` as (the generated table's
+    /// name, as the row keeps it): a part of another element, a line, or a kind of its own; none
+    /// for a table not its own and for one counted as an element.
+    fn chat_kind(&self, table: &str) -> Option<ChatKind> {
+        let _ = table;
+        None
+    }
+    /// Chat's words for `n` elements of its own kind `kind`, a key its [`NotationUi::chat_kind`]
+    /// gives, with the count in them; none for a key not its own.
+    fn chat_count(&self, kind: &str, n: u64) -> Option<String> {
+        let _ = (kind, n);
         None
     }
     /// The most characters its commands take in the name of one of its elements.

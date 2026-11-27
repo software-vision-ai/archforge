@@ -390,17 +390,7 @@ plural		{n} change undone	{n} Änderung rückgängig gemacht|{n} Änderungen rü
 plural		in about {n} minute	in etwa {n} Minute|in etwa {n} Minuten
 plural		{n} message	{n} Nachricht|{n} Nachrichten
 plural		{n} more call is not shown	{n} weiterer Aufruf wird nicht angezeigt|{n} weitere Aufrufe werden nicht angezeigt
-plural		{n} class	{n} Klasse|{n} Klassen
-plural		{n} interface	{n} Schnittstelle|{n} Schnittstellen
-plural		{n} enumeration	{n} Aufzählung|{n} Aufzählungen
-plural		{n} data type	{n} Datentyp|{n} Datentypen
-plural		{n} package	{n} Paket|{n} Pakete
-plural		{n} attribute	{n} Attribut|{n} Attribute
-plural		{n} operation	{n} Operation|{n} Operationen
 plural		{n} line	{n} Linie|{n} Linien
-plural		{n} table	{n} Tabelle|{n} Tabellen
-plural		{n} column	{n} Spalte|{n} Spalten
-plural		{n} schema	{n} Schema|{n} Schemas
 plural		{n} diagram	{n} Diagramm|{n} Diagramme
 plural		{n} skill	{n} Skill|{n} Skills
 str		Not saved	Nicht gesichert

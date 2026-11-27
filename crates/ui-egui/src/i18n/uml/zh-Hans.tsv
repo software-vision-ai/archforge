@@ -625,6 +625,13 @@ str		{specific} specialises {general}	{specific} 特化 {general}
 plural		{n} generalization	{n} 个泛化
 plural		{n} generalization · to {general}	{n} 个泛化 · 指向 {general}
 plural		{sets} had no other member and went too	{sets} 没有其他成员，也一并删除
+plural		{n} class	{n} 个类
+plural		{n} interface	{n} 个接口
+plural		{n} enumeration	{n} 个枚举
+plural		{n} data type	{n} 个数据类型
+plural		{n} package	{n} 个包
+plural		{n} attribute	{n} 个属性
+plural		{n} operation	{n} 个操作
 str		Interface realization: from the implementing class to its interface	接口实现：从实现类指向其接口
 str		Association class: between two classes, with a card of its own	关联类：位于两个类之间，带有自己的卡片
 str		Navigable	可导航

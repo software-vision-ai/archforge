@@ -75,8 +75,10 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   `crates/shell-api/src/kinds.rs`, beside what a frame's drawing reads (`canvas::Drawing`) and
   what a press asks for (`editing::Action`). A notation adds a diagram kind by implementing
   `DiagramKind`; the shell's list of kinds (`KINDS`, `crates/ui-egui/src/kinds.rs`) registers it. The refusal words
-  (`panels::refusal`, `said`, `a_kind`, `engine_said::disabled`, in `crates/shell-api/src/`) ask
-  the notations they are handed: pass `cx.notation_uis`, or the shell's `notation_uis`.
+  (`panels::refusal`, `said`, `a_kind`, `engine_said::disabled`, in `crates/shell-api/src/`) and
+  Chat's counts of the elements a tool row names (`chat_words::tool_words`, by
+  `NotationUi::chat_kind` and `chat_count`) ask the notations they are handed: pass
+  `cx.notation_uis`, or the shell's `notation_uis`.
 - A control whose screen does not exist yet says "Not available yet" on hover. A canvas tool that
   is not built is left out of the toolbar instead.
 - The interface never touches the file system: what it needs from the host comes through

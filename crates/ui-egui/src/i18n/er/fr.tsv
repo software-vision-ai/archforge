@@ -224,6 +224,9 @@ str		Keep the line	Garder la ligne
 str		Remove relationship	Retirer la relation
 str		Relationship removed	Relation supprimée
 plural		+ {n} more column	+ {n} colonne de plus|+ {n} colonnes de plus
+plural		{n} table	{n} table|{n} tables
+plural		{n} column	{n} colonne|{n} colonnes
+plural		{n} schema	{n} schéma|{n} schémas
 str		This schema	Ce schéma
 str		This table	Cette table
 str		This column	Cette colonne

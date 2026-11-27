@@ -389,17 +389,7 @@ plural		{n} change undone	{n} change undone|{n} changes undone
 plural		in about {n} minute	in about {n} minute|in about {n} minutes
 plural		{n} message	{n} message|{n} messages
 plural		{n} more call is not shown	{n} more call is not shown|{n} more calls are not shown
-plural		{n} class	{n} class|{n} classes
-plural		{n} interface	{n} interface|{n} interfaces
-plural		{n} enumeration	{n} enumeration|{n} enumerations
-plural		{n} data type	{n} data type|{n} data types
-plural		{n} package	{n} package|{n} packages
-plural		{n} attribute	{n} attribute|{n} attributes
-plural		{n} operation	{n} operation|{n} operations
 plural		{n} line	{n} line|{n} lines
-plural		{n} table	{n} table|{n} tables
-plural		{n} column	{n} column|{n} columns
-plural		{n} schema	{n} schema|{n} schemas
 plural		{n} diagram	{n} diagram|{n} diagrams
 plural		{n} skill	{n} skill|{n} skills
 str		Not saved	Not saved
