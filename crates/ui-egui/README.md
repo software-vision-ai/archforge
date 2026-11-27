@@ -117,9 +117,15 @@ shell forward to them for the shell's own screens, and `home::control` stays the
 to `panels::control_cx`. The shared controls (the `_cx` controls of `panels`, from `section_cx`
 and `control_cx` to `name_field_cx` and `reveal_cx`, with their geometry `PAD`, `FIELD`, `ROW` and
 `PATH_SEP`), the problems a selection shows (`problems::of`) and the key presses they take
-(`actions::{Keys, take, take_alone, held_exactly}`) are `archforge-shell-api`'s, re-exported
-crate-private under their old paths where the shell uses them (`actions::Keys` public, as
-`actions::Action` names it). The refusal words (`panels::refusal`, `panels::said`, `panels::a_kind`
+(`actions::{Keys, take, take_alone, held_exactly, plain_press, take_plain, chord_press}`) are
+`archforge-shell-api`'s, re-exported crate-private under their old paths where the shell uses them
+(`actions::Keys` public, as `actions::Action` names it). So are the actions on a diagram the
+context runs at once (`canvas::open_cx`, `skill_tab::open_cx`, `editing::{select_cx,
+place_with_lines_cx, unplace_cx, ask_delete_cx}`, `menu_bar::ends_cx`), the card geometry and the
+drawing helpers a notation's figures share with the canvas (`canvas::{CARD_ROW, row_top, look_of,
+edge_points, line_mark, …}`), `explorer::fresh_name`, `editing::diagrams_showing`,
+`skill_tab::is_skill` and the compact button with the focus ring (`settings::{button_in,
+focus_ring}`). The refusal words (`panels::refusal`, `panels::said`, `panels::a_kind`
 and `engine_said::disabled`, `archforge-shell-api`'s) ask the notations they are handed for their
 own: the context's or the shell's (`notation_uis`), those of the screens parts the shell is
 given.

@@ -689,8 +689,8 @@ pub(crate) fn retain_valid(draft: &mut Option<BindingDraft>, store: &Store) {
 
 /// The open draft's Apply pressed, as a sample to look at.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn apply_sample(shell: &mut crate::Shell) {
-    shell.cx(apply_draft);
+pub(crate) fn apply_sample(cx: &mut Ctx) {
+    apply_draft(cx);
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.

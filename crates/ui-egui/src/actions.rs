@@ -5,7 +5,7 @@
 use egui::{Key, Modifiers};
 
 pub use archforge_shell_api::actions::Keys;
-pub(crate) use archforge_shell_api::actions::{held_exactly, take, take_alone};
+pub(crate) use archforge_shell_api::actions::{chord_press, held_exactly, plain_press, take, take_alone, take_plain};
 
 use crate::i18n::{tr, tr_ctx};
 use crate::state::{RecentSort, RecentView};
@@ -352,36 +352,6 @@ pub(crate) fn free(shell: &Shell) -> bool {
 
 /// Redo's second key, ⌘Y (Ctrl Y), which no menu shows.
 const REDO_TOO: Keys = Keys { modifiers: Modifiers::COMMAND, key: Key::Y };
-
-/// Whether `key` was pressed in `input` with no command key, Control or Alt held, with Shift or
-/// without: the press an arrow's own reader acts on. With one of them held it is a chord's, as
-/// ⌥⌘← is Older version's, and a chord whose action is off stays in the input: no reader behind it
-/// takes it for a plain arrow.
-pub(crate) fn plain_press(input: &egui::InputState, key: Key) -> bool {
-    input.events.iter().any(|e| matches!(e, egui::Event::Key { key: k, pressed: true, modifiers, .. } if *k == key && plain(modifiers)))
-}
-
-/// Whether `held` has no command key, Control or Alt in it: Shift alone, or nothing.
-fn plain(held: &Modifiers) -> bool {
-    !(held.command || held.ctrl || held.mac_cmd || held.alt)
-}
-
-/// Whether `key` was pressed in `input` plainly, as `plain_press` reads it, and takes those
-/// presses. A press with a command key, Control or Alt stays in the input for its own chord.
-pub(crate) fn take_plain(input: &mut egui::InputState, key: Key) -> bool {
-    let before = input.events.len();
-    input.events.retain(|e| !matches!(e, egui::Event::Key { key: k, pressed: true, modifiers, .. } if *k == key && plain(modifiers)));
-    input.events.len() != before
-}
-
-/// Whether `key` was pressed in `input` with exactly the modifiers `wanted` held (`held_exactly`):
-/// not with Shift or Alt more or less, and not with a Mac's Control. Takes nothing.
-pub(crate) fn chord_press(input: &egui::InputState, key: Key, wanted: Modifiers) -> bool {
-    input
-        .events
-        .iter()
-        .any(|e| matches!(e, egui::Event::Key { key: k, pressed: true, modifiers, .. } if *k == key && held_exactly(*modifiers, wanted)))
-}
 
 /// Whether `keys` were pressed in this frame, exactly; takes the press as `take` does.
 fn pressed(ctx: &egui::Context, keys: &Keys) -> bool {

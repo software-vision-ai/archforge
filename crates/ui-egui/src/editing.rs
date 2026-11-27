@@ -10,16 +10,19 @@
 use std::collections::BTreeMap;
 
 use archforge_diagram::grid::bounds_of;
-use archforge_diagram::{Grid, Hit, ProjectView, diagram, node};
+use archforge_diagram::{Grid, Hit, ProjectView, node};
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 pub(crate) use archforge_shell_api::editing::Action;
-pub use archforge_shell_api::editing::{Corner, ElementMenu, Gesture, NodeRename, NoteEdit};
+use archforge_shell_api::editing::ask_delete_of;
+pub use archforge_shell_api::editing::{Corner, ElementMenu, Gesture, NodeRename, NoteEdit, diagrams_showing};
+pub(crate) use archforge_shell_api::editing::{
+    ask_delete_cx, element_of, hit, new_row_keys, nodes_of, on_diagram, place_with_lines_cx, select_cx, unplace_cx, uuid,
+};
 
 use crate::canvas::{CARD_FIRST_ROW, CARD_HEADER, CARD_ROW, Tool, View};
-use crate::cx::{Ctx, Request};
 use crate::home::control;
 use crate::i18n::tr;
 use crate::notation_ui::{Layer, Overlaid};
@@ -52,14 +55,6 @@ const MENU_ROW: f32 = 30.0;
 /// A note's size when placed, in diagram units.
 const NOTE_SIZE: (f64, f64) = (200.0, 72.0);
 
-/// What lies at diagram point `(x, y)`: the grid's topmost node or nearest line, looking through a
-/// node its notation says holds a label (the label of a figure drawn across several lines). A label
-/// takes a press only where the last frame drew it (`canvas.extra_labels`), so one that draws
-/// nothing, its diagram showing none of its figure's lines, is never hit.
-pub(crate) fn hit(store: &Store, notations: &ProjectView, grid: &Grid, x: f64, y: f64) -> Option<Hit> {
-    grid.hit_keeping(x, y, |n| !notations.node_is_label(store, n))
-}
-
 /// Whether a canvas action changes nothing, so that it stays on while a version shows.
 pub(crate) fn only_looks(action: &Action) -> bool {
     matches!(action, Action::Nothing | Action::Select(_) | Action::Toggle(_) | Action::Start(Gesture::Marquee { .. }, _) | Action::Commit)
@@ -74,14 +69,6 @@ pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Res
 /// [`select_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     shell.cx(|cx| select_cx(cx, ids));
-}
-
-/// Selects `ids`, as a click does; a refusal is said at the canvas's top.
-pub(crate) fn select_cx(cx: &mut Ctx, ids: Vec<Uuid>) {
-    let ids: Vec<String> = ids.iter().map(Uuid::to_string).collect();
-    if let Err(e) = crate::panels::run_cx(cx, "view.select", json!({ "ids": ids })) {
-        cx.canvas.notice = Some(e);
-    }
 }
 
 /// Selects what each box and line drawn on diagram `d` stands for, as a click on it would, boxes
@@ -119,24 +106,9 @@ fn node_target(store: &Store, notations: &ProjectView, n: Obj) -> Obj {
     element_of(store, n).map_or(n, |e| notations.selects_as(store, e))
 }
 
-/// The id of `o`, while the store has one for it.
-pub(crate) fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
-    store.uuid(o).ok()
-}
-
-/// The element node `n` shows, while the store has it alive; none for a note.
-pub(crate) fn element_of(store: &Store, n: Obj) -> Option<Obj> {
-    store.get(n, node::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|e| store.is_alive(*e))
-}
-
 /// The element of node `n` when it takes part in the gestures of `kind`.
 fn part_of_node(kind: Option<&'static dyn crate::kinds::DiagramKind>, store: &Store, n: Obj) -> Option<Obj> {
     element_of(store, n).filter(|e| kind.is_some_and(|k| k.takes_part(store, *e)))
-}
-
-/// The boxes of diagram `d` the store has alive, those at its top only.
-pub(crate) fn nodes_of(store: &Store, d: Obj) -> Vec<Obj> {
-    store.list(d, diagram::NODE).unwrap_or_default().iter().filter_map(archforge_mof::Value::as_ref).filter(|n| store.is_alive(*n)).collect()
 }
 
 /// A node's rectangle in diagram units.
@@ -1036,62 +1008,6 @@ fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: 
     }
 }
 
-/// Whether diagram `d` shows element `e`.
-pub(crate) fn on_diagram(store: &Store, d: Obj, e: Obj) -> bool {
-    nodes_of(store, d).into_iter().any(|n| element_of(store, n) == Some(e))
-}
-
-/// Places element `e` dropped on diagram `d`, centred on `at` at `size`, with those of `links`
-/// that join it to an element the diagram shows, as one undo step named `label`; then selects it.
-#[allow(clippy::too_many_arguments, reason = "a drop is placed with its size, its lines and its step's name")]
-pub(crate) fn place_with_lines_cx(
-    cx: &mut Ctx,
-    d: Obj,
-    e: Obj,
-    at: (f64, f64),
-    size: (f64, f64),
-    links: &[Obj],
-    notation: &dyn archforge_diagram::Notation,
-    label: &str,
-) {
-    let Some(session) = cx.session.as_ref() else { return };
-    let store = session.doc();
-    let (Some(diagram_id), Some(entity)) = (uuid(store, d), uuid(store, e)) else { return };
-    let (x, y) = ((at.0 - size.0 / 2.0).round(), (at.1 - size.1 / 2.0).round());
-    let place = json!({ "diagram": diagram_id.to_string(), "element": entity.to_string(), "x": x, "y": y, "width": size.0, "height": size.1 });
-    // (line's element, source, target), None for the element being placed.
-    let shown = |t: Obj| nodes_of(store, d).into_iter().find(|n| element_of(store, *n) == Some(t)).and_then(|n| uuid(store, n));
-    let mut lines: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = Vec::new();
-    for &l in links {
-        let Some((from, to)) = notation.ends(store, l) else { continue };
-        let end = |t: Obj| if t == e { Some(None) } else { shown(t).map(Some) };
-        if let (Some(a), Some(b), Some(id)) = (end(from), end(to), uuid(store, l))
-            && !lines.iter().any(|(x, _, _)| *x == id)
-        {
-            lines.push((id, a, b));
-        }
-    }
-    let out = cx.session.as_mut().map(|session| {
-        session.batch(label, |b| {
-            let placed = b.execute("diagram.place", &place)?;
-            let node = placed.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
-            for (element, source, target) in &lines {
-                let end = |x: &Option<Uuid>| x.map_or(node.clone(), |u| u.to_string());
-                b.execute(
-                    "diagram.connect",
-                    &json!({ "diagram": diagram_id.to_string(), "element": element.to_string(), "source": end(source), "target": end(target) }),
-                )?;
-            }
-            Ok(())
-        })
-    });
-    match out {
-        Some(Ok(_)) => select_cx(cx, vec![entity]),
-        Some(Err(e)) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
-        None => {}
-    }
-}
-
 /// Opens the name field in the header of `node` for the element it shows, holding the element's
 /// name as it is; nothing opens when no project is open or the element is gone.
 fn open_rename(shell: &mut Shell, node: Uuid, element: Uuid) {
@@ -1131,68 +1047,9 @@ pub(crate) fn unplace(shell: &mut Shell, nodes: Vec<Uuid>) {
     shell.cx(|cx| unplace_cx(cx, nodes));
 }
 
-/// Removes the nodes from the diagram, the model untouched; a refusal is said at the canvas's top.
-pub(crate) fn unplace_cx(cx: &mut Ctx, nodes: Vec<Uuid>) {
-    if nodes.is_empty() {
-        return;
-    }
-    let ids: Vec<String> = nodes.iter().map(Uuid::to_string).collect();
-    if let Err(e) = crate::panels::run_cx(cx, "diagram.unplace", json!({ "nodes": ids })) {
-        cx.canvas.notice = Some(e);
-    }
-}
-
-/// How many diagrams show `element`, as a node or as a line (an element drawn by its line alone),
-/// each diagram once: the count the Delete from the model dialog gives, from the canvas and from
-/// Models alike. A diagram that belongs to `element` (its own diagram) counts only
-/// when it shows `element` too.
-pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
-    let (_, edges, nodes) = archforge_diagram::views_of(store, element);
-    let diagrams: std::collections::BTreeSet<Obj> = nodes.iter().chain(&edges).filter_map(|v| archforge_diagram::diagram_of(store, *v)).collect();
-    diagrams.len()
-}
-
 /// [`ask_delete_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
     shell.cx(|cx| ask_delete_cx(cx, node, entity));
-}
-
-/// Asks before an element goes from the model, with what goes with it; what its notation keeps
-/// (an element that holds what the notation itself needs) is said at the canvas's top instead.
-pub(crate) fn ask_delete_cx(cx: &mut Ctx, node: Uuid, entity: Uuid) {
-    ask_delete_of(cx, Some(node), entity);
-}
-
-/// [`ask_delete_cx`] for an element selected on the diagram by its card `node`, or with none by a
-/// line alone (an element whose card is not on the diagram): the dialog then offers no removal
-/// from the diagram, as the line's own Delete does that. The shell opens the dialog once the call
-/// that asked returns ([`Request::AskDelete`]).
-fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
-    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
-    let Some(e) = store.by_uuid(entity) else { return };
-    // What its notation keeps (an element that holds what the notation itself needs) is said, not
-    // asked.
-    if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(cx.notation_uis, store, e)) {
-        cx.canvas.notice = Some(why);
-        cx.canvas.menu = None;
-        return;
-    }
-    let consequences = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.consequences(cx.notation_uis, store, e)).unwrap_or_default();
-    let diagrams = diagrams_showing(store, e);
-    // An element nested in another may hand what it holds up: the dialog says where, and so does
-    // the toast.
-    let hands_to = crate::notation_ui::of(cx.notation_uis, store, e)
-        .and_then(|ui| Some((archforge_core::name_of(store, ui.hands_up(store, e)?), ui.has_children(store, e))));
-    cx.requests.push(Request::AskDelete(crate::explorer::Delete {
-        ids: vec![entity],
-        // Named as every path that asks names it, an unnamed line's element by its ends (AR-216).
-        name: crate::notation_ui::label(cx.notation_uis, store, e),
-        consequences,
-        diagrams,
-        node,
-        hands_to,
-    }));
-    cx.canvas.menu = None;
 }
 
 /// Draws what sits over the diagram: the marquee, a selected node's adorners, the Arrange bar,
@@ -1606,12 +1463,6 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
     } else if (has_focus && enter) || (!fresh && crate::menu_bar::ends(shell, ui.ctx(), id, out.response.lost_focus(), has_focus)) {
         commit_rename(shell);
     }
-}
-
-/// The keys that open a new row on a selected card (⌘↩), as an element menu's row shows them; `mac`
-/// spells them as the Mac does.
-pub(crate) fn new_row_keys(mac: bool) -> &'static str {
-    if mac { "⌘↩" } else { "Ctrl Enter" }
 }
 
 /// The element menu: the design's rows with their shortcuts. Open in Models, Generate…, Remove from

@@ -151,7 +151,7 @@ pub fn history(shell: &mut Shell, rig: &Rig) -> Result<Vec<archforge_mof::Uuid>,
 /// The sample class model open with Order selected and the Chat panel over it, ready or not.
 pub fn sample(shell: &mut Shell, ready: bool) -> Result<Rig, String> {
     snapshot::adopt_project(shell);
-    crate::uml_ui::open_sample(shell)?;
+    snapshot::cx(shell, crate::uml_ui::open_sample)?;
     if let Some(order) = element(shell, archforge_uml::CLASS, "Order") {
         snapshot::run(shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
     }

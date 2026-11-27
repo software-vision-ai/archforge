@@ -1,5 +1,8 @@
 //! What the Models explorer's delete dialog asks about, as the narrow context asks for it
-//! ([`crate::cx::Request::AskDelete`]).
+//! ([`crate::cx::Request::AskDelete`]), and the default name an element added there takes
+//! (`fresh_name`).
+
+use std::collections::BTreeSet;
 
 use archforge_mof::Uuid;
 
@@ -22,4 +25,11 @@ pub struct Delete {
     /// another), and whether it holds anything: the dialog says so instead of saying what it holds
     /// goes with it, and the toast says where it went, as a removal without the dialog does.
     pub hands_to: Option<(String, bool)>,
+}
+
+/// A default name no sibling has, its stem and a number: `Note 2`, or `note_2` when `snake`; none
+/// past ten thousand.
+pub fn fresh_name(stem: &str, taken: impl Iterator<Item = String>, snake: bool) -> Option<String> {
+    let taken: BTreeSet<String> = taken.map(|n| n.to_lowercase()).collect();
+    (1..=10_000u32).map(|n| if snake { format!("{stem}_{n}") } else { format!("{stem} {n}") }).find(|name| !taken.contains(&name.to_lowercase()))
 }

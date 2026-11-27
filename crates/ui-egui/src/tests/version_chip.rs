@@ -793,7 +793,7 @@ fn an_end_typed_on_the_selected_association_stops_leaving() {
 fn a_moved_selection_ends_an_associations_draft_before_a_replacement() {
     in_both(|mut h, _| {
         let earlier = rows_now(&h);
-        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
         let away = rect_of(&h, "workspace.canvas").left_top() + egui::vec2(30.0, 30.0);
@@ -837,7 +837,7 @@ fn a_refused_role_is_not_written_when_the_selection_moves_on() {
         archforge_core::name_of(st, archforge_uml::figures::member_ends(st, st.by_uuid(a).unwrap()).unwrap()[i])
     }
     in_both(|mut h, _| {
-        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
         let paid = select_named(&mut h, archforge_uml::ASSOCIATION, "paid by");

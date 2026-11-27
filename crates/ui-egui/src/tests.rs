@@ -20271,7 +20271,7 @@ fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes
 /// The sample class model open on its class diagram, and the edge of its association `name`.
 fn read_class_diagram(name: &str) -> (Harness<'static, Shell>, archforge_mof::Obj, archforge_mof::Obj) {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
@@ -20349,7 +20349,7 @@ fn a_class_diagram_draws_every_line_kind_and_its_lines_highlight_and_their_texts
 /// The sample class model open with `class` selected and Properties showing it; gives its id.
 fn class_properties(class: &str) -> (Harness<'static, Shell>, archforge_mof::Uuid) {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     let st = h.state().session.as_ref().unwrap().doc();
     let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == class).unwrap();
     let id = st.uuid(c).unwrap();
@@ -20557,7 +20557,7 @@ fn nested_orders(theme: ThemeKind) -> (Harness<'static, Shell>, archforge_mof::U
         let place = serde_json::json!({ "diagram": d.to_string(), "element": element.to_string(), "x": x, "y": 80, "width": 280, "height": height });
         run(&mut h, "diagram.place", place);
     }
-    crate::uml_ui::put_literals(h.state_mut(), status, &["Placed", "Paid", "Shipped"]).unwrap();
+    h.state_mut().cx(|cx| crate::uml_ui::put_literals(cx, status, &["Placed", "Paid", "Shipped"])).unwrap();
     crate::canvas::open(h.state_mut(), d);
     h.run();
     let shell = h.state_mut();
@@ -21100,7 +21100,7 @@ fn members_a_tool_adds_grow_the_class_card_in_the_same_undo_step() {
 fn literals_and_values_a_tool_writes_grow_the_cards_that_show_them() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (_, _, entity) = crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        let (_, _, entity) = h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, true)).unwrap();
         let execute = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
             let out = crate::control::answer(h.state_mut(), "engine.execute", &serde_json::json!({ "command": command, "params": params }));
             out.unwrap_or_else(|e| panic!("{command}: {e}"))["result"].clone()
@@ -23639,7 +23639,7 @@ fn a_conversations_origin_never_acts_for_another_and_never_undoes_the_persons_st
         let _ = &rig;
         h.state_mut().open_project(crate::Opened { name: "Second".into(), path: "/tmp/Second.archforge".into(), ..Default::default() });
         h.run();
-        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Agent);
         h.run();
         ask_in_chat(&mut h, "Here");
@@ -24394,7 +24394,7 @@ fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can
 #[test]
 fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_undo_step() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     let st = h.state().session.as_ref().unwrap().doc();
     let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Catalog").unwrap();
     let catalog = st.uuid(c).unwrap();
@@ -24520,7 +24520,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
 #[test]
 fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_keeps_moved_rows_in_sight() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     let run = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
         let out = h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
         out.value["id"].as_str().map(|i| archforge_mof::Uuid::parse(i).unwrap())
@@ -24596,7 +24596,7 @@ fn harness_over(shell: Shell) -> Harness<'static, Shell> {
 #[test]
 fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     h.run();
     let class_diagram = h.state().canvas.active.expect("the sample's class diagram");
     // An ER diagram beside it, then the class diagram shown again, panned and zoomed.
@@ -24695,7 +24695,7 @@ fn each_rail_icon_opens_its_own_panel_in_both_appearances() {
 #[test]
 fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leaves_by_delete_or_shift_delete() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     let find = |h: &Harness<'static, Shell>, name: &str| {
         let st = h.state().session.as_ref().unwrap().doc();
         let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
@@ -24829,7 +24829,7 @@ fn related_sample() -> (Harness<'static, Shell>, std::collections::BTreeMap<Stri
 /// [`related_sample`] in `theme` in a window of `size`.
 fn related_sample_in(theme: ThemeKind, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>) {
     let mut h = workspace_harness(theme, size);
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
@@ -25645,7 +25645,7 @@ fn generalization_sets_are_made_from_the_menu_the_shortcut_and_properties() {
     use egui_kittest::kittest::Queryable;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, payment) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let (gens, payment) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
         h.state_mut().canvas.zoom = 0.75;
         h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
         h.run();
@@ -25818,7 +25818,7 @@ fn a_set_label_that_draws_nothing_takes_no_press() {
     use archforge_uml::generalization_sets as sets;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let (gens, _) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
         h.state_mut().canvas.zoom = 0.75;
         h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
         let out = h
@@ -25879,7 +25879,7 @@ fn a_set_label_that_draws_nothing_takes_no_press() {
 /// Payment's.
 fn sample_with_a_set_and_a_rule(theme: ThemeKind) -> (Harness<'static, Shell>, [String; 3], String) {
     let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-    let (gens, payment) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+    let (gens, payment) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
     let s = h.state_mut().session.as_mut().unwrap();
     s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": [gens[1]], "name": "Kinds" })).unwrap();
     let rule = serde_json::json!({ "context": payment, "name": "settled", "expression": "x", "constrained": [gens[1], payment] });
@@ -26687,7 +26687,7 @@ fn literal_sample(
     let (mut h, nodes, [status_node, _]) = enumeration_sample(theme);
     let status = named(&h, archforge_uml::ENUMERATION, "OrderStatus");
     if !literals.is_empty() {
-        crate::uml_ui::put_literals(h.state_mut(), status, literals).unwrap();
+        h.state_mut().cx(|cx| crate::uml_ui::put_literals(cx, status, literals)).unwrap();
     }
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [status.to_string()] })).unwrap();
     h.run();
@@ -26827,7 +26827,7 @@ fn an_enumeration_at_its_literal_cap_says_so_and_takes_no_more() {
 fn a_card_that_lists_only_some_of_its_members_adds_one_in_properties() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
         let catalog = named(&h, archforge_uml::CLASS, "Catalog");
         {
             let s = h.state_mut().session.as_mut().unwrap();
@@ -27194,7 +27194,7 @@ fn enumerations_are_listed_with_their_literals_edited_in_place_added_with_the_pl
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     h.run();
     let status = named(&h, archforge_uml::ENUMERATION, "OrderStatus");
-    crate::uml_ui::put_literals(h.state_mut(), status, &["Placed", "Paid"]).unwrap();
+    h.state_mut().cx(|cx| crate::uml_ui::put_literals(cx, status, &["Placed", "Paid"])).unwrap();
     h.state_mut().explorer.expanded.insert(status);
     h.run();
     // Its row under Commerce, its literals below it, in their order.
@@ -27363,7 +27363,7 @@ fn an_enumeration_in_properties_shows_its_literals_and_is_offered_as_a_type() {
         }
         assert!(found.iter().any(|i| i == "workspace.properties.literals.add"), "a + for literals: {found:?}");
         // With literals: each a row in their order; a click selects it and the panel stays.
-        crate::uml_ui::put_literals(h.state_mut(), priority, &["Low", "Normal", "High"]).unwrap();
+        h.state_mut().cx(|cx| crate::uml_ui::put_literals(cx, priority, &["Low", "Normal", "High"])).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [priority.to_string()] })).unwrap();
         h.run();
         let literals = {
@@ -27413,7 +27413,7 @@ fn the_skills_panel_offers_add_skill_only_where_the_selection_carries_skills() {
             let out = s.execute("uml.enumeration.add", &serde_json::json!({ "package": commerce, "name": "Priority" })).unwrap();
             archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
         };
-        crate::uml_ui::put_literals(h.state_mut(), priority, &["Low"]).unwrap();
+        h.state_mut().cx(|cx| crate::uml_ui::put_literals(cx, priority, &["Low"])).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Skills);
         h.run();
         let low = {
@@ -30070,7 +30070,7 @@ fn select_named(h: &mut Harness<'static, Shell>, class: archforge_mof::ClassId, 
 #[test]
 fn the_models_tree_nests_packages_lists_members_and_moves_a_class_by_drag_or_properties() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     h.run();
     // A package added with Commerce selected goes inside it, its name open for typing.
     let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
@@ -33633,7 +33633,7 @@ fn the_nested_sample_shows_its_owner_in_models_properties_and_on_the_canvas() {
     use egui_kittest::kittest::Queryable;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (priority, order) = crate::uml_ui::put_nested_priority(h.state_mut()).unwrap();
+        let (priority, order) = h.state_mut().cx(crate::uml_ui::put_nested_priority).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [priority] })).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
@@ -33661,7 +33661,7 @@ fn the_nested_sample_shows_its_owner_in_models_properties_and_on_the_canvas() {
 fn a_nested_classifier_dropped_within_its_package_stays_and_onto_a_package_row_moves() {
     use crate::notation_ui::NotationUi;
     let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    let (priority, order) = crate::uml_ui::put_nested_priority(h.state_mut()).unwrap();
+    let (priority, order) = h.state_mut().cx(crate::uml_ui::put_nested_priority).unwrap();
     let other = h.state_mut().session.as_mut().unwrap().execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap();
     let other = other.value["id"].as_str().unwrap().to_string();
     let invoice =
@@ -33735,7 +33735,7 @@ fn a_new_stereotype_is_named_in_models_once_the_call_returns() {
     use crate::cx::Request;
     use crate::state::Explorer;
     let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    let (_, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+    let (_, persistence, _) = h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, false)).unwrap();
     let persistence = archforge_mof::Uuid::parse(&persistence).unwrap();
     let shell = h.state_mut();
     let profile = shell.session.as_ref().unwrap().doc().by_uuid(persistence).unwrap();
@@ -33999,9 +33999,9 @@ fn template_parameter_refusals_are_said_in_place_and_nothing_is_written() {
         // In the sample model OrderRepository binds Repository: Key's removal is refused, naming
         // the binding (C5).
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
-        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
         h.run();
-        let (sample_id, _) = crate::uml_ui::put_repository(h.state_mut(), true).unwrap_or_else(|e| panic!("{e}"));
+        let (sample_id, _) = h.state_mut().cx(|cx| crate::uml_ui::put_repository(cx, true)).unwrap_or_else(|e| panic!("{e}"));
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
         let rows_before = signature_of(&h, &sample_id.to_string());
@@ -34300,7 +34300,7 @@ fn profiles_are_made_in_models_edited_in_properties_and_applied_to_packages() {
 
         // F6: in use, Unapply is refused with the uses counted, and they can be selected.
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (commerce, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        let (commerce, persistence, _) = h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, true)).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [commerce] })).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
@@ -34330,9 +34330,9 @@ fn nary_sample(theme: ThemeKind, drawn: bool) -> (Harness<'static, Shell>, std::
 /// [`nary_sample`] in a window of `size`.
 fn nary_sample_in(theme: ThemeKind, drawn: bool, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
     let mut h = workspace_harness(theme, size);
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     h.run();
-    let ids = crate::uml_nary::put_recommends(h.state_mut(), drawn).unwrap();
+    let ids = h.state_mut().cx(|cx| crate::uml_nary::put_recommends(cx, drawn)).unwrap();
     h.state_mut().canvas.fit_pending = false;
     h.state_mut().canvas.zoom = 1.0;
     h.state_mut().canvas.pan = egui::vec2(20.0, 30.0);
@@ -34564,7 +34564,7 @@ fn the_kind_reads_a_right_click_first_and_ers_leaves_it() {
     }
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let (gens, _) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
         h.run();
         let shell = h.state_mut();
         let st = shell.session.as_ref().unwrap().doc();
@@ -34683,7 +34683,7 @@ fn select_all_takes_in_what_the_kind_adds() {
     use crate::kinds::DiagramKind;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let (gens, _) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
         assert!(h.state_mut().cx(crate::uml_sets::shortcut), "{theme:?}: a set made");
         let st = h.state().session.as_ref().unwrap().doc();
@@ -34725,7 +34725,7 @@ fn delete_removes_each_notations_own_selected_element_its_own_way() {
     }
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let (gens, _) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
         assert!(h.state_mut().cx(crate::uml_sets::shortcut), "{theme:?}: a set made, and selected");
         let st = h.state().session.as_ref().unwrap().doc();
@@ -34747,7 +34747,7 @@ fn a_notations_chord_on_the_selection_is_its_own() {
     let chord = egui::Modifiers::COMMAND | egui::Modifiers::ALT;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let (gens, _) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
         let sets = |h: &Harness<'static, Shell>| {
             let st = h.state().session.as_ref().unwrap().doc();
@@ -34794,7 +34794,7 @@ fn escape_on_the_canvas_closes_ers_mapping_offer() {
 fn a_press_on_the_canvas_closes_umls_line_menu() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let (gens, _) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
         h.state_mut().canvas.zoom = 0.75;
         h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
@@ -34915,7 +34915,7 @@ fn umls_overlays_go_at_their_layers() {
         }
         // A member typed on Catalog's card, and the menu of three selected generalization lines.
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let (gens, _) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
         let class = {
             let st = h.state().session.as_ref().unwrap().doc();
             let node = st.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
@@ -34966,7 +34966,7 @@ fn a_card_draft_is_the_notations_row_typed_in_place() {
 fn a_generalization_sets_label_says_its_hover_text_in_umls_words() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let (gens, _) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
         let s = h.state_mut().session.as_mut().unwrap();
         let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method", "complete": true }));
         let set = archforge_mof::Uuid::parse(set.unwrap().value["id"].as_str().unwrap()).unwrap();
@@ -35717,7 +35717,7 @@ static PACKAGE_CLICKS: &[&dyn archforge_diagram::Notation] = &[&archforge_er::Er
 /// card's node, Order's package, and Customer with its card's node.
 fn package_clicks_sample(theme: ThemeKind) -> (Harness<'static, Shell>, String, archforge_mof::Obj, archforge_mof::Obj, archforge_mof::Obj) {
     let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-    let d = crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let d = h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
     let (tables, junctions) = archforge_notations::storage();
     let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
     let next = std::sync::atomic::AtomicU64::new(1 << 40);
@@ -36182,7 +36182,7 @@ fn stereotypes_are_applied_and_their_values_edited_in_properties() {
     use egui_kittest::kittest::Queryable;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (_, _, entity) = crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        let (_, _, entity) = h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, false)).unwrap();
         let (logging, rows_p) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let logging = s.execute("uml.profile.add", &serde_json::json!({ "name": "Logging" })).unwrap().value["id"].as_str().unwrap().to_string();
@@ -36301,7 +36301,7 @@ fn stereotypes_are_applied_and_their_values_edited_in_properties() {
 fn show_stereotype_values_refused_says_why_in_plain_words() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, false)).unwrap();
         select_named(&mut h, archforge_uml::CLASS, "Order");
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
@@ -36324,7 +36324,7 @@ fn show_stereotype_values_refused_says_why_in_plain_words() {
 fn deleting_a_stereotyped_element_names_its_applications() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, true)).unwrap();
         // A member selected: the section is its own.
         let id_attr = {
             let st = h.state().session.as_ref().unwrap().doc();
@@ -36363,7 +36363,7 @@ fn deleting_a_stereotyped_element_names_its_applications() {
 fn the_delete_dialog_names_the_applications_in_the_chosen_language() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, true)).unwrap();
         h.state_mut().state.language = "de".into();
         h.run();
         select_named(&mut h, archforge_uml::CLASS, "Order");
@@ -36388,7 +36388,7 @@ fn the_delete_dialog_names_the_applications_in_the_chosen_language() {
 fn a_members_remove_asks_before_its_stereotype_applications_go() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, true)).unwrap();
         let order = select_named(&mut h, archforge_uml::CLASS, "Order");
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         let member = |h: &Harness<'static, Shell>, n: &str| {
@@ -36427,7 +36427,7 @@ fn a_members_remove_asks_before_its_stereotype_applications_go() {
 fn an_association_end_takes_stereotypes_in_its_part_of_properties() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 2000.0));
-        crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, false)).unwrap();
         let places = select_named(&mut h, archforge_uml::ASSOCIATION, "places");
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
@@ -36462,7 +36462,7 @@ fn an_association_end_takes_stereotypes_in_its_part_of_properties() {
 fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (commerce, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        let (commerce, persistence, _) = h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, false)).unwrap();
         {
             let s = h.state_mut().session.as_mut().unwrap();
             let module =
@@ -36516,7 +36516,7 @@ fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
 fn the_picker_keeps_its_keys_from_the_models_tree() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, false)).unwrap();
         let order = select_named(&mut h, archforge_uml::CLASS, "Order");
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
@@ -36974,7 +36974,7 @@ fn a_return_landing_at_the_least_zoom_goes_back_on_the_next_zoom_out() {
 fn the_stereotype_picker_filter_ignores_capitals_and_accents() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (_, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        let (_, persistence, _) = h.state_mut().cx(|cx| crate::uml_profiles::put_profiles(cx, false)).unwrap();
         let row = |h: &mut Harness<'static, Shell>, name: &str| {
             let s = h.state_mut().session.as_mut().unwrap();
             let made = s.execute("uml.stereotype.add", &serde_json::json!({ "profile": persistence, "name": name, "extends": ["Class"] })).unwrap();

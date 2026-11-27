@@ -1019,16 +1019,16 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 /// With `uses`, the stereotypes are applied (AR-135): «Entity» on Order and Customer, «Id» on their
 /// id attributes, «Reference» on places (F6). Gives (Commerce, Persistence, Entity) ids.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_profiles(shell: &mut crate::Shell, uses: bool) -> Result<(String, String, String), String> {
+pub(crate) fn put_profiles(cx: &mut Ctx, uses: bool) -> Result<(String, String, String), String> {
     let id = |v: serde_json::Value| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
-    let store = shell.session.as_ref().ok_or("the profiles need a session")?.doc();
+    let store = cx.session.as_ref().ok_or("the profiles need a session")?.doc();
     let commerce = store
         .alive()
         .find(|o| store.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && name(store, *o) == "Commerce")
         .and_then(|o| store.uuid(o).ok())
         .ok_or("the sample has no Commerce")?
         .to_string();
-    let session = shell.session.as_mut().ok_or("the profiles need a session")?;
+    let session = cx.session.as_mut().ok_or("the profiles need a session")?;
     let mut run = |cmd: &str, p: serde_json::Value| session.execute(cmd, &p).map(|o| id(o.value)).map_err(|e| format!("{cmd}: {e}"));
     let persistence = run("uml.profile.add", json!({ "name": "Persistence" }))?;
     let entity = run("uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class"] }))?;
@@ -1039,9 +1039,9 @@ pub(crate) fn put_profiles(shell: &mut crate::Shell, uses: bool) -> Result<(Stri
     run("uml.attribute.add", json!({ "class": reference, "name": "lazy", "type": "Boolean", "default": "true" }))?;
     run("uml.profile.apply", json!({ "package": commerce, "profile": persistence }))?;
     if uses {
-        apply_samples(shell)?;
+        apply_samples(cx)?;
     }
-    if let Some(s) = shell.session.as_mut() {
+    if let Some(s) = cx.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;
     }
     Ok((commerce, persistence, entity))
@@ -1051,8 +1051,8 @@ pub(crate) fn put_profiles(shell: &mut crate::Shell, uses: bool) -> Result<(Stri
 /// (`uml.stereotype.apply`): «Entity» on Order and Customer, «Id» on their id attributes,
 /// «Reference» on places.
 #[cfg(any(test, feature = "snapshot"))]
-fn apply_samples(shell: &mut crate::Shell) -> Result<(), String> {
-    let session = shell.session.as_mut().ok_or("the sample needs a session")?;
+fn apply_samples(cx: &mut Ctx) -> Result<(), String> {
+    let session = cx.session.as_mut().ok_or("the sample needs a session")?;
     let uses: Vec<(String, String)> = {
         let st = session.doc();
         let find = |class: archforge_mof::ClassId, n: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(class) && name(st, *o) == n);

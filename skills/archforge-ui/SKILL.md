@@ -63,7 +63,12 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   (`Shell::cx`), `CtxRef` is its read-only twin (`Shell::cx_ref`), and what lies outside it (the
   Models tree's rows, the centre leaving a version's details, a panel of the right side or an
   explorer of the left side shown, a new element's name opened for typing in Models, the delete
-  dialog opened on a removal) is a `Request` the shell carries out once the call returns. The
+  dialog opened on a removal) is a `Request` the shell carries out once the call returns. What a
+  screen does on a diagram through it (opening a diagram or a skill, selecting, placing an element
+  with its lines, taking nodes off, asking before a removal: `canvas::open_cx`,
+  `editing::select_cx`, `place_with_lines_cx`, `unplace_cx`, `ask_delete_cx`) runs at once, as
+  functions of the interfaces over the context, beside the card geometry and the drawing helpers a
+  notation's figures share with the canvas (`crates/shell-api/src/canvas.rs`). The
   interfaces `NotationUi` and `DiagramKind` hand it over: a method that reaches the shell takes
   `&mut Ctx`, or `&CtxRef` where it only reads, and the shell builds it at each call, never the
   notation. A kind's rows of the Model menu are data (`kinds::ModelRow`), from which the shell

@@ -13,8 +13,6 @@ use archforge_uml::commands::{classifiers, package_of, packages};
 use egui::Rect;
 use serde_json::json;
 
-#[cfg(any(test, feature = "snapshot"))]
-use crate::Shell;
 use crate::canvas::Tool;
 use crate::cx::{Ctx, CtxRef, Request};
 use crate::editing::Action;
@@ -1806,9 +1804,9 @@ fn notes<const N: usize>(parts: [Option<String>; N]) -> Option<String> {
 /// and the tests (AR-132); the project is then marked saved as it stands. Gives Priority's id and
 /// Order's.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_nested_priority(shell: &mut Shell) -> Result<(String, String), String> {
-    let d = shell.canvas.active.ok_or("the sample's diagram")?;
-    let session = shell.session.as_mut().ok_or("the nested sample needs a session")?;
+pub(crate) fn put_nested_priority(cx: &mut Ctx) -> Result<(String, String), String> {
+    let d = cx.canvas.active.ok_or("the sample's diagram")?;
+    let session = cx.session.as_mut().ok_or("the nested sample needs a session")?;
     let store = session.doc();
     let order = store
         .alive()
@@ -1854,9 +1852,9 @@ pub(crate) fn put_nested_priority(shell: &mut Shell) -> Result<(String, String),
 /// with its label. All as one step; the project is then marked saved as it stands. Gives
 /// Repository's id and the parameters' ids.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_repository(shell: &mut Shell, bound: bool) -> Result<(Uuid, [Uuid; 2]), String> {
-    let d = shell.canvas.active.ok_or("the sample's diagram")?;
-    let session = shell.session.as_mut().ok_or("the template sample needs a session")?;
+pub(crate) fn put_repository(cx: &mut Ctx, bound: bool) -> Result<(Uuid, [Uuid; 2]), String> {
+    let d = cx.canvas.active.ok_or("the sample's diagram")?;
+    let session = cx.session.as_mut().ok_or("the template sample needs a session")?;
     let store = session.doc();
     let order = store
         .alive()
@@ -1912,9 +1910,9 @@ pub(crate) fn put_repository(shell: &mut Shell, bound: bool) -> Result<(Uuid, [U
 /// the tests (AR-129); the project is then marked saved as it stands. Gives the generalizations
 /// from CardPayment, BankTransfer and WalletPayment to Payment, and Payment, by id.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_payment_kinds(shell: &mut Shell) -> Result<([String; 3], String), String> {
-    let d = shell.canvas.active.ok_or("the sample's diagram")?.to_string();
-    let session = shell.session.as_mut().ok_or("the payment kinds need a session")?;
+pub(crate) fn put_payment_kinds(cx: &mut Ctx) -> Result<([String; 3], String), String> {
+    let d = cx.canvas.active.ok_or("the sample's diagram")?.to_string();
+    let session = cx.session.as_mut().ok_or("the payment kinds need a session")?;
     let store = session.doc();
     let class = |n: &str| {
         store
@@ -1957,8 +1955,8 @@ pub(crate) fn put_payment_kinds(shell: &mut Shell) -> Result<([String; 3], Strin
 /// `uml.literal.add`, as one step, for the snapshot screens and the tests; the project is then
 /// marked saved as it stands.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_literals(shell: &mut Shell, enumeration: Uuid, names: &[&str]) -> Result<(), String> {
-    let session = shell.session.as_mut().ok_or("the literals need a session")?;
+pub(crate) fn put_literals(cx: &mut Ctx, enumeration: Uuid, names: &[&str]) -> Result<(), String> {
+    let session = cx.session.as_mut().ok_or("the literals need a session")?;
     session
         .batch("Add literal", |b| {
             for name in names {
@@ -2109,14 +2107,14 @@ pub(crate) fn sample_model(st: &mut Store, model: Obj) -> Result<Obj, archforge_
     Ok(pkg)
 }
 
-/// Opens the sample class model (`sample_model`) on a class diagram in the shell's project: its
+/// Opens the sample class model (`sample_model`) on a class diagram in the context's project: its
 /// classes laid out in three rows, every association, generalization and dependency drawn, the
 /// named ones labelled. Gives the diagram's id.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn open_sample(shell: &mut Shell) -> Result<Uuid, String> {
+pub(crate) fn open_sample(cx: &mut Ctx) -> Result<Uuid, String> {
     use archforge_mof::rows;
     let fail = |e: &dyn std::fmt::Display| e.to_string();
-    let session = shell.session.as_ref().ok_or("the sample needs a session")?;
+    let session = cx.session.as_ref().ok_or("the sample needs a session")?;
     let (tables, junctions) = archforge_notations::storage();
     let counter = |start: u64| {
         let n = std::sync::atomic::AtomicU64::new(start);
@@ -2183,9 +2181,9 @@ pub(crate) fn open_sample(shell: &mut Shell) -> Result<Uuid, String> {
     }
     run(&mut session, "view.select", serde_json::json!({ "ids": [] }))?;
     session.mark_saved().map_err(|e| e.to_string())?;
-    shell.session = Some(session);
+    *cx.session = Some(session);
     let d = Uuid::parse(&d).ok_or("the diagram's id")?;
-    shell.explorer.expanded.extend(Uuid::parse(&pkg_id));
-    crate::canvas::open(shell, d);
+    cx.requests.push(Request::ExpandRows(Uuid::parse(&pkg_id).into_iter().collect()));
+    crate::canvas::open_cx(cx, d);
     Ok(d)
 }

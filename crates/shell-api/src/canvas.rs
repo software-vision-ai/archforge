@@ -4,19 +4,27 @@
 //! end mark, where a selected line's end handles and its end texts sit; and what the centre keeps
 //! between frames (`State`: the tabs, the view, the tool, the toggles, the editing under way and
 //! what the last frame drew that takes a press), and what one frame's drawing reads (`Drawing`),
-//! from which a diagram's kind draws its own figures. The shell draws the canvas with it
-//! (`archforge_ui_egui::canvas` re-exports it under its old paths), and so will a notation's
-//! screens, without the shell.
+//! from which a diagram's kind draws its own figures. Beside them: a card's geometry and where its
+//! rows sit, what a node's or a line's store holds (its element, its look, its references), the
+//! drawing helpers a kind's figures share with the canvas (a card's colours, its name from afar, a
+//! dashed outline, a line's end mark and its points on screen, an eyebrow's case, a text a notation
+//! describes), the zoom and the fit of the view, and opening a diagram through the narrow context
+//! (`open_cx`). The shell draws the canvas with it (`archforge_ui_egui::canvas` re-exports it under
+//! its old paths), and so will a notation's screens, without the shell.
 
 use std::collections::HashMap;
 
 use archforge_diagram::figure::EndMark;
 use archforge_diagram::grid::bounds_of;
-use archforge_mof::{Obj, Store, Uuid};
-use egui::{Pos2, Rect, Vec2, pos2, vec2};
+use archforge_diagram::{Grid, diagram, edge, node, point, style};
+use archforge_mof::{Obj, Store, Uuid, Value};
+use egui::{Pos2, Rect, Stroke, Vec2, pos2, vec2};
+use serde_json::json;
 
+use crate::cx::{Ctx, Request};
+use crate::i18n::{fmt, tr};
 use crate::kinds::ExtraLabel;
-use crate::ux::{self, Palette};
+use crate::ux::{self, Palette, types};
 
 /// The view's mapping between diagram units and the screen.
 #[derive(Debug, Clone, Copy)]
@@ -700,6 +708,414 @@ impl Drawing<'_> {
         let own = self.kind;
         own.into_iter().chain(self.kinds.iter().copied().filter(move |k| own.is_none_or(|o| o.kind() != k.kind())))
     }
+}
+
+/// The zoom's range and a step of the zoom buttons.
+pub const ZOOM_RANGE: (f32, f32) = (0.1, 4.0);
+pub const ZOOM_STEP: f32 = 1.25;
+/// The margin "Whole diagram" leaves around the nodes.
+const FIT_MARGIN: f32 = 48.0;
+/// How many frames a toast stays.
+pub const TOAST_FRAMES: u64 = 300;
+/// A card: its header's height, its first row's baseline, the pitch between rows, the text inset
+/// and the badge column.
+pub const CARD_HEADER: f32 = archforge_diagram::figure::CARD_HEADER;
+pub const CARD_FIRST_ROW: f32 = archforge_diagram::figure::CARD_FIRST_ROW;
+pub const CARD_ROW: f32 = archforge_diagram::figure::CARD_ROW;
+/// The pitches between the last row of a card's compartment and the first of the next: the
+/// compartment's foot, as far as a card's last row is from its foot, and the next one's head.
+pub const COMPARTMENT_GAP: f32 = archforge_diagram::figure::COMPARTMENT_GAP;
+/// How far a compartment's first row is under the line over it: as far as a card's first row is
+/// under its header's line.
+const COMPARTMENT_TOP: f32 = CARD_FIRST_ROW - CARD_HEADER;
+pub const CARD_INSET: f32 = 18.0;
+pub const CARD_TEXT: f32 = 42.0;
+/// How strongly the card of an element of another scope shows: the design's 60 %.
+const FOREIGN_ALPHA: f32 = 0.6;
+/// Below this zoom a node shows its name only.
+pub const DETAIL_ZOOM: f32 = 0.5;
+
+/// Keeps the active tab's pan and zoom as the view it was left with, for the tab and a diagram's
+/// kind to restore ([`State::views`]). Every way of leaving a tab comes here first, so the view
+/// kept is always the last (AR-666). Only a view drawn for that tab counts: one still to be fitted
+/// or centred belongs to the tab before, so the tab's entry stays.
+pub fn keep_left_view(state: &mut State) {
+    if let Some(from) = state.active
+        && state.shown == Some(from)
+    {
+        state.views.insert(from, (state.pan, state.zoom));
+    }
+}
+
+/// The view `next` opens with when it takes the active tab's place; the view is not drawn for it
+/// yet. A landing or a fit still pending was for the tab left, which navigation sets after opening,
+/// so it goes: the count of tabs opened moves on ([`State::settled`]). A view the canvas never
+/// drew for the tab left is half made, so `next` then shows as last left; after a drawn view an
+/// open tab keeps it, as a new one is fitted; a tab with no view kept, never drawn, is fitted
+/// (AR-758).
+pub fn settle_view(state: &mut State, next: Option<Uuid>) {
+    let drawn = state.active.is_some() && state.shown == state.active;
+    state.shown = None;
+    if state.active == next {
+        return;
+    }
+    let new = next.is_some_and(|n| !state.tabs.contains(&n));
+    state.settled = state.settled.wrapping_add(1);
+    match next.and_then(|n| state.views.get(&n).copied()) {
+        Some((pan, zoom)) if !drawn => (state.pan, state.zoom, state.fit_pending) = (pan, zoom, false),
+        Some(_) if !new => state.fit_pending = false,
+        _ => state.fit_pending = true,
+    }
+}
+
+/// Opens a diagram in the centre through the narrow context: its tab, added when it has none,
+/// becomes the active one, the view's open diagram follows, and the diagram is selected so
+/// Properties shows it. A skill opens in its own tab the same way, with its text in place of the
+/// canvas. The view of the tab left is kept first; a landing or fit still pending for it never
+/// places the diagram opened. The centre's half runs at once; the centre stops showing a version's
+/// details once the call returns ([`Request::HideVersionDetails`]).
+pub fn open_cx(cx: &mut Ctx, id: Uuid) {
+    keep_left_view(cx.canvas);
+    // What is opened shows in the centre, where a version's details or a changed element would hide it.
+    cx.requests.push(Request::HideVersionDetails);
+    if cx.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), id)) {
+        crate::skill_tab::open_cx(cx, id);
+        return;
+    }
+    cx.canvas.notice = None;
+    if let Err(e) = crate::panels::run_cx(cx, "view.open-diagram", json!({ "diagram": id.to_string() })) {
+        cx.canvas.notice = Some(e);
+        return;
+    }
+    crate::editing::select_cx(cx, vec![id]);
+    settle_view(cx.canvas, Some(id));
+    if !cx.canvas.tabs.contains(&id) {
+        cx.canvas.tabs.push(id);
+    }
+    cx.canvas.active = Some(id);
+}
+
+/// The number `o` holds in `prop`, or 0 when it holds none or one that isn't finite.
+pub fn real(store: &Store, o: Obj, prop: archforge_mof::PropId) -> f64 {
+    match store.get(o, prop) {
+        Ok(Value::Real(v)) if v.is_finite() => v,
+        _ => 0.0,
+    }
+}
+
+pub fn string(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
+    store.get(o, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+}
+
+/// The live objects the list `prop` of `o` refers to.
+pub fn refs(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
+    store.list(o, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|r| store.is_alive(*r)).collect()
+}
+
+/// A node's or an edge's own look on this diagram (the Appearance panel): its colours and width,
+/// each none when the diagram's look holds.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Look {
+    pub fill: Option<ux::Colour>,
+    pub stroke: Option<ux::Colour>,
+    pub text: Option<ux::Colour>,
+    /// The border's or the line's width; none for the diagram's.
+    pub width: Option<f32>,
+}
+
+/// A colour `#rrggbb` as drawn, or none for anything else.
+pub fn colour(hex: &str) -> Option<ux::Colour> {
+    let h = hex.strip_prefix('#').filter(|h| h.len() == 6 && h.is_ascii())?;
+    let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
+    Some(crate::ux::data_colour(byte(0)?, byte(2)?, byte(4)?))
+}
+
+/// The palette whose text reads on `fill`: Light's dark text on a light fill, Dark's light text on
+/// a dark one, so a node's own fill never hides its words.
+pub fn ink_for(fill: ux::Colour) -> &'static Palette {
+    let luma = 0.2126 * fill.r() as f32 + 0.7152 * fill.g() as f32 + 0.0722 * fill.b() as f32;
+    ux::palette(luma < 140.0)
+}
+
+/// The look a node (`node::STYLE`) or an edge (`edge::STYLE`) carries.
+pub fn look_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Look {
+    let Some(s) = element_of(store, o, prop) else { return Look::default() };
+    let c = |p| colour(&string(store, s, p));
+    let width = real(store, s, style::LINE) as f32;
+    Look { fill: c(style::FILL), stroke: c(style::STROKE), text: c(style::TEXT), width: (width > 0.0 && width.is_finite()).then_some(width) }
+}
+
+/// The element the node or line `o` shows, through its property `prop`, when it has one.
+pub fn element_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
+    store.get(o, prop).ok().and_then(|v| v.as_ref()).filter(|e| store.is_alive(*e))
+}
+
+/// The rectangle around every node of the diagram, in diagram units, or none when it has none.
+pub fn diagram_bounds(store: &Store, d: Obj) -> Option<Rect> {
+    let mut out: Option<Rect> = None;
+    for n in refs(store, d, diagram::NODE) {
+        let b = bounds_of(store, n);
+        let r = Rect::from_min_size(pos2(b.x as f32, b.y as f32), vec2(b.width as f32, b.height as f32));
+        if !r.is_finite() {
+            continue;
+        }
+        out = Some(out.map_or(r, |o| o.union(r)));
+    }
+    out
+}
+
+/// Zooms by `factor` about `at`, a point on the screen, so what is under it stays there.
+fn zoom_about(state: &mut State, factor: f32, at: Vec2) {
+    if !factor.is_finite() || factor <= 0.0 {
+        return;
+    }
+    let new = (state.zoom * factor).clamp(ZOOM_RANGE.0, ZOOM_RANGE.1);
+    let ratio = new / state.zoom;
+    state.pan = at - (at - state.pan) * ratio;
+    state.zoom = new;
+}
+
+/// A zoom the user makes by `factor` about `at`: the canvas zooms, and the diagram's kind hears of
+/// it before the canvas next draws ([`State::zoom_intent`]).
+pub fn zoom_by(state: &mut State, factor: f32, at: Vec2) {
+    zoom_about(state, factor, at);
+    state.zoom_intent = if state.zoom_intent == 0.0 { factor } else { state.zoom_intent * factor };
+}
+
+/// Fits the whole diagram into the canvas, zoomed out no further than `least`, or shows an empty
+/// one at 100 % from its top left.
+pub fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>, least: f32) {
+    match bounds {
+        Some(b) if b.width() > 0.0 && b.height() > 0.0 => {
+            let room = (size - Vec2::splat(2.0 * FIT_MARGIN)).max(Vec2::splat(1.0));
+            let z = (room.x / b.width()).min(room.y / b.height()).min(1.0).max(least);
+            state.zoom = z;
+            state.pan = (size - b.size() * z) / 2.0 - b.min.to_vec2() * z;
+        }
+        _ => {
+            state.zoom = 1.0;
+            state.pan = Vec2::ZERO;
+        }
+    }
+    if !state.pan.is_finite() {
+        state.pan = Vec2::ZERO;
+    }
+}
+
+/// The index of diagram `d` as the canvas draws and hits it: the nodes their notations draw behind
+/// (a card that stands behind others) under the other figures, each group in stored order, so a
+/// card or a note placed over such a card stays in sight and takes the press (AR-570). The store's
+/// order is untouched.
+pub fn grid(store: &Store, notations: &archforge_diagram::ProjectView, d: Obj) -> Grid {
+    Grid::build_with(store, d, |n| notations.node_drawn_behind(store, n))
+}
+
+/// A node's rectangle in diagram coordinates: as stored, or a gesture's preview turned back from
+/// the screen. Lines are routed from these, so panning and zooming route nothing anew.
+pub fn model_rect(store: &Store, view: &View, overrides: &std::collections::BTreeMap<Uuid, Rect>, n: Obj) -> archforge_diagram::Rect {
+    match store.uuid(n).ok().and_then(|id| overrides.get(&id)) {
+        Some(r) => {
+            let (x, y) = view.to_canvas(r.min);
+            archforge_diagram::Rect::new(x, y, f64::from(r.width() / view.zoom), f64::from(r.height() / view.zoom))
+        }
+        None => bounds_of(store, n),
+    }
+}
+
+/// The palette a card of the node `n` is drawn in, and its border's width at zoom `z`: a `plain`
+/// card takes the surface, the border and the muted eyebrow, any other the palette's tint;
+/// the node's own look on its diagram goes over either, its own fill bringing the text that reads
+/// on it unless it has its own text colour too; an element of another scope (`elsewhere`) is
+/// dimmed.
+pub fn card_palette(p: &Palette, store: &Store, n: Obj, elsewhere: bool, plain: bool, z: f32) -> (Palette, f32) {
+    let dim = |c: ux::Colour| if elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
+    let look = look_of(store, n, node::STYLE);
+    let ink: &Palette = match look.fill {
+        Some(f) => ink_for(f),
+        None => p,
+    };
+    let (fill, edge, eyebrow, line) =
+        if plain { (p.surface, p.border, ink.text_secondary, p.border) } else { (p.card, p.card_edge, ink.card_ink, p.card_line) };
+    let palette = Palette {
+        card: dim(look.fill.unwrap_or(fill)),
+        card_edge: dim(look.stroke.unwrap_or(edge)),
+        card_ink: dim(eyebrow),
+        card_line: dim(look.stroke.map_or(line, |c| c.gamma_multiply(0.5))),
+        text: dim(look.text.unwrap_or(ink.text)),
+        text_muted: dim(ink.text_muted),
+        text_secondary: dim(ink.text_secondary),
+        ..*p
+    };
+    (palette, look.width.map_or(1.0, |w| (w * z).max(1.0)))
+}
+
+/// A card's name as a card at `rect` shows it below [`DETAIL_ZOOM`]: alone, in `ink`, in the
+/// middle of the card, in the section style no smaller than at that zoom, cut to the card's inset.
+pub fn name_from_afar(inner: &egui::Painter, name: &str, rect: Rect, z: f32, ink: ux::Colour) {
+    let room = Some((rect.width() - 2.0 * CARD_INSET * z).max(0.0));
+    let g = ux::galley(inner, name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), ink, room);
+    inner.galley(rect.center() - g.size() / 2.0, g, ink.into());
+}
+
+/// The row of `card` at `y` units below its top, counted across its compartments as
+/// the canvas lays them out: a row takes its pitch from a little over its top; none on a
+/// compartment's padding or past the last row.
+pub fn row_at(card: &archforge_diagram::figure::Card, y: f32) -> Option<usize> {
+    slots(card).into_iter().filter(|(_, s, _)| matches!(s, Slot::Row(_))).position(|(top, _, _)| (top - 4.0..top - 4.0 + CARD_ROW).contains(&y))
+}
+
+/// A card's places under its header, each with its top in units below the card's and the
+/// compartment it is in: a row a pitch apart, an empty compartment of several still a row. Each
+/// compartment is padded as the card's first and last are: its rows start as far under its
+/// dividing line as the first row under the header's, and end as far over the next line as the
+/// last row over the card's foot, so a pitch and a dividing line part two compartments.
+pub fn slots(card: &archforge_diagram::figure::Card) -> Vec<(f32, Slot<'_>, usize)> {
+    let mut out = Vec::new();
+    // Where the next row sits, in pitches below the first.
+    let mut at = 0.0_f32;
+    for (c, rows) in card.compartments.iter().enumerate() {
+        if c > 0 {
+            at += COMPARTMENT_GAP;
+            out.push((CARD_FIRST_ROW + at * CARD_ROW - COMPARTMENT_TOP, Slot::Line, c));
+        }
+        if rows.is_empty() && card.compartments.len() > 1 {
+            out.push((CARD_FIRST_ROW + at * CARD_ROW, Slot::Empty, c));
+            at += 1.0;
+        }
+        for row in rows {
+            out.push((CARD_FIRST_ROW + at * CARD_ROW, Slot::Row(row), c));
+            at += 1.0;
+        }
+    }
+    out
+}
+
+/// The top of row `index` of `card`, counted across its compartments, in units below the card's.
+pub fn row_top(card: &archforge_diagram::figure::Card, index: usize) -> Option<f32> {
+    slots(card).into_iter().filter(|(_, s, _)| matches!(s, Slot::Row(_))).nth(index).map(|(top, _, _)| top)
+}
+
+/// The top of compartment `c`'s first place (its first row, or the row an empty one takes).
+pub fn compartment_top(card: &archforge_diagram::figure::Card, c: usize) -> Option<f32> {
+    slots(card).into_iter().find(|(_, s, at)| *at == c && !matches!(s, Slot::Line)).map(|(top, _, _)| top)
+}
+
+/// How tall `card` is to show every place it has: [`archforge_diagram::figure::Card::height`],
+/// the height a command grows a node to, which lays the places out as [`slots`] does.
+pub fn card_height(card: &archforge_diagram::figure::Card) -> f32 {
+    card.height()
+}
+
+/// `card` with a row being typed in place: a new, blank one at the end of compartment
+/// `compartment`, or row `row` (counted across the compartments) blanked under its field.
+pub fn with_draft(card: &mut archforge_diagram::figure::Card, compartment: usize, row: Option<usize>) {
+    match row {
+        None => {
+            if let Some(rows) = card.compartments.get_mut(compartment) {
+                rows.push(archforge_diagram::figure::Row { mark: None, text: String::new(), linked: false, slanted: false, underlined: false });
+            }
+        }
+        Some(index) => {
+            if let Some(r) = card.compartments.iter_mut().flatten().nth(index) {
+                r.text.clear();
+            }
+        }
+    }
+}
+
+/// One place in a card's compartments, at its top in units below the card's.
+pub enum Slot<'a> {
+    Row(&'a archforge_diagram::figure::Row),
+    /// The row an empty compartment of several still takes, so the line between them shows.
+    Empty,
+    Line,
+}
+
+/// An eyebrow as drawn: in capitals, but for a keyword between guillemets, which keeps its case
+/// (`«keyword» · BILLING`).
+pub fn eyebrow_case(text: &str) -> String {
+    let mut keyword = false;
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '«' => keyword = true,
+            '»' => keyword = false,
+            _ => {}
+        }
+        if keyword || c == '»' { out.push(c) } else { out.extend(c.to_uppercase()) }
+    }
+    out
+}
+
+/// A text a notation describes, in the user's language.
+pub fn say(t: &archforge_diagram::figure::Text) -> String {
+    match t {
+        archforge_diagram::figure::Text::Said(template, args) => {
+            let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            fmt(&tr(template), &args)
+        }
+        archforge_diagram::figure::Text::Plain(s) => s.clone(),
+    }
+}
+
+/// A rectangle's outline in dashes of `dash` with gaps of `gap`, as the design draws the card of an
+/// element of another scope.
+pub fn dashed_rect(paint: &egui::Painter, rect: Rect, stroke: Stroke, dash: f32, gap: f32) {
+    let r = rect.shrink(stroke.width / 2.0);
+    let path = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
+    paint.extend(egui::Shape::dashed_line(&path, stroke, dash.max(1.0), gap.max(1.0)));
+}
+
+/// Draws a line's triangle, diamond or open arrow at `tip`, coming from `back`, a hollow one filled
+/// with `bg`, at its [`mark_outline`].
+#[allow(clippy::too_many_arguments, reason = "a mark is drawn at its end, in its stroke and over what it is drawn on")]
+pub fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: ux::Colour) {
+    let outline = mark_outline(mark, tip, back, z);
+    match (mark, outline.as_slice()) {
+        (EndMark::Triangle | EndMark::HollowDiamond, [_, ..]) => {
+            paint.add(egui::Shape::convex_polygon(outline, bg, stroke));
+        }
+        (EndMark::FilledDiamond | EndMark::FilledTriangle, [_, ..]) => {
+            paint.add(egui::Shape::convex_polygon(outline, stroke.color, stroke));
+        }
+        (EndMark::OpenArrow, [tip, left, right]) => {
+            paint.line_segment([*tip, *left], stroke);
+            paint.line_segment([*tip, *right], stroke);
+        }
+        _ => {}
+    }
+}
+
+/// A line's points on screen, from its source's edge to its target's, run as its style or its
+/// diagram's says (straight, at right angles, around the other cards, or curved) through its
+/// waypoints; a line from a card back to itself loops out of its right side. Routed in diagram
+/// coordinates from the rectangles drawn, so a card being dragged takes its lines along. None
+/// when an end is missing.
+pub fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
+    let (store, view) = (d.store, d.view);
+    let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };
+    let dragged = store.uuid(e).ok().and_then(|id| d.segment_drag.as_ref().filter(|(s, _)| *s == id)).map(|(_, route)| route);
+    let points: Vec<Pos2> = if source == target {
+        self_loop(d.node_rect(source), view.zoom)
+    } else if let Some(route) = dragged {
+        route.iter().map(|(x, y)| view.to_screen(*x, *y)).collect()
+    } else {
+        let rect_of = |n: Obj| model_rect(store, view, d.overrides, n);
+        let via: Vec<(f64, f64)> = refs(store, e, edge::WAYPOINT).into_iter().map(|w| (real(store, w, point::X), real(store, w, point::Y))).collect();
+        let way = archforge_diagram::route::way_of(store, e);
+        // The other cards and notes on the diagram, which an avoiding line goes around.
+        let boxes: Vec<archforge_diagram::Rect> = if way == archforge_diagram::Way::Avoiding {
+            d.boxes.iter().filter(|(n, _)| *n != source && *n != target).map(|(_, r)| *r).collect()
+        } else {
+            Vec::new()
+        };
+        let at = d.spreads.get(&e).copied().unwrap_or((0.5, 0.5));
+        archforge_diagram::route(way, &rect_of(source), &rect_of(target), at, &via, &boxes).into_iter().map(|(x, y)| view.to_screen(x, y)).collect()
+    };
+    if points.len() < 2 || points.iter().any(|q| !q.is_finite()) {
+        return None;
+    }
+    Some(points)
 }
 
 /// A short end text, four characters at zoom 1, sits 30 points along a level or an upright line

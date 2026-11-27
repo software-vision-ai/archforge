@@ -1347,8 +1347,8 @@ pub(crate) fn retain_valid(state: &mut UmlState, store: &Store) {
 /// stands. Gives the ids by name: the classes, their cards (lower case), the diagram, and, drawn,
 /// the association and its diamond.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_recommends(shell: &mut crate::Shell, drawn: bool) -> Result<std::collections::BTreeMap<&'static str, String>, String> {
-    let session = shell.session.as_mut().ok_or("the sample needs a session")?;
+pub(crate) fn put_recommends(cx: &mut Ctx, drawn: bool) -> Result<std::collections::BTreeMap<&'static str, String>, String> {
+    let session = cx.session.as_mut().ok_or("the sample needs a session")?;
     let store = session.doc();
     let find = |n: &str| {
         store
@@ -1420,7 +1420,7 @@ pub(crate) fn put_recommends(shell: &mut crate::Shell, drawn: bool) -> Result<st
     ids.insert("product", product_node);
     ids.insert("catalog", catalog_node);
     ids.insert("diagram", d.clone());
-    crate::canvas::open(shell, Uuid::parse(&d).ok_or("the diagram's id")?);
+    crate::canvas::open_cx(cx, Uuid::parse(&d).ok_or("the diagram's id")?);
     Ok(ids)
 }
 

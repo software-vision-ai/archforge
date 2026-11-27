@@ -11,9 +11,9 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-pub use archforge_shell_api::skill_tab::Doc;
+pub use archforge_shell_api::skill_tab::{Doc, is_skill};
+pub(crate) use archforge_shell_api::skill_tab::{body_of, open_cx, skill_obj};
 
-use crate::cx::Ctx;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::markdown::{self, Format};
@@ -35,52 +35,9 @@ fn pending(doc: &Doc) -> bool {
     doc.text != doc.saved && doc.refused.as_ref().is_none_or(|(t, _)| *t != doc.text)
 }
 
-/// Whether `id` names a live skill.
-pub fn is_skill(store: &Store, id: Uuid) -> bool {
-    skill_obj(store, id).is_some()
-}
-
-fn skill_obj(store: &Store, id: Uuid) -> Option<Obj> {
-    let s = store.by_uuid(id)?;
-    (store.is_alive(s) && store.class_of(s).ok() == Some(archforge_core::SKILL)).then_some(s)
-}
-
-fn body_of(store: &Store, s: Obj) -> String {
-    store.get(s, archforge_core::skill::BODY).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
-}
-
 /// Opens a skill in its tab, added when it has none.
 pub fn open(shell: &mut Shell, id: Uuid) {
     shell.cx(|cx| open_cx(cx, id));
-}
-
-/// [`open`] through the narrow context.
-pub(crate) fn open_cx(cx: &mut Ctx, id: Uuid) {
-    let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
-    let Some(s) = skill_obj(store, id) else { return };
-    if !cx.canvas.skills.iter().any(|d| d.skill == id) {
-        let body = body_of(store, s);
-        cx.canvas.skills.push(Doc {
-            name: archforge_core::skills::name_of(store, s),
-            focus_name: false,
-            settings_refused: None,
-            skill: id,
-            text: body.clone(),
-            saved: body,
-            changed_at: 0.0,
-            preview: false,
-            selection: None,
-            refused: None,
-            notice: None,
-            link: None,
-        });
-    }
-    if !cx.canvas.tabs.contains(&id) {
-        cx.canvas.tabs.push(id);
-    }
-    cx.canvas.active = Some(id);
-    cx.canvas.notice = None;
-    cx.canvas.focused = false;
 }
 
 /// The text a new skill starts from, shaped as an agent's skill is, in the interface's language:

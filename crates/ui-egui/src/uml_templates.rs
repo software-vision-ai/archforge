@@ -698,12 +698,10 @@ fn commit(cx: &mut Ctx, edit: &TemplateEdit) {
 /// The open editor's bin pressed, as a sample to look at: the removal refused while a binding
 /// uses the parameter.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn remove_sample(shell: &mut crate::Shell) {
-    shell.cx(|cx| {
-        if let Some(edit) = uml(cx.notation_states).and_then(|uml| uml.template.clone()) {
-            remove_parameter(cx, &edit);
-        }
-    });
+pub(crate) fn remove_sample(cx: &mut Ctx) {
+    if let Some(edit) = uml(cx.notation_states).and_then(|uml| uml.template.clone()) {
+        remove_parameter(cx, &edit);
+    }
 }
 
 /// Drops an editor, or a refused removal, whose classifier or parameter is gone.
