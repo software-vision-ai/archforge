@@ -1114,8 +1114,8 @@ pub fn problems_section_cx(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect
         if resp.hovered() && live {
             paint.rect_filled(row, 6.0, p.page);
         }
-        paint.circle_stroke(pos2(row.left() + 10.0, row.center().y), 6.0, Stroke::new(1.2, p.key_foreign));
-        ux::text(&paint, pos2(row.left() + 8.0, row.top() + 6.0), "!", types::TINY, p.key_foreign, None);
+        paint.circle_stroke(pos2(row.left() + 10.0, row.center().y), 6.0, Stroke::new(1.2, p.warning));
+        ux::text(&paint, pos2(row.left() + 8.0, row.top() + 6.0), "!", types::TINY, p.warning, None);
         ux::text(&paint, row.min + vec2(26.0, 6.0), text, types::SMALL, p.text, Some((width - 30.0).max(0.0)));
         if resp.clicked()
             && live

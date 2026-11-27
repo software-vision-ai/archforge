@@ -17,9 +17,9 @@ use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 pub(crate) use archforge_shell_api::editing::Action;
-pub use archforge_shell_api::editing::{Corner, EntityMenu, Gesture, NodeRename, NoteEdit};
+pub use archforge_shell_api::editing::{Corner, ElementMenu, Gesture, NodeRename, NoteEdit};
 
-use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_ROW, Tool, View};
+use crate::canvas::{CARD_FIRST_ROW, CARD_HEADER, CARD_ROW, Tool, View};
 use crate::cx::{Ctx, Request};
 use crate::home::control;
 use crate::i18n::tr;
@@ -46,7 +46,7 @@ const ARRANGE: Vec2 = vec2(189.0, 42.0);
 const ARRANGE_GAP: f32 = 16.0;
 /// The gap the stack action leaves between nodes.
 const STACK_GAP: f64 = 24.0;
-/// The entity menu's width and row height.
+/// The element menu's width and row height.
 const MENU_WIDTH: f32 = 260.0;
 const MENU_ROW: f32 = 30.0;
 
@@ -515,7 +515,7 @@ fn decide(
                 && kind.is_some_and(|k| k.menu(store, entity, resp.ctx.os() == egui::os::OperatingSystem::Mac).is_some())
                 && let (Some(node), Some(entity)) = (uuid(store, n), uuid(store, entity))
             {
-                return Action::Menu(EntityMenu { node, entity, at: pos });
+                return Action::Menu(ElementMenu { node, entity, at: pos });
             }
             // A double click puts a moved cardinality text back, or a line's dragged route.
             if resp.double_clicked() && hit_node(pos).is_none() {
@@ -570,7 +570,7 @@ fn decide(
             {
                 let rect = view.rect(&bounds_of(store, n));
                 let y_units = (pos.y - rect.top()) / view.zoom;
-                if y_units < ENTITY_HEADER {
+                if y_units < CARD_HEADER {
                     return Action::Rename(node, entity_id);
                 }
                 // The row under the pointer, counted across the card's compartments.
@@ -578,7 +578,7 @@ fn decide(
                 let row = match card {
                     Some(card) => crate::canvas::row_at(&card, y_units),
                     None => {
-                        let row = ((y_units - (ENTITY_FIRST_ROW - 4.0)) / ENTITY_ROW).floor();
+                        let row = ((y_units - (CARD_FIRST_ROW - 4.0)) / CARD_ROW).floor();
                         (row >= 0.0).then_some(row as usize)
                     }
                 };
@@ -1198,7 +1198,7 @@ fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
 }
 
 /// Draws what sits over the diagram: the marquee, a selected node's adorners, the Arrange bar,
-/// the name typed in place and the entity menu, with the notations' drafts, rows and menus each at
+/// the name typed in place and the element menu, with the notations' drafts, rows and menus each at
 /// its layer among them ([`crate::notation_ui::Layer`]); then reads the keys.
 pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, view: View, d: Obj, overrides: &BTreeMap<Uuid, Rect>) {
     let paint = ui.painter().with_clip_rect(r);
@@ -1305,7 +1305,7 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         note_field(shell, ui, p, rect, view.zoom);
     }
     if let Some(menu) = shell.canvas.menu.clone() {
-        entity_menu(shell, ui, p, r, &menu);
+        element_menu(shell, ui, p, r, &menu);
     }
     crate::notation_ui::overlays(shell, ui, Layer::Menus, &on);
     keyboard(shell, ui, d);
@@ -1617,7 +1617,7 @@ pub(crate) fn new_row_keys(mac: bool) -> &'static str {
 /// this diagram and Delete from the model… are every element's; the diagram's kind adds its own
 /// ([`crate::kinds::DiagramKind::menu`]: a table's related tables, new column and collapse, a
 /// class's new attribute), each with what it does.
-fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &EntityMenu) {
+fn element_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &ElementMenu) {
     let paint = ui.painter().clone();
     let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
     let (delete_chord, model_chord) = if mac { ("⌫", "⇧⌫") } else { ("Del", "Shift Del") };

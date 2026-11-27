@@ -18,7 +18,7 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::canvas::{DETAIL_ZOOM, ENTITY_ROW, View};
+use crate::canvas::{CARD_ROW, DETAIL_ZOOM, View};
 use crate::cx::{Ctx, Request};
 use crate::i18n::{fmt, tr};
 use crate::panels::control_cx;
@@ -52,7 +52,7 @@ const NAME_ID: &str = "workspace.canvas.member.name";
 const TYPE_ID: &str = "workspace.canvas.member.type";
 /// The ring's height, a row's pitch, so a draft takes its row's place and no more and stays clear
 /// of the row over it; its fields' inset in it; and its details button and type chevron, in units.
-const ROW_HEIGHT: f32 = ENTITY_ROW;
+const ROW_HEIGHT: f32 = CARD_ROW;
 const INSET: f32 = 2.0;
 const BUTTON: f32 = 18.0;
 
@@ -211,7 +211,7 @@ pub(crate) fn row(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, view: View) {
     let field_h = (ROW_HEIGHT - 2.0 * INSET) * z;
     let details = Rect::from_min_size(pos2(row.right() - (BUTTON + INSET) * z, inner_top), vec2(BUTTON * z, field_h));
     // The name where a row's text starts, so the draft reads as the row it becomes.
-    let left = card.left() + crate::canvas::ENTITY_TEXT * z;
+    let left = card.left() + crate::canvas::CARD_TEXT * z;
     let usable = (details.left() - 4.0 * z - left).max(0.0);
     let operation = inline.edit.kind == MemberKind::Operation;
     let literal = inline.edit.kind == MemberKind::Literal;
@@ -463,16 +463,16 @@ pub(crate) fn add_buttons(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, clip: Rect, 
     for &(kind, key, hint) in adds {
         // A card of one compartment with no row yet (an enumeration without literals) has its
         // first row's place under the header.
-        let first = (card.compartments.len() == 1).then_some(crate::canvas::ENTITY_FIRST_ROW);
+        let first = (card.compartments.len() == 1).then_some(crate::canvas::CARD_FIRST_ROW);
         let Some(top) = crate::canvas::compartment_top(&card, compartment(kind)).or(first) else { continue };
         // A compartment past the card's foot (a card made short) takes its member from the keys.
-        if (top + ENTITY_ROW) * z > rect.height() + z {
+        if (top + CARD_ROW) * z > rect.height() + z {
             continue;
         }
         // As tall as a row at the card's zoom, never too small to hit.
-        let size = (ENTITY_ROW * z).max(14.0);
+        let size = (CARD_ROW * z).max(14.0);
         let b = Rect::from_min_size(
-            pos2(rect.right() - size - 6.0 * z, rect.top() + (top - 3.0) * z + (ENTITY_ROW * z - size) / 2.0),
+            pos2(rect.right() - size - 6.0 * z, rect.top() + (top - 3.0) * z + (CARD_ROW * z - size) / 2.0),
             egui::Vec2::splat(size),
         );
         if !clip.intersects(b) {

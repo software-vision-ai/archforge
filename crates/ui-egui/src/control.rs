@@ -525,7 +525,7 @@ mod tests {
             n += 1;
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        let mut shell = Shell::new(crate::Services::default());
+        let mut shell = Shell::new(crate::Services::default(), &crate::tests::SCREENS);
         shell.session = Some(archforge_notations::new_project_session("Shop", ids).unwrap());
         shell
     }

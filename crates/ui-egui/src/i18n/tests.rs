@@ -12,7 +12,7 @@ use super::*;
 
 /// Every catalogue of a language the shell registers ([`tables`]): its own, then each notation's.
 fn catalogues_of(lang: &Language) -> Vec<&'static super::Rows> {
-    tables(crate::notation_ui::UIS).map(|table| table.iter().find(|rows| rows.code == lang.code).unwrap()).collect()
+    tables(crate::tests::SCREENS.catalogues()).map(|table| table.iter().find(|rows| rows.code == lang.code).unwrap()).collect()
 }
 
 /// A language's rows in all its catalogues, read into one as the lookups read them.
@@ -112,7 +112,7 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     strings.extend(crate::skill_tab::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::canvas::texts().map(|s| (String::new(), s.to_string())));
     // The hover texts of each diagram kind's tools, which the toolbar takes through the kind.
-    let tools = crate::kinds::KINDS.iter().flat_map(|k| k.tools());
+    let tools = crate::tests::SCREENS.kinds().iter().flat_map(|k| k.tools());
     strings.extend(tools.flat_map(|t| std::iter::once(t.hint).chain(t.chevron.map(|(_, hint)| hint))).map(|s| (String::new(), s.to_string())));
     // The words of each notation's figures, which `tr` takes through the figures' descriptions.
     strings.extend(crate::er_ui::texts().map(|s| (String::new(), s.to_string())));
@@ -300,7 +300,7 @@ fn metamodel_names_become_words() {
 #[test]
 fn model_words_are_the_catalogues_rows_in_the_language_shown() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = crate::Shell::new(crate::Services::default());
+    let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
     use crate::model_words::{kind_label, literal_label, property_label};
     use archforge_mof::{DataId, DataKind, TypeRef};
     let universe = archforge_notations::universe().unwrap();
@@ -317,7 +317,7 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
     let package = u32::try_from(literals.iter().position(|l| &**l == "package").unwrap()).unwrap();
     set_language("de");
     let german = |key: &str| row("de", "", key);
-    let uis = crate::notation_ui::UIS;
+    let uis = crate::tests::SCREENS.notation_uis();
     assert_eq!(property_label(uis, &universe, archforge_uml::classifier::IS_ABSTRACT), Some(german("Is abstract")));
     assert_ne!(german("Is abstract"), "Is abstract", "the row checked is really a translation");
     assert_eq!(property_label(uis, &universe, archforge_er::foreign_key::ON_DELETE), Some(german("On delete")));
@@ -357,7 +357,7 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
 #[test]
 fn model_words_are_said_for_the_core_and_the_notations_given() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = crate::Shell::new(crate::Services::default());
+    let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
     use crate::model_words::{literal_label, property_label, words};
     use archforge_mof::{DataKind, TypeRef};
     let universe = archforge_notations::universe().unwrap();
@@ -499,7 +499,7 @@ const EDGES: [u64; 8] = [0, 1, 2, 5, 11, 21, 100, 1000];
 #[test]
 fn every_languages_plural_rows_give_their_form_at_the_edge_numbers() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = crate::Shell::new(crate::Services::default());
+    let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
     // Spelled out for one row in every language.
     let days = |code: &str, n: u64| {
         set_language(code);
@@ -880,7 +880,7 @@ fn the_screen_refuses_hidden_characters_addresses_and_instructions() {
 /// ellipses English asks for, and passes the screen.
 #[test]
 fn every_catalogue_is_keyed_as_english_and_passes_the_screen() {
-    for table in tables(crate::notation_ui::UIS) {
+    for table in tables(crate::tests::SCREENS.catalogues()) {
         let english_text = table[0].text;
         let english = rows(english_text);
         assert!(!english.is_empty(), "the English catalogue {} is empty", table[0].catalogue);
@@ -969,12 +969,16 @@ fn every_catalogue_in_the_folder_is_registered() {
     let mut files = Vec::new();
     catalogue_files(&dir, "", &mut files);
     files.sort();
-    let mut registered: Vec<String> = tables(crate::notation_ui::UIS).flatten().map(|rows| rows.catalogue.to_string()).collect();
+    let mut registered: Vec<String> = tables(crate::tests::SCREENS.catalogues()).flatten().map(|rows| rows.catalogue.to_string()).collect();
     registered.sort();
     assert_eq!(files, registered, "a catalogue the build checks is a registered one, and the other way round");
-    assert_eq!(tables(crate::notation_ui::UIS).count(), 1 + crate::notation_ui::UIS.len(), "the shell's table and one for each notation");
+    assert_eq!(
+        tables(crate::tests::SCREENS.catalogues()).count(),
+        1 + crate::tests::SCREENS.parts().len(),
+        "the shell's table and one for each notation"
+    );
     let languages: Vec<&str> = LANGUAGES.iter().map(|l| l.code).collect();
-    for table in tables(crate::notation_ui::UIS) {
+    for table in tables(crate::tests::SCREENS.catalogues()) {
         let catalogued: Vec<&str> = table.iter().map(|rows| rows.code).collect();
         assert_eq!(catalogued, languages, "{} is one of a table with one catalogue for each language, in the languages' order", table[0].catalogue);
     }
@@ -992,8 +996,8 @@ fn every_catalogue_in_the_folder_is_registered() {
 /// as it is made.
 #[test]
 fn every_row_finds_its_text_in_every_language() {
-    let _shell = crate::Shell::new(crate::Services::default());
-    for table in tables(crate::notation_ui::UIS) {
+    let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
+    for table in tables(crate::tests::SCREENS.catalogues()) {
         let english = rows(table.first().expect("a table has its English catalogue").text);
         for (lang, catalogue) in LANGUAGES.iter().zip(table) {
             assert_eq!(catalogue.code, lang.code, "{} is in the languages' order", catalogue.catalogue);

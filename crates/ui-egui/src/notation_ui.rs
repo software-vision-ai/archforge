@@ -1,8 +1,8 @@
-//! The notations the shell knows (`UIS`), what an opening does to a model with a shell's notations
-//! (`open_repair`), how their overlays are drawn over the canvas (`overlays`), and the forwarders
-//! over the whole shell for code not on the narrow context yet. What a notation brings to the shell
-//! (`NotationUi`, `NotationState`, `NotationStates`), the free functions that ask the shell's
-//! notations and the data types they hand across are the shell's interfaces'
+//! The app's notations for the tests (`UIS`), what an opening does to a model with a shell's
+//! notations (`open_repair`), how their overlays are drawn over the canvas (`overlays`), and the
+//! forwarders over the whole shell for code not on the narrow context yet. What a notation brings
+//! to the shell (`NotationUi`, `NotationState`, `NotationStates`), the free functions that ask the
+//! shell's notations and the data types they hand across are the shell's interfaces'
 //! (`archforge_shell_api::notation_ui`), and keep their old paths here.
 
 use archforge_mof::{Store, Uuid};
@@ -29,7 +29,9 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &
     }
 }
 
-/// The notations the shell knows.
+/// The app's notations, ER's and UML's, for the tests that ask them without a shell; a shell
+/// knows those of the screens parts it is given ([`Shell::new`]).
+#[cfg(test)]
 pub(crate) static UIS: &[&dyn NotationUi] = &[&crate::er_ui::ErUi, &crate::uml_ui::UmlUi];
 
 /// What an opening does to a project's model before its session starts with the notations `uis`:

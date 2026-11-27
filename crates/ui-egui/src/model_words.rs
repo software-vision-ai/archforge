@@ -110,14 +110,14 @@ pub fn kind_label(uis: &[&'static dyn NotationUi], universe: &Universe, class: C
 }
 
 /// Every key these labels look up, for the catalogue tests: each property a card shows and each
-/// literal of the core and of each notation's metamodel of the app, and the kinds ([`kinds`]) but
+/// literal of the core and of each notation's metamodel the tests register as the app does, and the kinds ([`kinds`]) but
 /// those with a notation's word, whose rows the scan reads from each notation's
 /// [`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word).
 #[cfg(test)]
 pub(crate) fn texts() -> Vec<String> {
     let Ok(universe) = archforge_notations::universe() else { return Vec::new() };
     let mut all = Vec::new();
-    for metamodel in universe.metamodels().filter(|m| in_the_model(UIS, m.index)) {
+    for metamodel in universe.metamodels().filter(|m| in_the_model(crate::tests::SCREENS.notation_uis(), m.index)) {
         all.extend(metamodel.props.iter().filter(|p| archforge_notations::differences::on_a_card(p)).map(|p| words(&p.name)));
         for ty in &metamodel.data_types {
             if let DataKind::Enumeration(literals) = &ty.kind {
