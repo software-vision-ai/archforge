@@ -476,9 +476,9 @@ pub fn select_field_cx(
     field
 }
 
-/// [`select_field_cx`] for a package's path, its names from the top in `parts` (`Commerce platform
-/// › Orders`): too long for the field, it is cut from its front, so the package's own name shows
-/// (`… › Orders`); the whole path is its tooltip and accessible name.
+/// [`select_field_cx`] for a path of nested elements, its names from the top in `parts` (`Commerce
+/// platform › Orders`): too long for the field, it is cut from its front, so the last element's own
+/// name shows (`… › Orders`); the whole path is its tooltip and accessible name.
 pub fn path_select_field_cx(
     cx: &mut Ctx,
     ui: &egui::Ui,
@@ -505,7 +505,7 @@ pub fn path_select_field_cx(
     field
 }
 
-/// What joins a package's path: `Commerce platform › Orders`.
+/// What joins the names of a path of nested elements: `Commerce platform › Orders`.
 pub const PATH_SEP: &str = " › ";
 
 /// An editable select: what it shows and offers.
@@ -728,9 +728,9 @@ pub fn menu_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str,
 }
 
 /// [`menu_cx`] with a muted note after an item's text where `notes` has one (empty for none), such as
-/// the package that tells two types of one name apart; the note joins the row's accessible name.
-/// `note_parts` holds a note's parts when it is a package's path: too long for its row, it folds
-/// from its front (`… › Orders › EU`) and the row's tooltip says it whole.
+/// the owner that tells two types of one name apart; the note joins the row's accessible name.
+/// `note_parts` holds a note's parts when it is a path of nested elements: too long for its row, it
+/// folds from its front (`… › Orders › EU`) and the row's tooltip says it whole.
 pub fn menu_noted_cx(
     cx: &mut Ctx,
     ui: &egui::Ui,
@@ -745,10 +745,10 @@ pub fn menu_noted_cx(
     menu_frame(cx, ui, p, anchor, id, MenuRows { items, notes, item_parts: &[], note_parts }, width)
 }
 
-/// [`menu_cx`] of package paths, each given by its names from the top (`paths`): as wide as the
-/// longest needs, inside the window; a path still too long folds from its front, so the packages
-/// at its end, the ones that tell it apart, show (`… › Orders › EU`), and its row's tooltip says
-/// it whole.
+/// [`menu_cx`] of paths of nested elements, each given by its names from the top (`paths`): as wide
+/// as the longest needs, inside the window; a path still too long folds from its front, so the
+/// names at its end, the ones that tell it apart, show (`… › Orders › EU`), and its row's tooltip
+/// says it whole.
 pub fn menu_paths_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, paths: &[Vec<String>]) -> Option<usize> {
     let items: Vec<String> = paths.iter().map(|parts| parts.join(PATH_SEP)).collect();
     let width = {
@@ -759,7 +759,8 @@ pub fn menu_paths_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id:
 }
 
 /// What a menu's rows show: each item, its muted note (empty for none), and, where the item or the
-/// note is a package's path, its parts, which fold from the front when the row is too narrow.
+/// note is a path of nested elements, its parts, which fold from the front when the row is too
+/// narrow.
 #[derive(Clone, Copy)]
 struct MenuRows<'a> {
     items: &'a [String],
@@ -965,7 +966,7 @@ fn menu_body(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id
             paint.rect_filled(row, 5.0, p.page);
         }
         let room = (row.width() - 20.0).max(0.0);
-        // A path too long for its room folds from its front, its end, the packages that tell it
+        // A path too long for its room folds from its front, its end, the names that tell it
         // apart, kept; the row's tooltip says it whole.
         let fits = |t: &str, width: f32| ux::galley(&paint, t, types::SMALL, p.text, None).size().x <= width;
         let mut folded = false;

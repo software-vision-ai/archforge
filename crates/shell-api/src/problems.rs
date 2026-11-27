@@ -7,9 +7,9 @@ use archforge_mof::{Obj, Store};
 
 use crate::notation_ui::{NotationUi, Problem};
 
-/// The problems a selection shows, from the frame's map: its own (a column's are its table's), or
-/// for a notation's top element (ER's schema) or a diagram of one those of every element in it,
-/// each with the element a click selects.
+/// The problems a selection shows, from the frame's map: its own (a part's are those of the element
+/// it belongs to), or for a notation's top element or a diagram of one those of every element in
+/// it, each with the element a click selects.
 pub fn of(uis: &[&'static dyn NotationUi], store: &Store, map: &BTreeMap<Obj, Vec<String>>, subject: Obj) -> Vec<Problem> {
     let ui = crate::notation_ui::of(uis, store, subject);
     let scope = if store.class_of(subject).ok() == Some(archforge_diagram::DIAGRAM) {

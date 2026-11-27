@@ -1,7 +1,7 @@
 //! How a search or a filter matches what a person types: the typed words folded once by
 //! craft-i18n's `Folder`, the texts they are matched against folded the same way, and where a
 //! word may start in a folded text, never inside a letter. Home's search, a project's, the
-//! Models, Diagrams and Versions filters, the version list and the stereotype picker all match
+//! Models, Diagrams and Versions filters, the version list and a notation's pickers all match
 //! through it (`archforge_ui_egui::home_search` re-exports it under its old path).
 
 use craft_i18n::{Folded, Folder};
@@ -9,8 +9,8 @@ use craft_i18n::{Folded, Folder};
 /// What was typed into a search or a filter, folded once by craft-i18n's `Folder`: capitals,
 /// accents, `ß` against `ss` and compatibility forms (full-width letters, ligatures) count for
 /// nothing. Every name search a person types into matches through it, so Home's search, a
-/// project's, the Models, Diagrams and Versions filters, the version list and the stereotype
-/// picker agree.
+/// project's, the Models, Diagrams and Versions filters, the version list and a notation's
+/// pickers agree.
 #[derive(Debug, Clone)]
 pub struct Typed {
     /// Folded once and never again: a second fold can reorder marks a dropped character kept

@@ -212,7 +212,8 @@ pub(crate) fn ghost_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: eg
 fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
-    // A notation may title the first section otherwise (a column's panel is its table's).
+    // A notation may title the first section otherwise (a part's panel is the one of the element it
+    // belongs to).
     let notation = shell.session.as_ref().zip(subject.obj).and_then(|(s, o)| crate::notation_ui::of(shell.notation_uis, s.doc(), o));
     let heading = shell.session.as_ref().zip(subject.obj).zip(notation).and_then(|((s, o), n)| n.heading(s.doc(), o));
     let word = heading.unwrap_or_else(|| subject.word.clone());
@@ -347,8 +348,8 @@ pub(crate) fn description_pending(panels: &State) -> bool {
 /// The description under the heading: typed in place, committed through `element.describe` on Enter
 /// or when the keyboard leaves it, and when the selection moves on ([`flush_description`]); Escape
 /// gives the typing up, a refused draft too, and the description as written comes back. It
-/// shows what the element's notation keeps: an ER element's description, a UML element's
-/// description Comment (AR-186).
+/// shows what the element's notation keeps: a description of its own, or a comment that describes
+/// it (AR-186).
 fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject) {
     let (Some(id), Some(obj)) = (subject.id, subject.obj) else { return };
     let current = description_now(shell, obj);
@@ -572,8 +573,9 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     // or selection starts at the top, an editor that opens or is refused is brought into view, the
     // wheel over the body moves it within its content.
     let body = Rect::from_min_max(pos2(r.left(), body_y), r.max);
-    // A notation may show another element's page for its element (a column shows its table's), so
-    // selecting one after the other in the same panel keeps the scroll ([`NotationUi::page`](crate::notation_ui::NotationUi::page)).
+    // A notation may show another element's page for its element (a part shows the page of the
+    // element it belongs to), so selecting one after the other in the same panel keeps the scroll
+    // ([`NotationUi::page`](crate::notation_ui::NotationUi::page)).
     let page = match (shell.session.as_ref(), s.obj) {
         (Some(session), Some(o)) => {
             let store = session.doc();

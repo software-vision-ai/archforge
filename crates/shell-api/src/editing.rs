@@ -50,9 +50,9 @@ pub enum Gesture {
     /// A selection rectangle from a screen point.
     Marquee { from: Pos2 },
     /// A line of a kind's connect tool drawn from a node, from the screen point the drag started
-    /// at (ER's relationship, slice E2).
+    /// at.
     Connect { tool: &'static str, from_node: Uuid, from: Pos2 },
-    /// A note link drawn from a note's handle to a table or a relationship's line.
+    /// A note link drawn from a note's handle to a card or a line.
     LinkNote { note: Uuid },
     /// A cardinality text dragged off its place: its line, its end, the screen point the drag
     /// started at, its centre then and the end of the line it belongs to.
@@ -64,9 +64,9 @@ pub enum Gesture {
     /// element, whether it is the source end, the screen point of the end that stays, and the
     /// revision of the model the drag began on, which the drop changes only if it still holds (AR-697).
     Reconnect { element: Uuid, source: bool, fixed: Pos2, at: archforge_engine::Revision },
-    /// A label of the figures of no one node or line dragged where no node holds it yet (a UML
-    /// generalization set's, AR-129): the element it stands for, the screen point the drag started
-    /// at and the label's rectangle then.
+    /// A label of the figures of no one node or line dragged where no node holds it yet (the label
+    /// of a figure drawn across several lines): the element it stands for, the screen point the
+    /// drag started at and the label's rectangle then.
     ExtraLabel { element: Uuid, from: Pos2, rect: Rect },
 }
 
@@ -99,6 +99,6 @@ pub enum Action {
     Notice(String),
     /// What the diagram's kind makes of the press ([`crate::kinds::DiagramKind::pointer`],
     /// [`crate::kinds::DiagramKind::secondary_click`]), run through the narrow context once
-    /// decided: a UML n-ary association's next end, or a menu of its own opened.
+    /// decided: the next click of a figure drawn click by click, or a menu of its own opened.
     Own(Box<dyn FnOnce(&mut Ctx)>),
 }

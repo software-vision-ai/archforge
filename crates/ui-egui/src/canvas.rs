@@ -6,8 +6,8 @@
 //! drawing tools wait for their slice and say so on hover. A click selects what it hits through
 //! `view.select`, so Properties follows the canvas; nothing on the canvas is moved or made yet.
 //!
-//! The geometry is the design's: the tab strip 36 tall with tabs 32 tall from x 44, an entity
-//! node's header 66 units with the name at 20 pt, its rows 20 units apart from 77, the minimap
+//! The geometry is the design's: the tab strip 36 tall with tabs 32 tall from x 44, a card's
+//! header 66 units with the name at 20 pt, its rows 20 units apart from 77, the minimap
 //! 200 by 156 at 16 px from the right and 14 px above the status bar, the toolbar 342 by 50 at
 //! the bottom centre. The grid dots sit 32 units apart and thin out as the zoom falls.
 
@@ -78,7 +78,7 @@ pub(crate) const COMPARTMENT_GAP: f32 = archforge_diagram::figure::COMPARTMENT_G
 const COMPARTMENT_TOP: f32 = CARD_FIRST_ROW - CARD_HEADER;
 pub(crate) const CARD_INSET: f32 = 18.0;
 pub(crate) const CARD_TEXT: f32 = 42.0;
-/// How strongly a table of another schema shows: the design's 60 %.
+/// How strongly the card of an element of another scope shows: the design's 60 %.
 const FOREIGN_ALPHA: f32 = 0.6;
 /// Below this zoom a node shows its name only.
 pub(crate) const DETAIL_ZOOM: f32 = 0.5;
@@ -549,9 +549,9 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     if !shell.canvas.pan.is_finite() {
         shell.canvas.pan = Vec2::ZERO;
     }
-    // The view is this diagram's once the diagram's kind has run before it draws: UML's places a
-    // pending landing first, and a zoom across a package's threshold, ⌘↓ or ⌘↑ then move to another
-    // level (AR-95). The zoom made since the last frame was the kind's to follow; it ends here.
+    // The view is this diagram's once the diagram's kind has run before it draws: a kind may place
+    // a pending landing first, or move to another diagram on a zoom across a threshold or on a key
+    // of its own. The zoom made since the last frame was the kind's to follow; it ends here.
     shell.canvas.shown = shell.canvas.active;
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
     if let Some(kind) = kind {
@@ -650,11 +650,11 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         crate::editing::pointer(shell, ui, &resp, view, grid, d);
     }
     crate::editing::overlays(shell, ui, p, r, view, d, &overrides);
-    // What the diagram's kind draws over the canvas (UML's path bar and a package's Open), and the
-    // fade of a switch over that.
+    // What the diagram's kind draws over the canvas (a path bar, a button over a selected card),
+    // and the fade of a switch over that.
     let below_path = kind.map_or(0.0, |k| shell.cx(|cx| k.after_draw(cx, ui, p, r, d)));
     fade(shell, ui, p, r);
-    // What the notations offer over the canvas (ER's mapping table offer), under the toast.
+    // What the notations offer over the canvas (a way out of a problem), under the toast.
     crate::notation_ui::overlays(shell, ui, Layer::Offers, &Overlaid { p, r, view, d, overrides: &overrides });
     toast(shell, ui, p, r);
     if minimap_shown(shell, r) {
@@ -674,7 +674,8 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         }
     }
     toolbar(shell, ui, p, r);
-    // What a drawing under way has so far, as the diagram's kind says (a UML n-ary association's).
+    // What a drawing under way has so far, as the diagram's kind says (a figure drawn click by
+    // click).
     if let Some(kind) = kind {
         shell.cx(|cx| kind.hint_bar(cx, ui, p, r, below_path));
     }
@@ -697,9 +698,9 @@ fn fade(shell: &Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
 
 /// A problem badge on the canvas: the problems on hover; one whose figure offers a way out of the
 /// problem (`resolvable`) shows a plus, says the way out and takes a click, as the element's
-/// notation answers ([`crate::notation_ui::NotationUi::resolve_hint`]: ER's many-to-many
-/// relationship opens the mapping table offer). Where the notation offers none, the badge stays a
-/// plain one: its problems on hover, no click.
+/// notation answers ([`crate::notation_ui::NotationUi::resolve_hint`], and a click offers the
+/// notation's way out). Where the notation offers none, the badge stays a plain one: its problems
+/// on hover, no click.
 #[allow(clippy::too_many_arguments, reason = "a badge is drawn from its place, its control id, its element and its texts")]
 pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, control_id: Uuid, element: Uuid, texts: &[String], resolvable: bool) {
     let paint = ui.painter().clone();
@@ -731,9 +732,9 @@ pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, con
 }
 
 /// The index of diagram `d` as the canvas draws and hits it: the nodes their notations draw behind
-/// (a package's card) under the other figures, each group in stored order, so a class or a note
-/// placed over a package's card stays in sight and takes the press (AR-570). The store's order is
-/// untouched.
+/// (a card that stands behind others) under the other figures, each group in stored order, so a
+/// card or a note placed over such a card stays in sight and takes the press (AR-570). The store's
+/// order is untouched.
 pub(crate) fn grid(store: &Store, notations: &archforge_diagram::ProjectView, d: Obj) -> Grid {
     Grid::build_with(store, d, |n| notations.node_drawn_behind(store, n))
 }
@@ -793,8 +794,8 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
     let (x0, y0) = view.to_canvas(r.min);
     let (x1, y1) = view.to_canvas(r.max);
     let mut visible = grid.visible(archforge_diagram::Rect::new(x0, y0, x1 - x0, y1 - y0));
-    // Nodes dragged into view draw too, in the drawing order: a package's card dragged in stays
-    // under the other figures (AR-570).
+    // Nodes dragged into view draw too, in the drawing order: a card drawn behind others stays
+    // under the other figures when dragged in (AR-570).
     let shown = visible.nodes.len();
     for n in refs(store, d, diagram::NODE) {
         if !visible.nodes.contains(&n) && store.uuid(n).ok().is_some_and(|id| overrides.contains_key(&id)) {
@@ -895,7 +896,7 @@ fn model_rect(store: &Store, view: &View, overrides: &std::collections::BTreeMap
     }
 }
 
-/// One node: an entity card with its eyebrow, name and columns, a note, or a plain card.
+/// One node: a card with its eyebrow, name and rows, a note, or a plain card.
 /// Gives the problem badge to draw at the node's corner, when its element has problems.
 fn draw_node(
     paint: &egui::Painter,
@@ -910,7 +911,7 @@ fn draw_node(
         return None;
     }
     let z = view.zoom;
-    // A label (a generalization set's) is drawn with its lines (AR-129), not as a card.
+    // A label (of a figure drawn across several lines) is drawn with its lines, not as a card.
     if d.notations.node_is_label(store, n) {
         return None;
     }
@@ -1232,8 +1233,8 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
     }
 }
 
-/// An eyebrow as drawn: in capitals, but for a UML keyword between guillemets, which keeps its
-/// case (`«interface» · BILLING`).
+/// An eyebrow as drawn: in capitals, but for a keyword between guillemets, which keeps its case
+/// (`«keyword» · BILLING`).
 pub(crate) fn eyebrow_case(text: &str) -> String {
     let mut keyword = false;
     let mut out = String::with_capacity(text.len());
@@ -1259,8 +1260,8 @@ pub(crate) fn say(t: &archforge_diagram::figure::Text) -> String {
     }
 }
 
-/// A rectangle's outline in dashes of `dash` with gaps of `gap`, as the design draws a table of
-/// another schema.
+/// A rectangle's outline in dashes of `dash` with gaps of `gap`, as the design draws the card of an
+/// element of another scope.
 pub(crate) fn dashed_rect(paint: &egui::Painter, rect: Rect, stroke: Stroke, dash: f32, gap: f32) {
     let r = rect.shrink(stroke.width / 2.0);
     let path = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
@@ -1384,7 +1385,7 @@ fn draw_edge(
     for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
         let (dir, base, _, _) = shape(end.mark, tip, back);
         line_mark(paint, end.mark, tip, back, stroke, z, p.canvas);
-        // A note beside the target's triangle, such as a generalization set's facts.
+        // A note beside the target's triangle, such as the facts of a figure the line belongs to.
         if end.mark == EndMark::Triangle
             && let Some(note) = line.note.as_ref().filter(|_| std::ptr::eq(end, &line.ends[1]))
         {
@@ -1523,9 +1524,9 @@ fn halo(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, p: &Palette) {
 }
 
 /// A line's points on screen, from its source's edge to its target's, run as its style or its
-/// diagram's says (straight, at right angles, around the other tables, or curved) through its
-/// waypoints; a relationship of a table with itself loops out of its right side. Routed in diagram
-/// coordinates from the rectangles drawn, so a table being dragged takes its lines along. None
+/// diagram's says (straight, at right angles, around the other cards, or curved) through its
+/// waypoints; a line from a card back to itself loops out of its right side. Routed in diagram
+/// coordinates from the rectangles drawn, so a card being dragged takes its lines along. None
 /// when an end is missing.
 pub(crate) fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
     let (store, view) = (d.store, d.view);
@@ -1539,7 +1540,7 @@ pub(crate) fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
         let rect_of = |n: Obj| model_rect(store, view, d.overrides, n);
         let via: Vec<(f64, f64)> = refs(store, e, edge::WAYPOINT).into_iter().map(|w| (real(store, w, point::X), real(store, w, point::Y))).collect();
         let way = archforge_diagram::route::way_of(store, e);
-        // The other tables and notes on the diagram, which an avoiding line goes around.
+        // The other cards and notes on the diagram, which an avoiding line goes around.
         let boxes: Vec<archforge_diagram::Rect> = if way == archforge_diagram::Way::Avoiding {
             d.boxes.iter().filter(|(n, _)| *n != source && *n != target).map(|(_, r)| *r).collect()
         } else {
@@ -1555,7 +1556,7 @@ pub(crate) fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
 }
 
 /// A note link (owner decision): dashed and straight, from the note's edge to the
-/// edge of the table it points at, or to the middle of the relationship's line.
+/// edge of the card it points at, or to the middle of the line.
 fn draw_link(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widgets::Registry, ui: &egui::Ui) {
     let (p, store, z) = (d.p, d.store, d.view.zoom);
     let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return };
@@ -1575,7 +1576,7 @@ fn draw_link(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widg
     let ink = if selected { p.accent } else { p.text_secondary };
     let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), ink);
     paint.extend(egui::Shape::dashed_line(&[from, to], stroke, 5.0 * z.max(0.5), 4.0 * z.max(0.5)));
-    // Where it meets a relationship's line, a dot says it points at the line.
+    // Where it meets a line, a dot says it points at the line.
     if store.class_of(target).ok() == Some(archforge_diagram::EDGE) {
         paint.circle_filled(to, 2.5 * z.max(0.6), ink);
     }
