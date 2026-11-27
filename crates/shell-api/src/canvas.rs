@@ -650,9 +650,9 @@ pub struct Drawing<'a> {
     pub notations: &'a archforge_diagram::ProjectView,
     pub kind: Option<&'static dyn crate::kinds::DiagramKind>,
     /// Every kind the shell knows: after the diagram's own, each is asked in turn what it draws
-    /// ([`Drawing::kinds_asked`]: a card it draws itself, what goes over a card, a line's ends and
-    /// what goes over its labels), so a figure is drawn as the kind that draws its element says
-    /// whatever diagram shows it.
+    /// ([`Drawing::kinds_asked`]: the links between nodes, a card it draws itself, what goes over a
+    /// card, a line's ends and what goes over its labels), so a figure is drawn as the kind that
+    /// draws its element says whatever diagram shows it.
     pub kinds: &'a [&'static dyn crate::kinds::DiagramKind],
     /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
     /// and where each line's ends sit along their sides: worked out once a frame.
@@ -696,8 +696,8 @@ impl Drawing<'_> {
         self.store.uuid(n).ok().and_then(|id| self.overrides.get(&id).copied()).unwrap_or_else(|| self.view.rect(&bounds_of(self.store, n)))
     }
 
-    /// The kinds asked in turn what they draw of a card or a line: the diagram's own first, then
-    /// every other kind the shell knows, each once.
+    /// The kinds asked in turn what they draw of a card or a line, and the links between nodes: the
+    /// diagram's own first, then every other kind the shell knows, each once.
     pub fn kinds_asked(&self) -> impl Iterator<Item = &'static dyn crate::kinds::DiagramKind> + '_ {
         let own = self.kind;
         own.into_iter().chain(self.kinds.iter().copied().filter(move |k| own.is_none_or(|o| o.kind() != k.kind())))

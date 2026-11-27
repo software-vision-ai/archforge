@@ -392,6 +392,11 @@ impl DiagramKind for UmlKind {
         class(store, element) == Some(archforge_uml::PACKAGE)
     }
 
+    /// A double click anywhere on a constraint's braces or note opens its editor (AR-133).
+    fn opens_on_double_click(&self, store: &Store, element: Obj) -> bool {
+        crate::uml_constraint_draw::opens_on_double_click(store, element)
+    }
+
     /// The member at `row` of the classifier's card (its attributes, then its operations; an
     /// enumeration's literals), or a new attribute (a new literal), typed in place on the card, or
     /// in Properties' editor where the card cannot hold it. A primitive type has no member to open.
@@ -598,6 +603,11 @@ impl DiagramKind for UmlKind {
         crate::uml_adornments::stereotypes(paint, d, line, name, registry, ui);
     }
 
+    /// A constraint note's dashed links to the nodes of the elements it constrains (AR-133).
+    fn draw_links(&self, paint: &egui::Painter, d: &crate::canvas::Drawing<'_>, _: &mut crate::widgets::Registry, _: &egui::Ui) {
+        crate::uml_constraint_draw::draw_links(paint, d);
+    }
+
     /// The generalization sets across their members' lines (AR-129).
     fn draw_extras(
         &self,
@@ -610,7 +620,8 @@ impl DiagramKind for UmlKind {
     }
 
     /// A package's card: its tab, the path of its owners and its own diagram's thumbnail (AR-113,
-    /// AR-565); an n-ary association's, its diamond (AR-128).
+    /// AR-565); an n-ary association's, its diamond (AR-128); a constraint's, its braces or its note
+    /// (AR-133).
     fn draw_card(
         &self,
         paint: &egui::Painter,
@@ -619,7 +630,9 @@ impl DiagramKind for UmlKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) -> bool {
-        crate::uml_package::draw_card(paint, d, card, registry, ui) || crate::uml_nary::draw_card(paint, d, card)
+        crate::uml_package::draw_card(paint, d, card, registry, ui)
+            || crate::uml_nary::draw_card(paint, d, card)
+            || crate::uml_constraint_draw::draw_card(paint, d, card)
     }
 
     /// A template's signature over its card's top-right corner (AR-130).
