@@ -920,7 +920,7 @@ str		Creates the folder {file} here: the project and every version of it.	Create
 str		The project is made here as one folder, with every version of it inside.	The project is made here as one folder, with every version of it inside.
 str		Diagrams	Diagrams
 str		Elements	Elements
-str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Add ER and UML class diagrams as you go. Every diagram shows the same model.
+str		Add {diagrams} as you go. Every diagram shows the same model.	Add {diagrams} as you go. Every diagram shows the same model.
 str		In every project	In every project
 str		Guidance for agents, written on the elements it applies to.	Guidance for agents, written on the elements it applies to.
 str		Agent access	Agent access
@@ -1014,6 +1014,7 @@ str		Classifier kinds	Classifier kinds
 str		Package	Package
 # Class members in Properties
 str		Stereotype	Stereotype
+str		{list}, {next}	{list}, {next}
 str		{first} and {second}	{first} and {second}
 str		{first}, {second} and {third}	{first}, {second} and {third}
 # Stereotypes applied (AR-135)

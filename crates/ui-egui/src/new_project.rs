@@ -1,5 +1,6 @@
 //! The New project dialog, over Home or an open project: the design's Proposal 03. The project's name, the folder its
-//! file goes in, a line on diagrams, and what every project holds; Cancel and Create project.
+//! file goes in, a line naming the kinds of diagram the shell was given, and what every project holds; Cancel and
+//! Create project.
 //!
 //! The geometry is the design's: a dialog 760 by 640 px, 32 px padding, centred over a veil that
 //! covers the window. A smaller window shrinks it to 16 px from its edges; the body between the
@@ -418,17 +419,14 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
             ux::text(&paint, at(LOCATION_HINT), &file_line, types::SMALL, p.text_muted, Some(inner));
         }
     }
-    // Diagrams come as the user works.
+    // Diagrams come as the user works: the kinds the shell was given, by their groups' names.
     ux::text(&paint, at(DIAGRAMS), &tr("Diagrams"), types::UI_STRONG, p.text, Some(inner));
-    let line = ux::galley_rows(
-        &paint,
-        &tr("Add ER and UML class diagrams as you go. Every diagram shows the same model."),
-        types::SMALL,
-        p.text_secondary,
-        Some(inner),
-        2,
-    );
-    paint.galley(at(DIAGRAMS_LINE), line, p.text_secondary.into());
+    let groups: Vec<String> = shell.kinds.iter().map(|k| k.group_word()).collect();
+    if let Some(diagrams) = listed(&groups) {
+        let said = fmt(&tr("Add {diagrams} as you go. Every diagram shows the same model."), &[("diagrams", &diagrams)]);
+        let line = ux::galley_rows(&paint, &said, types::SMALL, p.text_secondary, Some(inner), 2);
+        paint.galley(at(DIAGRAMS_LINE), line, p.text_secondary.into());
+    }
     // What every project holds.
     ux::text(&paint, at(PARTS), &tr("In every project"), types::UI_STRONG, p.text, Some(inner));
     let parts = [
@@ -481,6 +479,15 @@ fn footer(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, dialog: &m
     paint.rect_filled(create, 8.0, fill);
     centred(paint, create, &label, p.on_accent);
     !waiting && cancelled.clicked()
+}
+
+/// `words` as a sentence lists them in the language in use: one alone, two joined by "and", more
+/// with commas between them and "and" before the last; none when there are none.
+fn listed(words: &[String]) -> Option<String> {
+    let (last, before) = words.split_last()?;
+    let Some((first, middle)) = before.split_first() else { return Some(last.clone()) };
+    let start = middle.iter().fold(first.clone(), |list, next| fmt(&tr("{list}, {next}"), &[("list", &list), ("next", next)]));
+    Some(fmt(&tr("{first} and {second}"), &[("first", &start), ("second", last)]))
 }
 
 /// Draws `label` in the strong interface style and `color`, centred in `r` and cut to its width.

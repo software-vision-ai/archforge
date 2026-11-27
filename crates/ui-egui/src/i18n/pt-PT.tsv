@@ -921,7 +921,7 @@ str		Creates the folder {file} here: the project and every version of it.	Cria a
 str		The project is made here as one folder, with every version of it inside.	O projeto é criado aqui como uma pasta, com cada uma das suas versões lá dentro.
 str		Diagrams	Diagramas
 str		Elements	Elementos
-str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Adicione diagramas ER e de classes UML à medida que trabalha. Cada diagrama mostra o mesmo modelo.
+str		Add {diagrams} as you go. Every diagram shows the same model.	Adicione à medida que trabalha: {diagrams}. Cada diagrama mostra o mesmo modelo.
 str		In every project	Em cada projeto
 str		Guidance for agents, written on the elements it applies to.	Orientações para agentes, escritas nos elementos a que se aplicam.
 str		Agent access	Acesso de agentes
@@ -1015,6 +1015,7 @@ str		Classifier kinds	Tipos de classificador
 str		Package	Pacote
 # Membros de classe nas Propriedades
 str		Stereotype	Estereótipo
+str		{list}, {next}	{list}, {next}
 str		{first} and {second}	{first} e {second}
 str		{first}, {second} and {third}	{first}, {second} e {third}
 # Stereotypes applied (AR-135)

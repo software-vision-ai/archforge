@@ -921,7 +921,7 @@ str		Creates the folder {file} here: the project and every version of it.	Erstel
 str		The project is made here as one folder, with every version of it inside.	Das Projekt entsteht hier als ein Ordner, mit jeder seiner Versionen darin.
 str		Diagrams	Diagramme
 str		Elements	Elemente
-str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Fügen Sie beim Arbeiten ER- und UML-Klassendiagramme hinzu. Jedes Diagramm zeigt dasselbe Modell.
+str		Add {diagrams} as you go. Every diagram shows the same model.	Fügen Sie beim Arbeiten {diagrams} hinzu. Jedes Diagramm zeigt dasselbe Modell.
 str		In every project	In jedem Projekt
 str		Guidance for agents, written on the elements it applies to.	Anleitungen für Agenten, geschrieben an die Elemente, für die sie gelten.
 str		Agent access	Agentenzugriff
@@ -1015,6 +1015,7 @@ str		Classifier kinds	Klassifikatorarten
 str		Package	Paket
 # Klassenmerkmale in den Eigenschaften
 str		Stereotype	Stereotyp
+str		{list}, {next}	{list}, {next}
 str		{first} and {second}	{first} und {second}
 str		{first}, {second} and {third}	{first}, {second} und {third}
 # Stereotypes applied (AR-135)

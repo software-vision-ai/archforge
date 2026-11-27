@@ -921,7 +921,7 @@ str		Creates the folder {file} here: the project and every version of it.	在此
 str		The project is made here as one folder, with every version of it inside.	项目在此创建为一个文件夹，其每个版本都在其中。
 str		Diagrams	图表
 str		Elements	元素
-str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	随时添加 ER 图和 UML 类图。每个图表都显示同一个模型。
+str		Add {diagrams} as you go. Every diagram shows the same model.	随时添加 {diagrams}。每个图表都显示同一个模型。
 str		In every project	每个项目都包含
 str		Guidance for agents, written on the elements it applies to.	写在所适用元素上的代理指导说明。
 str		Agent access	代理访问
@@ -1015,6 +1015,7 @@ str		Classifier kinds	分类器类型
 str		Package	包
 # 属性面板中的类成员
 str		Stereotype	构造型
+str		{list}, {next}	{list}、{next}
 str		{first} and {second}	{first} 和 {second}
 str		{first}, {second} and {third}	{first}、{second} 和 {third}
 # Stereotypes applied (AR-135)

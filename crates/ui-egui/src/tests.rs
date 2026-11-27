@@ -149,6 +149,33 @@ fn the_new_project_dialog_opens_from_home_in_both_appearances_with_its_controls(
     }
 }
 
+/// The kinds a New project dialog lists: the sketch alone, then the sketch between ER and UML.
+static SKETCH_ALONE: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH)];
+static SKETCH_BETWEEN: &[&dyn crate::kinds::DiagramKind] = &[&crate::er_kind::ErKind, &SketchKind(SKETCH), &crate::uml_ui::UmlKind];
+
+/// The New project dialog's line on diagrams lists the kinds the shell was given, each by the name
+/// of its group in the Diagrams explorer, as a sentence lists them: the two kinds the app registers
+/// joined by "and"; the sketch alone, which the shell never names, with neither ER's nor UML's;
+/// three with a comma before "and". In light and dark.
+#[test]
+fn the_new_project_line_lists_the_kinds_the_shell_was_given() {
+    let line = |kinds: &'static [&'static dyn crate::kinds::DiagramKind], theme| {
+        let mut h = harness(theme);
+        h.state_mut().kinds = kinds;
+        open_new_project(&mut h);
+        painted(&h).into_iter().filter(|t| t.ends_with("Every diagram shows the same model.")).collect::<Vec<_>>()
+    };
+    in_both_appearances(|theme| {
+        let two = "Add ER diagrams and UML structure diagrams as you go. Every diagram shows the same model.";
+        assert_eq!(line(crate::kinds::KINDS, theme), [two], "{theme:?}");
+        let alone = line(SKETCH_ALONE, theme);
+        assert_eq!(alone, ["Add Sketches as you go. Every diagram shows the same model."], "{theme:?}");
+        assert!(!alone.iter().any(|t| t.contains("ER diagrams") || t.contains("UML structure diagrams")), "{theme:?}: {alone:?}");
+        let three = "Add ER diagrams, Sketches and UML structure diagrams as you go. Every diagram shows the same model.";
+        assert_eq!(line(SKETCH_BETWEEN, theme), [three], "{theme:?}");
+    });
+}
+
 #[test]
 fn the_name_field_has_the_keyboard_and_takes_a_name() {
     let mut h = harness(ThemeKind::Light);

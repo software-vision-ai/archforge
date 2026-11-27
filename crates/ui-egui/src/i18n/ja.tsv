@@ -921,7 +921,7 @@ str		Creates the folder {file} here: the project and every version of it.	ここ
 str		The project is made here as one folder, with every version of it inside.	プロジェクトはここに 1 つのフォルダーとして作成され、そのすべてのバージョンが中に入ります。
 str		Diagrams	ダイアグラム
 str		Elements	要素
-str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	作業しながら ER 図と UML クラス図を追加できます。どのダイアグラムも同じモデルを表示します。
+str		Add {diagrams} as you go. Every diagram shows the same model.	作業しながら {diagrams} を追加できます。どのダイアグラムも同じモデルを表示します。
 str		In every project	すべてのプロジェクトに
 str		Guidance for agents, written on the elements it applies to.	エージェント向けのガイダンスを、適用先の要素に書き込みます。
 str		Agent access	エージェントのアクセス
@@ -1015,6 +1015,7 @@ str		Classifier kinds	分類子の種類
 str		Package	パッケージ
 # プロパティのクラスメンバー
 str		Stereotype	ステレオタイプ
+str		{list}, {next}	{list}、{next}
 str		{first} and {second}	{first} と {second}
 str		{first}, {second} and {third}	{first}、{second}、{third}
 # Stereotypes applied (AR-135)
