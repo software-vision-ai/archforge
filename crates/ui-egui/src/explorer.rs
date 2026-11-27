@@ -18,7 +18,7 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-pub use archforge_shell_api::explorer::Delete;
+pub use archforge_shell_api::explorer::{Delete, fresh_name};
 pub use archforge_shell_api::notation_ui::Row;
 pub(crate) use archforge_shell_api::notation_ui::Tree;
 
@@ -262,13 +262,6 @@ pub(crate) fn rows(uis: &[&'static dyn NotationUi], store: &Store, state: &State
         }
     }
     out
-}
-
-/// A default name no sibling has, its stem and a number: `Note 2`, or `note_2` when `snake`; none
-/// past ten thousand.
-pub fn fresh_name(stem: &str, taken: impl Iterator<Item = String>, snake: bool) -> Option<String> {
-    let taken: BTreeSet<String> = taken.map(|n| n.to_lowercase()).collect();
-    (1..=10_000u32).map(|n| if snake { format!("{stem}_{n}") } else { format!("{stem} {n}") }).find(|name| !taken.contains(&name.to_lowercase()))
 }
 
 /// What `+` offers at the selection, the first being the default: what the selection's notation

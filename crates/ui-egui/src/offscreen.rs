@@ -856,11 +856,11 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if screen == Screen::WorkspaceClassDiagramRead {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
     }
     if screen == Screen::WorkspaceCloseAsk {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         if let Some(s) = shell.session.as_mut() {
             s.mark_unsaved();
         }
@@ -869,7 +869,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     let association = matches!(screen, Screen::WorkspaceAssociation | Screen::WorkspaceMultiplicityPresets | Screen::WorkspaceMultiplicityRefused);
     if association || screen == Screen::WorkspaceRelateKinds {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         if association {
             let id = {
                 let store = shell.session.as_ref().ok_or("no project is open")?.doc();
@@ -885,7 +885,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 shell.panels.menu = Some(menus::END_MULTIPLICITY.at(1));
             }
             if screen == Screen::WorkspaceMultiplicityRefused {
-                crate::uml_relate::refuse_typed(&mut shell, id, 1, "5..2")?;
+                snapshot::cx(&mut shell, |cx| crate::uml_relate::refuse_typed(cx, id, 1, "5..2"))?;
             }
         } else {
             shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
@@ -946,12 +946,12 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if screen == Screen::WorkspaceFinal {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         sample_final(&mut shell)?;
     }
     if screen == Screen::WorkspaceLeaf {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         sample_leaf(&mut shell)?;
     }
     let mut hover: Option<String> = None;
@@ -960,23 +960,23 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if matches!(screen, Screen::WorkspaceNaryDrawing | Screen::WorkspaceNary | Screen::WorkspaceNaryBinary) {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         hover = sample_nary(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceNestedClassifiers {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         sample_nested(&mut shell)?;
     }
     if screen == Screen::WorkspaceProfiles || screen == Screen::WorkspaceProfileRefused {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         sample_profiles(&mut shell, screen == Screen::WorkspaceProfileRefused)?;
     }
     if screen == Screen::WorkspaceStereotypes || screen == Screen::WorkspaceStereotypePicker {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
-        let order = crate::uml_stereotypes::put_values(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        let order = snapshot::cx(&mut shell, crate::uml_stereotypes::put_values)?;
         snapshot::run(&mut shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
         shell.state.show_panel(crate::state::Panel::Properties);
         shell.state.show_explorer(crate::state::Explorer::Models);
@@ -986,22 +986,22 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if screen == Screen::WorkspaceGeneralizationSets {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         sample_generalization_sets(&mut shell)?;
     }
     if matches!(screen, Screen::WorkspaceTemplate | Screen::WorkspaceTemplateKinds | Screen::WorkspaceTemplateInUse) {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         sample_template(&mut shell, screen)?;
     }
     if matches!(screen, Screen::WorkspaceTemplateBinding | Screen::WorkspaceTemplateBindingNew) {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         sample_binding(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceQualifiers || screen == Screen::WorkspaceQualifierRefused {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         sample_qualifiers(&mut shell, screen == Screen::WorkspaceQualifierRefused)?;
     }
     if let Some(step) = guide_step(screen) {
@@ -1026,7 +1026,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if screen == Screen::WorkspaceInlineMember {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         let class = {
             let store = shell.session.as_ref().ok_or("no project is open")?.doc();
             let c = store
@@ -1056,7 +1056,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if matches!(screen, Screen::WorkspaceClassMembers | Screen::WorkspaceMemberEditor) {
         snapshot::adopt_project(&mut shell);
-        crate::uml_ui::open_sample(&mut shell)?;
+        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
         sample_class_members(&mut shell, screen == Screen::WorkspaceMemberEditor)?;
     }
     if matches!(
@@ -1535,7 +1535,7 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
 /// editor or the question its removal asks. Gives the control the pointer rests on.
 fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, String> {
     let drawn = screen != Screen::WorkspaceNaryDrawing;
-    let ids = crate::uml_nary::put_recommends(shell, drawn)?;
+    let ids = snapshot::cx(shell, |cx| crate::uml_nary::put_recommends(cx, drawn))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
@@ -1572,7 +1572,7 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
 /// In the sample class model, Priority nested in Order, placed under it with the ⊕ line, selected
 /// with its Properties open and its row in Models in sight (AR-132, D2).
 fn sample_nested(shell: &mut Shell) -> Result<(), String> {
-    let (priority, order) = crate::uml_ui::put_nested_priority(shell)?;
+    let (priority, order) = snapshot::cx(shell, crate::uml_ui::put_nested_priority)?;
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [priority] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     // At 80 %, Priority's card over Order's, the ⊕ line between them in sight.
@@ -1590,7 +1590,7 @@ fn sample_nested(shell: &mut Shell) -> Result<(), String> {
 /// The profile Persistence of F1 in the sample: its diagram open with Entity selected and the
 /// editor on cached; or, `refused`, Commerce selected with Unapply refused for its uses (F6).
 fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
-    let (commerce, persistence, entity) = crate::uml_profiles::put_profiles(shell, refused)?;
+    let (commerce, persistence, entity) = snapshot::cx(shell, |cx| crate::uml_profiles::put_profiles(cx, refused))?;
     let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "an id".to_string());
     shell.state.show_panel(crate::state::Panel::Properties);
     shell.state.show_explorer(crate::state::Explorer::Models);
@@ -1628,7 +1628,7 @@ fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
 /// generalizations to Payment grouped in the set method {complete, disjoint}, the set selected with
 /// its Properties open, Payment and its three kinds in sight (AR-129).
 fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
-    let (gens, _) = crate::uml_ui::put_payment_kinds(shell)?;
+    let (gens, _) = snapshot::cx(shell, crate::uml_ui::put_payment_kinds)?;
     let out = snapshot::run(
         shell,
         "uml.generalization-set.add",
@@ -1651,11 +1651,11 @@ fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
 /// OrderRepository binding it and Key's removal refused (AR-130).
 fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     let in_use = screen == Screen::WorkspaceTemplateInUse;
-    let (repo, [_, key]) = crate::uml_ui::put_repository(shell, in_use)?;
+    let (repo, [_, key]) = snapshot::cx(shell, |cx| crate::uml_ui::put_repository(cx, in_use))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     snapshot::cx(shell, |cx| crate::uml_templates::open(cx, repo, Some(key)));
     if in_use {
-        crate::uml_templates::remove_sample(shell);
+        snapshot::cx(shell, crate::uml_templates::remove_sample);
     } else if screen == Screen::WorkspaceTemplateKinds {
         shell.panels.menu = Some(menus::TEMPLATE_KIND);
     }
@@ -1671,7 +1671,7 @@ fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
 /// again and a new one's draft opened from OrderRepository's card to Repository's, Apply pressed
 /// with T still to pick.
 fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
-    let (repo, _) = crate::uml_ui::put_repository(shell, true)?;
+    let (repo, _) = snapshot::cx(shell, |cx| crate::uml_ui::put_repository(cx, true))?;
     let d = shell.canvas.active.ok_or("the sample's diagram")?;
     let session = shell.session.as_mut().ok_or("the binding sample needs a session")?;
     let store = session.doc();
@@ -1697,7 +1697,7 @@ fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
         };
         let (Some(from), Some(to)) = (node_of(bound), node_of(r)) else { return Err("the sample's nodes".into()) };
         snapshot::cx(shell, |cx| crate::uml_bindings::open_new(cx, d_obj, (from, to), bound, r));
-        crate::uml_bindings::apply_sample(shell);
+        snapshot::cx(shell, crate::uml_bindings::apply_sample);
     }
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 0.75;
@@ -1731,7 +1731,7 @@ fn sample_qualifiers(shell: &mut Shell, refused: bool) -> Result<(), String> {
         s.mark_saved().map_err(|e| e.to_string())?;
     }
     if refused {
-        crate::uml_qualifiers::refuse_sample(shell, a_id, 0, "lineNo", "String");
+        snapshot::cx(shell, |cx| crate::uml_qualifiers::refuse_sample(cx, a_id, 0, "lineNo", "String"));
     } else {
         snapshot::cx(shell, |cx| crate::uml_qualifiers::open(cx, a_id, 0, Some(q)));
     }
@@ -2090,7 +2090,7 @@ fn sample_enumerations(shell: &mut Shell) -> Result<(), String> {
     else {
         return Err("the sample's ids".into());
     };
-    crate::uml_ui::put_literals(shell, status, &["Placed", "Paid", "Shipped", "Cancelled"])?;
+    snapshot::cx(shell, |cx| crate::uml_ui::put_literals(cx, status, &["Placed", "Paid", "Shipped", "Cancelled"]))?;
     shell.explorer.expanded.extend([package, status]);
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);

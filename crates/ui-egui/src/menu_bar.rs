@@ -12,7 +12,8 @@
 
 use std::sync::Arc;
 
-use archforge_shell_api::menu_bar::Hold;
+pub(crate) use archforge_shell_api::menu_bar::ends_cx;
+use archforge_shell_api::menu_bar::{Hold, on};
 use egui::text_edit::TextEditState;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use ux::Colour;
@@ -22,7 +23,6 @@ use crate::actions::{
     self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, COPY, CUT, GENERATE, Keys, NEW, NEW_BRANCH, NEWER, OPEN, PASTE, REDO, SAVE, SAVE_VERSION,
     SELECT_ALL, UNDO, VERSIONS,
 };
-use crate::cx::Ctx;
 use crate::home::{control, off_words};
 use crate::i18n::{fmt, tr, tr_ctx};
 use crate::ux::{self, Palette, types};
@@ -135,31 +135,9 @@ fn on_bar(shell: &Shell, ctx: &egui::Context) -> bool {
     on(shell.menu_bar.rect, ctx)
 }
 
-/// Whether the pointer is down on the bar drawn at `rect`, or let go on it this frame.
-fn on(rect: Option<Rect>, ctx: &egui::Context) -> bool {
-    ctx.input(|i| (i.pointer.any_down() || i.pointer.any_released()) && rect.zip(i.pointer.interact_pos()).is_some_and(|(bar, at)| bar.contains(at)))
-}
-
 /// [`ends_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn ends(shell: &mut Shell, ctx: &egui::Context, id: egui::Id, lost: bool, focused: bool) -> bool {
     shell.cx(|cx| ends_cx(cx, ctx, id, lost, focused))
-}
-
-/// Whether the inline editor `id`, which commits when it loses the keyboard, commits now: on `lost`,
-/// unless the bar holds it, having taken the keyboard for the Edit menu, for an Edit row chosen, or
-/// for a press on the bar before its menu opens. A held editor commits in the first frame another
-/// menu is open, or a row of another menu is chosen, so that row finds it committed when it runs
-/// the frame after, as with no menu; an Edit row or a press that opens nothing gives it the
-/// keyboard back instead.
-pub(crate) fn ends_cx(cx: &mut Ctx, ctx: &egui::Context, id: egui::Id, lost: bool, focused: bool) -> bool {
-    let bar = &mut cx.menu_bar;
-    let edit = bar.open == Some("edit") || bar.chosen.is_some_and(|r| r.starts_with("edit.")) || (bar.open.is_none() && on(bar.rect, ctx));
-    if bar.back == Some(id) && edit {
-        *bar.held = Some(id);
-        return false;
-    }
-    let held = bar.held.take_if(|h| *h == id).is_some();
-    lost || (held && !focused)
 }
 
 /// Whether a title of the bar is clicked in this frame, by the pointer or by a screen reader, so that

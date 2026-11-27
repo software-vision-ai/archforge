@@ -4,13 +4,15 @@
 //! typed refusal, asking the notations the shell registered for their own), and the shared
 //! controls the shell's panels and a notation's screens draw through the narrow context: a
 //! section, a text field, a select, an editable select, a menu, a check box, the buttons, the
-//! name field and the Problems section, each registered for automation (`control_cx`).
+//! name field and the Problems section, each registered for automation (`control_cx`); the compact
+//! button (`button_in`), recorded in the automation registry alone, and the ring a control with the
+//! keyboard shows while the keyboard was used last (`focus_ring`).
 //!
 //! The geometry is the design's: a section is 16 px in from the panel's edges with a full-width
 //! line over it, a field is 28 px tall and filled, its label 11 px above, a row 36 px.
 
 use archforge_mof::{Obj, Uuid};
-use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Pos2, Rect, Response, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::cx::{Ctx, CtxRef, Request};
@@ -1089,6 +1091,96 @@ pub fn ghost_button_cx(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: egui::Pos2,
         paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     }
     resp.clicked()
+}
+
+/// A control recorded under `id` in `registry`, the one part of the shell it reaches; one that is
+/// not `live` takes no click and shows only its tooltip.
+pub fn control_in(registry: &mut widgets::Registry, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> Response {
+    widgets::record_visible(ui, registry, id, kind, rect);
+    let resp = ui.interact(rect, widgets::egui_id(id), if live { Sense::click() } else { Sense::hover() });
+    if live { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp }
+}
+
+/// How a compact button looks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Look {
+    Primary,
+    Secondary,
+    Danger,
+    /// Filled in the danger colour: the button that deletes, in a confirmation.
+    DangerFill,
+}
+
+/// The design's compact button, 28 tall at `at`, hugging its label, recorded in `registry`, the one
+/// part of the shell it reaches, for screens on the narrow context ([`crate::cx::Ctx::registry`]):
+/// gives its rect and response. One that is not `live` is drawn faded and says `hover` on hover.
+pub fn button_in(
+    registry: &mut widgets::Registry,
+    ui: &egui::Ui,
+    p: &Palette,
+    id: &str,
+    at: Pos2,
+    label: &str,
+    look: Look,
+    live: bool,
+    hover: Option<&str>,
+) -> (Rect, Response) {
+    let paint = ui.painter().clone();
+    let g = ux::galley(&paint, label, types::UI, p.text, None);
+    let r = Rect::from_min_size(at, vec2((g.size().x + 20.0).ceil(), 28.0));
+    let mut resp = control_in(registry, ui, id, "button", r, live);
+    if let Some(h) = hover {
+        resp = resp.on_hover_text(h);
+    }
+    let _ = resp.clone().accessible_name(label);
+    let (fill, edge, ink) = match look {
+        Look::Primary if live => (if resp.hovered() { p.accent_fill.gamma_multiply(0.9) } else { p.accent_fill }, None, p.on_accent),
+        Look::Primary => (p.accent_fill.gamma_multiply(0.45), None, p.on_accent),
+        Look::Secondary => (if live && resp.hovered() { p.page } else { p.surface }, Some(p.border), if live { p.text } else { p.text_muted }),
+        Look::Danger => (if live && resp.hovered() { p.danger_tint } else { p.surface }, Some(p.border), if live { p.danger } else { p.text_muted }),
+        Look::DangerFill if live => (if resp.hovered() { p.danger.gamma_multiply(0.9) } else { p.danger }, None, p.on_accent),
+        Look::DangerFill => (p.danger.gamma_multiply(0.45), None, p.on_accent),
+    };
+    paint.rect_filled(r, 6.0, fill);
+    if let Some(edge) = edge {
+        paint.rect_stroke(r, 6.0, Stroke::new(1.0, edge), StrokeKind::Inside);
+    }
+    let g = ux::galley(&paint, label, types::UI, ink, None);
+    paint.galley(pos2(r.left() + 10.0, r.center().y - g.size().y / 2.0), g, ink.into());
+    focus_ring(&paint, p, r, 6.0, &resp);
+    (r, resp)
+}
+
+/// Where the window keeps whether the keyboard was used last.
+fn keyboard_id() -> egui::Id {
+    egui::Id::unique("archforge.keyboard-last")
+}
+
+/// Once per frame: notes whether the keyboard or the pointer was used last, so focus rings show
+/// only while the keyboard leads (AR-217). A key pressed sets it, a pointer button pressed clears it.
+pub fn note_keyboard(ctx: &egui::Context) {
+    let last = ctx.input(|i| {
+        i.events.iter().rev().find_map(|e| match e {
+            egui::Event::Key { pressed: true, .. } => Some(true),
+            egui::Event::PointerButton { pressed: true, .. } => Some(false),
+            _ => None,
+        })
+    });
+    if let Some(keyboard) = last {
+        ctx.data_mut(|d| d.insert_temp(keyboard_id(), keyboard));
+    }
+}
+
+/// Whether the keyboard was used last, since the pointer last pressed.
+pub fn keyboard_last(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(keyboard_id())).unwrap_or(false)
+}
+
+/// The ring a control that has the keyboard shows, while the keyboard was used last.
+pub fn focus_ring(paint: &egui::Painter, p: &Palette, r: Rect, radius: f32, resp: &Response) {
+    if resp.has_focus() && keyboard_last(&resp.ctx) {
+        paint.rect_stroke(r.expand(1.0), radius + 1.0, Stroke::new(2.0, p.focus), StrokeKind::Outside);
+    }
 }
 
 /// The Problems section for a selection, when the rules find any; gives the y under it.

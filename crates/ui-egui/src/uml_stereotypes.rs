@@ -904,9 +904,9 @@ pub(crate) fn going_along(uis: &[&'static dyn NotationUi], store: &Store, elemen
 /// Class) applied to Commerce, and Logging (Tracked, extending Class) applied nowhere, so the picker
 /// (F4) shows each kind of row; the open diagram showing the values. Gives Order's id.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_values(shell: &mut crate::Shell) -> Result<Uuid, String> {
-    let (commerce, _, entity) = crate::uml_profiles::put_profiles(shell, true)?;
-    let session = shell.session.as_mut().ok_or("the sample needs a session")?;
+pub(crate) fn put_values(cx: &mut Ctx) -> Result<Uuid, String> {
+    let (commerce, _, entity) = crate::uml_profiles::put_profiles(cx, true)?;
+    let session = cx.session.as_mut().ok_or("the sample needs a session")?;
     let order = {
         let st = session.doc();
         let o = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && name(st, *o) == "Order").ok_or("Order")?;
@@ -920,10 +920,10 @@ pub(crate) fn put_values(shell: &mut crate::Shell) -> Result<Uuid, String> {
     run("uml.profile.apply", json!({ "package": commerce, "profile": auditing }))?;
     let logging = run("uml.profile.add", json!({ "name": "Logging" }))?;
     run("uml.stereotype.add", json!({ "profile": logging, "name": "Tracked", "extends": ["Class"] }))?;
-    if let Some(d) = shell.canvas.active {
-        shell.cx(|cx| show_values(cx, d, true))?;
+    if let Some(d) = cx.canvas.active {
+        show_values(cx, d, true)?;
     }
-    if let Some(s) = shell.session.as_mut() {
+    if let Some(s) = cx.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;
     }
     Ok(order)

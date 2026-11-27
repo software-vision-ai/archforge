@@ -907,14 +907,14 @@ pub(crate) fn end_refusal(uis: &[&'static dyn NotationUi], store: &Store, end: O
 /// `typed` in end `end`'s multiplicity of association `id`, committed and refused, as a sample
 /// to look at.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn refuse_typed(shell: &mut crate::Shell, id: Uuid, end: usize, typed: &str) -> Result<(), String> {
-    let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+pub(crate) fn refuse_typed(cx: &mut Ctx, id: Uuid, end: usize, typed: &str) -> Result<(), String> {
+    let store = cx.session.as_ref().ok_or("no project is open")?.doc();
     let a = store.by_uuid(id).ok_or("no such association")?;
     let mut edit = ends_edit(store, a, id).ok_or("not an association")?;
     let why = archforge_uml::members::parse_multiplicity(typed).err().ok_or("the sample reads")?;
     *edit.multiplicity.get_mut(end).ok_or("no such end")? = typed.to_string();
     *edit.refused.get_mut(end).ok_or("no such end")? = Some(multiplicity_problem(&why));
-    if let Some(uml) = uml_mut(&mut shell.notation_states) {
+    if let Some(uml) = uml_mut(cx.notation_states) {
         uml.ends = Some(edit);
     }
     Ok(())

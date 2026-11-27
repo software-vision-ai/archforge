@@ -396,17 +396,15 @@ pub(crate) fn retain_valid(edit: &mut Option<QualifierEdit>, store: &Store) {
 /// `typed` as a new qualifier's name on end `end` of association `association`, applied and
 /// refused, as a sample to look at.
 #[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn refuse_sample(shell: &mut crate::Shell, association: Uuid, end: usize, typed: &str, ty: &str) {
-    shell.cx(|cx| {
-        open(cx, association, end, None);
-        if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.qualifier.as_mut()) {
-            e.name = typed.to_string();
-            e.ty = ty.to_string();
-            e.multiplicity = "1".to_string();
-        }
-        let Some(edit) = uml(cx.notation_states).and_then(|uml| uml.qualifier.clone()) else { return };
-        commit(cx, &edit);
-    });
+pub(crate) fn refuse_sample(cx: &mut Ctx, association: Uuid, end: usize, typed: &str, ty: &str) {
+    open(cx, association, end, None);
+    if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.qualifier.as_mut()) {
+        e.name = typed.to_string();
+        e.ty = ty.to_string();
+        e.multiplicity = "1".to_string();
+    }
+    let Some(edit) = uml(cx.notation_states).and_then(|uml| uml.qualifier.clone()) else { return };
+    commit(cx, &edit);
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.
