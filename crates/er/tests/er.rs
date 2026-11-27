@@ -1239,6 +1239,33 @@ fn an_unnamed_column_that_follows_none_is_named_by_its_id() {
     assert_eq!(error.reason, Some(archforge_engine::Reason::FollowsNoColumn { name: id.into() }));
 }
 
+/// A loaded document's enum type without a name, which no command makes, is named by its id when a
+/// column's default is none of its literals, in the typed reason and in the English, never as an
+/// empty name.
+#[test]
+fn a_default_none_of_an_unnamed_enum_types_literals_names_the_type_by_its_id() {
+    use archforge_engine::{DefaultKind, Reason};
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let t = st.create(ENUM_TYPE).unwrap();
+    st.push(t, enum_type::LITERAL, Value::str("open")).unwrap();
+    st.push(s, schema::ENUM_TYPE, Value::Ref(t)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.set(e, named_element::NAME, Value::str("T")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let a = st.create(ATTRIBUTE).unwrap();
+    st.set(a, named_element::NAME, Value::str("state")).unwrap();
+    st.set(a, attribute::ENUM_TYPE, Value::Ref(t)).unwrap();
+    st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+    let [t, a] = [t, a].map(|o| st.uuid(o).unwrap().to_string());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let p = json!({ "attribute": a, "default": "'gone'" });
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.attribute.set-default", &p) else { panic!("'gone' is no literal") };
+    let reason = Reason::DefaultUnread { value: "'gone'".into(), kind: DefaultKind::Literal(t.as_str().into()) };
+    assert_eq!((error.reason, error.message), (Some(reason), format!(r#"the default "'gone'" is not a literal of {t}"#)));
+}
+
 /// What is no ER element, which `element.describe` never hands ER, is refused as taking no
 /// description, with the English as it was (AR-495).
 #[test]
