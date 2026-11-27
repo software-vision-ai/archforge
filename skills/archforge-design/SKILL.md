@@ -942,7 +942,9 @@ What is UML's own, beside the shared rules above.
   eyebrow, as ER draws a table of another schema.
 - Removing a nested package needs no dialog: what it held moves up to its parent and the toast
   says so with Undo (owner decision, every notation). A top-level package asks, as anything that
-  takes its contents along does.
+  takes its contents along does. When a nested package asks (Delete from the model on its card, or
+  a stereotype applied to it), the dialog counts only the relationships that go with the package
+  itself, such as the dependencies at it, never those of what it hands up (AR-843).
 - An association's Properties: Name, its From and To classes read only with "Drag a line end onto
   another class.", then a section per end, "End at {class}": Role (written on Enter or leaving the
   field) and Multiplicity, Navigable and Aggregation (None, Shared, Composite; written when

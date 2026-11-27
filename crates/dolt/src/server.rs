@@ -683,7 +683,12 @@ fn launch(
                 let pid = child.id();
                 // A server that would not stop keeps its record, so recovery can still find it.
                 let cleared = child.stop() && record::remove_if(&opts.records, data_text, pid);
-                let lost_port = matches!(e, Error::StartFailed { .. }) && TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_err();
+                // The server's own log says it lost the port, though the program that took it may
+                // have let it go again by now; a bind still finds a holder it says nothing of.
+                let lost_port = match &e {
+                    Error::StartFailed { log_tail, .. } => port_taken(log_tail, port) || TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_err(),
+                    _ => false,
+                };
                 // With a record still under the name another try would only be refused by it.
                 if lost_port && cleared && attempt < PORT_RETRIES {
                     attempt += 1;
@@ -699,6 +704,19 @@ fn launch(
 fn free_port() -> Result<u16, Error> {
     let l = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).map_err(|e| Error::io("cannot find a free port on", "127.0.0.1", e))?;
     l.local_addr().map(|a| a.port()).map_err(|e| Error::io("cannot find a free port on", "127.0.0.1", e))
+}
+
+/// Whether the server's log tail says another program had `port` when the server came to it, as
+/// dolt 2.7.5 and 2.7.7 say it, each on a line of its own: dolt's own check found something
+/// listening there (the line `Port 50123 already in use.`), or its listen failed there (a line
+/// ending in Go's words for that on unix, `listen tcp 127.0.0.1:50123: bind: address already in
+/// use`, before which an error wrapping it would add its own). The same words inside another
+/// line, a path the start-up line names say, are not those lines. A port that is free again by
+/// now was still lost.
+fn port_taken(log_tail: &str, port: u16) -> bool {
+    let checked = format!("Port {port} already in use.");
+    let listened = format!("listen tcp {}:{port}: bind: address already in use", Ipv4Addr::LOCALHOST);
+    log_tail.lines().map(str::trim).any(|line| line == checked || line.ends_with(&listened))
 }
 
 /// Ready means: the child still runs, the project's lock names it, and a connection with the
@@ -1581,6 +1599,27 @@ mod tests {
             let left = (record::read(&opts.records, &data_text).unwrap(), Path::new(&pending.run_dir).exists());
             assert_eq!(left, (None, false), "{at}: the record and the run folder went");
             assert!(!data.join(".dolt").join("sql-server.info").exists(), "{at}: no lock is left, the server stopped politely");
+        }
+    }
+
+    /// The log tails dolt 2.7.7 left here when another program had its port, listening there or
+    /// holding it without listening, say the port was taken; the same words for another port, or
+    /// inside a path the start-up line names, the warning about a socket in use (on which dolt goes
+    /// on) and a tail without them do not.
+    #[test]
+    fn a_log_tail_says_whether_the_port_was_taken() {
+        let head = "Starting server with Config HP=\"127.0.0.1:55323\"|T=\"28800000\"|R=\"false\"|L=\"warning\"|S=\"/t/af-x/db.sock\"";
+        let listening = format!("{head}\nPort 55323 already in use.");
+        let holding = format!("{head}\nlisten tcp 127.0.0.1:55323: bind: address already in use");
+        for tail in [&listening, &holding] {
+            assert!(port_taken(tail, 55323), "{tail}");
+            assert!(!port_taken(tail, 5532) && !port_taken(tail, 55324), "another port's: {tail}");
+        }
+        let socket = format!("{head}\nunix socket set up failed: file already in use: /t/af-x/db.sock");
+        assert!(!port_taken(&socket, 55323) && !port_taken(head, 55323));
+        for inside in ["Port 55323 already in use.", "listen tcp 127.0.0.1:55323: bind: address already in use"] {
+            let banner = head.replace("/t/af-x/", &format!("/t/{inside}/"));
+            assert!(!port_taken(&banner, 55323), "words inside a path: {banner}");
         }
     }
 

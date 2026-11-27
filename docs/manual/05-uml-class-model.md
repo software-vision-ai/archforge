@@ -572,6 +572,8 @@ Drag a classifier's row in **Models** onto a package's row to move it there, or 
 its **Owner** in **Properties** (see [Nested classifiers](#nested-classifiers)). A classifier of
 another package on a diagram is drawn dimmed, its package named above its name. Removing a package
 hands what it holds up to the package around it, in the end the root package, which itself stays.
+When Archforge asks first, it counts only the relationships that go with the package itself, such
+as a dependency on it; the relationships of what it hands up stay.
 Its UML structure diagrams go up too, as more diagrams of the package around it, whose default
 diagram stays. When packages around it are removed at the same time, its UML structure diagrams go
 to the first package above all of them that stays, even past a package that is only moved up. When
