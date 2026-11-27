@@ -173,7 +173,7 @@ fn the_new_project_line_lists_the_kinds_the_shell_was_given() {
     };
     in_both_appearances(|theme| {
         let two = "Add ER diagrams and UML structure diagrams as you go. Every diagram shows the same model.";
-        assert_eq!(line(crate::kinds::KINDS, theme), [two], "{theme:?}");
+        assert_eq!(line(SCREENS.kinds(), theme), [two], "{theme:?}");
         let alone = line(SKETCH_ALONE, theme);
         assert_eq!(alone, ["Add Sketches as you go. Every diagram shows the same model."], "{theme:?}");
         assert!(!alone.iter().any(|t| t.contains("ER diagrams") || t.contains("UML structure diagrams")), "{theme:?}: {alone:?}");
@@ -18426,9 +18426,9 @@ fn a_kept_default_diagram_is_said_by_the_notations_handed() {
     crate::i18n::set_language("en");
     let kept = |fault| Reason::DefaultDiagramOf { package: "Sales".into(), fault };
     let own = "This diagram is the default diagram of Sales. Choose another class diagram as the default of Sales first.";
-    assert_eq!(crate::panels::said(crate::notation_ui::UIS, &kept(None)).as_deref(), Some(own));
+    assert_eq!(crate::panels::said(SCREENS.notation_uis(), &kept(None)).as_deref(), Some(own));
     let foreign = "Sales has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.";
-    assert_eq!(crate::panels::said(crate::notation_ui::UIS, &kept(Some(BindingFault::WrongOwner))).as_deref(), Some(foreign));
+    assert_eq!(crate::panels::said(SCREENS.notation_uis(), &kept(Some(BindingFault::WrongOwner))).as_deref(), Some(foreign));
     for fault in [None, Some(BindingFault::WrongOwner)] {
         assert_eq!(crate::panels::said(SKETCH_UIS, &kept(fault)), None, "{fault:?}: ER and the sketch take no default diagram");
         assert_eq!(crate::panels::said(&[], &kept(fault)), None, "{fault:?}: the shell alone has no words for it");
