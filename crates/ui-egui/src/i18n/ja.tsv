@@ -1020,7 +1020,6 @@ str		Association class	関連クラス
 str		Classifier kinds	分類子の種類
 str		Package	パッケージ
 # プロパティのクラスメンバー
-str		Owner: {path}	所有者: {path}
 str		Stereotype	ステレオタイプ
 str		{first} and {second}	{first} と {second}
 str		{first}, {second} and {third}	{first}、{second}、{third}

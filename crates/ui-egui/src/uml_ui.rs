@@ -374,6 +374,11 @@ impl DiagramKind for UmlKind {
         crate::panels::run_cx(cx, cmd, json!({ key: element.to_string(), "name": name })).map(|_| ())
     }
 
+    /// A package's name is typed in its tab, which grows with it (AR-113).
+    fn name_field(&self, paint: &egui::Painter, store: &Store, node: Obj, rect: Rect, text: &str, z: f32) -> Option<(Rect, crate::ux::Type)> {
+        crate::uml_package::name_field(paint, store, node, rect, text, z)
+    }
+
     /// A class, an interface, an enumeration, a data type, or a package on the diagram, goes from the model with
     /// ⇧⌫ (AR-95).
     fn deletes(&self, store: &Store, element: Obj) -> bool {
@@ -575,6 +580,19 @@ impl DiagramKind for UmlKind {
         ui: &egui::Ui,
     ) -> Vec<crate::canvas::ExtraLabel> {
         crate::uml_sets::draw_sets(paint, d, registry, ui)
+    }
+
+    /// A package's card: its tab, the path of its owners and its own diagram's thumbnail (AR-113,
+    /// AR-565).
+    fn draw_card(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> bool {
+        crate::uml_package::draw_card(paint, d, card, registry, ui)
     }
 
     /// A generalization set's label gets a node where it is let go, on this diagram alone (AR-129).
