@@ -1447,7 +1447,7 @@ fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
         h.run_steps(3);
         // What a notation kept for the version in view is that session's: the next starts fresh.
         uml_of_mut(h.state_mut()).classifier = Classifier::DataType;
-        uml_of_mut(h.state_mut()).type_choices = Some(crate::panels::TypeChoices::default());
+        uml_of_mut(h.state_mut()).type_choices = Some(crate::uml_panel::TypeChoices::default());
         step_to(&mut h, "b");
         assert!(!h.state().is_held(), "no hold");
         assert!(h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay.as_secs() < 1, "it wakes while waiting");
