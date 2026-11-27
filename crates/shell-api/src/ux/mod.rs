@@ -120,13 +120,15 @@ pub struct Palette {
     pub danger_tint: Colour,
     /// A switch's track while it is off.
     pub control_off: Colour,
-    /// An entity node on the canvas: its fill, its edge, its eyebrow and key badges, its header line.
-    pub entity: Colour,
-    pub entity_edge: Colour,
-    pub entity_ink: Colour,
-    pub entity_line: Colour,
-    /// The foreign-key dot of the key status toggle.
-    pub key_foreign: Colour,
+    /// A tinted card on the canvas: its fill, its edge, its eyebrow and row badges, its header line.
+    pub card: Colour,
+    pub card_edge: Colour,
+    pub card_ink: Colour,
+    pub card_line: Colour,
+    /// A status mark that asks for attention: a problem badge on the canvas and a row's mark in the
+    /// Problems section, a line not complete while the status marks are on, and the status toggle's
+    /// second dot.
+    pub warning: Colour,
 }
 
 /// The opaque colour of the code `0xRRGGBB`.
@@ -165,11 +167,11 @@ pub const LIGHT: Palette = Palette {
     danger: rgb(0xC0392B),
     danger_tint: rgb(0xFBEDEB),
     control_off: rgb(0xD5DCE6),
-    entity: rgb(0xFFF7EE),
-    entity_edge: rgb(0xF0B37A),
-    entity_ink: rgb(0xC25E0A),
-    entity_line: rgb(0xF6D6B5),
-    key_foreign: rgb(0xE07B1A),
+    card: rgb(0xFFF7EE),
+    card_edge: rgb(0xF0B37A),
+    card_ink: rgb(0xC25E0A),
+    card_line: rgb(0xF6D6B5),
+    warning: rgb(0xE07B1A),
 };
 
 pub const DARK: Palette = Palette {
@@ -203,11 +205,11 @@ pub const DARK: Palette = Palette {
     danger: rgb(0xD9534F),
     danger_tint: rgb(0x3A1F1E),
     control_off: rgb(0x3A4554),
-    entity: rgb(0x2A2119),
-    entity_edge: rgb(0x7A5A2E),
-    entity_ink: rgb(0xE8A05A),
-    entity_line: rgb(0x4A3A28),
-    key_foreign: rgb(0xF0A05A),
+    card: rgb(0x2A2119),
+    card_edge: rgb(0x7A5A2E),
+    card_ink: rgb(0xE8A05A),
+    card_line: rgb(0x4A3A28),
+    warning: rgb(0xF0A05A),
 };
 
 /// The palette of an appearance.

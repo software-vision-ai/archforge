@@ -466,12 +466,12 @@ pub struct State {
     /// work did not go, or what a step passed. Only ever read against `notice`, so whatever
     /// clears or replaces that ends the toast as well.
     pub refused_step: Option<String>,
-    /// Editing (slice E1): a name typed in a node, the pointer gesture under way, the entity menu,
+    /// Editing (slice E1): a name typed in a node, the pointer gesture under way, the element menu,
     /// and whether the canvas has the keyboard. What a notation types, draws and opens on the
     /// canvas is its own (the shell's `notation_ui::NotationState`).
     pub rename: Option<crate::editing::NodeRename>,
     pub gesture: Option<crate::editing::Gesture>,
-    pub menu: Option<crate::editing::EntityMenu>,
+    pub menu: Option<crate::editing::ElementMenu>,
     pub focused: bool,
     /// Relationships (slice E2): the chevron whose popover is open (the cardinality popover, a menu
     /// of kinds) and the toast with Undo; the ends a new line gets and the mapping table offer are

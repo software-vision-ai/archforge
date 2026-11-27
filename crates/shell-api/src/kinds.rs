@@ -14,7 +14,7 @@ use egui::{Pos2, Rect, Stroke};
 
 use crate::canvas::{self, Drawing, Tool, View};
 use crate::cx::{Ctx, CtxRef};
-use crate::editing::{Action, EntityMenu};
+use crate::editing::{Action, ElementMenu};
 use crate::ux::{Icon, Palette};
 use crate::widgets::Registry;
 
@@ -126,7 +126,7 @@ pub struct MenuRow {
     /// Open in Models, before Generate….
     pub first: bool,
     /// What it does when picked, on the menu's node and element.
-    pub run: fn(&mut Ctx, &EntityMenu),
+    pub run: fn(&mut Ctx, &ElementMenu),
 }
 
 /// A row a diagram kind gives the Model menu ([`DiagramKind::menu_rows`]), as data: the shell makes

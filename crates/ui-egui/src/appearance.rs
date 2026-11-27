@@ -73,14 +73,14 @@ fn default_colour(view: &ProjectView, store: &Store, n: Obj, group: Group, p: &P
     let el = store.get(n, node::ELEMENT).ok().and_then(|v| v.as_ref());
     // A tinted card its notation draws (ER's table) takes the card's colours; a plain one (a
     // class) the surface's.
-    let entity = el.is_some_and(|e| {
+    let tinted = el.is_some_and(|e| {
         let d = archforge_diagram::diagram_of(store, n);
         let card = d.zip(view.of_element(store, e)).and_then(|(d, notation)| notation.card(store, e, d));
         card.is_some_and(|c| c.tone == archforge_diagram::figure::Tone::Tinted)
     });
-    match (group, el, entity) {
-        (Group::Fill, _, true) => p.entity,
-        (Group::Border, _, true) => p.entity_edge,
+    match (group, el, tinted) {
+        (Group::Fill, _, true) => p.card,
+        (Group::Border, _, true) => p.card_edge,
         (Group::Fill, None, _) => p.amber_tint,
         (Group::Border, None, _) => p.amber,
         (Group::Fill, ..) => p.surface,

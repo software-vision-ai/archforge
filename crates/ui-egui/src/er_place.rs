@@ -10,7 +10,7 @@ use archforge_diagram::grid::bounds_of;
 use archforge_mof::{Obj, Store, Uuid};
 use serde_json::json;
 
-use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_ROW, Tool};
+use crate::canvas::{CARD_FIRST_ROW, CARD_ROW, Tool};
 use crate::cx::Ctx;
 use crate::editing::{NodeRename, element_of, nodes_of, on_diagram, place_with_lines_cx, select_cx, unit_rect, uuid};
 use crate::er_state::er;
@@ -27,7 +27,7 @@ fn entity_of_node(store: &Store, n: Obj) -> Option<Obj> {
 
 /// The columns an entity node shows, and the height that shows them all.
 pub fn content_height(columns: usize) -> f64 {
-    if columns == 0 { ENTITY_EMPTY_HEIGHT } else { (ENTITY_FIRST_ROW + 9.0) as f64 + columns as f64 * ENTITY_ROW as f64 }
+    if columns == 0 { ENTITY_EMPTY_HEIGHT } else { (CARD_FIRST_ROW + 9.0) as f64 + columns as f64 * CARD_ROW as f64 }
 }
 
 /// The name a new entity gets: "Entity", then "Entity 2" and on, never one its schema has.
