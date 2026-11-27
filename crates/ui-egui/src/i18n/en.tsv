@@ -138,7 +138,6 @@ str		Sort recent projects by last opened	Sort recent projects by last opened
 str		Find an element, view, or action	Find an element, view, or action
 str		Nothing in the model yet	Nothing in the model yet
 str		Add	Add
-str		Schema	Schema
 str		Folder	Folder
 str		Skill	Skill
 str		Nothing matches the filter	Nothing matches the filter
@@ -155,49 +154,19 @@ plural		{n} relationship goes with it.	{n} relationship goes with it.|{n} relati
 str		Delete	Delete
 str		Element · model	Element · model
 str		Skill · model	Skill · model
-str		Nulls distinct	Nulls distinct
 plural		{n} literal	{n} literal|{n} literals
-str		Domain	Domain
-str		Enum type	Enum type
-str		Base type	Base type
 str		Complete	Complete
 str		Disjoint	Disjoint
-str		Table per type	Table per type
-str		Single table	Single table
-str		Table per concrete type	Table per concrete type
-str		complete	complete
-str		disjoint	disjoint
-str		overlapping	overlapping
-str		Sequence	Sequence
-str		Increment	Increment
-str		Minimum	Minimum
-str		Maximum	Maximum
-str		Cycle	Cycle
-str		View	View
-str		Materialized	Materialized
-str		Query	Query
-str		Where	Where
-str		Method	Method
-str		Ascending	Ascending
-str		Descending	Descending
 str		Problems · {n}	Problems · {n}
 str		{key}: {problem}	{key}: {problem}
 str		Link to a table or a relationship	Link to a table or a relationship
 str		Drop the link on a table or a relationship's line	Drop the link on a table or a relationship's line
 str		Add skill	Add skill
 str		Kind	Kind
-str		Regular	Regular
 str		Type	Type
-str		Primary key	Primary key
-str		Not null	Not null
 str		Unique	Unique
-str		Length	Length
-str		Precision	Precision
-str		Scale	Scale
 str		Default	Default
-str		Generation	Generation
 str		Expression	Expression
-str		Collation	Collation
 str		Description	Description
 str		None	None
 str		Remove	Remove
@@ -683,9 +652,7 @@ str		Filter diagrams…	Filter diagrams…
 str		No diagrams yet	No diagrams yet
 str		Select	Select
 str		Pan	Pan
-str		Entity	Entity
 str		Relationship	Relationship
-str		Relationship types	Relationship types
 str		Note	Note
 str		Link note	Link note
 str		Grid	Grid
@@ -835,8 +802,6 @@ str		Stack vertically	Stack vertically
 str		Open in Models	Open in Models
 str		Remove from this diagram	Remove from this diagram
 str		Delete from the model…	Delete from the model…
-str		Start	Start
-str		Identifying	Identifying
 str		{name} removed	{name} removed
 str		Undo	Undo
 str		Redo	Redo
@@ -988,32 +953,10 @@ str		Diagram · of {owner}	Diagram · of {owner}
 str		This diagram	This diagram
 str		On this diagram · {n}	On this diagram · {n}
 str		Role	Role
-str		Foreign key	Foreign key
-str		On delete	On delete
-str		On update	On update
-str		No action	No action
-str		Restrict	Restrict
-str		Cascade	Cascade
-str		Set null	Set null
-str		Set default	Set default
 str		More	More
-str		Deferrable	Deferrable
 str		No	No
-str		Match	Match
-str		Simple	Simple
-str		Full	Full
-str		Partial	Partial
 # Class diagrams
-str		Class	Class
-str		Interface	Interface
-str		Enumeration	Enumeration
-str		Data type	Data type
-str		Primitive type	Primitive type
-str		Association class	Association class
-str		Classifier kinds	Classifier kinds
-str		Package	Package
 # Class members in Properties
-str		Stereotype	Stereotype
 str		{list}, {next}	{list}, {next}
 str		{first} and {second}	{first} and {second}
 str		{first}, {second} and {third}	{first}, {second} and {third}
@@ -1070,42 +1013,22 @@ str		{word} is not a diagram kind. The kinds are {kinds}.	{word} is not a diagra
 str		This project holds no notation, so it knows no diagram kind.	This project holds no notation, so it knows no diagram kind.
 str		This line has no label text {word}. It has {slots}.	This line has no label text {word}. It has {slots}.
 str		This line has no label text {word}. It has none.	This line has no label text {word}. It has none.
-str		Constraint	Constraint
 str		Type an expression. A constraint without one states no rule.	Type an expression. A constraint without one states no rule.
 str		Give the elements as a list of ids.	Give the elements as a list of ids.
 str		The {axis} is not a number.	The {axis} is not a number.
 str		The {axis} is farther than {max} from the origin.	The {axis} is farther than {max} from the origin.
 str		An element is named twice. Name each element once.	An element is named twice. Name each element once.
 str		{name} deleted	{name} deleted
-str		Parameter	Parameter
-str		Operation	Operation
-str		Private	Private
-str		Protected	Protected
-str		Public	Public
 str		Read only	Read only
-str		Ordered	Ordered
 str		An item takes no {key}. It takes {takes}.	An item takes no {key}. It takes {takes}.
 str		An item holds a key without a name. It takes {takes}.	An item holds a key without a name. It takes {takes}.
 str		There is no element with the id {id}.	There is no element with the id {id}.
 str		{value} is not a literal of {enumeration}.	{value} is not a literal of {enumeration}.
-str		Visibility	Visibility
-str		Move package	Move package
-str		{what} moved into {where}	{what} moved into {where}
-str		Open this package's diagram	Open this package's diagram
-str		Open this package's diagram (⌘↓)	Open this package's diagram (⌘↓)
-str		This is the top package: zooming out goes no further	This is the top package: zooming out goes no further
 # Relating classes
-str		Aggregation	Aggregation
-str		Association	Association
-str		Composite	Composite
-str		Dependency	Dependency
 # Templates (AR-130)
 str		Value	Value
 # Template bindings (AR-131)
-str		Template binding	Template binding
 str		From	From
-str		Generalization	Generalization
-str		Interface realization	Interface realization
 # Generalization sets (AR-129)
 str		Rename	Rename
 str		Show in diagram	Show in diagram
@@ -1113,187 +1036,27 @@ str		No diagram shows it yet	No diagram shows it yet
 str		Delete from model	Delete from model
 str		Delete diagram	Delete diagram
 str		A skill is removed from its tab	A skill is removed from its tab
-str		Generalization set	Generalization set
 plural		{n} element	{n} element|{n} elements
-str		Relationship kinds	Relationship kinds
-str		Shared	Shared
 str		{what} removed	{what} removed
 # Packages
 str		{name} removed; what it held moved to {parent}	{name} removed; what it held moved to {parent}
 # Words for what the metamodel names
-str		Alias	Alias
-str		Allow substitutable	Allow substitutable
-str		Alt	Alt
 str		Applies to	Applies to
-str		Assembly	Assembly
-str		Assert	Assert
-str		Associative	Associative
-str		Asynch call	Asynch call
-str		Asynch signal	Asynch signal
 str		Body	Body
-str		Break	Break
-str		Check constraint	Check constraint
-str		Choice	Choice
-str		Classifier template parameter	Classifier template parameter
-str		Comment	Comment
-str		Computed stored	Computed stored
-str		Computed virtual	Computed virtual
-str		Concurrency	Concurrency
-str		Concurrent	Concurrent
-str		Consider	Consider
-str		Content	Content
-str		Create message	Create message
-str		Critical	Critical
-str		Deep history	Deep history
-str		Delegation	Delegation
-str		Delete message	Delete message
-str		Deployment location	Deployment location
 str		Derivation	Derivation
 str		Direction	Direction
-str		Domain check	Domain check
 str		Drawing	Drawing
-str		Effect	Effect
-str		Entry point	Entry point
-str		Exactly one	Exactly one
-str		Execution location	Execution location
-str		Exit point	Exit point
 str		Export	Export
-str		Extension	Extension
-str		Extension end	Extension end
-str		External	External
-str		FIFO	FIFO
-str		File name	File name
-str		First	First
-str		First event	First event
-str		Fork	Fork
-str		Format	Format
-str		Found	Found
-str		From end	From end
-str		From role	From role
-str		Guarded	Guarded
-str		Identity always	Identity always
-str		Identity by default	Identity by default
-str		Ignore	Ignore
-str		In	In
-str		Index column	Index column
-str		Initial	Initial
-str		Initially deferred	Initially deferred
-str		Initially immediate	Initially immediate
-str		Inout	Inout
-str		Instance specification	Instance specification
-str		Instance value	Instance value
-str		Interaction operator	Interaction operator
-str		Internal	Internal
-str		Is ID	Is ID
-str		Is abstract	Is abstract
-str		Is active	Is active
-str		Is assured	Is assured
-str		Is behavior	Is behavior
-str		Is combine duplicate	Is combine duplicate
-str		Is conjugated	Is conjugated
-str		Is control	Is control
-str		Is control type	Is control type
-str		Is covering	Is covering
-str		Is derived	Is derived
-str		Is derived union	Is derived union
-str		Is destroy duplicates	Is destroy duplicates
-str		Is destroy links	Is destroy links
-str		Is destroy owned objects	Is destroy owned objects
-str		Is determinate	Is determinate
-str		Is dimension	Is dimension
-str		Is direct	Is direct
-str		Is disjoint	Is disjoint
-str		Is exception	Is exception
-str		Is external	Is external
-str		Is final specialization	Is final specialization
-str		Is indirectly instantiated	Is indirectly instantiated
-str		Is leaf	Is leaf
-str		Is locally reentrant	Is locally reentrant
-str		Is multicast	Is multicast
-str		Is multireceive	Is multireceive
-str		Is ordered	Is ordered
-str		Is query	Is query
-str		Is read only	Is read only
-str		Is reentrant	Is reentrant
-str		Is relative	Is relative
-str		Is remove duplicates	Is remove duplicates
-str		Is replace all	Is replace all
-str		Is service	Is service
-str		Is single execution	Is single execution
-str		Is static	Is static
-str		Is stream	Is stream
-str		Is strict	Is strict
-str		Is substitutable	Is substitutable
-str		Is synchronous	Is synchronous
-str		Is tested first	Is tested first
-str		Is unique	Is unique
-str		Is unmarshall	Is unmarshall
-str		Iterative	Iterative
-str		Join	Join
-str		Junction	Junction
-str		LIFO	LIFO
-str		Last	Last
-str		Literal boolean	Literal boolean
-str		Literal integer	Literal integer
-str		Literal real	Literal real
-str		Literal string	Literal string
-str		Literal unlimited natural	Literal unlimited natural
-str		Local	Local
-str		Loop	Loop
-str		Lost	Lost
-str		Message sort	Message sort
-str		Mode	Mode
 str		Modelling	Modelling
-str		Must isolate	Must isolate
 str		Naming	Naming
-str		Neg	Neg
-str		Not deferrable	Not deferrable
-str		Nullable	Nullable
-str		Nulls	Nulls
-str		One or more	One or more
-str		Opaque expression	Opaque expression
-str		Opt	Opt
-str		Ordering	Ordering
-str		Out	Out
-str		Par	Par
-str		Parallel	Parallel
 str		Persistence	Persistence
-str		Profile application	Profile application
-str		Read	Read
 str		Realization	Realization
-str		Redefinable template signature	Redefinable template signature
 str		Refinement	Refinement
-str		Reply	Reply
-str		Return	Return
 str		Satisfaction	Satisfaction
-str		Seq	Seq
-str		Sequential	Sequential
-str		Setting	Setting
-str		Shallow history	Shallow history
-str		Slot	Slot
-str		Stream	Stream
-str		Strict	Strict
-str		Subtype mapping	Subtype mapping
-str		Subtypes complete	Subtypes complete
-str		Subtypes disjoint	Subtypes disjoint
-str		Symbol	Symbol
-str		Synch call	Synch call
-str		Table index	Table index
 str		Tag	Tag
-str		Template parameter substitution	Template parameter substitution
-str		Terminate	Terminate
-str		To end	To end
-str		To role	To role
 str		Trace	Trace
 str		Type pattern	Type pattern
-str		URI	URI
-str		Unique constraint	Unique constraint
 str		Unknown	Unknown
-str		Unordered	Unordered
-str		Update	Update
-str		Viewpoint	Viewpoint
-str		Zero or more	Zero or more
-str		Zero or one	Zero or one
 # Unsaved changes on close
 str		Close and lose changes	Close and lose changes
 str		Close without writing	Close without writing

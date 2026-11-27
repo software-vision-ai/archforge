@@ -3,6 +3,7 @@
 str		Table	Table
 str		Column	Colonne
 str		Columns	Colonnes
+str		Schema	Schéma
 str		Schema · model	Schéma · modèle
 str		Table · model, in every diagram	Table · modèle, dans chaque diagramme
 str		Column · model	Colonne · modèle
@@ -23,10 +24,14 @@ str		Columns · {n}	Colonnes · {n}
 str		Keys · {n}	Clés · {n}
 str		Add a column	Ajouter une colonne
 str		Add unique constraint	Ajouter une contrainte d’unicité
+str		Nulls distinct	Nuls distincts
 str		Columns, in key order	Colonnes, dans l’ordre de la clé
 str		Types · {n}	Types · {n}
 plural		{n} check	{n} contrôle|{n} contrôles
 str		Add type	Ajouter un type
+str		Domain	Domaine
+str		Enum type	Type énuméré
+str		Base type	Type de base
 str		Checks	Contrôles
 str		Add a check	Ajouter un contrôle
 str		Literals, in order	Littéraux dans l’ordre
@@ -34,6 +39,12 @@ str		Subtypes · {n}	Sous-types · {n}
 str		Add subtype	Ajouter un sous-type
 str		Discriminator	Discriminant
 str		Mapping	Correspondance
+str		Table per type	Table par type
+str		Single table	Table unique
+str		Table per concrete type	Table par type concret
+str		complete	complète
+str		disjoint	disjointe
+str		overlapping	chevauchante
 str		key on {columns}	clé sur {columns}
 str		Add a literal	Ajouter un littéral
 plural		{n} column takes {name}: {columns}. Retype it first.	{n} colonne utilise {name} : {columns}. Changez d’abord son type.|{n} colonnes utilisent {name} : {columns}. Changez d’abord leur type.
@@ -63,6 +74,14 @@ str		The start {start} is below the minimum {minimum}.	La valeur initiale {start
 str		The start {start} is above the maximum {maximum}.	La valeur initiale {start} est supérieure au maximum {maximum}.
 str	sequence	Start	Valeur initiale
 str		Owned by	Appartient à
+str		Sequence	Séquence
+str		Increment	Incrément
+str		Minimum	Minimum
+str		Maximum	Maximum
+str		Cycle	Cyclique
+str		View	Vue
+str		Materialized	Matérialisée
+str		Query	Requête
 plural		{n} more column, not listed	{n} colonne de plus, non listée|{n} colonnes de plus, non listées
 str		{field} takes a whole number	{field} attend un nombre entier
 str		Views · {n}	Vues · {n}
@@ -81,6 +100,10 @@ str		Indexes · {n}	Index · {n}
 str		Add check constraint	Ajouter une contrainte de contrôle
 str		Add index	Ajouter un index
 str		Columns, in index order	Colonnes dans l’ordre de l’index
+str		Where	Where
+str		Method	Méthode
+str		Ascending	Croissant
+str		Descending	Décroissant
 str		An expression	Une expression
 str		Nulls default	Nuls par défaut
 str		Nulls first	Nuls en premier
@@ -96,6 +119,14 @@ plural		{n} key goes with it.	{n} clé part avec lui.|{n} clés partent avec lui
 plural		{n} foreign key goes with it.	{n} clé étrangère part avec lui.|{n} clés étrangères partent avec lui.
 str		Add column	Ajouter une colonne
 str		Edit column	Modifier la colonne
+str		Regular	Ordinaire
+str		Primary key	Clé primaire
+str		Not null	Non nul
+str		Length	Longueur
+str		Precision	Précision
+str		Scale	Échelle
+str		Generation	Génération
+str		Collation	Collation
 str		Mapping table	Table d’association
 str		Follows {target}	Suit {target}
 str		Unlink	Dissocier
@@ -128,6 +159,34 @@ str		Identity, always	Identité, toujours
 str		Identity, by default	Identité, par défaut
 str		Computed, stored	Calculée, stockée
 str		Computed, virtual	Calculée, virtuelle
+str		Associative	Associative
+str		Check constraint	Contrainte de contrôle
+str		Computed stored	Calculée, stockée
+str		Computed virtual	Calculée, virtuelle
+str		Domain check	Contrainte de contrôle de domaine
+str		Exactly one	Exactement un
+str		First	En premier
+str		From end	Extrémité de départ
+str		From role	Rôle de départ
+str		Identity always	Identité, toujours
+str		Identity by default	Identité, par défaut
+str		Index column	Colonne d’index
+str		Initially deferred	Initialement différé
+str		Initially immediate	Initialement immédiat
+str		Last	En dernier
+str		Not deferrable	Non différable
+str		Nullable	Accepte les nuls
+str		Nulls	Nuls
+str		One or more	Un ou plusieurs
+str		Subtype mapping	Mappage des sous-types
+str		Subtypes complete	Sous-types complets
+str		Subtypes disjoint	Sous-types disjoints
+str		Table index	Index de table
+str		To end	Extrémité d’arrivée
+str		To role	Rôle d’arrivée
+str		Unique constraint	Contrainte d’unicité
+str		Zero or more	Zéro ou plusieurs
+str		Zero or one	Zéro ou un
 str		New ER diagram	Nouveau diagramme ER
 str		Tables, their columns and keys, and the relationships between them.	Des tables, leurs colonnes et clés, et les relations entre elles.
 str		ER diagram	Diagramme ER
@@ -211,6 +270,8 @@ str	refusal	a subtype	un sous-type
 str	refusal	a key column	une colonne de clé
 str		Entity · {schema}	Entité · {schema}
 str		Add table	Ajouter une table
+str		Entity	Entité
+str		Relationship types	Types de relation
 str		Place table	Placer la table
 str		Show related tables	Afficher les tables liées
 str		Key status	État des clés
@@ -220,6 +281,8 @@ str		Add relationship	Ajouter une relation
 str		Cardinality	Cardinalité
 str		Presets	Préréglages
 str		End	Fin
+str		Start	Début
+str		Identifying	Identifiante
 str		Identifying needs the parent's primary key; drawn as not identifying	Identifiante demande la clé primaire du parent ; tracée comme non identifiante
 str		Many to many · add a mapping table	Plusieurs à plusieurs · ajouter une table de liaison
 str		Many to many · {from} and {to}	Plusieurs à plusieurs · {from} et {to}
@@ -242,6 +305,19 @@ str		This relationship	Cette relation
 str		On this relationship · {n}	Sur cette relation · {n}
 str		Add foreign key	Ajouter une clé étrangère
 str		Remove foreign key	Retirer la clé étrangère
+str		Foreign key	Clé étrangère
+str		On delete	À la suppression
+str		On update	À la mise à jour
+str		No action	Aucune action
+str		Restrict	Restreindre
+str		Cascade	En cascade
+str		Set null	Mettre à nul
+str		Set default	Mettre la valeur par défaut
+str		Deferrable	Différable
+str		Match	Correspondance
+str		Simple	Simple
+str		Full	Complète
+str		Partial	Partielle
 str		Add id column	Ajouter une colonne id
 str		Choose key columns	Choisir les colonnes clés
 str		Ends	Extrémités

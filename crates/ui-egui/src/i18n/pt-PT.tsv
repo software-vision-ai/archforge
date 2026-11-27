@@ -139,7 +139,6 @@ str		Sort recent projects by last opened	Ordenar os projetos recentes pela últi
 str		Find an element, view, or action	Encontrar um elemento, vista ou ação
 str		Nothing in the model yet	Ainda nada no modelo
 str		Add	Adicionar
-str		Schema	Esquema
 str		Folder	Pasta
 str		Skill	Competência
 str		Nothing matches the filter	Nada corresponde ao filtro
@@ -156,49 +155,19 @@ plural		{n} relationship goes with it.	{n} relação vai com ele.|{n} relações
 str		Delete	Eliminar
 str		Element · model	Elemento · modelo
 str		Skill · model	Competência · modelo
-str		Nulls distinct	Nulos distintos
 plural		{n} literal	{n} literal|{n} literais
-str		Domain	Domínio
-str		Enum type	Tipo enumerado
-str		Base type	Tipo base
 str		Complete	Completa
 str		Disjoint	Disjunta
-str		Table per type	Tabela por tipo
-str		Single table	Tabela única
-str		Table per concrete type	Tabela por tipo concreto
-str		complete	completa
-str		disjoint	disjunta
-str		overlapping	sobreposta
-str		Sequence	Sequência
-str		Increment	Incremento
-str		Minimum	Mínimo
-str		Maximum	Máximo
-str		Cycle	Cíclica
-str		View	Vista
-str		Materialized	Materializada
-str		Query	Consulta
-str		Where	Where
-str		Method	Método
-str		Ascending	Ascendente
-str		Descending	Descendente
 str		Problems · {n}	Problemas · {n}
 str		{key}: {problem}	{key}: {problem}
 str		Link to a table or a relationship	Ligar a uma tabela ou a uma relação
 str		Drop the link on a table or a relationship's line	Largue a ligação numa tabela ou na linha de uma relação
 str		Add skill	Adicionar competência
 str		Kind	Género
-str		Regular	Normal
 str		Type	Tipo
-str		Primary key	Chave primária
-str		Not null	Não nulo
 str		Unique	Único
-str		Length	Comprimento
-str		Precision	Precisão
-str		Scale	Escala
 str		Default	Predefinição
-str		Generation	Geração
 str		Expression	Expressão
-str		Collation	Colação
 str		Description	Descrição
 str		None	Nenhuma
 str		Remove	Remover
@@ -684,9 +653,7 @@ str		Filter diagrams…	Filtrar diagramas…
 str		No diagrams yet	Ainda sem diagramas
 str		Select	Selecionar
 str		Pan	Deslocar
-str		Entity	Entidade
 str		Relationship	Relação
-str		Relationship types	Tipos de relação
 str		Note	Nota
 str		Link note	Ligar nota
 str		Grid	Grelha
@@ -836,8 +803,6 @@ str		Stack vertically	Empilhar verticalmente
 str		Open in Models	Abrir em Modelos
 str		Remove from this diagram	Remover deste diagrama
 str		Delete from the model…	Eliminar do modelo…
-str		Start	Início
-str		Identifying	Identificadora
 str		{name} removed	{name} removida
 str		Undo	Anular
 str		Redo	Refazer
@@ -989,32 +954,10 @@ str		Diagram · of {owner}	Diagrama · de {owner}
 str		This diagram	Este diagrama
 str		On this diagram · {n}	Neste diagrama · {n}
 str		Role	Papel
-str		Foreign key	Chave estrangeira
-str		On delete	Ao eliminar
-str		On update	Ao atualizar
-str		No action	Sem ação
-str		Restrict	Restringir
-str		Cascade	Em cascata
-str		Set null	Definir nulo
-str		Set default	Definir predefinição
 str		More	Mais
-str		Deferrable	Adiável
 str		No	Não
-str		Match	Correspondência
-str		Simple	Simples
-str		Full	Completa
-str		Partial	Parcial
 # Diagramas de classes
-str		Class	Classe
-str		Interface	Interface
-str		Enumeration	Enumeração
-str		Data type	Tipo de dados
-str		Primitive type	Tipo primitivo
-str		Association class	Classe de associação
-str		Classifier kinds	Tipos de classificador
-str		Package	Pacote
 # Membros de classe nas Propriedades
-str		Stereotype	Estereótipo
 str		{list}, {next}	{list}, {next}
 str		{first} and {second}	{first} e {second}
 str		{first}, {second} and {third}	{first}, {second} e {third}
@@ -1071,42 +1014,22 @@ str		{word} is not a diagram kind. The kinds are {kinds}.	{word} não é um tipo
 str		This project holds no notation, so it knows no diagram kind.	Este projeto não contém nenhuma notação, por isso não conhece nenhum tipo de diagrama.
 str		This line has no label text {word}. It has {slots}.	Esta linha não tem o texto de etiqueta {word}. Tem {slots}.
 str		This line has no label text {word}. It has none.	Esta linha não tem o texto de etiqueta {word}. Não tem nenhum.
-str		Constraint	Restrição
 str		Type an expression. A constraint without one states no rule.	Escreva uma expressão. Uma restrição sem expressão não enuncia nenhuma regra.
 str		Give the elements as a list of ids.	Indique os elementos como uma lista de identificadores.
 str		The {axis} is not a number.	O valor {axis} não é um número.
 str		The {axis} is farther than {max} from the origin.	O valor {axis} está a mais de {max} da origem.
 str		An element is named twice. Name each element once.	Um elemento é indicado duas vezes. Indique cada elemento uma só vez.
 str		{name} deleted	{name} eliminado
-str		Parameter	Parâmetro
-str		Operation	Operação
-str		Private	Privada
-str		Protected	Protegida
-str		Public	Pública
 str		Read only	Só de leitura
-str		Ordered	Ordenado
 str		An item takes no {key}. It takes {takes}.	Uma entrada não aceita {key}. Aceita {takes}.
 str		An item holds a key without a name. It takes {takes}.	Uma entrada contém uma chave sem nome. Aceita {takes}.
 str		There is no element with the id {id}.	Não existe nenhum elemento com o identificador {id}.
 str		{value} is not a literal of {enumeration}.	{value} não é um literal de {enumeration}.
-str		Visibility	Visibilidade
-str		Move package	Mover pacote
-str		{what} moved into {where}	{what} movido para {where}
-str		Open this package's diagram	Abrir o diagrama deste pacote
-str		Open this package's diagram (⌘↓)	Abrir o diagrama deste pacote (⌘↓)
-str		This is the top package: zooming out goes no further	Este é o pacote de topo: afastar mais não leva mais acima
 # Relacionar classes
-str		Aggregation	Agregação
-str		Association	Associação
-str		Composite	Composta
-str		Dependency	Dependência
 # Templates (AR-130)
 str		Value	Valor
 # Template bindings (AR-131)
-str		Template binding	Vinculação de modelo
 str		From	De
-str		Generalization	Generalização
-str		Interface realization	Realização de interface
 # Conjuntos de generalização (AR-129)
 str		Rename	Mudar o nome
 str		Show in diagram	Mostrar no diagrama
@@ -1114,187 +1037,27 @@ str		No diagram shows it yet	Nenhum diagrama o mostra ainda
 str		Delete from model	Eliminar do modelo
 str		Delete diagram	Eliminar diagrama
 str		A skill is removed from its tab	Uma competência é removida no seu separador
-str		Generalization set	Conjunto de generalização
 plural		{n} element	{n} elemento|{n} elementos
-str		Relationship kinds	Tipos de relação
-str		Shared	Partilhada
 str		{what} removed	Removido: {what}
 # Pacotes
 str		{name} removed; what it held moved to {parent}	{name} removido; o conteúdo foi movido para {parent}
 # Palavras para o que o metamodelo nomeia
-str		Alias	Alias
-str		Allow substitutable	Permitir substituição
-str		Alt	Alternativa
 str		Applies to	Aplica-se a
-str		Assembly	Montagem
-str		Assert	Asserção
-str		Associative	Associativa
-str		Asynch call	Chamada assíncrona
-str		Asynch signal	Sinal assíncrono
 str		Body	Texto
-str		Break	Interrupção
-str		Check constraint	Restrição de verificação
-str		Choice	Escolha
-str		Classifier template parameter	Parâmetro de modelo de classificador
-str		Comment	Comentário
-str		Computed stored	Calculada, armazenada
-str		Computed virtual	Calculada, virtual
-str		Concurrency	Concorrência
-str		Concurrent	Concorrente
-str		Consider	Considerar
-str		Content	Conteúdo
-str		Create message	Mensagem de criação
-str		Critical	Crítico
-str		Deep history	Histórico profundo
-str		Delegation	Delegação
-str		Delete message	Mensagem de eliminação
-str		Deployment location	Localização de implantação
 str		Derivation	Derivação
 str		Direction	Direção
-str		Domain check	Restrição de verificação de domínio
 str		Drawing	Desenho
-str		Effect	Efeito
-str		Entry point	Ponto de entrada
-str		Exactly one	Exatamente um
-str		Execution location	Localização de execução
-str		Exit point	Ponto de saída
 str		Export	Exportação
-str		Extension	Extensão
-str		Extension end	Extremidade de extensão
-str		External	Externa
-str		FIFO	FIFO
-str		File name	Nome do ficheiro
-str		First	Primeiro
-str		First event	Primeiro evento
-str		Fork	Bifurcação
-str		Format	Formato
-str		Found	Encontrado
-str		From end	Extremidade de origem
-str		From role	Papel de origem
-str		Guarded	Protegida
-str		Identity always	Identidade, sempre
-str		Identity by default	Identidade, por predefinição
-str		Ignore	Ignorar
-str		In	Entrada
-str		Index column	Coluna de índice
-str		Initial	Inicial
-str		Initially deferred	Inicialmente adiado
-str		Initially immediate	Inicialmente imediato
-str		Inout	Entrada/saída
-str		Instance specification	Especificação de instância
-str		Instance value	Valor de instância
-str		Interaction operator	Operador de interação
-str		Internal	Interna
-str		Is ID	É ID
-str		Is abstract	É abstrato
-str		Is active	É ativo
-str		Is assured	É assegurado
-str		Is behavior	É comportamento
-str		Is combine duplicate	Combina duplicados
-str		Is conjugated	É conjugado
-str		Is control	É de controlo
-str		Is control type	É do tipo controlo
-str		Is covering	É completo
-str		Is derived	É derivado
-str		Is derived union	É união derivada
-str		Is destroy duplicates	Destrói duplicados
-str		Is destroy links	Destrói ligações
-str		Is destroy owned objects	Destrói objetos próprios
-str		Is determinate	É determinado
-str		Is dimension	É dimensão
-str		Is direct	É direto
-str		Is disjoint	É disjunto
-str		Is exception	É exceção
-str		Is external	É externo
-str		Is final specialization	É especialização final
-str		Is indirectly instantiated	Instanciado indiretamente
-str		Is leaf	É folha
-str		Is locally reentrant	Localmente reentrante
-str		Is multicast	É multidifusão
-str		Is multireceive	É receção múltipla
-str		Is ordered	É ordenado
-str		Is query	É consulta
-str		Is read only	É só de leitura
-str		Is reentrant	É reentrante
-str		Is relative	É relativo
-str		Is remove duplicates	Elimina duplicados
-str		Is replace all	Substitui tudo
-str		Is service	É serviço
-str		Is single execution	Execução única
-str		Is static	É estático
-str		Is stream	É fluxo
-str		Is strict	É estrito
-str		Is substitutable	É substituível
-str		Is synchronous	É síncrono
-str		Is tested first	Testado primeiro
-str		Is unique	É único
-str		Is unmarshall	Desempacota
-str		Iterative	Iterativo
-str		Join	União
-str		Junction	Junção
-str		LIFO	LIFO
-str		Last	Último
-str		Literal boolean	Literal booleano
-str		Literal integer	Literal inteiro
-str		Literal real	Literal real
-str		Literal string	Literal de cadeia
-str		Literal unlimited natural	Literal natural ilimitado
-str		Local	Local
-str		Loop	Ciclo
-str		Lost	Perdido
-str		Message sort	Tipo de mensagem
-str		Mode	Modo
 str		Modelling	Modelação
-str		Must isolate	Deve isolar
 str		Naming	Nomenclatura
-str		Neg	Negativo
-str		Not deferrable	Não adiável
-str		Nullable	Admite nulos
-str		Nulls	Nulos
-str		One or more	Um ou mais
-str		Opaque expression	Expressão opaca
-str		Opt	Opção
-str		Ordering	Ordem
-str		Out	Saída
-str		Par	Paralelo
-str		Parallel	Paralelo
 str		Persistence	Persistência
-str		Profile application	Aplicação de perfil
-str		Read	Ler
 str		Realization	Realização
-str		Redefinable template signature	Assinatura de modelo redefinível
 str		Refinement	Refinamento
-str		Reply	Resposta
-str		Return	Retorno
 str		Satisfaction	Satisfação
-str		Seq	Sequência fraca
-str		Sequential	Sequencial
-str		Setting	Definição
-str		Shallow history	Histórico superficial
-str		Slot	Ranhura
-str		Stream	Fluxo
-str		Strict	Sequência estrita
-str		Subtype mapping	Mapeamento de subtipos
-str		Subtypes complete	Subtipos completos
-str		Subtypes disjoint	Subtipos disjuntos
-str		Symbol	Símbolo
-str		Synch call	Chamada síncrona
-str		Table index	Índice de tabela
 str		Tag	Etiqueta
-str		Template parameter substitution	Substituição de parâmetro de modelo
-str		Terminate	Terminação
-str		To end	Extremidade de destino
-str		To role	Papel de destino
 str		Trace	Rastreio
 str		Type pattern	Padrão de tipo
-str		URI	URI
-str		Unique constraint	Restrição de unicidade
 str		Unknown	Desconhecido
-str		Unordered	Não ordenado
-str		Update	Atualizar
-str		Viewpoint	Ponto de vista
-str		Zero or more	Zero ou mais
-str		Zero or one	Zero ou um
 # Alterações por guardar ao fechar
 str		Close and lose changes	Fechar e perder as alterações
 str		Close without writing	Fechar sem escrever

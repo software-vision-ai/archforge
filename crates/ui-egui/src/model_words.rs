@@ -3,8 +3,13 @@
 //! The translation is the interface thread's language, so a view makes these words while drawing,
 //! never on another thread.
 //!
-//! The catalogues hold a row for every property a card shows and every literal in the model area
-//! (the core, ER and UML; a diagram's own are no model words). Kind words go only to the classes
+//! The catalogues hold a row for every property a card shows and every literal in the model area:
+//! the core's in the shell's catalogue, and those of each notation's metamodel
+//! ([`NotationUi::metamodel`](crate::notation_ui::NotationUi::metamodel)) in that notation's own
+//! ([`NotationUi::catalogues`](crate::notation_ui::NotationUi::catalogues)), unless the core or
+//! the other notation names them too; a diagram's own are no model words. So the words are said
+//! for the core and the notations the shell was given, whose catalogues it registered, and for no
+//! other metamodel. Kind words go only to the classes
 //! the core and the notations the shell was given create ([`NotationUi::created_classes`](crate::notation_ui::NotationUi::created_classes)), as the catalogues stay
 //! smaller that way, and to a package's default-diagram binding, the one class of the diagrams a
 //! comparison lists as the model's; the rest say Element.
@@ -34,9 +39,10 @@ pub(crate) fn kinds() -> Vec<ClassId> {
     CORE_KINDS.iter().chain(UIS.iter().flat_map(|ui| ui.created_classes())).copied().collect()
 }
 
-/// Whether `metamodel` is in the model area, the one these words cover: not the diagrams'.
-fn in_the_model(metamodel: u16) -> bool {
-    metamodel != archforge_diagram::INDEX
+/// Whether `metamodel` is one these words cover: the core's, or the metamodel of a notation of `uis`
+/// (the shell's), whose rows its catalogue holds; never the diagrams'.
+fn in_the_model(uis: &[&'static dyn NotationUi], metamodel: u16) -> bool {
+    metamodel == archforge_core::INDEX || uis.iter().any(|ui| ui.metamodel() == metamodel)
 }
 
 /// A metamodel name as words, the catalogue key: `isAbstract` is "Is abstract", `InterfaceRealization`
@@ -66,15 +72,17 @@ pub fn words(name: &str) -> String {
     cased.collect::<Vec<String>>().join(" ")
 }
 
-/// The label of `prop` in this thread's language; none when it is not a property of the model area.
-pub fn property_label(universe: &Universe, prop: PropId) -> Option<String> {
-    Some(tr(&words(&universe.prop(prop).filter(|_| in_the_model(prop.metamodel()))?.name)))
+/// The label of `prop` in this thread's language, as the notations of `uis` (the shell's) word it;
+/// none when it is not a property of the core or of one of their metamodels.
+pub fn property_label(uis: &[&'static dyn NotationUi], universe: &Universe, prop: PropId) -> Option<String> {
+    Some(tr(&words(&universe.prop(prop).filter(|_| in_the_model(uis, prop.metamodel()))?.name)))
 }
 
-/// The label of literal `index` of the enumeration `ty` in this thread's language; none when `ty`
-/// is no enumeration of the model area or has no such literal.
-pub fn literal_label(universe: &Universe, ty: DataId, index: u32) -> Option<String> {
-    let DataKind::Enumeration(literals) = &universe.data_type(ty).filter(|_| in_the_model(ty.metamodel()))?.kind else { return None };
+/// The label of literal `index` of the enumeration `ty` in this thread's language, as the
+/// notations of `uis` (the shell's) word it; none when `ty` is no enumeration of the core or of one
+/// of their metamodels, or has no such literal.
+pub fn literal_label(uis: &[&'static dyn NotationUi], universe: &Universe, ty: DataId, index: u32) -> Option<String> {
+    let DataKind::Enumeration(literals) = &universe.data_type(ty).filter(|_| in_the_model(uis, ty.metamodel()))?.kind else { return None };
     Some(tr(&words(literals.get(usize::try_from(index).ok()?)?)))
 }
 
@@ -102,14 +110,14 @@ pub fn kind_label(uis: &[&'static dyn NotationUi], universe: &Universe, class: C
 }
 
 /// Every key these labels look up, for the catalogue tests: each property a card shows and each
-/// literal of the model area, and the kinds ([`kinds`]) but those with a notation's word, whose
-/// rows the scan reads from each notation's
+/// literal of the core and of each notation's metamodel the tests register as the app does, and the kinds ([`kinds`]) but
+/// those with a notation's word, whose rows the scan reads from each notation's
 /// [`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word).
 #[cfg(test)]
 pub(crate) fn texts() -> Vec<String> {
     let Ok(universe) = archforge_notations::universe() else { return Vec::new() };
     let mut all = Vec::new();
-    for metamodel in universe.metamodels().filter(|m| in_the_model(m.index)) {
+    for metamodel in universe.metamodels().filter(|m| in_the_model(crate::tests::SCREENS.notation_uis(), m.index)) {
         all.extend(metamodel.props.iter().filter(|p| archforge_notations::differences::on_a_card(p)).map(|p| words(&p.name)));
         for ty in &metamodel.data_types {
             if let DataKind::Enumeration(literals) = &ty.kind {

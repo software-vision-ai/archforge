@@ -90,6 +90,14 @@ str		«metaclass»	«metaclass»
 str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Classifier	分類子
+str		Class	クラス
+str		Interface	インターフェース
+str		Enumeration	列挙
+str		Data type	データ型
+str		Primitive type	プリミティブ型
+str		Association class	関連クラス
+str		Classifier kinds	分類子の種類
+str		Package	パッケージ
 str		UML structure diagram	UML構造図
 str		UML structure diagrams	UML構造図
 str		Class · model, in every diagram	クラス · モデル、すべての図に
@@ -139,6 +147,11 @@ str		There is a literal named {name} already.	{name} という名前のリテラ
 str		An enumeration holds at most {n} literals.	列挙が持てるリテラルは最大 {n} 個です。
 str		Several types are named {name}; pick one from the menu.	{name} という名前の型が複数あります。メニューから 1 つ選んでください。
 str		Add parameter	パラメーターを追加
+str		Parameter	パラメーター
+str		Operation	操作
+str		Private	プライベート
+str		Protected	プロテクテッド
+str		Public	パブリック
 str		Attribute	属性
 str		Attributes	属性
 str		Operations	操作
@@ -191,6 +204,7 @@ plural		Values on {n} element don't fit {name} [{bounds}].	{n} 個の要素の�
 str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	リテラル {literal} は {element} の «{stereotype}» にある {property} の値です。先にそこへ別の値を設定してください。
 str		The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.	リテラル {literal} は、どの要素にも適用されていない «{stereotype}» にある {property} の値です。先にファイルでその値を変更してください。
 str		Stereotypes · {n}	ステレオタイプ · {n}
+str		Stereotype	ステレオタイプ
 str		Add stereotype	ステレオタイプを追加
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	まだありません。ここか、モデル ▸ 新規 ▸ ステレオタイプから追加できます。
 str		Open profile diagram	プロファイル図を開く
@@ -309,6 +323,7 @@ str		The package {owner} keeps the name {name} for a built-in type.	パッケー
 str		{name} is a built-in type and stays in Types.	{name} は組み込み型で、Types に留まります。
 str		{name} is a built-in type, which is never made leaf.	{name} は組み込み型のため、leaf にはできません。
 str		Constraints · {n}	制約 · {n}
+str		Constraint	制約
 str		Add constraint	制約を追加
 str		Edit constraint	制約を編集
 str		Describe the rule…	ルールを記述…
@@ -358,7 +373,9 @@ str		Parameters	パラメーター
 str		Remove parameter	パラメーターを削除
 str		Return type	戻り値の型
 str		Static	静的
+str		Ordered	順序付き
 str		Modifiers	修飾子
+str		Visibility	可視性
 str		Default value	既定値
 str		Derived	派生
 str		Subsets	サブセット
@@ -401,6 +418,11 @@ str		Place association class	関連クラスを配置
 str		Add package	パッケージを追加
 str		Place package	パッケージを配置
 str		Parent package	親パッケージ
+str		Move package	パッケージを移動
+str		{what} moved into {where}	{what} を {where} に移動しました
+str		Open this package's diagram	このパッケージの図を開く
+str		Open this package's diagram (⌘↓)	このパッケージの図を開く (⌘↓)
+str		This is the top package: zooming out goes no further	ここが最上位のパッケージです。これ以上ズームアウトしても上には移動しません
 str		A bound can be at most {max}.	境界は最大 {max} までです。
 str		A class realizes only an interface	クラスが実現できるのはインターフェースだけです
 str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
@@ -434,12 +456,18 @@ str		Association · model	関連 · モデル
 str		Clear	クリア
 str		Client	クライアント
 str		Composition	コンポジション
+str		Aggregation	集約
+str		Association	関連
+str		Composite	コンポジット
+str		Dependency	依存
 str		The other end has an aggregation already: only the part's end has one.	もう一方の端にはすでに集約があります。集約を持てるのは部分側の端だけです。
 str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	コンポジションの全体側は最大 1 つしか許しません。先にもう一方の端の多重度を 1 または 0..1 にしてください。
 str		This end is a composition's whole, which allows one at most.	この端はコンポジションの全体側で、最大 1 つしか許しません。
 str		The whole's end of an aggregation or composition is not navigable.	集約やコンポジションの全体側の端はナビゲーション可能にできません。
 str		Dependency · model	依存 · モデル
 str		Directed association	有向関連
+str		Relationship kinds	関係の種類
+str		Shared	共有
 str		Drag a line end onto another class.	線の端を別のクラスへドラッグします。
 str		Drag the class end onto another class, the interface end onto another interface.	クラス側の端を別のクラスへ、インターフェース側の端を別のインターフェースへドラッグします。
 str		End at {class}	{class} 側の端
@@ -484,6 +512,7 @@ str		template parameter	テンプレートパラメーター
 str		template	テンプレート
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · テンプレート、パラメーター {n} 個 · モデル、すべての図
 str		Template binding: from the bound class to its template	テンプレートバインディング：バインドするクラスからそのテンプレートへ
+str		Template binding	テンプレートバインディング
 str		«bind»	«bind»
 str		Add template binding	テンプレートバインディングを追加
 str		This template binding	このテンプレートバインディング
@@ -563,6 +592,8 @@ str		Make it binary turns {name} into a plain association between {first} and {s
 plural		N-ary association · {n} end · model, in every diagram	多項関連 · 端 {n} 個 · モデル、すべての図
 plural		N-ary association · {n} end — click a class for the next end	多項関連 · 端 {n} 個 — 次の端のクラスをクリック
 str		General	一般
+str		Generalization	汎化
+str		Interface realization	インターフェース実現
 str		Generalization · model	汎化 · モデル
 str		Implementing class	実装クラス
 str		Interface realization · model	インターフェース実現 · モデル
@@ -595,6 +626,7 @@ str		General class	一般クラス
 str		Generalization set {label}	汎化セット {label}
 str		Generalization set · model, in every diagram	汎化セット · モデル、すべての図
 str		Generalization sets	汎化セット
+str		Generalization set	汎化セット
 str		Generalization sets · {n}	汎化セット · {n}
 str		Incomplete	不完全
 str		Members · {n}	メンバー · {n}
@@ -664,6 +696,135 @@ str		This generalization	この汎化
 str		This interface realization	このインターフェース実現
 str		To	終点
 str		Type a whole number, a range such as 2..5, or *.	整数、2..5 のような範囲、または * を入力してください。
+str		Alias	別名
+str		Allow substitutable	置換を許可
+str		Alt	代替
+str		Assembly	アセンブリ
+str		Assert	アサート
+str		Asynch call	非同期呼び出し
+str		Asynch signal	非同期シグナル
+str		Break	ブレーク
+str		Choice	選択
+str		Classifier template parameter	分類子テンプレートパラメーター
+str		Comment	コメント
+str		Concurrency	並行性
+str		Concurrent	並行
+str		Consider	考慮
+str		Content	内容
+str		Create message	生成メッセージ
+str		Critical	クリティカル
+str		Deep history	深い履歴
+str		Delegation	委譲
+str		Delete message	削除メッセージ
+str		Deployment location	配置場所
+str		Effect	効果
+str		Entry point	入口点
+str		Execution location	実行場所
+str		Exit point	出口点
+str		Extension	拡張
+str		Extension end	拡張端
+str		External	外部
+str		FIFO	FIFO
+str		File name	ファイル名
+str		First event	最初のイベント
+str		Fork	フォーク
+str		Format	形式
+str		Found	発見
+str		Guarded	ガード付き
+str		Ignore	無視
+str		In	入力
+str		Initial	開始
+str		Inout	入出力
+str		Instance specification	インスタンス仕様
+str		Instance value	インスタンス値
+str		Interaction operator	相互作用オペレーター
+str		Internal	内部
+str		Is ID	ID
+str		Is abstract	抽象
+str		Is active	アクティブ
+str		Is assured	保証済み
+str		Is behavior	振る舞い
+str		Is combine duplicate	重複を結合
+str		Is conjugated	共役
+str		Is control	制御
+str		Is control type	制御型
+str		Is covering	完全
+str		Is derived	派生
+str		Is derived union	派生和集合
+str		Is destroy duplicates	重複を破棄
+str		Is destroy links	リンクを破棄
+str		Is destroy owned objects	所有オブジェクトを破棄
+str		Is determinate	決定的
+str		Is dimension	次元
+str		Is direct	直接
+str		Is disjoint	排他
+str		Is exception	例外
+str		Is external	外部
+str		Is final specialization	最終特化
+str		Is indirectly instantiated	間接インスタンス化
+str		Is leaf	リーフ
+str		Is locally reentrant	局所再入可能
+str		Is multicast	マルチキャスト
+str		Is multireceive	マルチレシーブ
+str		Is ordered	順序付き
+str		Is query	クエリ
+str		Is read only	読み取り専用
+str		Is reentrant	再入可能
+str		Is relative	相対
+str		Is remove duplicates	重複を削除
+str		Is replace all	すべて置換
+str		Is service	サービス
+str		Is single execution	単一実行
+str		Is static	静的
+str		Is stream	ストリーム
+str		Is strict	厳密
+str		Is substitutable	置換可能
+str		Is synchronous	同期
+str		Is tested first	先に判定
+str		Is unique	一意
+str		Is unmarshall	アンマーシャル
+str		Iterative	反復
+str		Join	ジョイン
+str		Junction	ジャンクション
+str		LIFO	LIFO
+str		Literal boolean	ブールリテラル
+str		Literal integer	整数リテラル
+str		Literal real	実数リテラル
+str		Literal string	文字列リテラル
+str		Literal unlimited natural	無制限自然数リテラル
+str		Local	ローカル
+str		Loop	ループ
+str		Lost	紛失
+str		Message sort	メッセージ種別
+str		Mode	モード
+str		Must isolate	隔離必須
+str		Neg	否定
+str		Opaque expression	不透明式
+str		Opt	オプション
+str		Ordering	順序
+str		Out	出力
+str		Par	並列
+str		Parallel	並列
+str		Profile application	プロファイル適用
+str		Read	読み取り
+str		Redefinable template signature	再定義可能テンプレートシグネチャ
+str		Reply	応答
+str		Return	戻り値
+str		Seq	弱順序
+str		Sequential	逐次
+str		Setting	設定
+str		Shallow history	浅い履歴
+str		Slot	スロット
+str		Stream	ストリーム
+str		Strict	強順序
+str		Symbol	記号
+str		Synch call	同期呼び出し
+str		Template parameter substitution	テンプレートパラメーター置換
+str		Terminate	終了
+str		URI	URI
+str		Unordered	順序なし
+str		Update	更新
+str		Viewpoint	ビューポイント
 str		Class · {package}	クラス · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}

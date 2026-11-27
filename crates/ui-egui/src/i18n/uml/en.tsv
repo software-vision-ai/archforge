@@ -89,6 +89,14 @@ str		«metaclass»	«metaclass»
 str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Classifier	Classifier
+str		Class	Class
+str		Interface	Interface
+str		Enumeration	Enumeration
+str		Data type	Data type
+str		Primitive type	Primitive type
+str		Association class	Association class
+str		Classifier kinds	Classifier kinds
+str		Package	Package
 str		UML structure diagram	UML structure diagram
 str		UML structure diagrams	UML structure diagrams
 str		Class · model, in every diagram	Class · model, in every diagram
@@ -138,6 +146,11 @@ str		There is a literal named {name} already.	There is a literal named {name} al
 str		An enumeration holds at most {n} literals.	An enumeration holds at most {n} literals.
 str		Several types are named {name}; pick one from the menu.	Several types are named {name}; pick one from the menu.
 str		Add parameter	Add parameter
+str		Parameter	Parameter
+str		Operation	Operation
+str		Private	Private
+str		Protected	Protected
+str		Public	Public
 str		Attribute	Attribute
 str		Attributes	Attributes
 str		Operations	Operations
@@ -190,6 +203,7 @@ plural		Values on {n} element don't fit {name} [{bounds}].	Values on {n} element
 str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.
 str		The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.	The literal {literal} is the value of {property} in «{stereotype}» on no element. Change that value in the file first.
 str		Stereotypes · {n}	Stereotypes · {n}
+str		Stereotype	Stereotype
 str		Add stereotype	Add stereotype
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	None yet. Add one here or from Models ▸ New ▸ Stereotype.
 str		Open profile diagram	Open profile diagram
@@ -308,6 +322,7 @@ str		The package {owner} keeps the name {name} for a built-in type.	The package 
 str		{name} is a built-in type and stays in Types.	{name} is a built-in type and stays in Types.
 str		{name} is a built-in type, which is never made leaf.	{name} is a built-in type, which is never made leaf.
 str		Constraints · {n}	Constraints · {n}
+str		Constraint	Constraint
 str		Add constraint	Add constraint
 str		Edit constraint	Edit constraint
 str		Describe the rule…	Describe the rule…
@@ -357,7 +372,9 @@ str		Parameters	Parameters
 str		Remove parameter	Remove parameter
 str		Return type	Return type
 str		Static	Static
+str		Ordered	Ordered
 str		Modifiers	Modifiers
+str		Visibility	Visibility
 str		Default value	Default value
 str		Derived	Derived
 str		Subsets	Subsets
@@ -400,6 +417,11 @@ str		Place association class	Place association class
 str		Add package	Add package
 str		Place package	Place package
 str		Parent package	Parent package
+str		Move package	Move package
+str		{what} moved into {where}	{what} moved into {where}
+str		Open this package's diagram	Open this package's diagram
+str		Open this package's diagram (⌘↓)	Open this package's diagram (⌘↓)
+str		This is the top package: zooming out goes no further	This is the top package: zooming out goes no further
 str		A bound can be at most {max}.	A bound can be at most {max}.
 str		A class realizes only an interface	A class realizes only an interface
 str		A relationship joins two classes or interfaces	A relationship joins two classes or interfaces
@@ -433,12 +455,18 @@ str		Association · model	Association · model
 str		Clear	Clear
 str		Client	Client
 str		Composition	Composition
+str		Aggregation	Aggregation
+str		Association	Association
+str		Composite	Composite
+str		Dependency	Dependency
 str		The other end has an aggregation already: only the part's end has one.	The other end has an aggregation already: only the part's end has one.
 str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.
 str		This end is a composition's whole, which allows one at most.	This end is a composition's whole, which allows one at most.
 str		The whole's end of an aggregation or composition is not navigable.	The whole's end of an aggregation or composition is not navigable.
 str		Dependency · model	Dependency · model
 str		Directed association	Directed association
+str		Relationship kinds	Relationship kinds
+str		Shared	Shared
 str		Drag a line end onto another class.	Drag a line end onto another class.
 str		Drag the class end onto another class, the interface end onto another interface.	Drag the class end onto another class, the interface end onto another interface.
 str		End at {class}	End at {class}
@@ -483,6 +511,7 @@ str		template parameter	template parameter
 str		template	template
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · template, {n} parameter · model, in every diagram|{kind} · template, {n} parameters · model, in every diagram
 str		Template binding: from the bound class to its template	Template binding: from the bound class to its template
+str		Template binding	Template binding
 str		«bind»	«bind»
 str		Add template binding	Add template binding
 str		This template binding	This template binding
@@ -562,6 +591,8 @@ str		Make it binary turns {name} into a plain association between {first} and {s
 plural		N-ary association · {n} end · model, in every diagram	N-ary association · {n} end · model, in every diagram|N-ary association · {n} ends · model, in every diagram
 plural		N-ary association · {n} end — click a class for the next end	N-ary association · {n} end — click a class for the next end|N-ary association · {n} ends — click a class for the next end
 str		General	General
+str		Generalization	Generalization
+str		Interface realization	Interface realization
 str		Generalization · model	Generalization · model
 str		Implementing class	Implementing class
 str		Interface realization · model	Interface realization · model
@@ -594,6 +625,7 @@ str		General class	General class
 str		Generalization set {label}	Generalization set {label}
 str		Generalization set · model, in every diagram	Generalization set · model, in every diagram
 str		Generalization sets	Generalization sets
+str		Generalization set	Generalization set
 str		Generalization sets · {n}	Generalization sets · {n}
 str		Incomplete	Incomplete
 str		Members · {n}	Members · {n}
@@ -663,6 +695,135 @@ str		This generalization	This generalization
 str		This interface realization	This interface realization
 str		To	To
 str		Type a whole number, a range such as 2..5, or *.	Type a whole number, a range such as 2..5, or *.
+str		Alias	Alias
+str		Allow substitutable	Allow substitutable
+str		Alt	Alt
+str		Assembly	Assembly
+str		Assert	Assert
+str		Asynch call	Asynch call
+str		Asynch signal	Asynch signal
+str		Break	Break
+str		Choice	Choice
+str		Classifier template parameter	Classifier template parameter
+str		Comment	Comment
+str		Concurrency	Concurrency
+str		Concurrent	Concurrent
+str		Consider	Consider
+str		Content	Content
+str		Create message	Create message
+str		Critical	Critical
+str		Deep history	Deep history
+str		Delegation	Delegation
+str		Delete message	Delete message
+str		Deployment location	Deployment location
+str		Effect	Effect
+str		Entry point	Entry point
+str		Execution location	Execution location
+str		Exit point	Exit point
+str		Extension	Extension
+str		Extension end	Extension end
+str		External	External
+str		FIFO	FIFO
+str		File name	File name
+str		First event	First event
+str		Fork	Fork
+str		Format	Format
+str		Found	Found
+str		Guarded	Guarded
+str		Ignore	Ignore
+str		In	In
+str		Initial	Initial
+str		Inout	Inout
+str		Instance specification	Instance specification
+str		Instance value	Instance value
+str		Interaction operator	Interaction operator
+str		Internal	Internal
+str		Is ID	Is ID
+str		Is abstract	Is abstract
+str		Is active	Is active
+str		Is assured	Is assured
+str		Is behavior	Is behavior
+str		Is combine duplicate	Is combine duplicate
+str		Is conjugated	Is conjugated
+str		Is control	Is control
+str		Is control type	Is control type
+str		Is covering	Is covering
+str		Is derived	Is derived
+str		Is derived union	Is derived union
+str		Is destroy duplicates	Is destroy duplicates
+str		Is destroy links	Is destroy links
+str		Is destroy owned objects	Is destroy owned objects
+str		Is determinate	Is determinate
+str		Is dimension	Is dimension
+str		Is direct	Is direct
+str		Is disjoint	Is disjoint
+str		Is exception	Is exception
+str		Is external	Is external
+str		Is final specialization	Is final specialization
+str		Is indirectly instantiated	Is indirectly instantiated
+str		Is leaf	Is leaf
+str		Is locally reentrant	Is locally reentrant
+str		Is multicast	Is multicast
+str		Is multireceive	Is multireceive
+str		Is ordered	Is ordered
+str		Is query	Is query
+str		Is read only	Is read only
+str		Is reentrant	Is reentrant
+str		Is relative	Is relative
+str		Is remove duplicates	Is remove duplicates
+str		Is replace all	Is replace all
+str		Is service	Is service
+str		Is single execution	Is single execution
+str		Is static	Is static
+str		Is stream	Is stream
+str		Is strict	Is strict
+str		Is substitutable	Is substitutable
+str		Is synchronous	Is synchronous
+str		Is tested first	Is tested first
+str		Is unique	Is unique
+str		Is unmarshall	Is unmarshall
+str		Iterative	Iterative
+str		Join	Join
+str		Junction	Junction
+str		LIFO	LIFO
+str		Literal boolean	Literal boolean
+str		Literal integer	Literal integer
+str		Literal real	Literal real
+str		Literal string	Literal string
+str		Literal unlimited natural	Literal unlimited natural
+str		Local	Local
+str		Loop	Loop
+str		Lost	Lost
+str		Message sort	Message sort
+str		Mode	Mode
+str		Must isolate	Must isolate
+str		Neg	Neg
+str		Opaque expression	Opaque expression
+str		Opt	Opt
+str		Ordering	Ordering
+str		Out	Out
+str		Par	Par
+str		Parallel	Parallel
+str		Profile application	Profile application
+str		Read	Read
+str		Redefinable template signature	Redefinable template signature
+str		Reply	Reply
+str		Return	Return
+str		Seq	Seq
+str		Sequential	Sequential
+str		Setting	Setting
+str		Shallow history	Shallow history
+str		Slot	Slot
+str		Stream	Stream
+str		Strict	Strict
+str		Symbol	Symbol
+str		Synch call	Synch call
+str		Template parameter substitution	Template parameter substitution
+str		Terminate	Terminate
+str		URI	URI
+str		Unordered	Unordered
+str		Update	Update
+str		Viewpoint	Viewpoint
 str		Class · {package}	Class · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
