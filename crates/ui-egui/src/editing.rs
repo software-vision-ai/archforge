@@ -1344,11 +1344,11 @@ fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View,
         return;
     };
     let mut screen: Vec<Pos2> = route.iter().map(|(x, y)| view.to_screen(*x, *y)).collect();
-    // An end the last frame moved out to its qualifier box starts there (AR-127).
+    // An end a kind moved off its node's border in the last frame starts where it moved to.
     let n = screen.len();
     for k in [0, n.saturating_sub(1)] {
         if let Some(at) = screen.get(k).copied()
-            && let Some((_, outer)) = shell.canvas.qualified_ends.iter().find(|(from, _)| (*from - at).length() < 0.5)
+            && let Some((_, outer)) = shell.canvas.moved_ends.iter().find(|(from, _)| (*from - at).length() < 0.5)
         {
             screen[k] = *outer;
         }
