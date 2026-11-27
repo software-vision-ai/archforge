@@ -1,11 +1,14 @@
 //! What editing on the canvas keeps between frames, which names no shell: the name typed in a
 //! node, a note's text typed in place, the pointer gesture under way with the corner a resize
-//! holds, and the element menu. The canvas's state holds them (`canvas::State`); the shell edits
+//! holds, and the element menu; and what the pointer asked for in a frame (`Action`), which a
+//! diagram kind's press gives back. The canvas's state holds them (`canvas::State`); the shell edits
 //! with them (`archforge_ui_egui::editing` re-exports them under their old paths), and so will a
 //! notation's screens, without the shell.
 
 use archforge_mof::Uuid;
 use egui::{Pos2, Rect};
+
+use crate::cx::Ctx;
 
 /// A name being typed in a node's header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,4 +75,28 @@ pub struct EntityMenu {
     pub node: Uuid,
     pub entity: Uuid,
     pub at: Pos2,
+}
+
+/// What the pointer asked for this frame, decided over the store and applied after.
+pub enum Action {
+    Nothing,
+    Select(Vec<Uuid>),
+    Toggle(Uuid),
+    Start(Gesture, Option<Uuid>),
+    Commit,
+    Place(&'static str, f64, f64),
+    Menu(EntityMenu),
+    Rename(Uuid, Uuid),
+    Open(Uuid, Option<usize>),
+    PlaceNote(f64, f64),
+    EditNote(Uuid),
+    /// A cardinality text put back in its place, and a line's route worked out anew.
+    ResetEnd(Uuid, u8),
+    ResetRoute(Uuid),
+    /// Something refused before it began, said at the canvas's top: a line the tool starts nowhere.
+    Notice(String),
+    /// What the diagram's kind makes of the press ([`crate::kinds::DiagramKind::pointer`],
+    /// [`crate::kinds::DiagramKind::secondary_click`]), run through the narrow context once
+    /// decided: a UML n-ary association's next end, or a menu of its own opened.
+    Own(Box<dyn FnOnce(&mut Ctx)>),
 }
