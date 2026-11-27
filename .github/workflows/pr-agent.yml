@@ -61,10 +61,12 @@ jobs:
       # No fallback model by default: a failure stays on the chosen provider (OpenAI's step names
       # its own OpenAI fallback).
       CONFIG.FALLBACK_MODELS: "[]"
-      # The diff PR-Agent sends may hold up to 120,000 tokens. This image's default is 32,000, which
-      # left files of large pull requests unreviewed (#616 had 114,623 tokens and lost 13 files).
-      # Both models read far more; the owner set the cap against the weekly API limits.
-      CONFIG.MAX_MODEL_TOKENS: "120000"
+      # The diff PR-Agent sends may hold up to 200,000 tokens. This image's default is 32,000, which
+      # left files of large pull requests unreviewed (#616 had 114,623 tokens and lost 13 files);
+      # 120,000 still left 6 files of #619 (174,377 tokens) out. Both models read far more. At
+      # $2 per million input tokens, even every review at the cap stays inside the owner's weekly
+      # API limits (34 EUR Anthropic, 20 EUR OpenAI).
+      CONFIG.MAX_MODEL_TOKENS: "200000"
       # Findings on the changed code only: bugs, security and correctness. No effort estimate, no
       # ticket compliance, no "can this be split", no tests checklist, no score, and no labels.
       PR_REVIEWER.REQUIRE_ESTIMATE_EFFORT_TO_REVIEW: "false"
