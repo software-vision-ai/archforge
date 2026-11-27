@@ -18504,7 +18504,7 @@ fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
         ]
     };
     let none = std::collections::BTreeMap::new();
-    for (kind, caption) in [(None, 0), (Some(&SketchKind as &'static dyn crate::kinds::DiagramKind), 1)] {
+    for (kind, caption) in [(None, 0), (Some(&SketchKind(SKETCH) as &'static dyn crate::kinds::DiagramKind), 1)] {
         let (_, recorded, _) = drawn_alone_at(&session, &d, (kind, SKETCH_KINDS), false, 1000.0, &Default::default(), &none);
         for (id, times) in wanted(caption) {
             assert_eq!(count(&recorded, &id), times, "{id} as {:?}", kind.map(|k| k.kind()));
