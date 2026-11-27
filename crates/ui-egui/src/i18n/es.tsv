@@ -137,7 +137,7 @@ str		Sort recent projects by name	Ordenar los proyectos recientes por nombre
 str		Sort recent projects by last opened	Ordenar los proyectos recientes por última apertura
 # Espacio de trabajo
 str		Find an element, view, or action	Buscar un elemento, vista o acción
-str		No schemas yet	Aún no hay esquemas
+str		Nothing in the model yet	Aún no hay nada en el modelo
 str		Add	Añadir
 str		Schema	Esquema
 str		Folder	Carpeta
@@ -995,7 +995,7 @@ str		Relationships carry no skills	Las relaciones no llevan habilidades
 str		This element carries no skills	Este elemento no lleva habilidades
 str		Diagram	Diagrama
 str		Default diagram	Diagrama predeterminado
-str		Diagram · of {schema}	Diagrama · de {schema}
+str		Diagram · of {owner}	Diagrama · de {owner}
 str		This diagram	Este diagrama
 str		On this diagram · {n}	En este diagrama · {n}
 str		Role	Rol

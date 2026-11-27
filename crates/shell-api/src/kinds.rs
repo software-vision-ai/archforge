@@ -146,7 +146,9 @@ pub trait DiagramKind: Sync {
     fn icon(&self) -> &'static Icon {
         &crate::ux::icons::ER_DIAGRAM
     }
-    /// What its diagrams are of: the word for it, and the choice that makes a new one.
+    /// What its diagrams are of: the word for it, as the New diagram dialog labels its choice, and
+    /// as Properties labels what one of its diagrams is of when that element's notation gives it
+    /// no word of its own.
     fn owner_word(&self) -> String;
     /// The choice that makes a new one of what its diagrams are of, in the New diagram dialog.
     fn new_owner(&self) -> String;

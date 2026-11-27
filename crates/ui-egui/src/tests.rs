@@ -5506,6 +5506,27 @@ fn the_rails_switch_the_explorer_and_the_panel_and_home_closes_the_project() {
     assert_eq!(h.state().tabs.len(), 1, "the project stays open in its tab");
 }
 
+/// The Models explorer of a model with nothing in it says so in the shell's own words, which name
+/// no notation's elements, translated; a filter that matches nothing says that instead.
+#[test]
+fn an_empty_models_explorer_says_the_model_holds_nothing_yet_in_the_language_shown() {
+    in_both_appearances(|theme| {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        crate::i18n::set_language("de");
+        h.state_mut().state.language = "de".into();
+        h.run();
+        assert_eq!(h.state().state.explorer, crate::state::Explorer::Models);
+        let shown = painted(&h);
+        assert!(shown.iter().any(|t| t == "Noch nichts im Modell"), "{theme:?}: {shown:?}");
+        assert!(!shown.iter().any(|t| t == "Noch keine Schemas" || t == "Nothing in the model yet"), "{theme:?}: {shown:?}");
+        h.state_mut().explorer.filter = "kunde".into();
+        h.run();
+        let shown = painted(&h);
+        assert!(shown.iter().any(|t| t == "Nichts passt zum Filter") && !shown.iter().any(|t| t == "Noch nichts im Modell"), "{theme:?}: {shown:?}");
+        crate::i18n::set_language("en");
+    });
+}
+
 #[test]
 fn a_narrow_window_keeps_the_rails_and_drops_the_panel_then_the_explorer() {
     let h = workspace_harness(ThemeKind::Light, egui::vec2(900.0, 700.0));
@@ -10583,7 +10604,7 @@ fn a_new_diagram_refused_by_its_schema_says_why_in_plain_words() {
             step,
             name: "Shop".into(),
             kind: archforge_er::DIAGRAM_KIND,
-            schema: None,
+            owner: None,
             menu: None,
             refused: None,
             opened: false,
@@ -10839,7 +10860,7 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     let edit = h.state().diagrams.new.clone().expect("the dialog opened");
     assert_eq!(edit.step, crate::diagrams::Step::Kind, "the kind comes first");
     assert_eq!(edit.name, "Shop");
-    assert!(edit.schema.is_some());
+    assert!(edit.owner.is_some());
     let at = rect_of(&h, "workspace.new-diagram.continue").center();
     click(&mut h, at);
     assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.step), Some(crate::diagrams::Step::Details));
@@ -10890,7 +10911,7 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     click(&mut h, at);
     let at = rect_of(&h, "workspace.new-diagram.schema.1").center();
     click(&mut h, at);
-    assert_eq!(h.state().diagrams.new.as_ref().unwrap().schema, None, "New schema chosen");
+    assert_eq!(h.state().diagrams.new.as_ref().unwrap().owner, None, "New schema chosen");
     let at = rect_of(&h, "workspace.new-diagram.create").center();
     click(&mut h, at);
     assert!(h.state().diagrams.new.is_none(), "{:?}", h.state().diagrams.new);
@@ -18035,6 +18056,35 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
     );
 }
 
+/// ER's screens alone: the sketch's package then has no notation in the shell to word it.
+static ER_UI_ONLY: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi];
+
+/// The word over a diagram's Properties field for what it is of: the word that element's notation
+/// gives it, and when no notation of the shell words it, the word of the diagram's own kind for
+/// what its diagrams are of, never a word of the shell's.
+#[test]
+fn a_diagrams_properties_word_what_it_is_of_by_its_notation_else_by_its_kind() {
+    in_both_appearances(|theme| {
+        let (mut h, d, ..) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [d] })).unwrap();
+        h.run();
+        // The word painted just above the field that names what the diagram is of.
+        let word_over = |h: &Harness<'static, Shell>| {
+            let field = rect_of(h, "workspace.properties.schema");
+            let above = egui::Rect::from_min_max(egui::pos2(field.left() - 1.0, field.top() - 20.0), egui::pos2(field.right(), field.top() - 1.0));
+            texts_in(h, above).into_iter().map(|(t, _)| t).collect::<Vec<_>>()
+        };
+        // The sketch notation words the package, as it words everything, "Class".
+        assert_eq!(word_over(&h), ["Class"], "{theme:?}");
+        assert!(painted(&h).iter().any(|t| t == "Diagram · of sales"), "{theme:?}: {:?}", painted(&h));
+        // With no notation to word the package, the sketch kind's word for what its diagrams are of.
+        h.state_mut().notation_uis = ER_UI_ONLY;
+        h.run();
+        assert_eq!(word_over(&h), ["Package"], "{theme:?}");
+    });
+}
+
 /// The sketch notation in the shell's explorers, search and panels, for the tests alone: a package
 /// at the top of the Models tree with its classes under it, each class found by the search as a
 /// Class of its package, and a class's Properties a section of its attributes. Its name (`sketch`)
@@ -18976,7 +19026,7 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     click(&mut h, at);
     let edit = h.state().diagrams.new.clone().expect("the dialog is open");
     assert_eq!(edit.kind, archforge_uml::STRUCTURE_DIAGRAM);
-    assert_eq!(edit.schema, None, "a project without a package gets its root package");
+    assert_eq!(edit.owner, None, "a project without a package gets its root package");
     assert!(painted(&h).iter().any(|t| t == "Commerce platform"), "the Package field names the root, after the project");
     h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
     let at = rect_of(&h, "workspace.new-diagram.create").center();
