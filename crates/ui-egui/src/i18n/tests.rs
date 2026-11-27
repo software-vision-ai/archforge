@@ -109,16 +109,104 @@ fn notation_crate(part: usize) -> String {
     format!("archforge_{folder}")
 }
 
+/// `text` with its comments (nested block comments among them) and its string, raw string and
+/// character literals blanked, each blanked character a space per byte and a line break kept, so
+/// offsets and lines stay those of `text`: what is left is the code, which names crates and whose
+/// brackets nest.
+fn code_only(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let at = |i: usize| chars.get(i).copied();
+    let ident = |i: Option<usize>| i.and_then(at).is_some_and(|c| c.is_alphanumeric() || c == '_');
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while let Some(c) = at(i) {
+        // How far a comment or a literal that starts here reaches, in characters.
+        let end = match (c, at(i + 1)) {
+            ('/', Some('/')) => Some((i..).find(|j| at(*j).is_none_or(|c| c == '\n')).unwrap_or(chars.len())),
+            ('/', Some('*')) => {
+                let (mut j, mut depth) = (i + 2, 1);
+                while depth > 0 && j < chars.len() {
+                    match (at(j), at(j + 1)) {
+                        (Some('/'), Some('*')) => (depth, j) = (depth + 1, j + 2),
+                        (Some('*'), Some('/')) => (depth, j) = (depth - 1, j + 2),
+                        _ => j += 1,
+                    }
+                }
+                Some(j)
+            }
+            ('"', _) => {
+                let mut j = i + 1;
+                while let Some(c) = at(j) {
+                    j += if c == '\\' { 2 } else { 1 };
+                    if c == '"' {
+                        break;
+                    }
+                }
+                Some(j.min(chars.len()))
+            }
+            // A raw string, `r"…"` or `r#"…"#` (`br` too), which no escape ends early.
+            ('r', _) if !ident(i.checked_sub(1)) || (i >= 2 && at(i - 1) == Some('b') && !ident(i.checked_sub(2))) => {
+                let hashes = (i + 1..).take_while(|j| at(*j) == Some('#')).count();
+                (at(i + 1 + hashes) == Some('"')).then(|| {
+                    let closing = |j: &usize| at(*j) == Some('"') && (1..=hashes).all(|h| at(j + h) == Some('#'));
+                    (i + 2 + hashes..chars.len()).find(closing).map_or(chars.len(), |j| j + 1 + hashes)
+                })
+            }
+            // A character literal, `'x'` or `'\n'`; a lifetime, `'a`, is code.
+            ('\'', Some('\\')) => Some((i + 3..).find(|j| at(*j).is_none_or(|c| c == '\'')).map_or(chars.len(), |j| (j + 1).min(chars.len()))),
+            ('\'', Some(_)) if at(i + 2) == Some('\'') => Some(i + 3),
+            _ => None,
+        };
+        match end {
+            Some(end) => {
+                for c in &chars[i..end] {
+                    if *c == '\n' {
+                        out.push('\n');
+                    } else {
+                        out.extend(std::iter::repeat_n(' ', c.len_utf8()));
+                    }
+                }
+                i = end;
+            }
+            None => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+/// The offset just past the bracket that closes the one at `open` in `code` (comments and
+/// literals blanked, [`code_only`]), or the end of `code` when none does.
+fn closing(code: &str, open: usize) -> usize {
+    let (first, last) = match code.as_bytes()[open] {
+        b'[' => (b'[', b']'),
+        b'(' => (b'(', b')'),
+        _ => (b'{', b'}'),
+    };
+    let mut depth = 0;
+    for (at, byte) in code.bytes().enumerate().skip(open) {
+        depth += i32::from(byte == first) - i32::from(byte == last);
+        if depth == 0 {
+            return at + 1;
+        }
+    }
+    code.len()
+}
+
 /// Whether `code` names the crate `name` as a whole word, as a path or a `use` does.
 fn names(code: &str, name: &str) -> bool {
     let word = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
     code.match_indices(name).any(|(at, _)| !word(code[..at].chars().last()) && !word(code[at + name.len()..].chars().next()))
 }
 
-/// Whose code `code` is: the notation's whose crate it alone names, or the shell's, which names
-/// none, or both (as the offscreen screens and the desktop app's projects do).
+/// Whose code `code` is: the notation's whose crate its code alone names, comments and literals
+/// aside ([`code_only`]), or the shell's, which names none, or both (as the offscreen screens and
+/// the desktop app's projects do).
 fn reader_of(code: &str) -> Reader {
-    let named: Vec<usize> = (0..crate::tests::SCREENS.parts().len()).filter(|part| names(code, &notation_crate(*part))).collect();
+    let code = code_only(code);
+    let named: Vec<usize> = (0..crate::tests::SCREENS.parts().len()).filter(|part| names(&code, &notation_crate(*part))).collect();
     match named.as_slice() {
         [part] => Reader::Notation(*part),
         _ => Reader::Shell,
@@ -129,15 +217,53 @@ fn reader_of(code: &str) -> Reader {
 /// feature the app never turns on.
 const TEST_BUILDS: [&str; 2] = ["#[cfg(test)]", "#[cfg(any(test, feature = \"snapshot\"))]"];
 
-/// The modules `text` declares for the tests' builds alone ([`TEST_BUILDS`]), each as the offset
-/// of the attribute and the declaration (`mod tests {`, `mod offscreen;`, its visibility dropped).
-fn test_modules(text: &str) -> impl Iterator<Item = (usize, &str)> {
-    text.match_indices("#[cfg(").filter(|(at, _)| *at == 0 || text[..*at].ends_with('\n')).filter_map(|(at, _)| {
-        let mut lines = text[at..].lines();
-        let attribute = lines.next()?;
-        let declaration = lines.next()?.trim_start_matches("pub(crate) ").trim_start_matches("pub ");
-        (TEST_BUILDS.contains(&attribute) && declaration.starts_with("mod ")).then_some((at, declaration))
-    })
+/// A module declared for the tests' builds alone ([`TEST_BUILDS`]).
+struct TestModule {
+    /// The module's name.
+    name: String,
+    /// Where its declaration starts, at the attribute, and ends: past `;`, or past the brace that
+    /// closes an inline module's body.
+    span: std::ops::Range<usize>,
+    /// Whether its body is inline (`mod tests { … }`) rather than a file of its own (`mod tests;`).
+    inline: bool,
+}
+
+/// The modules `text` declares for the tests' builds alone, in code only ([`code_only`]): the
+/// attribute, then any doc comments and other attributes, then the declaration with its
+/// visibility, if any.
+fn test_modules(text: &str) -> Vec<TestModule> {
+    let code = code_only(text);
+    let mut found = Vec::new();
+    for (at, _) in code.match_indices("#[cfg(") {
+        let after_attribute = closing(&code, at + 1);
+        if !TEST_BUILDS.contains(&&text[at..after_attribute]) {
+            continue;
+        }
+        // Past the whitespace (the blanked doc comments among it) and the attributes that follow.
+        let mut cursor = after_attribute;
+        loop {
+            cursor += code[cursor..].len() - code[cursor..].trim_start().len();
+            if !code[cursor..].starts_with("#[") {
+                break;
+            }
+            cursor = closing(&code, cursor + 1);
+        }
+        if let Some(rest) = code[cursor..].strip_prefix("pub") {
+            cursor = if rest.starts_with('(') { closing(&code, cursor + 3) } else { cursor + 3 };
+            cursor += code[cursor..].len() - code[cursor..].trim_start().len();
+        }
+        let Some(rest) = code[cursor..].strip_prefix("mod ") else { continue };
+        let name: String = rest.trim_start().chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        let after_name = cursor + 4 + (rest.len() - rest.trim_start().len()) + name.len();
+        let body = after_name + code[after_name..].len() - code[after_name..].trim_start().len();
+        let (end, inline) = match code.as_bytes().get(body) {
+            Some(b'{') => (closing(&code, body), true),
+            Some(b';') => (body + 1, false),
+            _ => continue,
+        };
+        found.push(TestModule { name, span: at..end, inline });
+    }
+    found
 }
 
 /// Whether only the tests' builds take `file`: it, or a module around it, is declared for them
@@ -157,19 +283,29 @@ fn test_only(file: &Path) -> bool {
     let declaring = [dir.join("lib.rs"), dir.join("main.rs"), dir.join("mod.rs"), dir.with_extension("rs")];
     let Some(parent) = declaring.into_iter().find(|parent| parent.is_file()) else { return false };
     let text = std::fs::read_to_string(&parent).unwrap_or_default();
-    test_modules(&text).any(|(_, declaration)| declaration == format!("mod {name};")) || test_only(&parent)
+    test_modules(&text).iter().any(|module| !module.inline && module.name == name) || test_only(&parent)
 }
 
 /// A source file's text split into its code and its tests, each with its reader: a file only tests
-/// build ([`test_only`]) is all tests; another file's tests are its inline test module, which ends
-/// the file, and the rest is the code of whose crate it names ([`reader_of`]).
+/// build ([`test_only`]) is all tests; another file's tests are its inline test modules, each to
+/// the brace that closes it, and the rest, before and after them, is the code of whose crate it
+/// names ([`reader_of`]).
 fn split(file: &Path, text: &str) -> Vec<(Reader, String)> {
     if test_only(file) {
         return vec![(Reader::Test, text.to_string())];
     }
-    let inline = test_modules(text).find(|(_, declaration)| declaration.ends_with('{')).map(|(at, _)| at);
-    let (code, tests) = text.split_at(inline.unwrap_or(text.len()));
-    vec![(reader_of(code), code.to_string()), (Reader::Test, tests.to_string())]
+    let (mut code, mut tests, mut from) = (String::new(), String::new(), 0);
+    for module in test_modules(text).iter().filter(|module| module.inline) {
+        // A module nested in one already taken is taken with it.
+        if module.span.start < from {
+            continue;
+        }
+        code.push_str(&text[from..module.span.start]);
+        tests.push_str(&text[module.span.clone()]);
+        from = module.span.end;
+    }
+    code.push_str(&text[from..]);
+    vec![(reader_of(&code), code), (Reader::Test, tests)]
 }
 
 /// Every key the catalogues must hold, each with a reader of it ([`Reader`]): the literals the
@@ -440,11 +576,21 @@ fn a_files_code_is_whose_crate_it_names_and_its_tests_are_a_tests() {
     assert_eq!(reader_of("use archforge_er::ENTITY;\nuse archforge_uml::CLASS;"), Reader::Shell, "both notations' crates");
     assert_eq!(reader_of("use archforge_core::LINK;"), Reader::Shell, "no notation's crate");
     assert_eq!(reader_of("archforge_ers::X; my_archforge_er::X"), Reader::Shell, "a longer name is another crate's");
+    // A crate named in a comment or a literal is not named by the code.
+    let commented = "use archforge_er::ENTITY;\n// as archforge_uml::CLASS does\n/* outer /* archforge_uml */ archforge_uml */\nfn f() {}\n";
+    assert_eq!(reader_of(commented), er, "another notation's crate only in comments");
+    let quoted =
+        "use archforge_er::ENTITY;\nconst S: &str = \"\\\" archforge_uml\";\nconst R: &str = r#\"\" archforge_uml\"#;\nconst C: char = '\"';\n";
+    assert_eq!(reader_of(quoted), er, "another notation's crate only in literals");
+    assert_eq!(reader_of("fn f<'a>(x: &'a str) -> &'a str { x }\nuse archforge_er::ENTITY;\n"), er, "a lifetime is no literal");
+    // An inline test module is a test's to the brace that closes it, whatever comes after it, and
+    // doc comments and other attributes may stand between its attribute and its declaration.
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let code = "use archforge_core::LINK;\nfn f() { tr(\"Open\"); }\n\n";
-    let tests = "#[cfg(test)]\nmod tests {\n    use archforge_er::ENTITY;\n}\n";
-    let text = format!("{code}{tests}");
-    assert_eq!(split(&root.join("canvas.rs"), &text), [(Reader::Shell, code.to_string()), (Reader::Test, tests.to_string())]);
+    let tests = "#[cfg(test)]\n/// The tests.\n#[allow(clippy::unwrap_used)]\nmod tests {\n    use archforge_er::ENTITY;\n    fn g() -> (char, &'static str) { ('}', \"}\") }\n}";
+    let after = "\n\nfn h() { tr(\"Close\"); }\n";
+    let text = format!("{code}{tests}{after}");
+    assert_eq!(split(&root.join("canvas.rs"), &text), [(Reader::Shell, format!("{code}{after}")), (Reader::Test, tests.to_string())]);
     for file in ["tests.rs", "tests/edit_menu.rs", "offscreen.rs", "offscreen/versions.rs", "../../../apps/archforge/src/acceptance.rs"] {
         assert!(test_only(&root.join(file)), "{file} is built for the tests alone");
     }
