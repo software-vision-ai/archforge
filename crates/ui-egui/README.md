@@ -4,9 +4,9 @@
 workspace once a project is open (`workspace`: the project bar, the activity rail and the Models
 explorer over the session (`explorer`: each notation's rows, ER's schemas, tables, columns and
 skills; `+` adds what the selection's notation offers, a name is typed in place, Delete asks when
-other things go with it; `notation_ui::NotationUi` is what a notation brings to the tree (the data
-types it hands across that name no shell are `archforge-shell-api`'s `notation_ui`, re-exported
-under their old paths), the search, the problems and Properties, how a row dropped on another runs, what it says of a
+other things go with it; `notation_ui::NotationUi` is what a notation brings to the tree (it and
+the data types it hands across are `archforge-shell-api`'s `notation_ui`, re-exported under their
+old paths), the search, the problems and Properties, how a row dropped on another runs, what it says of a
 removal of its own elements, worked out before it runs and said in the toast after
 (`notation_ui::Removal`: the shared removals ask the element's notation), what Delete and a
 chord of its own on the canvas do to its selected elements, what it draws over the canvas
@@ -14,7 +14,7 @@ whatever diagram shows, each layer at its one place in the canvas's order (`nota
 drafts, rows, menus, offers), what a problem badge that offers a way out says and does, and what an
 opening puts right in its own layout before the session starts (`open_repair`, which runs every
 notation's in turn), `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
-`notation_ui::NotationState` is what a notation keeps between frames for its own editors, menus,
+`notation_ui::NotationState` (`archforge-shell-api`'s too) is what a notation keeps between frames for its own editors, menus,
 drawings and tools, `er_state` ER's and `uml_state` UML's, which the shell holds, parks with the
 project, starts fresh with each project opened and each version shown, and asks only through that
 trait: whether something is being edited, which editors are open, what to drop, what to close,
@@ -82,8 +82,8 @@ and bars centre their content on their middle line (`ux::text_mid`,
 `ux::icon_mid`, `panels::field_inner`), and the macOS title strip is 32 pt tall with its controls
 78 pt in, clear of the traffic lights. An open project has an in-memory ER session (`Shell::session`); nothing reaches the
 project's database yet, and the status bar says so once there is something unsaved. A notation's
-screens and the shared controls reach the shell through the narrow context (`cx`, crate-private,
-`forge-ux/adr/0002`): `cx::Ctx`, the parts they change, each borrowed apart by `Shell::cx` (the
+screens and the shared controls reach the shell through the narrow context (`archforge-shell-api`'s
+`cx`, re-exported crate-private under `cx`, where the shell builds it; `forge-ux/adr/0002`): `cx::Ctx`, the parts they change, each borrowed apart by `Shell::cx` (the
 session, the panels' and the canvas's state, the automation registry, the notations and each
 one's own state, the problems, the frame count, the menu bar's hold on an inline editor, whether a
 version shows), its read-only twin `cx::CtxRef` (`Shell::cx_ref`: the session, the canvas's
@@ -105,7 +105,11 @@ the method returns, so ER's and UML's kinds and Properties (`er_kind`, `er_ui`, 
 none. The controls that take it end in `_cx` (`panels::section_cx`, `panels::control_cx`,
 `menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old names over the whole
 shell forward to them for the shell's own screens, and `home::control` stays the shell's own way
-to `panels::control_cx`.
+to `panels::control_cx`. The refusal words (`panels::refusal`, `panels::said`, `panels::a_kind`
+and `engine_said::disabled`, `archforge-shell-api`'s) ask the notations they are handed for their
+own: the context's or the shell's (`notation_uis`), and the app's (`notation_ui::UIS`) where a
+notation's code holds neither (its own refusal words, its problems and the checks that take only
+the store).
 
 **Layer.** 11, the top of the interface's layers, above the shell's interfaces
 (`archforge-shell-api`, 9) and the notations' screens (10); over `archforge-notations` (8),
@@ -129,7 +133,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `Shell::open_project`, `Shell::close_project` | `pub fn open_project(&mut self, opened: Opened)`, `pub fn close_project(&mut self)`: the workspace replaces Home and back |
 | `Shell::project`, `Shell::session`, `Shell::session_error` | the open project, its session (made once per project through `archforge_notations::new_project_session`), why none could be made |
 | `Shell::location` | `pub fn location(&self) -> Option<String>`: where the project lives, as the status bar says it |
-| `state::{Explorer, Panel}` | the workspace's explorer and right panel, part of `UiState` |
+| `state::{Explorer, Panel}` | the workspace's explorer and right panel, part of `UiState`; `archforge-shell-api`'s `state`, re-exported under their old paths, as the narrow context's requests name them |
 | `Shell::attach_control` | `pub fn attach_control(&mut self, requests: Receiver<control::ControlRequest>, generation: control::SessionGeneration)`: the requests of every opening of agent access (the person's own and Chat's); the shell answers once per frame, as each request's token allows |
 | `Shell::set_own_agent_access` | `pub fn set_own_agent_access(&mut self, on: bool)`: whether the person turned agent access on for this start, which File ▸ Generate… reports; the queue and Chat's access don't change it |
 | `control::{ControlRequest, SessionGeneration, answer, answer_from, answer_request, abandon, only_reads, Access, ACCESS, REVOKED, VIEWING, CHANGED, HELD, WAITING, TAKEN, ABANDONED, METHODS, READS, MAX_STEPS, MAX_REFERENCED, MAX_RESULTS}` | a request carries its token's role (`read_only`) and liveness (`live`): `answer_request` refuses a revoked token's request with `REVOKED` and, for a read-only token, anything that may change (`only_reads`: `ACCESS` classifies each method once; `engine.execute` and `engine.batch` read only when every command they run is a query by the engine's own test; a batch past `MAX_STEPS` is refused before its steps are looked at); a request carries `state`: one given up (`abandon`) before the shell takes it is never run; it carries `origin` too, the label `archforge-cli mcp --origin` set (a conversation's token gives its own, bound when it was granted), and `conversation`, the key the channel bound that token to, by which the chat gate knows the conversation, never by its label (AR-230); `answer_from` puts the origin on the undo steps the request makes (`<origin>: <label>`), in the result and in `document.inspect` (`undo_origin`, `redo_origin`); `READS` names the methods that only read (`engine.commands`, `engine.describe`, `document.inspect`, `ui.inspect`, `app.saved`); a batch step's references bring in at most 1 MiB and its results at most 8 MiB in all; the control channel's methods (`engine.commands`, `engine.describe`, `engine.execute`, `engine.batch`, `engine.undo`, `engine.redo`, `document.inspect`, `ui.inspect`, `app.save`, `app.saved`) answered through the open session; no network code here |
@@ -157,12 +161,12 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `Opened`, `CreateError` | an open project; why a creation or an opening failed, in the kinds the dialog explains; `UnsupportedKinds` names a project's diagram kinds Archforge does not support, worded on Home and in the status bar |
 | `UiState` | the stored appearance, language, Home's closed banner, the workspace's explorer and panel and their widths |
 | the title strip's controls | `strip.home`, `strip.open-project`, `strip.theme` on every screen; on the workspace `strip.home` closes the project |
-| `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time: the translations machinery of `archforge-shell-api`, re-exported under the path the shell's code and its tests name it by, with the shell's catalogues (`i18n::CATALOGUES`, `src/i18n/<code>.tsv`) and each notation's (`NotationUi::catalogues`: ER's in `src/i18n/er/`, UML's in `src/i18n/uml/`, the rows only that notation's screens name), which `tr`, `tr_ctx` and `trn` register before the first lookup |
+| `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time: the translations machinery of `archforge-shell-api`, re-exported under the path the shell's code and its tests name it by, with the shell's catalogues (`i18n::CATALOGUES`, `src/i18n/<code>.tsv`) and each notation's (`NotationUi::catalogues`: ER's in `src/i18n/er/`, UML's in `src/i18n/uml/`, the rows only that notation's screens name), which `Shell::new` registers as it sets up the notations it knows, so nothing the shell's interfaces say is looked up before them, and `tr`, `tr_ctx` and `trn` before their first lookup |
 | `model_words::{words, property_label, literal_label, kind_label}` | the labels for what the metamodel names, looked up in the catalogues on the interface thread: every card property and literal of the model area, the kinds the notations create, in each notation's own word (a table, a column, a subtype), and `Element` for the rest |
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |
 | `explorer::{State, ContextMenu, add, remove_selection, rows, fresh_name, Row, Tree}` | the Models explorer's state (a row's context menu among it, AR-132) and the actions the tests and the host drive; `Row`, a row of the tree as drawn, and `Tree`, what a notation's rows are made with, are `archforge-shell-api`'s `notation_ui::Row` and `notation_ui::Tree`, re-exported under their old paths |
-| `panels::{State, draw, retain_valid, SkillEdit, Applies, MenuId}` | the right panels' state and body; every change to the model goes through the shared commands (`diagram.rename`, `element.describe`), the notations' commands and the `skill.*` commands, and `view.select` selects the element a row names: a problem row whose problem is on another element than the one shown, and a row a Properties list shows (`select_element`); the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not); `MenuId` is `archforge-shell-api`'s `notation_ui::MenuId`, re-exported under its old path |
+| `panels::{State, draw, retain_valid, SkillEdit, Applies, MenuId}` | the right panels' state and body; every change to the model goes through the shared commands (`diagram.rename`, `element.describe`), the notations' commands and the `skill.*` commands, and `view.select` selects the element a row names: a problem row whose problem is on another element than the one shown, and a row a Properties list shows (`select_element`); the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens or is refused and a control the keyboard moves to are brought into view, Page Up, Page Down, Home and End scroll the body while one of its controls has the keyboard, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go, `laid_out` says where each is, in view or not); `State` (with what it holds: `NameEdit`, `DescriptionDraft`, `ReachedRows`, `MenuOrdinals`, and `appearance::Picker`) is `archforge-shell-api`'s `panels::State` and `MenuId` its `notation_ui::MenuId`, re-exported under their old paths |
 | `diagrams::{State, RowMenu, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows, a row's menu and the New diagram dialog |
 | `versions::State` | the Versions explorer's state: what it has read, how its sections are folded, and what the keyboard has just moved to, which its list brings into view |
 | `save_version::Dialog` | the Save version dialog: the description typed, the revision its summary is of, and how its save went |

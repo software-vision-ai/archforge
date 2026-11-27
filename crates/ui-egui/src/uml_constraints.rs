@@ -602,7 +602,7 @@ fn commit(cx: &mut Ctx, edit: &ConstraintEdit) {
         Err(e) => {
             // Braces with nothing to sit by are said under the form's buttons, any other refusal under Apply.
             let braces = matches!(&e, EngineError::Failed { error, .. } if error.reason == Some(Reason::BracesNoElement));
-            refuse(cx, crate::panels::refusal(&e), braces.then_some("show"));
+            refuse(cx, crate::panels::refusal(cx.notation_uis, &e), braces.then_some("show"));
         }
     }
 }

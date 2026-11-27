@@ -288,7 +288,7 @@ pub(crate) fn connect(cx: &mut Ctx, d: Obj, from_node: Uuid, to_node: Uuid) {
                 cx.canvas.notice = Some(tr("Identifying needs the parent's primary key; drawn as not identifying"));
             }
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -436,7 +436,7 @@ pub(crate) fn remove_selected_relationship(cx: &mut Ctx) -> bool {
     let Some(session) = cx.session.as_mut() else { return false };
     let removed = session
         .batch(&tr("Remove relationship"), |b| b.execute("element.remove", &json!({ "ids": ids })).map(|_| ()))
-        .map_err(|e| crate::panels::refusal(&e));
+        .map_err(|e| crate::panels::refusal(cx.notation_uis, &e));
     match removed {
         Ok(_) => {
             let text = if name.is_empty() { tr("Relationship removed") } else { fmt(&tr("{name} removed"), &[("name", &name)]) };

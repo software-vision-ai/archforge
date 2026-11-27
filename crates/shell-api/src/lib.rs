@@ -14,12 +14,19 @@
 //! interfaces' layer (9), below the notations' screens (10) and the shell (11), and builds for the
 //! portable target.
 
+pub mod appearance;
 pub mod canvas;
+pub mod cx;
 pub mod editing;
+pub mod engine_said;
+pub mod explorer;
 pub mod i18n;
 pub mod kinds;
+pub mod menu_bar;
 pub mod notation_ui;
+pub mod panels;
 pub mod search;
 pub mod skill_tab;
+pub mod state;
 pub mod ux;
 pub mod widgets;

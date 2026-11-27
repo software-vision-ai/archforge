@@ -325,7 +325,7 @@ fn realization_refusal(store: &Store, implementing: Option<Obj>, contract: Optio
 fn generalization_refusal(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<String> {
     let problem = archforge_uml::relations::generalization_problem(store, specific, general, except)?;
     let reason = problem.reason(store, specific, general);
-    Some(crate::panels::said(&reason).unwrap_or_else(|| problem.why(store, specific, general)))
+    Some(crate::panels::said(crate::notation_ui::UIS, &reason).unwrap_or_else(|| problem.why(store, specific, general)))
 }
 
 /// Whether `element` is a class: a plain class or an association class, which is one too.
@@ -460,7 +460,7 @@ pub(crate) fn connect(cx: &mut Ctx, d: Obj, from_node: Uuid, to_node: Uuid) {
                 cx.canvas.notice = Some(e);
             }
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -555,7 +555,7 @@ pub(crate) fn connect_class(cx: &mut Ctx, d: Obj, from: (Obj, Uuid), to: (Obj, U
                 cx.canvas.focused = true;
             }
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -644,7 +644,7 @@ pub(crate) fn connect_to_new(cx: &mut Ctx, d: Obj, from_node: Uuid, x: f64, y: f
                 cx.canvas.focused = true;
             }
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
     }
 }
 

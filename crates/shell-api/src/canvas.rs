@@ -14,6 +14,7 @@ use archforge_mof::Uuid;
 use egui::{Pos2, Rect, Vec2, pos2, vec2};
 
 use crate::kinds::ExtraLabel;
+use crate::ux;
 
 /// The view's mapping between diagram units and the screen.
 #[derive(Debug, Clone, Copy)]
@@ -632,6 +633,11 @@ impl State {
     pub fn notice_is_refused_step(&self) -> bool {
         self.notice.is_some() && self.notice == self.refused_step
     }
+}
+
+/// A colour as `#rrggbb`.
+pub fn hex(c: ux::Colour) -> String {
+    format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b())
 }
 
 /// A short end text, four characters at zoom 1, sits 30 points along a level or an upright line

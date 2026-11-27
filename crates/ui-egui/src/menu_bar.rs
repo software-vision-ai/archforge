@@ -12,6 +12,7 @@
 
 use std::sync::Arc;
 
+use archforge_shell_api::menu_bar::Hold;
 use egui::text_edit::TextEditState;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use ux::Colour;
@@ -80,17 +81,6 @@ pub(crate) struct Bar {
     /// Whether a click on the open menu's own title closed it: the keyboard goes back, as after Esc,
     /// once that click is over, since a field gives up a focus handed to it during a click elsewhere.
     closed_by_title: bool,
-}
-
-/// What the narrow context ([`crate::cx::Ctx`]) holds of the bar: what it took the keyboard for, the
-/// field it took it from, where it was drawn, and the inline editor it holds open, to change.
-pub(crate) struct Hold<'a> {
-    open: Option<&'static str>,
-    chosen: Option<&'static str>,
-    back: Option<egui::Id>,
-    rect: Option<Rect>,
-    /// The inline editor the bar keeps open after taking its keyboard, to change.
-    pub held: &'a mut Option<egui::Id>,
 }
 
 impl Bar {

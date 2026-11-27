@@ -303,7 +303,7 @@ impl DiagramKind for UmlKind {
                 }
                 cx.canvas.tool = crate::canvas::Tool::Select;
             }
-            Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+            Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
         }
     }
 
@@ -625,7 +625,7 @@ fn place_package(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
             }
             cx.canvas.tool = crate::canvas::Tool::Select;
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -663,7 +663,7 @@ fn drop_package(cx: &mut Ctx, d: Obj, element: Uuid, at: (f64, f64)) {
         Ok(_) => {
             let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(&e)),
+        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
     }
 }
 

@@ -5,20 +5,26 @@ from the shell, so a notation's screens build on this crate and never on the she
 (`archforge-ui-egui`) itself (`forge-ux/adr/0002`, "Notations are plugins", and `0003`, "Two
 registries"). It holds the automation-id registry, the design (`ux`), the canvas geometry and
 state that name no shell (`canvas`), with the editing under way on it (`editing`) and the skills
-open in its tabs (`skill_tab`), the data types the interfaces `NotationUi` and `DiagramKind` hand
-across that name no shell (`notation_ui`, `kinds`), how a search or a filter matches what is typed
-(`search`) and the translations machinery (`i18n`), with which each crate registers its own
-catalogues; story AR-780 moves the shared controls and the
-interfaces themselves with the data types that still name the shell here, unchanged.
+open in its tabs (`skill_tab`), the narrow context through which a notation's screens and the
+shared controls reach the shell (`cx`, with what it is built of: the right panels' state
+(`panels`, `appearance`), the menu bar's hold (`menu_bar`) and what its requests name (`state`,
+`explorer`)), the interface `NotationUi` with what a notation keeps (`notation_ui`), the refusals in
+the user's words, which ask the notations they are handed (`panels`, `engine_said`), the data types
+`DiagramKind` hands across that name no shell (`kinds`), how a search or a filter matches what is
+typed (`search`) and the translations machinery (`i18n`), with which each crate registers its own
+catalogues; story AR-780 moves the shared controls and `DiagramKind` with the data types that still
+name the shell here, unchanged.
 
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code
-(the gate's `layers` step scans it as it scans the shell). It takes egui, serde,
+(the gate's `layers` step scans it as it scans the shell). It takes egui, serde, serde_json, the
+parameters of a command a tree row dropped on another runs (`NotationUi::drop_on`), `log`, where an
+engine error said as an internal one is kept,
 `archforge-engine` (3), whose `Revision` a line end being dragged carries (the model's revision
-the drag began on), `archforge-mof` (4), whose elements, ids and store the interfaces' data types name,
+the drag began on), whose session the context holds and whose errors and reasons the refusals say, `archforge-mof` (4), whose elements, ids and store the interfaces' data types name,
 `archforge-core` (5), whose skills a row of the Models tree lists under its element,
-`archforge-diagram` (6), whose rectangles and line-end marks the canvas geometry reads and whose
-notations a press on the canvas carries, craft-i18n, whose `Folder` folds what a search is typed
+`archforge-diagram` (6), whose rectangles and line-end marks the canvas geometry reads, whose
+notations a press on the canvas carries and whose project view the context's session is over, craft-i18n, whose `Folder` folds what a search is typed
 against, and `icu_properties`, which says where a letter ends so a search never matches inside one.
 
 **Public API.**
@@ -42,6 +48,7 @@ against, and `icu_properties`, which says where a letter ends so a search never 
 | `canvas::{beside, beside_pair, qualifier_place, signature_place}` | where a line's end texts sit, one alone or both together; where a qualifier box sits against its card; where a template's signature box sits on its card |
 | `canvas::State` | what the centre keeps between frames, every field public: the tabs and the active one, the tool, the view (pan, zoom, size) and what the next frame does to it, the toggles, the notice and a refused step's words, the editing under way, the popover, the toast, the skills' texts, what the last frame drew that takes a press, and the views kept by diagram; `Default` (Select, grid and minimap on, zoom 1); `say_refused_step`, `notice_is_refused_step` |
 | `canvas::{Tool, Toast, MinimapDrag}` | the canvas tools (`Select`, `Pan`, a kind's `Place` and `Connect` by key, `Note`, `Link`); a line of text at the canvas's foot for a while, with the undo step it speaks of; a drag of the minimap's viewport (`shown`, `scale`, `origin`, `grab`: its mapping frozen as the drag began and where the pointer took hold) |
+| `canvas::hex` | `pub fn hex(c: ux::Colour) -> String`: a colour as `#rrggbb` |
 | `canvas::{EndText, PackageTab, PathBadge}` | what the last frame drew that takes a press: a cardinality text (line, end, rectangle, anchor); a package's tab (rectangle, node, the whole name when cut); a package's owning path under its card (rectangle, node, text shown, whole sentence) |
 | `editing::{NodeRename, NoteEdit, EntityMenu}` | a name being typed in a node's header; a note's text being typed in place; the element menu, open at a screen point |
 | `editing::{Gesture, Corner}` | a pointer gesture in progress, previewed and committed on release (`Move`, `Resize` by a `Corner`, `Marquee`, `Connect`, `LinkNote`, `EndText`, `Segment`, `Reconnect` with the revision it began on, `ExtraLabel`) |
@@ -55,6 +62,16 @@ against, and `icu_properties`, which says where a letter ends so a search never 
 | `notation_ui::{Row, Problem}` | a row of the Models tree as drawn (id, element, depth, kind and icon, muted, label, detail, note, whether it opens, is open and drags onto the canvas); a problem on the element it sits on (element, text) |
 | `notation_ui::{Editor, Place, OpenEditor}` | a Properties editor's card (its notation's metamodel and the card's name); where an open editor edits (the item, or none for one being added, and its list); an open editor (where it edits, the refusal its card shows) |
 | `notation_ui::{MenuId, Scope}` | a menu of the shell's one open-menu slot: whose it is (`Scope::Shell`, `Scope::Notation` by metamodel), its key and its index among a kind shown more than once; `shell`, `of`, `at`, `index_in` |
+| `notation_ui::{NotationUi, NotationState, NotationStates}` | what a notation brings to the shell (its rows in Models, its search entries, its problems, Properties' body, its refusals and words, its limits, its canvas keys and overlays, what an opening puts right, its fresh state), each method that reaches the shell taking `&mut Ctx` or `&CtxRef`; what it keeps between frames for its own editors, menus and drawings; the shell's one state per notation, `own` and `own_mut` by type |
+| `notation_ui::{of, of_class, name_limit, name_limit_of_cx, longest_name, description_limit, label, ends_label, before_removal, say_after_cx}` | the notation of an element or a class among those handed; the most characters a name or a description takes; what a sentence calls an element; an unnamed relationship by its ends; what the notations say of a removal; what a removal changed besides, said after its toast |
+| `cx::{Ctx, CtxRef, Request}` | the narrow context, every field public: the session, the panels' and the canvas's state, the automation registry, the notations and their states, the problems, the frame count, the menu bar's hold, whether a version shows and the requests; its read-only twin (`Ctx::cx_ref`); what the shell carries out once the call returns (`ExpandRows`, `HideVersionDetails`, `ShowPanel`, `ShowExplorer`, `NameInModels`, `AskDelete`) |
+| `panels::{State, NameEdit, DescriptionDraft, ReachedRows, MenuOrdinals}` | what the right panels keep between frames: a name or description being typed, the open menu with its scroll, reached row and numbered rows, the colour picker, the last refusal, the body's scroll and the editors to bring into view |
+| `panels::{run_cx, refusal, said, a_kind}` | `pub fn run_cx(cx: &mut Ctx, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String>`: a command on the open session, a refusal in the user's words; an engine's refusal as the panels say it, a typed refusal and a kind with its article, the shell's own first, then the notations of `uis` (`refusal(uis, e)`, `said(uis, reason)`, `a_kind(uis, kind)`) |
+| `engine_said::disabled` | `pub fn disabled(uis: &[&'static dyn NotationUi], reason: &str) -> Option<String>`: why a command is not available, in the user's words, the shell's own first, then the notations of `uis`; the engine's and the diagrams' typed refusals and the engine's own errors are said beside it for `panels::refusal` and `panels::said` |
+| `appearance::{Picker, Group}` | the colour picker open on an Appearance row (`new`, `colour`) and the row's group (`key`) |
+| `menu_bar::Hold` | what the context holds of the in-window menu bar: the group open, the row chosen, the field it took the keyboard from, where it was drawn, the inline editor it holds open |
+| `state::{Explorer, Panel}` | the activity rail's explorers and the right rail's panels, as the saved interface state names them |
+| `explorer::Delete` | a removal the delete dialog asks about: what goes, named, and what goes with it |
 | `search::Typed` | what was typed into a search or a filter, folded once: `words` (each word apart), `phrase` (one piece), `trimmed` (one piece, its edges trimmed after folding); `is_empty`, `first`, `in_folded`, `in_any` |
 | `search::{fold, joins, starts}` | `pub fn fold(text: &str) -> Folded`: a text folded as a search folds what is typed; `pub fn joins(prev: Option<char>, next: char) -> bool`: whether `next` goes on the letter before it; `pub fn starts<'a>(name: &'a Folded, word: &'a str) -> impl Iterator<Item = usize> + 'a`: where a folded word starts in a folded name, never inside a letter |
 | `kinds::{ToolUse, KindTool}` | what a diagram kind's tool does (`Place`, `Connect`); a tool it brings to the toolbar (key, icon, hint, use, chevron, width) |
