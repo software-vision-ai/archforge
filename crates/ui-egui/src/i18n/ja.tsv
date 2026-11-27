@@ -603,8 +603,6 @@ str		Compared with the version of {when}	{when} のバージョンと比較
 str		There is no version to compare with yet.	比較するバージョンはまだありません。
 str		This diagram couldn't be compared.	この図を比較できませんでした。
 str		This element couldn't be compared.	この要素を比較できませんでした。
-str		Attributes	属性
-str		Operations	操作
 str		Literals	リテラル
 str		Members	メンバー
 str		Relationships	関連
@@ -843,7 +841,6 @@ str		Remove from this diagram	この図から削除
 str		Delete from the model…	モデルから削除…
 str		Start	始点
 str		Identifying	識別
-str		Columns	列
 str		{name} removed	{name} を削除しました
 str		Undo	元に戻す
 str		Redo	やり直す

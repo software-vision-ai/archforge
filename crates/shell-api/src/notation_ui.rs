@@ -543,6 +543,12 @@ pub trait NotationUi: Sync {
         let _ = class;
         None
     }
+    /// The heading of a list of an element's own features of `class`, a class of its metamodel, in
+    /// its own words as the change view's cards show it; none leaves the shell's Members.
+    fn list_heading(&self, class: ClassId) -> Option<String> {
+        let _ = class;
+        None
+    }
     /// A kind of element as a refusal names it, with its article where the language has one (`a
     /// table`), for a kind only its own commands name; none for any other kind.
     fn a_kind(&self, kind: &str) -> Option<String> {

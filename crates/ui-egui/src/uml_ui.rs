@@ -1325,6 +1325,17 @@ impl NotationUi for UmlUi {
         })
     }
 
+    /// A classifier's properties are its Attributes, then its Operations, and an enumeration's
+    /// literals its Literals.
+    fn list_heading(&self, class: archforge_mof::ClassId) -> Option<String> {
+        Some(match class {
+            c if c == archforge_uml::PROPERTY => tr("Attributes"),
+            c if c == archforge_uml::OPERATION => tr("Operations"),
+            c if c == archforge_uml::ENUMERATION_LITERAL => tr("Literals"),
+            _ => return None,
+        })
+    }
+
     /// The UML kinds only its commands name in a refusal: a class, an interface, a package and
     /// the rest.
     fn a_kind(&self, kind: &str) -> Option<String> {
