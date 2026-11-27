@@ -384,11 +384,11 @@ pub fn remove_selection(shell: &mut Shell) {
         shell.explorer.notice = Some(why);
         return;
     }
-    // Stereotype applications go with it: removing them is never silent (AR-135).
-    let applications = ui.map(|u| u.applications_along(store, obj)).unwrap_or_default();
+    // What goes with it, as its notation says it: removing it is never silent (AR-135).
+    let consequences = ui.map(|u| u.consequences(store, obj)).unwrap_or_default();
     // What it holds moves up to its parent (a nested package): no dialog, the toast says where;
-    // the dialog when its stereotype applications would go with it.
-    if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)).filter(|_| applications.is_empty()) {
+    // the dialog when anything would go with it.
+    if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)).filter(|_| consequences.is_empty()) {
         let (name, to) = (crate::notation_ui::label(shell.notation_uis, store, obj), name_of(store, parent));
         let held = ui.is_some_and(|u| u.has_children(store, obj));
         let removal = crate::notation_ui::before_removal(shell.notation_uis, store, &[obj]);
@@ -407,11 +407,10 @@ pub fn remove_selection(shell: &mut Shell) {
         }
         return;
     }
-    let (relationships, keys, foreign_keys) = ui.map(|u| u.consequences(store, obj)).unwrap_or_default();
     let has_children = ui.is_some_and(|u| u.has_children(store, obj));
     // The diagrams that show it, counted as the canvas counts them (AR-187).
     let diagrams = crate::editing::diagrams_showing(store, obj);
-    if [relationships, keys, foreign_keys, diagrams].iter().all(|n| *n == 0) && !has_children && applications.is_empty() {
+    if consequences.is_empty() && diagrams == 0 && !has_children {
         let lead = fmt(&tr("{name} deleted"), &[("name", &crate::notation_ui::label(shell.notation_uis, store, obj))]);
         let removal = crate::notation_ui::before_removal(shell.notation_uis, store, &[obj]);
         match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
@@ -420,19 +419,14 @@ pub fn remove_selection(shell: &mut Shell) {
         }
         return;
     }
-    let along = ui.map(|u| u.goes_along(store, obj)).unwrap_or_default();
     let hands_to = ui.and_then(|u| u.hands_up(store, obj)).map(|p| (name_of(store, p), has_children));
     shell.explorer.delete = Some(Delete {
         ids: vec![id],
         // Named as the canvas names it, an unnamed relationship by its ends (AR-216).
         name: crate::notation_ui::label(shell.notation_uis, store, obj),
-        relationships,
-        keys,
-        foreign_keys,
+        consequences,
         diagrams,
         node: None,
-        along,
-        applications,
         hands_to,
     });
 }
@@ -1293,31 +1287,8 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
     if d.diagrams > 0 {
         lines.push(trn("It disappears from {n} diagram.", "It disappears from {n} diagrams.", d.diagrams as u64));
     }
-    if d.relationships > 0 {
-        lines.push(trn("{n} relationship goes with it.", "{n} relationships go with it.", d.relationships as u64));
-    }
-    if d.keys > 0 {
-        lines.push(trn("{n} key goes with it.", "{n} keys go with it.", d.keys as u64));
-    }
-    if d.foreign_keys > 0 {
-        lines.push(trn("{n} foreign key goes with it.", "{n} foreign keys go with it.", d.foreign_keys as u64));
-    }
-    // What goes with it by name: a classifier's nested classifiers (AR-132).
-    if !d.along.is_empty() {
-        let n = u64::try_from(d.along.len()).unwrap_or(u64::MAX);
-        lines.push(fmt(
-            &trn("{n} nested classifier goes with it: {names}.", "{n} nested classifiers go with it: {names}.", n),
-            &[("names", &d.along.join(", "))],
-        ));
-    }
-    // The stereotype applications that go with it, by name (AR-135): their values go too.
-    if !d.applications.is_empty() {
-        let n = u64::try_from(d.applications.len()).unwrap_or(u64::MAX);
-        lines.push(fmt(
-            &trn("{n} stereotype application goes with it: {names}.", "{n} stereotype applications go with it: {names}.", n),
-            &[("names", &d.applications.join(", "))],
-        ));
-    }
+    // What goes with it, as its notation counts and words it.
+    lines.extend(d.consequences.iter().cloned());
     lines.push(match &d.hands_to {
         Some((parent, _)) => fmt(&tr("What it holds moves to {parent}."), &[("parent", parent)]),
         None => tr("What it holds goes with it."),

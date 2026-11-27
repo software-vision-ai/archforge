@@ -153,10 +153,6 @@ str		What it holds moves to {parent}.	O que contém passa para {parent}.
 str		Remove from this diagram only	Remover apenas deste diagrama
 plural		It disappears from {n} diagram.	Desaparece de {n} diagrama.|Desaparece de {n} diagramas.
 plural		{n} relationship goes with it.	{n} relação vai com ele.|{n} relações vão com ele.
-plural		{n} key goes with it.	{n} chave vai com ele.|{n} chaves vão com ele.
-plural		{n} foreign key goes with it.	{n} chave estrangeira vai com ele.|{n} chaves estrangeiras vão com ele.
-plural		{n} nested classifier goes with it: {names}.	{n} classificador aninhado vai com ele: {names}.|{n} classificadores aninhados vão com ele: {names}.
-plural		{n} stereotype application goes with it: {names}.	{n} aplicação de estereótipo vai com ele: {names}.|{n} aplicações de estereótipo vão com ele: {names}.
 str		Delete	Eliminar
 str		Element · model	Elemento · modelo
 str		Skill · model	Competência · modelo

@@ -78,7 +78,10 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   (`panels::refusal`, `said`, `a_kind`, `engine_said::disabled`, in `crates/shell-api/src/`) and
   Chat's counts of the elements a tool row names (`chat_words::tool_words`, by
   `NotationUi::chat_kind` and `chat_count`) ask the notations they are handed: pass
-  `cx.notation_uis`, or the shell's `notation_uis`.
+  `cx.notation_uis`, or the shell's `notation_uis`. The delete dialog says what goes with a
+  removal as the element's notation counts and words it (`NotationUi::consequences`, one finished
+  sentence each, carried in `explorer::Delete`); the shell adds only the diagrams it disappears
+  from and what happens to what it holds, and asks only when there is something to say.
 - A control whose screen does not exist yet says "Not available yet" on hover. A canvas tool that
   is not built is left out of the toolbar instead.
 - The interface never touches the file system: what it needs from the host comes through
