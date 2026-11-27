@@ -402,17 +402,7 @@ plural		{n} change undone	{n} alteração anulada|{n} alterações anuladas
 plural		in about {n} minute	dentro de cerca de {n} minuto|dentro de cerca de {n} minutos
 plural		{n} message	{n} mensagem|{n} mensagens
 plural		{n} more call is not shown	Mais {n} chamada não é mostrada|Mais {n} chamadas não são mostradas
-plural		{n} class	{n} classe|{n} classes
-plural		{n} interface	{n} interface|{n} interfaces
-plural		{n} enumeration	{n} enumeração|{n} enumerações
-plural		{n} data type	{n} tipo de dados|{n} tipos de dados
-plural		{n} package	{n} pacote|{n} pacotes
-plural		{n} attribute	{n} atributo|{n} atributos
-plural		{n} operation	{n} operação|{n} operações
 plural		{n} line	{n} linha|{n} linhas
-plural		{n} table	{n} tabela|{n} tabelas
-plural		{n} column	{n} coluna|{n} colunas
-plural		{n} schema	{n} esquema|{n} esquemas
 plural		{n} diagram	{n} diagrama|{n} diagramas
 plural		{n} skill	{n} competência|{n} competências
 str		Not saved	Não guardado
