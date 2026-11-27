@@ -12805,6 +12805,28 @@ fn a_packages_tab_selects_drags_and_renames_its_card_and_the_name_is_typed_in_th
     assert_eq!(archforge_core::name_of(st, st.by_uuid(sales).unwrap()), "Sales and Marketing");
 }
 
+/// A double click on a package's card opens its name in its tab in the very frame of the second
+/// click, before the card is drawn renamed, in light and dark (AR-113).
+#[test]
+fn a_packages_name_is_typed_in_its_tab_from_the_frame_the_double_click_opens_it() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _, card, _, _) = package_preview_harness(theme);
+        let tab = rect_of(&h, &format!("workspace.canvas.node.{card}.tab"));
+        let body = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+        let at = body.center();
+        h.event(egui::Event::PointerMoved(at));
+        for _ in 0..2 {
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+            }
+            h.step();
+        }
+        assert!(h.state().canvas.rename.as_ref().is_some_and(|r| r.text == "Sales"), "{theme:?}: {:?}", h.state().canvas.rename);
+        let field = rect_of(&h, "workspace.canvas.rename");
+        assert!(tab.contains_rect(field), "{theme:?}: in the tab from the first frame: {field:?} {tab:?}");
+    }
+}
+
 #[test]
 fn a_parent_package_menu_longer_than_the_window_scrolls_to_its_last_choice() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 700.0));
@@ -17921,6 +17943,66 @@ impl crate::kinds::DiagramKind for SketchKind {
         };
         (archforge_core::name_of(store, element) == "Party").then(|| vec![first, own])
     }
+    /// The name typed on a card the sketch draws itself goes in the card's part over its top left,
+    /// in the small style; any other card's in its header.
+    fn name_field(
+        &self,
+        _: &egui::Painter,
+        store: &archforge_mof::Store,
+        node: archforge_mof::Obj,
+        rect: egui::Rect,
+        _: &str,
+        z: f32,
+    ) -> Option<(egui::Rect, crate::ux::Type)> {
+        let element = crate::canvas::element_of(store, node, archforge_diagram::node::ELEMENT)?;
+        (archforge_core::name_of(store, element) == SKETCH_DRAWN).then(|| (sketch_part(rect, z), crate::ux::types::SMALL.scaled(z)))
+    }
+    /// Draws the card of a class named [`SKETCH_DRAWN`] itself: a plain box with its own word, a
+    /// part over its top left that takes a press and says [`SKETCH_PART_SAYS`] on hover, and a
+    /// label under it that says [`SKETCH_LABEL_SAYS`]; any other card is the canvas's.
+    fn draw_card(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> bool {
+        if archforge_core::name_of(d.store, card.element) != SKETCH_DRAWN {
+            return false;
+        }
+        let z = d.view.zoom;
+        paint.rect_filled(card.rect, 0.0, d.p.surface);
+        crate::ux::text(paint, card.rect.min + egui::vec2(8.0, 8.0) * z, SKETCH_WORD, crate::ux::types::UI.scaled(z), d.p.text, None);
+        let Ok(id) = d.store.uuid(card.node) else { return true };
+        let part = sketch_part(card.rect, z);
+        paint.rect_filled(part, 0.0, d.p.surface);
+        crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.sketch-part"), "tab", part);
+        d.parts.borrow_mut().push(crate::canvas::CardPart { rect: part, node: id, hover: Some(SKETCH_PART_SAYS.into()) });
+        let label = egui::Rect::from_min_size(card.rect.left_bottom() + egui::vec2(0.0, 6.0) * z, egui::vec2(card.rect.width(), 16.0 * z));
+        let label_id = format!("workspace.canvas.node.{id}.sketch-label");
+        crate::widgets::record_visible(ui, registry, &label_id, "label", label);
+        d.labels.borrow_mut().push(crate::canvas::CardLabel {
+            rect: label,
+            node: id,
+            id: label_id,
+            shown: SKETCH_LABEL_SAYS.into(),
+            whole: SKETCH_LABEL_SAYS.into(),
+        });
+        true
+    }
+}
+
+/// The name of a class whose card the sketch kind draws itself, the word it draws on it, and what
+/// its part and its label say.
+const SKETCH_DRAWN: &str = "Drawn by the sketch";
+const SKETCH_WORD: &str = "Sketched";
+const SKETCH_PART_SAYS: &str = "The sketch's part";
+const SKETCH_LABEL_SAYS: &str = "The sketch's label, whole";
+
+/// The part over the top left of a card at `rect` that the sketch kind draws itself, at zoom `z`.
+fn sketch_part(rect: egui::Rect, z: f32) -> egui::Rect {
+    egui::Rect::from_min_size(rect.left_top() - egui::vec2(0.0, 24.0) * z, egui::vec2(90.0, 24.0) * z)
 }
 
 /// The element menu's rows as drawn, top to bottom: each key, with the gap above it from the row
@@ -18033,6 +18115,128 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
         *SKETCH_CALLS.lock().unwrap(),
         ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]
     );
+}
+
+/// The sketch harness in `theme` with Customer renamed [`SKETCH_DRAWN`], whose card the sketch kind
+/// draws itself; gives the diagram, Party's node and Customer's node.
+fn sketch_drawn_harness(theme: ThemeKind) -> (Harness<'static, Shell>, String, String, String) {
+    let (mut h, d, a, b, _e) = sketch_harness();
+    h.state_mut().state.theme = theme;
+    let s = h.state_mut().session.as_mut().unwrap();
+    let st = s.doc();
+    let customer = st
+        .uuid(crate::canvas::element_of(st, st.by_uuid(archforge_mof::Uuid::parse(&b).unwrap()).unwrap(), archforge_diagram::node::ELEMENT).unwrap())
+        .unwrap();
+    s.execute("uml.class.rename", &serde_json::json!({ "class": customer.to_string(), "name": SKETCH_DRAWN })).unwrap();
+    h.run();
+    (h, d, a, b)
+}
+
+/// The elements selected, by id.
+fn selected_ids(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Uuid> {
+    let s = h.state().session.as_ref().unwrap();
+    s.view().selection.iter().filter_map(|o| s.doc().uuid(*o).ok()).collect()
+}
+
+/// A card its diagram's kind draws itself takes the place of the canvas's own (the sketch's box
+/// and word, none of the canvas's rows), while the canvas's other cards stay its own; its part over
+/// the card takes a press as the card does and says its words on hover; its label is read out whole
+/// and shown on hover; and the canvas still draws the selection ring round it and gives its problem
+/// badge back. In light and dark.
+#[test]
+fn a_card_its_kind_draws_replaces_the_canvass_and_keeps_the_ring_badge_parts_and_labels() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, d, _a, b) = sketch_drawn_harness(theme);
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == SKETCH_WORD), "{theme:?}: the kind's card: {texts:?}");
+        assert!(!texts.iter().any(|t| t == "since"), "{theme:?}: none of the canvas's card");
+        assert_eq!(texts.iter().filter(|t| *t == "CLASS").count(), 1, "{theme:?}: Party's eyebrow alone");
+        assert!(texts.iter().any(|t| t == "partyId"), "{theme:?}: Party's card is still the canvas's");
+        let node = archforge_mof::Uuid::parse(&b).unwrap();
+        assert_eq!(h.state().canvas.kind_cards, vec![node], "{theme:?}");
+        let body = rect_of(&h, &format!("workspace.canvas.node.{b}"));
+        let part = rect_of(&h, &format!("workspace.canvas.node.{b}.sketch-part"));
+        assert!(!body.contains(part.center()), "{theme:?}: the part lies outside the card");
+        // A click on the part selects the card's element.
+        click(&mut h, part.center());
+        let element = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(crate::canvas::element_of(st, st.by_uuid(node).unwrap(), archforge_diagram::node::ELEMENT).unwrap()).unwrap()
+        };
+        assert_eq!(selected_ids(&h), vec![element], "{theme:?}: the part selects its card");
+        // The canvas draws the selection ring round the kind's card.
+        let accent = egui::Color32::from(crate::ux::palette(theme == ThemeKind::Dark).accent);
+        let ring = body.expand(4.0);
+        let ringed = h.output().shapes.iter().any(|c| {
+            matches!(&c.shape, egui::Shape::Rect(r) if r.stroke.color == accent && r.rect.min.distance(ring.min) < 0.5 && r.rect.max.distance(ring.max) < 0.5)
+        });
+        assert!(ringed, "{theme:?}: the selection ring");
+        // The pointer on the part shows its words, a gesture under way or not.
+        for _ in 0..45 {
+            h.step();
+        }
+        let before = painted(&h).iter().filter(|t| *t == SKETCH_PART_SAYS).count();
+        h.event(egui::Event::PointerMoved(part.center()));
+        for _ in 0..40 {
+            h.step();
+        }
+        assert_eq!(painted(&h).iter().filter(|t| *t == SKETCH_PART_SAYS).count(), before + 1, "{theme:?}: the part's words on hover");
+        // The label is read out whole, as a label, and shown whole on hover.
+        let said = h.get_by_label(SKETCH_LABEL_SAYS).accesskit_node();
+        assert_eq!(said.role(), egui::accesskit::Role::Label, "{theme:?}");
+        let label = rect_of(&h, &format!("workspace.canvas.node.{b}.sketch-label"));
+        let before = painted(&h).iter().filter(|t| *t == SKETCH_LABEL_SAYS).count();
+        h.event(egui::Event::PointerMoved(label.center()));
+        for _ in 0..40 {
+            h.step();
+        }
+        assert_eq!(painted(&h).iter().filter(|t| *t == SKETCH_LABEL_SAYS).count(), before + 1, "{theme:?}: the label's tooltip");
+        // Drawn with no shell, the kind's card gives its problem badge back.
+        let session = h.state_mut().session.take().unwrap();
+        drop(h);
+        let st = session.doc();
+        let flagged = [(st.by_uuid(element).unwrap(), vec!["A problem".to_string()])].into_iter().collect();
+        let (texts, _, badges) = drawn_alone(&session, &d, Some(&SketchKind), theme == ThemeKind::Dark, 1000.0, &Default::default(), &flagged);
+        assert!(texts.iter().any(|t| t == SKETCH_WORD), "{theme:?}: drawn by the kind");
+        assert_eq!(badges, 1, "{theme:?}: its badge");
+    }
+}
+
+/// The name typed in place on a card its kind draws goes where the kind says, from the very frame
+/// the double click opens it, and stays there while it is typed; a canvas card's goes in its
+/// header. In light and dark.
+#[test]
+fn the_name_typed_on_a_card_its_kind_draws_goes_where_the_kind_says_from_the_first_frame() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _d, a, b) = sketch_drawn_harness(theme);
+        let body = rect_of(&h, &format!("workspace.canvas.node.{b}"));
+        let part = sketch_part(body, 1.0);
+        // The frame the second click lands in opens the name, and the field is in the part.
+        let at = rect_of(&h, &format!("workspace.canvas.node.{b}.sketch-part")).center();
+        h.event(egui::Event::PointerMoved(at));
+        for _ in 0..2 {
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+            }
+            h.step();
+        }
+        assert!(h.state().canvas.rename.as_ref().is_some_and(|r| r.text == SKETCH_DRAWN), "{theme:?}: {:?}", h.state().canvas.rename);
+        let field = rect_of(&h, "workspace.canvas.rename");
+        assert_eq!(field, part, "{theme:?}: in the part from the first frame");
+        h.state_mut().canvas.rename.as_mut().unwrap().text = "Typed".into();
+        h.run();
+        assert_eq!(rect_of(&h, "workspace.canvas.rename"), part, "{theme:?}: still there while typed");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Party's card is the canvas's: its name is typed in its header.
+        for _ in 0..45 {
+            h.step();
+        }
+        let party = rect_of(&h, &format!("workspace.canvas.node.{a}"));
+        double_click(&mut h, party.left_top() + egui::vec2(60.0, 30.0));
+        let field = rect_of(&h, "workspace.canvas.rename");
+        assert!(party.contains_rect(field) && field.top() > party.top() + 20.0, "{theme:?}: in Party's header: {field:?} {party:?}");
+    }
 }
 
 /// The sketch notation in the shell's explorers, search and panels, for the tests alone: a package
