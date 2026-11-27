@@ -20,7 +20,9 @@ drawing reads, `canvas::Drawing`, and what the pointer asked for, `editing::Acti
 or a filter matches what is typed (`search`) and the translations machinery (`i18n`), with which
 each crate registers its own catalogues, the interfaces' own among them (`src/i18n/<code>.tsv`,
 the words only their code says, registered before their first lookup), and the screens registry's type (`screens`): the
-notations' screens parts the app registers, with the lists the shell reads made from them. The app
+notations' screens parts the app registers, with the lists the shell reads made from them. Behind its
+`testing` feature it offers the test context a notation's screens are tested against without the
+shell (`testing`, `forge-ux/adr/0005`, "Tests follow the plugin"). The app
 registers ER's and UML's parts and gives them to every shell it makes, and a test of the app's
 holds them in step with the model registry (`archforge_notations::NOTATIONS`): one part for each
 notation there, of its metamodel and with its diagram kinds, and none besides. The shell keeps the
@@ -38,6 +40,8 @@ the drag began on), whose session the context holds (and `kinds::active_kind` re
 `archforge-diagram` (6), whose rectangles and line-end marks the canvas geometry reads, whose
 notations a press on the canvas carries and whose project view the context's session is over, craft-i18n, whose `Folder` folds what a search is typed
 against, and `icu_properties`, which says where a letter ends so a search never matches inside one.
+Behind its `testing` feature, never shipped, it also takes `egui_kittest`, in which the test context
+draws a screen (`testing::harness`).
 
 **Public API.**
 
@@ -128,6 +132,8 @@ against, and `icu_properties`, which says where a letter ends so a search never 
 | `i18n::{Catalogue, parse}` | a catalogue's `str` and `plural` rows, as the lookups read them; malformed rows skipped |
 | `i18n::CATALOGUES` | `pub static CATALOGUES: &[Rows]`: the interfaces' own catalogue of each language, in the order of `LANGUAGES`, embedded from `src/i18n/<code>.tsv`: the rows only their code says (the panels' and the engine's refusal words among them); `tr`, `tr_ctx` and `trn` register it before their first lookup, and the build script refuses a malformed row in it |
 | `i18n::check::malformed_row` | `pub fn malformed_row(text: &str) -> Option<(usize, usize)>`: the build-time row check, the first row without four tab-separated columns (line, columns found); a build script takes the file as a module of its own (`#[path]`) |
+| `testing::TestContext` | feature `testing`: the test context a notation's screens are tested against without the shell (ADR 0005), every field public: what the narrow context borrows, owned for the notations given (`new(uis) -> Result<TestContext, Unregistered>`, each notation's state made and its catalogues registered), the problems a test sets, the inline editor the menu bar holds and every request made, kept in order and never carried out; `cx(f)` gives the narrow context over these parts, `cx_ref()` its read-only twin |
+| `testing::{harness, centre, click}` | feature `testing`: `pub fn harness<'a>(test: TestContext, language: &str, dark: bool, size: egui::Vec2, screen: impl FnMut(&mut Ctx<'_>, &mut egui::Ui, &Palette) + 'a) -> Result<Harness<'a, TestContext>, String>`: a screen drawn through the narrow context in an `egui_kittest` harness, in one language, pinned each frame, and one appearance with its palette, each frame counted and starting a frame of the automation registry, the design's families as the toolkit's faces; refused for a code no language has; the centre of a control the last frame drew, by automation id; a click there |
 
 **Non-goals.** Installing fonts and the app icon, which stay in the shell, as do the icons only one
 notation draws until its screens crate takes them; the other crates' catalogues, which each crate

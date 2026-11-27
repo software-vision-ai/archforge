@@ -13,7 +13,9 @@
 //! draw are in `panels`, with the problems a selection shows (`problems`) and the key presses they
 //! take (`actions`). The screens registry's type is here (`screens`): the notations' screens parts
 //! the app registers, with the lists the shell reads made from them, so the shell knows the
-//! notations and diagram kinds it is given and no others. It sits on the shell interfaces' layer
+//! notations and diagram kinds it is given and no others. Behind the `testing` feature, the test
+//! context (`testing`) owns what the narrow context borrows, so a notation's screens are tested
+//! without the shell (ADR 0005). It sits on the shell interfaces' layer
 //! (9), below the notations' screens (10) and the shell (11), and builds for the portable target.
 
 pub mod actions;
@@ -33,5 +35,7 @@ pub mod screens;
 pub mod search;
 pub mod skill_tab;
 pub mod state;
+#[cfg(feature = "testing")]
+pub mod testing;
 pub mod ux;
 pub mod widgets;
