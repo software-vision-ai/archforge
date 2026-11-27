@@ -49,7 +49,7 @@ const COLLAPSE: MenuRow = MenuRow {
     first: false,
     run: |cx, menu| {
         // The command selects the relationship it makes.
-        if let Err(e) = crate::panels::run_cx(cx, "er.relationship.collapse", serde_json::json!({ "entity": menu.entity.to_string() })) {
+        if let Err(e) = crate::panels::run_cx(cx, "er.relationship.collapse", serde_json::json!({ "entity": menu.element.to_string() })) {
             cx.canvas.notice = Some(e);
         }
     },
@@ -65,7 +65,7 @@ fn add_column(mac: bool) -> MenuRow {
         live: true,
         first: false,
         run: |cx, menu| {
-            crate::er_table::open_column(cx, menu.entity, None);
+            crate::er_table::open_column(cx, menu.element, None);
             cx.requests.push(Request::ShowPanel(Panel::Properties));
         },
     }

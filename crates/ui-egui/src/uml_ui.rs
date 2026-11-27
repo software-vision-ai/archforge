@@ -299,7 +299,7 @@ impl DiagramKind for UmlKind {
                 let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
                 if let (Some(class), Some(node)) = (id_at(0), id_at(1)) {
                     let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [class.to_string()] }));
-                    cx.canvas.rename = Some(crate::editing::NodeRename { node, entity: class, text: name, opened: true, refused: None });
+                    cx.canvas.rename = Some(crate::editing::NodeRename { node, element: class, text: name, opened: true, refused: None });
                     cx.canvas.focused = true;
                 }
                 cx.canvas.tool = crate::canvas::Tool::Select;
@@ -475,7 +475,7 @@ impl DiagramKind for UmlKind {
             keys: crate::editing::new_row_keys(mac),
             live: true,
             first: false,
-            run: |cx, menu| UmlKind.open(cx, menu.entity, None),
+            run: |cx, menu| UmlKind.open(cx, menu.element, None),
         });
         Some(row.into_iter().collect())
     }
@@ -678,7 +678,7 @@ fn place_package(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
             let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
             if let (Some(package), Some(node)) = (id_at(0), id_at(1)) {
                 let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [package.to_string()] }));
-                cx.canvas.rename = Some(crate::editing::NodeRename { node, entity: package, text: package_name, opened: true, refused: None });
+                cx.canvas.rename = Some(crate::editing::NodeRename { node, element: package, text: package_name, opened: true, refused: None });
                 cx.canvas.focused = true;
             }
             cx.canvas.tool = crate::canvas::Tool::Select;

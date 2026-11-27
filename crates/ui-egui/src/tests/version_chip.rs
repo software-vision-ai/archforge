@@ -688,7 +688,7 @@ fn an_open_editor_stops_every_way_of_leaving() {
         ("panel card", &|s| {
             er_of_mut(s).check = Some(CheckEdit { target: None, entity: ID, name: "x".into(), expression: "1".into(), refused: None, opened: false })
         }),
-        ("canvas name", &|s| s.canvas.rename = Some(NodeRename { node: ID, entity: ID, text: "x".into(), opened: false, refused: None })),
+        ("canvas name", &|s| s.canvas.rename = Some(NodeRename { node: ID, element: ID, text: "x".into(), opened: false, refused: None })),
         ("drag", &|s| s.canvas.gesture = Some(Gesture::Marquee { from: egui::Pos2::ZERO })),
         ("drawing", &draw),
         ("tree drag", &|s| s.explorer.dragging = Some(ID)),
