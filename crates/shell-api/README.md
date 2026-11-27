@@ -15,8 +15,10 @@ with the problems a selection shows (`problems`) and the key presses they take (
 interface `DiagramKind` with the data types it hands across (`kinds`, with what one frame's
 drawing reads, `canvas::Drawing`, and what the pointer asked for, `editing::Action`), how a search
 or a filter matches what is typed (`search`) and the translations machinery (`i18n`), with which
-each crate registers its own catalogues. The lists of notations and diagram kinds the app
-registers, which name ER and UML, stay in the shell.
+each crate registers its own catalogues, and the screens registry's type (`screens`): the
+notations' screens parts the app registers, with the lists the shell reads made from them. The
+lists of notations and diagram kinds the shell knows today, which name ER and UML, stay in the
+shell.
 
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code
@@ -99,6 +101,8 @@ against, and `icu_properties`, which says where a letter ends so a search never 
 | `kinds::{kind_of, active_kind, diagram_icon, popover_takes_keys}` | `pub fn kind_of(kinds: &[&'static dyn DiagramKind], store: &Store, d: Obj) -> Option<&'static dyn DiagramKind>`: the kind of a diagram among `kinds`; the kind of the diagram `canvas` shows in the open project's session (`active_kind(kinds, canvas, session)`); a diagram's icon, its kind's (`diagram_icon(kinds, store, d)`); whether the canvas's open popover is a menu the keys walk, every kind of `kinds` asked (`popover_takes_keys(kinds, canvas)`) |
 | `kinds::CardDrawn` | a node's card as the canvas is about to draw it, for its diagram kind to draw it itself (node, element, the card its notation describes, rectangle on screen, whether selected) |
 | `kinds::{LineDrawn, ExtraLabel}` | a line as the canvas drew it this frame, for its diagram kind to draw what goes with it (line, element, points on screen from source to target, whether selected); a label a kind drew of no one node or line (the element, where it was on screen, the node that holds where it was moved, its hover text) |
+| `screens::ScreensPart` | `pub struct ScreensPart { pub ui: &'static dyn NotationUi, pub kinds: &'static [&'static dyn DiagramKind] }`: one notation's screens part, what it brings to the shell and the diagram kinds its screens serve; its catalogues are its `NotationUi`'s |
+| `screens::ScreensRegistry` | the screens parts the app registers, a `static` (`pub const fn new(parts: &'static [ScreensPart]) -> Self`): `parts`; `notation_uis(&'static self) -> &'static [&'static dyn NotationUi]`, every part's, in the parts' order, and `kinds(&'static self) -> &'static [&'static dyn DiagramKind]`, every part's kinds part after part, each made once, the first time it is asked for, and kept in the registry; `catalogues(&self) -> impl Iterator<Item = &'static [Rows]>`, each part's table in the parts' order |
 | `i18n::{tr, tr_ctx, trn, fmt}` | a literal translated in this thread's language, one under a context, a plural with its count filled in, named placeholders filled in one pass; a key without a registered row is its own English text |
 | `i18n::{Language, LANGUAGES, plural_forms, codes, set_language, language}` | the languages (code, native name, plural rule, complete or not), English first; how many plural forms a language's catalogue holds; the codes for a message; this thread's language |
 | `i18n::{Rows, register, Unregistered}` | one language's rows in a crate's catalogue (code, file name, text); registering a crate's catalogues, once, a later table's row replacing an earlier one's under the same key; the refusal of a table with a catalogue for a code no language has, before anything is registered |
