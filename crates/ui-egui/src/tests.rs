@@ -4308,7 +4308,7 @@ fn a_connection_dropped_on_empty_canvas_makes_a_new_table_joined_to_it_in_one_st
     let st = h.state().session.as_ref().unwrap().doc();
     let rel = relationships(&h)[0];
     let to = st.get(rel, archforge_er::relationship::TO).unwrap().as_ref().unwrap();
-    assert_eq!(st.uuid(to).unwrap(), rename.entity, "the line joins the new table");
+    assert_eq!(st.uuid(to).unwrap(), rename.element, "the line joins the new table");
     assert!(!crate::connect::has_foreign_key(st, rel), "the new table's relationship starts with its foreign key off");
     // One undo takes the table, its node and its line away together.
     let undo = h.state().session.as_ref().unwrap().undo_label();
@@ -11545,7 +11545,7 @@ fn the_package_tool_makes_the_package_its_diagram_and_its_default_as_one_undo_st
         assert_eq!(packages_diagrams_bindings(&h), [packages + 1, diagrams + 1, bindings + 1], "{theme:?}");
         let s = h.state().session.as_ref().unwrap();
         assert_eq!(s.undo_label(), Some("Add package"), "{theme:?}: one undo step");
-        let package = h.state().canvas.rename.as_ref().expect("named in place").entity;
+        let package = h.state().canvas.rename.as_ref().expect("named in place").element;
         let (st, p) = (s.doc(), s.doc().by_uuid(package).unwrap());
         assert_eq!(s.view().selection, [p], "{theme:?}: the package selected, not its diagram");
         let Ok(DefaultDiagram::Bound(d)) = resolve(st, p) else { panic!("{theme:?}: no default for the package") };
@@ -11700,11 +11700,11 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         let (package, inner) = {
             let st = h.state().session.as_ref().unwrap().doc();
-            let p = st.by_uuid(rename.entity).unwrap();
+            let p = st.by_uuid(rename.element).unwrap();
             assert_eq!(archforge_core::name_of(st, p), "Sales");
             let d = default_of(st, p).expect("its own diagram");
             assert_eq!(crate::diagrams::diagram_name(st, d), "Sales", "{theme:?}: named with the package");
-            (rename.entity, st.uuid(d).unwrap())
+            (rename.element, st.uuid(d).unwrap())
         };
         // Open on the selected package; the path bar leads back, to the view as it was left.
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [package.to_string()] })).unwrap();
@@ -11779,7 +11779,7 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         rest(&mut h);
         let _ = node;
         double_click(&mut h, shown.center());
-        assert_eq!(h.state().canvas.rename.as_ref().map(|r| r.entity), Some(package), "{theme:?}: renaming");
+        assert_eq!(h.state().canvas.rename.as_ref().map(|r| r.element), Some(package), "{theme:?}: renaming");
         assert_eq!(active(&h), Some(root_diagram));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // Saved and opened again, the package leads to the same diagram.
@@ -18046,7 +18046,7 @@ impl crate::kinds::DiagramKind for SketchKind {
             live: true,
             first: false,
             run: |cx, menu| {
-                let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(menu.entity).map(|e| archforge_core::name_of(s.doc(), e)));
+                let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(menu.element).map(|e| archforge_core::name_of(s.doc(), e)));
                 SKETCH_CALLS.lock().unwrap().push(format!("menu own {}", name.unwrap_or_default()));
             },
         };
@@ -19506,7 +19506,7 @@ fn names_typed_in_place(theme: ThemeKind) {
     // On the canvas: the name is selected whole, so typing replaces it, up to the sketch's limit.
     h.state_mut().canvas.rename = Some(crate::editing::NodeRename {
         node: archforge_mof::Uuid::parse(&a).unwrap(),
-        entity: party,
+        element: party,
         text: "Party".into(),
         opened: true,
         refused: None,
@@ -28617,7 +28617,7 @@ fn the_relationship_tool_draws_an_association_class_with_its_card_as_one_step_an
         };
         assert_eq!(r.selection(), [element.to_string()]);
         let rename = r.h.state().canvas.rename.clone().expect("its card's name is open for typing");
-        assert_eq!((rename.node, rename.entity, rename.text.as_str()), (card, element, "AssociationClass 1"));
+        assert_eq!((rename.node, rename.element, rename.text.as_str()), (card, element, "AssociationClass 1"));
         r.h.state_mut().canvas.rename = None;
         r.h.run();
         let card_rect = rect_of(&r.h, &format!("workspace.canvas.node.{card}"));

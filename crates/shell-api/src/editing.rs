@@ -14,7 +14,8 @@ use crate::cx::Ctx;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeRename {
     pub node: Uuid,
-    pub entity: Uuid,
+    /// The element the node shows, which the name is typed for.
+    pub element: Uuid,
     pub text: String,
     /// True until the field has taken the keyboard once.
     pub opened: bool,
@@ -73,7 +74,8 @@ pub enum Gesture {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ElementMenu {
     pub node: Uuid,
-    pub entity: Uuid,
+    /// The element the node shows, which the menu is about.
+    pub element: Uuid,
     pub at: Pos2,
 }
 

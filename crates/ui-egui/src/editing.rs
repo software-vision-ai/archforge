@@ -511,11 +511,11 @@ fn decide(
             // Its element menu, where the kind answers one for what the card shows.
             if resp.secondary_clicked()
                 && let Some(n) = hit_node(pos)
-                && let Some(entity) = part_of_node(kind, store, n)
-                && kind.is_some_and(|k| k.menu(store, entity, resp.ctx.os() == egui::os::OperatingSystem::Mac).is_some())
-                && let (Some(node), Some(entity)) = (uuid(store, n), uuid(store, entity))
+                && let Some(element) = part_of_node(kind, store, n)
+                && kind.is_some_and(|k| k.menu(store, element, resp.ctx.os() == egui::os::OperatingSystem::Mac).is_some())
+                && let (Some(node), Some(element)) = (uuid(store, n), uuid(store, element))
             {
-                return Action::Menu(ElementMenu { node, entity, at: pos });
+                return Action::Menu(ElementMenu { node, element, at: pos });
             }
             // A double click puts a moved cardinality text back, or a line's dragged route.
             if resp.double_clicked() && hit_node(pos).is_none() {
@@ -662,7 +662,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
             }
         }
         Action::Menu(m) => shell.canvas.menu = Some(m),
-        Action::Rename(node, entity) => open_rename(shell, node, entity),
+        Action::Rename(node, element) => open_rename(shell, node, element),
         Action::PlaceNote(x, y) => place_note(shell, d, x, y),
         Action::EditNote(node) => {
             let text = shell.session.as_ref().and_then(|s| {
@@ -1098,17 +1098,19 @@ pub(crate) fn place_with_lines_cx(
     }
 }
 
-fn open_rename(shell: &mut Shell, node: Uuid, entity: Uuid) {
+/// Opens the name field in the header of `node` for the element it shows, holding the element's
+/// name as it is; nothing opens when no project is open or the element is gone.
+fn open_rename(shell: &mut Shell, node: Uuid, element: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    let Some(e) = store.by_uuid(entity) else { return };
+    let Some(e) = store.by_uuid(element) else { return };
     let text = archforge_core::name_of(store, e);
-    shell.canvas.rename = Some(NodeRename { node, entity, text, opened: true, refused: None });
+    shell.canvas.rename = Some(NodeRename { node, element, text, opened: true, refused: None });
 }
 
 /// Commits the name typed in place; a refusal keeps it open.
 fn commit_rename(shell: &mut Shell) {
     let Some(r) = shell.canvas.rename.clone() else { return };
-    let current = shell.session.as_ref().and_then(|s| s.doc().by_uuid(r.entity).map(|e| archforge_core::name_of(s.doc(), e)));
+    let current = shell.session.as_ref().and_then(|s| s.doc().by_uuid(r.element).map(|e| archforge_core::name_of(s.doc(), e)));
     if current.as_deref() == Some(r.text.trim()) {
         shell.canvas.rename = None;
         return;
@@ -1118,7 +1120,7 @@ fn commit_rename(shell: &mut Shell) {
         crate::kinds::kind_of(shell, s.doc(), d)
     });
     let Some(kind) = kind else { return };
-    match shell.cx(|cx| kind.rename(cx, r.entity, r.text.trim())) {
+    match shell.cx(|cx| kind.rename(cx, r.element, r.text.trim())) {
         Ok(()) => shell.canvas.rename = None,
         Err(e) => {
             // The field takes the keyboard again, the text selected, so the name can be retyped.
@@ -1566,8 +1568,8 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
     });
     paint.rect_filled(field, 2.0 * z, p.accent_tint);
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.rename", "field", field);
-    let Some(entity) = shell.canvas.rename.as_ref().map(|rn| rn.entity) else { return };
-    let limit = crate::notation_ui::name_limit_of(shell, entity);
+    let Some(element) = shell.canvas.rename.as_ref().map(|rn| rn.element) else { return };
+    let limit = crate::notation_ui::name_limit_of(shell, element);
     let Some(rn) = shell.canvas.rename.as_mut() else { return };
     let fresh = std::mem::take(&mut rn.opened);
     let inner = Rect::from_min_max(
@@ -1623,7 +1625,7 @@ fn element_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &E
     let (delete_chord, model_chord) = if mac { ("⌫", "⇧⌫") } else { ("Del", "Shift Del") };
     let kind = crate::kinds::active_kind(shell);
     let own: Vec<crate::kinds::MenuRow> =
-        shell.session.as_ref().and_then(|s| s.doc().by_uuid(menu.entity).zip(kind).and_then(|(e, k)| k.menu(s.doc(), e, mac))).unwrap_or_default();
+        shell.session.as_ref().and_then(|s| s.doc().by_uuid(menu.element).zip(kind).and_then(|(e, k)| k.menu(s.doc(), e, mac))).unwrap_or_default();
     let (first, after): (Vec<&crate::kinds::MenuRow>, Vec<&crate::kinds::MenuRow>) = own.iter().partition(|row| row.first);
     let row_of = |row: &&crate::kinds::MenuRow| (row.key, row.label, row.keys, row.live, false);
     let mut rows: Vec<(&str, &str, &str, bool, bool)> = first.iter().map(row_of).collect();
@@ -1680,14 +1682,14 @@ fn element_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &E
     match key {
         "open" => {
             shell.state.show_explorer(crate::state::Explorer::Models);
-            select(shell, vec![menu.entity]);
+            select(shell, vec![menu.element]);
         }
         "generate" => {
-            select(shell, vec![menu.entity]);
+            select(shell, vec![menu.element]);
             shell.open_generate();
         }
         "remove" => unplace(shell, vec![menu.node]),
-        "delete" => ask_delete(shell, menu.node, menu.entity),
+        "delete" => ask_delete(shell, menu.node, menu.element),
         key => {
             if let Some(row) = own.iter().find(|row| row.key == key) {
                 shell.cx(|cx| (row.run)(cx, menu));
@@ -1922,7 +1924,7 @@ fn remove_lines_here(shell: &mut Shell, d: Obj) {
 /// Drops what the store no longer has.
 pub fn retain_valid(state: &mut crate::canvas::State, store: &Store) {
     let alive = |id: &Uuid| store.by_uuid(*id).is_some_and(|o| store.is_alive(o));
-    if state.rename.as_ref().is_some_and(|r| !alive(&r.node) || !alive(&r.entity)) {
+    if state.rename.as_ref().is_some_and(|r| !alive(&r.node) || !alive(&r.element)) {
         state.rename = None;
     }
     if state.note_edit.as_ref().is_some_and(|ne| !alive(&ne.node)) {

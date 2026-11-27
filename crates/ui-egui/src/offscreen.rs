@@ -3077,7 +3077,7 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
     session.execute("view.select", &json!({ "ids": [entity.to_string()] })).map_err(|e| format!("view.select: {e:?}"))?;
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     shell.canvas.tool = crate::canvas::Tool::Place("entity");
-    shell.canvas.rename = Some(crate::editing::NodeRename { node, entity, text: "Entity".to_string(), opened: true, refused: None });
+    shell.canvas.rename = Some(crate::editing::NodeRename { node, element: entity, text: "Entity".to_string(), opened: true, refused: None });
     Ok(())
 }
 
