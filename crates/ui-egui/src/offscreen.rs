@@ -602,6 +602,9 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     Ok(())
 }
 
+/// The screens parts the screens' shells are given: ER's, then UML's, as the app registers them.
+static PARTS: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[crate::ER, crate::UML]);
+
 /// The shell of `screen` in `theme`, its project, model and view as the screen shows them, and the
 /// control the pointer rests on, if any.
 fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>), String> {
@@ -613,7 +616,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         r[2..].copy_from_slice(&i.to_be_bytes());
         archforge_mof::Uuid::v7(1_761_670_800_000, r)
     });
-    let mut shell = Shell::new(Services { ids: Some(ids), ..Services::default() });
+    let mut shell = Shell::new(Services { ids: Some(ids), ..Services::default() }, &PARTS);
     shell.state.theme = theme;
     if matches!(screen, Screen::HomeGallery | Screen::HomeSearch) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });

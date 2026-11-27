@@ -21,7 +21,9 @@ pub(crate) use archforge_shell_api::kinds::{DiagramKind, KindTool, MenuRow, Mode
 
 use crate::Shell;
 
-/// The kinds the shell knows.
+/// The app's diagram kinds, ER's and UML's, for the tests that ask them without a shell; a shell
+/// knows those of the screens parts it is given ([`Shell::new`]).
+#[cfg(test)]
 pub(crate) static KINDS: &[&dyn DiagramKind] = &[&crate::er_kind::ErKind, &crate::uml_ui::UmlKind];
 
 /// The kind of the diagram `d`, when the shell knows it: asked of the shell's kinds.

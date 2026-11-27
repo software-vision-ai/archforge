@@ -8,6 +8,7 @@
 //! package Types stay out of Models and the search, as they did before primitive types were a kind.
 
 use archforge_mof::{Obj, Store, Uuid};
+use archforge_shell_api::screens::ScreensPart;
 use archforge_uml::commands::{classifiers, package_of, packages};
 use egui::Rect;
 use serde_json::json;
@@ -715,6 +716,10 @@ pub(crate) fn members_height(attributes: usize, operations: usize) -> f64 {
     (f64::from(ENTITY_FIRST_ROW) + f64::from(archforge_diagram::figure::CARD_FOOT) + slots * f64::from(ENTITY_ROW))
         .clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
 }
+
+/// UML's screens part, as the app registers it (`archforge_shell_api::screens`): UML in the shell
+/// and its structure diagram. The shell exports it until UML's screens have a crate of their own.
+pub const UML: ScreensPart = ScreensPart { ui: &UmlUi, kinds: &[&UmlKind] };
 
 /// UML in the shell's explorers, search and panels.
 pub(crate) struct UmlUi;
