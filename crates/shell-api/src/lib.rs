@@ -11,7 +11,9 @@
 //! filter matches what is typed (`search`), and the translations machinery (`i18n`), with which
 //! each crate registers its own catalogues. The shared controls the panels and a notation's screens
 //! draw are in `panels`, with the problems a selection shows (`problems`) and the key presses they
-//! take (`actions`). The lists of notations and kinds the app registers stay in the shell. It sits
+//! take (`actions`). The screens registry's type is here (`screens`): the notations' screens parts
+//! the app registers, with the lists the shell reads made from them; the lists of notations and
+//! kinds the shell knows today, which name ER and UML, stay in the shell. It sits
 //! on the shell interfaces' layer (9), below the notations' screens (10) and the shell (11), and
 //! builds for the portable target.
 
@@ -28,6 +30,7 @@ pub mod menu_bar;
 pub mod notation_ui;
 pub mod panels;
 pub mod problems;
+pub mod screens;
 pub mod search;
 pub mod skill_tab;
 pub mod state;

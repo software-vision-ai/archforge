@@ -16429,7 +16429,7 @@ fn a_stores_diagram_draws_with_no_shell() {
     let element = crate::canvas::element_of(store, line, archforge_diagram::edge::ELEMENT).unwrap();
     let flagged = [(element, vec!["A problem".to_string()])].into_iter().collect();
     for dark in [false, true] {
-        let (texts, ids, badges) = drawn_alone(&session, &d, Some(&SketchKind), dark, 1000.0, &none, &clean);
+        let (texts, ids, badges) = drawn_alone(&session, &d, Some(&SketchKind(SKETCH)), dark, 1000.0, &none, &clean);
         assert_eq!(badges, 0);
         for t in ["CLASS", "Party", "partyId", "rename", "Customer", "since", "specific"] {
             assert!(texts.iter().any(|x| x == t), "{t} is drawn: {texts:?}");
@@ -16439,12 +16439,12 @@ fn a_stores_diagram_draws_with_no_shell() {
         for id in [format!("workspace.canvas.node.{a}"), format!("workspace.canvas.node.{b}"), format!("workspace.canvas.edge.{e}")] {
             assert!(ids.contains(&id), "{id}: {ids:?}");
         }
-        let (.., badges) = drawn_alone(&session, &d, Some(&SketchKind), dark, 1000.0, &none, &flagged);
+        let (.., badges) = drawn_alone(&session, &d, Some(&SketchKind(SKETCH)), dark, 1000.0, &none, &flagged);
         assert_eq!(badges, 1, "the line's badge");
-        let (texts, ..) = drawn_alone(&session, &d, Some(&SketchKind), dark, 400.0, &none, &clean);
+        let (texts, ..) = drawn_alone(&session, &d, Some(&SketchKind(SKETCH)), dark, 400.0, &none, &clean);
         assert!(texts.iter().any(|x| x == "Party") && !texts.iter().any(|x| x == "Customer"), "out of view: {texts:?}");
         let dragged = [(archforge_mof::Uuid::parse(&b).unwrap(), egui::Rect::from_min_size(egui::pos2(20.0, 300.0), egui::vec2(240.0, 166.0)))];
-        let (texts, ..) = drawn_alone(&session, &d, Some(&SketchKind), dark, 400.0, &dragged.into_iter().collect(), &clean);
+        let (texts, ..) = drawn_alone(&session, &d, Some(&SketchKind(SKETCH)), dark, 400.0, &dragged.into_iter().collect(), &clean);
         assert!(texts.iter().any(|x| x == "Customer"), "a drag brought it into view: {texts:?}");
     }
 }
@@ -17900,8 +17900,9 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
 static SKETCH_CALLS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 /// The sketch diagram kind in the shell, for the tests alone: a Class tool that places and an
-/// Inherit tool that connects, each hook writing down what it was asked.
-struct SketchKind;
+/// Inherit tool that connects, each hook writing down what it was asked. It serves the diagram kind
+/// it is given ([`SKETCH`] for the canvas's tests), so two of them are told apart.
+struct SketchKind(&'static str);
 
 static SKETCH_TOOLS: &[crate::kinds::KindTool] = &[
     crate::kinds::KindTool {
@@ -17929,9 +17930,9 @@ static SKETCH_ROWS: &[&[crate::kinds::ModelRow]] = &[
 ];
 
 impl crate::kinds::DiagramKind for SketchKind {
-    /// The sketch kind, which no notation of the shell knows.
+    /// The kind it was given, which no notation of the shell knows.
     fn kind(&self) -> &'static str {
-        SKETCH
+        self.0
     }
     /// Class and Inherit.
     fn tools(&self) -> &'static [crate::kinds::KindTool] {
@@ -18224,7 +18225,7 @@ fn the_element_menu_builds_from_the_kinds_answer() {
     }
 }
 
-static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&crate::er_kind::ErKind, &SketchKind];
+static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&crate::er_kind::ErKind, &SketchKind(SKETCH)];
 
 #[test]
 fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_hooks_run() {
@@ -18364,7 +18365,8 @@ fn a_card_its_kind_draws_replaces_the_canvass_and_keeps_the_ring_badge_parts_and
         drop(h);
         let st = session.doc();
         let flagged = [(st.by_uuid(element).unwrap(), vec!["A problem".to_string()])].into_iter().collect();
-        let (texts, _, badges) = drawn_alone(&session, &d, Some(&SketchKind), theme == ThemeKind::Dark, 1000.0, &Default::default(), &flagged);
+        let (texts, _, badges) =
+            drawn_alone(&session, &d, Some(&SketchKind(SKETCH)), theme == ThemeKind::Dark, 1000.0, &Default::default(), &flagged);
         assert!(texts.iter().any(|t| t == SKETCH_WORD), "{theme:?}: drawn by the kind");
         assert_eq!(badges, 1, "{theme:?}: its badge");
     }
@@ -18617,9 +18619,10 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn parents(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
         store.container(o).ok().flatten().map(|(c, _)| c).into_iter().collect()
     }
-    /// None: the sketch says nothing a catalogue holds.
+    /// None, but for the sketch named `second`: an English row of its own, so a test tells two
+    /// sketches' tables apart. No test registers it.
     fn catalogues(&self) -> &'static [crate::i18n::Rows] {
-        &[]
+        if self.0 == "second" { SECOND_SKETCH_ROWS } else { &[] }
     }
     /// The class, the one kind it makes.
     fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
@@ -18781,6 +18784,43 @@ static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErU
 static FIRST_SKETCH: SketchUi = SketchUi("first");
 static SECOND_SKETCH: SketchUi = SketchUi("second");
 static TWO_SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi, &FIRST_SKETCH, &SECOND_SKETCH];
+
+/// The second sketch's one catalogue, a row only it says.
+static SECOND_SKETCH_ROWS: &[crate::i18n::Rows] =
+    &[crate::i18n::Rows { code: "en", catalogue: "second-sketch.tsv", text: "str\t\tSecond sketch\tSecond sketch\n" }];
+
+/// Two more sketch kinds, both of the second sketch's part, so a part with more than one kind
+/// lists them in its order.
+static SECOND_SKETCH_KINDS: [SketchKind; 2] = [SketchKind("test.second"), SketchKind("test.third")];
+
+/// A screens registry of two parts: the sketch with its kind, then the second sketch with two
+/// kinds of its own.
+static SKETCH_SCREENS: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[
+    archforge_shell_api::screens::ScreensPart { ui: &FIRST_SKETCH, kinds: &[&SketchKind(SKETCH)] },
+    archforge_shell_api::screens::ScreensPart { ui: &SECOND_SKETCH, kinds: &[&SECOND_SKETCH_KINDS[0], &SECOND_SKETCH_KINDS[1]] },
+]);
+
+/// A screens registry gives the shell its notations, its diagram kinds and the notations'
+/// catalogue tables from the parts it was given: every part's notation in the parts' order, every
+/// part's kinds part after part, each part's in its own order, and each part's table in the
+/// parts' order. The lists are made once: asked again, the same lists come back.
+#[test]
+fn a_screens_registry_lists_its_parts_notations_kinds_and_catalogues_in_order() {
+    let parts = SKETCH_SCREENS.parts();
+    assert_eq!(parts.len(), 2);
+    let uis = SKETCH_SCREENS.notation_uis();
+    let first: &dyn crate::notation_ui::NotationUi = &FIRST_SKETCH;
+    let second: &dyn crate::notation_ui::NotationUi = &SECOND_SKETCH;
+    assert_eq!(uis.len(), 2, "one notation for each part");
+    assert!(std::ptr::addr_eq(uis[0], first) && std::ptr::addr_eq(uis[1], second), "the parts' notations, in the parts' order");
+    assert!(std::ptr::addr_eq(parts[0].ui, first) && std::ptr::addr_eq(parts[1].ui, second));
+    let kinds: Vec<&str> = SKETCH_SCREENS.kinds().iter().map(|k| k.kind()).collect();
+    assert_eq!(kinds, [SKETCH, "test.second", "test.third"]);
+    let tables: Vec<Vec<&str>> = SKETCH_SCREENS.catalogues().map(|t| t.iter().map(|r| r.catalogue).collect()).collect();
+    assert_eq!(tables, [vec![], vec!["second-sketch.tsv"]]);
+    assert!(std::ptr::eq(SKETCH_SCREENS.notation_uis(), uis), "made once");
+    assert!(std::ptr::eq(SKETCH_SCREENS.kinds(), SKETCH_SCREENS.kinds()), "made once");
+}
 
 /// The sketch notation's limits, shorter than any other notation's, so a field that takes them is
 /// told apart from one that takes another's.
