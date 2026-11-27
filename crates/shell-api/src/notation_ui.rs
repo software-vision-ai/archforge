@@ -5,9 +5,10 @@
 //! Delete and a chord of its own on the canvas do to its selected elements, what it draws over the
 //! canvas whatever diagram shows and what a problem badge that offers a way out does, its entries in
 //! the project search, its problems, the heading and the body of Properties for its elements and
-//! which share a page, its commands' refusals in the user's words, the words for the kinds of its
-//! elements and Chat's counts of them, and the limits of their names and descriptions;
-//! `NotationState` is what its own editors, menus and drawings keep between frames,
+//! which share a page, what of its own Properties ends as the selection moves on and the panel it
+//! draws there in place of the selection's, its commands' refusals in the user's words, the words
+//! for the kinds of its elements and Chat's counts of them, and the limits of their names and
+//! descriptions; `NotationState` is what its own editors, menus and drawings keep between frames,
 //! `NotationStates` the shell's one of each, and the free functions ask the notations the shell
 //! registered (`of`, the limits, `label`, what a removal says). The shells (the tree, the filter,
 //! the scroll, the search list, the sections, the fields, the editors) stay shared; each answer is
@@ -476,6 +477,23 @@ pub trait NotationUi: Sync {
     fn page(&self, store: &Store, obj: Obj) -> Option<Obj> {
         let _ = store;
         Some(obj)
+    }
+    /// Ends what of its own was being typed in Properties for an element that is no longer
+    /// `subject`, the selection, as leaving its field would: the click that moves the selection
+    /// draws the next subject before that field can see it lose the keyboard. Asked of every
+    /// notation on each frame the right panel draws, whichever panel it shows, before that panel;
+    /// nothing by default.
+    fn selection_moved(&self, cx: &mut Ctx, subject: Option<Uuid>) {
+        let _ = (cx, subject);
+    }
+    /// Draws Properties in place of the selection's while something of its own takes the panel (a
+    /// drawing under way, or a selection of several elements it has its own panel for), from `y`;
+    /// true when it drew, so neither the selection's panel nor another notation's is drawn. Asked
+    /// of every notation in turn, in the order of the notations, before the selection's panel;
+    /// false by default.
+    fn properties_in_place(&self, cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> bool {
+        let _ = (cx, ui, p, r, y);
+        false
     }
     /// Draws the body of Properties for `subject`, an element of its metamodel.
     #[allow(clippy::too_many_arguments, reason = "the body is drawn into the panel from its top, for its subject")]
