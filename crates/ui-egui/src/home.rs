@@ -736,7 +736,7 @@ fn pinned_tile(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Pain
 
 /// The time now, in seconds since 1970, as the recent list records it.
 pub(crate) fn now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    crate::clock::now()
 }
 
 /// The recent projects in the order the user chose: the last opened first, or by name, A to Z

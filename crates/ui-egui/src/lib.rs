@@ -22,6 +22,7 @@ pub mod chat_store;
 mod chat_view;
 pub mod chat_words;
 pub mod checks;
+mod clock;
 pub mod close_ask;
 pub mod connect;
 pub mod control;
@@ -1118,7 +1119,7 @@ impl Shell {
         // A project made or opened is kept in Dolt: Home no longer asks to install it.
         self.dolt_missing = None;
         // Home's recent list puts it first.
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let now = crate::clock::now();
         self.state.remember(&opened.name, &opened.path, now);
         // It is on `main` now, and the notice has said why just this once.
         if opened.notice.is_some() {
@@ -1870,7 +1871,7 @@ impl Shell {
             return;
         }
         if let Some(i) = self.tabs.iter().position(|t| t.path == path) {
-            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let now = crate::clock::now();
             let name = self.tabs[i].name.clone();
             self.state.remember(&name, path, now);
             self.activate(i);
