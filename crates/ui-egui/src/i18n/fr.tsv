@@ -139,7 +139,6 @@ str		Sort recent projects by last opened	Trier les projets récents par dernièr
 str		Find an element, view, or action	Trouver un élément, une vue ou une action
 str		Nothing in the model yet	Rien dans le modèle pour l’instant
 str		Add	Ajouter
-str		Schema	Schéma
 str		Folder	Dossier
 str		Skill	Compétence
 str		Nothing matches the filter	Rien ne correspond au filtre
@@ -156,49 +155,19 @@ plural		{n} relationship goes with it.	{n} relation part avec lui.|{n} relations
 str		Delete	Supprimer
 str		Element · model	Élément · modèle
 str		Skill · model	Compétence · modèle
-str		Nulls distinct	Nuls distincts
 plural		{n} literal	{n} littéral|{n} littéraux
-str		Domain	Domaine
-str		Enum type	Type énuméré
-str		Base type	Type de base
 str		Complete	Complète
 str		Disjoint	Disjointe
-str		Table per type	Table par type
-str		Single table	Table unique
-str		Table per concrete type	Table par type concret
-str		complete	complète
-str		disjoint	disjointe
-str		overlapping	chevauchante
-str		Sequence	Séquence
-str		Increment	Incrément
-str		Minimum	Minimum
-str		Maximum	Maximum
-str		Cycle	Cyclique
-str		View	Vue
-str		Materialized	Matérialisée
-str		Query	Requête
-str		Where	Where
-str		Method	Méthode
-str		Ascending	Croissant
-str		Descending	Décroissant
 str		Problems · {n}	Problèmes · {n}
 str		{key}: {problem}	{key}: {problem}
 str		Link to a table or a relationship	Lier à une table ou à une relation
 str		Drop the link on a table or a relationship's line	Déposez le lien sur une table ou sur la ligne d’une relation
 str		Add skill	Ajouter une compétence
 str		Kind	Genre
-str		Regular	Ordinaire
 str		Type	Type
-str		Primary key	Clé primaire
-str		Not null	Non nul
 str		Unique	Unique
-str		Length	Longueur
-str		Precision	Précision
-str		Scale	Échelle
 str		Default	Valeur par défaut
-str		Generation	Génération
 str		Expression	Expression
-str		Collation	Collation
 str		Description	Description
 str		None	Aucune
 str		Remove	Retirer
@@ -686,9 +655,7 @@ str		Filter diagrams…	Filtrer les diagrammes…
 str		No diagrams yet	Aucun diagramme pour l’instant
 str		Select	Sélectionner
 str		Pan	Déplacer
-str		Entity	Entité
 str		Relationship	Relation
-str		Relationship types	Types de relation
 str		Note	Note
 str		Link note	Lier une note
 str		Key status	État des clés
@@ -839,8 +806,6 @@ str		Stack vertically	Empiler verticalement
 str		Open in Models	Ouvrir dans Modèles
 str		Remove from this diagram	Retirer de ce diagramme
 str		Delete from the model…	Supprimer du modèle…
-str		Start	Début
-str		Identifying	Identifiante
 str		{name} removed	{name} supprimée
 str		Undo	Annuler
 str		Redo	Rétablir
@@ -992,32 +957,10 @@ str		Diagram · of {owner}	Diagramme · de {owner}
 str		This diagram	Ce diagramme
 str		On this diagram · {n}	Sur ce diagramme · {n}
 str		Role	Rôle
-str		Foreign key	Clé étrangère
-str		On delete	À la suppression
-str		On update	À la mise à jour
-str		No action	Aucune action
-str		Restrict	Restreindre
-str		Cascade	En cascade
-str		Set null	Mettre à nul
-str		Set default	Mettre la valeur par défaut
 str		More	Plus
-str		Deferrable	Différable
 str		No	Non
-str		Match	Correspondance
-str		Simple	Simple
-str		Full	Complète
-str		Partial	Partielle
 # Diagrammes de classes
-str		Class	Classe
-str		Interface	Interface
-str		Enumeration	Énumération
-str		Data type	Type de données
-str		Primitive type	Type primitif
-str		Association class	Classe d’association
-str		Classifier kinds	Types de classificateur
-str		Package	Paquetage
 # Membres de classe dans Propriétés
-str		Stereotype	Stéréotype
 str		{first} and {second}	{first} et {second}
 str		{first}, {second} and {third}	{first}, {second} et {third}
 # Stereotypes applied (AR-135)
@@ -1073,43 +1016,23 @@ str		{word} is not a diagram kind. The kinds are {kinds}.	{word} n’est pas un 
 str		This project holds no notation, so it knows no diagram kind.	Ce projet ne contient aucune notation et ne connaît donc aucun type de diagramme.
 str		This line has no label text {word}. It has {slots}.	Cette ligne n’a pas de texte d’étiquette {word}. Elle a {slots}.
 str		This line has no label text {word}. It has none.	Cette ligne n’a pas de texte d’étiquette {word}. Elle n’en a aucun.
-str		Constraint	Contrainte
 str		Type an expression. A constraint without one states no rule.	Saisissez une expression. Une contrainte sans expression n'énonce aucune règle.
 str		Give the elements as a list of ids.	Indiquez les éléments sous forme de liste d’identifiants.
 str		The {axis} is not a number.	La valeur {axis} n’est pas un nombre.
 str		The {axis} is farther than {max} from the origin.	La valeur {axis} est à plus de {max} de l’origine.
 str		An element is named twice. Name each element once.	Un élément est nommé deux fois. Nommez chaque élément une seule fois.
 str		{name} deleted	{name} supprimé
-str		Parameter	Paramètre
-str		Operation	Opération
-str		Private	Privée
-str		Protected	Protégée
-str		Public	Publique
 str		Read only	Lecture seule
-str		Ordered	Ordonné
 str		An item takes no {key}. It takes {takes}.	Une entrée n’accepte pas {key}. Elle accepte {takes}.
 str		An item holds a key without a name. It takes {takes}.	Une entrée contient une clé sans nom. Elle accepte {takes}.
 str		There is no element with the id {id}.	Il n’existe aucun élément ayant l’identifiant {id}.
 str		{value} is not a literal of {enumeration}.	{value} n’est pas un littéral de {enumeration}.
-str		Visibility	Visibilité
-str		Move package	Déplacer le paquetage
-str		{what} moved into {where}	{what} déplacé dans {where}
-str		Open this package's diagram	Ouvrir le diagramme de ce paquetage
-str		Open this package's diagram (⌘↓)	Ouvrir le diagramme de ce paquetage (⌘↓)
-str		This is the top package: zooming out goes no further	Ceci est le paquetage le plus haut : dézoomer ne mène pas plus loin
 # Relier des classes
-str		Aggregation	Agrégation
-str		Association	Association
-str		Composite	Composite
-str		Dependency	Dépendance
 str		Drag onto another class to move this end	Faire glisser sur une autre classe pour déplacer cette extrémité
 # Templates (AR-130)
 str		Value	Valeur
 # Template bindings (AR-131)
-str		Template binding	Liaison de modèle
 str		From	De
-str		Generalization	Généralisation
-str		Interface realization	Réalisation d’interface
 # Ensembles de généralisations (AR-129)
 str		Rename	Renommer
 str		Show in diagram	Afficher dans le diagramme
@@ -1117,187 +1040,27 @@ str		No diagram shows it yet	Aucun diagramme ne l’affiche encore
 str		Delete from model	Supprimer du modèle
 str		Delete diagram	Supprimer le diagramme
 str		A skill is removed from its tab	Une compétence se supprime depuis son onglet
-str		Generalization set	Ensemble de généralisations
 plural		{n} element	{n} élément|{n} éléments
-str		Relationship kinds	Types de relation
-str		Shared	Partagée
 str		{what} removed	Supprimé : {what}
 # Paquetages
 str		{name} removed; what it held moved to {parent}	{name} supprimé ; son contenu a été déplacé vers {parent}
 # Mots pour ce que nomme le métamodèle
-str		Alias	Alias
-str		Allow substitutable	Autoriser la substitution
-str		Alt	Alternative
 str		Applies to	S’applique à
-str		Assembly	Assemblage
-str		Assert	Assertion
-str		Associative	Associative
-str		Asynch call	Appel asynchrone
-str		Asynch signal	Signal asynchrone
 str		Body	Texte
-str		Break	Interruption
-str		Check constraint	Contrainte de contrôle
-str		Choice	Choix
-str		Classifier template parameter	Paramètre de modèle de classificateur
-str		Comment	Commentaire
-str		Computed stored	Calculée, stockée
-str		Computed virtual	Calculée, virtuelle
-str		Concurrency	Concurrence
-str		Concurrent	Concurrente
-str		Consider	Considérer
-str		Content	Contenu
-str		Create message	Message de création
-str		Critical	Critique
-str		Deep history	Historique profond
-str		Delegation	Délégation
-str		Delete message	Message de suppression
-str		Deployment location	Emplacement de déploiement
 str		Derivation	Dérivation
 str		Direction	Direction
-str		Domain check	Contrainte de contrôle de domaine
 str		Drawing	Dessin
-str		Effect	Effet
-str		Entry point	Point d’entrée
-str		Exactly one	Exactement un
-str		Execution location	Emplacement d’exécution
-str		Exit point	Point de sortie
 str		Export	Export
-str		Extension	Extension
-str		Extension end	Extrémité d’extension
-str		External	Externe
-str		FIFO	FIFO
-str		File name	Nom de fichier
-str		First	En premier
-str		First event	Premier événement
-str		Fork	Bifurcation
-str		Format	Format
-str		Found	Trouvé
-str		From end	Extrémité de départ
-str		From role	Rôle de départ
-str		Guarded	Gardée
-str		Identity always	Identité, toujours
-str		Identity by default	Identité, par défaut
-str		Ignore	Ignorer
-str		In	Entrée
-str		Index column	Colonne d’index
-str		Initial	Initial
-str		Initially deferred	Initialement différé
-str		Initially immediate	Initialement immédiat
-str		Inout	Entrée-sortie
-str		Instance specification	Spécification d’instance
-str		Instance value	Valeur d’instance
-str		Interaction operator	Opérateur d’interaction
-str		Internal	Interne
-str		Is ID	Est un ID
-str		Is abstract	Est abstrait
-str		Is active	Est actif
-str		Is assured	Est assuré
-str		Is behavior	Est un comportement
-str		Is combine duplicate	Combine les doublons
-str		Is conjugated	Est conjugué
-str		Is control	Est de contrôle
-str		Is control type	Est de type contrôle
-str		Is covering	Est complet
-str		Is derived	Est dérivé
-str		Is derived union	Est une union dérivée
-str		Is destroy duplicates	Détruit les doublons
-str		Is destroy links	Détruit les liens
-str		Is destroy owned objects	Détruit les objets possédés
-str		Is determinate	Est déterminé
-str		Is dimension	Est une dimension
-str		Is direct	Est direct
-str		Is disjoint	Est disjoint
-str		Is exception	Est une exception
-str		Is external	Est externe
-str		Is final specialization	Est une spécialisation finale
-str		Is indirectly instantiated	Instancié indirectement
-str		Is leaf	Est une feuille
-str		Is locally reentrant	Localement réentrant
-str		Is multicast	Est une multidiffusion
-str		Is multireceive	Est une réception multiple
-str		Is ordered	Est ordonné
-str		Is query	Est une requête
-str		Is read only	Est en lecture seule
-str		Is reentrant	Est réentrant
-str		Is relative	Est relatif
-str		Is remove duplicates	Supprime les doublons
-str		Is replace all	Remplace tout
-str		Is service	Est un service
-str		Is single execution	Exécution unique
-str		Is static	Est statique
-str		Is stream	Est un flux
-str		Is strict	Est strict
-str		Is substitutable	Est substituable
-str		Is synchronous	Est synchrone
-str		Is tested first	Testé en premier
-str		Is unique	Est unique
-str		Is unmarshall	Désérialise
-str		Iterative	Itératif
-str		Join	Jointure
-str		Junction	Jonction
-str		LIFO	LIFO
-str		Last	En dernier
-str		Literal boolean	Littéral booléen
-str		Literal integer	Littéral entier
-str		Literal real	Littéral réel
-str		Literal string	Littéral de chaîne
-str		Literal unlimited natural	Littéral naturel illimité
-str		Local	Locale
-str		Loop	Boucle
-str		Lost	Perdu
-str		Message sort	Type de message
-str		Mode	Mode
 str		Modelling	Modélisation
-str		Must isolate	Doit isoler
 str		Naming	Nommage
-str		Neg	Négatif
-str		Not deferrable	Non différable
-str		Nullable	Accepte les nuls
-str		Nulls	Nuls
-str		One or more	Un ou plusieurs
-str		Opaque expression	Expression opaque
-str		Opt	Option
-str		Ordering	Ordre
-str		Out	Sortie
-str		Par	Parallèle
-str		Parallel	Parallèle
 str		Persistence	Persistance
-str		Profile application	Application de profil
-str		Read	Lire
 str		Realization	Réalisation
-str		Redefinable template signature	Signature de modèle redéfinissable
 str		Refinement	Raffinement
-str		Reply	Réponse
-str		Return	Retour
 str		Satisfaction	Satisfaction
-str		Seq	Séquence faible
-str		Sequential	Séquentielle
-str		Setting	Définition
-str		Shallow history	Historique superficiel
-str		Slot	Emplacement
-str		Stream	Flux
-str		Strict	Séquence stricte
-str		Subtype mapping	Mappage des sous-types
-str		Subtypes complete	Sous-types complets
-str		Subtypes disjoint	Sous-types disjoints
-str		Symbol	Symbole
-str		Synch call	Appel synchrone
-str		Table index	Index de table
 str		Tag	Étiquette
-str		Template parameter substitution	Substitution de paramètre de modèle
-str		Terminate	Terminaison
-str		To end	Extrémité d’arrivée
-str		To role	Rôle d’arrivée
 str		Trace	Trace
 str		Type pattern	Motif de type
-str		URI	URI
-str		Unique constraint	Contrainte d’unicité
 str		Unknown	Inconnu
-str		Unordered	Non ordonné
-str		Update	Mettre à jour
-str		Viewpoint	Point de vue
-str		Zero or more	Zéro ou plusieurs
-str		Zero or one	Zéro ou un
 # Modifications non enregistrées à la fermeture
 str		Close and lose changes	Fermer et perdre les modifications
 str		Close without writing	Fermer sans écrire

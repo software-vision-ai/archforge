@@ -111,6 +111,9 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     strings.extend(crate::appearance::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::skill_tab::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::canvas::texts().map(|s| (String::new(), s.to_string())));
+    // The hover texts of each diagram kind's tools, which the toolbar takes through the kind.
+    let tools = crate::tests::SCREENS.kinds().iter().flat_map(|k| k.tools());
+    strings.extend(tools.flat_map(|t| std::iter::once(t.hint).chain(t.chevron.map(|(_, hint)| hint))).map(|s| (String::new(), s.to_string())));
     // The words of each notation's figures, which `tr` takes through the figures' descriptions.
     strings.extend(crate::er_ui::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::er_kind::texts().map(|s| (String::new(), s.to_string())));
@@ -314,12 +317,13 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
     let package = u32::try_from(literals.iter().position(|l| &**l == "package").unwrap()).unwrap();
     set_language("de");
     let german = |key: &str| row("de", "", key);
-    assert_eq!(property_label(&universe, archforge_uml::classifier::IS_ABSTRACT), Some(german("Is abstract")));
+    let uis = crate::tests::SCREENS.notation_uis();
+    assert_eq!(property_label(uis, &universe, archforge_uml::classifier::IS_ABSTRACT), Some(german("Is abstract")));
     assert_ne!(german("Is abstract"), "Is abstract", "the row checked is really a translation");
-    assert_eq!(property_label(&universe, archforge_er::foreign_key::ON_DELETE), Some(german("On delete")));
-    assert_eq!(literal_label(&universe, visibility, package), Some(german("Package")));
-    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_uml::INTERFACE_REALIZATION), german("Interface realization"));
-    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_er::ENTITY), german("Table"));
+    assert_eq!(property_label(uis, &universe, archforge_er::foreign_key::ON_DELETE), Some(german("On delete")));
+    assert_eq!(literal_label(uis, &universe, visibility, package), Some(german("Package")));
+    assert_eq!(kind_label(uis, &universe, archforge_uml::INTERFACE_REALIZATION), german("Interface realization"));
+    assert_eq!(kind_label(uis, &universe, archforge_er::ENTITY), german("Table"));
     // Each notation's own word, where the metamodel's name isn't what the rest of the interface says.
     for (class, word) in [
         (archforge_er::ATTRIBUTE, "Column"),
@@ -327,27 +331,59 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
         (archforge_uml::PROPERTY, "Attribute"),
         (archforge_uml::ENUMERATION_LITERAL, "Literal"),
     ] {
-        assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, class), german(word), "{word}");
+        assert_eq!(kind_label(uis, &universe, class), german(word), "{word}");
     }
-    assert_eq!(
-        kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_uml::GENERALIZATION),
-        german("Generalization"),
-        "UML's keeps its name"
-    );
+    assert_eq!(kind_label(uis, &universe, archforge_uml::GENERALIZATION), german("Generalization"), "UML's keeps its name");
     // A package's default-diagram binding is the diagrams' one class a comparison lists as the model's.
-    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_diagram::DEFAULT_DIAGRAM_BINDING), german("Default diagram"));
+    assert_eq!(kind_label(uis, &universe, archforge_diagram::DEFAULT_DIAGRAM_BINDING), german("Default diagram"));
     // A concrete class no notation creates, and a diagram's own, say the one word for the rest.
-    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_uml::ACTOR), german("Element"));
-    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_diagram::NODE), german("Element"));
+    assert_eq!(kind_label(uis, &universe, archforge_uml::ACTOR), german("Element"));
+    assert_eq!(kind_label(uis, &universe, archforge_diagram::NODE), german("Element"));
     // What the words have no row for is told apart from a word.
-    assert_eq!(literal_label(&universe, visibility, u32::MAX), None);
-    assert_eq!(literal_label(&universe, data(archforge_uml::comment::BODY), 0), None, "a string is no enumeration");
-    assert_eq!(property_label(&universe, archforge_diagram::style::FILL), None);
-    assert_eq!(literal_label(&universe, data(archforge_diagram::style::ROUTING), 0), None);
+    assert_eq!(literal_label(uis, &universe, visibility, u32::MAX), None);
+    assert_eq!(literal_label(uis, &universe, data(archforge_uml::comment::BODY), 0), None, "a string is no enumeration");
+    assert_eq!(property_label(uis, &universe, archforge_diagram::style::FILL), None);
+    assert_eq!(literal_label(uis, &universe, data(archforge_diagram::style::ROUTING), 0), None);
     // The class Profile says the modeller's word, not the row of a person's profile.
     set_language("ja");
-    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_uml::PROFILE), row("ja", "uml", "Profile"));
+    assert_eq!(kind_label(uis, &universe, archforge_uml::PROFILE), row("ja", "uml", "Profile"));
     assert_ne!(row("ja", "uml", "Profile"), row("ja", "", "Profile"), "the two rows differ here, so the check can tell them apart");
+    set_language("en");
+}
+
+/// The words are said for the core and the notations a shell is given, from the catalogues it
+/// registered, and for no other metamodel: a property or literal of a notation the shell was not
+/// given has no label, as that notation's rows are not the shell's to say.
+#[test]
+fn model_words_are_said_for_the_core_and_the_notations_given() {
+    // The app's shell registers its notations' catalogues, whose rows this says.
+    let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
+    use crate::model_words::{literal_label, property_label, words};
+    use archforge_mof::{DataKind, TypeRef};
+    let universe = archforge_notations::universe().unwrap();
+    let german = |key: &str| parsed(LANGUAGES.iter().find(|l| l.code == "de").unwrap()).strings[&(String::new(), key.to_string())].clone();
+    // A property's enumeration and the word of its first literal.
+    let first_literal = |prop| {
+        let TypeRef::Data(ty) = universe.prop(prop).unwrap().ty else { panic!("{prop:?} is no data") };
+        let DataKind::Enumeration(literals) = &universe.data_type(ty).unwrap().kind else { panic!("{prop:?} is no enumeration") };
+        (ty, words(&literals[0]))
+    };
+    let er_only: &[&'static dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi];
+    let (on_delete, no_action) = first_literal(archforge_er::foreign_key::ON_DELETE);
+    let (visibility, _) = first_literal(archforge_uml::named_element::VISIBILITY);
+    let (link_kind, trace) = first_literal(archforge_core::link::KIND);
+    set_language("de");
+    // ER's words, from its own catalogue, and the core's, from the shell's.
+    assert_eq!(property_label(er_only, &universe, archforge_er::foreign_key::ON_DELETE), Some(german("On delete")));
+    assert_eq!(literal_label(er_only, &universe, on_delete, 0), Some(german(&no_action)));
+    assert_eq!(property_label(er_only, &universe, archforge_core::link::KIND), Some(german("Kind")));
+    assert_eq!(literal_label(er_only, &universe, link_kind, 0), Some(german(&trace)));
+    // UML's are none, as that shell was not given UML.
+    assert_eq!(property_label(er_only, &universe, archforge_uml::classifier::IS_ABSTRACT), None);
+    assert_eq!(literal_label(er_only, &universe, visibility, 0), None);
+    // A shell given no notation says the core's alone.
+    assert_eq!(property_label(&[], &universe, archforge_er::foreign_key::ON_DELETE), None);
+    assert_eq!(property_label(&[], &universe, archforge_core::link::KIND), Some(german("Kind")));
     set_language("en");
 }
 

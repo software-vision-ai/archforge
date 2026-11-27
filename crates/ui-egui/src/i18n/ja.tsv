@@ -139,7 +139,6 @@ str		Sort recent projects by last opened	最近のプロジェクトを最後に
 str		Find an element, view, or action	要素、ビュー、操作を検索
 str		Nothing in the model yet	モデルにはまだ何もありません
 str		Add	追加
-str		Schema	スキーマ
 str		Folder	フォルダー
 str		Skill	スキル
 str		Nothing matches the filter	フィルターに一致するものはありません
@@ -156,49 +155,19 @@ plural		{n} relationship goes with it.	{n} 件のリレーションシップが�
 str		Delete	削除
 str		Element · model	要素 · モデル
 str		Skill · model	スキル · モデル
-str		Nulls distinct	NULL を区別
 plural		{n} literal	{n} 件のリテラル
-str		Domain	ドメイン
-str		Enum type	列挙型
-str		Base type	基底型
 str		Complete	完全
 str		Disjoint	排他
-str		Table per type	型ごとのテーブル
-str		Single table	単一テーブル
-str		Table per concrete type	具象型ごとのテーブル
-str		complete	完全
-str		disjoint	排他
-str		overlapping	重複あり
-str		Sequence	シーケンス
-str		Increment	増分
-str		Minimum	最小値
-str		Maximum	最大値
-str		Cycle	循環する
-str		View	ビュー
-str		Materialized	マテリアライズド
-str		Query	クエリ
-str		Where	Where
-str		Method	メソッド
-str		Ascending	昇順
-str		Descending	降順
 str		Problems · {n}	問題 · {n}
 str		{key}: {problem}	{key}: {problem}
 str		Link to a table or a relationship	テーブルまたはリレーションシップにリンク
 str		Drop the link on a table or a relationship's line	リンクはテーブルまたはリレーションシップの線の上で離してください
 str		Add skill	スキルを追加
 str		Kind	種類
-str		Regular	通常
 str		Type	型
-str		Primary key	主キー
-str		Not null	NOT NULL
 str		Unique	一意
-str		Length	長さ
-str		Precision	精度
-str		Scale	小数桁
 str		Default	既定値
-str		Generation	生成
 str		Expression	式
-str		Collation	照合順序
 str		Description	説明
 str		None	なし
 str		Remove	削除
@@ -686,9 +655,7 @@ str		Filter diagrams…	図を絞り込む…
 str		No diagrams yet	図はまだありません
 str		Select	選択
 str		Pan	パン
-str		Entity	エンティティ
 str		Relationship	リレーションシップ
-str		Relationship types	リレーションシップの種類
 str		Note	ノート
 str		Link note	ノートをリンク
 str		Key status	キーの状態
@@ -839,8 +806,6 @@ str		Stack vertically	垂直に積む
 str		Open in Models	モデルで開く
 str		Remove from this diagram	この図から削除
 str		Delete from the model…	モデルから削除…
-str		Start	始点
-str		Identifying	識別
 str		{name} removed	{name} を削除しました
 str		Undo	元に戻す
 str		Redo	やり直す
@@ -992,32 +957,10 @@ str		Diagram · of {owner}	図 · {owner} の
 str		This diagram	この図
 str		On this diagram · {n}	この図に · {n}
 str		Role	ロール
-str		Foreign key	外部キー
-str		On delete	削除時
-str		On update	更新時
-str		No action	何もしない
-str		Restrict	制限
-str		Cascade	カスケード
-str		Set null	NULL に設定
-str		Set default	既定値に設定
 str		More	その他
-str		Deferrable	遅延可能
 str		No	いいえ
-str		Match	一致
-str		Simple	単純
-str		Full	完全
-str		Partial	部分
 # クラス図
-str		Class	クラス
-str		Interface	インターフェース
-str		Enumeration	列挙
-str		Data type	データ型
-str		Primitive type	プリミティブ型
-str		Association class	関連クラス
-str		Classifier kinds	分類子の種類
-str		Package	パッケージ
 # プロパティのクラスメンバー
-str		Stereotype	ステレオタイプ
 str		{first} and {second}	{first} と {second}
 str		{first}, {second} and {third}	{first}、{second}、{third}
 # Stereotypes applied (AR-135)
@@ -1073,43 +1016,23 @@ str		{word} is not a diagram kind. The kinds are {kinds}.	{word} は図の種類
 str		This project holds no notation, so it knows no diagram kind.	このプロジェクトには表記法がないため、図の種類がありません。
 str		This line has no label text {word}. It has {slots}.	この線にはラベルのテキスト {word} がありません。あるのは {slots} です。
 str		This line has no label text {word}. It has none.	この線にはラベルのテキスト {word} がありません。ラベルのテキストはありません。
-str		Constraint	制約
 str		Type an expression. A constraint without one states no rule.	式を入力してください。式のない制約はルールを表しません。
 str		Give the elements as a list of ids.	要素は ID のリストで指定してください。
 str		The {axis} is not a number.	{axis} の値が数値ではありません。
 str		The {axis} is farther than {max} from the origin.	{axis} の値が原点から {max} より離れています。
 str		An element is named twice. Name each element once.	要素が 2 回指定されています。要素はそれぞれ 1 回だけ指定してください。
 str		{name} deleted	{name} を削除しました
-str		Parameter	パラメーター
-str		Operation	操作
-str		Private	プライベート
-str		Protected	プロテクテッド
-str		Public	パブリック
 str		Read only	読み取り専用
-str		Ordered	順序付き
 str		An item takes no {key}. It takes {takes}.	項目に {key} は指定できません。指定できるのは {takes} です。
 str		An item holds a key without a name. It takes {takes}.	項目に名前のないキーがあります。指定できるのは {takes} です。
 str		There is no element with the id {id}.	ID が {id} の要素はありません。
 str		{value} is not a literal of {enumeration}.	{value} は {enumeration} のリテラルではありません。
-str		Visibility	可視性
-str		Move package	パッケージを移動
-str		{what} moved into {where}	{what} を {where} に移動しました
-str		Open this package's diagram	このパッケージの図を開く
-str		Open this package's diagram (⌘↓)	このパッケージの図を開く (⌘↓)
-str		This is the top package: zooming out goes no further	ここが最上位のパッケージです。これ以上ズームアウトしても上には移動しません
 # クラスの関係
-str		Aggregation	集約
-str		Association	関連
-str		Composite	コンポジット
-str		Dependency	依存
 str		Drag onto another class to move this end	別のクラスへドラッグしてこの端を移動
 # Templates (AR-130)
 str		Value	値
 # Template bindings (AR-131)
-str		Template binding	テンプレートバインディング
 str		From	始点
-str		Generalization	汎化
-str		Interface realization	インターフェース実現
 # 汎化セット (AR-129)
 str		Rename	名前を変更
 str		Show in diagram	図で表示
@@ -1117,187 +1040,27 @@ str		No diagram shows it yet	まだどの図にも表示されていません
 str		Delete from model	モデルから削除
 str		Delete diagram	ダイアグラムを削除
 str		A skill is removed from its tab	スキルはそのタブから削除します
-str		Generalization set	汎化セット
 plural		{n} element	{n} 個の要素
-str		Relationship kinds	関係の種類
-str		Shared	共有
 str		{what} removed	{what}を削除しました
 # パッケージ
 str		{name} removed; what it held moved to {parent}	{name} を削除しました。中身は {parent} に移動しました
 # メタモデルが名付けるものの言葉
-str		Alias	別名
-str		Allow substitutable	置換を許可
-str		Alt	代替
 str		Applies to	適用先
-str		Assembly	アセンブリ
-str		Assert	アサート
-str		Associative	連関
-str		Asynch call	非同期呼び出し
-str		Asynch signal	非同期シグナル
 str		Body	本文
-str		Break	ブレーク
-str		Check constraint	チェック制約
-str		Choice	選択
-str		Classifier template parameter	分類子テンプレートパラメーター
-str		Comment	コメント
-str		Computed stored	計算列、保存
-str		Computed virtual	計算列、仮想
-str		Concurrency	並行性
-str		Concurrent	並行
-str		Consider	考慮
-str		Content	内容
-str		Create message	生成メッセージ
-str		Critical	クリティカル
-str		Deep history	深い履歴
-str		Delegation	委譲
-str		Delete message	削除メッセージ
-str		Deployment location	配置場所
 str		Derivation	導出
 str		Direction	方向
-str		Domain check	ドメインチェック制約
 str		Drawing	描画
-str		Effect	効果
-str		Entry point	入口点
-str		Exactly one	ちょうど 1
-str		Execution location	実行場所
-str		Exit point	出口点
 str		Export	エクスポート
-str		Extension	拡張
-str		Extension end	拡張端
-str		External	外部
-str		FIFO	FIFO
-str		File name	ファイル名
-str		First	先頭
-str		First event	最初のイベント
-str		Fork	フォーク
-str		Format	形式
-str		Found	発見
-str		From end	開始側
-str		From role	開始側ロール
-str		Guarded	ガード付き
-str		Identity always	識別列、常に
-str		Identity by default	識別列、既定で
-str		Ignore	無視
-str		In	入力
-str		Index column	インデックス列
-str		Initial	開始
-str		Initially deferred	初期状態で遅延
-str		Initially immediate	初期状態で即時
-str		Inout	入出力
-str		Instance specification	インスタンス仕様
-str		Instance value	インスタンス値
-str		Interaction operator	相互作用オペレーター
-str		Internal	内部
-str		Is ID	ID
-str		Is abstract	抽象
-str		Is active	アクティブ
-str		Is assured	保証済み
-str		Is behavior	振る舞い
-str		Is combine duplicate	重複を結合
-str		Is conjugated	共役
-str		Is control	制御
-str		Is control type	制御型
-str		Is covering	完全
-str		Is derived	派生
-str		Is derived union	派生和集合
-str		Is destroy duplicates	重複を破棄
-str		Is destroy links	リンクを破棄
-str		Is destroy owned objects	所有オブジェクトを破棄
-str		Is determinate	決定的
-str		Is dimension	次元
-str		Is direct	直接
-str		Is disjoint	排他
-str		Is exception	例外
-str		Is external	外部
-str		Is final specialization	最終特化
-str		Is indirectly instantiated	間接インスタンス化
-str		Is leaf	リーフ
-str		Is locally reentrant	局所再入可能
-str		Is multicast	マルチキャスト
-str		Is multireceive	マルチレシーブ
-str		Is ordered	順序付き
-str		Is query	クエリ
-str		Is read only	読み取り専用
-str		Is reentrant	再入可能
-str		Is relative	相対
-str		Is remove duplicates	重複を削除
-str		Is replace all	すべて置換
-str		Is service	サービス
-str		Is single execution	単一実行
-str		Is static	静的
-str		Is stream	ストリーム
-str		Is strict	厳密
-str		Is substitutable	置換可能
-str		Is synchronous	同期
-str		Is tested first	先に判定
-str		Is unique	一意
-str		Is unmarshall	アンマーシャル
-str		Iterative	反復
-str		Join	ジョイン
-str		Junction	ジャンクション
-str		LIFO	LIFO
-str		Last	末尾
-str		Literal boolean	ブールリテラル
-str		Literal integer	整数リテラル
-str		Literal real	実数リテラル
-str		Literal string	文字列リテラル
-str		Literal unlimited natural	無制限自然数リテラル
-str		Local	ローカル
-str		Loop	ループ
-str		Lost	紛失
-str		Message sort	メッセージ種別
-str		Mode	モード
 str		Modelling	モデリング
-str		Must isolate	隔離必須
 str		Naming	命名
-str		Neg	否定
-str		Not deferrable	遅延不可
-str		Nullable	NULL 許容
-str		Nulls	NULL
-str		One or more	1 以上
-str		Opaque expression	不透明式
-str		Opt	オプション
-str		Ordering	順序
-str		Out	出力
-str		Par	並列
-str		Parallel	並列
 str		Persistence	永続化
-str		Profile application	プロファイル適用
-str		Read	読み取り
 str		Realization	実現
-str		Redefinable template signature	再定義可能テンプレートシグネチャ
 str		Refinement	詳細化
-str		Reply	応答
-str		Return	戻り値
 str		Satisfaction	充足
-str		Seq	弱順序
-str		Sequential	逐次
-str		Setting	設定
-str		Shallow history	浅い履歴
-str		Slot	スロット
-str		Stream	ストリーム
-str		Strict	強順序
-str		Subtype mapping	サブタイプマッピング
-str		Subtypes complete	サブタイプ完全
-str		Subtypes disjoint	サブタイプ排他
-str		Symbol	記号
-str		Synch call	同期呼び出し
-str		Table index	テーブルインデックス
 str		Tag	タグ
-str		Template parameter substitution	テンプレートパラメーター置換
-str		Terminate	終了
-str		To end	終了側
-str		To role	終了側ロール
 str		Trace	トレース
 str		Type pattern	型パターン
-str		URI	URI
-str		Unique constraint	一意制約
 str		Unknown	不明
-str		Unordered	順序なし
-str		Update	更新
-str		Viewpoint	ビューポイント
-str		Zero or more	0 以上
-str		Zero or one	0 または 1
 # 閉じるときの未保存の変更
 str		Close and lose changes	閉じて変更を破棄
 str		Close without writing	書き込まずに閉じる
