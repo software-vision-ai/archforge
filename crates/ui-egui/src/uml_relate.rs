@@ -552,8 +552,8 @@ pub(crate) fn connect_class(cx: &mut Ctx, d: Obj, from: (Obj, Uuid), to: (Obj, U
                 Some((class_name, _)) => id_at(0).zip(id_at(1)).map(|(class, node)| (node, class, class_name)),
                 None => card.map(|card| (card, element, name)),
             };
-            if let Some((node, entity, text)) = rename {
-                cx.canvas.rename = Some(crate::editing::NodeRename { node, entity, text, opened: true, refused: None });
+            if let Some((node, element, text)) = rename {
+                cx.canvas.rename = Some(crate::editing::NodeRename { node, element, text, opened: true, refused: None });
                 cx.canvas.focused = true;
             }
         }
@@ -642,7 +642,7 @@ pub(crate) fn connect_to_new(cx: &mut Ctx, d: Obj, from_node: Uuid, x: f64, y: f
             let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
             if let (Some(class), Some(node)) = (id_at(0), id_at(1)) {
                 let _ = run_cx(cx, "view.select", json!({ "ids": [class.to_string()] }));
-                cx.canvas.rename = Some(crate::editing::NodeRename { node, entity: class, text: name, opened: true, refused: None });
+                cx.canvas.rename = Some(crate::editing::NodeRename { node, element: class, text: name, opened: true, refused: None });
                 cx.canvas.focused = true;
             }
         }
