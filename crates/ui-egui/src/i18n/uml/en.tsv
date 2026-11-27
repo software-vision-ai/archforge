@@ -616,6 +616,13 @@ str		{specific} specialises {general}	{specific} specialises {general}
 plural		{n} generalization	{n} generalization|{n} generalizations
 plural		{n} generalization · to {general}	{n} generalization · to {general}|{n} generalizations · to {general}
 plural		{sets} had no other member and went too	{sets} had no other member and went too|{sets} had no other members and went too
+plural		{n} class	{n} class|{n} classes
+plural		{n} interface	{n} interface|{n} interfaces
+plural		{n} enumeration	{n} enumeration|{n} enumerations
+plural		{n} data type	{n} data type|{n} data types
+plural		{n} package	{n} package|{n} packages
+plural		{n} attribute	{n} attribute|{n} attributes
+plural		{n} operation	{n} operation|{n} operations
 str		Interface realization: from the implementing class to its interface	Interface realization: from the implementing class to its interface
 str		Association class: between two classes, with a card of its own	Association class: between two classes, with a card of its own
 str		Navigable	Navigable

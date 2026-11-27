@@ -18378,6 +18378,21 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn a_kind(&self, kind: &str) -> Option<String> {
         (kind == "sketch").then(|| format!("a {}", self.0))
     }
+    /// Chat counts its class as a kind of its own, its attribute as a line and its operation as a
+    /// part of its class, unlike UML, so a test sees each asked; a description's comment it leaves
+    /// to be counted as an element.
+    fn chat_kind(&self, table: &str) -> Option<crate::notation_ui::ChatKind> {
+        Some(match table {
+            "uml_class" => crate::notation_ui::ChatKind::Own("sketched"),
+            "uml_property" => crate::notation_ui::ChatKind::Line,
+            "uml_operation" => crate::notation_ui::ChatKind::Part,
+            _ => return None,
+        })
+    }
+    /// Its classes in Chat's count, signed with its name, so a test sees it asked.
+    fn chat_count(&self, kind: &str, n: u64) -> Option<String> {
+        (kind == "sketched").then(|| format!("{n} drawn in the {}", self.0))
+    }
     /// Shorter than any other notation's, so a field that takes it is told apart.
     fn name_limit(&self) -> usize {
         SKETCH_NAME_LIMIT
@@ -18536,6 +18551,93 @@ fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
     assert_eq!(shell.panels.notice, None);
     assert!(shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, "uml.relationship.rename", "  ")), "UML is not the shell's here");
     assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
+}
+
+/// Chat counts what a tool row names as the notations the shell registered say, not the app's own
+/// list: the sketch, which the shell knows here and the app does not, counts a class as a kind of
+/// its own in its words, an attribute as a line and an operation as a part of its class, which is
+/// not counted, where UML counts classes, attributes and operations; a kind it does not know is an
+/// element. The tool rows the window draws and the changes a turn keeps ask the shell's notations.
+#[test]
+fn chats_counts_ask_the_notations_the_shell_registered() {
+    use crate::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
+    use crate::chat_words::{counted, tool_words};
+    crate::i18n::set_language("en");
+    let at =
+        |n: u8, role: AnchorRole, metaclass: &str| Anchor { element: archforge_mof::Uuid([n; 16]), role, metaclass: metaclass.into(), name: None };
+    let read = |anchors: Vec<Anchor>| ToolFacts {
+        tool: "engine.execute".into(),
+        command: Some("uml.class.list".into()),
+        detail: None,
+        status: ToolStatus::Done,
+        changed_model: false,
+        element_count: None,
+        anchors,
+    };
+    let mut named: Vec<Anchor> = (1..=3).map(|n| at(n, AnchorRole::Read, "uml_class")).collect();
+    named.extend((4..=5).map(|n| at(n, AnchorRole::Read, "uml_property")));
+    named.extend((6..=9).map(|n| at(n, AnchorRole::Read, "uml_operation")));
+    assert_eq!(tool_words(SKETCH_UIS, &read(named.clone())).0, "Read 3 drawn in the sketch, 2 lines");
+    assert_eq!(tool_words(crate::notation_ui::UIS, &read(named)).0, "Read 4 operations, 3 classes");
+    assert!(!counted(SKETCH_UIS, "uml_operation") && counted(crate::notation_ui::UIS, "uml_operation"));
+    // What a row is about, unnamed: one of its kind, several of one kind, or elements of several.
+    let mut added = read(vec![at(1, AnchorRole::Target, "uml_class")]);
+    (added.command, added.changed_model) = (Some("uml.class.add".into()), true);
+    assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 1 drawn in the sketch");
+    added.anchors.push(at(2, AnchorRole::Target, "uml_class"));
+    assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 2 drawn in the sketch");
+    added.anchors.push(at(3, AnchorRole::Target, "uml_property"));
+    assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 3 elements");
+    // The window's tool row asks the shell's notations.
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    h.state_mut().notation_uis = SKETCH_UIS;
+    ask_in_chat(&mut h, "What is on the diagram?");
+    let diagram = h.state().canvas.active.unwrap();
+    crate::chat_fixture::call(
+        h.state_mut(),
+        "engine.execute",
+        serde_json::json!({ "command": "diagram.get", "params": { "diagram": diagram.to_string() } }),
+    )
+    .unwrap();
+    h.run();
+    assert!(painted(&h).iter().any(|t| t.contains("drawn in the sketch")), "{:?}", painted(&h));
+    // What a read's answer named is kept as the sketch counts it: Customer's operation, a part of
+    // its class to the sketch, is neither kept nor in the row's count.
+    let customer = crate::chat_fixture::element(h.state(), archforge_uml::CLASS, "Customer").unwrap();
+    crate::chat_fixture::call(
+        h.state_mut(),
+        "engine.execute",
+        serde_json::json!({ "command": "uml.class.get", "params": { "class": customer.to_string() } }),
+    )
+    .unwrap();
+    h.run();
+    let facts = kept_chat(&h, &rig)
+        .messages
+        .iter()
+        .rev()
+        .find_map(|m| if let crate::chat_store::StoredBody::Tool(f) = &m.body { Some(f.clone()) } else { None })
+        .unwrap();
+    let kept = facts.anchors.iter().filter(|a| a.role == AnchorRole::Read).count();
+    assert!(kept > 0 && facts.anchors.iter().all(|a| a.metaclass != "uml_operation"), "{facts:?}");
+    assert_eq!(facts.element_count, Some(u32::try_from(kept).unwrap()), "{facts:?}");
+    chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    // A turn's changes keep what the sketch counts: a description's comment, which UML leaves out
+    // as a part of its element, is listed beside the class described.
+    let at = rect_of(&h, "workspace.chat.allow-changes").center();
+    click(&mut h, at);
+    ask_in_chat(&mut h, "Describe Customer");
+    crate::chat_fixture::call(
+        h.state_mut(),
+        "engine.execute",
+        serde_json::json!({ "command": "element.describe", "params": { "element": customer.to_string(), "text": "A buyer" } }),
+    )
+    .unwrap();
+    h.run();
+    chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let changes = kept_chat(&h, &rig).ends.last().unwrap().1.clone().unwrap();
+    let mut listed: Vec<String> = changes.changed.iter().map(|e| e.metaclass.clone()).collect();
+    listed.sort();
+    assert_eq!(listed, ["uml_class", "uml_comment"]);
 }
 
 #[test]

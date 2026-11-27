@@ -617,6 +617,13 @@ str		{specific} specialises {general}	{specific} especializa {general}
 plural		{n} generalization	{n} generalização|{n} generalizações
 plural		{n} generalization · to {general}	{n} generalização · para {general}|{n} generalizações · para {general}
 plural		{sets} had no other member and went too	{sets} não tinha outro membro e também desapareceu|{sets} não tinham outros membros e também desapareceram
+plural		{n} class	{n} classe|{n} classes
+plural		{n} interface	{n} interface|{n} interfaces
+plural		{n} enumeration	{n} enumeração|{n} enumerações
+plural		{n} data type	{n} tipo de dados|{n} tipos de dados
+plural		{n} package	{n} pacote|{n} pacotes
+plural		{n} attribute	{n} atributo|{n} atributos
+plural		{n} operation	{n} operação|{n} operações
 str		Interface realization: from the implementing class to its interface	Realização de interface: da classe que implementa para a sua interface
 str		Association class: between two classes, with a card of its own	Classe de associação: entre duas classes, com um cartão próprio
 str		Navigable	Navegável

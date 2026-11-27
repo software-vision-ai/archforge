@@ -617,6 +617,13 @@ str		{specific} specialises {general}	{specific} は {general} を特化しま�
 plural		{n} generalization	{n} 個の汎化
 plural		{n} generalization · to {general}	{n} 個の汎化 · {general} へ
 plural		{sets} had no other member and went too	{sets} にはほかのメンバーがなく、一緒に削除されました
+plural		{n} class	{n} 個のクラス
+plural		{n} interface	{n} 個のインターフェース
+plural		{n} enumeration	{n} 個の列挙
+plural		{n} data type	{n} 個のデータ型
+plural		{n} package	{n} 個のパッケージ
+plural		{n} attribute	{n} 個の属性
+plural		{n} operation	{n} 個の操作
 str		Interface realization: from the implementing class to its interface	インターフェース実現：実装クラスからそのインターフェースへ
 str		Association class: between two classes, with a card of its own	関連クラス：2 つのクラスの間に、専用のカードを持つ
 str		Navigable	ナビゲーション可能

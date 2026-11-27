@@ -5,11 +5,14 @@
 //! its own, so without one a time is said in UTC and marked so. Months are short and translated.
 //! A tool row is worded from its kept facts (the control method, the command, the elements it was
 //! about and those its answer named), so a row read back from the project shows in the language of
-//! the day, as it showed when it ran.
+//! the day, as it showed when it ran. The elements it names are counted as the notations handed
+//! count them ([`NotationUi::chat_kind`], [`NotationUi::chat_count`]); the shell counts only its
+//! own: diagrams, skills, and lines and elements.
 
 use crate::ai_agents::Provider;
 use crate::chat_store::{AnchorRole, ToolFacts, ToolStatus};
 use crate::i18n::{fmt, tr, tr_ctx, trn};
+use crate::notation_ui::{ChatKind, NotationUi};
 
 /// The time now and the local offset from UTC, as the host gives them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,65 +182,82 @@ pub fn badge(provider: Provider, model: &str, named: Option<&str>) -> String {
     fmt(&tr("{agent} · {model}"), &[("agent", provider.name()), ("model", &model)])
 }
 
-/// The kind a person counts an element of `metaclass` as: one metaclass of the kind stands for it
-/// (every relationship is a line, a primitive type a data type), anything else is an element.
-fn kind_of(metaclass: &str) -> &str {
-    match metaclass {
-        "uml_association"
-        | "uml_association_class"
-        | "uml_generalization"
-        | "uml_dependency"
-        | "uml_realization"
-        | "uml_abstraction"
-        | "uml_usage"
-        | "uml_interface_realization"
-        | "er_relationship"
-        | "er_generalization" => "uml_association",
-        "uml_primitive_type" => "uml_data_type",
-        other => other,
+/// What a person counts an element as in a tool row's words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind<'a> {
+    /// A part of another element, not counted: a diagram's own nodes, lines, labels and styles,
+    /// core's comment, and what a notation says is one.
+    Part,
+    /// A diagram.
+    Diagram,
+    /// A skill.
+    Skill,
+    /// A line: a relationship of any notation.
+    Line,
+    /// A notation's own kind: the notation's place among those handed, and its key.
+    Own(usize, &'static str),
+    /// Anything else, an element, told apart by its table.
+    Element(&'a str),
+}
+
+/// The kind a person counts an element of the table `table` (a generated table's name) as: the
+/// shell's own for a diagram, its parts, a skill and core's comment; else as the first of the
+/// notations `uis` that knows the table says ([`NotationUi::chat_kind`]); else an element.
+fn kind_of<'a>(uis: &[&'static dyn NotationUi], table: &'a str) -> Kind<'a> {
+    match table {
+        "diagram_diagram" => Kind::Diagram,
+        "core_skill" => Kind::Skill,
+        "core_comment" => Kind::Part,
+        t if t.starts_with("diagram_") => Kind::Part,
+        _ => uis
+            .iter()
+            .enumerate()
+            .find_map(|(i, ui)| {
+                Some(match ui.chat_kind(table)? {
+                    ChatKind::Part => Kind::Part,
+                    ChatKind::Line => Kind::Line,
+                    ChatKind::Own(key) => Kind::Own(i, key),
+                })
+            })
+            .unwrap_or(Kind::Element(table)),
     }
 }
 
-/// A count of elements of one metaclass (a generated table's name), in the words a person uses:
-/// "8 classes", "2 lines" for relationships, "3 elements" for the rest.
-pub fn kinds(metaclass: &str, n: u64) -> String {
-    match kind_of(metaclass) {
-        "uml_class" => trn("{n} class", "{n} classes", n),
-        "uml_interface" => trn("{n} interface", "{n} interfaces", n),
-        "uml_enumeration" => trn("{n} enumeration", "{n} enumerations", n),
-        "uml_data_type" => trn("{n} data type", "{n} data types", n),
-        "uml_package" => trn("{n} package", "{n} packages", n),
-        "uml_property" => trn("{n} attribute", "{n} attributes", n),
-        "uml_operation" => trn("{n} operation", "{n} operations", n),
-        "uml_enumeration_literal" => trn("{n} literal", "{n} literals", n),
-        "uml_association" => trn("{n} line", "{n} lines", n),
-        "er_entity" => trn("{n} table", "{n} tables", n),
-        "er_attribute" => trn("{n} column", "{n} columns", n),
-        "er_schema" => trn("{n} schema", "{n} schemas", n),
-        "diagram_diagram" => trn("{n} diagram", "{n} diagrams", n),
-        "core_skill" => trn("{n} skill", "{n} skills", n),
-        _ => trn("{n} element", "{n} elements", n),
+/// Whether an element of the table `table` counts as one a person reads about, as the notations
+/// `uis` count it: a part of another element (a diagram's own nodes, lines, labels and styles,
+/// core's comment, and what a notation says is one) is not one of its own.
+pub(crate) fn counted(uis: &[&'static dyn NotationUi], table: &str) -> bool {
+    kind_of(uis, table) != Kind::Part
+}
+
+/// A count of `n` elements of one kind, in the words a person uses: a notation's kind in its own
+/// words ([`NotationUi::chat_count`]), "2 lines" for relationships, "3 elements" for the rest.
+fn kinds(uis: &[&'static dyn NotationUi], kind: Kind<'_>, n: u64) -> String {
+    let elements = || trn("{n} element", "{n} elements", n);
+    match kind {
+        Kind::Diagram => trn("{n} diagram", "{n} diagrams", n),
+        Kind::Skill => trn("{n} skill", "{n} skills", n),
+        Kind::Line => trn("{n} line", "{n} lines", n),
+        Kind::Own(i, key) => uis.get(i).and_then(|ui| ui.chat_count(key, n)).unwrap_or_else(elements),
+        Kind::Part | Kind::Element(_) => elements(),
     }
 }
 
-/// Whether an element of `metaclass` counts as one a person reads about: a diagram's own nodes,
-/// lines, labels and styles, and a description's comment (core's or UML's), are its parts, not
-/// elements of their own.
-pub fn counted(metaclass: &str) -> bool {
-    !(metaclass.starts_with("diagram_") && metaclass != "diagram_diagram") && metaclass != "core_comment" && metaclass != "uml_comment"
-}
-
-/// The elements a row's answer named, summed by kind, the two most first: "8 classes",
-/// "2 attributes, 2 lines". When the answer named more than are kept, the count in all.
-fn read_summary(facts: &ToolFacts) -> Option<String> {
-    let mut by: Vec<(String, u64)> = Vec::new();
+/// The elements a row's answer named, summed by kind as the notations `uis` count them, the two
+/// most first; a part of another element is not counted. When the answer named more than are
+/// kept, the count in all.
+fn read_summary(uis: &[&'static dyn NotationUi], facts: &ToolFacts) -> Option<String> {
+    let mut by: Vec<(Kind<'_>, u64)> = Vec::new();
     let mut kept = 0u64;
-    for a in facts.anchors.iter().filter(|a| a.role == AnchorRole::Read && counted(&a.metaclass)) {
+    for a in facts.anchors.iter().filter(|a| a.role == AnchorRole::Read) {
+        let kind = kind_of(uis, &a.metaclass);
+        if kind == Kind::Part {
+            continue;
+        }
         kept += 1;
-        let kind = kind_of(&a.metaclass);
-        match by.iter_mut().find(|(m, _)| m == kind) {
+        match by.iter_mut().find(|(k, _)| *k == kind) {
             Some((_, n)) => *n += 1,
-            None => by.push((kind.to_string(), 1)),
+            None => by.push((kind, 1)),
         }
     }
     let all = facts.element_count.map_or(kept, u64::from);
@@ -245,11 +265,11 @@ fn read_summary(facts: &ToolFacts) -> Option<String> {
         return None;
     }
     if all > kept {
-        return Some(kinds("", all));
+        return Some(kinds(uis, Kind::Element(""), all));
     }
     // Most first; among equals, the one the answer named first.
     by.sort_by_key(|k| std::cmp::Reverse(k.1));
-    let words: Vec<String> = by.iter().take(2).map(|(m, n)| kinds(m, *n)).collect();
+    let words: Vec<String> = by.iter().take(2).map(|(k, n)| kinds(uis, *k, *n)).collect();
     match words.as_slice() {
         [one] => Some(one.clone()),
         [a, b] => Some(fmt(&tr("{first}, {second}"), &[("first", a), ("second", b)])),
@@ -284,9 +304,10 @@ pub fn verb(command: Option<&str>, changed_model: bool, status: ToolStatus) -> V
     }
 }
 
-/// A row's words: its label ("Read diagram Commerce", "Changed Customer", "Read 8 classes") and
-/// its detail ("8 classes", "description", "refused").
-pub fn tool_words(facts: &ToolFacts) -> (String, Option<String>) {
+/// A row's words: its label ("Read diagram Commerce", "Changed Customer", "Read 8 elements") and
+/// its detail ("2 lines", "description", "refused"), the elements counted as the notations `uis`
+/// count them.
+pub fn tool_words(uis: &[&'static dyn NotationUi], facts: &ToolFacts) -> (String, Option<String>) {
     let detail_of = |d: Option<String>| match facts.status {
         ToolStatus::Done => d,
         ToolStatus::Refused => Some(tr("refused")),
@@ -316,13 +337,13 @@ pub fn tool_words(facts: &ToolFacts) -> (String, Option<String>) {
             match (name, v) {
                 (Some(n), Verb::Read) if one.metaclass == "diagram_diagram" => fmt(&tr("Read diagram {name}"), &[("name", &n)]),
                 (Some(n), _) => with(&n),
-                (None, _) => with(&kinds(&one.metaclass, 1)),
+                (None, _) => with(&kinds(uis, kind_of(uis, &one.metaclass), 1)),
             }
         }
-        [] if v == Verb::Read => match read_summary(facts) {
+        [] if v == Verb::Read => match read_summary(uis, facts) {
             Some(what) => {
                 // Read with no element it was about: what its answer named is the label, and the
-                // aspect read the detail ("Read 8 classes · descriptions").
+                // aspect read the detail ("Read 8 elements · descriptions").
                 return (with(&what), detail_of(facts.detail.clone()));
             }
             None => tr("Read the model"),
@@ -331,11 +352,11 @@ pub fn tool_words(facts: &ToolFacts) -> (String, Option<String>) {
         many => {
             let first = many.first().map(|a| a.metaclass.as_str()).unwrap_or_default();
             let same = many.iter().all(|a| a.metaclass == first);
-            with(&kinds(if same { first } else { "" }, u64::try_from(many.len()).unwrap_or(u64::MAX)))
+            with(&kinds(uis, kind_of(uis, if same { first } else { "" }), u64::try_from(many.len()).unwrap_or(u64::MAX)))
         }
     };
     let detail = match v {
-        Verb::Read => read_summary(facts).or_else(|| facts.detail.clone()),
+        Verb::Read => read_summary(uis, facts).or_else(|| facts.detail.clone()),
         Verb::Changed => facts.detail.clone(),
         // What was added or removed is named in the label; the parameters say nothing more.
         Verb::Added | Verb::Removed => None,
@@ -347,6 +368,7 @@ pub fn tool_words(facts: &ToolFacts) -> (String, Option<String>) {
 mod tests {
     use super::*;
     use crate::chat_store::Anchor;
+    use crate::notation_ui::UIS;
     use archforge_mof::Uuid;
 
     /// An anchor of the test's own.
@@ -428,12 +450,12 @@ mod tests {
         diagram.push(at(20, AnchorRole::Target, "diagram_diagram", "Commerce"));
         diagram.push(at(21, AnchorRole::Read, "diagram_node", ""));
         assert_eq!(
-            tool_words(&facts("engine.execute", Some("diagram.get"), false, diagram)),
+            tool_words(UIS, &facts("engine.execute", Some("diagram.get"), false, diagram)),
             ("Read diagram Commerce".into(), Some("8 classes".into()))
         );
         let mut listed = facts("engine.execute", Some("uml.class.list"), false, classes);
         listed.detail = Some("descriptions".into());
-        assert_eq!(tool_words(&listed), ("Read 8 classes".into(), Some("descriptions".into())));
+        assert_eq!(tool_words(UIS, &listed), ("Read 8 classes".into(), Some("descriptions".into())));
         let payment = vec![
             at(1, AnchorRole::Target, "uml_class", "Payment"),
             at(2, AnchorRole::Read, "uml_property", "amount"),
@@ -441,24 +463,78 @@ mod tests {
             at(4, AnchorRole::Read, "uml_association", ""),
             at(5, AnchorRole::Read, "uml_generalization", ""),
         ];
-        assert_eq!(tool_words(&facts("engine.execute", Some("uml.class.get"), false, payment)).1.as_deref(), Some("2 attributes, 2 lines"));
+        assert_eq!(tool_words(UIS, &facts("engine.execute", Some("uml.class.get"), false, payment)).1.as_deref(), Some("2 attributes, 2 lines"));
         let mut changed = facts("engine.execute", Some("uml.class.set"), true, vec![at(1, AnchorRole::Target, "uml_class", "Customer")]);
         changed.detail = Some("description".into());
-        assert_eq!(tool_words(&changed), ("Changed Customer".into(), Some("description".into())));
+        assert_eq!(tool_words(UIS, &changed), ("Changed Customer".into(), Some("description".into())));
         let added = facts("engine.execute", Some("uml.class.add"), true, vec![at(1, AnchorRole::Target, "uml_class", "Invoice")]);
-        assert_eq!(tool_words(&added).0, "Added Invoice");
+        assert_eq!(tool_words(UIS, &added).0, "Added Invoice");
         let removed = facts("engine.execute", Some("er.entity.remove"), true, vec![at(1, AnchorRole::Target, "er_entity", "Tag")]);
-        assert_eq!(tool_words(&removed).0, "Removed Tag");
+        assert_eq!(tool_words(UIS, &removed).0, "Removed Tag");
         let mut refused = removed.clone();
         refused.status = ToolStatus::Refused;
-        assert_eq!(tool_words(&refused), ("Removed Tag".into(), Some("refused".into())));
+        assert_eq!(tool_words(UIS, &refused), ("Removed Tag".into(), Some("refused".into())));
         let mut failed = added;
         failed.status = ToolStatus::Failed;
-        assert_eq!(tool_words(&failed).1.as_deref(), Some("failed"));
-        assert_eq!(tool_words(&facts("engine.undo", None, true, Vec::new())).0, "Undid a step");
+        assert_eq!(tool_words(UIS, &failed).1.as_deref(), Some("failed"));
+        assert_eq!(tool_words(UIS, &facts("engine.undo", None, true, Vec::new())).0, "Undid a step");
         // More named than kept: the count in all.
         let mut many = facts("engine.execute", Some("uml.class.list"), false, vec![at(1, AnchorRole::Read, "uml_class", "A")]);
         many.element_count = Some(700);
-        assert_eq!(tool_words(&many).0, "Read 700 elements");
+        assert_eq!(tool_words(UIS, &many).0, "Read 700 elements");
+    }
+
+    /// The app's notations count each of their kinds in its own words, every relationship of
+    /// either as a line, a primitive type as a data type, and leave out the parts of a diagram and
+    /// a description's comment; the shell counts diagrams, skills and the rest as elements.
+    #[test]
+    fn the_app_notations_count_their_kinds_in_their_words() {
+        crate::i18n::set_language("en");
+        let read = |metaclasses: &[&str]| ToolFacts {
+            tool: "engine.execute".into(),
+            command: Some("model.find".into()),
+            detail: None,
+            status: ToolStatus::Done,
+            changed_model: false,
+            element_count: None,
+            anchors: metaclasses.iter().zip(1u8..).map(|(m, n)| at(n, AnchorRole::Read, m, "")).collect(),
+        };
+        for (table, two) in [
+            ("uml_class", "2 classes"),
+            ("uml_interface", "2 interfaces"),
+            ("uml_enumeration", "2 enumerations"),
+            ("uml_data_type", "2 data types"),
+            ("uml_primitive_type", "2 data types"),
+            ("uml_package", "2 packages"),
+            ("uml_property", "2 attributes"),
+            ("uml_operation", "2 operations"),
+            ("uml_enumeration_literal", "2 literals"),
+            ("er_entity", "2 tables"),
+            ("er_attribute", "2 columns"),
+            ("er_schema", "2 schemas"),
+            ("diagram_diagram", "2 diagrams"),
+            ("core_skill", "2 skills"),
+            ("uml_constraint", "2 elements"),
+        ] {
+            assert_eq!(tool_words(UIS, &read(&[table, table])).0, format!("Read {two}"), "{table}");
+        }
+        let lines = [
+            "uml_association",
+            "uml_association_class",
+            "uml_generalization",
+            "uml_dependency",
+            "uml_realization",
+            "uml_abstraction",
+            "uml_usage",
+            "uml_interface_realization",
+            "er_relationship",
+            "er_generalization",
+        ];
+        assert_eq!(tool_words(UIS, &read(&lines)).0, "Read 10 lines", "every relationship of either notation");
+        assert_eq!(tool_words(UIS, &read(&["uml_data_type", "uml_primitive_type", "er_entity"])).0, "Read 2 data types, 1 table");
+        let parts = ["diagram_node", "diagram_edge", "core_comment", "uml_comment", "er_entity"];
+        assert_eq!(tool_words(UIS, &read(&parts)).0, "Read 1 table", "a diagram's parts and a description's comment are not counted");
+        // Elements of tables no one counts are told apart by their table.
+        assert_eq!(tool_words(UIS, &read(&["core_folder", "core_folder", "core_model"])).0, "Read 2 elements, 1 element");
     }
 }

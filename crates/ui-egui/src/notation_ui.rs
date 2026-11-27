@@ -8,8 +8,8 @@
 use archforge_mof::{Store, Uuid};
 
 pub(crate) use archforge_shell_api::notation_ui::{
-    Added, Entry, Inside, Layer, NotationState, NotationStates, NotationUi, Offer, Overlaid, Removal, Words, before_removal, description_limit,
-    ends_label, label, longest_name, name_limit_of_cx, of, of_class, say_after_cx,
+    Added, ChatKind, Entry, Inside, Layer, NotationState, NotationStates, NotationUi, Offer, Overlaid, Removal, Words, before_removal,
+    description_limit, ends_label, label, longest_name, name_limit_of_cx, of, of_class, say_after_cx,
 };
 
 use crate::Shell;
