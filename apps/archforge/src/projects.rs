@@ -3915,7 +3915,7 @@ mod tests {
 
     /// What an opening does to a model with the app's notations, as a shell hands it to the host.
     fn opening_repair() -> impl Fn(&mut archforge_mof::Store) + Copy + Send + 'static {
-        archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default()).open_repair()
+        archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &crate::SCREENS).open_repair()
     }
 
     /// The commit of the `n`th newest version of the open project.

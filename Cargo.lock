@@ -262,6 +262,7 @@ dependencies = [
  "archforge-notations",
  "archforge-project",
  "archforge-secrets",
+ "archforge-shell-api",
  "archforge-ui-egui",
  "archforge-uml",
  "craft-atomic",

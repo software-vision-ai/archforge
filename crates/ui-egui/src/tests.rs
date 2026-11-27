@@ -6,6 +6,11 @@ use egui_kittest::Harness;
 use crate::theme::ThemeKind;
 use crate::{Picked, Services, Shell, UiState};
 
+/// The app's screens parts, ER's then UML's, as the app registers them: the shells the tests make
+/// are given them, and the tests that ask the app's notations without a shell ask them.
+pub(crate) static SCREENS: archforge_shell_api::screens::ScreensRegistry =
+    archforge_shell_api::screens::ScreensRegistry::new(&[crate::ER, crate::UML]);
+
 mod branches;
 mod edit_menu;
 mod field_keys;
@@ -52,7 +57,7 @@ fn uml_of_mut(shell: &mut Shell) -> &mut crate::uml_state::UmlState {
 /// The real shell in the harness at the design's frame size.
 fn harness(theme: ThemeKind) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ..Services::default() });
+    let mut shell = Shell::new(Services { ..Services::default() }, &SCREENS);
     shell.state.theme = theme;
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -85,11 +90,12 @@ fn home_draws_in_both_appearances_with_every_control_registered() {
     }
 }
 
+/// Home lists a pinned folder and a recent project, in both appearances.
 #[test]
 fn home_lists_its_pinned_folders_and_recent_projects_in_both_appearances() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services::default());
+        let mut shell = Shell::new(Services::default(), &SCREENS);
         shell.state.theme = theme;
         shell.state.pin(std::path::Path::new("/Users/robin/Documents/Models"));
         shell.state.remember("Library system", std::path::Path::new("/Users/robin/Documents/Archforge/Library system.archforge"), 1_761_670_800);
@@ -192,10 +198,11 @@ fn create_project_waits_for_creating_projects_and_home_takes_no_click_behind_the
     assert_eq!(h.state().state.theme, ThemeKind::Light, "the theme switch behind the veil took the click");
 }
 
+/// In the smallest window the New project dialog keeps its buttons and its field inside it.
 #[test]
 fn in_the_smallest_window_the_dialog_keeps_its_buttons_and_field_inside_it() {
     crate::i18n::set_language("en");
-    let shell = Shell::new(Services::default());
+    let shell = Shell::new(Services::default(), &SCREENS);
     let mut h = Harness::builder().with_size(egui::vec2(640.0, 400.0)).build_ui_state(
         |ui, shell: &mut Shell| {
             shell.logic(ui.ctx());
@@ -250,7 +257,7 @@ fn creating_harness() -> (Harness<'static, Shell>, std::sync::Arc<FakeHost>) {
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services),
+        Shell::new(services, &SCREENS),
     );
     h.run();
     open_new_project(&mut h);
@@ -695,7 +702,7 @@ fn saving_harness(opened: Option<crate::Opened>, picked: Option<&str>) -> (Harne
         pick_project: Some(std::sync::Arc::new(move |_| Picked::at_once(picked.clone()))),
         ..Services::default()
     };
-    let mut shell = Shell::new(services);
+    let mut shell = Shell::new(services, &SCREENS);
     if let Some(opened) = opened {
         shell.open_project(opened);
     }
@@ -1125,7 +1132,7 @@ fn the_save_key_is_left_alone_and_saves_nothing_while_held() {
     use std::sync::atomic::{AtomicBool, Ordering};
     crate::i18n::set_language("en");
     let host = std::sync::Arc::new(SavingHost::default());
-    let mut shell = Shell::new(Services { projects: Some(host.clone()), ids: Some(test_ids()), ..Services::default() });
+    let mut shell = Shell::new(Services { projects: Some(host.clone()), ids: Some(test_ids()), ..Services::default() }, &SCREENS);
     shell.open_project(commerce());
     // Whether the key is still there once the shell's logic has run: taken, it is gone.
     let left = std::sync::Arc::new(AtomicBool::new(false));
@@ -2521,7 +2528,7 @@ fn a_move_with_no_clear_answer_is_read_back() {
 #[test]
 fn a_switch_from_every_starting_point() {
     use crate::hold::HoldRefused::{Another, NoProject};
-    assert_eq!(Shell::new(Services::default()).switch_branch("x".to_string()), Err(NoProject), "this part draws nothing");
+    assert_eq!(Shell::new(Services::default(), &SCREENS).switch_branch("x".to_string()), Err(NoProject), "this part draws nothing");
     in_both(work_and_earlier, |mut h, host, earlier| {
         start_viewing(&mut h, "c1");
         answer_read(&mut h, &host, Ok(earlier));
@@ -3501,11 +3508,12 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
     assert!(ids(&h).iter().any(|i| i == "home.start.open-project"), "Home after the last tab");
 }
 
+/// The most tabs a window opens stay left of Help at every width, down to the smallest window.
 #[test]
 fn eight_tabs_stay_left_of_help_at_every_width_down_to_the_smallest_window() {
     for w in [640.0, 900.0, 1600.0] {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
+        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
         for i in 0..crate::MAX_TABS {
             shell.open_project(crate::Opened {
                 name: format!("A project with a rather long name {i}"),
@@ -4086,7 +4094,7 @@ fn a_pinned_folder_is_pinned_from_the_picker_opens_the_project_picker_in_it_and_
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services),
+        Shell::new(services, &SCREENS),
     );
     h.run_steps(2);
     let at = rect_of(&h, "home.pin-folder").center();
@@ -4217,7 +4225,7 @@ fn homes_search_finds_the_projects_in_the_pinned_folders_one_search_at_a_time_an
         })),
         ..Services::default()
     };
-    let mut shell = Shell::new(services);
+    let mut shell = Shell::new(services, &SCREENS);
     shell.state.pin(std::path::Path::new("/Users/robin/Work"));
     shell.state.remember("Shop", std::path::Path::new("/tmp/Shop.archforge"), 1);
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
@@ -4470,9 +4478,10 @@ mod installed_fonts {
         }
     }
 
+    /// A font scan that panics leaves no fallback order and nothing in flight to wait for.
     #[test]
     fn a_scan_that_panics_leaves_nothing_to_wait_for() {
-        let mut s = Shell::new(Services::default());
+        let mut s = Shell::new(Services::default(), &SCREENS);
         s.services.fonts = Some(Arc::new(Panicking));
         let ctx = framed_context();
         frame(&mut s, &ctx);
@@ -4501,13 +4510,16 @@ mod installed_fonts {
                 })
                 .collect()
         }
+        /// The bytes of the face `entry` names, or a refusal when none of that name is served.
         fn read(&self, entry: &FontEntry, _cap: u64) -> Result<Vec<u8>, String> {
             self.0.iter().find(|(f, _)| *f == entry.key).map(|(_, b)| b.clone()).ok_or_else(|| "gone".to_string())
         }
     }
 
+    /// A shell whose installed fonts come from `source`, framed until its scan has finished, with
+    /// the context it was framed in.
     fn scripted(source: Scripts) -> (Shell, egui::Context) {
-        let mut s = Shell::new(Services::default());
+        let mut s = Shell::new(Services::default(), &SCREENS);
         s.services.fonts = Some(Arc::new(source));
         let ctx = framed_context();
         frame(&mut s, &ctx);
@@ -4604,7 +4616,7 @@ mod installed_fonts {
         until(&mut s, &ctx, |s| s.fonts.in_flight() == 0 && s.fonts.unserved("zh-Hans").is_some());
         assert_eq!(s.fonts.unserved("zh-Hans"), Some(Unserved::Refused));
         // A host with no fonts at all (the web) knows at once.
-        let mut web = Shell::new(Services::default());
+        let mut web = Shell::new(Services::default(), &SCREENS);
         let ctx = framed_context();
         frame(&mut web, &ctx);
         assert_eq!(web.fonts.unserved("ja"), Some(Unserved::NoSource));
@@ -4677,7 +4689,7 @@ fn the_bundled_faces_draw_every_character_of_the_latin_script_catalogues() {
 /// The shell with a project open, in the harness at the design's frame size or another.
 fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     // Frames a sixtieth of a second apart, as on screen, so two clicks in a row read as a double click;
@@ -5580,10 +5592,12 @@ fn the_saved_state_names_each_explorer_and_panel_by_its_own_name() {
     }
 }
 
+/// Without an id source the model does not open: the shell keeps no session and holds the reason
+/// the status bar says (`SessionError::NoIdSource`).
 #[test]
 fn without_an_id_source_the_status_bar_says_the_model_could_not_open_once() {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -5603,7 +5617,7 @@ fn a_long_project_name_keeps_the_chip_left_of_the_bar_controls_at_every_size_and
     for lang in crate::i18n::LANGUAGES {
         for (w, h_) in [(1600.0, 1120.0), (900.0, 700.0), (480.0, 600.0), (80.0, 80.0)] {
             crate::i18n::set_language(lang.code);
-            let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
+            let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
             shell.open_project(crate::Opened {
                 name: "A project with a very long name that goes on and on".into(),
                 path: "/tmp/long.archforge".into(),
@@ -8763,7 +8777,7 @@ fn no_two_notations_claim_the_same_refusal() {
 #[test]
 fn each_kind_a_refusal_names_is_said_by_the_shell_or_one_notation() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = crate::Shell::new(crate::Services::default());
+    let _shell = crate::Shell::new(crate::Services::default(), &SCREENS);
     use crate::i18n::{set_language, tr_ctx};
     use crate::notation_ui::UIS;
     let own = [("element", "an element"), ("constraint", "a constraint"), ("skill", "a skill")];
@@ -9063,7 +9077,7 @@ fn only_a_notation_s_typed_menu_takes_the_keys() {
 fn a_notation_s_state_goes_with_its_project() {
     use crate::uml_classifier::Classifier;
     let opened = |name: &str| crate::Opened { name: name.into(), path: format!("/tmp/{name}.archforge").into(), ..Default::default() };
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     shell.open_project(opened("First"));
     uml_of_mut(&mut shell).classifier = Classifier::Interface;
     uml_of_mut(&mut shell).nary =
@@ -9210,7 +9224,7 @@ fn kept_type_and_target_choices_are_built_again_for_another_session_of_the_same_
 #[test]
 fn an_empty_name_is_refused_unless_the_rename_may_leave_it_unnamed() {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     for cmd in ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"] {
         assert!(!shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, cmd, "  ")), "{cmd} may leave its element unnamed");
         assert_eq!(shell.panels.notice, None, "{cmd}");
@@ -18622,8 +18636,8 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn parents(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
         store.container(o).ok().flatten().map(|(c, _)| c).into_iter().collect()
     }
-    /// None, but for the sketch named `second`: an English row of its own, so a test tells two
-    /// sketches' tables apart. No test registers it.
+    /// None, but for the sketch named `second`: a row of its own, so a test tells two sketches'
+    /// tables apart. Only a shell given the sketches' screens parts registers it.
     fn catalogues(&self) -> &'static [crate::i18n::Rows] {
         if self.0 == "second" { SECOND_SKETCH_ROWS } else { &[] }
     }
@@ -18911,9 +18925,11 @@ impl crate::notation_ui::NotationUi for WordsUi {
 /// The worded notation before the app's two.
 static WORDS_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &crate::er_ui::ErUi, &crate::uml_ui::UmlUi];
 
-/// The second sketch's one catalogue, a row only it says.
-static SECOND_SKETCH_ROWS: &[crate::i18n::Rows] =
-    &[crate::i18n::Rows { code: "en", catalogue: "second-sketch.tsv", text: "str\t\tSecond sketch\tSecond sketch\n" }];
+/// The second sketch's catalogue, a row only it says, in English and in German.
+static SECOND_SKETCH_ROWS: &[crate::i18n::Rows] = &[
+    crate::i18n::Rows { code: "en", catalogue: "second-sketch.tsv", text: "str\t\tSecond sketch\tSecond sketch\n" },
+    crate::i18n::Rows { code: "de", catalogue: "second-sketch-de.tsv", text: "str\t\tSecond sketch\tZweite Skizze\n" },
+];
 
 /// Two more sketch kinds, both of the second sketch's part, so a part with more than one kind
 /// lists them in its order.
@@ -18943,9 +18959,42 @@ fn a_screens_registry_lists_its_parts_notations_kinds_and_catalogues_in_order() 
     let kinds: Vec<&str> = SKETCH_SCREENS.kinds().iter().map(|k| k.kind()).collect();
     assert_eq!(kinds, [SKETCH, "test.second", "test.third"]);
     let tables: Vec<Vec<&str>> = SKETCH_SCREENS.catalogues().map(|t| t.iter().map(|r| r.catalogue).collect()).collect();
-    assert_eq!(tables, [vec![], vec!["second-sketch.tsv"]]);
+    assert_eq!(tables, [vec![], vec!["second-sketch.tsv", "second-sketch-de.tsv"]]);
     assert!(std::ptr::eq(SKETCH_SCREENS.notation_uis(), uis), "made once");
     assert!(std::ptr::eq(SKETCH_SCREENS.kinds(), SKETCH_SCREENS.kinds()), "made once");
+}
+
+/// A shell takes its notations, its diagram kinds, its notations' states and its catalogues from
+/// the screens parts it is given, not from the app's: given the sketches' parts, it knows the two
+/// sketches and their three kinds, keeps the sketch's state and none of ER's or UML's, and finds
+/// the second sketch's row in German, which no other shell registers.
+#[test]
+fn a_shell_takes_its_notations_kinds_states_and_catalogues_from_the_screens_parts_it_is_given() {
+    let shell = Shell::new(Services::default(), &SKETCH_SCREENS);
+    assert!(std::ptr::eq(shell.notation_uis, SKETCH_SCREENS.notation_uis()), "the parts' notations");
+    let kinds: Vec<&str> = shell.kinds.iter().map(|k| k.kind()).collect();
+    assert_eq!(kinds, [SKETCH, "test.second", "test.third"], "the parts' kinds");
+    assert!(shell.notation_states.own::<SketchState>().is_some(), "the sketch keeps its state");
+    assert!(crate::er_state::er(&shell.notation_states).is_none(), "ER is not among the parts");
+    assert!(crate::uml_state::uml(&shell.notation_states).is_none(), "nor is UML");
+    let row = "Second sketch";
+    crate::i18n::set_language("de");
+    let said = crate::i18n::tr(row);
+    crate::i18n::set_language("en");
+    assert_eq!(said, "Zweite Skizze", "the second sketch's catalogue is registered");
+}
+
+/// The app's screens parts, ER's before UML's, give a shell the lists the shell knew before it
+/// was given parts: ER's notation and kind, then UML's.
+#[test]
+fn the_apps_screens_parts_give_a_shell_er_then_uml() {
+    let shell = Shell::new(Services::default(), &SCREENS);
+    let metamodels = |uis: &[&dyn crate::notation_ui::NotationUi]| uis.iter().map(|ui| ui.metamodel()).collect::<Vec<_>>();
+    assert_eq!(metamodels(shell.notation_uis), metamodels(crate::notation_ui::UIS), "ER's notation, then UML's");
+    assert_eq!(metamodels(shell.notation_uis), [archforge_er::INDEX, archforge_uml::INDEX]);
+    let kinds = |kinds: &[&dyn crate::kinds::DiagramKind]| kinds.iter().map(|k| k.kind()).collect::<Vec<_>>();
+    assert_eq!(kinds(shell.kinds), kinds(crate::kinds::KINDS), "ER's kind, then UML's");
+    assert_eq!(kinds(shell.kinds), [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]);
 }
 
 /// The sketch notation's limits, shorter than any other notation's, so a field that takes them is
@@ -18988,7 +19037,7 @@ fn the_refusal_words_ask_the_notations_the_shell_registered() {
 #[test]
 fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     shell.notation_uis = SKETCH_UIS;
     assert!(!shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, SKETCH_UNNAMED, "  ")), "the sketch may leave its element unnamed");
     assert_eq!(shell.panels.notice, None);
@@ -19161,7 +19210,7 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
 fn a_notations_refusals_say_their_parts_by_the_notations_the_shell_registered() {
     use archforge_engine::{AppliedTo, CommandError, EngineError, InUse, LiteralValued, Named, Reason, Used};
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     shell.notation_uis = WORDS_UIS;
     let no_literal = || Box::new(Reason::TooFew { kind: "enum literal", min: 1 });
     let unnamed = || Named::Unnamed { kind: "association" };
@@ -19222,7 +19271,7 @@ fn a_notations_problems_are_said_by_the_notations_the_shell_registered() {
     let status = st.create(archforge_er::ENUM_TYPE).unwrap();
     st.set(status, archforge_er::named_element::NAME, archforge_mof::Value::str("Status")).unwrap();
     st.push(schema, archforge_er::schema::ENUM_TYPE, archforge_mof::Value::Ref(status)).unwrap();
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     let said = |shell: &Shell| crate::problems::all(shell.notation_uis, &st).into_iter().map(|p| (p.element, p.text)).collect::<Vec<_>>();
     assert_eq!(said(&shell), [(status, "Status: An enum type needs at least one literal.".to_string())], "the app's notations");
     shell.notation_uis = WORDS_UIS;
@@ -19259,7 +19308,7 @@ fn what_goes_with_a_removal_is_worded_by_the_notations_the_shell_registered() {
     let st = s.doc();
     let at = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
     let (order, trace) = (at(&order), at(&trace));
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     let worded = |shell: &Shell| {
         let uis = shell.notation_uis;
         let along = crate::notation_ui::of(uis, st, order).map(|ui| ui.consequences(uis, st, order)).unwrap_or_default();
@@ -19283,7 +19332,7 @@ fn what_goes_with_a_removal_is_worded_by_the_notations_the_shell_registered() {
 fn a_models_kind_words_ask_the_notations_the_shell_registered() {
     crate::i18n::set_language("en");
     let universe = archforge_notations::universe().unwrap();
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     let classes = [archforge_uml::PROPERTY, archforge_uml::INTERFACE, archforge_uml::CLASS];
     let words = |shell: &Shell| classes.map(|c| crate::model_words::kind_label(shell.notation_uis, &universe, c));
     assert_eq!(words(&shell), ["Attribute", "Interface", "Class"], "the app's notations");
@@ -19296,7 +19345,7 @@ fn a_models_kind_words_ask_the_notations_the_shell_registered() {
 /// with the notations it comes with, as a shell registers its own.
 #[test]
 fn the_catalogues_of_the_notations_a_shell_is_given_are_registered() {
-    crate::i18n::register_notations(WORDS_UIS);
+    crate::i18n::register_notations(WORDS_UIS.iter().map(|ui| ui.catalogues()));
     crate::i18n::set_language("de");
     let row = WORDED_ROW;
     assert_eq!(crate::i18n::tr(row), "Eine Wortzeile");
@@ -19308,7 +19357,7 @@ fn the_catalogues_of_the_notations_a_shell_is_given_are_registered() {
 /// registered, its repair runs too and leaves its tag.
 #[test]
 fn an_opening_repairs_a_model_with_the_notations_the_shell_registered() {
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     let repaired = |shell: &Shell| {
         let mut st = archforge_notations::store(Box::new({
             let ids = test_ids();
@@ -20937,7 +20986,7 @@ fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest
 /// kept in memory (`crate::chat_fixture`), Claude set up when `ready`.
 fn chat_harness(theme: ThemeKind, ready: bool) -> (Harness<'static, Shell>, crate::chat_fixture::Rig) {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     let rig = crate::chat_fixture::sample(&mut shell, ready).unwrap();
@@ -24363,7 +24412,7 @@ fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() 
     let (tables, junctions) = archforge_notations::storage();
     let rows = std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap());
     let reopen = |state: crate::state::UiState| {
-        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
+        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
         shell.state = state;
         shell.open_project(crate::Opened {
             name: "Commerce platform".into(),
@@ -30126,7 +30175,7 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services),
+        Shell::new(services, &SCREENS),
     );
     h.run();
     // A cancel, taken on the next frame: nothing to say.
@@ -30192,17 +30241,20 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
         crate::i18n::set_language("en");
         let waiting = Waiting::default();
         let asked = waiting.clone();
-        let mut shell = Shell::new(Services {
-            projects: Some(std::sync::Arc::new(SavingHost::default())),
-            pick_project: Some(std::sync::Arc::new(|_| Picked::at_once(Some("/tmp/Shop.archforge".into())))),
-            pick_folder: Some(std::sync::Arc::new(move |_: &str| {
-                let (tx, rx) = std::sync::mpsc::channel();
-                asked.lock().unwrap().push(tx);
-                rx
-            })),
-            picker_unavailable: Some(std::sync::Arc::new(|| Some("this system has no desktop portal".into()))),
-            ..Services::default()
-        });
+        let mut shell = Shell::new(
+            Services {
+                projects: Some(std::sync::Arc::new(SavingHost::default())),
+                pick_project: Some(std::sync::Arc::new(|_| Picked::at_once(Some("/tmp/Shop.archforge".into())))),
+                pick_folder: Some(std::sync::Arc::new(move |_: &str| {
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    asked.lock().unwrap().push(tx);
+                    rx
+                })),
+                picker_unavailable: Some(std::sync::Arc::new(|| Some("this system has no desktop portal".into()))),
+                ..Services::default()
+            },
+            &SCREENS,
+        );
         shell.state.theme = theme;
         shell.state.remember("Library", std::path::Path::new("/tmp/Library.archforge"), 0);
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
@@ -30296,19 +30348,22 @@ fn pick_waits_harness(
     let asked_for = asked.clone();
     let opens = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let counted = opens.clone();
-    let mut shell = Shell::new(Services {
-        projects: Some(host.clone()),
-        pick_project: Some(std::sync::Arc::new(move |_| {
-            counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Picked::at_once(None)
-        })),
-        pick_folder: Some(std::sync::Arc::new(move |_: &str| {
-            let (tx, rx) = std::sync::mpsc::channel();
-            asked_for.lock().unwrap().push(tx);
-            rx
-        })),
-        ..Services::default()
-    });
+    let mut shell = Shell::new(
+        Services {
+            projects: Some(host.clone()),
+            pick_project: Some(std::sync::Arc::new(move |_| {
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Picked::at_once(None)
+            })),
+            pick_folder: Some(std::sync::Arc::new(move |_: &str| {
+                let (tx, rx) = std::sync::mpsc::channel();
+                asked_for.lock().unwrap().push(tx);
+                rx
+            })),
+            ..Services::default()
+        },
+        &SCREENS,
+    );
     shell.state.theme = theme;
     shell.state.remember("Library", std::path::Path::new("/tmp/Library.archforge"), 0);
     shell.state.pin(std::path::Path::new("/Users/robin/Work/Models"));
@@ -30468,7 +30523,7 @@ fn a_menus_rows_of_one_text_are_told_apart() {
         let picks = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let swapped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (picked, swap) = (picks.clone(), swapped.clone());
-        let mut shell = Shell::new(Services::default());
+        let mut shell = Shell::new(Services::default(), &SCREENS);
         shell.state.theme = theme;
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
             move |ui, shell: &mut Shell| {
@@ -30515,7 +30570,7 @@ fn a_menus_twin_rows_keep_their_ids_when_it_scrolls() {
         const TWINS: [&[usize]; 5] = [&[0, 3], &[0, 1, 4], &[2], &[0, 1], &[0]];
         let mode = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let (picked, now) = (picks.clone(), mode.clone());
-        let mut shell = Shell::new(Services::default());
+        let mut shell = Shell::new(Services::default(), &SCREENS);
         shell.state.theme = theme;
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).with_step_dt(0.1).build_ui_state(
             move |ui, shell: &mut Shell| {
@@ -30600,7 +30655,7 @@ type MenuRowsSet = std::sync::Arc<std::sync::Mutex<(Vec<String>, Vec<String>)>>;
 fn rows_menu(theme: ThemeKind, rows: &MenuRowsSet, picks: &std::sync::Arc<std::sync::Mutex<Vec<usize>>>) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
     let (shown, picked) = (rows.clone(), picks.clone());
-    let mut shell = Shell::new(Services::default());
+    let mut shell = Shell::new(Services::default(), &SCREENS);
     shell.state.theme = theme;
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).with_step_dt(0.1).build_ui_state(
         move |ui, shell: &mut Shell| {
@@ -31372,7 +31427,7 @@ fn dolt_harness(theme: ThemeKind, installed: bool) -> (Harness<'static, Shell>, 
     crate::i18n::set_language("en");
     let host = std::sync::Arc::new(DoltHost::default());
     host.installed.store(installed, std::sync::atomic::Ordering::SeqCst);
-    let mut shell = Shell::new(Services { projects: Some(host.clone()), ..Services::default() });
+    let mut shell = Shell::new(Services { projects: Some(host.clone()), ..Services::default() }, &SCREENS);
     shell.state.theme = theme;
     let mut h = harness_over(shell);
     h.run_steps(4);
@@ -31991,7 +32046,7 @@ fn agents_harness(
     };
     setup(&mut f);
     let f = std::sync::Arc::new(f);
-    let mut shell = Shell::new(Services { agents: Some(f.clone()), ..Services::default() });
+    let mut shell = Shell::new(Services { agents: Some(f.clone()), ..Services::default() }, &SCREENS);
     shell.state.theme = theme;
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1400.0)).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -32735,7 +32790,7 @@ fn chat_workspace(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<
     let f = fake::Fake::default();
     *f.look.lock().unwrap() = Look { claude: fake::found(Provider::Claude), codex: fake::found(Provider::Codex), ..Look::default() };
     let f = std::sync::Arc::new(f);
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), agents: Some(f.clone()), ..Services::default() });
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), agents: Some(f.clone()), ..Services::default() }, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(

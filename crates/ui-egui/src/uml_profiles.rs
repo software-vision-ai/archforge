@@ -1089,7 +1089,7 @@ mod tests {
     #[test]
     fn an_unnamed_element_in_use_is_said_by_its_kind() {
         // The app's shell registers its notations' catalogues, whose rows this says.
-        let _shell = crate::Shell::new(crate::Services::default());
+        let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
         let unnamed = |kind| Named::Unnamed { kind };
         let said = |names: Vec<Named>| {
             let n = names.len();
@@ -1120,7 +1120,7 @@ mod tests {
     #[test]
     fn a_literal_valued_names_its_element_by_its_kind_or_none() {
         // The app's shell registers its notations' catalogues, whose rows this says.
-        let _shell = crate::Shell::new(crate::Services::default());
+        let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
         use archforge_engine::{AppliedTo, LiteralValued};
         let said = |element| {
             let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Entity".into(), element };
@@ -1166,7 +1166,7 @@ mod tests {
     #[test]
     fn the_delete_dialog_names_an_unnamed_element_by_its_kind() {
         // The app's shell registers its notations' catalogues, whose rows this says.
-        let _shell = crate::Shell::new(crate::Services::default());
+        let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
         let mut n: u128 = 0;
         let ids = Box::new(move || {
             n += 1;
