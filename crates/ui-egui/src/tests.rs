@@ -206,7 +206,7 @@ fn a_long_new_project_line_is_drawn_whole_and_moves_the_strip_below_it() {
         crate::new_project::open(h.state_mut());
         h.run();
         h.run();
-        // Every text painted, with where it starts, its rows and whether it was cut.
+        /// Collects every text under `s`, with where it is drawn, its rows and whether it was cut.
         fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Rect, usize, bool)>) {
             match s {
                 egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.visual_bounding_rect(), t.galley.rows.len(), t.galley.elided)),
