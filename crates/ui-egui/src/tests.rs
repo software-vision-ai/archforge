@@ -18292,7 +18292,8 @@ fn a_card_its_kind_draws_replaces_the_canvass_and_keeps_the_ring_badge_parts_and
         drop(h);
         let st = session.doc();
         let flagged = [(st.by_uuid(element).unwrap(), vec!["A problem".to_string()])].into_iter().collect();
-        let (texts, _, badges) = drawn_alone(&session, &d, Some(&SketchKind), theme == ThemeKind::Dark, 1000.0, &Default::default(), &flagged);
+        let (texts, _, badges) =
+            drawn_alone(&session, &d, Some(&SketchKind(SKETCH)), theme == ThemeKind::Dark, 1000.0, &Default::default(), &flagged);
         assert!(texts.iter().any(|t| t == SKETCH_WORD), "{theme:?}: drawn by the kind");
         assert_eq!(badges, 1, "{theme:?}: its badge");
     }
