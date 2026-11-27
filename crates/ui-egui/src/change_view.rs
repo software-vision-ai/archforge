@@ -134,12 +134,12 @@ fn start_read(shell: &mut Shell) {
     let (Some(before), Some(session)) = (base_held(v, &key.0), shell.session.as_ref()) else { return };
     let (tables, junctions) = archforge_notations::storage();
     let about = about(shell);
+    let repair = shell.open_repair();
     let v = &mut shell.versions;
     // The frame only copies the objects; their rows are built with the sides.
     let frozen = session.doc().freeze();
     let (tx, rx) = channel();
     let read = move || {
-        let repair = crate::open_repair;
         let sides = frozen.rows(&tables, &junctions).map_err(|e| e.to_string()).and_then(|after| {
             match area {
                 Area::Model | Area::Skill => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),

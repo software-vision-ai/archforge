@@ -369,15 +369,18 @@ pub trait NotationUi: Sync {
         Vec::new()
     }
     /// The stereotype applications that go when `obj` is removed, by name, for the delete
-    /// dialog (AR-135); none by default.
-    fn applications_along(&self, store: &Store, obj: Obj) -> Vec<String> {
-        let _ = (store, obj);
+    /// dialog (AR-135), an element without a name by its kind in the words of the notations the
+    /// shell was given, `uis` ([`crate::panels::a_kind`]); none by default.
+    fn applications_along(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Vec<String> {
+        let _ = (uis, store, obj);
         Vec::new()
     }
     /// Why `obj` cannot be removed, in the user's words, checked before the removal or its dialog
-    /// (UML's package Types while it keeps the built-in types); none lets the command decide.
-    fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {
-        let _ = (store, obj);
+    /// (UML's package Types while it keeps the built-in types), an element it names without a name
+    /// by its kind in the words of the notations the shell was given, `uis`
+    /// ([`crate::panels::a_kind`]); none lets the command decide.
+    fn remove_refusal(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<String> {
+        let _ = (uis, store, obj);
         None
     }
     /// The element that takes what `obj` holds when `obj` is removed (a nested package's
@@ -452,9 +455,10 @@ pub trait NotationUi: Sync {
 
     // Problems.
 
-    /// Its problems in the store, each on the element the user would fix it on.
-    fn problems(&self, store: &Store, out: &mut Vec<Problem>) {
-        let _ = (store, out);
+    /// Its problems in the store, each on the element the user would fix it on, a typed rule's
+    /// problem in the words of the notations the shell was given, `uis` ([`crate::panels::said`]).
+    fn problems(&self, uis: &[&'static dyn NotationUi], store: &Store, out: &mut Vec<Problem>) {
+        let _ = (uis, store, out);
     }
     /// The element whose problems a selection of `obj` shows (a column's table).
     fn problem_holder(&self, store: &Store, obj: Obj) -> Obj {
@@ -511,9 +515,11 @@ pub trait NotationUi: Sync {
     // diagrams or both notations give is the shell's own ([`crate::panels::said`]).
 
     /// A typed refusal only its own commands give, in the user's words; none for any other reason
-    /// or for a kind of element the catalogues don't name.
-    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
-        let _ = reason;
+    /// or for a kind of element the catalogues don't name. A reason or a kind of element it names
+    /// inside its sentence is said by the notations the shell was given, `uis`
+    /// ([`crate::panels::said`], [`crate::panels::a_kind`]).
+    fn said(&self, uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        let _ = (uis, reason);
         None
     }
     /// Why one of its own commands is not available now, in the user's words, by the reason its

@@ -18,6 +18,7 @@ use serde_json::json;
 use crate::cx::{Ctx, Request};
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{fmt, tr, tr_ctx, trn};
+use crate::notation_ui::NotationUi;
 use crate::panels::{FIELD, PAD, ROW, Subject, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx};
 use crate::state::Explorer;
 use crate::uml_classifier::Classifier;
@@ -75,31 +76,33 @@ pub struct ProfileRefusal {
 // What the shell says of uses.
 
 /// An element a stereotype is used on, in words: its name, or, when it has none, its kind with its
-/// article, as `a generalization` (AR-807); a kind the catalogues don't name is `an element`, as
-/// the model names an element of a kind it has no word for.
-pub(crate) fn element_text(named: &Named) -> String {
+/// article, as `a generalization` (AR-807), as the notations of `uis` name it; a kind the
+/// catalogues don't name is `an element`, as the model names an element of a kind it has no word
+/// for.
+pub(crate) fn element_text(uis: &[&'static dyn NotationUi], named: &Named) -> String {
     match named {
         Named::Name(name) => name.clone(),
-        Named::Unnamed { kind } => crate::panels::a_kind(crate::notation_ui::UIS, kind).unwrap_or_else(|| tr_ctx("refusal", "an element")),
+        Named::Unnamed { kind } => crate::panels::a_kind(uis, kind).unwrap_or_else(|| tr_ctx("refusal", "an element")),
     }
 }
 
-/// The elements a stereotype is used on, in words: one element ([`element_text`]), two joined, or
-/// how many, `n`, when none is named.
-fn on_text(names: &[Named], n: usize) -> String {
+/// The elements a stereotype is used on, in words: one element ([`element_text`], by the notations
+/// of `uis`), two joined, or how many, `n`, when none is named.
+fn on_text(uis: &[&'static dyn NotationUi], names: &[Named], n: usize) -> String {
     match names {
-        [one] => element_text(one),
-        [a, b] => fmt(&tr("{first} and {second}"), &[("first", &element_text(a)), ("second", &element_text(b))]),
+        [one] => element_text(uis, one),
+        [a, b] => fmt(&tr("{first} and {second}"), &[("first", &element_text(uis, a)), ("second", &element_text(uis, b))]),
         _ => trn("{n} element", "{n} elements", u64::try_from(n).unwrap_or(u64::MAX)),
     }
 }
 
 /// What is in use and its uses, in the user's words, as `Persistence is in use in Commerce: «Entity»
 /// on Order and Customer, «Id» on 2 elements. Remove those first.`: what Profiles' panels say before
-/// asking, and what a refusal of the engine's says (AR-437).
-pub(crate) fn in_use(used: &InUse) -> String {
+/// asking, and what a refusal of the engine's says (AR-437). An element without a name is named by
+/// its kind as the notations of `uis` name it ([`element_text`]).
+pub(crate) fn in_use(uis: &[&'static dyn NotationUi], used: &InUse) -> String {
     let on = |(s, names, n): &(String, Vec<Named>, usize)| {
-        fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", s), ("elements", &on_text(names, *n))])
+        fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", s), ("elements", &on_text(uis, names, *n))])
     };
     let uses = used.uses.iter().map(on).collect::<Vec<_>>().join(", ");
     // A sentence names its two parts by its own keys, so each part is given under every key it goes by.
@@ -122,9 +125,10 @@ pub(crate) fn in_use(used: &InUse) -> String {
     fmt(&template, &[("profile", first), ("stereotype", first), ("name", second), ("package", second), ("metaclass", second), ("uses", &uses)])
 }
 
-/// `uses` of `what`, in the user's words.
-fn uses_said(store: &Store, what: Used, uses: &Uses) -> String {
-    in_use(&InUse { what, uses: profiles::uses_named(store, uses) })
+/// `uses` of `what`, in the user's words, an element without a name by its kind as the notations of
+/// `uis` name it.
+fn uses_said(uis: &[&'static dyn NotationUi], store: &Store, what: Used, uses: &Uses) -> String {
+    in_use(uis, &InUse { what, uses: profiles::uses_named(store, uses) })
 }
 
 /// The ids of the elements in use.
@@ -132,10 +136,11 @@ fn use_ids(store: &Store, uses: &Uses) -> Vec<Uuid> {
     uses.elements().into_iter().filter_map(|e| store.uuid(e).ok()).collect()
 }
 
-/// Why `obj` may not be removed for its uses, in the user's words; none when the uses allow it.
-pub(crate) fn removal_refusal(store: &Store, obj: Obj) -> Option<String> {
+/// Why `obj` may not be removed for its uses, in the user's words, an element without a name by its
+/// kind as the notations of `uis` name it; none when the uses allow it.
+pub(crate) fn removal_refusal(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<String> {
     match profiles::removal_problem(store, obj)?.reason? {
-        archforge_engine::Reason::InUse(used) => Some(in_use(&used)),
+        archforge_engine::Reason::InUse(used) => Some(in_use(uis, &used)),
         _ => None,
     }
 }
@@ -620,7 +625,7 @@ pub(crate) fn unapply_profile(cx: &mut Ctx, package: Uuid, profile: Uuid) {
         let uses = profiles::unapply_uses(store, pk, pr);
         (!uses.is_empty()).then(|| ProfileRefusal {
             owner: package,
-            why: uses_said(store, Used::ProfileIn { profile: name(store, pr), package: name(store, pk) }, &uses),
+            why: uses_said(cx.notation_uis, store, Used::ProfileIn { profile: name(store, pr), package: name(store, pk) }, &uses),
             uses: use_ids(store, &uses),
         })
     });
@@ -910,7 +915,7 @@ fn set_extends(cx: &mut Ctx, s: Uuid, names: &[String], dropped: Option<&str>) {
         let uses = profiles::extension_uses(store, st, metaclass);
         (!uses.is_empty()).then(|| ProfileRefusal {
             owner: s,
-            why: uses_said(store, Used::Extension { stereotype: name(store, st), metaclass: m.to_string() }, &uses),
+            why: uses_said(cx.notation_uis, store, Used::Extension { stereotype: name(store, st), metaclass: m.to_string() }, &uses),
             uses: use_ids(store, &uses),
         })
     });
@@ -939,7 +944,7 @@ fn move_stereotype(cx: &mut Ctx, s: Uuid, to: Uuid) {
         let uses = profiles::stereotype_uses(store, st);
         (!uses.is_empty()).then(|| ProfileRefusal {
             owner: s,
-            why: uses_said(store, Used::Moved(name(store, st)), &uses),
+            why: uses_said(cx.notation_uis, store, Used::Moved(name(store, st)), &uses),
             uses: use_ids(store, &uses),
         })
     });
@@ -1083,6 +1088,8 @@ mod tests {
     /// German; a kind the catalogues don't name is an element.
     #[test]
     fn an_unnamed_element_in_use_is_said_by_its_kind() {
+        // The app's shell registers its notations' catalogues, whose rows this says.
+        let _shell = crate::Shell::new(crate::Services::default());
         let unnamed = |kind| Named::Unnamed { kind };
         let said = |names: Vec<Named>| {
             let n = names.len();
@@ -1112,6 +1119,8 @@ mod tests {
     /// kind words take; never by an id or an empty name (AR-808).
     #[test]
     fn a_literal_valued_names_its_element_by_its_kind_or_none() {
+        // The app's shell registers its notations' catalogues, whose rows this says.
+        let _shell = crate::Shell::new(crate::Services::default());
         use archforge_engine::{AppliedTo, LiteralValued};
         let said = |element| {
             let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Entity".into(), element };
@@ -1156,6 +1165,8 @@ mod tests {
     /// English and in German.
     #[test]
     fn the_delete_dialog_names_an_unnamed_element_by_its_kind() {
+        // The app's shell registers its notations' catalogues, whose rows this says.
+        let _shell = crate::Shell::new(crate::Services::default());
         let mut n: u128 = 0;
         let ids = Box::new(move || {
             n += 1;
@@ -1175,7 +1186,7 @@ mod tests {
         let order = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
         for (language, said) in [("en", "«Trace» on an association"), ("de", "«Trace» auf eine Assoziation")] {
             set_language(language);
-            assert_eq!(crate::uml_stereotypes::going_along(st, order), [said], "{language}");
+            assert_eq!(crate::uml_stereotypes::going_along(crate::notation_ui::UIS, st, order), [said], "{language}");
         }
         set_language("en");
     }

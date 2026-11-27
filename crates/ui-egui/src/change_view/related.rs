@@ -82,7 +82,7 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &U
             continue;
         }
         let Some(row) = shell.versions.changes.get(*at).cloned() else { continue };
-        let name = row.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| kind_label(universe, row.class));
+        let name = row.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| kind_label(shell.notation_uis, universe, row.class));
         let (said, go) = (sentence(*kind, &name), fmt(&tr("Go to {name}"), &[("name", &name)]));
         let g = ux::galley(&paint, &go, types::UI_STRONG, p.accent, Some(LINK.min(room / 2.0)));
         let link = Rect::from_min_size(pos2(right - g.size().x, mid - g.size().y / 2.0), g.size());

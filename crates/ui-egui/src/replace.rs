@@ -15,7 +15,7 @@ use archforge_notations::Session;
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::{fmt, tr};
 use crate::leaving::{Cleared, Leaving};
-use crate::{BranchSwitch, SaveState, SavedBy, Shell, VersionRead, chat_panel, open_repair};
+use crate::{BranchSwitch, SaveState, SavedBy, Shell, VersionRead, chat_panel};
 
 /// The most seconds reading a job back may take before what happened counts as unknown.
 pub const READ_BACK_LIMIT: u64 = 30;
@@ -183,7 +183,7 @@ impl Shell {
         self.begin_hold()?;
         let by = SavedBy::Person(self.state.user_name.clone());
         let dates = (saved_at.to_string(), crate::restore_ask::asked_at(self));
-        let job = host.restore_job(&path, commit.to_string(), dates, by, open_repair);
+        let job = host.restore_job(&path, commit.to_string(), dates, by, Box::new(self.open_repair()));
         self.start_replacing(host.read_version(&path, commit.to_string()), Some(job), None, cleared);
         Ok(())
     }
@@ -445,7 +445,7 @@ impl Shell {
     /// holds diagrams of kinds Archforge does not support.
     pub(crate) fn build(&self, rows: &Rows) -> Result<Session, String> {
         let Some(source) = self.services.ids.clone() else { return Err(tr("The host gives no ids for the model's elements")) };
-        archforge_notations::session_from_rows_repaired(rows, Box::new(move || source()), open_repair).map_err(crate::open_refusal)
+        archforge_notations::session_from_rows_repaired(rows, Box::new(move || source()), self.open_repair()).map_err(crate::open_refusal)
     }
 
     /// Ends the operation with the session as it was, saying `why` when given. The same session

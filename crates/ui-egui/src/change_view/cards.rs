@@ -11,6 +11,7 @@ use crate::Shell;
 use crate::explorer::scroll_tree;
 use crate::i18n::{fmt, tr};
 use crate::model_words::{kind_label, literal_label, property_label};
+use crate::notation_ui::NotationUi;
 use crate::settings::control;
 use crate::ux::{self, Palette, types};
 use crate::version_details::{MARGIN, page_keys, scroll_keys};
@@ -41,7 +42,7 @@ const AFTER_LIST: f32 = 7.0;
 pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, sides: &ElementSides) {
     let Some(universe) = shell.session.as_ref().map(|s| s.doc().universe().clone()) else { return };
     let head = head_before(shell);
-    let said = summary::words(&universe, sides, shell.versions.compare_failed.is_none());
+    let said = summary::words(shell.notation_uis, &universe, sides, shell.versions.compare_failed.is_none());
     let whole = (r.width() - 2.0 * MARGIN).max(0.0);
     let body = summary::laid_out(ui.painter(), p, &said, whole);
     let tall = summary::height(&body);
@@ -117,7 +118,7 @@ fn card(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (b
     }
     let x = line.left() + INSET - MARK + if marked { MARK } else { 0.0 };
     let name = card.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
-    let kind = kind_label(universe, card.class);
+    let kind = kind_label(shell.notation_uis, universe, card.class);
     let room = Some((line.right() - 8.0 - x).max(0.0));
     ux::text(&paint, pos2(x, line.top() + 4.0), &kind.to_uppercase(), types::EYEBROW_SMALL, p.text_secondary, room);
     ux::text(&paint, pos2(x, line.top() + 19.0), &name, types::SECTION, p.text, room);
@@ -180,7 +181,7 @@ fn lists(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (
                     mark(&paint, p, row, before);
                 }
                 let x = body.left() + INSET + if item.change.is_some() { MARK } else { 0.0 };
-                let words = row_words(universe, list.kind, item);
+                let words = row_words(shell.notation_uis, universe, list.kind, item);
                 ux::text_mid(&paint, x, row.center().y, &words, types::UI, p.text, Some((row.right() - 8.0 - x).max(0.0)));
                 let said = item.change.map_or_else(|| format!("{heading}, {words}"), |c| format!("{heading}, {words}, {}", kind_look(c, p).0));
                 let id = format!("workspace.change-view.{side}.list.{l}.{i}");
@@ -206,8 +207,9 @@ fn heading(kind: ListKind) -> String {
 
 /// What a row of a list of `kind` says in the language shown: one with no name goes by its kind, a
 /// relationship by what it joins to as well, and what isn't there is said to be missing, in words.
-fn row_words(universe: &Universe, kind: ListKind, row: &ListRow) -> String {
-    let name = said(&row.name).unwrap_or_else(|| kind_label(universe, row.class));
+/// A kind is said as the notations of `uis` say it.
+fn row_words(uis: &[&'static dyn NotationUi], universe: &Universe, kind: ListKind, row: &ListRow) -> String {
+    let name = said(&row.name).unwrap_or_else(|| kind_label(uis, universe, row.class));
     match &row.to {
         Some((_, to)) if kind == ListKind::Relationships => {
             let to = said(to).unwrap_or_else(|| tr("Unnamed"));

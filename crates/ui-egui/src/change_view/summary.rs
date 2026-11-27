@@ -13,6 +13,7 @@ use super::cards::worded;
 use crate::Shell;
 use crate::i18n::{fmt, tr, trn};
 use crate::model_words::{kind_label, property_label};
+use crate::notation_ui::NotationUi;
 use crate::settings::control;
 use crate::ux::{self, Palette, types};
 
@@ -36,8 +37,9 @@ pub(super) struct Words {
 }
 
 /// What to say of `sides`. `listed` says the list of changes vouches that the element changed: a
-/// failed list doesn't, so the summary then speaks only of what the cards hold.
-pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> Words {
+/// failed list doesn't, so the summary then speaks only of what the cards hold. A kind is said as
+/// the notations of `uis` say it.
+pub(super) fn words(uis: &[&'static dyn NotationUi], universe: &Universe, sides: &ElementSides, listed: bool) -> Words {
     let (Some(was), Some(is)) = (&sides.before, &sides.after) else {
         let (head, body) = if sides.before.is_none() {
             (tr("This element was added"), tr("It is only on the After side, so there is nothing to compare."))
@@ -46,7 +48,7 @@ pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> 
         };
         return Words { head, body };
     };
-    let mut said = differences(universe, (was, is), &sides.fields);
+    let mut said = differences(uis, universe, (was, is), &sides.fields);
     let owner = sides.lists.after.iter().any(|l| l.kind == ListKind::Ownership && l.rows.iter().any(|r| r.change.is_some()));
     let (members, relationships) = (sides.lists.member_changes, sides.lists.relationship_changes);
     if said.is_empty() && !owner && members == 0 && relationships == 0 {
@@ -72,15 +74,16 @@ pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> 
     Words { head, body: joined(&said) }
 }
 
-/// One whole sentence for each thing that differs between the cards, in the order the cards show them.
-fn differences(universe: &Universe, (was, is): (&ElementCard, &ElementCard), fields: &[CardField]) -> Vec<String> {
+/// One whole sentence for each thing that differs between the cards, in the order the cards show
+/// them, a kind as the notations of `uis` say it.
+fn differences(uis: &[&'static dyn NotationUi], universe: &Universe, (was, is): (&ElementCard, &ElementCard), fields: &[CardField]) -> Vec<String> {
     let name = |card: &ElementCard| short(&card.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed")));
     let mut said = Vec::new();
     if is.renamed_from(was) {
         said.push(from_to(&tr("The name changed from {from} to {to}."), &name(was), &name(is)));
     }
     if was.class != is.class {
-        said.push(from_to(&tr("The kind changed from {from} to {to}."), &kind_label(universe, was.class), &kind_label(universe, is.class)));
+        said.push(from_to(&tr("The kind changed from {from} to {to}."), &kind_label(uis, universe, was.class), &kind_label(uis, universe, is.class)));
     }
     said.extend(fields.iter().filter(|f| f.changed).map(|f| field_said(universe, f)));
     said

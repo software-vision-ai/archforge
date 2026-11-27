@@ -1174,7 +1174,7 @@ fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
     // What its notation keeps (UML's package Types with the built-in types) is said, not asked.
-    if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(store, e)) {
+    if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(cx.notation_uis, store, e)) {
         cx.canvas.notice = Some(why);
         cx.canvas.menu = None;
         return;
@@ -1182,7 +1182,8 @@ fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
     let (relationships, keys, foreign_keys) = crate::notation_ui::of(cx.notation_uis, store, e).map_or((0, 0, 0), |ui| ui.consequences(store, e));
     let diagrams = diagrams_showing(store, e);
     let along = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.goes_along(store, e)).unwrap_or_default();
-    let applications = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.applications_along(store, e)).unwrap_or_default();
+    let applications =
+        crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.applications_along(cx.notation_uis, store, e)).unwrap_or_default();
     // A nested package hands what it holds up: the dialog says where, and so does the toast.
     let hands_to = crate::notation_ui::of(cx.notation_uis, store, e)
         .and_then(|ui| Some((archforge_core::name_of(store, ui.hands_up(store, e)?), ui.has_children(store, e))));

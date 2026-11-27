@@ -5,14 +5,16 @@
 //!
 //! The catalogues hold a row for every property a card shows and every literal in the model area
 //! (the core, ER and UML; a diagram's own are no model words). Kind words go only to the classes
-//! the core and the notations create ([`NotationUi::created_classes`](crate::notation_ui::NotationUi::created_classes)), as the catalogues stay
+//! the core and the notations the shell was given create ([`NotationUi::created_classes`](crate::notation_ui::NotationUi::created_classes)), as the catalogues stay
 //! smaller that way, and to a package's default-diagram binding, the one class of the diagrams a
 //! comparison lists as the model's; the rest say Element.
 
 use archforge_mof::{ClassId, DataId, DataKind, PropId, Universe};
 
 use crate::i18n::tr;
-use crate::notation_ui::{UIS, of_class};
+#[cfg(test)]
+use crate::notation_ui::UIS;
+use crate::notation_ui::{NotationUi, of_class};
 
 /// The classes the core creates, the only ones beside those the notations create
 /// ([`NotationUi::created_classes`](crate::notation_ui::NotationUi::created_classes)) that get a kind word of their own. A new `create` call by
@@ -21,12 +23,12 @@ use crate::notation_ui::{UIS, of_class};
 /// a default value) is listed by hand.
 const CORE_KINDS: &[ClassId] = &[archforge_core::LINK, archforge_core::MODEL, archforge_core::SKILL, archforge_core::TAG];
 
-/// Whether `class` gets a kind word of its own: the core creates it, or its notation does.
-fn is_kind(class: ClassId) -> bool {
-    CORE_KINDS.contains(&class) || of_class(UIS, class).is_some_and(|ui| ui.created_classes().contains(&class))
+/// Whether `class` gets a kind word of its own: the core creates it, or its notation of `uis` does.
+fn is_kind(uis: &[&'static dyn NotationUi], class: ClassId) -> bool {
+    CORE_KINDS.contains(&class) || of_class(uis, class).is_some_and(|ui| ui.created_classes().contains(&class))
 }
 
-/// Every class that gets a kind word of its own, the core's and each registered notation's.
+/// Every class that gets a kind word of its own, the core's and each notation's of the app.
 #[cfg(test)]
 pub(crate) fn kinds() -> Vec<ClassId> {
     CORE_KINDS.iter().chain(UIS.iter().flat_map(|ui| ui.created_classes())).copied().collect()
@@ -77,23 +79,23 @@ pub fn literal_label(universe: &Universe, ty: DataId, index: u32) -> Option<Stri
 }
 
 /// The word Models and Properties use for `class` where it isn't its metamodel's name: its
-/// notation's own ([`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word): a table and its columns, a subtype, an attribute, a
+/// notation's own, of `uis` ([`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word): a table and its columns, a subtype, an attribute, a
 /// literal), and the word a comparison says for a package's default-diagram binding.
-fn notation_word(class: ClassId) -> Option<String> {
+fn notation_word(uis: &[&'static dyn NotationUi], class: ClassId) -> Option<String> {
     if class == archforge_diagram::DEFAULT_DIAGRAM_BINDING {
         return Some(tr("Default diagram"));
     }
-    of_class(UIS, class)?.kind_word(class)
+    of_class(uis, class)?.kind_word(class)
 }
 
-/// The kind word of `class` in this thread's language: the notation's own where it has one, the
-/// metamodel's name for the rest of the kinds the core and the notations create, otherwise
-/// Element.
-pub fn kind_label(universe: &Universe, class: ClassId) -> String {
-    if let Some(word) = notation_word(class) {
+/// The kind word of `class` in this thread's language, as the notations of `uis` (the shell's)
+/// say it: its notation's own where it has one, the metamodel's name for the rest of the kinds the
+/// core and the notations create, otherwise Element.
+pub fn kind_label(uis: &[&'static dyn NotationUi], universe: &Universe, class: ClassId) -> String {
+    if let Some(word) = notation_word(uis, class) {
         return word;
     }
-    match universe.class(class).filter(|_| is_kind(class)) {
+    match universe.class(class).filter(|_| is_kind(uis, class)) {
         Some(known) => tr(&words(&known.name)),
         None => tr("Element"),
     }
@@ -115,6 +117,6 @@ pub(crate) fn texts() -> Vec<String> {
             }
         }
     }
-    all.extend(kinds().into_iter().filter(|c| notation_word(*c).is_none()).filter_map(|c| universe.class(c)).map(|c| words(&c.name)));
+    all.extend(kinds().into_iter().filter(|c| notation_word(UIS, *c).is_none()).filter_map(|c| universe.class(c)).map(|c| words(&c.name)));
     all
 }

@@ -270,8 +270,10 @@ impl NotationUi for ErUi {
                 entry(&icons::COLUMN, 3, name(store, o), place(tr("Column"), table))
             }
             c if c == archforge_er::RELATIONSHIP => {
+                // The search asks this of the notation of `o`, which for a relationship of ER's is
+                // ER: its label is asked of ER alone.
                 let ends = relationship_ends(store, o);
-                entry(&icons::LINK, 4, crate::notation_ui::label(crate::notation_ui::UIS, store, o), place(tr("Relationship"), ends))
+                entry(&icons::LINK, 4, crate::notation_ui::label(&[&ErUi], store, o), place(tr("Relationship"), ends))
             }
             c if c == archforge_er::DOMAIN => entry(&icons::DOMAIN, 5, name(store, o), place(tr("Domain"), schema_name(o))),
             c if c == archforge_er::ENUM_TYPE => entry(&icons::ENUM, 5, name(store, o), place(tr("Enum type"), schema_name(o))),
@@ -294,9 +296,10 @@ impl NotationUi for ErUi {
     /// table, a foreign key the rules refuse, a key column that may be null, a key whose columns
     /// the rules refuse, and the rest the rules find; a column's or a key's on its table. A rule's
     /// problem that is typed (a key's columns, a column's enum default, a check, an index's columns,
-    /// a foreign key, an enum type's literals) is said by its reason in the user's words, the English
-    /// only for a reason the interface doesn't say; a domain's problem is not typed yet.
-    fn problems(&self, store: &Store, out: &mut Vec<Problem>) {
+    /// a foreign key, an enum type's literals) is said by its reason in the words of the notations of
+    /// `uis`, the English only for a reason the interface doesn't say; a domain's problem is not typed
+    /// yet.
+    fn problems(&self, uis: &[&'static dyn NotationUi], store: &Store, out: &mut Vec<Problem>) {
         for o in store.alive() {
             let Ok(class) = store.class_of(o) else { continue };
             if class == archforge_er::ENTITY {
@@ -311,7 +314,7 @@ impl NotationUi for ErUi {
                 for k in r::primary_key_of(store, o).into_iter().chain(r::unique_constraints(store, o)) {
                     let primary = store.class_of(k).ok() == Some(archforge_er::PRIMARY_KEY);
                     if let Some(p) = r::key_columns_problem(store, o, &r::key_columns(store, k), primary) {
-                        let said = crate::panels::said(crate::notation_ui::UIS, &p.reason()).unwrap_or_else(|| p.said());
+                        let said = crate::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &said)]) });
                     }
                 }
@@ -323,13 +326,13 @@ impl NotationUi for ErUi {
                 }
                 for a in children(store, o, archforge_er::entity::ATTRIBUTE) {
                     if let Some(p) = r::enum_default_problem(store, a) {
-                        let said = crate::panels::said(crate::notation_ui::UIS, &p.reason()).unwrap_or_else(|| p.said());
+                        let said = crate::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, a)), ("problem", &said)]) });
                     }
                 }
                 for c in r::checks_of(store, o) {
                     if let Some(p) = r::check_problem(&r::text_of(store, c, archforge_er::check_constraint::EXPRESSION)) {
-                        let said = crate::panels::said(crate::notation_ui::UIS, &p.reason()).unwrap_or_else(|| p.said());
+                        let said = crate::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem {
                             element: o,
                             text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, c)), ("problem", &said)]),
@@ -340,7 +343,7 @@ impl NotationUi for ErUi {
                     if let Some(p) = r::index_columns_problem(store, o, &r::index_specs(store, ix)) {
                         // The columns' problem is typed, so it is said in the user's words, the English
                         // only for a reason the interface doesn't say.
-                        let said = crate::panels::said(crate::notation_ui::UIS, &p.reason()).unwrap_or_else(|| p.said());
+                        let said = crate::panels::said(uis, &p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem {
                             element: o,
                             text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, ix)), ("problem", &said)]),
@@ -352,7 +355,7 @@ impl NotationUi for ErUi {
                     let text = match (parts.entity, parts.key) {
                         // A key or a foreign key in no table or schema has no typed reason, so its English.
                         (Some(e), Some(k)) => r::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship)
-                            .map(|p| p.reason().and_then(|reason| crate::panels::said(crate::notation_ui::UIS, &reason)).unwrap_or_else(|| p.said())),
+                            .map(|p| p.reason().and_then(|reason| crate::panels::said(uis, &reason)).unwrap_or_else(|| p.said())),
                         _ => Some(tr("lacks its table or its key")),
                     };
                     if let Some(p) = text {
@@ -370,7 +373,7 @@ impl NotationUi for ErUi {
             {
                 // The literals' rule is typed, so it is said in the user's words, the English only
                 // for a reason the interface doesn't say.
-                let said = crate::panels::said(crate::notation_ui::UIS, &p.reason).unwrap_or_else(|| p.to_string());
+                let said = crate::panels::said(uis, &p.reason).unwrap_or_else(|| p.to_string());
                 out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, o)), ("problem", &said)]) });
             }
             if class == archforge_er::RELATIONSHIP {
@@ -540,8 +543,8 @@ impl NotationUi for ErUi {
     }
 
     /// ER's own refusals: those its commands alone give, in the ER editors' words.
-    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
-        crate::er_said::said(reason)
+    fn said(&self, uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        crate::er_said::said(uis, reason)
     }
 
     /// No schema or no table yet, for the ER commands that need one.

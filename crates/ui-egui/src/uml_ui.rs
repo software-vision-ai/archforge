@@ -822,9 +822,9 @@ impl NotationUi for UmlUi {
 
     /// The package Types stays while it keeps the built-in types, which Models does not show: said
     /// under the tree before anything is asked.
-    fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {
+    fn remove_refusal(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<String> {
         // A profile, a stereotype or a package whose profiles its elements use stays (AR-134).
-        if let Some(why) = crate::uml_profiles::removal_refusal(store, obj) {
+        if let Some(why) = crate::uml_profiles::removal_refusal(uis, store, obj) {
             return Some(why);
         }
         let package = class(store, obj) == Some(archforge_uml::PACKAGE);
@@ -867,8 +867,8 @@ impl NotationUi for UmlUi {
     }
 
     /// The stereotype applications that go with `obj` and what it takes along (AR-135).
-    fn applications_along(&self, store: &Store, obj: Obj) -> Vec<String> {
-        crate::uml_stereotypes::going_along(store, obj)
+    fn applications_along(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Vec<String> {
+        crate::uml_stereotypes::going_along(uis, store, obj)
     }
 
     /// Whether `obj` has rows under it: a package what it holds (the built-in types in Types, which
@@ -1259,8 +1259,8 @@ impl NotationUi for UmlUi {
     }
 
     /// UML's own refusals: those its commands alone give, in its editors' and the canvas's words.
-    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
-        crate::uml_said::said(reason)
+    fn said(&self, uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        crate::uml_said::said(uis, reason)
     }
 
     /// No element yet of the kind a UML command needs: a package, a classifier, a relationship, a

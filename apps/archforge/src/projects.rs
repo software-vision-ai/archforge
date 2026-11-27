@@ -133,8 +133,9 @@ pub struct RestoreRequest {
     /// When the restore was asked for, as the list says it, for the name unsaved work is kept under.
     pub before_at: String,
     pub by: SavedBy,
-    /// What an opening does to a model, applied to both sides of the comparison.
-    pub repair: fn(&mut archforge_mof::Store),
+    /// What an opening does to a model with the shell's notations, applied to both sides of the
+    /// comparison.
+    pub repair: archforge_ui_egui::Repair,
 }
 
 /// How a restore that did not fail went.
@@ -984,7 +985,7 @@ impl ProjectHost for Projects {
         commit: String,
         (saved_at, before_at): (String, String),
         by: SavedBy,
-        repair: fn(&mut archforge_mof::Store),
+        repair: archforge_ui_egui::Repair,
     ) -> ReplacementJob {
         self.restore_job_within(project, RestoreRequest { commit, saved_at, before_at, by, repair }, RESTORE_LIMIT)
     }
@@ -1969,7 +1970,7 @@ fn restore(
     // is never written in (AR-551).
     known_kinds_in(&version)?;
     let current = project.read_model(&schema).map_err(|e| RestoreError::Failed(e.to_string()))?;
-    if !differs(archforge_notations::differences::classified(&current, &version, request.repair))? {
+    if !differs(archforge_notations::differences::classified(&current, &version, &request.repair))? {
         return Ok(Restored::Same { kept_work: false });
     }
     let replaced = replace(inner, project, &schema, &request, &version, watch);
@@ -3909,7 +3910,12 @@ mod tests {
     /// A restore of `commit`, repaired as an opening repairs a model.
     fn restoring(commit: &str) -> RestoreRequest {
         let (saved_at, before_at) = (SAVED_AT.into(), BEFORE_AT.into());
-        RestoreRequest { commit: commit.into(), saved_at, before_at, by: nobody(), repair: archforge_ui_egui::open_repair }
+        RestoreRequest { commit: commit.into(), saved_at, before_at, by: nobody(), repair: Box::new(opening_repair()) }
+    }
+
+    /// What an opening does to a model with the app's notations, as a shell hands it to the host.
+    fn opening_repair() -> impl Fn(&mut archforge_mof::Store) + Copy + Send + 'static {
+        archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default()).open_repair()
     }
 
     /// The commit of the `n`th newest version of the open project.
@@ -4081,7 +4087,7 @@ mod tests {
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 })).unwrap();
         let (tables, junctions) = archforge_notations::storage();
         let short = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
-        let fitted = archforge_notations::session_from_rows_repaired(&short, counted_ids(), archforge_ui_egui::open_repair).unwrap();
+        let fitted = archforge_notations::session_from_rows_repaired(&short, counted_ids(), opening_repair()).unwrap();
         let fitted = archforge_mof::rows::snapshot(fitted.doc(), &tables, &junctions).unwrap();
         assert_ne!(short, fitted, "the repair changes the box");
         (short, fitted)
@@ -4431,8 +4437,7 @@ mod tests {
         switched(&host.inner, &path);
         assert!(matches!(ran(&(stale.run)()), Err(JobFailure::Failed(why)) if why == not_going_ahead()));
         assert_eq!(sandbox.messages(), messages);
-        let fresh =
-            ProjectHost::restore_job(&**host, &path, old.clone(), (SAVED_AT.into(), BEFORE_AT.into()), nobody(), archforge_ui_egui::open_repair);
+        let fresh = ProjectHost::restore_job(&**host, &path, old.clone(), (SAVED_AT.into(), BEFORE_AT.into()), nobody(), Box::new(opening_repair()));
         assert!(matches!(ran(&(fresh.run)()), Ok(())), "a job asked for now runs");
         assert_eq!(work(host), model("a"));
         assert_eq!(close(host, &path), Ok(()));
