@@ -22,6 +22,7 @@ archforge-notations.workspace = true
 archforge-mof.workspace = true
 archforge-project.workspace = true
 archforge-secrets.workspace = true
+archforge-shell-api.workspace = true
 archforge-ui-egui.workspace = true
 getrandom.workspace = true
 eframe.workspace = true

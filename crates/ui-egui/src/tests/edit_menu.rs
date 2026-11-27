@@ -400,7 +400,7 @@ fn command_a_on_the_canvas_selects_what_the_diagram_draws() {
 fn copy_takes_text_selected_on_a_label() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services::default());
+        let mut shell = Shell::new(Services::default(), &crate::tests::SCREENS);
         (shell.state.theme, shell.in_window_menu) = (theme, true);
         // The label lies where the Edit menu's Copy row opens, so the row's press is over its words.
         let words = "Selected words";
@@ -1238,7 +1238,7 @@ fn a_press_on_the_strip_beside_the_bar_only_closes_the_menu() {
 fn a_press_on_a_control_across_the_bars_row_only_closes_the_menu() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services::default());
+        let mut shell = Shell::new(Services::default(), &crate::tests::SCREENS);
         (shell.state.theme, shell.in_window_menu) = (theme, true);
         let clicks = std::rc::Rc::new(std::cell::Cell::new(0));
         let counted = clicks.clone();

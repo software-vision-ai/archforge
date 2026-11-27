@@ -106,8 +106,10 @@ pub mod workspace;
 
 /// The automation registry, from the shell's interfaces, under the path the shell's code names it by.
 pub use archforge_shell_api::widgets;
+pub use er_ui::ER;
 pub use fonts::{FontEntry, FontSource};
 pub use state::UiState;
+pub use uml_ui::UML;
 
 /// Host functions the shell may call; each is optional, and a missing one degrades rather than
 /// failing.
@@ -1029,18 +1031,19 @@ pub(crate) fn typing_unkept(panels: &panels::State, canvas: &canvas::State) -> b
 }
 
 impl Shell {
-    /// A shell over the host's `services`, on Home, with the notations it knows
-    /// ([`notation_ui::UIS`]) and their catalogues and its own registered.
-    pub fn new(services: Services) -> Self {
-        let notation_uis = notation_ui::UIS;
+    /// A shell over the host's `services`, on Home, with the notations and the diagram kinds of the
+    /// screens parts the app registered (`screens`), each notation's state made from them, and
+    /// their catalogues and its own registered.
+    pub fn new(services: Services, screens: &'static archforge_shell_api::screens::ScreensRegistry) -> Self {
+        let notation_uis = screens.notation_uis();
         // The catalogues go in with the notations the shell knows, before anything is said.
-        i18n::register_notations(notation_uis);
+        i18n::register_notations(screens.catalogues());
         Self {
             services,
             state: UiState::default(),
             frames: 0,
             registry: widgets::Registry::default(),
-            kinds: kinds::KINDS,
+            kinds: screens.kinds(),
             notation_uis,
             fonts: fonts::FontState::default(),
             #[cfg(test)]

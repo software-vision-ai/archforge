@@ -74,7 +74,7 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   `popover_takes_keys`, each asked of the kinds it is handed), is in
   `crates/shell-api/src/kinds.rs`, beside what a frame's drawing reads (`canvas::Drawing`) and
   what a press asks for (`editing::Action`). A notation adds a diagram kind by implementing
-  `DiagramKind`; the shell's list of kinds (`KINDS`, `crates/ui-egui/src/kinds.rs`) registers it. The refusal words
+  `DiagramKind`; the app registers it with its notation's screens part (`ScreensPart`, `crates/shell-api/src/screens.rs`) in its static list of parts (`SCREENS`, `apps/archforge/src/main.rs`), which it gives every shell (`Shell::new`). The refusal words
   (`panels::refusal`, `said`, `a_kind`, `engine_said::disabled`, in `crates/shell-api/src/`) and
   Chat's counts of the elements a tool row names (`chat_words::tool_words`, by
   `NotationUi::chat_kind` and `chat_count`) ask the notations they are handed: pass
@@ -82,8 +82,8 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   or what goes with a removal (`NotationUi::said`, `problems`, `remove_refusal`, `consequences`),
   for the reasons and kinds they name inside their sentences; a model's kind words
   (`model_words::kind_label`); and what an opening does to a model (`Shell::open_repair`, which
-  the comparisons' threads and the host's restore take). Nothing reads the app's lists
-  (`notation_ui::UIS`, `kinds::KINDS`) but `Shell::new`, which gives them to the shell, and tests. The delete dialog says what goes with a
+  the comparisons' threads and the host's restore take). Only tests read the app's lists
+  (`notation_ui::UIS`, `kinds::KINDS`); a shell takes its own from the screens parts it is given. The delete dialog says what goes with a
   removal as the element's notation counts and words it (`NotationUi::consequences`, one finished
   sentence each, carried in `explorer::Delete`); the shell adds only the diagrams it disappears
   from and what happens to what it holds, and asks only when there is something to say.
@@ -108,7 +108,7 @@ after every visible change, in both appearances, beside the design.
   notation, `crates/ui-egui/src/i18n/er/<code>.tsv` and `crates/ui-egui/src/i18n/uml/<code>.tsv`,
   which the notation hands over (`NotationUi::catalogues`). The shell's own is registered before
   the first lookup; a shell registers those of the notations it is given as it sets them up
-  (`Shell::new`, `i18n::register_notations`), so nothing a notation says is looked up before them.
+  (`Shell::new`, from its screens parts, `i18n::register_notations`), so nothing a notation says is looked up before them.
   A test that says a notation's words without a shell makes one first, as the app does. A row only one notation's screens name goes in that notation's table;
   a row the shell names, or both notations, goes in the shell's. Each is keyed by the English
   text, four tab-separated columns: kind, context, key, text. All seven languages are complete,

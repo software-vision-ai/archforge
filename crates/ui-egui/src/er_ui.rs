@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 
 use archforge_er::rules as r;
 use archforge_mof::{ClassId, Obj, Store, Uuid, Value};
+use archforge_shell_api::screens::ScreensPart;
 use egui::Rect;
 use serde_json::json;
 
@@ -19,6 +20,10 @@ use crate::notation_ui::{Added, ChatKind, Entry, Layer, NotationState, NotationU
 use crate::panels::{FIELD, Subject};
 use crate::problems::Problem;
 use crate::ux::{Palette, icons};
+
+/// ER's screens part, as the app registers it (`archforge_shell_api::screens`): ER in the shell
+/// and its diagram kind. The shell exports it until ER's screens have a crate of their own.
+pub const ER: ScreensPart = ScreensPart { ui: &ErUi, kinds: &[&crate::er_kind::ErKind] };
 
 /// ER in the shell.
 pub(crate) struct ErUi;
