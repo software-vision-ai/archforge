@@ -19,9 +19,9 @@ use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 pub(crate) use archforge_shell_api::canvas::{
-    CARD_FIRST_ROW, CARD_HEADER, CARD_INSET, CARD_ROW, CARD_TEXT, COMPARTMENT_GAP, DETAIL_ZOOM, Look, TOAST_FRAMES, ZOOM_RANGE, ZOOM_STEP,
-    card_height, card_palette, colour, compartment_top, dashed_rect, diagram_bounds, edge_points, element_of, eyebrow_case, fit, grid, ink_for,
-    line_mark, look_of, name_from_afar, open_cx, real, refs, row_at, row_top, say, with_draft, zoom_by,
+    CARD_FIRST_ROW, CARD_HEADER, CARD_INSET, CARD_ROW, CARD_TEXT, DETAIL_ZOOM, Look, TOAST_FRAMES, ZOOM_RANGE, ZOOM_STEP, card_height, card_palette,
+    colour, dashed_rect, diagram_bounds, edge_points, element_of, eyebrow_case, fit, grid, ink_for, line_mark, look_of, name_from_afar, open_cx,
+    real, refs, row_at, say, with_draft, zoom_by,
 };
 pub use archforge_shell_api::canvas::{CardLabel, CardPart, EndText, MinimapDrag, State, Toast, Tool, self_loop};
 pub(crate) use archforge_shell_api::canvas::{Drawing, END_HANDLE, View, along, end_handles_at, exit_point, nesting_route};

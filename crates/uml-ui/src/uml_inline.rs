@@ -18,26 +18,26 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::canvas::{CARD_ROW, DETAIL_ZOOM, View};
-use crate::cx::{Ctx, Request};
-use crate::i18n::{fmt, tr};
-use crate::panels::control_cx;
 use crate::uml_panel::{MemberEdit, MemberKind};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
-use crate::widgets;
+use archforge_shell_api::canvas::{CARD_ROW, DETAIL_ZOOM, View};
+use archforge_shell_api::cx::{Ctx, Request};
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::panels::control_cx;
+use archforge_shell_api::widgets;
 
 /// Which field of the row has the keyboard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InlineField {
+pub enum InlineField {
     Name,
     Type,
 }
 
 /// A member being typed on its class's card.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct InlineMember {
+pub struct InlineMember {
     /// The member as Properties' editor holds it: what the row does not show is kept as it is.
     pub edit: MemberEdit,
     /// The type as typed: a type's name, a built-in one or the model's own, or empty for none.
@@ -104,7 +104,7 @@ fn resolve(store: &Store, inline: &InlineMember) -> Result<String, String> {
 /// false when the card cannot hold one (no card of the class on the diagram, the diagram drawn
 /// below the zoom at which cards show their rows, or, for a new member, a card that lists only
 /// some of its rows, whose end is not the members' end); the caller opens Properties' editor then.
-pub(crate) fn open(cx: &mut Ctx, class: Uuid, kind: MemberKind, target: Option<Uuid>) -> bool {
+pub fn open(cx: &mut Ctx, class: Uuid, kind: MemberKind, target: Option<Uuid>) -> bool {
     if cx.canvas.zoom < DETAIL_ZOOM {
         return false;
     }
@@ -129,7 +129,7 @@ pub(crate) fn open(cx: &mut Ctx, class: Uuid, kind: MemberKind, target: Option<U
         uml.member = None;
     }
     cx.panels.menu = None;
-    if let Err(e) = crate::panels::run_cx(cx, "view.select", json!({ "ids": [class.to_string()] })) {
+    if let Err(e) = archforge_shell_api::panels::run_cx(cx, "view.select", json!({ "ids": [class.to_string()] })) {
         cx.canvas.notice = Some(e);
     }
     true
@@ -168,16 +168,16 @@ fn row_place(cx: &Ctx, store: &Store, view: View, c: Obj) -> Option<(Rect, f32)>
     let d = archforge_diagram::diagram_of(store, n)?;
     let mut card = cx.session.as_ref()?.view().of_element(store, c)?.card(store, c, d)?;
     let (_, compartment, row) = draft(uml(cx.notation_states)?.inline.as_ref()?, store)?;
-    crate::canvas::with_draft(&mut card, compartment, row);
+    archforge_shell_api::canvas::with_draft(&mut card, compartment, row);
     let index = match row {
         Some(i) => i,
         None => card.compartments.iter().take(compartment + 1).map(Vec::len).sum::<usize>().checked_sub(1)?,
     };
     let mut rect = view.rect(&archforge_diagram::grid::bounds_of(store, n));
     if row.is_none() {
-        rect.max.y = rect.max.y.max(rect.top() + crate::canvas::card_height(&card) * view.zoom);
+        rect.max.y = rect.max.y.max(rect.top() + archforge_shell_api::canvas::card_height(&card) * view.zoom);
     }
-    Some((rect, crate::canvas::row_top(&card, index)?))
+    Some((rect, archforge_shell_api::canvas::row_top(&card, index)?))
 }
 
 /// The row over its card, when one is typed: its fields, the type menu, the details button, the
@@ -211,7 +211,7 @@ pub(crate) fn row(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, view: View) {
     let field_h = (ROW_HEIGHT - 2.0 * INSET) * z;
     let details = Rect::from_min_size(pos2(row.right() - (BUTTON + INSET) * z, inner_top), vec2(BUTTON * z, field_h));
     // The name where a row's text starts, so the draft reads as the row it becomes.
-    let left = card.left() + crate::canvas::CARD_TEXT * z;
+    let left = card.left() + archforge_shell_api::canvas::CARD_TEXT * z;
     let usable = (details.left() - 4.0 * z - left).max(0.0);
     let operation = inline.edit.kind == MemberKind::Operation;
     let literal = inline.edit.kind == MemberKind::Literal;
@@ -300,7 +300,7 @@ pub(crate) fn row(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, view: View) {
     let mut picked = false;
     if cx.panels.menu == Some(menus::INLINE_TYPE) && !literal {
         let choices = crate::uml_panel::choices_for_menu(cx, Some(inline.edit.class));
-        let chosen = crate::panels::menu_noted_cx(cx, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes, &choices.note_parts);
+        let chosen = archforge_shell_api::panels::menu_noted_cx(cx, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes, &choices.note_parts);
         let value = chosen.map(|i| choices.values.get(i).cloned().unwrap_or_default());
         crate::uml_panel::keep_choices(cx, choices);
         if let Some(value) = value {
@@ -327,8 +327,8 @@ pub(crate) fn row(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, view: View) {
     }
     // The in-window Edit menu takes a field's keyboard, by a press away, for its rows to act on it:
     // neither its leaving nor the press commits while the bar holds the field.
-    let left = crate::menu_bar::ends_cx(cx, ui.ctx(), name_eid, name_resp.lost_focus(), name_resp.has_focus())
-        | type_resp.as_ref().is_some_and(|t| crate::menu_bar::ends_cx(cx, ui.ctx(), type_eid, t.lost_focus(), t.has_focus()));
+    let left = archforge_shell_api::menu_bar::ends_cx(cx, ui.ctx(), name_eid, name_resp.lost_focus(), name_resp.has_focus())
+        | type_resp.as_ref().is_some_and(|t| archforge_shell_api::menu_bar::ends_cx(cx, ui.ctx(), type_eid, t.lost_focus(), t.has_focus()));
     let held = cx.menu_bar.held.is_some_and(|h| h == name_eid || h == type_eid);
     if to_details {
         to_properties(cx);
@@ -343,7 +343,7 @@ pub(crate) fn row(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, view: View) {
 
 /// The ink of a draft row's ⋯, one for every kind of member: an attribute's, an operation's and a
 /// literal's rows read alike.
-pub(crate) fn details_ink(p: &Palette) -> ux::Colour {
+pub fn details_ink(p: &Palette) -> ux::Colour {
     p.text_secondary
 }
 
@@ -434,7 +434,7 @@ fn to_properties(cx: &mut Ctx) {
     if let Some(uml) = uml_mut(cx.notation_states) {
         uml.member = Some(edit);
     }
-    cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
+    cx.requests.push(Request::ShowPanel(archforge_shell_api::state::Panel::Properties));
 }
 
 /// The + at the right of each compartment of a selected class's card, which opens a new row there;
@@ -463,8 +463,8 @@ pub(crate) fn add_buttons(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, clip: Rect, 
     for &(kind, key, hint) in adds {
         // A card of one compartment with no row yet (an enumeration without literals) has its
         // first row's place under the header.
-        let first = (card.compartments.len() == 1).then_some(crate::canvas::CARD_FIRST_ROW);
-        let Some(top) = crate::canvas::compartment_top(&card, compartment(kind)).or(first) else { continue };
+        let first = (card.compartments.len() == 1).then_some(archforge_shell_api::canvas::CARD_FIRST_ROW);
+        let Some(top) = archforge_shell_api::canvas::compartment_top(&card, compartment(kind)).or(first) else { continue };
         // A compartment past the card's foot (a card made short) takes its member from the keys.
         if (top + CARD_ROW) * z > rect.height() + z {
             continue;
@@ -485,7 +485,7 @@ pub(crate) fn add_buttons(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, clip: Rect, 
         ux::icon_in(&paint, b.shrink(3.0), &icons::PLUS, p.text_secondary);
         if resp.clicked() && !open(cx, class, kind, None) {
             crate::uml_panel::open(cx, class, kind, None);
-            cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
+            cx.requests.push(Request::ShowPanel(archforge_shell_api::state::Panel::Properties));
         }
     }
 }

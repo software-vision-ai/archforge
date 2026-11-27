@@ -9,8 +9,8 @@
 
 use archforge_engine::{BindingFault, Reason};
 
-use crate::i18n::{fmt, tr, tr_ctx, trn};
-use crate::notation_ui::NotationUi;
+use archforge_shell_api::i18n::{fmt, tr, tr_ctx, trn};
+use archforge_shell_api::notation_ui::NotationUi;
 
 /// A kind of UML element as a refusal names it, with its article where the language has one, as
 /// `archforge_uml`'s commands alone type it; none for another kind.
@@ -47,7 +47,7 @@ pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<S
     Some(match reason {
         Reason::DependsOnItself { kind } => {
             let template = tr("{what} cannot depend on itself.");
-            let what = crate::panels::a_kind(uis, kind)?;
+            let what = archforge_shell_api::panels::a_kind(uis, kind)?;
             // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
             let what = if template.starts_with("{what}") {
                 what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect()
@@ -72,7 +72,7 @@ pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<S
         }
         Reason::HoldsBuiltInName { kind, name } => fmt(
             &tr("The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first."),
-            &[("what", &crate::panels::a_kind(uis, kind)?), ("name", name), ("types", types)],
+            &[("what", &archforge_shell_api::panels::a_kind(uis, kind)?), ("name", name), ("types", types)],
         ),
         Reason::InvalidBinding(BindingFault::Missing) => {
             tr("The package has class diagrams, but none is its default. Choose one of them as its default diagram.")
@@ -331,7 +331,7 @@ fn template_said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<Str
         ),
         Reason::BuiltInTaken { kind, name } => fmt(
             &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type."),
-            &[("what", &crate::panels::a_kind(uis, kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
+            &[("what", &archforge_shell_api::panels::a_kind(uis, kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
         ),
         _ => return None,
     })

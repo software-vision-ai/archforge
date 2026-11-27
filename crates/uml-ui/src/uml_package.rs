@@ -11,14 +11,15 @@ use archforge_diagram::{DIAGRAM, diagram, node};
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke, StrokeKind, pos2, vec2};
 
-use crate::canvas::{
-    CARD_FIRST_ROW, CARD_HEADER, CARD_INSET, CARD_ROW, COMPARTMENT_GAP, CardDrawn, CardLabel, CardPart, DETAIL_ZOOM, Drawing, card_palette,
-    dashed_rect, element_of, name_from_afar,
-};
-use crate::i18n::{fmt, tr};
-use crate::panels::PATH_SEP;
 use crate::ux::{self, Palette, types};
-use crate::widgets::{self, Registry};
+use archforge_shell_api::canvas::{
+    CARD_FIRST_ROW, CARD_HEADER, CARD_INSET, CARD_ROW, COMPARTMENT_GAP, CardLabel, CardPart, DETAIL_ZOOM, Drawing, card_palette, dashed_rect,
+    element_of, name_from_afar,
+};
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::kinds::CardDrawn;
+use archforge_shell_api::panels::PATH_SEP;
+use archforge_shell_api::widgets::{self, Registry};
 
 /// Whether the element `e` is a package, whose card UML draws itself.
 fn is_package(store: &Store, e: Obj) -> bool {
@@ -139,7 +140,7 @@ fn path_badge(paint: &egui::Painter, card: Rect, owners: &[String], z: f32, ink:
 
 /// How a card of a thumbnail is drawn: as the card it stands for is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MiniLook {
+pub enum MiniLook {
     Plain,
     Tinted,
     Tabbed,
@@ -153,7 +154,7 @@ pub(crate) enum MiniLook {
 
 /// One card of a thumbnail, on screen: its look and how many rows each of its compartments has.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct MiniCard {
+pub struct MiniCard {
     pub rect: Rect,
     pub look: MiniLook,
     pub rows: Vec<usize>,
@@ -162,7 +163,7 @@ pub(crate) struct MiniCard {
 /// A diagram scaled into a thumbnail (AR-113): its cards and its lines as they are laid out, and
 /// the scale it was drawn at.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Preview {
+pub struct Preview {
     pub cards: Vec<MiniCard>,
     pub lines: Vec<Vec<Pos2>>,
     pub scale: f32,
@@ -181,8 +182,8 @@ fn leads(store: &Store) -> std::collections::HashMap<Obj, Obj> {
 
 /// `d` scaled to fit `area`, centred, enlarged at most [`PREVIEW_MOST`]: none when it shows
 /// nothing.
-pub(crate) fn preview(store: &Store, notations: &archforge_diagram::ProjectView, d: Obj, area: Rect) -> Option<Preview> {
-    let grid = crate::canvas::grid(store, notations, d);
+pub fn preview(store: &Store, notations: &archforge_diagram::ProjectView, d: Obj, area: Rect) -> Option<Preview> {
+    let grid = archforge_shell_api::canvas::grid(store, notations, d);
     let all = grid.visible(archforge_diagram::Rect::new(-1.0e9, -1.0e9, 2.0e9, 2.0e9));
     let mut boxes: Vec<(Rect, MiniLook, Vec<usize>)> = Vec::new();
     for n in &all.nodes {

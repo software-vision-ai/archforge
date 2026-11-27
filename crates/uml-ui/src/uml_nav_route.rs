@@ -23,19 +23,19 @@ pub(crate) const MAX_ROUTE: usize = 256;
 /// One package entry: the diagram left, the diagram entered, and what a return to the source
 /// needs.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Step {
+pub struct Step {
     /// The diagram the entry left, which a return opens again.
-    pub(crate) source: Uuid,
+    pub source: Uuid,
     /// The diagram the entry opened.
-    pub(crate) destination: Uuid,
+    pub destination: Uuid,
     /// The source's name when it was left, for saying what a return skipped once it is gone.
-    pub(crate) source_name: String,
+    pub source_name: String,
     /// The source's pan and zoom when it was left, for a return to restore; none for an entry made
     /// by zooming in, whose view a return must not restore (AR-668).
-    pub(crate) view: Option<(Vec2, f32)>,
+    pub view: Option<(Vec2, f32)>,
     /// The undo history of the session the entry was made in (`Session::history`): a step of
     /// another history never leads anywhere, since its diagrams belong to another revision.
-    pub(crate) history: u64,
+    pub history: u64,
 }
 
 /// What a return took from a route.
@@ -50,14 +50,14 @@ pub(crate) struct Return {
 
 /// The entries that led to a tab's diagram, oldest first, at most [`MAX_ROUTE`] of them.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct Route {
+pub struct Route {
     steps: VecDeque<Step>,
 }
 
 impl Route {
     /// Records an entry as the newest step, dropping the oldest when the route already holds
     /// [`MAX_ROUTE`]. An entry whose source is its destination records nothing.
-    pub(crate) fn push(&mut self, step: Step) {
+    pub fn push(&mut self, step: Step) {
         if step.source == step.destination {
             return;
         }
@@ -84,8 +84,8 @@ impl Route {
     }
 
     /// The steps, oldest first, left in the route.
-    #[cfg(test)]
-    pub(crate) fn steps(&self) -> impl DoubleEndedIterator<Item = &Step> {
+    #[cfg(feature = "snapshot")]
+    pub fn steps(&self) -> impl DoubleEndedIterator<Item = &Step> {
         self.steps.iter()
     }
 

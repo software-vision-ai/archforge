@@ -6,9 +6,13 @@ mod versions;
 use crate::er_state::er_mut;
 use crate::snapshot;
 use crate::theme::ThemeKind;
-use crate::uml_state::menus;
-use crate::uml_state::uml_mut;
 use crate::{Folder, Services, Shell};
+// UML's screens' modules, as their crate's `snapshot` lists them for the tool.
+use archforge_uml_ui::snapshot::uml_state::{menus, uml_mut};
+use archforge_uml_ui::snapshot::{
+    uml_bindings, uml_classifier, uml_constraints, uml_inline, uml_nary, uml_panel, uml_profiles, uml_qualifiers, uml_relate, uml_stereotypes,
+    uml_templates, uml_ui,
+};
 
 /// Declares [`Screen`] and [`SCREENS`] from one list, so every screen has its name and its place
 /// in the list.
@@ -603,7 +607,7 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
 }
 
 /// The screens parts the screens' shells are given: ER's, then UML's, as the app registers them.
-static PARTS: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[crate::ER, crate::UML]);
+static PARTS: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[crate::ER, archforge_uml_ui::UML]);
 
 /// The shell of `screen` in `theme`, its project, model and view as the screen shows them, and the
 /// control the pointer rests on, if any.
@@ -856,11 +860,11 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if screen == Screen::WorkspaceClassDiagramRead {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
     }
     if screen == Screen::WorkspaceCloseAsk {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         if let Some(s) = shell.session.as_mut() {
             s.mark_unsaved();
         }
@@ -869,7 +873,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     let association = matches!(screen, Screen::WorkspaceAssociation | Screen::WorkspaceMultiplicityPresets | Screen::WorkspaceMultiplicityRefused);
     if association || screen == Screen::WorkspaceRelateKinds {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         if association {
             let id = {
                 let store = shell.session.as_ref().ok_or("no project is open")?.doc();
@@ -885,12 +889,12 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 shell.panels.menu = Some(menus::END_MULTIPLICITY.at(1));
             }
             if screen == Screen::WorkspaceMultiplicityRefused {
-                snapshot::cx(&mut shell, |cx| crate::uml_relate::refuse_typed(cx, id, 1, "5..2"))?;
+                snapshot::cx(&mut shell, |cx| uml_relate::refuse_typed(cx, id, 1, "5..2"))?;
             }
         } else {
             shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
             if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
-                uml.relation = crate::uml_relate::Relate::Composition;
+                uml.relation = uml_relate::Relate::Composition;
             }
             shell.canvas.popover = Some("relationship-kinds");
         }
@@ -900,10 +904,10 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         sample_interfaces(&mut shell)?;
         if screen == Screen::WorkspaceClassifierKinds {
             if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
-                uml.classifier = crate::uml_classifier::Classifier::Interface;
+                uml.classifier = uml_classifier::Classifier::Interface;
             }
-            shell.canvas.tool = crate::canvas::Tool::Place(crate::uml_classifier::TOOL);
-            shell.canvas.popover = Some(crate::uml_classifier::KINDS);
+            shell.canvas.tool = crate::canvas::Tool::Place(uml_classifier::TOOL);
+            shell.canvas.popover = Some(uml_classifier::KINDS);
         }
     }
     if matches!(screen, Screen::WorkspaceEnumeration | Screen::WorkspaceLiterals) {
@@ -928,7 +932,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         // selection: the toolbar shows Interface realization active beside its Properties.
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
         if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
-            uml.relation = crate::uml_relate::Relate::Realization;
+            uml.relation = uml_relate::Relate::Realization;
         }
     }
     if screen == Screen::WorkspaceAssociationClass {
@@ -937,7 +941,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         // The Relationship tool armed after the element was selected, as the realization's screen.
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
         if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
-            uml.relation = crate::uml_relate::Relate::AssociationClass;
+            uml.relation = uml_relate::Relate::AssociationClass;
         }
     }
     if screen == Screen::WorkspaceModifiers {
@@ -946,12 +950,12 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if screen == Screen::WorkspaceFinal {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         sample_final(&mut shell)?;
     }
     if screen == Screen::WorkspaceLeaf {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         sample_leaf(&mut shell)?;
     }
     let mut hover: Option<String> = None;
@@ -960,23 +964,23 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if matches!(screen, Screen::WorkspaceNaryDrawing | Screen::WorkspaceNary | Screen::WorkspaceNaryBinary) {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         hover = sample_nary(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceNestedClassifiers {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         sample_nested(&mut shell)?;
     }
     if screen == Screen::WorkspaceProfiles || screen == Screen::WorkspaceProfileRefused {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         sample_profiles(&mut shell, screen == Screen::WorkspaceProfileRefused)?;
     }
     if screen == Screen::WorkspaceStereotypes || screen == Screen::WorkspaceStereotypePicker {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
-        let order = snapshot::cx(&mut shell, crate::uml_stereotypes::put_values)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        let order = snapshot::cx(&mut shell, uml_stereotypes::put_values)?;
         snapshot::run(&mut shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
         shell.state.show_panel(crate::state::Panel::Properties);
         shell.state.show_explorer(crate::state::Explorer::Models);
@@ -986,22 +990,22 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if screen == Screen::WorkspaceGeneralizationSets {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         sample_generalization_sets(&mut shell)?;
     }
     if matches!(screen, Screen::WorkspaceTemplate | Screen::WorkspaceTemplateKinds | Screen::WorkspaceTemplateInUse) {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         sample_template(&mut shell, screen)?;
     }
     if matches!(screen, Screen::WorkspaceTemplateBinding | Screen::WorkspaceTemplateBindingNew) {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         sample_binding(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceQualifiers || screen == Screen::WorkspaceQualifierRefused {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         sample_qualifiers(&mut shell, screen == Screen::WorkspaceQualifierRefused)?;
     }
     if let Some(step) = guide_step(screen) {
@@ -1026,7 +1030,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if screen == Screen::WorkspaceInlineMember {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         let class = {
             let store = shell.session.as_ref().ok_or("no project is open")?.doc();
             let c = store
@@ -1035,7 +1039,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 .ok_or("the sample has no such class")?;
             store.uuid(c).map_err(|e| e.to_string())?
         };
-        if !snapshot::cx(&mut shell, |cx| crate::uml_inline::open(cx, class, crate::uml_panel::MemberKind::Attribute, None)) {
+        if !snapshot::cx(&mut shell, |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)) {
             return Err("the class's card cannot hold a row".into());
         }
         if let Some(inline) = uml_mut(snapshot::notation_states(&mut shell)).and_then(|uml| uml.inline.as_mut()) {
@@ -1056,7 +1060,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if matches!(screen, Screen::WorkspaceClassMembers | Screen::WorkspaceMemberEditor) {
         snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, crate::uml_ui::open_sample)?;
+        snapshot::cx(&mut shell, uml_ui::open_sample)?;
         sample_class_members(&mut shell, screen == Screen::WorkspaceMemberEditor)?;
     }
     if matches!(
@@ -1498,7 +1502,7 @@ fn sample_class_members(shell: &mut Shell, editor: bool) -> Result<(), String> {
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [class.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     if editor && let Some(op) = op {
-        snapshot::cx(shell, |cx| crate::uml_panel::open(cx, class, crate::uml_panel::MemberKind::Operation, Some(op)));
+        snapshot::cx(shell, |cx| uml_panel::open(cx, class, uml_panel::MemberKind::Operation, Some(op)));
     }
     Ok(())
 }
@@ -1535,7 +1539,7 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
 /// editor or the question its removal asks. Gives the control the pointer rests on.
 fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, String> {
     let drawn = screen != Screen::WorkspaceNaryDrawing;
-    let ids = snapshot::cx(shell, |cx| crate::uml_nary::put_recommends(cx, drawn))?;
+    let ids = snapshot::cx(shell, |cx| uml_nary::put_recommends(cx, drawn))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
@@ -1544,15 +1548,15 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
     if !drawn {
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
         if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
-            uml.relation = crate::uml_relate::Relate::NAry;
+            uml.relation = uml_relate::Relate::NAry;
         }
         let diagram = uuid("diagram")?;
         let ends = vec![
-            crate::uml_nary::DraftEnd { class: uuid("Customer")?, node: uuid("customer")? },
-            crate::uml_nary::DraftEnd { class: uuid("Product")?, node: uuid("product")? },
+            uml_nary::DraftEnd { class: uuid("Customer")?, node: uuid("customer")? },
+            uml_nary::DraftEnd { class: uuid("Product")?, node: uuid("product")? },
         ];
         if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
-            uml.nary = Some(crate::uml_nary::Nary::Draft { diagram, ends });
+            uml.nary = Some(uml_nary::Nary::Draft { diagram, ends });
         }
         return Ok(Some(format!("workspace.canvas.node.{}", uuid("catalog")?)));
     }
@@ -1560,10 +1564,10 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [a.to_string()] }))?;
     shell.panels.editors_for = Some(a);
     if screen == Screen::WorkspaceNary {
-        snapshot::cx(shell, |cx| crate::uml_nary::open(cx, a, 2));
+        snapshot::cx(shell, |cx| uml_nary::open(cx, a, 2));
     } else {
         if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
-            uml.nary_remove = Some(crate::uml_nary::RemoveAsk { association: a, end: 2, opened: true });
+            uml.nary_remove = Some(uml_nary::RemoveAsk { association: a, end: 2, opened: true });
         }
     }
     Ok(None)
@@ -1572,7 +1576,7 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
 /// In the sample class model, Priority nested in Order, placed under it with the ⊕ line, selected
 /// with its Properties open and its row in Models in sight (AR-132, D2).
 fn sample_nested(shell: &mut Shell) -> Result<(), String> {
-    let (priority, order) = snapshot::cx(shell, crate::uml_ui::put_nested_priority)?;
+    let (priority, order) = snapshot::cx(shell, uml_ui::put_nested_priority)?;
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [priority] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     // At 80 %, Priority's card over Order's, the ⊕ line between them in sight.
@@ -1590,7 +1594,7 @@ fn sample_nested(shell: &mut Shell) -> Result<(), String> {
 /// The profile Persistence of F1 in the sample: its diagram open with Entity selected and the
 /// editor on cached; or, `refused`, Commerce selected with Unapply refused for its uses (F6).
 fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
-    let (commerce, persistence, entity) = snapshot::cx(shell, |cx| crate::uml_profiles::put_profiles(cx, refused))?;
+    let (commerce, persistence, entity) = snapshot::cx(shell, |cx| uml_profiles::put_profiles(cx, refused))?;
     let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "an id".to_string());
     shell.state.show_panel(crate::state::Panel::Properties);
     shell.state.show_explorer(crate::state::Explorer::Models);
@@ -1598,12 +1602,12 @@ fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
         snapshot::run(shell, "view.select", serde_json::json!({ "ids": [commerce] }))?;
         shell.explorer.expanded.insert(id(&commerce)?);
         let (package, profile) = (id(&commerce)?, id(&persistence)?);
-        snapshot::cx(shell, |cx| crate::uml_profiles::unapply_profile(cx, package, profile));
+        snapshot::cx(shell, |cx| uml_profiles::unapply_profile(cx, package, profile));
         shell.panels.editors_for = Some(id(&commerce)?);
         return Ok(());
     }
     let profile = id(&persistence)?;
-    snapshot::cx(shell, |cx| crate::uml_profiles::open_profile_diagram(cx, profile))?;
+    snapshot::cx(shell, |cx| uml_profiles::open_profile_diagram(cx, profile))?;
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [entity] }))?;
     shell.explorer.expanded.insert(id(&persistence)?);
     let cached = {
@@ -1613,7 +1617,7 @@ fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
         store.uuid(c).map_err(|e| e.to_string())?
     };
     let class = id(&entity)?;
-    snapshot::cx(shell, |cx| crate::uml_panel::open(cx, class, crate::uml_panel::MemberKind::Attribute, Some(cached)));
+    snapshot::cx(shell, |cx| uml_panel::open(cx, class, uml_panel::MemberKind::Attribute, Some(cached)));
     shell.panels.editors_for = Some(id(&entity)?);
     if let Some(s) = shell.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;
@@ -1628,7 +1632,7 @@ fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
 /// generalizations to Payment grouped in the set method {complete, disjoint}, the set selected with
 /// its Properties open, Payment and its three kinds in sight (AR-129).
 fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
-    let (gens, _) = snapshot::cx(shell, crate::uml_ui::put_payment_kinds)?;
+    let (gens, _) = snapshot::cx(shell, uml_ui::put_payment_kinds)?;
     let out = snapshot::run(
         shell,
         "uml.generalization-set.add",
@@ -1651,11 +1655,11 @@ fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
 /// OrderRepository binding it and Key's removal refused (AR-130).
 fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     let in_use = screen == Screen::WorkspaceTemplateInUse;
-    let (repo, [_, key]) = snapshot::cx(shell, |cx| crate::uml_ui::put_repository(cx, in_use))?;
+    let (repo, [_, key]) = snapshot::cx(shell, |cx| uml_ui::put_repository(cx, in_use))?;
     shell.state.show_panel(crate::state::Panel::Properties);
-    snapshot::cx(shell, |cx| crate::uml_templates::open(cx, repo, Some(key)));
+    snapshot::cx(shell, |cx| uml_templates::open(cx, repo, Some(key)));
     if in_use {
-        snapshot::cx(shell, crate::uml_templates::remove_sample);
+        snapshot::cx(shell, uml_templates::remove_sample);
     } else if screen == Screen::WorkspaceTemplateKinds {
         shell.panels.menu = Some(menus::TEMPLATE_KIND);
     }
@@ -1671,7 +1675,7 @@ fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
 /// again and a new one's draft opened from OrderRepository's card to Repository's, Apply pressed
 /// with T still to pick.
 fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
-    let (repo, _) = snapshot::cx(shell, |cx| crate::uml_ui::put_repository(cx, true))?;
+    let (repo, _) = snapshot::cx(shell, |cx| uml_ui::put_repository(cx, true))?;
     let d = shell.canvas.active.ok_or("the sample's diagram")?;
     let session = shell.session.as_mut().ok_or("the binding sample needs a session")?;
     let store = session.doc();
@@ -1696,8 +1700,8 @@ fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                 .and_then(|n| store.uuid(n).ok())
         };
         let (Some(from), Some(to)) = (node_of(bound), node_of(r)) else { return Err("the sample's nodes".into()) };
-        snapshot::cx(shell, |cx| crate::uml_bindings::open_new(cx, d_obj, (from, to), bound, r));
-        snapshot::cx(shell, crate::uml_bindings::apply_sample);
+        snapshot::cx(shell, |cx| uml_bindings::open_new(cx, d_obj, (from, to), bound, r));
+        snapshot::cx(shell, uml_bindings::apply_sample);
     }
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 0.75;
@@ -1731,9 +1735,9 @@ fn sample_qualifiers(shell: &mut Shell, refused: bool) -> Result<(), String> {
         s.mark_saved().map_err(|e| e.to_string())?;
     }
     if refused {
-        snapshot::cx(shell, |cx| crate::uml_qualifiers::refuse_sample(cx, a_id, 0, "lineNo", "String"));
+        snapshot::cx(shell, |cx| uml_qualifiers::refuse_sample(cx, a_id, 0, "lineNo", "String"));
     } else {
-        snapshot::cx(shell, |cx| crate::uml_qualifiers::open(cx, a_id, 0, Some(q)));
+        snapshot::cx(shell, |cx| uml_qualifiers::open(cx, a_id, 0, Some(q)));
     }
     shell.panels.editors_for = Some(a_id);
     shell.canvas.fit_pending = false;
@@ -1747,8 +1751,8 @@ fn sample_qualifiers(shell: &mut Shell, refused: bool) -> Result<(), String> {
 /// attribute editor open on amount after No redefinition was refused there, as a click on it
 /// leaves the editor (AR-138).
 fn sample_leaf(shell: &mut Shell) -> Result<(), String> {
-    use crate::uml_panel::{MemberEdit, MemberKind, command_of, edit_of, write_in_sight};
     use archforge_mof::Obj;
+    use uml_panel::{MemberEdit, MemberKind, command_of, edit_of, write_in_sight};
     let store = shell.session.as_ref().ok_or("no project is open")?.doc();
     let class = |name: &str| {
         store
@@ -1785,7 +1789,7 @@ fn sample_leaf(shell: &mut Shell) -> Result<(), String> {
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [payment_id.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     shell.panels.editors_for = Some(payment_id);
-    let refused = shell.session.as_ref().and_then(|s| crate::uml_panel::member_leaf_refusal(s.doc(), &amount_edit, true));
+    let refused = shell.session.as_ref().and_then(|s| uml_panel::member_leaf_refusal(s.doc(), &amount_edit, true));
     if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
         uml.member = Some(MemberEdit { refused, refused_at: Some("leaf"), opened: false, ..amount_edit });
     }
@@ -1968,7 +1972,7 @@ fn sample_class_sizing(shell: &mut Shell) -> Result<(), String> {
     let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Billing" }))?;
     let members: [(&str, &[&str], &[&str], f64); 4] = [
         ("ReviewInvoice", &[], &["calculateTotal"], archforge_uml::CLASS_SIZE.1),
-        ("Invoice", &["number", "issuedAt", "total"], &["send", "cancel"], crate::uml_ui::members_height(3, 2)),
+        ("Invoice", &["number", "issuedAt", "total"], &["send", "cancel"], uml_ui::members_height(3, 2)),
         ("Order", &["id", "placedAt"], &["submit", "cancel"], 120.0),
         ("Payment", &["amount"], &["authorise"], 60.0),
     ];
@@ -2033,7 +2037,7 @@ fn sample_interfaces(shell: &mut Shell) -> Result<(), String> {
     let settles = run(session, "uml.association.add", json!({ "from": invoice, "to": payable, "kind": "directed", "name": "settles" }))?;
     let (w, _) = archforge_uml::CLASS_SIZE;
     for (element, x, y, attributes, operations) in [(&invoice, 80, 140, 2, 0), (&payable, 520, 140, 1, 2), (&refundable, 520, 440, 0, 1)] {
-        let height = crate::uml_ui::members_height(attributes, operations);
+        let height = uml_ui::members_height(attributes, operations);
         run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 80.0, "height": height }))?;
     }
     run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
@@ -2078,9 +2082,9 @@ fn sample_enumerations(shell: &mut Shell) -> Result<(), String> {
     run(session, "uml.operation.add", json!({ "class": order, "name": "advance", "parameters": [{ "name": "to", "type": status }] }))?;
     let (w, _) = archforge_uml::CLASS_SIZE;
     let cards = [
-        (&order, 80, 140, crate::uml_ui::members_height(3, 1)),
-        (&status, 560, 140, crate::uml_ui::literals_height(4)),
-        (&priority, 560, 400, crate::uml_ui::literals_height(0)),
+        (&order, 80, 140, uml_ui::members_height(3, 1)),
+        (&status, 560, 140, uml_ui::literals_height(4)),
+        (&priority, 560, 400, uml_ui::literals_height(0)),
     ];
     for (element, x, y, height) in cards {
         run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 40.0, "height": height }))?;
@@ -2090,7 +2094,7 @@ fn sample_enumerations(shell: &mut Shell) -> Result<(), String> {
     else {
         return Err("the sample's ids".into());
     };
-    snapshot::cx(shell, |cx| crate::uml_ui::put_literals(cx, status, &["Placed", "Paid", "Shipped", "Cancelled"]))?;
+    snapshot::cx(shell, |cx| uml_ui::put_literals(cx, status, &["Placed", "Paid", "Shipped", "Cancelled"]))?;
     shell.explorer.expanded.extend([package, status]);
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
@@ -2130,9 +2134,9 @@ fn sample_data_types(shell: &mut Shell) -> Result<(), String> {
     run(session, "uml.operation.add", json!({ "class": order, "name": "refund", "parameters": [{ "name": "amount", "type": money }] }))?;
     let (w, _) = archforge_uml::CLASS_SIZE;
     let cards = [
-        (&order, 80, 140, crate::uml_ui::members_height(2, 1)),
-        (&money, 560, 140, crate::uml_ui::members_height(2, 1)),
-        (&price, 560, 400, crate::uml_ui::members_height(1, 0)),
+        (&order, 80, 140, uml_ui::members_height(2, 1)),
+        (&money, 560, 140, uml_ui::members_height(2, 1)),
+        (&price, 560, 400, uml_ui::members_height(1, 0)),
     ];
     for (element, x, y, height) in cards {
         run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 40.0, "height": height }))?;
@@ -2182,7 +2186,7 @@ fn sample_primitive_types(shell: &mut Shell) -> Result<(), String> {
     )?;
     let (w, _) = archforge_uml::CLASS_SIZE;
     let (_, h) = archforge_uml::PRIMITIVE_TYPE_SIZE;
-    let cards = [(&product, 80, 140, crate::uml_ui::members_height(3, 1)), (&sku, 560, 140, h), (&gtin, 560, 340, h)];
+    let cards = [(&product, 80, 140, uml_ui::members_height(3, 1)), (&sku, 560, 140, h), (&gtin, 560, 340, h)];
     for (element, x, y, height) in cards {
         run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 40.0, "height": height }))?;
     }
@@ -2221,7 +2225,7 @@ fn literal_draft(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.25;
     shell.canvas.pan = egui::vec2(160.0 - bounds.x as f32 * 1.25, 120.0 - bounds.y as f32 * 1.25);
-    if !snapshot::cx(shell, |cx| crate::uml_inline::open(cx, status, crate::uml_panel::MemberKind::Literal, None)) {
+    if !snapshot::cx(shell, |cx| uml_inline::open(cx, status, uml_panel::MemberKind::Literal, None)) {
         return Err("OrderStatus's card cannot hold a row".into());
     }
     if let Some(inline) = uml_mut(snapshot::notation_states(shell)).and_then(|uml| uml.inline.as_mut()) {
@@ -2261,8 +2265,8 @@ fn sample_realizations(shell: &mut Shell) -> Result<(), String> {
     let (w, _) = archforge_uml::CLASS_SIZE;
     // Order and Payable side by side, the same height, so Order's line runs straight; Invoice under
     // Payable, its line straight up.
-    let top = crate::uml_ui::members_height(2, 2);
-    for (element, x, y, height) in [(&order, 80, 140, top), (&payable, 560, 140, top), (&invoice, 560, 460, crate::uml_ui::members_height(2, 0))] {
+    let top = uml_ui::members_height(2, 2);
+    for (element, x, y, height) in [(&order, 80, 140, top), (&payable, 560, 140, top), (&invoice, 560, 460, uml_ui::members_height(2, 0))] {
         run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 40.0, "height": height }))?;
     }
     run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
@@ -2303,8 +2307,8 @@ fn sample_association_class(shell: &mut Shell) -> Result<(), String> {
     run(session, "uml.association.set-end", json!({ "association": review, "end": 0, "multiplicity": "*", "navigable": false }))?;
     run(session, "uml.association.set-end", json!({ "association": review, "end": 1, "multiplicity": "*", "navigable": false }))?;
     let (w, _) = archforge_uml::CLASS_SIZE;
-    let low = crate::uml_ui::members_height(1, 0);
-    for (element, x, y, height) in [(&customer, 80, 420, low), (&product, 640, 420, low), (&review, 360, 120, crate::uml_ui::members_height(2, 1))] {
+    let low = uml_ui::members_height(1, 0);
+    for (element, x, y, height) in [(&customer, 80, 420, low), (&product, 640, 420, low), (&review, 360, 120, uml_ui::members_height(2, 1))] {
         run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w, "height": height }))?;
     }
     run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
@@ -2359,15 +2363,15 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
         json!({ "association": holds, "end": 1, "role": "items", "multiplicity": "0..*", "derived": true, "default": "none", "ordered": true }),
     )?;
     let (w, _) = archforge_uml::CLASS_SIZE;
-    let order_height = crate::uml_ui::members_height(4, 2);
-    let line_height = crate::uml_ui::members_height(1, 0);
+    let order_height = uml_ui::members_height(4, 2);
+    let line_height = uml_ui::members_height(1, 0);
     // OrderLine's middle level with Order's, so the line between them runs straight.
     let line_y = (120.0 + (order_height - line_height) / 2.0).round();
     for (element, x, y, width, height) in [
         (&order, 80.0, 120.0, w + 80.0, order_height),
         (&line, 700.0, line_y, w, line_height),
-        (&money, 80.0, 470.0, w, crate::uml_ui::members_height(0, 0)),
-        (&status, 420.0, 470.0, w, crate::uml_ui::members_height(3, 0)),
+        (&money, 80.0, 470.0, w, uml_ui::members_height(0, 0)),
+        (&status, 420.0, 470.0, w, uml_ui::members_height(3, 0)),
     ] {
         run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": width, "height": height }))?;
     }
@@ -2388,7 +2392,7 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
     crate::canvas::open(shell, diagram);
     snapshot::run(shell, "view.select", json!({ "ids": [order.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
-    snapshot::cx(shell, |cx| crate::uml_panel::open(cx, order, crate::uml_panel::MemberKind::Attribute, Some(total)));
+    snapshot::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(total)));
     Ok(())
 }
 
@@ -2478,7 +2482,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
         run(session, "uml.attribute.add", json!({ "class": money, "name": "currency", "type": "String" }))?;
         run(session, "uml.attribute.add", json!({ "class": order, "name": "total", "type": money }))?;
         order_rows = (3, 1);
-        cards.push((money.clone(), 720.0, 500.0, w, crate::uml_ui::members_height(2, 0)));
+        cards.push((money.clone(), 720.0, 500.0, w, uml_ui::members_height(2, 0)));
         if step == 6 {
             selected = Some(money.clone());
             about = vec![money.clone()];
@@ -2498,7 +2502,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
         let payable = run(session, "uml.interface.add", json!({ "package": root, "name": "Payable" }))?;
         run(session, "uml.operation.add", json!({ "class": payable, "name": "pay", "returns": "Boolean" }))?;
         let realized = run(session, "uml.realization.add", json!({ "class": order, "interface": payable }))?;
-        cards.push((payable.clone(), 510.0, -20.0, w, crate::uml_ui::members_height(0, 1)));
+        cards.push((payable.clone(), 510.0, -20.0, w, uml_ui::members_height(0, 1)));
         if step == 8 {
             selected = Some(realized);
             about = vec![payable];
@@ -2513,9 +2517,9 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
             run(session, "uml.association.set-end", json!({ "association": line, "end": end, "multiplicity": "*" }))?;
         }
         // Product's middle level with Order's, so the line between them runs straight.
-        let (order_height, product_height) = (crate::uml_ui::members_height(3, 1), crate::uml_ui::members_height(1, 0));
+        let (order_height, product_height) = (uml_ui::members_height(3, 1), uml_ui::members_height(1, 0));
         cards.push((product.clone(), 1040.0, (220.0 + (order_height - product_height) / 2.0).round(), w, product_height));
-        cards.push((line.clone(), 790.0, -20.0, w, crate::uml_ui::members_height(1, 0)));
+        cards.push((line.clone(), 790.0, -20.0, w, uml_ui::members_height(1, 0)));
         if step == 9 {
             selected = Some(line.clone());
             about = vec![product, line];
@@ -2524,16 +2528,16 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
     if step >= 5 {
         // The draft row of step 5 needs a slot below the literals there are.
         let slots = if step == 5 { status_literals + 1 } else { status_literals };
-        cards.push((status.clone(), 420.0, 500.0, w, crate::uml_ui::literals_height(slots)));
+        cards.push((status.clone(), 420.0, 500.0, w, uml_ui::literals_height(slots)));
         if step == 5 {
             selected = Some(status.clone());
             about = vec![status.clone()];
         }
     }
     // Step 1's draft row needs a slot on Order's card.
-    let order_height = crate::uml_ui::members_height(order_rows.0.max(1), order_rows.1);
+    let order_height = uml_ui::members_height(order_rows.0.max(1), order_rows.1);
     // Customer's middle level with Order's, so the association between them runs straight.
-    let customer_height = crate::uml_ui::members_height(customer_rows, 0);
+    let customer_height = uml_ui::members_height(customer_rows, 0);
     cards.push((customer.clone(), 0.0, (220.0 + (order_height - customer_height) / 2.0).round(), w, customer_height));
     cards.push((order.clone(), 480.0, 220.0, w + 60.0, order_height));
     for (element, x, y, width, height) in &cards {
@@ -2599,7 +2603,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
     };
     match step {
         1 => {
-            if !snapshot::cx(shell, |cx| crate::uml_inline::open(cx, order, crate::uml_panel::MemberKind::Attribute, None)) {
+            if !snapshot::cx(shell, |cx| uml_inline::open(cx, order, uml_panel::MemberKind::Attribute, None)) {
                 return Err("Order's card cannot hold a row".into());
             }
             if let Some(inline) = uml_mut(snapshot::notation_states(shell)).and_then(|uml| uml.inline.as_mut()) {
@@ -2610,21 +2614,21 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
         2 => {
             shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
             if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
-                uml.relation = crate::uml_relate::Relate::Association;
+                uml.relation = uml_relate::Relate::Association;
             }
             shell.canvas.popover = Some("relationship-kinds");
         }
         4 => {
-            shell.canvas.tool = crate::canvas::Tool::Place(crate::uml_classifier::TOOL);
+            shell.canvas.tool = crate::canvas::Tool::Place(uml_classifier::TOOL);
             if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
-                uml.classifier = crate::uml_classifier::Classifier::Class;
+                uml.classifier = uml_classifier::Classifier::Class;
             }
-            shell.canvas.popover = Some(crate::uml_classifier::KINDS);
+            shell.canvas.popover = Some(uml_classifier::KINDS);
             shell.canvas.menu_focus = Some(2);
         }
         5 => {
             let status = id(&status)?;
-            if !snapshot::cx(shell, |cx| crate::uml_inline::open(cx, status, crate::uml_panel::MemberKind::Literal, None)) {
+            if !snapshot::cx(shell, |cx| uml_inline::open(cx, status, uml_panel::MemberKind::Literal, None)) {
                 return Err("OrderStatus's card cannot hold a row".into());
             }
             if let Some(inline) = uml_mut(snapshot::notation_states(shell)).and_then(|uml| uml.inline.as_mut()) {
@@ -2641,11 +2645,11 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
                     .and_then(|a| store.uuid(a).ok())
                     .ok_or("Order has no status")?
             };
-            snapshot::cx(shell, |cx| crate::uml_panel::open(cx, order, crate::uml_panel::MemberKind::Attribute, Some(status_attribute)));
+            snapshot::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(status_attribute)));
         }
         11 => {
             let paid = id(&paid)?;
-            snapshot::cx(shell, |cx| crate::uml_constraints::open(cx, order, Some(paid)));
+            snapshot::cx(shell, |cx| uml_constraints::open(cx, order, Some(paid)));
         }
         12 => shell.state.panel_collapsed = true,
         _ => {}
@@ -2725,7 +2729,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     // Order's card made taller for `rows` (attributes, operations).
     let grow_order = |shell: &mut Shell, rows: (usize, usize)| -> Result<(), String> {
         let n = node(shell, order)?;
-        let height = crate::uml_ui::members_height(rows.0, rows.1);
+        let height = uml_ui::members_height(rows.0, rows.1);
         run(shell, "diagram.resize", json!({ "node": n.to_string(), "width": w + 60.0, "height": height }))?;
         braces_under_order(shell)
     };
@@ -2738,7 +2742,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             )?)?;
             grow_order(shell, (3, 2))?;
             select(shell, &[order])?;
-            snapshot::cx(shell, |cx| crate::uml_panel::open(cx, order, crate::uml_panel::MemberKind::Operation, Some(op)));
+            snapshot::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Operation, Some(op)));
             guide_view(shell, &[order], 1.0)?;
         }
         Screen::GuideQualifier => {
@@ -2750,7 +2754,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             let n = node(shell, customer)?;
             run(shell, "diagram.move", json!({ "nodes": [n.to_string()], "dx": -100.0, "dy": 0.0 }))?;
             select(shell, &[places])?;
-            snapshot::cx(shell, |cx| crate::uml_qualifiers::open(cx, places, 0, Some(q)));
+            snapshot::cx(shell, |cx| uml_qualifiers::open(cx, places, 0, Some(q)));
             guide_view(shell, &[customer, order], 0.75)?;
         }
         Screen::GuideNary => {
@@ -2764,13 +2768,13 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             let money = find(shell, None, "Money")?;
             let payment = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": "Payment" }))?)?;
             let amount = id(&run(shell, "uml.attribute.add", json!({ "class": payment.to_string(), "name": "amount", "type": money.to_string() }))?)?;
-            place(shell, d, payment, 280.0, 0.0, w, crate::uml_ui::members_height(1, 0))?;
+            place(shell, d, payment, 280.0, 0.0, w, uml_ui::members_height(1, 0))?;
             let mut generalizations = Vec::new();
             let mut card = None;
             let mut cards = vec![payment];
             for (name, x) in [("CardPayment", 0.0), ("BankTransfer", 280.0), ("WalletPayment", 560.0)] {
                 let c = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": name }))?)?;
-                place(shell, d, c, x, 340.0, w, crate::uml_ui::members_height(0, 0))?;
+                place(shell, d, c, x, 340.0, w, uml_ui::members_height(0, 0))?;
                 cards.push(c);
                 let g = run(shell, "uml.generalization.add", json!({ "specific": c.to_string(), "general": payment.to_string() }))?;
                 generalizations.push(id(&g)?.to_string());
@@ -2789,7 +2793,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                 run(shell, "uml.classifier.set", json!({ "classifier": card.to_string(), "final": true }))?;
                 run(shell, "uml.attribute.set", json!({ "attribute": amount.to_string(), "leaf": true }))?;
                 select(shell, &[payment])?;
-                snapshot::cx(shell, |cx| crate::uml_panel::open(cx, payment, crate::uml_panel::MemberKind::Attribute, Some(amount)));
+                snapshot::cx(shell, |cx| uml_panel::open(cx, payment, uml_panel::MemberKind::Attribute, Some(amount)));
             }
             guide_view(shell, &cards, 0.85)?;
         }
@@ -2818,15 +2822,15 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                 "uml.operation.add",
                 json!({ "class": repo.to_string(), "name": "find", "parameters": [{ "name": "key", "type": ke }], "returns": te }),
             )?;
-            let repo_node = place(shell, d, repo, 380.0, 40.0, 300.0, crate::uml_ui::members_height(1, 1))?;
+            let repo_node = place(shell, d, repo, 380.0, 40.0, 300.0, uml_ui::members_height(1, 1))?;
             if screen == Screen::GuideTemplate {
                 select(shell, &[repo])?;
                 let key = id(&key)?;
-                snapshot::cx(shell, |cx| crate::uml_templates::open(cx, repo, Some(key)));
+                snapshot::cx(shell, |cx| uml_templates::open(cx, repo, Some(key)));
                 guide_view(shell, &[repo], 1.0)?;
             } else {
                 let bound = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": "OrderRepository" }))?)?;
-                let bound_node = place(shell, d, bound, 410.0, 340.0, w, crate::uml_ui::members_height(0, 0))?;
+                let bound_node = place(shell, d, bound, 410.0, 340.0, w, uml_ui::members_height(0, 0))?;
                 let binding = id(&run(
                     shell,
                     "uml.template-binding.add",
@@ -2848,7 +2852,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             run(shell, "uml.attribute.add", json!({ "class": entity.to_string(), "name": "table", "type": "String" }))?;
             shell.state.show_explorer(crate::state::Explorer::Models);
             if screen == Screen::GuideProfile {
-                snapshot::cx(shell, |cx| crate::uml_profiles::open_profile_diagram(cx, profile))?;
+                snapshot::cx(shell, |cx| uml_profiles::open_profile_diagram(cx, profile))?;
                 select(shell, &[entity])?;
                 shell.explorer.expanded.insert(profile);
                 shell.canvas.fit_pending = false;
@@ -2863,7 +2867,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                     json!({ "element": order.to_string(), "stereotype": entity.to_string(), "property": "table", "values": ["orders"] }),
                 )?;
                 let d = shell.canvas.active.ok_or("no diagram is open")?;
-                snapshot::cx(shell, |cx| crate::uml_stereotypes::show_values(cx, d, true))?;
+                snapshot::cx(shell, |cx| uml_stereotypes::show_values(cx, d, true))?;
                 braces_under_order(shell)?;
                 select(shell, &[order])?;
                 guide_view(shell, &[order], 1.0)?;

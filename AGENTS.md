@@ -58,10 +58,11 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   A new kind gets its row in `xtask/diagram-kinds.tsv`, which a notations test holds to the kinds
   registered.
 - The user interface never touches the file system or the operating system itself: the host
-  injects `Services`. Only `crates/ui-egui`, the shell, `crates/shell-api`, its interfaces, and the
-  application may use the toolkit.
+  injects `Services`. Only `crates/ui-egui`, the shell, `crates/shell-api`, its interfaces, a
+  notation's screens crate (`crates/uml-ui`) and the application may use the toolkit.
 - The interface draws through `ux` (`crates/shell-api/src/ux/`, re-exported by the shell as
-  `crate::ux` with the shell's own app icon, fonts and the icons only one notation draws): no
+  `crate::ux` with the shell's own app icon, fonts and the icons only ER draws, and by UML's screens
+  crate with the icons only UML draws): no
   literal colour, font or icon outside it, and every control has an automation id.
 - Every string the user sees goes through the catalogues, with a row in every language: in the
   shell's catalogues, in the shell's interfaces' own (`crates/shell-api/src/i18n/`) when only their
@@ -69,7 +70,7 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 - Behaviour, icons and wording are our own: never copy another product's.
 - The Rust version is the one `rust-toolchain.toml` pins. A lint added by a newer release is fixed
   in code in the change that raises it, never by allowing the lint or by holding the version back.
-- Hot files (the translation catalogues in `crates/ui-egui/src/i18n/` and `crates/shell-api/src/i18n/`, `xtask/src/layers.rs`,
+- Hot files (the translation catalogues in `crates/ui-egui/src/i18n/`, `crates/shell-api/src/i18n/` and `crates/uml-ui/src/i18n/`, `xtask/src/layers.rs`,
   `ATTRIBUTION.toml`) are edited surgically, with new rows placed beside related entries and never
   appended at the end of the file.
 - Fonts, samples and other binaries stay out of the repository (the app icon's one picture,

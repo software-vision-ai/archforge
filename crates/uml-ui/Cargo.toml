@@ -1,0 +1,40 @@
+[package]
+name = "archforge-uml-ui"
+description = "UML's screens: what UML brings to the shell through the shell's interfaces"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# What the screenshot tool, the app's catalogue tests and the shell's tests reach in UML's screens
+# (`archforge_uml_ui::snapshot`): the sample builders, the word lists and the items they name;
+# never shipped.
+snapshot = ["dep:archforge-notations"]
+
+[dependencies]
+# The names, skills and comments of the elements UML's screens show.
+archforge-core.workspace = true
+# The diagrams, nodes, lines and their figures UML's screens draw and place.
+archforge-diagram.workspace = true
+# The refusals and reasons UML's screens say, and the session they run commands on.
+archforge-engine.workspace = true
+archforge-mof.workspace = true
+# The sample model the builders make for the screenshots and the tests, with the feature `snapshot` only.
+archforge-notations = { workspace = true, optional = true }
+archforge-shell-api.workspace = true
+archforge-uml.workspace = true
+egui.workspace = true
+# The parameters of the commands UML's screens run.
+serde_json.workspace = true
+
+[dev-dependencies]
+# A project's session for the tests (`new_project_session`).
+archforge-notations.workspace = true
+# The test context the screens' tests run against without the shell (ADR 0005).
+archforge-shell-api = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

@@ -13,19 +13,20 @@ use archforge_uml::commands::{classifiers, package_of, packages};
 use egui::Rect;
 use serde_json::json;
 
-use crate::canvas::Tool;
-use crate::cx::{Ctx, CtxRef, Request};
-use crate::editing::Action;
-use crate::explorer::{Row, Tree, fresh_name};
-use crate::i18n::{Rows, fmt, tr, tr_ctx, trn};
-use crate::kinds::{DiagramKind, KindTool, MenuRow, ModelRow, Press, ToolUse};
-use crate::notation_ui::{Added, ChatKind, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
-use crate::panels::Subject;
 use crate::uml_classifier::Classifier;
 use crate::uml_panel::{MemberKind, member_of};
 use crate::uml_relate::Relate;
 use crate::uml_state::uml;
 use crate::ux::{Palette, icons};
+use archforge_shell_api::canvas::Tool;
+use archforge_shell_api::cx::{Ctx, CtxRef, Request};
+use archforge_shell_api::editing::Action;
+use archforge_shell_api::explorer::fresh_name;
+use archforge_shell_api::i18n::{Rows, fmt, tr, tr_ctx, trn};
+use archforge_shell_api::kinds::{DiagramKind, KindTool, MenuRow, ModelRow, Press, ToolUse};
+use archforge_shell_api::notation_ui::{
+    Added, ChatKind, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Row, Subject, Tree, Words,
+};
 
 fn class(store: &Store, o: Obj) -> Option<archforge_mof::ClassId> {
     store.class_of(o).ok()
@@ -76,7 +77,7 @@ fn constraint_context(store: &Store, o: Obj) -> Option<Obj> {
 }
 
 /// The UML structure diagram in the shell.
-pub(crate) struct UmlKind;
+pub struct UmlKind;
 
 const TOOLS: &[KindTool] = &[
     KindTool {
@@ -243,13 +244,14 @@ impl DiagramKind for UmlKind {
     }
 
     /// A package named `name` for a new UML structure diagram to be of, or the root package while
-    /// the model has none yet. A refusal comes back in plain words ([`crate::panels::refusal`]).
+    /// the model has none yet. A refusal comes back in plain words
+    /// ([`archforge_shell_api::panels::refusal`]).
     fn add_owner(&self, cx: &mut Ctx, name: &str) -> Result<String, String> {
         let has_root = cx.session.as_ref().is_some_and(|s| archforge_uml::commands::root_package(s.doc()).is_some());
         let made = if has_root {
-            crate::panels::run_cx(cx, "uml.package.add", json!({ "name": name }))
+            archforge_shell_api::panels::run_cx(cx, "uml.package.add", json!({ "name": name }))
         } else {
-            crate::panels::run_cx(cx, "uml.model.root", json!({}))
+            archforge_shell_api::panels::run_cx(cx, "uml.model.root", json!({}))
         };
         made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
@@ -296,13 +298,14 @@ impl DiagramKind for UmlKind {
             Ok(o) => {
                 let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
                 if let (Some(class), Some(node)) = (id_at(0), id_at(1)) {
-                    let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [class.to_string()] }));
-                    cx.canvas.rename = Some(crate::editing::NodeRename { node, element: class, text: name, opened: true, refused: None });
+                    let _ = archforge_shell_api::panels::run_cx(cx, "view.select", json!({ "ids": [class.to_string()] }));
+                    cx.canvas.rename =
+                        Some(archforge_shell_api::editing::NodeRename { node, element: class, text: name, opened: true, refused: None });
                     cx.canvas.focused = true;
                 }
-                cx.canvas.tool = crate::canvas::Tool::Select;
+                cx.canvas.tool = archforge_shell_api::canvas::Tool::Select;
             }
-            Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
+            Err(e) => cx.canvas.notice = Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e)),
         }
     }
 
@@ -371,7 +374,7 @@ impl DiagramKind for UmlKind {
             Some((st, o)) => Classifier::of(st, o).unwrap_or_default().rename_command(),
             None => Classifier::Class.rename_command(),
         };
-        crate::panels::run_cx(cx, cmd, json!({ key: element.to_string(), "name": name })).map(|_| ())
+        archforge_shell_api::panels::run_cx(cx, cmd, json!({ key: element.to_string(), "name": name })).map(|_| ())
     }
 
     /// A package's name is typed in its tab, which grows with it (AR-113).
@@ -408,8 +411,8 @@ impl DiagramKind for UmlKind {
             store.uuid(archforge_uml::constraints::context_of(store, c)?).ok()
         });
         if let Some(context) = context {
-            let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
-            cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
+            let _ = archforge_shell_api::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
+            cx.requests.push(Request::ShowPanel(archforge_shell_api::state::Panel::Properties));
             crate::uml_constraints::open(cx, context, Some(element));
             return;
         }
@@ -436,8 +439,8 @@ impl DiagramKind for UmlKind {
         if crate::uml_inline::open(cx, element, kind, target) {
             return;
         }
-        let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
-        cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
+        let _ = archforge_shell_api::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
+        cx.requests.push(Request::ShowPanel(archforge_shell_api::state::Panel::Properties));
         crate::uml_panel::open(cx, element, kind, target);
     }
 
@@ -457,8 +460,8 @@ impl DiagramKind for UmlKind {
             return;
         }
         if !crate::uml_inline::open(cx, element, MemberKind::Operation, None) {
-            let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
-            cx.requests.push(Request::ShowPanel(crate::state::Panel::Properties));
+            let _ = archforge_shell_api::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
+            cx.requests.push(Request::ShowPanel(archforge_shell_api::state::Panel::Properties));
             crate::uml_panel::open(cx, element, MemberKind::Operation, None);
         }
     }
@@ -476,7 +479,7 @@ impl DiagramKind for UmlKind {
         let row = self.adorner(store, element).map(|(_, label)| MenuRow {
             key: "add-row",
             label,
-            keys: crate::editing::new_row_keys(mac),
+            keys: archforge_shell_api::editing::new_row_keys(mac),
             live: true,
             first: false,
             run: |cx, menu| UmlKind.open(cx, menu.element, None),
@@ -526,7 +529,7 @@ impl DiagramKind for UmlKind {
             return;
         }
         let Some((c, kind)) = store.by_uuid(element).and_then(|c| Some((c, Classifier::of(store, c)?))) else { return };
-        if crate::editing::on_diagram(store, d, c) {
+        if archforge_shell_api::editing::on_diagram(store, d, c) {
             cx.canvas.notice = Some(tr("Already on this diagram"));
             return;
         }
@@ -540,27 +543,27 @@ impl DiagramKind for UmlKind {
             // The legs of n-ary associations whose diamond this diagram shows, from their ends at
             // the classifier (AR-128).
             .chain(store.alive().filter(|e| {
-                archforge_uml::nary::leg_ends(store, *e).is_some_and(|(a, t)| t == c && crate::editing::on_diagram(store, d, a))
+                archforge_uml::nary::leg_ends(store, *e).is_some_and(|(a, t)| t == c && archforge_shell_api::editing::on_diagram(store, d, a))
                     && archforge_diagram::views_of(store, *e).1.iter().all(|l| archforge_diagram::diagram_of(store, *l) != Some(d))
             }))
             .collect();
         let (width, _) = kind.size();
-        crate::editing::place_with_lines_cx(cx, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
+        archforge_shell_api::editing::place_with_lines_cx(cx, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
     }
 
     /// On a package's diagram, package navigation: a landing after a switch, ⌘↓ and ⌘↑, the zoom
     /// keys, and a zoom across a package's threshold (AR-95).
     fn before_draw(&self, cx: &mut Ctx, ui: &egui::Ui, r: Rect, d: Obj) {
-        crate::package_nav::before_draw(cx, ui, r, d);
+        crate::uml_package_nav::before_draw(cx, ui, r, d);
     }
 
     /// On a package's diagram, the path bar and a selected package's Open (AR-95).
     fn after_draw(&self, cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) -> f32 {
-        crate::package_nav::after_draw(cx, ui, p, r, d)
+        crate::uml_package_nav::after_draw(cx, ui, p, r, d)
     }
 
     /// An n-ary association's leg starts at its diamond's outline (AR-128).
-    fn line_start(&self, d: &crate::canvas::Drawing<'_>, source: Obj, tip: egui::Pos2, next: egui::Pos2) -> Option<egui::Pos2> {
+    fn line_start(&self, d: &archforge_shell_api::canvas::Drawing<'_>, source: Obj, tip: egui::Pos2, next: egui::Pos2) -> Option<egui::Pos2> {
         crate::uml_nary::leg_start(d.store, source, || d.node_rect(source), tip, next)
     }
 
@@ -569,10 +572,10 @@ impl DiagramKind for UmlKind {
     fn line_ends(
         &self,
         paint: &egui::Painter,
-        d: &crate::canvas::Drawing<'_>,
-        line: &crate::canvas::LineEnds<'_>,
+        d: &archforge_shell_api::canvas::Drawing<'_>,
+        line: &archforge_shell_api::kinds::LineEnds<'_>,
         points: &mut [egui::Pos2],
-        registry: &mut crate::widgets::Registry,
+        registry: &mut archforge_shell_api::widgets::Registry,
         ui: &egui::Ui,
     ) -> Vec<egui::Shape> {
         crate::uml_adornments::qualifier_boxes(paint, d, line, points, registry, ui)
@@ -582,9 +585,9 @@ impl DiagramKind for UmlKind {
     fn line_extras(
         &self,
         paint: &egui::Painter,
-        d: &crate::canvas::Drawing<'_>,
-        line: &crate::canvas::LineDrawn<'_>,
-        registry: &mut crate::widgets::Registry,
+        d: &archforge_shell_api::canvas::Drawing<'_>,
+        line: &archforge_shell_api::kinds::LineDrawn<'_>,
+        registry: &mut archforge_shell_api::widgets::Registry,
         ui: &egui::Ui,
     ) -> Option<Rect> {
         crate::uml_relate::association_class_extras(paint, d, line, registry, ui)
@@ -594,17 +597,23 @@ impl DiagramKind for UmlKind {
     fn line_caption(
         &self,
         paint: &egui::Painter,
-        d: &crate::canvas::Drawing<'_>,
-        line: &crate::canvas::LineDrawn<'_>,
+        d: &archforge_shell_api::canvas::Drawing<'_>,
+        line: &archforge_shell_api::kinds::LineDrawn<'_>,
         name: Option<Rect>,
-        registry: &mut crate::widgets::Registry,
+        registry: &mut archforge_shell_api::widgets::Registry,
         ui: &egui::Ui,
     ) {
         crate::uml_adornments::stereotypes(paint, d, line, name, registry, ui);
     }
 
     /// A constraint note's dashed links to the nodes of the elements it constrains (AR-133).
-    fn draw_links(&self, paint: &egui::Painter, d: &crate::canvas::Drawing<'_>, _: &mut crate::widgets::Registry, _: &egui::Ui) {
+    fn draw_links(
+        &self,
+        paint: &egui::Painter,
+        d: &archforge_shell_api::canvas::Drawing<'_>,
+        _: &mut archforge_shell_api::widgets::Registry,
+        _: &egui::Ui,
+    ) {
         crate::uml_constraint_draw::draw_links(paint, d);
     }
 
@@ -612,10 +621,10 @@ impl DiagramKind for UmlKind {
     fn draw_extras(
         &self,
         paint: &egui::Painter,
-        d: &crate::canvas::Drawing<'_>,
-        registry: &mut crate::widgets::Registry,
+        d: &archforge_shell_api::canvas::Drawing<'_>,
+        registry: &mut archforge_shell_api::widgets::Registry,
         ui: &egui::Ui,
-    ) -> Vec<crate::canvas::ExtraLabel> {
+    ) -> Vec<archforge_shell_api::kinds::ExtraLabel> {
         crate::uml_sets::draw_sets(paint, d, registry, ui)
     }
 
@@ -625,9 +634,9 @@ impl DiagramKind for UmlKind {
     fn draw_card(
         &self,
         paint: &egui::Painter,
-        d: &crate::canvas::Drawing<'_>,
-        card: &crate::canvas::CardDrawn<'_>,
-        registry: &mut crate::widgets::Registry,
+        d: &archforge_shell_api::canvas::Drawing<'_>,
+        card: &archforge_shell_api::kinds::CardDrawn<'_>,
+        registry: &mut archforge_shell_api::widgets::Registry,
         ui: &egui::Ui,
     ) -> bool {
         crate::uml_package::draw_card(paint, d, card, registry, ui)
@@ -639,9 +648,9 @@ impl DiagramKind for UmlKind {
     fn card_extras(
         &self,
         paint: &egui::Painter,
-        d: &crate::canvas::Drawing<'_>,
-        card: &crate::canvas::CardDrawn<'_>,
-        registry: &mut crate::widgets::Registry,
+        d: &archforge_shell_api::canvas::Drawing<'_>,
+        card: &archforge_shell_api::kinds::CardDrawn<'_>,
+        registry: &mut archforge_shell_api::widgets::Registry,
         ui: &egui::Ui,
     ) {
         crate::uml_adornments::signature(paint, d, card, registry, ui);
@@ -689,13 +698,14 @@ fn place_package(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
         Ok(o) => {
             let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
             if let (Some(package), Some(node)) = (id_at(0), id_at(1)) {
-                let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [package.to_string()] }));
-                cx.canvas.rename = Some(crate::editing::NodeRename { node, element: package, text: package_name, opened: true, refused: None });
+                let _ = archforge_shell_api::panels::run_cx(cx, "view.select", json!({ "ids": [package.to_string()] }));
+                cx.canvas.rename =
+                    Some(archforge_shell_api::editing::NodeRename { node, element: package, text: package_name, opened: true, refused: None });
                 cx.canvas.focused = true;
             }
-            cx.canvas.tool = crate::canvas::Tool::Select;
+            cx.canvas.tool = archforge_shell_api::canvas::Tool::Select;
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
+        Err(e) => cx.canvas.notice = Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -708,7 +718,7 @@ fn drop_package(cx: &mut Ctx, d: Obj, element: Uuid, at: (f64, f64)) {
     let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
     let Some(package) = store.by_uuid(element) else { return };
-    if crate::editing::on_diagram(store, d, package) {
+    if archforge_shell_api::editing::on_diagram(store, d, package) {
         cx.canvas.notice = Some(tr("Already on this diagram"));
         return;
     }
@@ -731,9 +741,9 @@ fn drop_package(cx: &mut Ctx, d: Obj, element: Uuid, at: (f64, f64)) {
     });
     match out {
         Ok(_) => {
-            let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
+            let _ = archforge_shell_api::panels::run_cx(cx, "view.select", json!({ "ids": [element.to_string()] }));
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
+        Err(e) => cx.canvas.notice = Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -751,8 +761,8 @@ fn content_height(store: &Store, c: Obj) -> f64 {
 }
 
 /// How tall an enumeration's card is to show `literals` rows in its one compartment, none a row.
-pub(crate) fn literals_height(literals: usize) -> f64 {
-    use crate::canvas::{CARD_FIRST_ROW, CARD_ROW};
+pub fn literals_height(literals: usize) -> f64 {
+    use archforge_shell_api::canvas::{CARD_FIRST_ROW, CARD_ROW};
     let slots = literals.max(1) as f64;
     (f64::from(CARD_FIRST_ROW) + f64::from(archforge_diagram::figure::CARD_FOOT) + slots * f64::from(CARD_ROW))
         .clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
@@ -760,8 +770,8 @@ pub(crate) fn literals_height(literals: usize) -> f64 {
 
 /// How tall a card is to show `attributes` and `operations` rows, each compartment padded at its
 /// foot and the next at its head.
-pub(crate) fn members_height(attributes: usize, operations: usize) -> f64 {
-    use crate::canvas::{CARD_FIRST_ROW, CARD_ROW, COMPARTMENT_GAP};
+pub fn members_height(attributes: usize, operations: usize) -> f64 {
+    use archforge_shell_api::canvas::{CARD_FIRST_ROW, CARD_ROW, COMPARTMENT_GAP};
     let rows = |n: usize| n.max(1) as f64;
     let slots = rows(attributes) + f64::from(COMPARTMENT_GAP) + rows(operations);
     (f64::from(CARD_FIRST_ROW) + f64::from(archforge_diagram::figure::CARD_FOOT) + slots * f64::from(CARD_ROW))
@@ -769,11 +779,11 @@ pub(crate) fn members_height(attributes: usize, operations: usize) -> f64 {
 }
 
 /// UML's screens part, as the app registers it (`archforge_shell_api::screens`): UML in the shell
-/// and its structure diagram. The shell exports it until UML's screens have a crate of their own.
+/// and its structure diagram.
 pub const UML: ScreensPart = ScreensPart { ui: &UmlUi, kinds: &[&UmlKind] };
 
 /// UML in the shell's explorers, search and panels.
-pub(crate) struct UmlUi;
+pub struct UmlUi;
 
 /// UML's own catalogue of each language, in the order of `LANGUAGES`, embedded: the rows only
 /// UML's screens name ([`NotationUi::catalogues`]).
@@ -852,7 +862,7 @@ impl NotationUi for UmlUi {
                 let siblings = home.map_or_else(|| packages(store), |h| archforge_uml::commands::subpackages(store, h));
                 let Some(name) = fresh_name("Package", siblings.into_iter().map(|p| name(store, p)), false) else { return no_name() };
                 let parent = home.and_then(|h| store.uuid(h).ok()).map(|u| u.to_string()).unwrap_or_default();
-                crate::panels::run_cx(cx, "uml.package.add", json!({ "name": name, "parent": parent }))
+                archforge_shell_api::panels::run_cx(cx, "uml.package.add", json!({ "name": name, "parent": parent }))
             }
             key => {
                 let kind = Classifier::ALL.into_iter().find(|k| k.key() == key)?;
@@ -862,7 +872,7 @@ impl NotationUi for UmlUi {
                 };
                 let package_id = store.uuid(package).ok()?;
                 parents.push(package_id);
-                crate::panels::run_cx(cx, kind.add_command(), json!({ "package": package_id.to_string(), "name": name }))
+                archforge_shell_api::panels::run_cx(cx, kind.add_command(), json!({ "package": package_id.to_string(), "name": name }))
             }
         };
         match out {
@@ -941,7 +951,7 @@ impl NotationUi for UmlUi {
     }
 
     /// New inside ▸ on a classifier: the kinds it may nest (AR-132).
-    fn inside(&self, store: &Store, obj: Obj) -> Option<crate::notation_ui::Inside> {
+    fn inside(&self, store: &Store, obj: Obj) -> Option<archforge_shell_api::notation_ui::Inside> {
         // New ▸ on a package or a profile (AR-134, F2).
         crate::uml_profiles::inside(store, obj).or_else(|| crate::uml_nesting::inside(store, obj))
     }
@@ -1068,8 +1078,8 @@ impl NotationUi for UmlUi {
             Some((of("package")?, of("to")?))
         });
         match moved {
-            Some((package, to)) => crate::package_nav::move_package(cx, package, to),
-            None => crate::panels::run_cx(cx, cmd, params).map(|_| ()),
+            Some((package, to)) => crate::uml_package_nav::move_package(cx, package, to),
+            None => archforge_shell_api::panels::run_cx(cx, cmd, params).map(|_| ()),
         }
     }
 
@@ -1222,7 +1232,7 @@ impl NotationUi for UmlUi {
             return Some(crate::uml_constraints::row_text(store, o));
         }
         let (from, to) = archforge_uml::figures::ends(store, o)?;
-        Some(crate::notation_ui::ends_label(&name(store, from), &name(store, to)))
+        Some(archforge_shell_api::notation_ui::ends_label(&name(store, from), &name(store, to)))
     }
 
     /// A member's panel is its classifier's, a literal's its enumeration's.
@@ -1278,11 +1288,11 @@ impl NotationUi for UmlUi {
         // A metaclass on a profile's diagram is UML's own: its panel says so, and nothing changes it
         // (AR-134).
         if archforge_uml::profiles::is_metaclass(store, o) {
-            let width = (r.width() - 2.0 * crate::panels::PAD).max(0.0);
+            let width = (r.width() - 2.0 * archforge_shell_api::panels::PAD).max(0.0);
             let said = tr("A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.");
             let paint = ui.painter();
             let g = crate::ux::galley_rows(paint, &said, crate::ux::types::CAPTION, p.text_muted, Some(width), 6);
-            paint.galley(egui::pos2(r.left() + crate::panels::PAD, y), g, p.text_muted.into());
+            paint.galley(egui::pos2(r.left() + archforge_shell_api::panels::PAD, y), g, p.text_muted.into());
             return;
         }
         match class(store, o) {
@@ -1326,11 +1336,11 @@ impl NotationUi for UmlUi {
             return crate::uml_panel::package_body(cx, ui, p, r, y, subject);
         }
         let Some((cmd, key)) = self.rename(store, o) else { return };
-        let width = r.width() - 2.0 * crate::panels::PAD;
+        let width = r.width() - 2.0 * archforge_shell_api::panels::PAD;
         let root = archforge_uml::constraints::is_context(store, o).then_some(subject.id).flatten();
         let is_package = class(store, o) == Some(archforge_uml::PACKAGE);
-        crate::panels::name_field_cx(cx, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, cmd, key);
-        let mut below = y + 17.0 + crate::panels::FIELD + 16.0;
+        archforge_shell_api::panels::name_field_cx(cx, ui, p, egui::pos2(r.left() + archforge_shell_api::panels::PAD, y), width, subject, cmd, key);
+        let mut below = y + 17.0 + archforge_shell_api::panels::FIELD + 16.0;
         // The root package applies profiles as any package does (AR-134, F5), and carries
         // stereotypes (AR-135).
         if is_package && let Some(id) = subject.id {
@@ -1492,8 +1502,8 @@ impl NotationUi for UmlUi {
 
 /// The words of UML's figures, which reach `tr` through the figures' descriptions, for the
 /// catalogue tests.
-#[cfg(any(test, feature = "testing"))]
-pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
+#[cfg(feature = "snapshot")]
+pub fn texts() -> impl Iterator<Item = &'static str> {
     archforge_uml::WORDS.iter().copied()
 }
 
@@ -1803,8 +1813,8 @@ fn notes<const N: usize>(parts: [Option<String>; N]) -> Option<String> {
 /// the open diagram, tied to it by the ⊕ line, as one step, for the snapshot screens
 /// and the tests (AR-132); the project is then marked saved as it stands. Gives Priority's id and
 /// Order's.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_nested_priority(cx: &mut Ctx) -> Result<(String, String), String> {
+#[cfg(feature = "snapshot")]
+pub fn put_nested_priority(cx: &mut Ctx) -> Result<(String, String), String> {
     let d = cx.canvas.active.ok_or("the sample's diagram")?;
     let session = cx.session.as_mut().ok_or("the nested sample needs a session")?;
     let store = session.doc();
@@ -1851,8 +1861,8 @@ pub(crate) fn put_nested_priority(cx: &mut Ctx) -> Result<(String, String), Stri
 /// package placed left of it, binds it, T to Order and Key to Integer (AR-131, C2), its line drawn
 /// with its label. All as one step; the project is then marked saved as it stands. Gives
 /// Repository's id and the parameters' ids.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_repository(cx: &mut Ctx, bound: bool) -> Result<(Uuid, [Uuid; 2]), String> {
+#[cfg(feature = "snapshot")]
+pub fn put_repository(cx: &mut Ctx, bound: bool) -> Result<(Uuid, [Uuid; 2]), String> {
     let d = cx.canvas.active.ok_or("the sample's diagram")?;
     let session = cx.session.as_mut().ok_or("the template sample needs a session")?;
     let store = session.doc();
@@ -1909,8 +1919,8 @@ pub(crate) fn put_repository(cx: &mut Ctx, bound: bool) -> Result<(Uuid, [Uuid; 
 /// Payment, placed in a row under it with their lines, as one step, for the snapshot screens and
 /// the tests (AR-129); the project is then marked saved as it stands. Gives the generalizations
 /// from CardPayment, BankTransfer and WalletPayment to Payment, and Payment, by id.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_payment_kinds(cx: &mut Ctx) -> Result<([String; 3], String), String> {
+#[cfg(feature = "snapshot")]
+pub fn put_payment_kinds(cx: &mut Ctx) -> Result<([String; 3], String), String> {
     let d = cx.canvas.active.ok_or("the sample's diagram")?.to_string();
     let session = cx.session.as_mut().ok_or("the payment kinds need a session")?;
     let store = session.doc();
@@ -1954,8 +1964,8 @@ pub(crate) fn put_payment_kinds(cx: &mut Ctx) -> Result<([String; 3], String), S
 /// Adds literals named `names` at the end of the enumeration `enumeration` through
 /// `uml.literal.add`, as one step, for the snapshot screens and the tests; the project is then
 /// marked saved as it stands.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_literals(cx: &mut Ctx, enumeration: Uuid, names: &[&str]) -> Result<(), String> {
+#[cfg(feature = "snapshot")]
+pub fn put_literals(cx: &mut Ctx, enumeration: Uuid, names: &[&str]) -> Result<(), String> {
     let session = cx.session.as_mut().ok_or("the literals need a session")?;
     session
         .batch("Add literal", |b| {
@@ -1974,7 +1984,7 @@ pub(crate) fn put_literals(cx: &mut Ctx, enumeration: Uuid, names: &[&str]) -> R
 /// navigate one way and both, a composition and a shared aggregation, a generalization and a
 /// dependency. Built on the store, since commands for members and relationships come with their
 /// own journeys. Gives the package.
-#[cfg(any(test, feature = "snapshot"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn sample_model(st: &mut Store, model: Obj) -> Result<Obj, archforge_mof::Invalid> {
     use archforge_mof::Value;
     use archforge_uml as u;
@@ -2110,8 +2120,8 @@ pub(crate) fn sample_model(st: &mut Store, model: Obj) -> Result<Obj, archforge_
 /// Opens the sample class model (`sample_model`) on a class diagram in the context's project: its
 /// classes laid out in three rows, every association, generalization and dependency drawn, the
 /// named ones labelled. Gives the diagram's id.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn open_sample(cx: &mut Ctx) -> Result<Uuid, String> {
+#[cfg(feature = "snapshot")]
+pub fn open_sample(cx: &mut Ctx) -> Result<Uuid, String> {
     use archforge_mof::rows;
     let fail = |e: &dyn std::fmt::Display| e.to_string();
     let session = cx.session.as_ref().ok_or("the sample needs a session")?;
@@ -2184,6 +2194,45 @@ pub(crate) fn open_sample(cx: &mut Ctx) -> Result<Uuid, String> {
     *cx.session = Some(session);
     let d = Uuid::parse(&d).ok_or("the diagram's id")?;
     cx.requests.push(Request::ExpandRows(Uuid::parse(&pkg_id).into_iter().collect()));
-    crate::canvas::open_cx(cx, d);
+    archforge_shell_api::canvas::open_cx(cx, d);
     Ok(d)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use archforge_shell_api::i18n::{LANGUAGES, register};
+    use archforge_shell_api::notation_ui::NotationUi;
+
+    /// Adds the catalogue files under `dir` to `out`, each by its path from the catalogues' folder
+    /// (`uml/de.tsv`), as the build script walks them; a listing that fails part way fails the test.
+    fn catalogue_files(dir: &Path, under: &str, out: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap().map(Result::unwrap) {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if entry.file_type().unwrap().is_dir() {
+                catalogue_files(&entry.path(), &format!("{under}{name}/"), out);
+            } else if name.ends_with(".tsv") {
+                out.push(format!("{under}{name}"));
+            }
+        }
+    }
+
+    /// Every catalogue file under the folder, which the build script checks, is one of UML's
+    /// registered catalogues ([`NotationUi::catalogues`]), and every one of them is a file there;
+    /// they are one for each language, in the languages' order, so the machinery takes them.
+    #[test]
+    fn every_catalogue_in_the_folder_is_registered() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("i18n");
+        let mut files = Vec::new();
+        catalogue_files(&dir, "", &mut files);
+        files.sort();
+        let catalogues = super::UmlUi.catalogues();
+        let mut registered: Vec<&str> = catalogues.iter().map(|rows| rows.catalogue).collect();
+        registered.sort();
+        assert_eq!(files, registered, "a catalogue the build checks is a registered one, and the other way round");
+        let languages: Vec<&str> = LANGUAGES.iter().map(|l| l.code).collect();
+        assert_eq!(catalogues.iter().map(|rows| rows.code).collect::<Vec<_>>(), languages, "one for each language, in the languages' order");
+        assert_eq!(register(catalogues), Ok(()), "the machinery takes UML's catalogues");
+    }
 }

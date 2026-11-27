@@ -639,16 +639,17 @@ fn catalogue_files(dir: &Path, under: &str, out: &mut Vec<String>) {
 }
 
 /// Every catalogue file under the folder, which the build script checks, is a registered
-/// catalogue, the shell's or a notation's, and every registered catalogue is a file there; each
-/// table has one catalogue for each language, in the languages' order, so the machinery takes it;
-/// a listing that fails part way fails the test.
+/// catalogue, the shell's or ER's, whose screens are still in this crate, and every one of theirs
+/// is a file there (UML's are in its screens crate, which checks its own); each table a shell
+/// registers has one catalogue for each language, in the languages' order, so the machinery takes
+/// it; a listing that fails part way fails the test.
 #[test]
 fn every_catalogue_in_the_folder_is_registered() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("i18n");
     let mut files = Vec::new();
     catalogue_files(&dir, "", &mut files);
     files.sort();
-    let mut registered: Vec<String> = tables(crate::tests::SCREENS.catalogues()).flatten().map(|rows| rows.catalogue.to_string()).collect();
+    let mut registered: Vec<String> = tables([crate::ER.ui.catalogues()]).flatten().map(|rows| rows.catalogue.to_string()).collect();
     registered.sort();
     assert_eq!(files, registered, "a catalogue the build checks is a registered one, and the other way round");
     assert_eq!(

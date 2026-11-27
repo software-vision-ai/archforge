@@ -32,17 +32,18 @@ use archforge_uml::nary;
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::canvas::{CardDrawn, Drawing, Look, Tool, View, look_of};
-use crate::cx::{Ctx, CtxRef};
-use crate::editing::Action;
-use crate::i18n::{fmt, tr, trn};
-use crate::kinds::Press;
-use crate::panels::{FIELD, PAD, ROW, Subject, check_cx, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx, text_field_cx};
 use crate::uml_relate::Relate;
 use crate::uml_state::menus;
 use crate::uml_state::{UmlState, uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
-use crate::widgets;
+use archforge_shell_api::canvas::{Drawing, Look, Tool, View, look_of};
+use archforge_shell_api::cx::{Ctx, CtxRef};
+use archforge_shell_api::editing::Action;
+use archforge_shell_api::i18n::{fmt, tr, trn};
+use archforge_shell_api::kinds::{CardDrawn, Press};
+use archforge_shell_api::notation_ui::Subject;
+use archforge_shell_api::panels::{FIELD, PAD, ROW, check_cx, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx, text_field_cx};
+use archforge_shell_api::widgets;
 
 /// The panel's longer sentences, kept whole for the catalogue.
 const FINISHES: &str = "Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.";
@@ -108,7 +109,7 @@ fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
 }
 
 /// Whether the Relationship tool is armed with N-ary association on a class diagram.
-pub(crate) fn armed(cx: &CtxRef) -> bool {
+pub fn armed(cx: &CtxRef) -> bool {
     cx.canvas.tool == Tool::Connect(TOOL)
         && uml(cx.notation_states).map(|uml| uml.relation).unwrap_or_default() == Relate::NAry
         && on_class_diagram(cx)
@@ -146,7 +147,7 @@ pub(crate) fn adding_end(cx: &CtxRef) -> Option<Uuid> {
 /// tool is not N-ary association any more, its diagram is not the open one, or a class or card it
 /// picked is gone; Add end once another tool is chosen, another diagram opened, or the association
 /// is gone or no longer n-ary. A draft never outlives its gesture.
-pub(crate) fn retain(state: &mut UmlState, canvas: &crate::canvas::State, store: &Store) {
+pub(crate) fn retain(state: &mut UmlState, canvas: &archforge_shell_api::canvas::State, store: &Store) {
     let alive = |id: &Uuid| store.by_uuid(*id).is_some_and(|o| store.is_alive(o));
     let keep = match &state.nary {
         None => true,
@@ -186,10 +187,11 @@ fn has_menu(store: &Store, a: Obj) -> bool {
     nary::is_nary(store, a)
 }
 
-/// What a press of the primary button means here first ([`crate::kinds::DiagramKind::pointer`]):
-/// with the N-ary association tool armed, any press is the drawing's, a click on a card its next
-/// end (a double click finishes) and a click anywhere else cancelling it; with Select while Add
-/// end waits, a click on a card gives the new end and anywhere else cancels. None otherwise.
+/// What a press of the primary button means here first
+/// ([`archforge_shell_api::kinds::DiagramKind::pointer`]): with the N-ary association tool armed,
+/// any press is the drawing's, a click on a card its next end (a double click finishes) and a click
+/// anywhere else cancelling it; with Select while Add end waits, a click on a card gives the new
+/// end and anywhere else cancels. None otherwise.
 pub(crate) fn pointer(cx: &CtxRef, press: &Press<'_>) -> Option<Action> {
     let card = |at: Pos2| (press.node_at)(at).and_then(|n| uuid(press.store, n));
     match cx.canvas.tool {
@@ -219,12 +221,12 @@ pub(crate) fn pointer(cx: &CtxRef, press: &Press<'_>) -> Option<Action> {
 pub(crate) fn secondary_click(press: &Press<'_>) -> Option<Action> {
     let (store, at) = (press.store, press.at?);
     let shown = match (press.node_at)(at) {
-        Some(n) => crate::editing::element_of(store, n),
+        Some(n) => archforge_shell_api::editing::element_of(store, n),
         None => (press.line_at)(at).and_then(|e| store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref())),
     };
     let a = shown.map(|e| press.notations.selects_as(store, e)).filter(|a| has_menu(store, *a)).and_then(|a| uuid(store, a))?;
     Some(Action::Own(Box::new(move |cx| {
-        crate::editing::select_cx(cx, vec![a]);
+        archforge_shell_api::editing::select_cx(cx, vec![a]);
         if let Some(uml) = uml_mut(cx.notation_states) {
             uml.nary_menu = Some((at, a));
         }
@@ -245,7 +247,7 @@ pub(crate) fn shown_by(store: &Store, element: Obj) -> Option<Obj> {
 /// draft's next end; a double click with three ends or more finishes instead (its first click
 /// picked the last class). Anything but a class or an interface is refused at the canvas's top,
 /// in the user's words, and adds no end.
-pub(crate) fn click(cx: &mut Ctx, d: Obj, node: Uuid, double: bool) {
+pub fn click(cx: &mut Ctx, d: Obj, node: Uuid, double: bool) {
     cx.canvas.notice = None;
     let mut ends = draft(cx);
     if double && ends.len() >= nary::MIN_ENDS {
@@ -354,7 +356,7 @@ pub(crate) fn finish(cx: &mut Ctx, d: Obj) {
             }
         }
         // Refused, the draft stays for another try and the model is as it was.
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
+        Err(e) => cx.canvas.notice = Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -456,8 +458,8 @@ fn draw_diamond(paint: &egui::Painter, p: &Palette, rect: Rect, name: &str, keyw
 /// from `tip`, on the node's border, towards `next` meets the diamond's outline in the node's
 /// rectangle on screen, which `rect` gives only then ([`onto_diamond`]); none for a node of
 /// anything else.
-pub(crate) fn leg_start(store: &Store, source: Obj, rect: impl FnOnce() -> Rect, tip: Pos2, next: Pos2) -> Option<Pos2> {
-    crate::canvas::element_of(store, source, archforge_diagram::node::ELEMENT).filter(|a| nary::is_nary(store, *a))?;
+pub fn leg_start(store: &Store, source: Obj, rect: impl FnOnce() -> Rect, tip: Pos2, next: Pos2) -> Option<Pos2> {
+    archforge_shell_api::canvas::element_of(store, source, archforge_diagram::node::ELEMENT).filter(|a| nary::is_nary(store, *a))?;
     onto_diamond(rect(), tip, next)
 }
 
@@ -502,9 +504,9 @@ fn draw_draft(cx: &Ctx, paint: &egui::Painter, p: &Palette, view: View, d: Obj, 
     };
     // The class under the pointer, ringed as the next end.
     let target = pointer.and_then(|at| {
-        let grid = crate::canvas::grid(store, notations, d);
+        let grid = archforge_shell_api::canvas::grid(store, notations, d);
         let (x, y) = view.to_canvas(at);
-        match crate::editing::hit(store, notations, &grid, x, y) {
+        match archforge_shell_api::editing::hit(store, notations, &grid, x, y) {
             Some(archforge_diagram::Hit::Node(n)) if crate::uml_relate::class_of_node(store, uuid(store, n)?).is_some() => {
                 Some(view.rect(&archforge_diagram::grid::bounds_of(store, n)))
             }
@@ -518,8 +520,8 @@ fn draw_draft(cx: &Ctx, paint: &egui::Painter, p: &Palette, view: View, d: Obj, 
     if rects.len() < 2 {
         // One end: a dashed line from its card to the pointer.
         if let (Some(card), Some(at)) = (rects.first(), pointer) {
-            let end = target.map_or(at, |t| crate::canvas::exit_point(t, card.center()));
-            dashed(paint, crate::canvas::exit_point(*card, end), end);
+            let end = target.map_or(at, |t| archforge_shell_api::canvas::exit_point(t, card.center()));
+            dashed(paint, archforge_shell_api::canvas::exit_point(*card, end), end);
         }
         return;
     }
@@ -551,8 +553,8 @@ fn draw_draft(cx: &Ctx, paint: &egui::Painter, p: &Palette, view: View, d: Obj, 
     }
     diamond_shape(paint, diamond, p.canvas, stroke);
     if let Some(at) = pointer.filter(|at| !diamond.contains(*at)) {
-        let end = target.map_or(at, |t| crate::canvas::exit_point(t, diamond.center()));
-        let from = onto_diamond(diamond, crate::canvas::exit_point(diamond, end), end).unwrap_or(diamond.center());
+        let end = target.map_or(at, |t| archforge_shell_api::canvas::exit_point(t, diamond.center()));
+        let from = onto_diamond(diamond, archforge_shell_api::canvas::exit_point(diamond, end), end).unwrap_or(diamond.center());
         dashed(paint, from, end);
     }
 }
@@ -597,7 +599,8 @@ fn leg_handles(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d:
             let Some(route) = grid.line(leg) else { continue };
             let screen: Vec<Pos2> = route.iter().map(|(x, y)| view.to_screen(*x, *y)).collect();
             let (Some(first), Some(last)) = (screen.first().copied(), screen.last().copied()) else { continue };
-            let at = crate::canvas::end_handles_at(&screen, [archforge_diagram::figure::EndMark::None, mark], view.zoom)[1].unwrap_or(last);
+            let at =
+                archforge_shell_api::canvas::end_handles_at(&screen, [archforge_diagram::figure::EndMark::None, mark], view.zoom)[1].unwrap_or(last);
             handles.push((i, end_id, at, first));
         }
     }
@@ -606,7 +609,7 @@ fn leg_handles(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d:
         if !r.contains(at) {
             continue;
         }
-        let radius = crate::canvas::END_HANDLE;
+        let radius = archforge_shell_api::canvas::END_HANDLE;
         paint.circle_filled(at, radius, p.surface);
         paint.circle_stroke(at, radius, Stroke::new(1.5, p.accent));
         let id = format!("workspace.canvas.leg-end.{i}");
@@ -619,7 +622,7 @@ fn leg_handles(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d:
         if resp.drag_started_by(egui::PointerButton::Primary)
             && let Some(at) = cx.session.as_ref().map(|s| s.token())
         {
-            cx.canvas.gesture = Some(crate::editing::Gesture::Reconnect { element: end, source: false, fixed, at });
+            cx.canvas.gesture = Some(archforge_shell_api::editing::Gesture::Reconnect { element: end, source: false, fixed, at });
         }
     }
 }
@@ -799,12 +802,12 @@ fn menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, at: Pos2, a: Uuid, d:
         "add-end" => arm_add_end(cx, a),
         "remove" => {
             if let Some(n) = diamond {
-                crate::editing::unplace_cx(cx, vec![n]);
+                archforge_shell_api::editing::unplace_cx(cx, vec![n]);
             }
         }
         "delete" => {
             if let Some(n) = diamond {
-                crate::editing::ask_delete_cx(cx, n, a);
+                archforge_shell_api::editing::ask_delete_cx(cx, n, a);
             }
         }
         // Reconnect end: the association selected, its legs' ends take the drag.
@@ -873,7 +876,7 @@ pub(crate) fn draft_body(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, y: f
 
 /// The classes and interfaces an end may be at, by name, each with its id: every classifier of
 /// the model an association may join, the built-in types aside.
-pub(crate) fn end_types(store: &Store) -> Vec<(Uuid, String)> {
+pub fn end_types(store: &Store) -> Vec<(Uuid, String)> {
     let mut out: Vec<(Uuid, String)> = store
         .alive()
         .filter(|o| store.class_of(*o).is_ok_and(archforge_uml::is_classifier))
@@ -898,7 +901,7 @@ fn row_text(store: &Store, e: Obj) -> String {
 }
 
 /// Opens the editor on end `i` of association `a` (whose id is `id`), as the model has it.
-pub(crate) fn open(cx: &mut Ctx, id: Uuid, i: usize) {
+pub fn open(cx: &mut Ctx, id: Uuid, i: usize) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(id).and_then(|a| nary::ends(store, a).get(i).copied()) else { return };
     let (_, _, ordered, unique) = archforge_uml::modifiers::flags(store, e);
@@ -929,11 +932,11 @@ pub(crate) fn body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
     let half = ((width - 8.0) / 2.0).max(0.0);
-    crate::panels::name_field_cx(cx, ui, p, pos2(left, y), half, subject, "uml.relationship.rename", "relationship");
+    archforge_shell_api::panels::name_field_cx(cx, ui, p, pos2(left, y), half, subject, "uml.relationship.rename", "relationship");
     // Its package, read only: an association does not move on its own.
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let parts = archforge_uml::commands::package_of(store, a).map(|pkg| crate::uml_panel::package_parts(store, pkg)).unwrap_or_default();
-    let path = parts.join(crate::panels::PATH_SEP);
+    let path = parts.join(archforge_shell_api::panels::PATH_SEP);
     let at = pos2(left + half + 8.0, y);
     let paint = ui.painter().clone();
     let label = tr("Package");
@@ -945,7 +948,7 @@ pub(crate) fn body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
         field.left() + 8.0,
         field.center().y,
         &parts,
-        crate::panels::PATH_SEP,
+        archforge_shell_api::panels::PATH_SEP,
         types::SMALL,
         p.text_secondary,
         (half - 16.0).max(0.0),
@@ -984,7 +987,7 @@ pub(crate) fn body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             paint.rect_filled(row, 6.0, p.page);
         }
         ux::text_mid(&paint, row.left() + 10.0, row.center().y, text, types::UI, p.text, Some((width - 50.0).max(0.0)));
-        if crate::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
+        if archforge_shell_api::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
             open(cx, id, i);
         }
         y += ROW;
@@ -1056,7 +1059,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
     let m_id = format!("{key}.multiplicity");
     let typed_m = edit.multiplicity.clone();
     let m_label = tr("Multiplicity");
-    let combo = crate::panels::Combo {
+    let combo = archforge_shell_api::panels::Combo {
         id: &m_id,
         label: &m_label,
         name: &m_label,
@@ -1071,12 +1074,12 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
         menu: menus::NARY_END_MULTIPLICITY,
         limit: MAX_MULTIPLICITY,
     };
-    match crate::panels::editable_select_cx(cx, ui, p, at(0.0, cy), half, &mut edit.multiplicity, &combo) {
-        crate::panels::ComboOut::Pick(k) => {
+    match archforge_shell_api::panels::editable_select_cx(cx, ui, p, at(0.0, cy), half, &mut edit.multiplicity, &combo) {
+        archforge_shell_api::panels::ComboOut::Pick(k) => {
             edit.multiplicity = crate::uml_relate::MULTIPLICITIES.get(k).map(|m| (*m).to_string()).unwrap_or_default();
         }
-        crate::panels::ComboOut::Commit => enter |= ui.input(|i| i.key_pressed(egui::Key::Enter)),
-        crate::panels::ComboOut::Cancel | crate::panels::ComboOut::Idle => {}
+        archforge_shell_api::panels::ComboOut::Commit => enter |= ui.input(|i| i.key_pressed(egui::Key::Enter)),
+        archforge_shell_api::panels::ComboOut::Cancel | archforge_shell_api::panels::ComboOut::Idle => {}
     }
     if refused_at == Some("multiplicity") && edit.multiplicity != typed_m {
         edit.refused = None;
@@ -1109,11 +1112,11 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal_cx(cx, ui, crate::uml_state::NARY_END, card);
+    archforge_shell_api::panels::reveal_cx(cx, ui, crate::uml_state::NARY_END, card);
     // The type menu last, over the card: a pick changes the field; Apply moves the end.
     if cx.panels.menu == Some(menus::NARY_END_TYPE) {
         let names: Vec<String> = types_of.iter().map(|(_, n)| n.clone()).collect();
-        if let Some(k) = crate::panels::menu_cx(cx, ui, p, type_field, &type_id, &names)
+        if let Some(k) = archforge_shell_api::panels::menu_cx(cx, ui, p, type_field, &type_id, &names)
             && let Some((t, _)) = types_of.get(k)
         {
             edit.ty = Some(*t);
@@ -1204,7 +1207,7 @@ fn commit(cx: &mut Ctx, edit: &EndEdit) {
         }
         Err(e) => {
             if let Some(ed) = uml_mut(cx.notation_states).and_then(|uml| uml.nary_end.as_mut()) {
-                ed.refused = Some((None, crate::panels::refusal(cx.notation_uis, &e)));
+                ed.refused = Some((None, archforge_shell_api::panels::refusal(cx.notation_uis, &e)));
             }
         }
     }
@@ -1231,7 +1234,11 @@ pub(crate) fn remove_end(cx: &mut Ctx, id: Uuid, i: usize) {
         Ok(_) => {
             let text = fmt(&tr("End {role} removed"), &[("role", &called)]);
             let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
+            cx.canvas.toast = Some(archforge_shell_api::canvas::Toast {
+                text,
+                until: cx.frames.saturating_add(archforge_shell_api::canvas::TOAST_FRAMES),
+                undo_label,
+            });
         }
         Err(e) => cx.panels.notice = Some(e),
     }
@@ -1346,8 +1353,8 @@ pub(crate) fn retain_valid(state: &mut UmlState, store: &Store) {
 /// between the three as one step, its Catalog end at `1`. The project is then marked saved as it
 /// stands. Gives the ids by name: the classes, their cards (lower case), the diagram, and, drawn,
 /// the association and its diamond.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_recommends(cx: &mut Ctx, drawn: bool) -> Result<std::collections::BTreeMap<&'static str, String>, String> {
+#[cfg(feature = "snapshot")]
+pub fn put_recommends(cx: &mut Ctx, drawn: bool) -> Result<std::collections::BTreeMap<&'static str, String>, String> {
     let session = cx.session.as_mut().ok_or("the sample needs a session")?;
     let store = session.doc();
     let find = |n: &str| {
@@ -1420,12 +1427,12 @@ pub(crate) fn put_recommends(cx: &mut Ctx, drawn: bool) -> Result<std::collectio
     ids.insert("product", product_node);
     ids.insert("catalog", catalog_node);
     ids.insert("diagram", d.clone());
-    crate::canvas::open_cx(cx, Uuid::parse(&d).ok_or("the diagram's id")?);
+    archforge_shell_api::canvas::open_cx(cx, Uuid::parse(&d).ok_or("the diagram's id")?);
     Ok(ids)
 }
 
 /// Every word this module says through `tr` other than as a literal call, for the catalogue.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add end", "Remove", "Cancel", "Apply", FINISHES, SELECTING, BINARY_UNNAMED, BINARY_NAMED].into_iter()
 }

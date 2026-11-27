@@ -13,9 +13,9 @@ chord of its own on the canvas do to its selected elements, what it draws over t
 whatever diagram shows, each layer at its one place in the canvas's order (`notation_ui::Layer`:
 drafts, rows, menus, offers), what a problem badge that offers a way out says and does, and what an
 opening puts right in its own layout before the session starts (`open_repair`, which runs every
-notation's in turn), `er_ui` ER's, `uml_ui` UML's packages, classes, interfaces, enumerations, data types and primitive types;
+notation's in turn), `er_ui` ER's, and UML's screens crate (`archforge-uml-ui`) UML's packages, classes, interfaces, enumerations, data types and primitive types;
 `notation_ui::NotationState` (`archforge-shell-api`'s too) is what a notation keeps between frames for its own editors, menus,
-drawings and tools, `er_state` ER's and `uml_state` UML's, which the shell holds, parks with the
+drawings and tools, `er_state` ER's and UML's own in its screens crate, which the shell holds, parks with the
 project, starts fresh with each project opened and each version shown, and asks only through that
 trait: whether something is being edited, which editors are open, what to drop, what to close,
 whether something of its own holds the canvas's keys (an open menu holds them without being an
@@ -25,8 +25,7 @@ on a card that the card is drawn with; the shell keeps one open-menu slot, which
 `notation_ui::MenuId`, re-exported under its old path): the shell's own
 menus (Home's, the Versions panel's) in their scope, each notation's by its metamodel in its own,
 with a key and an index, so a notation opens, recognises and closes only its own (`er_state::menus`,
-`uml_state::menus`); and
-`uml_classifier` the class diagram's classifier tool with its menu of kinds),
+and UML's in its screens crate, with the class diagram's classifier tool and its menu of kinds)),
 the Diagrams explorer (`diagrams`: the model's folders and diagrams, the model behind the open
 diagram, the New diagram dialog from its `+` and the tab strip's, a diagram row's menu and Delete
 key, which delete a diagram that is no package's default), the centre (`canvas`: the
@@ -49,9 +48,9 @@ where a line's ends move to and what goes over the line there, what goes with a 
 over its labels by its name, the links between nodes, the figures of no one node or line, a card
 it draws itself, what goes over a card and its ring, and the hint
 bar, through which UML draws its association classes' ties and names, its generalization sets,
-its package cards with their tabs, owning paths and thumbnails (`uml_package`), its qualifier
-boxes, line stereotypes and template signatures (`uml_adornments`), its constraints' braces and
-notes with the notes' dashed links, opened whole by a double click (`uml_constraint_draw`), its
+its package cards with their tabs, owning paths and thumbnails, its qualifier boxes, line
+stereotypes and template signatures, its constraints' braces and notes with the notes' dashed
+links, opened whole by a double click, its
 n-ary diamonds, legs and hint,
 and runs its package navigation, whose state is UML's own; and its rows of the Model menu, as
 data (`kinds::ModelRow`: the row's id, its word, the tool it arms and the choice of the tool's
@@ -83,7 +82,7 @@ the Problems section that lists what the rules find on the selection, and a desc
 the heading of every model element (a diagram's heading has none): an ER element's is the text DDL
 writes as its comment, a UML element's a Comment it owns) and Skills (the skills on the
 selection, the inherited ones, the skill editor) following the selection, the status bar), drawn
-from the design with its own palette, type and icons (`ux`, the design of `archforge-shell-api` re-exported with the shell's app icon, its fonts and the icons only ER or only UML draws); its colours are `ux::Colour` values, which only `ux` makes. Icons are drawn crisp: each is rasterised once per size into an alpha mask at the screen's own pixels, its
+from the design with its own palette, type and icons (`ux`, the design of `archforge-shell-api` re-exported with the shell's app icon, its fonts and the icons only ER draws); its colours are `ux::Colour` values, which only `ux` makes. Icons are drawn crisp: each is rasterised once per size into an alpha mask at the screen's own pixels, its
 strokes a whole number of pixels on the pixel grid (`ux::raster`), and drawn at the standard size
 each icon carries, by role, with one stroke weight (`ux::Icon::standard_size`, drawn by
 `ux::icon_weighted`: chrome 15-17 pt, rows 13-15, small actions 10-14, chevrons 8); rows, fields
@@ -101,17 +100,15 @@ outside it, which the shell carries out once the call returns, in order, each on
 tree's rows opened over a selected element, the centre leaving a version's details for what was
 opened (`canvas::open` opens at once), a panel of the right side shown, an explorer of the left
 side shown, a new element's name opened for typing in Models, and the delete dialog opened on a
-removal. ER's screens take the context, and so do UML's leaf screens (`package_nav`,
-`uml_classifier`, `uml_bindings`, `uml_constraints`, `uml_nesting`, `uml_sets`, `uml_templates`),
-its panel screens (`uml_panel`, `uml_relate`, `uml_profiles`, `uml_stereotypes`, `uml_nary`,
-`uml_qualifiers`) and its member typed in place on a card (`uml_inline`). The interfaces hand a
+removal. ER's screens take the context, and so do UML's, in their own crate (`archforge-uml-ui`).
+The interfaces hand a
 notation the context, not the shell: each method of `NotationUi` and `DiagramKind` that reaches
 the shell takes `&mut cx::Ctx`, or `&cx::CtxRef` where it only reads (a tool's face and hint,
 where a line starts, the live line, a press and a right click), and so do a row of an element's
 menu (`kinds::MenuRow::run`) and what a kind makes of a press (`editing::Action::Own`). The shell
 builds the context at each call (`Shell::cx`, `Shell::cx_ref`) and carries out its requests once
-the method returns, so ER's and UML's kinds and Properties (`er_kind`, `er_ui`, `uml_ui`) build
-none. The controls that take it end in `_cx` (`panels::section_cx`, `panels::control_cx`,
+the method returns, so ER's and UML's kinds and Properties (`er_kind`, `er_ui`, and UML's in its
+screens crate) build none. The controls that take it end in `_cx` (`panels::section_cx`, `panels::control_cx`,
 `menu_bar::ends_cx`, `notation_ui::say_after_cx` and the rest); their old names over the whole
 shell forward to them for the shell's own screens, and `home::control` stays the shell's own way
 to `panels::control_cx`. The shared controls (the `_cx` controls of `panels`, from `section_cx`
@@ -122,7 +119,7 @@ and `control_cx` to `name_field_cx` and `reveal_cx`, with their geometry `PAD`, 
 (`actions::Keys` public, as `actions::Action` names it). So are the actions on a diagram the
 context runs at once (`canvas::open_cx`, `skill_tab::open_cx`, `editing::{select_cx,
 place_with_lines_cx, unplace_cx, ask_delete_cx}`, `menu_bar::ends_cx`), the card geometry and the
-drawing helpers a notation's figures share with the canvas (`canvas::{CARD_ROW, row_top, look_of,
+drawing helpers a notation's figures share with the canvas (`canvas::{CARD_ROW, card_height, look_of,
 edge_points, line_mark, …}`), `explorer::fresh_name`, `editing::diagrams_showing`,
 `skill_tab::is_skill` and the compact button with the focus ring (`settings::{button_in,
 focus_ring}`). The refusal words (`panels::refusal`, `panels::said`, `panels::a_kind`
@@ -133,7 +130,8 @@ given.
 **Layer.** 11, the top of the interface's layers, above the shell's interfaces
 (`archforge-shell-api`, 9) and the notations' screens (10); over `archforge-notations` (8),
 `archforge-er` (7), `archforge-diagram` (6), `archforge-core` (5), `archforge-mof` (4),
-`archforge-engine` (3) and `archforge-names`; with the shell's interfaces, the only library crates that may use the toolkit (egui). The shell never reads
+`archforge-engine` (3) and `archforge-names`; UML's model and screens (`archforge-uml`, 7, and `archforge-uml-ui`, 10) only for
+its tests and the screenshot tool (feature `snapshot`), which reach UML's screens through `archforge_uml_ui::snapshot`. With the shell's interfaces and the notations' screens, the only library crates that may use the toolkit (egui). The shell never reads
 the clock or the file system: the ids of a model's elements come from the host (`Services::ids`).
 
 **Binding rules.** The shell rules, the localisation rules (`i18n/`), and the layering rule that
@@ -146,7 +144,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | Item | Signature |
 |---|---|
 | `Shell::new` | `pub fn new(services: Services, screens: &'static ScreensRegistry) -> Shell`: on Home, with the notations and diagram kinds of the screens parts the app registered (`archforge_shell_api::screens`), each notation's state made from them and their catalogues registered |
-| `ER`, `UML` | `pub const ER: ScreensPart`, `pub const UML: ScreensPart`: ER's and UML's screens parts, each its `NotationUi` with its diagram kind, which the app registers (`static SCREENS: ScreensRegistry = ScreensRegistry::new(&[ER, UML])`); here until each notation's screens have a crate of their own |
+| `ER` | `pub const ER: ScreensPart`: ER's screens part, its `NotationUi` with its diagram kind, which the app registers with UML's (`archforge_uml_ui::UML`; `static SCREENS: ScreensRegistry = ScreensRegistry::new(&[ER, UML])`); here until ER's screens have a crate of their own |
 | `Shell::logic` | `pub fn logic(&mut self, ctx: &egui::Context)` (once per frame, before drawing) |
 | `Shell::ui` | `pub fn ui(&mut self, ui: &mut egui::Ui)` (draws the whole window) |
 | `Shell::request_quit` | `pub fn request_quit(&mut self)` (closes the window at the next frame) |
@@ -160,7 +158,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `Shell::widgets` | `pub fn widgets(&self) -> &[widgets::Entry]` (the controls of the last frame, by automation id) |
 | `widgets` | the automation registry of `archforge-shell-api`, re-exported under the path the shell's code and its tests name it by |
 | `canvas::self_loop` | `pub fn self_loop(rect: Rect, z: f32) -> Vec<Pos2>`: a self relationship's loop on a card's right side, from the canvas geometry of `archforge-shell-api`, which the shell re-exports in `canvas` under the paths its code names it by |
-| `ux` | the design of `archforge-shell-api` (colours, type, icons and the helpers that draw them), re-exported under the path the shell's code and its tests name it by, with what needs the shell: `ux::app_icon_rgba` and `ux::scale_rgba` (the app icon built in), the installing of the design's fonts, and in `ux::icons` the icons only ER or only UML draws |
+| `ux` | the design of `archforge-shell-api` (colours, type, icons and the helpers that draw them), re-exported under the path the shell's code and its tests name it by, with what needs the shell: `ux::app_icon_rgba` and `ux::scale_rgba` (the app icon built in), the installing of the design's fonts, and in `ux::icons` the icons only ER draws |
 | `Shell::top_inset` | `pub top_inset: f32`, a field: the logical pixels at the top the host draws over (the macOS title bar) |
 | `Shell::in_window_menu` | `pub in_window_menu: bool`, a field: whether the window draws its own menu bar in the title strip, set by the application everywhere but macOS |
 | `actions::VERSIONS_MENU` | `[&[&str]; 4]`: the Versions menu's rows by section, on every system; `actions::{label, available, run}` answer for them |
@@ -181,7 +179,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `Opened`, `CreateError` | an open project; why a creation or an opening failed, in the kinds the dialog explains; `UnsupportedKinds` names a project's diagram kinds Archforge does not support, worded on Home and in the status bar |
 | `UiState` | the stored appearance, language, Home's closed banner, the workspace's explorer and panel and their widths |
 | the title strip's controls | `strip.home`, `strip.open-project`, `strip.theme` on every screen; on the workspace `strip.home` closes the project |
-| `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time: the translations machinery of `archforge-shell-api`, re-exported under the path the shell's code and its tests name it by, with the shell's catalogues (`i18n::CATALOGUES`, `src/i18n/<code>.tsv`; the rows only the shell's interfaces' code says are in theirs, which their lookups register) and each notation's (`NotationUi::catalogues`: ER's in `src/i18n/er/`, UML's in `src/i18n/uml/`, the rows only that notation's screens name), which `Shell::new` registers from the screens parts it is given (`ScreensRegistry::catalogues`), so nothing the shell's interfaces say is looked up before them, and `tr`, `tr_ctx` and `trn` before their first lookup |
+| `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time: the translations machinery of `archforge-shell-api`, re-exported under the path the shell's code and its tests name it by, with the shell's catalogues (`i18n::CATALOGUES`, `src/i18n/<code>.tsv`; the rows only the shell's interfaces' code says are in theirs, which their lookups register) and each notation's (`NotationUi::catalogues`: ER's in `src/i18n/er/`, UML's in its screens crate, the rows only that notation's screens name), which `Shell::new` registers from the screens parts it is given (`ScreensRegistry::catalogues`), so nothing the shell's interfaces say is looked up before them, and `tr`, `tr_ctx` and `trn` before their first lookup |
 | `model_words::{words, property_label, literal_label, kind_label}` | the labels for what the metamodel names, looked up in the catalogues on the interface thread, each taking the notations the shell was given: every card property and literal of the core and of their metamodels, a notation's words in its own catalogue, the kinds the core and they create, in each notation's own word (a table, a column, a subtype), and `Element` for the rest |
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |

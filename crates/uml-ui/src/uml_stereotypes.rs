@@ -20,21 +20,21 @@ use archforge_uml::profiles;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::cx::Ctx;
-use crate::i18n::{fmt, tr, tr_ctx, trn};
-use crate::notation_ui::NotationUi;
-use crate::panels::{FIELD, PAD, ROW, control_cx, run_cx, section_cx};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::i18n::{fmt, tr, tr_ctx, trn};
+use archforge_shell_api::notation_ui::NotationUi;
+use archforge_shell_api::panels::{FIELD, PAD, ROW, control_cx, run_cx, section_cx};
 
 /// The ids of the Stereotypes section (F3, F4).
 pub(crate) const PREFIX: &str = "workspace.properties.stereotypes";
-#[cfg(test)]
-pub(crate) const ADD_ID: &str = "workspace.properties.stereotypes.add";
-#[cfg(test)]
-pub(crate) const APPLIED_ID: &str = "workspace.properties.stereotypes.applied";
-pub(crate) const SHOW_ID: &str = "workspace.properties.stereotypes.showValues";
+#[cfg(feature = "snapshot")]
+pub const ADD_ID: &str = "workspace.properties.stereotypes.add";
+#[cfg(feature = "snapshot")]
+pub const APPLIED_ID: &str = "workspace.properties.stereotypes.applied";
+pub const SHOW_ID: &str = "workspace.properties.stereotypes.showValues";
 
 /// What values and Remove mean, under the section (F3), and where stereotypes come from while none
 /// is applied: too long for a line of code, so named here and listed for the catalogue in [`texts`].
@@ -133,7 +133,7 @@ struct Pick {
 /// capitals and accents): those that apply and those applied first, then the rest, each group by
 /// profile.
 fn picks(store: &Store, element: Obj, filter: &str) -> Vec<Pick> {
-    let wanted = crate::home_search::Typed::trimmed(filter);
+    let wanted = archforge_shell_api::search::Typed::trimmed(filter);
     let mut open = Vec::new();
     let mut shut = Vec::new();
     for (s, offer) in applications::choices(store, element) {
@@ -319,7 +319,7 @@ pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
 /// model has no stereotype to apply. Gives the y under it.
 pub(crate) fn section_for(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, owner: Obj) -> f32 {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return y };
-    let selected = crate::panels::selected_id_cx(&cx.cx_ref()).and_then(|id| store.by_uuid(id));
+    let selected = archforge_shell_api::panels::selected_id_cx(&cx.cx_ref()).and_then(|id| store.by_uuid(id));
     let member = selected.filter(|m| {
         *m != owner
             && store.class_of(*m).is_ok_and(|c| c == archforge_uml::PROPERTY || c == archforge_uml::OPERATION)
@@ -362,7 +362,7 @@ fn refusal(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, left: f32, y: f32, width: f
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
     paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-    crate::widgets::record_visible(ui, cx.registry, id, "text", card);
+    archforge_shell_api::widgets::record_visible(ui, cx.registry, id, "text", card);
     card.bottom() + 12.0
 }
 
@@ -390,8 +390,8 @@ fn applied_rows(
     let key = format!("{prefix}.applied.{s_id}");
     let paint = ui.painter().clone();
     let r = Rect::from_min_size(pos2(left, y), vec2(width, ROW));
-    crate::widgets::record_visible(ui, cx.registry, &key, "row", r);
-    ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&key), |node| {
+    archforge_shell_api::widgets::record_visible(ui, cx.registry, &key, "row", r);
+    ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(&key), |node| {
         node.set_role(egui::accesskit::Role::Row);
         node.set_label(format!("{label} {profile}"));
     });
@@ -509,7 +509,7 @@ fn value_line(
             if open {
                 let mut items = vec![if default.is_empty() { tr("No value") } else { fmt(&tr("Default ({value})"), &[("value", &default)]) }];
                 items.extend(choices.iter().cloned());
-                if let Some(i) = crate::panels::menu_cx(cx, ui, p, field, &id, &items) {
+                if let Some(i) = archforge_shell_api::panels::menu_cx(cx, ui, p, field, &id, &items) {
                     let values: Vec<String> = if i == 0 { Vec::new() } else { choices.get(i - 1).cloned().into_iter().collect() };
                     write_values(cx, element_id, s_id, p_id, values, None);
                 }
@@ -523,14 +523,14 @@ fn value_line(
             let mut text = editing.as_ref().map_or_else(|| current.clone(), |v| v.text.clone());
             let refused = editing.as_ref().and_then(|v| v.refused.clone());
             paint.rect_filled(field, 6.0, p.field);
-            let eid = crate::widgets::egui_id(&id);
+            let eid = archforge_shell_api::widgets::egui_id(&id);
             let focused = ui.memory(|m| m.has_focus(eid));
             let mut inner_right = field.right() - 8.0;
             if !set && text.is_empty() && !focused && !default.is_empty() {
                 inner_right = default_tag(&paint, p, field.right() - 6.0, field.center().y) - 6.0;
             }
-            crate::widgets::record_visible(ui, cx.registry, &id, "field", field);
-            let inner = crate::panels::field_inner(ui, field);
+            archforge_shell_api::widgets::record_visible(ui, cx.registry, &id, "field", field);
+            let inner = archforge_shell_api::panels::field_inner(ui, field);
             let inner = Rect::from_min_max(inner.min, pos2(inner_right.max(inner.left()), inner.bottom()));
             let hint = if default.is_empty() { "—".to_string() } else { default.clone() };
             let edit = egui::TextEdit::singleline(&mut text)
@@ -588,7 +588,7 @@ fn value_line(
                 let g = ux::galley_rows(&paint, &why, types::CAPTION, p.danger, Some(field.width()), 4);
                 let tall = g.size().y;
                 paint.galley(pos2(field.left(), field.bottom() + 4.0), g, p.danger.into());
-                crate::widgets::record_visible(
+                archforge_shell_api::widgets::record_visible(
                     ui,
                     cx.registry,
                     &format!("{id}.refusal"),
@@ -671,7 +671,7 @@ fn write_values(cx: &mut Ctx, element: Uuid, s_id: Uuid, p_id: Uuid, values: Vec
                     stereotype: s_id,
                     property: p_id,
                     text: typed.unwrap_or_else(|| values.join(", ")),
-                    refused: Some(crate::panels::refusal(cx.notation_uis, &e)),
+                    refused: Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e)),
                 });
             }
         }
@@ -694,7 +694,7 @@ fn show_values_check(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, left: f32, y: f32
     let Some((d_id, d)) = open_class_diagram(cx) else { return y };
     let was = cx.session.as_ref().is_some_and(|s| applications::values_shown(s.doc(), d));
     let mut on = was;
-    crate::panels::check_cx(cx, ui, p, pos2(left, y), SHOW_ID, &tr("Show stereotype values on this diagram"), &mut on);
+    archforge_shell_api::panels::check_cx(cx, ui, p, pos2(left, y), SHOW_ID, &tr("Show stereotype values on this diagram"), &mut on);
     if on != was
         && let Err(e) = show_values(cx, d_id, on)
     {
@@ -705,12 +705,12 @@ fn show_values_check(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, left: f32, y: f32
 
 /// Shows or hides the stereotype values on diagram `d` in one undo step, whose command grows the
 /// cards that would hide a value (AR-241).
-pub(crate) fn show_values(cx: &mut Ctx, d: Uuid, on: bool) -> Result<(), String> {
+pub fn show_values(cx: &mut Ctx, d: Uuid, on: bool) -> Result<(), String> {
     let session = cx.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
     session
         .execute("uml.stereotype.show-values", &json!({ "diagram": d.to_string(), "show": on }))
         .map(|_| cx.panels.notice = None)
-        .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
+        .map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e))
 }
 
 /// The picker under `anchor` (F4): headed `APPLY TO ORDER`, then the filter as typed, the
@@ -749,7 +749,7 @@ fn picker(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &str, 
     let left = (anchor.right() - width).min(window.right() - 8.0 - width).max(window.left() + 8.0);
     let m = Rect::from_min_size(pos2(left, anchor.bottom() + 4.0), vec2(width, height));
     let live: Vec<usize> = rows.iter().enumerate().filter(|(_, r)| r.live).map(|(i, _)| i).collect();
-    let picked = ux::overlay(ui, crate::widgets::egui_id(&format!("{add_id}.layer")), m, |ui| {
+    let picked = ux::overlay(ui, archforge_shell_api::widgets::egui_id(&format!("{add_id}.layer")), m, |ui| {
         let paint = ui.painter().clone();
         ux::shadow(&paint, m, 8.0, p.shadow);
         paint.rect_filled(m, 8.0, p.surface);
@@ -757,7 +757,7 @@ fn picker(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &str, 
         ux::text(
             &paint,
             pos2(m.left() + 14.0, m.top() + 12.0),
-            &crate::canvas::eyebrow_case(&heading),
+            &archforge_shell_api::canvas::eyebrow_case(&heading),
             types::EYEBROW,
             p.text_muted,
             Some(m.width() - 28.0),
@@ -766,7 +766,7 @@ fn picker(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &str, 
             let said = fmt(&tr("Filter: {text}"), &[("text", &filter)]);
             ux::text(&paint, pos2(m.left() + 14.0, m.top() + 30.0), &said, types::CAPTION, p.text_secondary, Some(m.width() - 28.0));
         }
-        crate::widgets::record_visible(ui, cx.registry, &format!("{add_id}.menu"), "menu", m);
+        archforge_shell_api::widgets::record_visible(ui, cx.registry, &format!("{add_id}.menu"), "menu", m);
         let mut reached = cx.panels.menu_reached.as_ref().filter(|(of, _)| of == add_id).map(|(_, i)| *i);
         let (down, up, enter) = ui.input_mut(|i| {
             (
@@ -812,11 +812,11 @@ fn picker(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &str, 
             let resp = if row.live {
                 control_cx(cx, ui, &rid, "menu-item", r.intersect(list), true).accessible_name(format!("{} {}", row.label, row.detail))
             } else {
-                crate::widgets::record_visible(ui, cx.registry, &rid, "menu-item", r.intersect(list));
-                let resp = ui.interact(r.intersect(list), crate::widgets::egui_id(&rid), Sense::hover());
+                archforge_shell_api::widgets::record_visible(ui, cx.registry, &rid, "menu-item", r.intersect(list));
+                let resp = ui.interact(r.intersect(list), archforge_shell_api::widgets::egui_id(&rid), Sense::hover());
                 let why = row.why.clone().unwrap_or_else(|| row.detail.clone());
                 let ticked = row.ticked;
-                ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&rid), |node| {
+                ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(&rid), |node| {
                     node.set_role(egui::accesskit::Role::MenuItem);
                     node.set_disabled();
                     if ticked {
@@ -903,8 +903,8 @@ pub(crate) fn going_along(uis: &[&'static dyn NotationUi], store: &Store, elemen
 /// table set to `orders`, cached left to its default; the profile Auditing (Auditable, extending
 /// Class) applied to Commerce, and Logging (Tracked, extending Class) applied nowhere, so the picker
 /// (F4) shows each kind of row; the open diagram showing the values. Gives Order's id.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_values(cx: &mut Ctx) -> Result<Uuid, String> {
+#[cfg(feature = "snapshot")]
+pub fn put_values(cx: &mut Ctx) -> Result<Uuid, String> {
     let (commerce, _, entity) = crate::uml_profiles::put_profiles(cx, true)?;
     let session = cx.session.as_mut().ok_or("the sample needs a session")?;
     let order = {
@@ -931,7 +931,7 @@ pub(crate) fn put_values(cx: &mut Ctx) -> Result<Uuid, String> {
 
 /// The words this module hands to `tr` by a name rather than a literal, for the catalogue's
 /// coverage test: the section's `+` hint and its helps.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Apply stereotype", VALUES_HELP, NONE_HELP].into_iter()
 }

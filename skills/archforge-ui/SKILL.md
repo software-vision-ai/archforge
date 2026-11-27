@@ -5,15 +5,17 @@ description: "Use when adding or changing anything Archforge draws or says: a sc
 
 # The interface and its text
 
-The interface is `crates/ui-egui`, the shell, over its interfaces in `crates/shell-api`; the two are
-the only library crates that may use the toolkit. It draws the design: when the design changes, the
+The interface is `crates/ui-egui`, the shell, over its interfaces in `crates/shell-api`, with each
+notation's screens in a crate of their own between them (UML's: `crates/uml-ui`); they are the
+only library crates that may use the toolkit. It draws the design: when the design changes, the
 code follows it, and a correction the owner makes to the look goes into the design first. `crates/ui-egui/README.md` lists the crate's public items. The
 decisions taken so far about how it looks and behaves are in `skills/archforge-design/SKILL.md`.
 
 ## Draw through `ux`
 - `ux` is the shell's interfaces' design (`crates/shell-api/src/ux/mod.rs`), which the shell
   re-exports as `crate::ux` (`crates/ui-egui/src/ux/mod.rs`) with what needs the shell: the app
-  icon, the installing of the design's fonts, and the icons only one notation draws.
+  icon, the installing of the design's fonts, and the icons only ER draws; UML's screens crate
+  re-exports it as its own `crate::ux` (`crates/uml-ui/src/ux/mod.rs`) with the icons only UML draws.
 - Colours come from the palette, `ux::palette(dark)` (`crates/shell-api/src/ux/mod.rs`): `LIGHT`
   and `DARK`, one field per role. No literal colour outside that file; a new role is a new field in
   both appearances.
@@ -29,9 +31,9 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   `ux::galley_rows`, which place a line box's top-left corner as the design does. No raw `FontId`
   in a screen. A screen checks `ux::ready` before its first text.
 - Icons are strokes in `crates/shell-api/src/ux/icons.rs` when the shell or both notations draw
-  them, and in `crates/ui-egui/src/ux/icons.rs` when only ER or only UML does, until that
-  notation's screens crate takes them; both are drawn with `ux::icon` or `ux::icon_in` at the
-  design's stroke weight.
+  them, in `crates/uml-ui/src/ux/icons.rs` when only UML does, and in `crates/ui-egui/src/ux/icons.rs`
+  when only ER does, until ER's screens crate takes them; all are drawn with `ux::icon` or
+  `ux::icon_in` at the design's stroke weight.
 - `crates/ui-egui/src/theme.rs` gives the toolkit's own visuals (tooltips, scroll bars) the same
   palette. Everything else is drawn by the screen itself.
 - On macOS the title strip is the window's title bar: keep clear of `Shell::top_inset`.
@@ -108,12 +110,13 @@ after every visible change, in both appearances, beside the design.
   several meanings, or `trn("{n} thing", "{n} things", n)` (the machinery is
   `crates/shell-api/src/i18n/mod.rs`, whose lookups register the interfaces' own catalogues; the
   shell's `crate::i18n` re-exports it with its catalogues registered). Pass the English text as a literal: the coverage test (`apps/archforge/src/catalogues.rs`) reads the
-  literals in `crates/ui-egui/src`, `crates/shell-api/src` and `apps/archforge/src`. Text from a
-  table goes through a function the test calls, listed in `testing::word_lists`, as `home::start_texts` is.
+  literals in `crates/ui-egui/src`, `crates/shell-api/src`, `crates/uml-ui/src` and `apps/archforge/src`. Text from a
+  table goes through a function the test calls, listed in `testing::word_lists`, as `home::start_texts` is, or for
+  UML's screens in `archforge_uml_ui::snapshot::word_lists`.
 - The catalogues are `crates/ui-egui/src/i18n/<code>.tsv`, the shell's,
   `crates/shell-api/src/i18n/<code>.tsv`, the shell's interfaces' (registered by their own
-  lookups, and checked by their build script), and one table per notation, `crates/ui-egui/src/i18n/er/<code>.tsv` and `crates/ui-egui/src/i18n/uml/<code>.tsv`,
-  which the notation hands over (`NotationUi::catalogues`). The shell's own is registered before
+  lookups, and checked by their build script), and one table per notation, `crates/ui-egui/src/i18n/er/<code>.tsv` and `crates/uml-ui/src/i18n/uml/<code>.tsv`
+  (checked by UML's screens crate's build script), which the notation hands over (`NotationUi::catalogues`). The shell's own is registered before
   the first lookup; a shell registers those of the notations it is given as it sets them up
   (`Shell::new`, from its screens parts, `i18n::register_notations`), so nothing a notation says is looked up before them.
   A test that says a notation's words without a shell makes one first, as the app does. A row only one notation's screens name goes in that notation's table;
@@ -141,7 +144,7 @@ after every visible change, in both appearances, beside the design.
 - A new language is a catalogue in every table plus a row in `LANGUAGES`
   (`crates/shell-api/src/i18n/mod.rs`), in the interfaces' `CATALOGUES` (the same file), in the
   shell's `CATALOGUES` (`crates/ui-egui/src/i18n/mod.rs`) and in each notation's (`er_ui.rs`,
-  `uml_ui.rs`); each crate's `every_catalogue_in_the_folder_is_registered` fails without the rows. Japanese and Chinese draw with an installed family
+  `crates/uml-ui/src/uml_ui.rs`); each crate's `every_catalogue_in_the_folder_is_registered` fails without the rows. Japanese and Chinese draw with an installed family
   (`crates/ui-egui/src/fonts.rs`).
 - Wording is plain and UK English: colour, licence, catalogue.
 

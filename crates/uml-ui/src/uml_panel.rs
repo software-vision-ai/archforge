@@ -20,17 +20,17 @@ use archforge_uml::members::{BUILT_IN, attributes, operations, parameters};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::cx::{Ctx, Request};
-use crate::i18n::{fmt, tr, trn};
-use crate::notation_ui::NotationUi;
-use crate::panels::{
-    FIELD, MenuId, PAD, ROW, Subject, check_cx, control_cx, field_inner, icon_button_cx, menu_cx, run_cx, section_cx, select_field_cx, text_field_cx,
-};
 use crate::uml_classifier::Classifier;
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
-use crate::widgets;
+use archforge_shell_api::cx::{Ctx, Request};
+use archforge_shell_api::i18n::{fmt, tr, trn};
+use archforge_shell_api::notation_ui::{MenuId, NotationUi, Subject};
+use archforge_shell_api::panels::{
+    FIELD, PAD, ROW, check_cx, control_cx, field_inner, icon_button_cx, menu_cx, run_cx, section_cx, select_field_cx, text_field_cx,
+};
+use archforge_shell_api::widgets;
 
 /// The visibilities, in the metamodel's order, as the commands name them.
 const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
@@ -165,7 +165,7 @@ fn parameter_types(store: &Store, within: Option<Obj>) -> Vec<(String, String)> 
 }
 
 /// Opens the editor of `kind` on `target`, or on a new member of `class`.
-pub(crate) fn open(cx: &mut Ctx, class: Uuid, kind: MemberKind, target: Option<Uuid>) {
+pub fn open(cx: &mut Ctx, class: Uuid, kind: MemberKind, target: Option<Uuid>) {
     let edit = edit_of(cx.session.as_ref().map(|s| s.doc()), class, kind, target);
     if let Some(uml) = uml_mut(cx.notation_states) {
         uml.member = Some(edit);
@@ -175,7 +175,7 @@ pub(crate) fn open(cx: &mut Ctx, class: Uuid, kind: MemberKind, target: Option<U
 
 /// The editor's values for `target` as the model holds them, or empty ones for a new member of
 /// `class`: what the Properties editor and the canvas's inline row start from.
-pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, target: Option<Uuid>) -> MemberEdit {
+pub fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, target: Option<Uuid>) -> MemberEdit {
     let mut edit = MemberEdit {
         kind,
         target,
@@ -274,7 +274,7 @@ pub(crate) fn class_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
     let width = r.width() - 2.0 * PAD;
     let half = ((width - 8.0) / 2.0).max(0.0);
     let (rename, key) = kind.rename_command();
-    crate::panels::name_field_cx(cx, ui, p, pos2(r.left() + PAD, y), half, subject, rename, key);
+    archforge_shell_api::panels::name_field_cx(cx, ui, p, pos2(r.left() + PAD, y), half, subject, rename, key);
     // Its owner, a package or a classifier: a pick moves it there (AR-132, D2 and D3).
     let field = crate::uml_nesting::owner_field(cx, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, class);
     let mut y = y + 17.0 + FIELD + 12.0;
@@ -327,7 +327,7 @@ pub(crate) fn class_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
 }
 
 /// The id of No subclasses (final), the design's own (AR-137).
-pub(crate) const FINAL_ID: &str = "workspace.properties.classifier.isFinalSpecialization";
+pub const FINAL_ID: &str = "workspace.properties.classifier.isFinalSpecialization";
 
 /// No subclasses (final) at `y` with its explanation under it (AR-137): ticked, nothing may
 /// specialize the classifier and its card says `{final}` after its name (`uml.classifier.set`, one
@@ -357,7 +357,7 @@ fn final_check(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32
         Some(why) => format!("{explained} {why}"),
         None => explained.clone(),
     };
-    ui.ctx().accesskit_node_builder(crate::widgets::egui_id(FINAL_ID), |node| {
+    ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(FINAL_ID), |node| {
         node.set_role(egui::accesskit::Role::CheckBox);
         node.set_toggled(if was { egui::accesskit::Toggled::True } else { egui::accesskit::Toggled::False });
         node.set_description(described);
@@ -396,7 +396,7 @@ fn final_check(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
         paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-        crate::widgets::record_visible(ui, cx.registry, &format!("{FINAL_ID}.refusal"), "text", card);
+        archforge_shell_api::widgets::record_visible(ui, cx.registry, &format!("{FINAL_ID}.refusal"), "text", card);
         y = card.bottom() + 12.0;
         // A button that selects their generalizations, for Delete to remove them.
         let n = u64::try_from(below.len()).unwrap_or(u64::MAX);
@@ -437,9 +437,9 @@ pub(crate) fn final_refusal(name: &str, below: &[(Uuid, String)]) -> String {
 }
 
 /// The id of a classifier's No redefinition (leaf), the design's own (AR-138).
-pub(crate) const LEAF_ID: &str = "workspace.properties.element.isLeaf";
+pub const LEAF_ID: &str = "workspace.properties.element.isLeaf";
 /// The id of a member editor's No redefinition (leaf).
-pub(crate) const MEMBER_LEAF_ID: &str = "workspace.properties.member.isLeaf";
+pub const MEMBER_LEAF_ID: &str = "workspace.properties.member.isLeaf";
 
 /// A check box at `at` labelled `label`, its explanation under it `width` wide, which also describes
 /// it, and `refused`, when given, on the danger tint under that with its warning mark, joining its
@@ -464,7 +464,7 @@ pub(crate) fn explained_check(
         Some(why) => format!("{explained} {why}"),
         None => explained.to_string(),
     };
-    ui.ctx().accesskit_node_builder(crate::widgets::egui_id(id), |node| {
+    ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(id), |node| {
         node.set_role(egui::accesskit::Role::CheckBox);
         node.set_toggled(if was { egui::accesskit::Toggled::True } else { egui::accesskit::Toggled::False });
         node.set_description(described);
@@ -483,7 +483,7 @@ pub(crate) fn explained_check(
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(at.x + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
         paint.galley(pos2(at.x + 32.0, y + 10.0), text, p.text.into());
-        crate::widgets::record_visible(ui, cx.registry, &format!("{id}.refusal"), "text", card);
+        archforge_shell_api::widgets::record_visible(ui, cx.registry, &format!("{id}.refusal"), "text", card);
         y = card.bottom() + 12.0;
     }
     (on, y)
@@ -491,7 +491,7 @@ pub(crate) fn explained_check(
 
 /// Why an element may not be made leaf while `by` redefine it, in the user's words: each named
 /// (`CardPayment::authorise()`), their redefinitions to be removed first (AR-138).
-pub(crate) fn leaf_refusal(by: &[String]) -> String {
+pub fn leaf_refusal(by: &[String]) -> String {
     let listed = match by.split_last() {
         Some((last, rest)) if !rest.is_empty() => fmt(&tr("{names} and {last}"), &[("names", &rest.join(", ")), ("last", last)]),
         _ => by.join(", "),
@@ -553,7 +553,7 @@ fn leaf_check(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, cla
 pub(crate) fn package_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(package), Some(_)) = (subject.obj, subject.id) else { return };
     let width = r.width() - 2.0 * PAD;
-    crate::panels::name_field_cx(cx, ui, p, pos2(r.left() + PAD, y), width, subject, "uml.package.rename", "package");
+    archforge_shell_api::panels::name_field_cx(cx, ui, p, pos2(r.left() + PAD, y), width, subject, "uml.package.rename", "package");
     // Where it may go: every package but itself and those it holds, on a row of its own, so the
     // menu has room for their paths.
     let (here, choices) = match cx.session.as_ref() {
@@ -570,7 +570,7 @@ pub(crate) fn package_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect
         None => (Vec::new(), Vec::new()),
     };
     let parent_id = "workspace.properties.package.parent";
-    let field = crate::panels::path_select_field_cx(
+    let field = archforge_shell_api::panels::path_select_field_cx(
         cx,
         ui,
         p,
@@ -589,13 +589,13 @@ pub(crate) fn package_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect
     }
     if cx.panels.menu == Some(menus::PACKAGE_PARENT) {
         let paths: Vec<Vec<String>> = choices.iter().map(|(_, n)| n.clone()).collect();
-        if let Some(i) = crate::panels::menu_paths_cx(cx, ui, p, field, parent_id, &paths)
+        if let Some(i) = archforge_shell_api::panels::menu_paths_cx(cx, ui, p, field, parent_id, &paths)
             && let Some((to, _)) = choices.get(i)
         {
             // As a drop in Models moves it: its cards stay, none is added to its new owner's diagram.
             let to = cx.session.as_ref().and_then(|s| s.doc().by_uuid(*to));
             if let Some(to) = to {
-                cx.panels.notice = crate::package_nav::move_package(cx, package, to).err();
+                cx.panels.notice = crate::uml_package_nav::move_package(cx, package, to).err();
             }
         }
     }
@@ -612,14 +612,14 @@ fn path_below_root(store: &Store, package: Obj) -> Vec<String> {
 
 /// The names on a package's path from the top, its own last: each name one part, whatever it
 /// holds, every ancestor up to the root however deep it sits.
-pub(crate) fn package_parts(store: &Store, package: Obj) -> Vec<String> {
+pub fn package_parts(store: &Store, package: Obj) -> Vec<String> {
     path_parts(package, |p| archforge_uml::commands::package_of(store, p), |p| name(store, p))
 }
 
 /// The names of `start` and of every ancestor `parent` leads to, from the top down. A walk that
 /// comes back to where it has been (a cycle a damaged file could hold) stops there, so it ends
 /// after at most one step per element the model holds, however deep the path is.
-pub(crate) fn path_parts<T: Copy + Eq + std::hash::Hash>(start: T, parent: impl Fn(T) -> Option<T>, name: impl Fn(T) -> String) -> Vec<String> {
+pub fn path_parts<T: Copy + Eq + std::hash::Hash>(start: T, parent: impl Fn(T) -> Option<T>, name: impl Fn(T) -> String) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut names = Vec::new();
     let mut at = Some(start);
@@ -686,7 +686,7 @@ pub(crate) fn members_section(
     y = next - 6.0;
     let editing =
         |cx: &Ctx| uml(cx.notation_states).and_then(|uml| uml.member.as_ref()).filter(|e| e.kind == kind && e.class == class_id).map(|e| e.target);
-    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
+    let chosen = archforge_shell_api::panels::selected_id_cx(&cx.cx_ref());
     if rows.is_empty() && kind == MemberKind::Literal && editing(cx) != Some(None) {
         ux::text(&paint, pos2(r.left() + PAD + 10.0, y + 9.0), &tr("No literals yet"), types::UI, p.text_muted, Some(width));
         y += ROW;
@@ -710,11 +710,11 @@ pub(crate) fn members_section(
         let at = pos2(row.left() + 10.0, row.top() + 9.0);
         let room = Some((width - 50.0).max(0.0));
         ux::text_marked(&paint, at, text, types::UI, p.text, room, *marks);
-        if crate::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
-            crate::panels::select_element_cx(cx, *id);
+        if archforge_shell_api::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
+            archforge_shell_api::panels::select_element_cx(cx, *id);
             open(cx, class_id, kind, Some(*id));
         } else if resp.clicked() {
-            crate::panels::select_element_cx(cx, *id);
+            archforge_shell_api::panels::select_element_cx(cx, *id);
         }
         y += ROW;
     }
@@ -729,7 +729,7 @@ pub(crate) fn members_section(
 /// first (AR-130), every built-in type by its name, which the commands always resolve to the one
 /// in Types, then the model's own by name. A type of the model's own named like a built-in one
 /// never hides it: both are offered, told apart by [`type_notes`].
-pub(crate) fn type_choices(store: &Store, within: Option<Obj>) -> Vec<(String, String)> {
+pub fn type_choices(store: &Store, within: Option<Obj>) -> Vec<(String, String)> {
     std::iter::once((tr("None"), String::new()))
         .chain(parameter_types(store, within))
         .chain(BUILT_IN.iter().map(|b| (b.to_string(), b.to_string())))
@@ -743,7 +743,7 @@ pub(crate) fn type_choices(store: &Store, within: Option<Obj>) -> Vec<(String, S
 /// for a built-in type and its package's path below the root package (every package's top) for
 /// one of the model's own, so the entries are told apart. Each is given by its parts, the path's
 /// names, so a long one folds from its front.
-pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<Vec<String>> {
+pub fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<Vec<String>> {
     let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for (label, value) in choices {
         if !value.is_empty() {
@@ -819,12 +819,12 @@ pub struct TypeChoices {
 /// The open type menu's choices for a member of `within`, built by [`type_choices`] only when the
 /// project, the session, its state, the classifier or the interface language changed since they
 /// were last built; taken out of the shell for the frame, to be handed back with [`keep_choices`].
-pub(crate) fn choices_for_menu(cx: &mut Ctx, within: Option<Uuid>) -> TypeChoices {
+pub fn choices_for_menu(cx: &mut Ctx, within: Option<Uuid>) -> TypeChoices {
     let Some(session) = cx.session.as_ref() else { return TypeChoices::default() };
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
     let (history, revision) = (session.history(), session.revision());
-    let language = crate::i18n::language();
+    let language = archforge_shell_api::i18n::language();
     match uml_mut(cx.notation_states).and_then(|uml| uml.type_choices.take()) {
         Some(kept)
             if kept.project == project
@@ -838,7 +838,7 @@ pub(crate) fn choices_for_menu(cx: &mut Ctx, within: Option<Uuid>) -> TypeChoice
         _ => {
             let choices = type_choices(store, within.and_then(|w| store.by_uuid(w)));
             let note_parts = type_notes(store, &choices);
-            let notes = note_parts.iter().map(|parts| parts.join(crate::panels::PATH_SEP)).collect();
+            let notes = note_parts.iter().map(|parts| parts.join(archforge_shell_api::panels::PATH_SEP)).collect();
             let (labels, values) = choices.into_iter().unzip();
             TypeChoices { project, history, revision, language, within, labels, values, notes, note_parts }
         }
@@ -846,7 +846,7 @@ pub(crate) fn choices_for_menu(cx: &mut Ctx, within: Option<Uuid>) -> TypeChoice
 }
 
 /// Hands the type menu's choices back to the shell for the next frame.
-pub(crate) fn keep_choices(cx: &mut Ctx, choices: TypeChoices) {
+pub fn keep_choices(cx: &mut Ctx, choices: TypeChoices) {
     if let Some(uml) = uml_mut(cx.notation_states) {
         uml.type_choices = Some(choices);
     }
@@ -883,7 +883,7 @@ pub(crate) fn type_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, field: Rect, i
     let pick = |v: &[String]| offered.iter().filter_map(|i| v.get(*i).cloned()).collect::<Vec<String>>();
     let (labels, notes) = (pick(&choices.labels), pick(&choices.notes));
     let note_parts: Vec<Vec<String>> = offered.iter().filter_map(|i| choices.note_parts.get(*i).cloned()).collect();
-    if let Some(i) = crate::panels::menu_noted_cx(cx, ui, p, field, id, &labels, &notes, &note_parts) {
+    if let Some(i) = archforge_shell_api::panels::menu_noted_cx(cx, ui, p, field, id, &labels, &notes, &note_parts) {
         *ty = offered.get(i).and_then(|i| choices.values.get(*i)).cloned().unwrap_or_default();
     }
     keep_choices(cx, choices);
@@ -1046,7 +1046,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
             }
             let add_id = "workspace.properties.member.parameter.add";
             if edit.params.len() < archforge_uml::members::MAX_PARAMETERS
-                && crate::panels::ghost_button_cx(cx, ui, p, at(-6.0, cy), add_id, &icons::PLUS, &tr("Add parameter"))
+                && archforge_shell_api::panels::ghost_button_cx(cx, ui, p, at(-6.0, cy), add_id, &icons::PLUS, &tr("Add parameter"))
             {
                 edit.params.push(ParamEdit { name: String::new(), ty: String::new(), multiplicity: String::new() });
             }
@@ -1100,7 +1100,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal_cx(cx, ui, crate::uml_state::MEMBER, card);
+    archforge_shell_api::panels::reveal_cx(cx, ui, crate::uml_state::MEMBER, card);
     // The menus last, over the card.
     if cx.panels.menu == Some(menus::MEMBER_VISIBILITY)
         && !literal
@@ -1144,7 +1144,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
                     uml.member = None;
                 }
                 reselect(cx, edit.class);
-                crate::notation_ui::say_after_cx(cx, said, &fmt(&tr("{name} deleted"), &[("name", &edit.name)]));
+                archforge_shell_api::notation_ui::say_after_cx(cx, said, &fmt(&tr("{name} deleted"), &[("name", &edit.name)]));
             }
             Err(e) => refuse(cx, Some(e)),
         }
@@ -1160,18 +1160,18 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
 /// what goes ([`NotationUi::consequences`]): its stereotype applications (AR-135), named, so
 /// removing it never takes them along unasked. None when nothing would.
 ///
-/// [`NotationUi::consequences`]: crate::notation_ui::NotationUi::consequences
-fn ask_for_consequences(cx: &Ctx, edit: &MemberEdit) -> Option<crate::explorer::Delete> {
-    use crate::notation_ui::NotationUi;
+/// [`NotationUi::consequences`]: archforge_shell_api::notation_ui::NotationUi::consequences
+fn ask_for_consequences(cx: &Ctx, edit: &MemberEdit) -> Option<archforge_shell_api::explorer::Delete> {
+    use archforge_shell_api::notation_ui::NotationUi;
     let target = edit.target?;
     let store = cx.session.as_ref()?.doc();
     let member = store.by_uuid(target)?;
     let consequences = crate::uml_ui::UmlUi.consequences(cx.notation_uis, store, member);
-    (!consequences.is_empty()).then(|| crate::explorer::Delete {
+    (!consequences.is_empty()).then(|| archforge_shell_api::explorer::Delete {
         ids: vec![target],
-        name: crate::notation_ui::label(cx.notation_uis, store, member),
+        name: archforge_shell_api::notation_ui::label(cx.notation_uis, store, member),
         consequences,
-        ..crate::explorer::Delete::default()
+        ..archforge_shell_api::explorer::Delete::default()
     })
 }
 
@@ -1206,7 +1206,7 @@ fn member_leaf(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, wid
 /// Why the member as edited may not be made leaf (`leaf`), in the user's words: something redefines
 /// it already, named; the rule the commands keep too (AR-138). None when it is leaf already, or
 /// may be made so.
-pub(crate) fn member_leaf_refusal(store: &Store, edit: &MemberEdit, leaf: bool) -> Option<String> {
+pub fn member_leaf_refusal(store: &Store, edit: &MemberEdit, leaf: bool) -> Option<String> {
     if !leaf || edit.kind == MemberKind::Literal {
         return None;
     }
@@ -1415,7 +1415,7 @@ pub(crate) fn redefines_menu(
     let notes: Vec<String> = std::iter::repeat_n(String::new(), 1 + targets.redefines.len())
         .chain(std::iter::repeat_n("{leaf}".to_string(), targets.leaf.len()))
         .collect();
-    let i = crate::panels::menu_noted_cx(cx, ui, p, field, id, &items, &notes, &[])?;
+    let i = archforge_shell_api::panels::menu_noted_cx(cx, ui, p, field, id, &items, &notes, &[])?;
     let Some(i) = i.checked_sub(1) else { return Some(Ok(Vec::new())) };
     if let Some(t) = targets.redefines.get(i) {
         return Some(Ok(vec![t.id]));
@@ -1462,7 +1462,7 @@ const KEPT_TARGETS: usize = 4;
 /// for the frame: the kept ones when the project, the session, its state and the language are the
 /// same, else built once from `shape` and `enumeration` (the property's type when it is one) and
 /// kept from then on. Hand them back with [`keep_targets`].
-pub(crate) fn take_targets(
+pub fn take_targets(
     cx: &mut Ctx,
     what: &str,
     shape: impl FnOnce(&Store) -> Option<archforge_uml::modifiers::Shape>,
@@ -1471,7 +1471,7 @@ pub(crate) fn take_targets(
     let Some(session) = cx.session.as_ref() else { return TargetChoices::default() };
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
-    let key = format!("{project:?}|{}|{}|{}|{what}", session.history(), session.revision(), crate::i18n::language());
+    let key = format!("{project:?}|{}|{}|{}|{what}", session.history(), session.revision(), archforge_shell_api::i18n::language());
     if let Some(kept) = uml_mut(cx.notation_states).map(|uml| &mut uml.targets)
         && let Some(i) = kept.iter().position(|t| t.key == key)
     {
@@ -1506,7 +1506,7 @@ pub(crate) fn take_targets(
 
 /// Hands target choices back to the shell for the next frame, the oldest dropped past
 /// [`KEPT_TARGETS`].
-pub(crate) fn keep_targets(cx: &mut Ctx, targets: TargetChoices) {
+pub fn keep_targets(cx: &mut Ctx, targets: TargetChoices) {
     let Some(kept) = uml_mut(cx.notation_states).map(|uml| &mut uml.targets) else { return };
     kept.push(targets);
     if kept.len() > KEPT_TARGETS {
@@ -1620,13 +1620,13 @@ pub(crate) fn target_refusals(
 /// Why a default does not read, in the user's words: the value and the form its type takes, said
 /// by the notations of `uis` where the reason is typed.
 pub(crate) fn default_refusal(uis: &[&'static dyn NotationUi], store: &Store, e: &archforge_uml::modifiers::DefaultError) -> String {
-    crate::panels::said(uis, &e.reason(store)).unwrap_or_else(|| e.said(store))
+    archforge_shell_api::panels::said(uis, &e.reason(store)).unwrap_or_else(|| e.said(store))
 }
 
 /// A property's default refused, typed, in the user's words: too long, not read as its type's
 /// default, or not fitting the type it would take; none for another reason, and for a default that
 /// is none of an enumeration's literals, which ER's commands give too and the shell says
-/// ([`crate::panels::said`]).
+/// ([`archforge_shell_api::panels::said`]).
 pub(crate) fn default_said(reason: &archforge_engine::Reason) -> Option<String> {
     use archforge_engine::{DefaultKind as K, Reason};
     let (value, kind) = match reason {
@@ -1741,7 +1741,7 @@ fn commit(cx: &mut Ctx, edit: &MemberEdit) {
 /// The command that writes the member as edited, with its parameters: the member's id under its
 /// key when it is edited, else its classifier's under `class` (an enumeration's under
 /// `enumeration`).
-pub(crate) fn command_of(edit: &MemberEdit) -> (&'static str, serde_json::Value) {
+pub fn command_of(edit: &MemberEdit) -> (&'static str, serde_json::Value) {
     let visibility = VISIBILITIES[edit.visibility.min(VISIBILITIES.len() - 1)];
     let (cmd, mut params, key) = match edit.kind {
         MemberKind::Attribute => (
@@ -1814,7 +1814,7 @@ pub(crate) fn attribute_refusal(store: &Store, edit: &MemberEdit) -> Option<Stri
 /// into the command, so a tool's change grows a card as the window's does). A literal's name that
 /// clashes, an association class's attribute named as one of its ends' roles, or a modifier the
 /// rules refuse (AR-126), is refused first, in the user's words, and nothing is run.
-pub(crate) fn write_in_sight(cx: &mut Ctx, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+pub fn write_in_sight(cx: &mut Ctx, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let uis = cx.notation_uis;
     let Some(session) = cx.session.as_mut() else { return Err(tr("The model could not be opened")) };
     let store = session.doc();
@@ -1825,7 +1825,7 @@ pub(crate) fn write_in_sight(cx: &mut Ctx, edit: &MemberEdit, cmd: &str, params:
     {
         return Err(why);
     }
-    session.execute(cmd, &params).map(|o| o.value).map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
+    session.execute(cmd, &params).map(|o| o.value).map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e))
 }
 
 /// Drops the editor whose class or member is gone.
@@ -1836,7 +1836,7 @@ pub(crate) fn retain_valid(edit: &mut Option<MemberEdit>, store: &Store) {
 }
 
 /// The hover texts given by key and the visibilities' words, for the catalogue tests.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add attribute", "Add property", "Add operation", "Add literal", "Remove", "Remove parameter", "Move up", "Move down", "Cancel", "Apply"]
         .into_iter()

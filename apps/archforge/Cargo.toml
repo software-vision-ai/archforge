@@ -24,6 +24,8 @@ archforge-project.workspace = true
 archforge-secrets.workspace = true
 archforge-shell-api.workspace = true
 archforge-ui-egui.workspace = true
+# UML's screens part, which the app registers with every shell it makes.
+archforge-uml-ui.workspace = true
 getrandom.workspace = true
 eframe.workspace = true
 # Not called: here for its `wayland` feature, which craft-dialogs builds rfd without.
@@ -47,6 +49,8 @@ archforge-secrets = { workspace = true, features = ["testing"] }
 archforge-uml.workspace = true
 # The words the shell hands its lookups through a table, for the tests across every catalogue.
 archforge-ui-egui = { workspace = true, features = ["testing"] }
+# The words UML's screens hand their lookups through a table, for the tests across every catalogue.
+archforge-uml-ui = { workspace = true, features = ["snapshot"] }
 craft-testkit.workspace = true
 egui_kittest.workspace = true
 

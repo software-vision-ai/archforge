@@ -17,18 +17,20 @@ use archforge_uml::generalization_sets as sets;
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::canvas::{Drawing, ExtraLabel, edge_points, element_of, refs};
-use crate::cx::{Ctx, CtxRef, Request};
-use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, FieldOut, PAD, ROW, Subject, control_cx, edit_field_cx, menu_cx, run_cx, section_cx};
-use crate::state::Panel;
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::canvas::{Drawing, edge_points, element_of, refs};
+use archforge_shell_api::cx::{Ctx, CtxRef, Request};
+use archforge_shell_api::i18n::{fmt, tr, trn};
+use archforge_shell_api::kinds::ExtraLabel;
+use archforge_shell_api::notation_ui::Subject;
+use archforge_shell_api::panels::{FIELD, FieldOut, PAD, ROW, control_cx, edit_field_cx, menu_cx, run_cx, section_cx};
+use archforge_shell_api::state::Panel;
 
 /// The automation ids the design gives.
-pub(crate) const CREATE_ID: &str = "workspace.canvas.contextMenu.generalizationSet.create";
-pub(crate) const PANEL_CREATE_ID: &str = "workspace.properties.selection.createGeneralizationSet";
+pub const CREATE_ID: &str = "workspace.canvas.contextMenu.generalizationSet.create";
+pub const PANEL_CREATE_ID: &str = "workspace.properties.selection.createGeneralizationSet";
 const MENU_WIDTH: f32 = 288.0;
 const MENU_ROW: f32 = 30.0;
 
@@ -133,7 +135,7 @@ pub(crate) fn create(cx: &mut Ctx, gens: &[Obj], general: Obj) {
                 .collect()
         })
         .unwrap_or_default();
-    let Some(fresh) = crate::explorer::fresh_name("GeneralizationSet", taken.into_iter(), false) else { return };
+    let Some(fresh) = archforge_shell_api::explorer::fresh_name("GeneralizationSet", taken.into_iter(), false) else { return };
     let params = json!({ "generalizations": ids(store, gens), "name": fresh });
     match run_cx(cx, "uml.generalization-set.add", params) {
         Ok(out) => {
@@ -166,7 +168,7 @@ fn remove_from(cx: &mut Ctx, set: Obj, g: Obj) {
 }
 
 /// ⌥⌘G (Ctrl Alt G): the selection's generalizations into a new set, or why not at the canvas's top.
-pub(crate) fn shortcut(cx: &mut Ctx) -> bool {
+pub fn shortcut(cx: &mut Ctx) -> bool {
     let Some(all) = selected(&cx.cx_ref()) else { return false };
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return false };
     match grouping(store, &all) {
@@ -180,13 +182,13 @@ pub(crate) fn shortcut(cx: &mut Ctx) -> bool {
 /// form one at the canvas's top; true when pressed with a generalization selected, which takes the
 /// keys this frame.
 pub(crate) fn chord_pressed(cx: &mut Ctx, ui: &egui::Ui) -> bool {
-    ui.input(|i| crate::actions::chord_press(i, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::ALT)) && shortcut(cx)
+    ui.input(|i| archforge_shell_api::actions::chord_press(i, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::ALT)) && shortcut(cx)
 }
 
 /// A right click on a generalization's line, away from any card: the set actions' menu opened
 /// there, the line selected first when the selection did not hold its generalization (AR-129);
 /// none for anything else.
-pub(crate) fn secondary_click(press: &crate::kinds::Press<'_>) -> Option<crate::editing::Action> {
+pub(crate) fn secondary_click(press: &archforge_shell_api::kinds::Press<'_>) -> Option<archforge_shell_api::editing::Action> {
     let (store, at) = (press.store, press.at?);
     if (press.node_at)(at).is_some() {
         return None;
@@ -196,9 +198,9 @@ pub(crate) fn secondary_click(press: &crate::kinds::Press<'_>) -> Option<crate::
         return None;
     }
     let first = if elements(store, press.selection).contains(&g) { None } else { store.uuid(g).ok() };
-    Some(crate::editing::Action::Own(Box::new(move |cx| {
+    Some(archforge_shell_api::editing::Action::Own(Box::new(move |cx| {
         if let Some(id) = first {
-            crate::editing::select_cx(cx, vec![id]);
+            archforge_shell_api::editing::select_cx(cx, vec![id]);
         }
         if let Some(uml) = uml_mut(cx.notation_states) {
             uml.line_menu = Some(at);
@@ -228,7 +230,11 @@ pub(crate) fn remove_selected_set(cx: &mut Ctx) -> bool {
         Ok(_) => {
             let text = fmt(&tr("{name} removed; its generalizations stay"), &[("name", &said)]);
             let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
+            cx.canvas.toast = Some(archforge_shell_api::canvas::Toast {
+                text,
+                until: cx.frames.saturating_add(archforge_shell_api::canvas::TOAST_FRAMES),
+                undo_label,
+            });
         }
         Err(e) => cx.canvas.notice = Some(e),
     }
@@ -380,7 +386,7 @@ pub(crate) fn line_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, at: P
     ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.surface);
     paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    let eyebrow = crate::canvas::eyebrow_case(&heading);
+    let eyebrow = archforge_shell_api::canvas::eyebrow_case(&heading);
     ux::text(&paint, pos2(m.left() + 12.0, m.top() + 10.0), &eyebrow, types::EYEBROW, p.text_muted, Some(MENU_WIDTH - 24.0));
     let mut picked = None;
     let mut ry = m.top() + 4.0 + heading_h;
@@ -394,10 +400,10 @@ pub(crate) fn line_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, at: P
             control_cx(cx, ui, &item.id, "menu-item", row, true).accessible_name(item.label.as_str())
         } else {
             // Disabled, it says why on hover and to a screen reader.
-            crate::widgets::record_visible(ui, cx.registry, &item.id, "menu-item", row);
-            let resp = ui.interact(row, crate::widgets::egui_id(&item.id), Sense::hover());
+            archforge_shell_api::widgets::record_visible(ui, cx.registry, &item.id, "menu-item", row);
+            let resp = ui.interact(row, archforge_shell_api::widgets::egui_id(&item.id), Sense::hover());
             let why = if item.detail.is_empty() { item.label.clone() } else { format!("{}: {}", item.label, item.detail) };
-            ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&item.id), |node| {
+            ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(&item.id), |node| {
                 node.set_role(egui::accesskit::Role::MenuItem);
                 node.set_disabled();
                 node.set_description(reason.clone().unwrap_or_else(|| why.clone()));
@@ -430,7 +436,7 @@ pub(crate) fn line_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, at: P
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(card.left() + 10.0, card.top() + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
         paint.galley(pos2(card.left() + 32.0, card.top() + 10.0), text, p.text.into());
-        crate::widgets::record_visible(ui, cx.registry, "workspace.canvas.contextMenu.generalizationSet.reason", "text", card);
+        archforge_shell_api::widgets::record_visible(ui, cx.registry, "workspace.canvas.contextMenu.generalizationSet.reason", "text", card);
         area = area.union(card);
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| area.contains(pos)));
@@ -473,7 +479,7 @@ fn remove_lines(cx: &mut Ctx, d: Obj, elements: &[Obj]) {
         Ok(())
     });
     if let Err(e) = out {
-        cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e));
+        cx.canvas.notice = Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e));
     }
 }
 
@@ -485,7 +491,9 @@ fn delete(cx: &mut Ctx, elements: &[Obj]) {
     let n = u64::try_from(elements.len()).unwrap_or(u64::MAX);
     let word = trn("{n} element", "{n} elements", n);
     let what = match elements {
-        [one] => crate::notation_ui::of(cx.notation_uis, store, *one).and_then(|ui| ui.words(store, *one)).map(|w| w.word).unwrap_or(word),
+        [one] => {
+            archforge_shell_api::notation_ui::of(cx.notation_uis, store, *one).and_then(|ui| ui.words(store, *one)).map(|w| w.word).unwrap_or(word)
+        }
         _ => word,
     };
     let ids = ids(store, elements);
@@ -493,7 +501,11 @@ fn delete(cx: &mut Ctx, elements: &[Obj]) {
         Ok(_) => {
             let text = removed_text(&what, &gone);
             let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(crate::canvas::TOAST_FRAMES), undo_label });
+            cx.canvas.toast = Some(archforge_shell_api::canvas::Toast {
+                text,
+                until: cx.frames.saturating_add(archforge_shell_api::canvas::TOAST_FRAMES),
+                undo_label,
+            });
         }
         Err(e) => cx.canvas.notice = Some(e),
     }
@@ -530,7 +542,7 @@ fn segmented(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: Pos2, id: &str, label
         let b = Rect::from_min_size(pos2(x, frame.top() + 2.0), vec2(g.size().x + 24.0, FIELD - 4.0));
         let sid = format!("{id}.{key}");
         let resp = control_cx(cx, ui, &sid, "toggle", b, true).accessible_name(format!("{label}: {word}"));
-        ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&sid), |node| {
+        ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(&sid), |node| {
             node.set_role(egui::accesskit::Role::RadioButton);
             node.set_toggled(if on { egui::accesskit::Toggled::True } else { egui::accesskit::Toggled::False });
         });
@@ -546,7 +558,8 @@ fn segmented(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: Pos2, id: &str, label
         }
         x = b.right();
     }
-    if focused && ui.input(|i| [egui::Key::ArrowLeft, egui::Key::ArrowRight].into_iter().any(|key| crate::actions::plain_press(i, key))) {
+    if focused && ui.input(|i| [egui::Key::ArrowLeft, egui::Key::ArrowRight].into_iter().any(|key| archforge_shell_api::actions::plain_press(i, key)))
+    {
         out = Some(!first);
     }
     out
@@ -582,7 +595,7 @@ fn list_row(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, row: Rect, id: &str, text:
     }
     ux::text(&paint, pos2(row.left() + 10.0, row.top() + 9.0), text, types::UI, p.text, Some((row.width() - 76.0).max(0.0)));
     let edit_row = Rect::from_min_max(row.min, pos2(row.right() - 28.0, row.bottom()));
-    let edit = crate::panels::edit_button_cx(cx, ui, p, edit_row, id, resp.contains_pointer()) || resp.double_clicked();
+    let edit = archforge_shell_api::panels::edit_button_cx(cx, ui, p, edit_row, id, resp.contains_pointer()) || resp.double_clicked();
     let b = Rect::from_center_size(pos2(row.right() - 14.0, row.center().y), vec2(24.0, 24.0));
     let r = control_cx(cx, ui, &format!("{id}.remove"), "button", b, true).on_hover_text(tr(remove_hint)).accessible_name(tr(remove_hint));
     if r.hovered() {
@@ -636,14 +649,14 @@ pub(crate) fn set_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mu
         cx.panels.name = None;
     } else if out == FieldOut::Commit {
         cx.panels.name = None;
-        if text.trim() != subject.name && !crate::panels::refuse_empty_name_cx(cx, set, &text) {
+        if text.trim() != subject.name && !archforge_shell_api::panels::refuse_empty_name_cx(cx, set, &text) {
             match run_cx(cx, set, json!({ "set": id.to_string(), "name": text.trim() })) {
                 Ok(_) => cx.panels.notice = None,
                 Err(e) => cx.panels.notice = Some(e),
             }
         }
     } else if text != subject.name {
-        cx.panels.name = Some(crate::panels::NameEdit { target: id, text });
+        cx.panels.name = Some(archforge_shell_api::panels::NameEdit { target: id, text });
     } else if cx.panels.name.as_ref().is_some_and(|n| n.target == id) {
         cx.panels.name = None;
     }
@@ -702,7 +715,7 @@ pub(crate) fn set_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mu
         if remove {
             remove_from(cx, s, *g);
         } else if edit {
-            crate::panels::select_element_cx(cx, *gid);
+            archforge_shell_api::panels::select_element_cx(cx, *gid);
         }
         y += ROW;
     }
@@ -713,7 +726,7 @@ pub(crate) fn set_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mu
     #[rustfmt::skip]
     let said = tr("Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.");
     let bottom = help(ui, p, pos2(left, y + 16.0), width, &said);
-    crate::widgets::record_visible(
+    archforge_shell_api::widgets::record_visible(
         ui,
         cx.registry,
         "workspace.properties.generalizationSet.help",
@@ -769,7 +782,7 @@ pub(crate) fn generalization_section(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r
         if remove {
             remove_from(cx, *s, g);
         } else if edit {
-            crate::panels::select_element_cx(cx, *sid);
+            archforge_shell_api::panels::select_element_cx(cx, *sid);
         }
         y += ROW;
     }
@@ -785,7 +798,7 @@ pub(crate) fn generalization_section(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
         paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-        crate::widgets::record_visible(ui, cx.registry, "workspace.properties.generalization.sets.refusal", "text", card);
+        archforge_shell_api::widgets::record_visible(ui, cx.registry, "workspace.properties.generalization.sets.refusal", "text", card);
         y = card.bottom() + 12.0;
     }
     if !in_sets.is_empty() {
@@ -845,10 +858,10 @@ pub(crate) fn selection_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Re
         let resp = if live {
             control_cx(cx, ui, id, "button", b, true)
         } else {
-            crate::widgets::record_visible(ui, cx.registry, id, "button", b);
-            let resp = ui.interact(b, crate::widgets::egui_id(id), Sense::hover());
+            archforge_shell_api::widgets::record_visible(ui, cx.registry, id, "button", b);
+            let resp = ui.interact(b, archforge_shell_api::widgets::egui_id(id), Sense::hover());
             let reason = why.clone().unwrap_or_default();
-            ui.ctx().accesskit_node_builder(crate::widgets::egui_id(id), |node| {
+            ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(id), |node| {
                 node.set_role(egui::accesskit::Role::Button);
                 node.set_disabled();
                 node.set_description(reason.clone());
@@ -878,7 +891,7 @@ pub(crate) fn selection_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Re
         paint.rect_filled(card, 6.0, p.danger_tint);
         ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
         paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-        crate::widgets::record_visible(ui, cx.registry, "workspace.properties.selection.generalizationSet.reason", "text", card);
+        archforge_shell_api::widgets::record_visible(ui, cx.registry, "workspace.properties.selection.generalizationSet.reason", "text", card);
         y = card.bottom() + 12.0;
     }
     #[rustfmt::skip]
@@ -978,7 +991,12 @@ pub(crate) fn set_place(routes: &[Vec<Pos2>], nth: usize, size: Vec2, placed: Op
 /// worked out from the model each frame; muted, the accent while the set is selected. A label moved
 /// on this diagram sits where its node holds it. Gives the labels drawn, for the next frame's press,
 /// each saying "Generalization set" and its whole text on hover.
-pub(crate) fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut crate::widgets::Registry, ui: &egui::Ui) -> Vec<ExtraLabel> {
+pub(crate) fn draw_sets(
+    paint: &egui::Painter,
+    d: &Drawing<'_>,
+    registry: &mut archforge_shell_api::widgets::Registry,
+    ui: &egui::Ui,
+) -> Vec<ExtraLabel> {
     let (p, store, z) = (d.p, d.store, d.view.zoom);
     let mut by_set: std::collections::BTreeMap<Obj, Vec<Obj>> = std::collections::BTreeMap::new();
     for e in refs(store, d.diagram, archforge_diagram::diagram::EDGE) {
@@ -1028,8 +1046,8 @@ pub(crate) fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut c
         x += name_w + gap;
         paint.galley(pos2(x, y - braces_g.size().y / 2.0), braces_g, braces_ink.into());
         let Some(id) = id else { continue };
-        crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.generalizationSet.{id}"), "label", label);
-        crate::widgets::record_visible(
+        archforge_shell_api::widgets::record_visible(ui, registry, &format!("workspace.canvas.generalizationSet.{id}"), "label", label);
+        archforge_shell_api::widgets::record_visible(
             ui,
             registry,
             &format!("workspace.canvas.generalizationSet.{id}.line"),
@@ -1055,7 +1073,7 @@ pub(crate) fn place_label(cx: &mut Ctx, d: Obj, set: Uuid, x: f64, y: f64) {
 }
 
 /// Every text that reaches `tr` through a variable, for the catalogue tests.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add member", "Remove from set", "Add to a generalization set"].into_iter()
 }

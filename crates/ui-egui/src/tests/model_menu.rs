@@ -8,8 +8,8 @@ use crate::actions::{available, label, run};
 use crate::canvas::Tool;
 use crate::model_menu::{sections as model_sections, why_off};
 use crate::state::Explorer;
-use crate::uml_classifier::{Classifier, KINDS, TOOL};
-use crate::uml_relate::Relate;
+use archforge_uml_ui::snapshot::uml_classifier::{Classifier, KINDS, TOOL};
+use archforge_uml_ui::snapshot::uml_relate::Relate;
 
 const BOTH: [ThemeKind; 2] = [ThemeKind::Light, ThemeKind::Dark];
 const SHARED: [&str; 2] = ["model.note", "model.link"];
@@ -216,7 +216,7 @@ fn each_kind_answers_its_own_rows() {
         vec!["model.relate.n-ary", "model.relate.template-binding"],
     ];
     let uml: Vec<Vec<&str>> = std::iter::once(classifiers.to_vec()).chain(relate).collect();
-    assert_eq!(ids_of(crate::uml_ui::UmlKind.menu_rows()), uml);
+    assert_eq!(ids_of(uml_ui::UmlKind.menu_rows()), uml);
     let all: Vec<&str> = crate::model_menu::rows(crate::tests::SCREENS.kinds()).map(|(_, row)| row.key).collect();
     assert_eq!(all, [ER_ROWS.to_vec(), uml.concat(), SHARED.to_vec()].concat());
     assert!(all.iter().enumerate().all(|(n, id)| !all[n + 1..].contains(id)), "{all:?}");
@@ -252,7 +252,7 @@ fn the_entries_are_made_from_the_rows_data() {
     use crate::kinds::DiagramKind;
     for theme in BOTH {
         let kinds: [(Harness<'static, Shell>, &dyn DiagramKind); 2] =
-            [(er(theme), &crate::er_kind::ErKind), (uml_sized(theme, BIG), &crate::uml_ui::UmlKind)];
+            [(er(theme), &crate::er_kind::ErKind), (uml_sized(theme, BIG), &uml_ui::UmlKind)];
         for (mut h, kind) in kinds {
             let s = h.state_mut();
             for (_, row) in crate::model_menu::rows(&[kind]) {

@@ -670,7 +670,7 @@ const ID: archforge_mof::Uuid = archforge_mof::Uuid([7; 16]);
 
 /// An edit left open between frames: an n-ary end armed on the canvas.
 fn draw(s: &mut Shell) {
-    uml_of_mut(s).nary = Some(crate::uml_nary::Nary::AddEnd { diagram: ID, association: ID });
+    uml_of_mut(s).nary = Some(uml_nary::Nary::AddEnd { diagram: ID, association: ID });
 }
 
 /// Every way of leaving is refused for an open editor, drawing, drag or dialog, with nothing begun.
@@ -732,10 +732,8 @@ fn leaving_closes_a_colour_picker_and_a_refusal_keeps_it() {
 /// fills them in for any association, and an open fold holds nothing.
 #[test]
 fn an_end_typed_on_the_selected_association_stops_leaving() {
-    use crate::{
-        hold::HoldRefused::Editing,
-        uml_relate::{EndModifiers, EndsEdit},
-    };
+    use crate::hold::HoldRefused::Editing;
+    use uml_relate::{EndModifiers, EndsEdit};
     /// An end's modifiers as a plain end has them.
     fn modifiers() -> EndModifiers {
         EndModifiers {
@@ -793,7 +791,7 @@ fn an_end_typed_on_the_selected_association_stops_leaving() {
 fn a_moved_selection_ends_an_associations_draft_before_a_replacement() {
     in_both(|mut h, _| {
         let earlier = rows_now(&h);
-        h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
+        h.state_mut().cx(uml_ui::open_sample).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
         let away = rect_of(&h, "workspace.canvas").left_top() + egui::vec2(30.0, 30.0);
@@ -837,7 +835,7 @@ fn a_refused_role_is_not_written_when_the_selection_moves_on() {
         archforge_core::name_of(st, archforge_uml::figures::member_ends(st, st.by_uuid(a).unwrap()).unwrap()[i])
     }
     in_both(|mut h, _| {
-        h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
+        h.state_mut().cx(uml_ui::open_sample).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
         let paid = select_named(&mut h, archforge_uml::ASSOCIATION, "paid by");
@@ -1436,7 +1434,7 @@ fn dated_as_before(h: &Harness<'static, Shell>) {
 /// the notations' own state among it.
 #[test]
 fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
-    use crate::uml_classifier::Classifier;
+    use uml_classifier::Classifier;
     in_both(|mut h, host| {
         uml_of_mut(h.state_mut()).classifier = Classifier::Interface;
         let [b, _] = stepping(&mut h, &host);
@@ -1445,7 +1443,7 @@ fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
         h.run_steps(3);
         // What a notation kept for the version in view is that session's: the next starts fresh.
         uml_of_mut(h.state_mut()).classifier = Classifier::DataType;
-        uml_of_mut(h.state_mut()).type_choices = Some(crate::uml_panel::TypeChoices::default());
+        uml_of_mut(h.state_mut()).type_choices = Some(uml_panel::TypeChoices::default());
         step_to(&mut h, "b");
         assert!(!h.state().is_held(), "no hold");
         assert!(h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay.as_secs() < 1, "it wakes while waiting");

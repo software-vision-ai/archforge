@@ -1,14 +1,15 @@
 //! The tests across every catalogue the app registers, here because the app is the one crate that
-//! knows every catalogue (ADR 0003): every wrapped literal in the shell's, its interfaces' and the
-//! desktop app's source, and every text the shell hands the lookups through a table, has a row in
-//! every complete language, in the shell's catalogue, the interfaces' or a notation's; every row
-//! is read, and is in the catalogue of the code that reads it; no key is in a language's
-//! catalogues twice; a partial catalogue reports its gaps without failing; and the words for what
-//! the metamodel names are each catalogue's rows. They read the sources and the catalogues by path
-//! and find the shell's word lists through `archforge_ui_egui::testing`. What each crate's own
-//! catalogue needs alone (well-formed, registered, the screen, the plural edges) is tested in that
-//! crate: the shell's in `crates/ui-egui/src/i18n/tests.rs`, the machinery and the interfaces' in
-//! `crates/shell-api`.
+//! knows every catalogue (ADR 0003): every wrapped literal in the shell's, its interfaces', UML's
+//! screens' and the desktop app's source, and every text the shell and UML's screens hand the
+//! lookups through a table, has a row in every complete language, in the shell's catalogue, the
+//! interfaces' or a notation's; every row is read, and is in the catalogue of the code that reads
+//! it; no key is in a language's catalogues twice; a partial catalogue reports its gaps without
+//! failing; and the words for what the metamodel names are each catalogue's rows. They read the
+//! sources and the catalogues by path and find the word lists through `archforge_ui_egui::testing`
+//! and `archforge_uml_ui::snapshot`. What each crate's own catalogue needs alone (well-formed,
+//! registered, the screen, the plural edges) is tested in that crate: the shell's in
+//! `crates/ui-egui/src/i18n/tests.rs`, UML's registering in `crates/uml-ui`, the machinery and the
+//! interfaces' in `crates/shell-api`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -339,8 +340,8 @@ fn split(file: &Path, text: &str) -> Vec<(Reader, String)> {
 /// Every key the catalogues must hold, each with a reader of it ([`Reader`]): the literals the
 /// sources wrap, and the texts the tables and the notations hand to the lookups.
 fn reads() -> Vec<(Key, Reader)> {
-    // The shell's source, its interfaces', and the desktop app's, which looks its menu up in these
-    // catalogues.
+    // The shell's source, its interfaces', UML's screens', and the desktop app's, which looks its
+    // menu up in these catalogues.
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let shell = root.join("../../crates/ui-egui/src");
     assert!(shell.is_dir(), "the shell's source is not at {}", shell.display());
@@ -349,6 +350,9 @@ fn reads() -> Vec<(Key, Reader)> {
     let interfaces = root.join("../../crates/shell-api/src");
     assert!(interfaces.is_dir(), "the shell's interfaces' source is not at {}", interfaces.display());
     sources(&interfaces, &mut files);
+    let uml = root.join("../../crates/uml-ui/src");
+    assert!(uml.is_dir(), "UML's screens' source is not at {}", uml.display());
+    sources(&uml, &mut files);
     sources(&root.join("src"), &mut files);
     let mut reads = Vec::new();
     let str_key = |key: &str| key_of("str", "", key);
@@ -364,16 +368,19 @@ fn reads() -> Vec<(Key, Reader)> {
             reads.extend(literal_args(&text, "trn", 0).iter().map(|s| (key_of("plural", "", s), reader)));
         }
     }
-    // The texts each module hands `tr` through a table, read by whose code that module is.
-    let module = |name: &str| {
-        let file = shell.join(format!("{name}.rs"));
+    // The texts each module hands `tr` through a table, read by whose code that module is: a
+    // module of the shell's, or of the crate `src` holds.
+    let module_in = |src: &Path, name: &str| {
+        let file = src.join(format!("{name}.rs"));
         let text = std::fs::read_to_string(&file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
         split(&file, &text)[0].0
     };
     // The start cards' texts, the panels', and each notation's figures' words, which `tr` takes
     // through the figures' descriptions.
-    for (name, texts) in archforge_ui_egui::testing::word_lists() {
-        let reader = module(name);
+    let module = |name: &str| module_in(&shell, name);
+    let lists = archforge_ui_egui::testing::word_lists().into_iter().map(|(name, texts)| (module(name), texts));
+    let uml_lists = archforge_uml_ui::snapshot::word_lists().into_iter().map(|(name, texts)| (module_in(&uml, name), texts));
+    for (reader, texts) in lists.chain(uml_lists) {
         reads.extend(texts.into_iter().map(|s| (str_key(s), reader)));
     }
     // The hover texts of each diagram kind's tools, which the toolbar takes through the kind: its

@@ -5,7 +5,7 @@
 use egui::{Key, Modifiers};
 
 pub use archforge_shell_api::actions::Keys;
-pub(crate) use archforge_shell_api::actions::{chord_press, held_exactly, plain_press, take, take_alone, take_plain};
+pub(crate) use archforge_shell_api::actions::{chord_press, held_exactly, plain_press, take, take_alone};
 
 use crate::i18n::{tr, tr_ctx};
 use crate::state::{RecentSort, RecentView};
@@ -874,7 +874,7 @@ pub(crate) mod tests {
         let taken = |events: &[egui::Event]| {
             let mut input = egui::InputState::default();
             input.events = events.to_vec();
-            (take_plain(&mut input, Key::Minus), input.events)
+            (archforge_shell_api::actions::take_plain(&mut input, Key::Minus), input.events)
         };
         let other = down(Modifiers::NONE, Key::Plus);
         for held in [Modifiers::NONE, Modifiers::SHIFT] {

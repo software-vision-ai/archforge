@@ -13,12 +13,12 @@ use archforge_uml::qualifiers;
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::cx::Ctx;
-use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, ROW, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx, text_field_cx};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::panels::{FIELD, PAD, ROW, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx, text_field_cx};
 
 /// The longest multiplicity typed.
 const MAX_MULTIPLICITY: usize = 24;
@@ -64,7 +64,7 @@ fn end_of(store: &Store, a: Obj, i: usize) -> Option<Obj> {
 }
 
 /// Opens the editor on qualifier `target`, or on a new one of end `end` of `association`.
-pub(crate) fn open(cx: &mut Ctx, association: Uuid, end: usize, target: Option<Uuid>) {
+pub fn open(cx: &mut Ctx, association: Uuid, end: usize, target: Option<Uuid>) {
     let mut edit = QualifierEdit {
         association,
         end,
@@ -140,7 +140,7 @@ pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
     }
     let editing =
         |cx: &Ctx| uml(cx.notation_states).and_then(|uml| uml.qualifier.as_ref()).filter(|e| e.association == a_id && e.end == i).map(|e| e.target);
-    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
+    let chosen = archforge_shell_api::panels::selected_id_cx(&cx.cx_ref());
     for (k, (id, text)) in rows.iter().enumerate() {
         if editing(cx) == Some(Some(*id)) {
             y = editor(cx, ui, p, r, y, k);
@@ -155,11 +155,11 @@ pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
             paint.rect_filled(row, 6.0, p.page);
         }
         ux::text(&paint, pos2(row.left() + 10.0, row.top() + 9.0), text, types::UI, p.text, Some((width - 50.0).max(0.0)));
-        if crate::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
-            crate::panels::select_element_cx(cx, *id);
+        if archforge_shell_api::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
+            archforge_shell_api::panels::select_element_cx(cx, *id);
             open(cx, a_id, i, Some(*id));
         } else if resp.clicked() {
-            crate::panels::select_element_cx(cx, *id);
+            archforge_shell_api::panels::select_element_cx(cx, *id);
         }
         y += ROW;
     }
@@ -272,7 +272,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k: usiz
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal_cx(cx, ui, crate::uml_state::QUALIFIER, card);
+    archforge_shell_api::panels::reveal_cx(cx, ui, crate::uml_state::QUALIFIER, card);
     // The type menu last, over the card.
     crate::uml_panel::type_menu(cx, ui, p, type_field, &type_id, &mut edit.ty, menus::QUALIFIER_TYPE, None);
     if let Some(uml) = uml_mut(cx.notation_states) {
@@ -395,8 +395,8 @@ pub(crate) fn retain_valid(edit: &mut Option<QualifierEdit>, store: &Store) {
 
 /// `typed` as a new qualifier's name on end `end` of association `association`, applied and
 /// refused, as a sample to look at.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn refuse_sample(cx: &mut Ctx, association: Uuid, end: usize, typed: &str, ty: &str) {
+#[cfg(feature = "snapshot")]
+pub fn refuse_sample(cx: &mut Ctx, association: Uuid, end: usize, typed: &str, ty: &str) {
     open(cx, association, end, None);
     if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.qualifier.as_mut()) {
         e.name = typed.to_string();
@@ -408,7 +408,7 @@ pub(crate) fn refuse_sample(cx: &mut Ctx, association: Uuid, end: usize, typed: 
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add qualifier"].into_iter()
 }

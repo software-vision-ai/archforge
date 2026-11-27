@@ -16,13 +16,13 @@ use archforge_uml::constraints::{self, Form};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::cx::{Ctx, CtxRef};
-use crate::i18n::{fmt, tr};
-use crate::panels::{Combo, ComboOut, FIELD, PAD, ROW, control_cx, icon_button_cx, section_cx, text_field_cx};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
-use crate::widgets;
+use archforge_shell_api::cx::{Ctx, CtxRef};
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::panels::{Combo, ComboOut, FIELD, PAD, ROW, control_cx, icon_button_cx, section_cx, text_field_cx};
+use archforge_shell_api::widgets;
 
 /// The longest language typed, and the longest expression.
 const MAX_LANGUAGE: usize = 64;
@@ -72,7 +72,7 @@ fn fresh_name(store: &Store, context: Obj) -> String {
 }
 
 /// Opens the editor on `target`, or on a new constraint of `context`.
-pub(crate) fn open(cx: &mut Ctx, context: Uuid, target: Option<Uuid>) {
+pub fn open(cx: &mut Ctx, context: Uuid, target: Option<Uuid>) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(ctx) = store.by_uuid(context) else { return };
     let d = open_diagram(cx);
@@ -109,7 +109,7 @@ pub(crate) fn open(cx: &mut Ctx, context: Uuid, target: Option<Uuid>) {
 }
 
 /// The row a constraint reads as: its name and its expression in braces, on one line.
-pub(crate) fn row_text(store: &Store, c: Obj) -> String {
+pub fn row_text(store: &Store, c: Obj) -> String {
     let braces = constraints::braces(store, c).replace('\n', " ");
     let name = name_of(store, c);
     if name.is_empty() { braces } else { format!("{name} {braces}") }
@@ -130,7 +130,7 @@ pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
     };
     y = next - 6.0;
     let editing = |cx: &Ctx| uml(cx.notation_states).and_then(|uml| uml.constraint.as_ref()).filter(|e| e.context == context_id).map(|e| e.target);
-    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
+    let chosen = archforge_shell_api::panels::selected_id_cx(&cx.cx_ref());
     for (id, text) in &rows {
         if editing(cx) == Some(Some(*id)) {
             y = editor(cx, ui, p, r, y);
@@ -145,11 +145,11 @@ pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
             paint.rect_filled(row, 6.0, p.page);
         }
         ux::text(&paint, pos2(row.left() + 10.0, row.top() + 9.0), text, types::UI, p.text, Some((width - 50.0).max(0.0)));
-        if crate::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
-            crate::panels::select_element_cx(cx, *id);
+        if archforge_shell_api::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
+            archforge_shell_api::panels::select_element_cx(cx, *id);
             open(cx, context_id, Some(*id));
         } else if resp.clicked() {
-            crate::panels::select_element_cx(cx, *id);
+            archforge_shell_api::panels::select_element_cx(cx, *id);
         }
         y += ROW;
     }
@@ -384,7 +384,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
         menu: menus::CONSTRAINT_LANGUAGE,
         limit: MAX_LANGUAGE,
     };
-    match crate::panels::editable_select_cx(cx, ui, p, at(half + 8.0, cy), half, &mut edit.language, &combo) {
+    match archforge_shell_api::panels::editable_select_cx(cx, ui, p, at(half + 8.0, cy), half, &mut edit.language, &combo) {
         ComboOut::Pick(i) => edit.language = LANGUAGES.get(i).map(|l| (*l).to_string()).unwrap_or_default(),
         ComboOut::Commit => {}
         _ => {}
@@ -482,7 +482,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal_cx(cx, ui, crate::uml_state::CONSTRAINT, card);
+    archforge_shell_api::panels::reveal_cx(cx, ui, crate::uml_state::CONSTRAINT, card);
     // The element menu last, over the card.
     if cx.panels.menu == Some(menus::CONSTRAINT_ELEMENT)
         && let Some(store) = cx.session.as_ref().map(|s| s.doc())
@@ -492,7 +492,8 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
         let notes: Vec<String> = choices.iter().map(|(_, _, k)| k.clone()).collect();
         if items.is_empty() {
             cx.panels.menu = None;
-        } else if let Some(i) = crate::panels::menu_noted_cx(cx, ui, p, add, "workspace.properties.constraint.elements.menu", &items, &notes, &[])
+        } else if let Some(i) =
+            archforge_shell_api::panels::menu_noted_cx(cx, ui, p, add, "workspace.properties.constraint.elements.menu", &items, &notes, &[])
             && let Some((id, _, _)) = choices.get(i)
         {
             edit.elements.push(*id);
@@ -530,14 +531,14 @@ fn reselect(cx: &mut Ctx, context: Uuid) {
     if let Some(uml) = uml_mut(cx.notation_states) {
         uml.constraint = None;
     }
-    let _ = crate::panels::run_cx(cx, "view.select", json!({ "ids": [context.to_string()] }));
+    let _ = archforge_shell_api::panels::run_cx(cx, "view.select", json!({ "ids": [context.to_string()] }));
 }
 
 /// The editor's bin: removes the constraint and selects its context again, or says why not in the
 /// editor.
 fn remove_constraint(cx: &mut Ctx, edit: &ConstraintEdit) {
     let target = edit.target.map(|t| t.to_string()).unwrap_or_default();
-    match crate::panels::run_cx(cx, "element.remove", json!({ "ids": [target] })) {
+    match archforge_shell_api::panels::run_cx(cx, "element.remove", json!({ "ids": [target] })) {
         Ok(_) => reselect(cx, edit.context),
         Err(e) => refuse(cx, e, None),
     }
@@ -553,7 +554,7 @@ fn move_constraint(cx: &mut Ctx, edit: &ConstraintEdit, up: bool) {
     let Some(i) = all.iter().position(|x| *x == c) else { return };
     let to = if up { i.checked_sub(1) } else { Some(i + 1).filter(|j| *j < all.len()) };
     let Some(to) = to else { return };
-    if let Err(e) = crate::panels::run_cx(cx, "uml.constraint.move", json!({ "constraint": target.to_string(), "at": to })) {
+    if let Err(e) = archforge_shell_api::panels::run_cx(cx, "uml.constraint.move", json!({ "constraint": target.to_string(), "at": to })) {
         refuse(cx, e, None);
     }
 }
@@ -602,7 +603,7 @@ fn commit(cx: &mut Ctx, edit: &ConstraintEdit) {
         Err(e) => {
             // Braces with nothing to sit by are said under the form's buttons, any other refusal under Apply.
             let braces = matches!(&e, EngineError::Failed { error, .. } if error.reason == Some(Reason::BracesNoElement));
-            refuse(cx, crate::panels::refusal(cx.notation_uis, &e), braces.then_some("show"));
+            refuse(cx, archforge_shell_api::panels::refusal(cx.notation_uis, &e), braces.then_some("show"));
         }
     }
 }
@@ -631,12 +632,14 @@ pub(crate) fn dropped_text(store: &Store, dropped: &[constraints::Dropped]) -> O
             let rest: Vec<String> = one.remaining.iter().map(|e| element_label(store, *e)).collect();
             Some(fmt(&tr("{constraint} now constrains {elements} only"), &[("constraint", &name(one.constraint)), ("elements", &rest.join(", "))]))
         }
-        many => Some(crate::i18n::trn("{n} constraint changed", "{n} constraints changed", u64::try_from(many.len()).unwrap_or(u64::MAX))),
+        many => {
+            Some(archforge_shell_api::i18n::trn("{n} constraint changed", "{n} constraints changed", u64::try_from(many.len()).unwrap_or(u64::MAX)))
+        }
     }
 }
 
 /// What removing `objs`, as `element.remove` removes them, does to the constraints, worked out
-/// before the removal; to be said after it by [`crate::notation_ui::say_after`].
+/// before the removal; to be said after it by [`archforge_shell_api::notation_ui::say_after_cx`].
 pub(crate) fn said_of_removal(store: &Store, objs: &[Obj]) -> Option<String> {
     dropped_text(store, &constraints::dropped_by(store, objs))
 }

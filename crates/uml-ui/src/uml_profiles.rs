@@ -15,31 +15,31 @@ use archforge_uml::profiles::{self, Uses};
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::cx::{Ctx, Request};
-use crate::explorer::{Row, Tree, fresh_name};
-use crate::i18n::{fmt, tr, tr_ctx, trn};
-use crate::notation_ui::NotationUi;
-use crate::panels::{FIELD, PAD, ROW, Subject, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx};
-use crate::state::Explorer;
 use crate::uml_classifier::Classifier;
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::cx::{Ctx, Request};
+use archforge_shell_api::explorer::fresh_name;
+use archforge_shell_api::i18n::{fmt, tr, tr_ctx, trn};
+use archforge_shell_api::notation_ui::{NotationUi, Row, Subject, Tree};
+use archforge_shell_api::panels::{FIELD, PAD, ROW, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx};
+use archforge_shell_api::state::Explorer;
 
 /// The ids of a stereotype's Properties (F1).
 pub(crate) const STEREOTYPE_PROFILE_ID: &str = "workspace.properties.stereotype.profile";
-pub(crate) const EXTENDS_ADD_ID: &str = "workspace.properties.stereotype.extends.add";
-pub(crate) const EXTENDS_ROW_ID: &str = "workspace.properties.stereotype.extends";
-pub(crate) const EXTENSION_ID: &str = "workspace.properties.stereotype.extension";
+pub const EXTENDS_ADD_ID: &str = "workspace.properties.stereotype.extends.add";
+pub const EXTENDS_ROW_ID: &str = "workspace.properties.stereotype.extends";
+pub const EXTENSION_ID: &str = "workspace.properties.stereotype.extension";
 /// The ids of a profile's Properties.
 pub(crate) const STEREOTYPES_ADD_ID: &str = "workspace.properties.profile.stereotypes.add";
 pub(crate) const STEREOTYPE_ROW_ID: &str = "workspace.properties.profile.stereotype";
 pub(crate) const DIAGRAM_ID: &str = "workspace.properties.profile.diagram";
 /// The ids of a package's Applied profiles (F5, F6).
-pub(crate) const APPLIED_ADD_ID: &str = "workspace.properties.package.profiles.add";
-pub(crate) const APPLIED_ROW_ID: &str = "workspace.properties.package.profile";
-pub(crate) const APPLIED_EDIT_ID: &str = "workspace.properties.package.profileEditor";
-pub(crate) const USES_ID: &str = "workspace.properties.package.profileRefusal";
+pub const APPLIED_ADD_ID: &str = "workspace.properties.package.profiles.add";
+pub const APPLIED_ROW_ID: &str = "workspace.properties.package.profile";
+pub const APPLIED_EDIT_ID: &str = "workspace.properties.package.profileEditor";
+pub const USES_ID: &str = "workspace.properties.package.profileRefusal";
 
 /// What applying a profile means, and what a stereotype's properties take, under their sections:
 /// too long for a line of code, so named here and listed for the catalogue in [`texts`].
@@ -82,7 +82,7 @@ pub struct ProfileRefusal {
 pub(crate) fn element_text(uis: &[&'static dyn NotationUi], named: &Named) -> String {
     match named {
         Named::Name(name) => name.clone(),
-        Named::Unnamed { kind } => crate::panels::a_kind(uis, kind).unwrap_or_else(|| tr_ctx("refusal", "an element")),
+        Named::Unnamed { kind } => archforge_shell_api::panels::a_kind(uis, kind).unwrap_or_else(|| tr_ctx("refusal", "an element")),
     }
 }
 
@@ -138,7 +138,7 @@ fn use_ids(store: &Store, uses: &Uses) -> Vec<Uuid> {
 
 /// Why `obj` may not be removed for its uses, in the user's words, an element without a name by its
 /// kind as the notations of `uis` name it; none when the uses allow it.
-pub(crate) fn removal_refusal(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<String> {
+pub fn removal_refusal(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<String> {
     match profiles::removal_problem(store, obj)?.reason? {
         archforge_engine::Reason::InUse(used) => Some(in_use(uis, &used)),
         _ => None,
@@ -227,11 +227,11 @@ pub(crate) fn foldable(store: &Store, profile: Obj) -> Vec<Obj> {
 
 /// What Models' New ▸ offers on a package (F2) or a profile: a package, a profile and the
 /// classifiers in a package; a stereotype in a profile.
-pub(crate) fn inside(store: &Store, o: Obj) -> Option<crate::notation_ui::Inside> {
+pub(crate) fn inside(store: &Store, o: Obj) -> Option<archforge_shell_api::notation_ui::Inside> {
     let owner = name(store, o);
     let heading = fmt(&tr("New in {name}"), &[("name", &owner)]);
     if profiles::is_profile(store, o) {
-        return Some(crate::notation_ui::Inside {
+        return Some(archforge_shell_api::notation_ui::Inside {
             word: tr("New"),
             heading,
             kinds: vec![("stereotype", tr("Stereotype"), &icons::STEREOTYPE)],
@@ -246,12 +246,19 @@ pub(crate) fn inside(store: &Store, o: Obj) -> Option<crate::notation_ui::Inside
     let mut kinds: Vec<(&'static str, String, &'static ux::Icon)> =
         vec![(PACKAGE_KINDS[0], tr("Package"), &icons::PACKAGE), (PACKAGE_KINDS[1], tr_ctx("uml", "Profile"), &icons::PROFILE)];
     kinds.extend(Classifier::ALL.iter().map(|k| (k.key(), k.word(), k.icon())));
-    Some(crate::notation_ui::Inside { word: tr("New"), heading, kinds, refused: Vec::new(), why_not: None, split: Some(PACKAGE_KINDS.len()) })
+    Some(archforge_shell_api::notation_ui::Inside {
+        word: tr("New"),
+        heading,
+        kinds,
+        refused: Vec::new(),
+        why_not: None,
+        split: Some(PACKAGE_KINDS.len()),
+    })
 }
 
 /// Makes what New ▸ `key` names inside the package or profile `o`, named afresh among what it holds
 /// of that kind, as one undo step; Models opens the rows above it and its name for typing.
-pub(crate) fn add_inside(cx: &mut Ctx, key: &str, o: Obj) -> Option<Result<Uuid, String>> {
+pub fn add_inside(cx: &mut Ctx, key: &str, o: Obj) -> Option<Result<Uuid, String>> {
     let store = cx.session.as_ref()?.doc();
     let id = store.uuid(o).ok()?.to_string();
     let taken = |class: archforge_mof::ClassId| {
@@ -298,7 +305,7 @@ fn made_in_place(cx: &mut Ctx, cmd: &str, params: serde_json::Value, fresh: Stri
     let id = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).ok_or_else(|| tr("The model could not be opened"))?;
     if let Some(store) = cx.session.as_ref().map(|s| s.doc())
         && let Some(c) = store.by_uuid(id)
-        && let Some(ui) = crate::notation_ui::of(cx.notation_uis, store, c)
+        && let Some(ui) = archforge_shell_api::notation_ui::of(cx.notation_uis, store, c)
     {
         let parents: Vec<Uuid> = ui.parents(store, c).into_iter().filter_map(|p| store.uuid(p).ok()).collect();
         cx.requests.push(Request::ExpandRows(parents));
@@ -334,7 +341,7 @@ fn pick_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, h
     let left = (anchor.right() - width).min(window.right() - 8.0 - width).max(window.left() + 8.0);
     let m = Rect::from_min_size(pos2(left, anchor.bottom() + 4.0), vec2(width, height));
     let live: Vec<usize> = rows.iter().enumerate().filter(|(_, r)| r.live).map(|(i, _)| i).collect();
-    let picked = ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), m, |ui| {
+    let picked = ux::overlay(ui, archforge_shell_api::widgets::egui_id(&format!("{id}.layer")), m, |ui| {
         let paint = ui.painter().clone();
         ux::shadow(&paint, m, 8.0, p.shadow);
         paint.rect_filled(m, 8.0, p.surface);
@@ -342,7 +349,7 @@ fn pick_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, h
         ux::text(
             &paint,
             pos2(m.left() + 14.0, m.top() + 12.0),
-            &crate::canvas::eyebrow_case(heading),
+            &archforge_shell_api::canvas::eyebrow_case(heading),
             types::EYEBROW,
             p.text_muted,
             Some(m.width() - 28.0),
@@ -384,10 +391,10 @@ fn pick_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, h
             let resp = if row.live {
                 control_cx(cx, ui, &rid, "menu-item", r.intersect(list), true).accessible_name(row.label.as_str())
             } else {
-                crate::widgets::record_visible(ui, cx.registry, &rid, "menu-item", r.intersect(list));
-                let resp = ui.interact(r.intersect(list), crate::widgets::egui_id(&rid), Sense::hover());
+                archforge_shell_api::widgets::record_visible(ui, cx.registry, &rid, "menu-item", r.intersect(list));
+                let resp = ui.interact(r.intersect(list), archforge_shell_api::widgets::egui_id(&rid), Sense::hover());
                 let why = row.why.clone().unwrap_or_else(|| row.detail.clone());
-                ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&rid), |node| {
+                ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(&rid), |node| {
                     node.set_role(egui::accesskit::Role::MenuItem);
                     node.set_disabled();
                     node.set_description(why.clone());
@@ -460,7 +467,7 @@ fn row(
     }
     ux::icon_mid(&paint, pos2(r.left() + 17.0, r.center().y), icon, p.text_secondary);
     ux::text_mid(&paint, r.left() + 34.0, r.center().y, label, types::UI, p.text, Some((width - 80.0).max(0.0)));
-    let edited = edit && crate::panels::edit_button_cx(cx, ui, p, r, id, resp.contains_pointer());
+    let edited = edit && archforge_shell_api::panels::edit_button_cx(cx, ui, p, r, id, resp.contains_pointer());
     (resp.clicked(), edited || (edit && resp.double_clicked()))
 }
 
@@ -473,7 +480,7 @@ fn refusal(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, left: f32, y: f32, width: f
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
     paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-    crate::widgets::record_visible(ui, cx.registry, USES_ID, "text", card);
+    archforge_shell_api::widgets::record_visible(ui, cx.registry, USES_ID, "text", card);
     let mut y = card.bottom() + 12.0;
     if !r.uses.is_empty() {
         let n = u64::try_from(r.uses.len()).unwrap_or(u64::MAX);
@@ -526,7 +533,7 @@ pub(crate) fn applied_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: R
         let (clicked, edit) = row(cx, ui, p, pos2(left, y), width, &key, label, &icons::PROFILE, open || refused, true);
         y += ROW;
         if clicked {
-            crate::panels::select_element_cx(cx, *id);
+            archforge_shell_api::panels::select_element_cx(cx, *id);
         }
         if edit && let Some(uml) = uml_mut(cx.notation_states) {
             uml.profile_edit = Some(ProfileEdit { owner: package_id, target: Some(target.clone()), choice: target.clone(), opened: true });
@@ -618,7 +625,7 @@ fn unapply_editor(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, left: f32, y: f32, w
 
 /// Unapplies `profile` from `package`, or, while elements inside use it, shows why with the uses
 /// counted (F6), changing nothing.
-pub(crate) fn unapply_profile(cx: &mut Ctx, package: Uuid, profile: Uuid) {
+pub fn unapply_profile(cx: &mut Ctx, package: Uuid, profile: Uuid) {
     let refused = cx.session.as_ref().and_then(|s| {
         let store = s.doc();
         let (pk, pr) = (store.by_uuid(package)?, store.by_uuid(profile)?);
@@ -652,7 +659,7 @@ pub(crate) fn profile_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect
     let (Some(profile), Some(profile_id)) = (subject.obj, subject.id) else { return };
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let left = r.left() + PAD;
-    crate::panels::name_field_cx(cx, ui, p, pos2(left, y), width, subject, "uml.profile.rename", "profile");
+    archforge_shell_api::panels::name_field_cx(cx, ui, p, pos2(left, y), width, subject, "uml.profile.rename", "profile");
     let mut y = y + 17.0 + FIELD + 16.0;
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let rows: Vec<(Uuid, String, String)> = profiles::stereotypes(store, profile)
@@ -669,7 +676,7 @@ pub(crate) fn profile_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect
             y += 44.0;
         }
     }
-    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
+    let chosen = archforge_shell_api::panels::selected_id_cx(&cx.cx_ref());
     for (id, label, note) in &rows {
         let (clicked, _) = row(
             cx,
@@ -684,7 +691,7 @@ pub(crate) fn profile_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect
             false,
         );
         if clicked {
-            crate::panels::select_element_cx(cx, *id);
+            archforge_shell_api::panels::select_element_cx(cx, *id);
         }
         y += ROW;
     }
@@ -692,7 +699,7 @@ pub(crate) fn profile_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect
         y = help(ui, p, left, y + 4.0, width, &tr("None yet. Add one here or from Models ▸ New ▸ Stereotype."));
     }
     y += 8.0;
-    if crate::panels::ghost_button_cx(cx, ui, p, pos2(left - 6.0, y), DIAGRAM_ID, &icons::CLASS_DIAGRAM, &tr("Open profile diagram"))
+    if archforge_shell_api::panels::ghost_button_cx(cx, ui, p, pos2(left - 6.0, y), DIAGRAM_ID, &icons::CLASS_DIAGRAM, &tr("Open profile diagram"))
         && let Err(e) = open_profile_diagram(cx, profile_id)
     {
         cx.panels.notice = Some(e);
@@ -748,7 +755,7 @@ pub(crate) fn stereotype_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: R
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let half = ((width - 8.0) / 2.0).max(0.0);
     let left = r.left() + PAD;
-    crate::panels::name_field_cx(cx, ui, p, pos2(left, y), half, subject, "uml.stereotype.set", "stereotype");
+    archforge_shell_api::panels::name_field_cx(cx, ui, p, pos2(left, y), half, subject, "uml.stereotype.set", "stereotype");
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let profile = profiles::profile_of(store, s);
     let all: Vec<(Uuid, String)> = profiles::all_profiles(store).into_iter().filter_map(|x| Some((store.uuid(x).ok()?, name(store, x)))).collect();
@@ -809,7 +816,7 @@ pub(crate) fn stereotype_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: R
     // The menus last, over the sections.
     if cx.panels.menu == Some(menus::STEREOTYPE_PROFILE) {
         let names: Vec<String> = all.iter().map(|(_, n)| n.clone()).collect();
-        if let Some(i) = crate::panels::menu_cx(cx, ui, p, field, STEREOTYPE_PROFILE_ID, &names)
+        if let Some(i) = archforge_shell_api::panels::menu_cx(cx, ui, p, field, STEREOTYPE_PROFILE_ID, &names)
             && let Some((to, _)) = all.get(i)
             && profile.and_then(|x| cx.session.as_ref()?.doc().uuid(x).ok()) != Some(*to)
         {
@@ -965,10 +972,10 @@ fn move_stereotype(cx: &mut Ctx, s: Uuid, to: Uuid) {
 /// Opens the profile's diagram, made when it has none and filled with every stereotype, every
 /// metaclass they extend and the extensions between them, what it lacked placed as one undo step
 /// (`uml.profile.diagram`).
-pub(crate) fn open_profile_diagram(cx: &mut Ctx, profile: Uuid) -> Result<(), String> {
+pub fn open_profile_diagram(cx: &mut Ctx, profile: Uuid) -> Result<(), String> {
     let out = run_cx(cx, "uml.profile.diagram", json!({ "profile": profile.to_string() }))?;
     let d = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).ok_or_else(|| tr("The model could not be opened"))?;
-    crate::canvas::open_cx(cx, d);
+    archforge_shell_api::canvas::open_cx(cx, d);
     Ok(())
 }
 
@@ -981,7 +988,7 @@ pub(crate) fn drop_stereotype(cx: &mut Ctx, d: Obj, s: Obj, at: (f64, f64)) {
         cx.canvas.notice = Some(tr("A stereotype is shown on its profile's diagram"));
         return;
     }
-    if crate::editing::on_diagram(store, d, s) {
+    if archforge_shell_api::editing::on_diagram(store, d, s) {
         cx.canvas.notice = Some(tr("Already on this diagram"));
         return;
     }
@@ -1002,13 +1009,13 @@ pub(crate) fn drop_stereotype(cx: &mut Ctx, d: Obj, s: Obj, at: (f64, f64)) {
         Ok(())
     });
     if let Err(e) = out {
-        cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e));
+        cx.canvas.notice = Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e));
     }
 }
 
 /// The words this module hands to `tr` by a name rather than a literal, for the catalogue's
 /// coverage test: the sections' `+` hints and the editors' buttons.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Apply profile", "Add stereotype", "Add extended metaclass", "Unapply profile", APPLIED_HELP, TYPES_HELP].into_iter()
 }
@@ -1018,8 +1025,8 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 /// Property and Reference extending Association with `lazy : Boolean = true`; Commerce applies it.
 /// With `uses`, the stereotypes are applied (AR-135): «Entity» on Order and Customer, «Id» on their
 /// id attributes, «Reference» on places (F6). Gives (Commerce, Persistence, Entity) ids.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn put_profiles(cx: &mut Ctx, uses: bool) -> Result<(String, String, String), String> {
+#[cfg(feature = "snapshot")]
+pub fn put_profiles(cx: &mut Ctx, uses: bool) -> Result<(String, String, String), String> {
     let id = |v: serde_json::Value| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
     let store = cx.session.as_ref().ok_or("the profiles need a session")?.doc();
     let commerce = store
@@ -1050,7 +1057,7 @@ pub(crate) fn put_profiles(cx: &mut Ctx, uses: bool) -> Result<(String, String, 
 /// The sample's stereotype applications (F6), made as the window makes them
 /// (`uml.stereotype.apply`): «Entity» on Order and Customer, «Id» on their id attributes,
 /// «Reference» on places.
-#[cfg(any(test, feature = "snapshot"))]
+#[cfg(feature = "snapshot")]
 fn apply_samples(cx: &mut Ctx) -> Result<(), String> {
     let session = cx.session.as_mut().ok_or("the sample needs a session")?;
     let uses: Vec<(String, String)> = {
@@ -1077,99 +1084,21 @@ fn apply_samples(cx: &mut Ctx) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use archforge_engine::{InUse, Named, Reason, Used};
+    use archforge_shell_api::i18n::set_language;
+    use archforge_shell_api::notation_ui::NotationUi;
+    use archforge_shell_api::testing::TestContext;
     use serde_json::json;
 
-    use crate::i18n::set_language;
-
-    /// An element in use that has no name is said by its kind, with its article, in the user's
-    /// language, never as an empty name (AR-807): an unnamed generalization beside a named
-    /// association, an unnamed association and an association end with no role, in English and in
-    /// German; a kind the catalogues don't name is an element.
-    #[test]
-    fn an_unnamed_element_in_use_is_said_by_its_kind() {
-        // The app's shell registers its notations' catalogues, whose rows this says.
-        let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
-        let unnamed = |kind| Named::Unnamed { kind };
-        let said = |names: Vec<Named>| {
-            let n = names.len();
-            let held = Used::HeldProfile { package: "Tools".into(), profile: "Audit".into() };
-            crate::panels::said(
-                crate::tests::SCREENS.notation_uis(),
-                &Reason::InUse(Box::new(InUse { what: held, uses: vec![("Tracked".into(), names, n)] })),
-            )
-        };
-        let cases = [
-            (vec!["bills".into(), unnamed("generalization")], "bills and a generalization", "bills und eine Generalisierung"),
-            (vec![unnamed("association")], "an association", "eine Assoziation"),
-            (vec![unnamed("association end")], "an association end", "ein Assoziationsende"),
-            (vec![unnamed("untyped kind")], "an element", "ein Element"),
-        ];
-        for (names, english, german) in cases {
-            set_language("en");
-            let en = format!("Tools holds the profile Audit, which is in use: «Tracked» on {english}. Remove those first.");
-            assert_eq!(said(names.clone()), Some(en));
-            set_language("de");
-            let de = format!("Tools enthält das Profil Audit, das verwendet wird: «Tracked» auf {german}. Diese zuerst entfernen.");
-            assert_eq!(said(names), Some(de));
-        }
-        set_language("en");
-    }
-
-    /// A literal a value names is refused naming the element its stereotype is applied to by its
-    /// name or, having none, by its kind, and an application on no element as on none, to be
-    /// changed in the file, in English and in French, and in German, with the preposition the
-    /// kind words take; never by an id or an empty name (AR-808).
-    #[test]
-    fn a_literal_valued_names_its_element_by_its_kind_or_none() {
-        // The app's shell registers its notations' catalogues, whose rows this says.
-        let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
-        use archforge_engine::{AppliedTo, LiteralValued};
-        let said = |element| {
-            let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Entity".into(), element };
-            crate::panels::said(crate::tests::SCREENS.notation_uis(), &Reason::LiteralValued(Box::new(valued)))
-        };
-        let on = |element: &str, french: &str| {
-            (
-                format!("The literal lazy is the value of fetch in «Entity» on {element}. Set another value there first."),
-                format!("Le littéral lazy est la valeur de fetch dans «Entity» sur {french}. Donnez-y d’abord une autre valeur."),
-            )
-        };
-        let nowhere = (
-            "The literal lazy is the value of fetch in «Entity» on no element. Change that value in the file first.".to_string(),
-            "Le littéral lazy est la valeur de fetch dans «Entity», qui n’est appliqué à aucun élément. Modifiez d’abord cette valeur dans le fichier."
-                .to_string(),
-        );
-        let cases = [
-            (AppliedTo::from("Order"), on("Order", "Order")),
-            (AppliedTo::Element(Named::Unnamed { kind: "association" }), on("an association", "une association")),
-            (AppliedTo::Element(Named::Unnamed { kind: "untyped kind" }), on("an element", "un élément")),
-            (AppliedTo::Nothing, nowhere),
-        ];
-        for (element, (english, french)) in cases {
-            set_language("en");
-            assert_eq!(said(element.clone()), Some(english));
-            set_language("fr");
-            assert_eq!(said(element), Some(french));
-        }
-        set_language("de");
-        let german =
-            |element: &str| format!("Das Literal lazy ist der Wert von fetch in «Entity» auf {element}. Setzen Sie dort zuerst einen anderen Wert.");
-        assert_eq!(said(AppliedTo::from("Order")), Some(german("Order")));
-        assert_eq!(said(AppliedTo::Element(Named::Unnamed { kind: "association" })), Some(german("eine Assoziation")));
-        let nowhere =
-            "Das Literal lazy ist der Wert von fetch in «Entity», das auf kein Element angewendet ist. Ändern Sie diesen Wert zuerst in der Datei.";
-        assert_eq!(said(AppliedTo::Nothing), Some(nowhere.to_string()));
-        set_language("en");
-    }
+    /// UML alone, as a test context is given it.
+    static UIS: &[&dyn NotationUi] = &[&crate::uml_ui::UmlUi];
 
     /// The delete dialog names a stereotype application on an element with no name by its kind
     /// (AR-807): deleting a class names «Trace» on its unnamed association, which goes with it, in
     /// English and in German.
     #[test]
     fn the_delete_dialog_names_an_unnamed_element_by_its_kind() {
-        // The app's shell registers its notations' catalogues, whose rows this says.
-        let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
+        // A test context registers UML's catalogues, whose rows this says, as the app's shell does.
+        let test = TestContext::new(UIS).unwrap();
         let mut n: u128 = 0;
         let ids = Box::new(move || {
             n += 1;
@@ -1189,7 +1118,7 @@ mod tests {
         let order = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
         for (language, said) in [("en", "«Trace» on an association"), ("de", "«Trace» auf eine Assoziation")] {
             set_language(language);
-            assert_eq!(crate::uml_stereotypes::going_along(crate::tests::SCREENS.notation_uis(), st, order), [said], "{language}");
+            assert_eq!(crate::uml_stereotypes::going_along(test.notation_uis, st, order), [said], "{language}");
         }
         set_language("en");
     }

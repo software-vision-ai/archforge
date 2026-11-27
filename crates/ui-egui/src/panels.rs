@@ -16,14 +16,13 @@ use serde_json::json;
 
 pub use archforge_shell_api::notation_ui::MenuId;
 pub(crate) use archforge_shell_api::notation_ui::{Editor, OpenEditor, Subject};
-pub(crate) use archforge_shell_api::panels::{
-    Combo, ComboOut, FIELD, FieldOut, PAD, PATH_SEP, ROW, check_cx, control_cx, edit_button_cx, edit_field_cx, editable_select_cx, field_inner,
-    ghost_button_cx, icon_button_cx, into_view, keys_at_start, menu_cx, menu_noted_cx, menu_paths_cx, name_field_cx, off_words_cx,
-    path_select_field_cx, problems_section_cx, refuse_empty_name_cx, refused_on_cx, reveal_cx, section_cx, select_element_cx, select_field_cx,
-    selected_id_cx, text_field_cx,
-};
 pub use archforge_shell_api::panels::{DescriptionDraft, NameEdit, State};
-pub(crate) use archforge_shell_api::panels::{a_kind, refusal, run_cx, said};
+pub(crate) use archforge_shell_api::panels::{
+    FIELD, FieldOut, PAD, ROW, check_cx, control_cx, edit_button_cx, edit_field_cx, field_inner, ghost_button_cx, icon_button_cx, into_view, menu_cx,
+    name_field_cx, off_words_cx, problems_section_cx, refused_on_cx, reveal_cx, section_cx, select_element_cx, select_field_cx, selected_id_cx,
+    text_field_cx,
+};
+pub(crate) use archforge_shell_api::panels::{refusal, run_cx, said};
 
 use crate::home::control;
 use crate::i18n::{fmt, tr};

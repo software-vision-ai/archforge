@@ -2,10 +2,10 @@
 //! mark's A, the model thumbnail's links and the chevron. Each is a set of strokes in the box the
 //! design draws it in: `L` a straight segment, `C` a cubic curve with its two control points. The
 //! stroke is the design's weight; drawing an icon larger or smaller keeps it, as the design does.
-//! These are the icons the shell and both notations draw, and six only one notation draws (ER's
-//! column, domain, enumeration, sequence and grip, UML's issue), which leave with their notation;
-//! any other icon only one notation draws, ER's or UML's, stays in the shell until that notation's
-//! screens crate takes it. Each icon carries its standard size, if it has one.
+//! These are the icons the shell and both notations draw, and five only ER draws (its column,
+//! domain, enumeration, sequence and grip), which leave with it; any other icon only ER draws
+//! stays in the shell until ER's screens crate takes it, and the icons only UML draws are UML's
+//! screens crate's. Each icon carries its standard size, if it has one.
 
 #![allow(clippy::approx_constant, reason = "path coordinates measured from the design; one that happens to be near 1/π is not that constant")]
 
@@ -373,21 +373,6 @@ pub const MODEL_LINKS: Icon = Icon {
     stroke: 1.0,
     standard_size: None,
     segments: &[L([0.0, 0.0], [36.0, 0.0]), L([36.0, 0.0], [36.0, 20.0]), L([0.0, 0.0], [0.0, 20.0]), L([0.0, 20.0], [36.0, 20.0])],
-};
-
-/// An issue: a ring with a tick, in the New project dialog's strip.
-pub const ISSUE: Icon = Icon {
-    size: [16.0, 16.0],
-    stroke: 1.5,
-    standard_size: Some(17.0),
-    segments: &[
-        C([8.0, 1.5], [11.59, 1.5], [14.5, 4.41], [14.5, 8.0]),
-        C([14.5, 8.0], [14.5, 11.59], [11.59, 14.5], [8.0, 14.5]),
-        C([8.0, 14.5], [4.41, 14.5], [1.5, 11.59], [1.5, 8.0]),
-        C([1.5, 8.0], [1.5, 4.41], [4.41, 1.5], [8.0, 1.5]),
-        L([5.3, 8.2], [7.2, 10.0]),
-        L([7.2, 10.0], [10.8, 6.3]),
-    ],
 };
 
 /// A warning: a triangle with an exclamation mark, before a refusal said in a panel.
@@ -948,14 +933,6 @@ pub const SCHEMA: Icon = Icon {
 };
 
 /// A chevron pointing right: a folded row.
-/// Open: an arrow out to the top right, into what it opens.
-pub const OPEN_IN: Icon = Icon {
-    size: [16.0, 16.0],
-    stroke: 1.5,
-    standard_size: Some(10.0),
-    segments: &[L([3.0, 13.0], [13.0, 3.0]), L([6.0, 3.0], [13.0, 3.0]), L([13.0, 3.0], [13.0, 10.0])],
-};
-
 pub const CHEVRON_RIGHT: Icon =
     Icon { size: [16.0, 16.0], stroke: 1.5, standard_size: Some(9.0), segments: &[L([6.0, 3.0], [11.0, 8.0]), L([11.0, 8.0], [6.0, 13.0])] };
 
@@ -1209,7 +1186,7 @@ mod tests {
     /// 14, and Restore, the versions' clock without its hands, none.
     #[test]
     fn every_icon_keeps_its_standard_size() {
-        let icons: [(&str, Icon, Option<f32>); 87] = [
+        let icons: [(&str, Icon, Option<f32>); 85] = [
             ("MARK_A", MARK_A, None),
             ("HOME", HOME, Some(15.0)),
             ("PLUS", PLUS, Some(10.0)),
@@ -1236,7 +1213,6 @@ mod tests {
             ("MOON", MOON, Some(14.0)),
             ("SUN", SUN, Some(14.0)),
             ("MODEL_LINKS", MODEL_LINKS, None),
-            ("ISSUE", ISSUE, Some(17.0)),
             ("WARNING", WARNING, None),
             ("KEY", KEY, None),
             ("LOCK", LOCK, None),
@@ -1273,7 +1249,6 @@ mod tests {
             ("COLLAPSE_ALL", COLLAPSE_ALL, Some(9.0)),
             ("DIAGRAM", DIAGRAM, Some(17.0)),
             ("SCHEMA", SCHEMA, Some(16.0)),
-            ("OPEN_IN", OPEN_IN, Some(10.0)),
             ("CHEVRON_RIGHT", CHEVRON_RIGHT, Some(9.0)),
             ("CHEVRON_LEFT", CHEVRON_LEFT, Some(9.0)),
             ("TICK", TICK, Some(13.0)),
