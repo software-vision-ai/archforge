@@ -628,8 +628,6 @@ str		Compared with the version of {when}	Compared with the version of {when}
 str		There is no version to compare with yet.	There is no version to compare with yet.
 str		This diagram couldn't be compared.	This diagram couldn't be compared.
 str		This element couldn't be compared.	This element couldn't be compared.
-str		Attributes	Attributes
-str		Operations	Operations
 str		Literals	Literals
 str		Members	Members
 str		Relationships	Relationships
@@ -868,7 +866,6 @@ str		Remove from this diagram	Remove from this diagram
 str		Delete from the model…	Delete from the model…
 str		Start	Start
 str		Identifying	Identifying
-str		Columns	Columns
 str		{name} removed	{name} removed
 str		Undo	Undo
 str		Redo	Redo

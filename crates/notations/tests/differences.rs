@@ -309,6 +309,14 @@ fn said(text: &str) -> Named {
     Named::Said(text.to_string())
 }
 
+/// The lists of features the tests read: a class's attributes and operations, an enumeration's
+/// literals, a table's columns and an ER enum type's literals.
+const ATTRIBUTES: ListKind = ListKind::Features(archforge_uml::PROPERTY);
+const OPERATIONS: ListKind = ListKind::Features(archforge_uml::OPERATION);
+const LITERALS: ListKind = ListKind::Features(archforge_uml::ENUMERATION_LITERAL);
+const COLUMNS: ListKind = ListKind::Features(archforge_er::ATTRIBUTE);
+const ENUM_LITERALS: ListKind = ListKind::Features(archforge_er::ENUM_TYPE);
+
 /// A class's members group by kind; an added, a removed and a changed one are marked on the sides that have them.
 #[test]
 fn members_are_grouped_and_marked_on_their_own_side() {
@@ -322,14 +330,40 @@ fn members_are_grouped_and_marked_on_their_own_side() {
     run(&mut s, "element.remove", json!({ "ids": [cut] }));
     let seen = sides(&before, &state(&s), &order);
     let (was, is) = (lists(&seen.lists.before), lists(&seen.lists.after));
-    assert_eq!(was.iter().map(|l| l.0).collect::<Vec<_>>(), [ListKind::Attributes, ListKind::Ownership], "{was:?}");
-    assert_eq!(is.iter().map(|l| l.0).collect::<Vec<_>>(), [ListKind::Attributes, ListKind::Operations, ListKind::Ownership], "{is:?}");
+    assert_eq!(was.iter().map(|l| l.0).collect::<Vec<_>>(), [ATTRIBUTES, ListKind::Ownership], "{was:?}");
+    assert_eq!(is.iter().map(|l| l.0).collect::<Vec<_>>(), [ATTRIBUTES, OPERATIONS, ListKind::Ownership], "{is:?}");
     assert_eq!(was[0].1[..2], [(said("- total"), Some(ChangeKind::Changed)), (said("+ cut"), Some(ChangeKind::Removed))], "{was:?}");
     assert_eq!(is[0].1[0], (said("+ total"), Some(ChangeKind::Changed)), "{is:?}");
     assert_eq!(is[1].1, [(said("+ pay()"), Some(ChangeKind::Added))], "added, on the after side only");
     assert_eq!(seen.lists.member_changes, 3, "the changed one once, the owner not at all");
-    assert_eq!(lists(&sides(&before, &before, &status).lists.after)[0], (ListKind::Literals, vec![(said("open"), None)]));
+    assert_eq!(lists(&sides(&before, &before, &status).lists.after)[0], (LITERALS, vec![(said("open"), None)]));
     assert_eq!(was.last().unwrap().1, [(said("shop"), None)], "the same owner is plain");
+}
+
+/// A card's lists keep the order its box shows, whatever the classes' ids: an enumeration's
+/// attributes, operations and literals, with an operation's class after the literal's in the
+/// metamodel, then its owner.
+#[test]
+fn the_lists_keep_the_order_of_the_box() {
+    use archforge_uml::{data_type, enumeration};
+    let (mut s, shop, ..) = uml_project();
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": shop, "name": "Status" }));
+    run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "open" }));
+    assert!(archforge_uml::ENUMERATION_LITERAL < archforge_uml::OPERATION, "the ids alone would put the literals first");
+    // No command gives an enumeration an attribute or an operation; a project read from elsewhere may.
+    let both = edited(&state(&s), |st| {
+        let e = st.by_uuid(uuid(&status)).unwrap();
+        let parts =
+            [(archforge_uml::OPERATION, data_type::OWNED_OPERATION, "next", 1), (archforge_uml::PROPERTY, data_type::OWNED_ATTRIBUTE, "code", 2)];
+        for (class, prop, name, n) in parts {
+            let o = st.create_with_uuid(class, Uuid([n; 16])).unwrap();
+            st.set(o, archforge_uml::named_element::NAME, Value::str(name)).unwrap();
+            st.push(e, prop, Value::Ref(o)).unwrap();
+        }
+        assert_eq!(st.list(e, enumeration::OWNED_LITERAL).unwrap().len(), 1);
+    });
+    let kinds = |of: &[CardList]| of.iter().map(|l| l.kind).collect::<Vec<_>>();
+    assert_eq!(kinds(&sides(&both, &both, &status).lists.after), [ATTRIBUTES, OPERATIONS, LITERALS, ListKind::Ownership]);
 }
 
 /// What `id` is connected to between the two states.
@@ -455,7 +489,7 @@ fn er_elements_without_a_name_go_by_what_they_join() {
     assert_eq!(told_card(&before, &places), (Some("customer → order".into()), true));
     assert_eq!(told_card(&before, &subtype), (Some("vip → customer".into()), true));
     let table = sides(&before, &before, &customer);
-    assert_eq!(rows_of(&table, ListKind::Columns).len(), 2, "{table:?}");
+    assert_eq!(rows_of(&table, COLUMNS).len(), 2, "{table:?}");
     assert_eq!(
         rows_of(&table, ListKind::Members),
         [made("pk_customer"), made("uq_customer_email"), made("ck_customer_1"), made("ix_customer_expr"), made("ix_customer_email")]
@@ -502,9 +536,11 @@ fn an_er_enums_literals_are_listed_and_marked_by_their_text() {
     run(&mut s, "er.enum.set", json!({ "enum": states, "name": "state", "literals": ["open", "sent"] }));
     let seen = sides(&before, &state(&s), &states);
     let row = |text, change| (said(text), change);
-    assert_eq!(rows_of(&seen, ListKind::Literals), [row("open", None), row("sent", Some(ChangeKind::Added))]);
-    assert_eq!(lists(&seen.lists.before)[0], (ListKind::Literals, vec![row("open", None), row("paid", Some(ChangeKind::Removed))]));
+    assert_eq!(rows_of(&seen, ENUM_LITERALS), [row("open", None), row("sent", Some(ChangeKind::Added))]);
+    assert_eq!(lists(&seen.lists.before)[0], (ENUM_LITERALS, vec![row("open", None), row("paid", Some(ChangeKind::Removed))]));
     assert_eq!(seen.lists.member_changes, 2);
+    let schema = sides(&before, &before, &shop);
+    assert_eq!(schema.lists.after.iter().map(|l| l.kind).collect::<Vec<_>>(), [ListKind::Members, ListKind::Ownership], "the schema's member");
 }
 
 /// A constraint is marked by its whole expression, even an edit its shortened words don't show.
@@ -601,7 +637,7 @@ fn relationships_are_listed_on_the_cards_of_what_they_join() {
     let to = |id: &str, name: &str| Some((Some(uuid(id)), said(name)));
     let seen = sides(&before, &before, &order);
     assert_eq!(joins(&seen), [(said(""), to(&shape, "Shape"), String::new(), None), (said("lines"), to(&line, "OrderLine"), " [1..*]".into(), None)]);
-    assert_eq!(rows_of(&seen, ListKind::Attributes), [(said("- total"), None)], "the end is no attribute");
+    assert_eq!(rows_of(&seen, ATTRIBUTES), [(said("- total"), None)], "the end is no attribute");
     assert_eq!(joins(&sides(&before, &before, &line)), [(said(""), to(&order, "Order"), String::new(), None)], "on the other end's card");
     assert!(rows_of(&sides(&before, &before, &shop), ListKind::Members).contains(&made("Order → OrderLine")), "the package's own line");
     let edit = |change: &dyn Fn(&mut Store)| sides(&before, &edited(&before, change), &order);

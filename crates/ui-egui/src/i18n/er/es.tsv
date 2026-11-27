@@ -2,6 +2,7 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 str		Table	Tabla
 str		Column	Columna
+str		Columns	Columnas
 str		Schema · model	Esquema · modelo
 str		Table · model, in every diagram	Tabla · modelo, en todos los diagramas
 str		Column · model	Columna · modelo

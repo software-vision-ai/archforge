@@ -18132,6 +18132,10 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn a_kind(&self, kind: &str) -> Option<String> {
         (kind == "sketch").then(|| format!("a {}", self.0))
     }
+    /// A class's attributes as its fields, by its name, so a test sees it asked.
+    fn list_heading(&self, class: archforge_mof::ClassId) -> Option<String> {
+        (class == archforge_uml::PROPERTY).then(|| format!("Fields of the {}", self.0))
+    }
     /// Shorter than any other notation's, so a field that takes it is told apart.
     fn name_limit(&self) -> usize {
         SKETCH_NAME_LIMIT

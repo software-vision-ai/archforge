@@ -129,6 +129,8 @@ str		An enumeration holds at most {n} literals.	Una enumeración contiene como m
 str		Several types are named {name}; pick one from the menu.	Hay varios tipos llamados {name}; elige uno del menú.
 str		Add parameter	Añadir parámetro
 str		Attribute	Atributo
+str		Attributes	Atributos
+str		Operations	Operaciones
 str		Literal	Literal
 str		Attribute · model	Atributo · modelo
 str		Literal · model	Literal · modelo

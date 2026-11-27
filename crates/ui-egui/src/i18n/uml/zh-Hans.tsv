@@ -129,6 +129,8 @@ str		An enumeration holds at most {n} literals.	一个枚举最多包含 {n} 个
 str		Several types are named {name}; pick one from the menu.	有多个名为 {name} 的类型；请从菜单中选择一个。
 str		Add parameter	添加参数
 str		Attribute	属性
+str		Attributes	属性
+str		Operations	操作
 str		Literal	字面量
 str		Attribute · model	属性 · 模型
 str		Literal · model	字面量 · 模型

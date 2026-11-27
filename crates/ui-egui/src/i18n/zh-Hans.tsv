@@ -629,8 +629,6 @@ str		Compared with the version of {when}	与 {when} 的版本比较
 str		There is no version to compare with yet.	还没有可比较的版本。
 str		This diagram couldn't be compared.	无法比较此图。
 str		This element couldn't be compared.	无法比较此元素。
-str		Attributes	属性
-str		Operations	操作
 str		Literals	字面量
 str		Members	成员
 str		Relationships	关系
@@ -869,7 +867,6 @@ str		Remove from this diagram	从此图中移除
 str		Delete from the model…	从模型中删除…
 str		Start	起点
 str		Identifying	标识
-str		Columns	列
 str		{name} removed	已删除 {name}
 str		Undo	撤销
 str		Redo	重做
