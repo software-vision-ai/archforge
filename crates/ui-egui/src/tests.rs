@@ -8260,6 +8260,44 @@ fn an_er_columns_default_collation_place_and_link_refused_are_said_in_the_chosen
     crate::i18n::set_language("en");
 }
 
+/// The Problems panel names a loaded document's enum type without a name, which no command makes, by
+/// its id when a column's default is none of its literals, in the chosen language, never as an empty
+/// name. In light and dark.
+#[test]
+fn an_er_columns_default_none_of_an_unnamed_enum_types_literals_names_the_type_by_its_id() {
+    use archforge_er::{ATTRIBUTE, ENTITY, ENUM_TYPE, SCHEMA};
+    use archforge_mof::Value;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut n = 0u64;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
+        });
+        let mut st = archforge_er::store(ids).unwrap();
+        let schema = st.create(SCHEMA).unwrap();
+        let status = st.create(ENUM_TYPE).unwrap();
+        st.push(status, archforge_er::enum_type::LITERAL, Value::str("offen")).unwrap();
+        st.push(schema, archforge_er::schema::ENUM_TYPE, Value::Ref(status)).unwrap();
+        let bestellung = st.create(ENTITY).unwrap();
+        st.set(bestellung, archforge_er::named_element::NAME, Value::str("bestellung")).unwrap();
+        st.push(schema, archforge_er::schema::ENTITY, Value::Ref(bestellung)).unwrap();
+        let zustand = st.create(ATTRIBUTE).unwrap();
+        st.set(zustand, archforge_er::named_element::NAME, Value::str("zustand")).unwrap();
+        st.set(zustand, archforge_er::attribute::ENUM_TYPE, Value::Ref(status)).unwrap();
+        st.set(zustand, archforge_er::attribute::DEFAULT, Value::str("'zu'")).unwrap();
+        st.push(bestellung, archforge_er::entity::ATTRIBUTE, Value::Ref(zustand)).unwrap();
+        let id = st.uuid(status).unwrap();
+        let texts: Vec<String> = crate::problems::all(crate::notation_ui::UIS, &st).into_iter().map(|p| p.text).collect();
+        let zustand: Vec<&String> = texts.iter().filter(|t| t.starts_with("zustand")).collect();
+        assert_eq!(zustand, [&format!("zustand: 'zu' ist kein Literal von {id}.")], "{texts:?} {theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// What a column is typed by, refused, is said in the chosen language: a type name that holds its
 /// own size, a domain and an enum type together, and a type name or a size beside a domain or an
 /// enum type; a part neither knows is left to the engine's English. In light and dark (AR-497).

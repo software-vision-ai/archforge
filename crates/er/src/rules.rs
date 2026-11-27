@@ -511,7 +511,7 @@ pub fn enum_default_problem(store: &Store, a: Obj) -> Option<EnumDefaultProblem>
 pub struct EnumDefaultProblem {
     /// The default, cut to its first 40 characters.
     pub value: String,
-    /// The enum type's name.
+    /// How the enum type is named ([`label`]): its name, or its id when it has none.
     pub enumeration: String,
 }
 
@@ -537,7 +537,7 @@ pub fn enum_default_check(store: &Store, e: Obj, default: &str) -> Option<EnumDe
     if literals_of(store, e).iter().any(|l| l == bare) {
         return None;
     }
-    Some(EnumDefaultProblem { value: default.chars().take(40).collect(), enumeration: name_of(store, e) })
+    Some(EnumDefaultProblem { value: default.chars().take(40).collect(), enumeration: label(store, e) })
 }
 
 /// What a type takes after its name, in the PostgreSQL list (owner decision 2026-10-30: this
