@@ -1556,16 +1556,16 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
     pos2(x as f32, y as f32)
 }
 
-/// The name typed in the node's header, or where its diagram's kind places it on a card the kind
-/// drew itself in the last frame: the design's tinted field over the name, the text selected when
+/// The name typed in the node's header, or where a kind places it on a card the kind drew itself
+/// in the last frame: the design's tinted field over the name, the text selected when
 /// the entity is new; Enter commits, Escape closes, a refusal stays under it.
 fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
     let paint = ui.painter().clone();
-    let placed = shell.canvas.rename.as_ref().filter(|rn| shell.canvas.kind_cards.contains(&rn.node)).and_then(|rn| {
+    let placed = shell.canvas.rename.as_ref().and_then(|rn| {
+        let drew = shell.canvas.kind_cards.iter().find(|(node, _)| *node == rn.node)?.1;
+        let kind = shell.kinds.iter().find(|k| k.kind() == drew)?;
         let store = shell.session.as_ref()?.doc();
-        let n = store.by_uuid(rn.node)?;
-        let kind = crate::kinds::kind_of(shell, store, archforge_diagram::diagram_of(store, n)?)?;
-        kind.name_field(&paint, store, n, rect, &rn.text, z)
+        kind.name_field(&paint, store, store.by_uuid(rn.node)?, rect, &rn.text, z)
     });
     let (field, font) = placed.unwrap_or_else(|| {
         (Rect::from_min_size(rect.min + vec2(14.0, 28.0) * z, vec2((rect.width() - 28.0 * z).max(0.0), 30.0 * z)), types::SECTION.scaled(z))

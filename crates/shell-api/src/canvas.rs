@@ -519,10 +519,11 @@ pub struct State {
     /// The labels the last frame's diagram kind drew with its cards, which a screen reader and the
     /// pointer read.
     pub card_labels: Vec<CardLabel>,
-    /// The nodes whose cards their diagram's kind drew itself in the last frame
-    /// ([`crate::kinds::DiagramKind::draw_card`]): a name typed in place on one goes where the kind
-    /// says ([`crate::kinds::DiagramKind::name_field`]).
-    pub kind_cards: Vec<Uuid>,
+    /// The nodes whose cards a diagram kind drew itself in the last frame
+    /// ([`crate::kinds::DiagramKind::draw_card`]), each with that kind (its
+    /// [`crate::kinds::DiagramKind::kind`]): a name typed in place on one goes where that kind says
+    /// ([`crate::kinds::DiagramKind::name_field`]).
+    pub kind_cards: Vec<(Uuid, &'static str)>,
     /// The labels of the figures of no one node or line the last frame drew, which take a press
     /// (a UML generalization set's, AR-129).
     pub extra_labels: Vec<ExtraLabel>,
@@ -672,6 +673,10 @@ pub struct Drawing<'a> {
     pub diagram: Obj,
     pub notations: &'a archforge_diagram::ProjectView,
     pub kind: Option<&'static dyn crate::kinds::DiagramKind>,
+    /// Every kind the shell knows: after the diagram's own, each is asked in turn to draw a card
+    /// itself ([`crate::kinds::DiagramKind::draw_card`]), so a card is drawn by the kind that
+    /// draws its element whatever diagram shows it.
+    pub kinds: &'a [&'static dyn crate::kinds::DiagramKind],
     /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
     /// and where each line's ends sit along their sides: worked out once a frame.
     pub boxes: Vec<(Obj, archforge_diagram::Rect)>,
@@ -695,8 +700,9 @@ pub struct Drawing<'a> {
     pub parts: std::cell::RefCell<Vec<CardPart>>,
     /// The labels their kind drew with cards this frame, for their tooltips and screen readers.
     pub labels: std::cell::RefCell<Vec<CardLabel>>,
-    /// The nodes whose cards their kind drew itself this frame, written down by the canvas.
-    pub kind_cards: std::cell::RefCell<Vec<Uuid>>,
+    /// The nodes whose cards a kind drew itself this frame, each with that kind, written down by
+    /// the canvas.
+    pub kind_cards: std::cell::RefCell<Vec<(Uuid, &'static str)>>,
     /// The diagram each element leads to, by the element (a diagram of it, the first in the
     /// store's order): worked out once a frame, when a card its kind draws first asks.
     pub led: std::cell::OnceCell<std::collections::HashMap<Obj, Obj>>,

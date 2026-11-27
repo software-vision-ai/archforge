@@ -12432,6 +12432,33 @@ fn a_package_cards_thumbnail_is_its_own_diagram_scaled_and_follows_it() {
     assert!(painted(&h).iter().any(|t| t == "Empty diagram"));
 }
 
+/// A package's card is drawn by the kind that draws packages whatever the scene's own kind: on a
+/// scene of UML's kind, of a kind that leaves the card to the canvas (ER's) and of no kind, its tab
+/// and thumbnail are drawn alike, as a stored project may put the card anywhere it opens; with no
+/// kind asked at all, the canvas's own card is all there is. In light and dark.
+#[test]
+fn a_package_card_is_drawn_by_the_kind_that_draws_packages_whatever_the_scenes_kind() {
+    let (mut h, top, _, card, _, _) = package_preview_harness(ThemeKind::Light);
+    let session = h.state_mut().session.take().unwrap();
+    drop(h);
+    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
+    let (tab, preview) = (format!("workspace.canvas.node.{card}.tab"), format!("workspace.canvas.node.{card}.preview"));
+    let uml: &'static dyn crate::kinds::DiagramKind = &crate::uml_ui::UmlKind;
+    let er: &'static dyn crate::kinds::DiagramKind = &crate::er_kind::ErKind;
+    for dark in [false, true] {
+        for scene in [Some(uml), Some(er), None] {
+            let (texts, at, _) = drawn_alone_at(&session, &top.to_string(), (scene, crate::kinds::KINDS), dark, 1000.0, &none, &clean);
+            let ids: Vec<&String> = at.iter().map(|(i, _)| i).collect();
+            let named = scene.map(|k| k.kind());
+            assert!(ids.contains(&&tab) && ids.contains(&&preview), "{dark} {named:?}: the package's card: {ids:?}");
+            assert!(texts.iter().any(|t| t == "Sales"), "{dark} {named:?}: its name in its tab");
+        }
+        let (_, at, _) = drawn_alone_at(&session, &top.to_string(), (None, &[]), dark, 1000.0, &none, &clean);
+        assert!(at.iter().all(|(i, _)| *i != tab && *i != preview), "{dark}: the canvas's own card, no tab: {at:?}");
+        assert!(at.iter().any(|(i, _)| *i == format!("workspace.canvas.node.{card}")), "{dark}: the card still drawn");
+    }
+}
+
 /// A project whose root's structure diagram is open at 100 % (AR-565), with the root's id and the
 /// diagram's.
 fn owning_path_harness(theme: ThemeKind) -> (Harness<'static, Shell>, String, String) {
@@ -16269,15 +16296,16 @@ fn drawn_alone(
     overrides: &std::collections::BTreeMap<archforge_mof::Uuid, egui::Rect>,
     problems: &std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
 ) -> (Vec<String>, Vec<String>, usize) {
-    let (texts, recorded, badges) = drawn_alone_at(session, d, kind, dark, width, overrides, problems);
+    let (texts, recorded, badges) = drawn_alone_at(session, d, (kind, crate::kinds::KINDS), dark, width, overrides, problems);
     (texts, recorded.into_iter().map(|(id, _)| id).collect(), badges)
 }
 
-/// [`drawn_alone`], each id recorded with its rectangle.
+/// [`drawn_alone`], each id recorded with its rectangle, `kinds` the kinds asked after `kind` for
+/// a card they draw themselves.
 fn drawn_alone_at(
     session: &archforge_notations::Session,
     d: &str,
-    kind: Option<&'static dyn crate::kinds::DiagramKind>,
+    (kind, kinds): (Option<&'static dyn crate::kinds::DiagramKind>, &'static [&'static dyn crate::kinds::DiagramKind]),
     dark: bool,
     width: f32,
     overrides: &std::collections::BTreeMap<archforge_mof::Uuid, egui::Rect>,
@@ -16296,8 +16324,17 @@ fn drawn_alone_at(
             ui.ctx().set_fonts(crate::fonts::definitions());
             return;
         }
-        let scene =
-            crate::canvas::Scene { p: crate::ux::palette(dark), store, notations: session.view(), kind, diagram, view: &view, grid: &grid, area };
+        let scene = crate::canvas::Scene {
+            p: crate::ux::palette(dark),
+            store,
+            notations: session.view(),
+            kind,
+            kinds,
+            diagram,
+            view: &view,
+            grid: &grid,
+            area,
+        };
         let live = crate::canvas::Live {
             selection: &[],
             overrides,
@@ -18154,7 +18191,7 @@ fn a_card_its_kind_draws_replaces_the_canvass_and_keeps_the_ring_badge_parts_and
         assert_eq!(texts.iter().filter(|t| *t == "CLASS").count(), 1, "{theme:?}: Party's eyebrow alone");
         assert!(texts.iter().any(|t| t == "partyId"), "{theme:?}: Party's card is still the canvas's");
         let node = archforge_mof::Uuid::parse(&b).unwrap();
-        assert_eq!(h.state().canvas.kind_cards, vec![node], "{theme:?}");
+        assert_eq!(h.state().canvas.kind_cards, vec![(node, SKETCH)], "{theme:?}");
         let body = rect_of(&h, &format!("workspace.canvas.node.{b}"));
         let part = rect_of(&h, &format!("workspace.canvas.node.{b}.sketch-part"));
         assert!(!body.contains(part.center()), "{theme:?}: the part lies outside the card");
@@ -33951,7 +33988,7 @@ fn the_canvas_starts_n_ary_legs_where_umls_kind_says() {
     let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
     for dark in [false, true] {
         let leg_rects = |kind: &'static dyn crate::kinds::DiagramKind| {
-            let (_, at, _) = drawn_alone_at(&session, &ids["diagram"], Some(kind), dark, 1000.0, &none, &clean);
+            let (_, at, _) = drawn_alone_at(&session, &ids["diagram"], (Some(kind), crate::kinds::KINDS), dark, 1000.0, &none, &clean);
             legs.iter().map(|l| at.iter().find(|(id, _)| id == l).map(|(_, r)| *r).unwrap()).collect::<Vec<_>>()
         };
         let (uml, er) = (leg_rects(&crate::uml_ui::UmlKind), leg_rects(&crate::er_kind::ErKind));

@@ -604,7 +604,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
             rename_text: shell.canvas.rename.as_ref().map(|rn| rn.text.as_str()),
             label_drag: crate::editing::label_preview(shell, pointer),
         };
-        let scene = Scene { p, store, notations: session.view(), kind, diagram: d, view: &view, grid, area: r };
+        let scene = Scene { p, store, notations: session.view(), kind, kinds: shell.kinds, diagram: d, view: &view, grid, area: r };
         let drawn = draw_scene(ui, &clip, &scene, live, &mut shell.registry);
         shell.canvas.ends = drawn.ends;
         shell.canvas.qualified_ends = drawn.qualified_ends;
@@ -746,6 +746,8 @@ pub(crate) struct Scene<'a> {
     pub(crate) store: &'a Store,
     pub(crate) notations: &'a archforge_diagram::ProjectView,
     pub(crate) kind: Option<&'static dyn crate::kinds::DiagramKind>,
+    /// Every kind the shell knows, asked in turn after `kind` for a card it draws itself.
+    pub(crate) kinds: &'a [&'static dyn crate::kinds::DiagramKind],
     pub(crate) diagram: Obj,
     pub(crate) view: &'a View,
     pub(crate) grid: &'a Grid,
@@ -778,7 +780,7 @@ pub(crate) struct Drawn {
     pub(crate) extra_labels: Vec<ExtraLabel>,
     pub(crate) card_parts: Vec<CardPart>,
     pub(crate) card_labels: Vec<CardLabel>,
-    pub(crate) kind_cards: Vec<Uuid>,
+    pub(crate) kind_cards: Vec<(Uuid, &'static str)>,
     pub(crate) badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)>,
 }
 
@@ -786,7 +788,7 @@ pub(crate) struct Drawn {
 /// state is read, so any store can be drawn, in a context that has the window's fonts. Each thing
 /// drawn is recorded in `registry`.
 pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>, live: Live<'_>, registry: &mut widgets::Registry) -> Drawn {
-    let Scene { p, store, notations, kind, diagram: d, view, grid, area: r } = *scene;
+    let Scene { p, store, notations, kind, kinds, diagram: d, view, grid, area: r } = *scene;
     let overrides = live.overrides;
     let (x0, y0) = view.to_canvas(r.min);
     let (x1, y1) = view.to_canvas(r.max);
@@ -815,6 +817,7 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
         diagram: d,
         notations,
         kind,
+        kinds,
         boxes: refs(store, d, diagram::NODE).into_iter().map(|n| (n, model_rect(store, view, overrides, n))).collect(),
         spreads: archforge_diagram::route::spreads(store, d, |n| model_rect(store, view, overrides, n)),
         hovered: live.hovered,
@@ -934,14 +937,21 @@ fn draw_node(
     // A template's signature rows, drawn over the card and its selection (AR-130).
     let signature = card.as_ref().filter(|c| !annotation && !c.template.is_empty() && z >= DETAIL_ZOOM).map(|c| c.template.clone());
     let diamond = card.as_ref().is_some_and(|c| c.tone == Tone::Diamond);
-    // A card its diagram's kind draws itself takes the place of the canvas's own figure for it.
-    let by_kind = match (element, card.as_ref(), d.kind) {
-        (Some(element), Some(card), Some(kind)) => kind.draw_card(paint, d, &CardDrawn { node: n, element, card, rect, selected }, registry, ui),
-        _ => false,
+    // A card a kind draws itself takes the place of the canvas's own figure for it: the diagram's
+    // own kind is asked first, then every other the shell knows, so the kind that draws the
+    // element draws it whatever diagram shows it.
+    let drawn_by = match (element, card.as_ref()) {
+        (Some(element), Some(card)) => {
+            let card = CardDrawn { node: n, element, card, rect, selected };
+            let others = d.kinds.iter().copied().filter(|k| d.kind.is_none_or(|own| own.kind() != k.kind()));
+            d.kind.into_iter().chain(others).find(|k| k.draw_card(paint, d, &card, registry, ui))
+        }
+        _ => None,
     };
-    if by_kind && let Some(id) = id {
-        d.kind_cards.borrow_mut().push(id);
+    if let (Some(kind), Some(id)) = (drawn_by, id) {
+        d.kind_cards.borrow_mut().push((id, kind.kind()));
     }
+    let by_kind = drawn_by.is_some();
     match element {
         _ if by_kind => {}
         Some(_) if annotation && let Some(card) = card => draw_constraint(paint, &inner, d, n, &card, rect),

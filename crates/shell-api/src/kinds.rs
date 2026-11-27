@@ -348,9 +348,11 @@ pub trait DiagramKind: Sync {
     /// the cards drawn before it, recording each part in `registry`, and in `d` the parts outside
     /// the card that take a press as it does (`Drawing::parts`) and the labels a screen reader and
     /// the pointer read (`Drawing::labels`) (UML's package: its tab, the path of its owners under
-    /// it and its own diagram's thumbnail). True when it drew the card; the canvas then draws only
-    /// what goes over any card: the selection ring, a template's signature and the problem badge.
-    /// False, and by default: the canvas draws the card.
+    /// it and its own diagram's thumbnail). The canvas asks the diagram's own kind first, then every
+    /// other kind it knows in turn, so a card is drawn by the kind that draws its element whatever
+    /// diagram shows it. True when it drew the card; the canvas then draws only what goes over any
+    /// card: the selection ring, a template's signature and the problem badge. False, and by
+    /// default: the next kind is asked, and when none draws it, the canvas does.
     fn draw_card(&self, paint: &egui::Painter, d: &Drawing<'_>, card: &CardDrawn<'_>, registry: &mut Registry, ui: &egui::Ui) -> bool {
         let _ = (paint, d, card, registry, ui);
         false
