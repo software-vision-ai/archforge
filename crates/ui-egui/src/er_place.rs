@@ -77,7 +77,7 @@ pub(crate) fn place_entity(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
             let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
             if let (Some(entity), Some(node)) = (id_at(0), id_at(1)) {
                 select_cx(cx, vec![entity]);
-                cx.canvas.rename = Some(NodeRename { node, entity, text: name, opened: true, refused: None });
+                cx.canvas.rename = Some(NodeRename { node, element: entity, text: name, opened: true, refused: None });
                 cx.canvas.focused = true;
             }
             cx.canvas.tool = Tool::Select;
@@ -144,7 +144,7 @@ pub(crate) fn connect_to_new(cx: &mut Ctx, d: Obj, from_node: Uuid, x: f64, y: f
             let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
             if let (Some(entity), Some(node)) = (id_at(0), id_at(1)) {
                 select_cx(cx, vec![entity]);
-                cx.canvas.rename = Some(NodeRename { node, entity, text: name, opened: true, refused: None });
+                cx.canvas.rename = Some(NodeRename { node, element: entity, text: name, opened: true, refused: None });
                 cx.canvas.focused = true;
             }
         }

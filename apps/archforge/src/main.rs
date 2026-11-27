@@ -35,7 +35,9 @@ use archforge_shell_api::screens::ScreensRegistry;
 use archforge_ui_egui::{ER, Shell, UML};
 
 /// The notations' screens parts the app registers at start-up (ADR 0003, "Two registries"), in
-/// the order the shell lists them: ER's, then UML's. Every shell the app makes is given them.
+/// the order the shell lists them: ER's, then UML's. Every shell the app makes is given them. A
+/// test holds them in step with the model registry (`archforge_notations::NOTATIONS`): one part
+/// for each notation there, of its metamodel and with its diagram kinds.
 static SCREENS: ScreensRegistry = ScreensRegistry::new(&[ER, UML]);
 
 const USAGE: &str = "usage: archforge [--version | --help | --control <port>]
@@ -325,6 +327,8 @@ fn writeln_stderr(text: &str) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use archforge_diagram::Notation;
+    use archforge_shell_api::screens::ScreensPart;
 
     fn args(list: &[&str]) -> Result<Args, String> {
         parse_args(list.iter().map(|s| s.to_string()))
@@ -338,6 +342,84 @@ mod tests {
         assert_eq!(metamodels, [archforge_er::INDEX, archforge_uml::INDEX]);
         let kinds: Vec<&str> = SCREENS.kinds().iter().map(|kind| kind.kind()).collect();
         assert_eq!(kinds, [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]);
+    }
+
+    /// Where the model registry's `notations` and the screens registry's `parts` disagree (ADR
+    /// 0003, "Two registries"; ADR 0004, rule 4), in English, one line each; none when they hold
+    /// the same notations. Each notation needs exactly one part of its metamodel, whose kinds are
+    /// the notation's diagram kinds, each once; each part needs exactly one notation of its
+    /// metamodel. Both sides are told apart by what they answer (`metamodel`, `kinds`, `kind`),
+    /// never by address: the notations' types hold no data, so two of them may share one.
+    fn registry_differences(notations: &[&dyn Notation], parts: &[&ScreensPart]) -> Vec<String> {
+        let mut differences = Vec::new();
+        for notation in notations {
+            let (name, metamodel) = (notation.name(), notation.metamodel());
+            let theirs: Vec<&&ScreensPart> = parts.iter().filter(|part| part.ui.metamodel() == metamodel).collect();
+            let [part] = theirs.as_slice() else {
+                differences.push(format!("{name} (metamodel {metamodel}) has {} screens parts, not one", theirs.len()));
+                continue;
+            };
+            let mut model = notation.kinds().to_vec();
+            model.sort_unstable();
+            let mut screens: Vec<&str> = part.kinds.iter().map(|kind| kind.kind()).collect();
+            screens.sort_unstable();
+            if model != screens {
+                differences.push(format!("{name}'s diagram kinds are {model:?}, its screens part's {screens:?}"));
+            }
+        }
+        for part in parts {
+            let metamodel = part.ui.metamodel();
+            let count = notations.iter().filter(|notation| notation.metamodel() == metamodel).count();
+            if count != 1 {
+                differences.push(format!("the screens part of metamodel {metamodel} has {count} notations, not one"));
+            }
+        }
+        differences
+    }
+
+    /// The app's screens registry holds the model registry's notations, no more and no fewer: one
+    /// screens part for each notation of `archforge_notations::NOTATIONS`, of its metamodel and
+    /// with its diagram kinds (ADR 0003, ADR 0004 rule 4).
+    #[test]
+    fn the_model_and_screens_registries_hold_the_same_notations() {
+        let parts: Vec<&ScreensPart> = SCREENS.parts().iter().collect();
+        assert!(!archforge_notations::NOTATIONS.is_empty(), "the model registry lists no notation");
+        assert_eq!(registry_differences(archforge_notations::NOTATIONS, &parts), Vec::<String>::new());
+    }
+
+    /// A notation in one registry and not the other, twice in one, or with a diagram kind its
+    /// screens part lacks is a difference: each copy of the two registries below differs from the
+    /// app's by one such change, and the comparison names it.
+    #[test]
+    fn a_notation_or_kind_in_one_registry_and_not_the_other_is_a_difference() {
+        let notations = archforge_notations::NOTATIONS;
+        let parts: Vec<&ScreensPart> = SCREENS.parts().iter().collect();
+        let last = notations[notations.len() - 1];
+        let (name, metamodel) = (last.name(), last.metamodel());
+        let lacking = |count: usize| format!("{name} (metamodel {metamodel}) has {count} screens parts, not one");
+
+        let own = parts.iter().copied().find(|p| p.ui.metamodel() == metamodel).expect("the last notation's part");
+        let others: Vec<&ScreensPart> = parts.iter().copied().filter(|p| p.ui.metamodel() != metamodel).collect();
+
+        assert_eq!(registry_differences(notations, &others), [lacking(0)]);
+
+        let doubled: Vec<&ScreensPart> = parts.iter().copied().chain([own]).collect();
+        assert_eq!(registry_differences(notations, &doubled), [lacking(2)]);
+
+        assert_eq!(
+            registry_differences(&notations[..notations.len() - 1], &parts),
+            [format!("the screens part of metamodel {metamodel} has 0 notations, not one")]
+        );
+
+        let doubled_notation = [notations, &[last]].concat();
+        assert_eq!(registry_differences(&doubled_notation, &parts), [format!("the screens part of metamodel {metamodel} has 2 notations, not one")]);
+
+        let mut kinds = last.kinds().to_vec();
+        kinds.sort_unstable();
+        assert!(!kinds.is_empty(), "{name} declares no diagram kind");
+        let without_kinds = ScreensPart { ui: own.ui, kinds: &[] };
+        let fewer_kinds: Vec<&ScreensPart> = others.iter().copied().chain([&without_kinds]).collect();
+        assert_eq!(registry_differences(notations, &fewer_kinds), [format!("{name}'s diagram kinds are {kinds:?}, its screens part's []")]);
     }
 
     /// The window draws its own menu bar only where the system has none.

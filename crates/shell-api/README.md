@@ -17,8 +17,10 @@ drawing reads, `canvas::Drawing`, and what the pointer asked for, `editing::Acti
 or a filter matches what is typed (`search`) and the translations machinery (`i18n`), with which
 each crate registers its own catalogues, and the screens registry's type (`screens`): the
 notations' screens parts the app registers, with the lists the shell reads made from them. The app
-registers ER's and UML's parts and gives them to every shell it makes; the shell keeps the old
-lists, which name ER and UML, for its tests only.
+registers ER's and UML's parts and gives them to every shell it makes, and a test of the app's
+holds them in step with the model registry (`archforge_notations::NOTATIONS`): one part for each
+notation there, of its metamodel and with its diagram kinds, and none besides. The shell keeps the
+old lists, which name ER and UML, for its tests only.
 
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code
