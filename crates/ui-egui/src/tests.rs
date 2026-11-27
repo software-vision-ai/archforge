@@ -18101,8 +18101,13 @@ fn sketch_classes(store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<
         .collect()
 }
 
-/// The sketch notation's state: none of its own, as the trait's answers say.
-struct SketchState;
+/// The sketch notation's state: none of its own for the trait's answers, only the selection it
+/// was last told of ([`NotationUi::selection_moved`](crate::notation_ui::NotationUi::selection_moved)),
+/// so a test sees it asked.
+#[derive(Default)]
+struct SketchState {
+    told: Option<Option<archforge_mof::Uuid>>,
+}
 
 impl crate::notation_ui::NotationState for SketchState {}
 
@@ -18190,9 +18195,9 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn description_limit(&self) -> usize {
         SKETCH_DESCRIPTION_LIMIT
     }
-    /// The sketch keeps nothing of its own between frames.
+    /// The sketch keeps nothing of its own between frames but the selection it was last told of.
     fn new_state(&self) -> Box<dyn crate::notation_ui::NotationState> {
-        Box::new(SketchState)
+        Box::new(SketchState::default())
     }
     /// The sketch removes nothing its own way: Delete goes on to the shared removals.
     fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
@@ -18232,6 +18237,26 @@ impl crate::notation_ui::NotationUi for SketchUi {
             on_this: "On this class · {n}".into(),
             name: archforge_core::name_of(store, o),
         })
+    }
+    /// Keeps the selection it is told of, so a test sees it asked.
+    fn selection_moved(&self, cx: &mut crate::cx::Ctx, subject: Option<archforge_mof::Uuid>) {
+        if let Some(state) = cx.notation_states.own_mut::<SketchState>() {
+            state.told = Some(subject);
+        }
+    }
+    /// With two or more elements selected, all of them its classes, a row naming how many, in
+    /// place of the selection's panel.
+    fn properties_in_place(&self, cx: &mut crate::cx::Ctx, ui: &mut egui::Ui, p: &crate::ux::Palette, r: egui::Rect, y: f32) -> bool {
+        let Some(session) = cx.session.as_ref() else { return false };
+        let (store, selection) = (session.doc(), &session.view().selection);
+        if selection.len() < 2 || !selection.iter().all(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS)) {
+            return false;
+        }
+        let row = egui::Rect::from_min_size(egui::pos2(r.left() + 16.0, r.top() + y), egui::vec2(r.width() - 32.0, 24.0));
+        let text = format!("{} classes", selection.len());
+        crate::panels::control_cx(cx, ui, "workspace.properties.sketch.selection", "row", row, true);
+        crate::ux::text(&ui.painter().clone(), row.min, &text, crate::ux::types::UI, p.text, None);
+        true
     }
     /// A class's attributes in a section of the shared controls, a row each, then the shared name
     /// field.
@@ -18352,6 +18377,67 @@ fn a_second_notations_elements_show_in_the_tree_are_found_and_get_their_own_prop
     let texts = painted(&h);
     assert!(texts.iter().any(|t| t == "Class · sketch"), "{texts:?}");
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.sketch.attribute.0"), "the class's attributes section");
+}
+
+/// Every notation the shell registered is told of the selection on each frame the right panel
+/// draws, whichever panel it shows, before that panel, so what it had typed for the element selected
+/// before ends as leaving its field would: the sketch, which the app does not know, is told under
+/// Chat, Appearance and Skills as under Properties.
+#[test]
+fn the_notations_are_told_of_the_selection_whichever_panel_shows() {
+    use crate::state::Panel;
+    let (mut h, ..) = sketch_harness();
+    // The states of the notations the shell registered, the sketch's among them.
+    h.state_mut().notation_states = crate::notation_ui::NotationStates::new(SKETCH_UIS);
+    let (party, customer) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let o = |name: &str| st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap()).unwrap();
+        (o("Party"), o("Customer"))
+    };
+    for (panel, picked) in [(Panel::Agent, party), (Panel::Appearance, customer), (Panel::Skills, party), (Panel::Properties, customer)] {
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [picked.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(panel);
+        h.state_mut().notation_states.own_mut::<SketchState>().unwrap().told = None;
+        h.run();
+        assert_eq!(h.state().notation_states.own::<SketchState>().unwrap().told, Some(Some(picked)), "{panel:?}");
+    }
+}
+
+/// A notation that draws its own panel in place of the selection's takes Properties: with two of
+/// the sketch's classes selected, the sketch's row for them is drawn, and neither the selection's
+/// heading and description nor the first class's body; with one selected, the selection's panel is
+/// drawn as before.
+#[test]
+fn a_notations_own_panel_takes_properties_in_place_of_the_selections() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ..) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        let (party, customer) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = |name: &str| st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap()).unwrap();
+            (o("Party"), o("Customer"))
+        };
+        let select = |h: &mut Harness<'static, Shell>, picked: &[archforge_mof::Uuid]| {
+            let picked: Vec<String> = picked.iter().map(ToString::to_string).collect();
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": picked })).unwrap();
+            h.state_mut().state.show_panel(crate::state::Panel::Properties);
+            h.run();
+        };
+        select(&mut h, &[party, customer]);
+        let (drawn, texts) = (ids(&h), painted(&h));
+        assert!(drawn.iter().any(|i| i == "workspace.properties.sketch.selection"), "{theme:?}: {drawn:?}");
+        assert!(texts.iter().any(|t| t == "2 classes"), "{theme:?}: {texts:?}");
+        assert!(!texts.iter().any(|t| t == "Class · sketch"), "{theme:?}: no heading of the selection: {texts:?}");
+        assert!(
+            !drawn.iter().any(|i| i == "workspace.properties.description" || i == "workspace.properties.sketch.attribute.0"),
+            "{theme:?}: {drawn:?}"
+        );
+        select(&mut h, &[party]);
+        let (drawn, texts) = (ids(&h), painted(&h));
+        assert!(!drawn.iter().any(|i| i == "workspace.properties.sketch.selection"), "{theme:?}: {drawn:?}");
+        assert!(texts.iter().any(|t| t == "Class · sketch"), "{theme:?}: {texts:?}");
+        assert!(drawn.iter().any(|i| i == "workspace.properties.description"), "{theme:?}: {drawn:?}");
+    }
 }
 
 /// A name typed in place takes as many characters as its element's notation lets it have
