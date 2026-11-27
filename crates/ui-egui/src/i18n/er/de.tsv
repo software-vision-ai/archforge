@@ -15,6 +15,9 @@ str		Subtype · {sub} is a {super}	Untertyp · {sub} ist ein {super}
 str		Subtype	Untertyp
 str		This subtype	Dieser Untertyp
 str		On this subtype · {n}	Zu diesem Untertyp · {n}
+str		every table	jede Tabelle
+str		every relationship	jede Beziehung
+str		every column	jede Spalte
 str		Columns · {n}	Spalten · {n}
 str		Keys · {n}	Schlüssel · {n}
 str		Add a column	Spalte hinzufügen

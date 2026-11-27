@@ -137,7 +137,7 @@ str		Sort recent projects by name	Ordenar os projetos recentes por nome
 str		Sort recent projects by last opened	Ordenar os projetos recentes pela última abertura
 # Área de trabalho
 str		Find an element, view, or action	Encontrar um elemento, vista ou ação
-str		No schemas yet	Ainda sem esquemas
+str		Nothing in the model yet	Ainda nada no modelo
 str		Add	Adicionar
 str		Schema	Esquema
 str		Folder	Pasta
@@ -209,18 +209,6 @@ str		Remove	Remover
 str		Edit	Editar
 str		Apply	Aplicar
 str		Inherited · {n}	Herdadas · {n}
-str		every table	todas as tabelas
-str		every relationship	todas as relações
-str		every column	todas as colunas
-str		every class	todas as classes
-str		every interface	todas as interfaces
-str		every enumeration	todas as enumerações
-str		every data type	todos os tipos de dados
-str		every primitive type	todos os tipos primitivos
-str		every association class	todas as classes de associação
-str		every attribute	todos os atributos
-str		every operation	todas as operações
-str		every association	todas as associações
 str		project	projeto
 str		overridden below	substituída abaixo
 str		Open the skill	Abrir a competência
@@ -1007,7 +995,7 @@ str		Relationships carry no skills	As relações não têm competências
 str		This element carries no skills	Este elemento não tem competências
 str		Diagram	Diagrama
 str		Default diagram	Diagrama predefinido
-str		Diagram · of {schema}	Diagrama · de {schema}
+str		Diagram · of {owner}	Diagrama · de {owner}
 str		This diagram	Este diagrama
 str		On this diagram · {n}	Neste diagrama · {n}
 str		Role	Papel

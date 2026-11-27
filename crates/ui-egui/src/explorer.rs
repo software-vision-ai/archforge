@@ -523,7 +523,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         None => Vec::new(),
     };
     if rows.is_empty() {
-        let empty = if Typed::trimmed(&shell.explorer.filter).is_empty() { tr("No schemas yet") } else { tr("Nothing matches the filter") };
+        let empty = if Typed::trimmed(&shell.explorer.filter).is_empty() { tr("Nothing in the model yet") } else { tr("Nothing matches the filter") };
         ux::text(&paint, at(36.0, FIRST_ROW), &empty, types::SMALL, p.text_muted, Some((r.width() - 52.0).max(0.0)));
     }
     // A name open on a row the tree does not list (filtered out, or past the most rows drawn) is

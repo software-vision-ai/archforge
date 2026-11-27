@@ -65,6 +65,15 @@ str		Literals carry no skills	Os literais não têm competências
 str		Built-in types carry no skills	Os tipos integrados não têm competências
 str		Types keeps the built-in types, so it stays while it holds them	Types guarda os tipos integrados, por isso fica enquanto os contiver
 str		Generalization sets carry no skills	Os conjuntos de generalização não têm competências
+str		every class	todas as classes
+str		every interface	todas as interfaces
+str		every enumeration	todas as enumerações
+str		every data type	todos os tipos de dados
+str		every primitive type	todos os tipos primitivos
+str		every association class	todas as classes de associação
+str		every attribute	todos os atributos
+str		every operation	todas as operações
+str		every association	todas as associações
 str		Add class	Adicionar classe
 str		Add interface	Adicionar interface
 str		Add enumeration	Adicionar enumeração
