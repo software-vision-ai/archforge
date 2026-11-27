@@ -74,7 +74,7 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   `popover_takes_keys`, each asked of the kinds it is handed), is in
   `crates/shell-api/src/kinds.rs`, beside what a frame's drawing reads (`canvas::Drawing`) and
   what a press asks for (`editing::Action`). A notation adds a diagram kind by implementing
-  `DiagramKind`; the app registers it with its notation's screens part (`ScreensPart`, `crates/shell-api/src/screens.rs`) in its static list of parts (`SCREENS`, `apps/archforge/src/main.rs`), which it gives every shell (`Shell::new`). The refusal words
+  `DiagramKind`; the app registers it with its notation's screens part (`ScreensPart`, `crates/shell-api/src/screens.rs`) in its static list of parts (`SCREENS`, `apps/archforge/src/main.rs`), which it gives every shell (`Shell::new`); a test there (`the_model_and_screens_registries_hold_the_same_notations`) holds that list in step with the model registry (`archforge_notations::NOTATIONS`), one part for each notation, of its metamodel and with its diagram kinds. The refusal words
   (`panels::refusal`, `said`, `a_kind`, `engine_said::disabled`, in `crates/shell-api/src/`) and
   Chat's counts of the elements a tool row names (`chat_words::tool_words`, by
   `NotationUi::chat_kind` and `chat_count`) ask the notations they are handed: pass
