@@ -14500,7 +14500,8 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(archforge_er::rules::primary_key_of(st, customer_obj).is_none(), "{:?}", h.state().panels.notice);
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.problem.0"), "Problems lists the missing key: {:?}", ids(&h));
-    let problems = crate::problems::of(crate::notation_ui::UIS, st, &crate::problems::by_element(crate::notation_ui::UIS, st), customer_obj);
+    let problems =
+        archforge_shell_api::problems::of(crate::notation_ui::UIS, st, &crate::problems::by_element(crate::notation_ui::UIS, st), customer_obj);
     assert_eq!(problems.len(), 1);
     assert_eq!(problems[0].text, "Customer has no primary key");
 }
@@ -17994,8 +17995,13 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
         None
     }
+    /// None: the sketch renames nothing in place.
     fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
         None
+    }
+    /// Its one rename that may empty a name, which no other notation knows, so a test sees it asked.
+    fn may_be_unnamed(&self, cmd: &str) -> bool {
+        cmd == SKETCH_UNNAMED
     }
     /// The package, the one row that opens.
     fn foldable(&self, _: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
@@ -18127,6 +18133,9 @@ const SKETCH_DESCRIPTION_LIMIT: usize = 100;
 /// Why the sketch's one command is not available, as its availability check would give it.
 const SKETCH_UNAVAILABLE: &str = "nothing to draw";
 
+/// The sketch's rename that may leave its element unnamed.
+const SKETCH_UNNAMED: &str = "sketch.link.rename";
+
 /// The refusal words ask the notations the shell registered, not the app's own list: the sketch,
 /// which the shell knows here and the app does not, says its own refusal, names its own kind in the
 /// shell's sentence and says why its command is not available, each through an engine's refusal as
@@ -18147,6 +18156,23 @@ fn the_refusal_words_ask_the_notations_the_shell_registered() {
     assert_eq!(said, ["Party is not drawn in the sketch.", "There is a sketch named Party already.", "The sketch has nothing to draw yet."]);
     let app = refusals().map(|e| crate::panels::refusal(crate::notation_ui::UIS, &e));
     assert_eq!(app, ["Refused in English.", "Refused in English.", "Nothing to draw."]);
+}
+
+/// Whether a name of nothing but spaces is refused is asked of the notations the shell registered,
+/// not the app's own list: the sketch, which the shell knows here and the app does not, may leave
+/// its element unnamed, and UML's relationship, which the app's list lets go unnamed, is refused,
+/// as UML is not the shell's here. ER, which both hold, still lets its relationship go unnamed.
+#[test]
+fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
+    crate::i18n::set_language("en");
+    let mut shell = Shell::new(Services::default());
+    shell.notation_uis = SKETCH_UIS;
+    assert!(!shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, SKETCH_UNNAMED, "  ")), "the sketch may leave its element unnamed");
+    assert_eq!(shell.panels.notice, None);
+    assert!(!shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, "er.relationship.rename", "  ")), "ER may leave its relationship unnamed");
+    assert_eq!(shell.panels.notice, None);
+    assert!(shell.cx(|cx| crate::panels::refuse_empty_name_cx(cx, "uml.relationship.rename", "  ")), "UML is not the shell's here");
+    assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
 }
 
 #[test]
@@ -29028,7 +29054,7 @@ fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
             h.run();
             let (opening, other) =
                 if menu == crate::home::RECENT.at(0) { ("Open", "Remove from recent projects") } else { ("Open a project here", "Unpin") };
-            reader_click(&mut h, crate::panels::menu_row_id(id, (other, ""), 0));
+            reader_click(&mut h, archforge_shell_api::panels::menu_row_id(id, (other, ""), 0));
             let left = (h.state().state.recent.len(), h.state().state.pinned.len());
             assert_eq!(left, if menu == crate::home::RECENT.at(0) { (0, 1) } else { (1, 0) }, "{theme:?}: {id}: a screen reader's click ran its row");
             // A screen reader's click on the opening as a pick starts and takes it away runs
@@ -29037,7 +29063,7 @@ fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
             h.state_mut().panels.menu = Some(menu);
             h.run();
             h.state_mut().pin_from_picker();
-            reader_click(&mut h, crate::panels::menu_row_id(id, (opening, ""), 0));
+            reader_click(&mut h, archforge_shell_api::panels::menu_row_id(id, (opening, ""), 0));
             let s = h.state();
             let opened = (s.is_opening(), host.opens.lock().unwrap().len(), opens.load(std::sync::atomic::Ordering::SeqCst));
             assert_eq!(
@@ -29128,7 +29154,7 @@ fn a_menus_twin_rows_keep_their_ids_when_it_scrolls() {
         h.run();
         let ids = ids(&h);
         assert!(!ids.iter().any(|i| i == "test.long.0") && ids.iter().any(|i| i == "test.long.3"), "{theme:?}: the first twin out of sight: {ids:?}");
-        let twin = |nth| crate::panels::menu_row_id("test.long", ("T", "template parameter"), nth);
+        let twin = |nth| archforge_shell_api::panels::menu_row_id("test.long", ("T", "template parameter"), nth);
         reader_click(&mut h, twin(0));
         assert!(picks.lock().unwrap().is_empty(), "{theme:?}: the click meant for the first twin ran nothing");
         reader_click(&mut h, twin(1));

@@ -8,12 +8,15 @@
 //! and the skills open in its tabs (`skill_tab`), the data types the interfaces `NotationUi`
 //! (`notation_ui`) and `DiagramKind` (`kinds`) hand across that name no shell, how a search or a
 //! filter matches what is typed (`search`), and the translations machinery (`i18n`), with which
-//! each crate registers its own catalogues. Story
-//! AR-780 moves the rest into it, step by step and unchanged: the shared controls, and the
-//! interfaces themselves with the data types that still name the shell. It sits on the shell
+//! each crate registers its own catalogues. The shared controls the panels and a notation's screens
+//! draw are in `panels`, with the problems a selection shows (`problems`) and the key presses they
+//! take (`actions`). Story
+//! AR-780 moves the rest into it, step by step and unchanged: the interfaces themselves with the
+//! data types that still name the shell. It sits on the shell
 //! interfaces' layer (9), below the notations' screens (10) and the shell (11), and builds for the
 //! portable target.
 
+pub mod actions;
 pub mod appearance;
 pub mod canvas;
 pub mod cx;
@@ -25,6 +28,7 @@ pub mod kinds;
 pub mod menu_bar;
 pub mod notation_ui;
 pub mod panels;
+pub mod problems;
 pub mod search;
 pub mod skill_tab;
 pub mod state;
