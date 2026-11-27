@@ -65,19 +65,19 @@ const TOAST_MIN: f32 = 300.0;
 /// The most lines a toast's text wraps to.
 const TOAST_ROWS: usize = 3;
 pub(crate) const TOAST_FRAMES: u64 = 300;
-/// An entity node: its header's height, its first row's baseline, the pitch between rows, the
-/// text inset and the badge column.
-pub(crate) const ENTITY_HEADER: f32 = archforge_diagram::figure::CARD_HEADER;
-pub(crate) const ENTITY_FIRST_ROW: f32 = archforge_diagram::figure::CARD_FIRST_ROW;
-pub(crate) const ENTITY_ROW: f32 = archforge_diagram::figure::CARD_ROW;
+/// A card: its header's height, its first row's baseline, the pitch between rows, the text inset
+/// and the badge column.
+pub(crate) const CARD_HEADER: f32 = archforge_diagram::figure::CARD_HEADER;
+pub(crate) const CARD_FIRST_ROW: f32 = archforge_diagram::figure::CARD_FIRST_ROW;
+pub(crate) const CARD_ROW: f32 = archforge_diagram::figure::CARD_ROW;
 /// The pitches between the last row of a card's compartment and the first of the next: the
 /// compartment's foot, as far as a card's last row is from its foot, and the next one's head.
 pub(crate) const COMPARTMENT_GAP: f32 = archforge_diagram::figure::COMPARTMENT_GAP;
 /// How far a compartment's first row is under the line over it: as far as a card's first row is
 /// under its header's line.
-const COMPARTMENT_TOP: f32 = ENTITY_FIRST_ROW - ENTITY_HEADER;
-pub(crate) const ENTITY_INSET: f32 = 18.0;
-pub(crate) const ENTITY_TEXT: f32 = 42.0;
+const COMPARTMENT_TOP: f32 = CARD_FIRST_ROW - CARD_HEADER;
+pub(crate) const CARD_INSET: f32 = 18.0;
+pub(crate) const CARD_TEXT: f32 = 42.0;
 /// How strongly a table of another schema shows: the design's 60 %.
 const FOREIGN_ALPHA: f32 = 0.6;
 /// Below this zoom a node shows its name only.
@@ -705,7 +705,7 @@ pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, con
     let paint = ui.painter().clone();
     let b = Rect::from_center_size(at, Vec2::splat(18.0));
     paint.circle_filled(b.center(), 9.0, p.surface);
-    paint.circle_stroke(b.center(), 9.0, Stroke::new(1.2, p.key_foreign));
+    paint.circle_stroke(b.center(), 9.0, Stroke::new(1.2, p.warning));
     let way_out = shell
         .session
         .as_ref()
@@ -713,10 +713,10 @@ pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, con
         .and_then(|s| crate::notation_ui::of(shell.notation_uis, s.doc(), s.doc().by_uuid(element)?))
         .and_then(|notation| Some((notation, notation.resolve_hint()?)));
     if way_out.is_some() {
-        ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(10.0)), &icons::PLUS, p.key_foreign);
+        ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(10.0)), &icons::PLUS, p.warning);
     } else {
-        let g = ux::galley(&paint, "!", types::CAPTION, p.key_foreign, None);
-        paint.galley(b.center() - g.size() / 2.0, g, p.key_foreign.into());
+        let g = ux::galley(&paint, "!", types::CAPTION, p.warning, None);
+        paint.galley(b.center() - g.size() / 2.0, g, p.warning.into());
     }
     let (resolver, hint) = match way_out {
         Some((notation, hint)) => (Some(notation), hint),
@@ -955,16 +955,16 @@ fn draw_node(
             // muted eyebrow.
             let (p, border) = card_palette(p, store, n, card.elsewhere, card.tone != Tone::Tinted, z);
             let p = &p;
-            paint.rect_filled(rect, 6.0 * z, p.entity);
+            paint.rect_filled(rect, 6.0 * z, p.card);
             if card.elsewhere {
-                dashed_rect(paint, rect, Stroke::new(border, p.entity_edge), 4.0 * z, 3.0 * z);
+                dashed_rect(paint, rect, Stroke::new(border, p.card_edge), 4.0 * z, 3.0 * z);
             } else {
-                paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, p.entity_edge), StrokeKind::Inside);
+                paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, p.card_edge), StrokeKind::Inside);
             }
-            let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
+            let room = Some((rect.width() - 2.0 * CARD_INSET * z).max(0.0));
             if z >= DETAIL_ZOOM {
                 let eyebrow = eyebrow_case(&say(&card.eyebrow));
-                ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), p.entity_ink, room);
+                ux::text(&inner, rect.min + vec2(CARD_INSET, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), p.card_ink, room);
                 if !renaming {
                     let name = if card.slanted { ux::text_slanted } else { ux::text };
                     // Braces after the name (`{final}`) in the smaller keyword style, on its
@@ -972,14 +972,14 @@ fn draw_node(
                     let braces = card.braces.as_deref().map(|b| ux::galley(&inner, b, types::SMALL.scaled(z), p.text_secondary, None));
                     let gap = 5.0 * z;
                     let room = room.map(|w| (w - braces.as_ref().map_or(0.0, |b| b.size().x + gap)).max(0.0));
-                    let at = name(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &card.name, types::SECTION.scaled(z), p.text, room);
+                    let at = name(&inner, rect.min + vec2(CARD_INSET, 30.0) * z, &card.name, types::SECTION.scaled(z), p.text, room);
                     if let Some(b) = braces {
                         inner.galley(pos2(at.right() + gap, at.top() + 9.0 * z), b, p.text_secondary.into());
                     }
                 }
-                let line_y = rect.top() + ENTITY_HEADER * z;
+                let line_y = rect.top() + CARD_HEADER * z;
                 if line_y < rect.bottom() {
-                    inner.rect_filled(Rect::from_min_size(pos2(rect.left(), line_y), vec2(rect.width(), 1.0)), 0.0, p.entity_line);
+                    inner.rect_filled(Rect::from_min_size(pos2(rect.left(), line_y), vec2(rect.width(), 1.0)), 0.0, p.card_line);
                 }
                 draw_rows(&inner, p, card, rect, z, key_status, room);
             } else {
@@ -994,11 +994,11 @@ fn draw_node(
             let name = archforge_core::name_of(store, e);
             ux::text(
                 &inner,
-                rect.min + vec2(ENTITY_INSET, 12.0) * z,
+                rect.min + vec2(CARD_INSET, 12.0) * z,
                 &name,
                 types::UI.scaled(z),
                 look.text.unwrap_or_else(|| look.fill.map_or(p.text, |f| ink_for(f).text)),
-                Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0)),
+                Some((rect.width() - 2.0 * CARD_INSET * z).max(0.0)),
             );
         }
         None => {
@@ -1041,12 +1041,12 @@ pub(crate) fn card_palette(p: &Palette, store: &Store, n: Obj, elsewhere: bool, 
         None => p,
     };
     let (fill, edge, eyebrow, line) =
-        if plain { (p.surface, p.border, ink.text_secondary, p.border) } else { (p.entity, p.entity_edge, ink.entity_ink, p.entity_line) };
+        if plain { (p.surface, p.border, ink.text_secondary, p.border) } else { (p.card, p.card_edge, ink.card_ink, p.card_line) };
     let palette = Palette {
-        entity: dim(look.fill.unwrap_or(fill)),
-        entity_edge: dim(look.stroke.unwrap_or(edge)),
-        entity_ink: dim(eyebrow),
-        entity_line: dim(look.stroke.map_or(line, |c| c.gamma_multiply(0.5))),
+        card: dim(look.fill.unwrap_or(fill)),
+        card_edge: dim(look.stroke.unwrap_or(edge)),
+        card_ink: dim(eyebrow),
+        card_line: dim(look.stroke.map_or(line, |c| c.gamma_multiply(0.5))),
         text: dim(look.text.unwrap_or(ink.text)),
         text_muted: dim(ink.text_muted),
         text_secondary: dim(ink.text_secondary),
@@ -1058,7 +1058,7 @@ pub(crate) fn card_palette(p: &Palette, store: &Store, n: Obj, elsewhere: bool, 
 /// A card's name as a card at `rect` shows it below [`DETAIL_ZOOM`]: alone, in `ink`, in the
 /// middle of the card, in the section style no smaller than at that zoom, cut to the card's inset.
 pub(crate) fn name_from_afar(inner: &egui::Painter, name: &str, rect: Rect, z: f32, ink: ux::Colour) {
-    let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
+    let room = Some((rect.width() - 2.0 * CARD_INSET * z).max(0.0));
     let g = ux::galley(inner, name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), ink, room);
     inner.galley(rect.center() - g.size() / 2.0, g, ink.into());
 }
@@ -1170,7 +1170,7 @@ fn draw_nesting_lines(paint: &egui::Painter, d: &Drawing<'_>) {
 /// [`draw_rows`] lays them out: a row takes its pitch from a little over its top; none on a
 /// compartment's padding or past the last row.
 pub(crate) fn row_at(card: &archforge_diagram::figure::Card, y: f32) -> Option<usize> {
-    slots(card).into_iter().filter(|(_, s, _)| matches!(s, Slot::Row(_))).position(|(top, _, _)| (top - 4.0..top - 4.0 + ENTITY_ROW).contains(&y))
+    slots(card).into_iter().filter(|(_, s, _)| matches!(s, Slot::Row(_))).position(|(top, _, _)| (top - 4.0..top - 4.0 + CARD_ROW).contains(&y))
 }
 
 /// A card's places under its header, each with its top in units below the card's and the
@@ -1185,14 +1185,14 @@ fn slots(card: &archforge_diagram::figure::Card) -> Vec<(f32, Slot<'_>, usize)> 
     for (c, rows) in card.compartments.iter().enumerate() {
         if c > 0 {
             at += COMPARTMENT_GAP;
-            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW - COMPARTMENT_TOP, Slot::Line, c));
+            out.push((CARD_FIRST_ROW + at * CARD_ROW - COMPARTMENT_TOP, Slot::Line, c));
         }
         if rows.is_empty() && card.compartments.len() > 1 {
-            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Empty, c));
+            out.push((CARD_FIRST_ROW + at * CARD_ROW, Slot::Empty, c));
             at += 1.0;
         }
         for row in rows {
-            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Row(row), c));
+            out.push((CARD_FIRST_ROW + at * CARD_ROW, Slot::Row(row), c));
             at += 1.0;
         }
     }
@@ -1248,7 +1248,7 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
     let slots: Vec<(f32, Slot<'_>)> = slots(card).into_iter().map(|(top, slot, _)| (top, slot)).collect();
     // A row fits when it ends within the card, a unit of slack for rounding.
     let height = rect.height() / z;
-    let fits = |top: f32| top + ENTITY_ROW <= height + 1.0;
+    let fits = |top: f32| top + CARD_ROW <= height + 1.0;
     // Where the rows stop: the first that does not fit, and the place before it the rest is said in.
     // Rows the notation left out count as not fitting: the last place that fits says them.
     let first = slots.iter().position(|(top, s)| matches!(s, Slot::Row(_)) && !fits(*top)).or((card.hidden > 0).then_some(slots.len()));
@@ -1260,14 +1260,14 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
         let y = rect.top() + top * z;
         match slot {
             Slot::Line if y < rect.bottom() => {
-                inner.rect_filled(Rect::from_min_size(pos2(rect.left(), y), vec2(rect.width(), 1.0)), 0.0, p.entity_line);
+                inner.rect_filled(Rect::from_min_size(pos2(rect.left(), y), vec2(rect.width(), 1.0)), 0.0, p.card_line);
             }
             Slot::Row(row) => {
                 if key_status && let Some(b) = row.mark {
-                    ux::text(inner, pos2(rect.left() + ENTITY_INSET * z, y + z), b, types::CAPTION.scaled(z), p.entity_ink, None);
+                    ux::text(inner, pos2(rect.left() + CARD_INSET * z, y + z), b, types::CAPTION.scaled(z), p.card_ink, None);
                 }
-                let text_x = rect.left() + ENTITY_TEXT * z;
-                let room_x = (rect.right() - ENTITY_INSET * z - text_x - if row.linked { 18.0 * z } else { 0.0 }).max(0.0);
+                let text_x = rect.left() + CARD_TEXT * z;
+                let room_x = (rect.right() - CARD_INSET * z - text_x - if row.linked { 18.0 * z } else { 0.0 }).max(0.0);
                 // An abstract operation slanted, a static member underlined.
                 let marks = ux::Marks { slanted: row.slanted, underlined: row.underlined };
                 let drawn = ux::text_marked(inner, pos2(text_x, y), &row.text, types::UI.scaled(z), p.text, Some(room_x), marks);
@@ -1286,15 +1286,15 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
     let text = trn(card.more.0, card.more.1, total.saturating_sub(shown) as u64);
     // In the last place that fits; with none, a row's height above the card's foot while that is
     // still under the header; on a card shorter still, at the right of its eyebrow's line.
-    let place = cue.and_then(|i| slots.get(i)).map(|(top, _)| *top).or(Some(height - ENTITY_ROW).filter(|top| *top >= ENTITY_HEADER - 4.0));
+    let place = cue.and_then(|i| slots.get(i)).map(|(top, _)| *top).or(Some(height - CARD_ROW).filter(|top| *top >= CARD_HEADER - 4.0));
     match place {
         Some(top) => {
-            ux::text(inner, pos2(rect.left() + ENTITY_TEXT * z, rect.top() + top * z), &text, types::UI.scaled(z), p.text_muted, room);
+            ux::text(inner, pos2(rect.left() + CARD_TEXT * z, rect.top() + top * z), &text, types::UI.scaled(z), p.text_muted, room);
         }
         None => {
             let style = types::CAPTION.scaled(z);
             let width = ux::galley(inner, &text, style, p.text_muted, room).size().x;
-            let x = (rect.right() - ENTITY_INSET * z - width).max(rect.left() + ENTITY_INSET * z);
+            let x = (rect.right() - CARD_INSET * z - width).max(rect.left() + CARD_INSET * z);
             ux::text(inner, pos2(x, rect.top() + 11.0 * z), &text, style, p.text_muted, room);
         }
     }
@@ -1413,7 +1413,7 @@ fn draw_edge(
             (true, _, _) => p.accent,
             (false, false, _) | (false, true, None) => own,
             (false, true, Some(true)) => p.green,
-            (false, true, Some(false)) => p.key_foreign,
+            (false, true, Some(false)) => p.warning,
         };
         let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
         // The line under the pointer turns to the accent.
@@ -2031,7 +2031,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             let box_ = Rect::from_center_size(b.center(), vec2(14.0, 12.0));
             ux::icon_in(&paint, box_, &icons::KEY_STATUS, ink);
             paint.circle_filled(box_.min + vec2(2.5, 2.5), 2.5, p.green);
-            paint.circle_filled(box_.min + vec2(11.5, 9.5), 2.5, p.key_foreign);
+            paint.circle_filled(box_.min + vec2(11.5, 9.5), 2.5, p.warning);
         }
         if control(shell, ui, &format!("workspace.tools.{key}"), "toggle", b, true).on_hover_text(hint.as_str()).clicked() {
             match *key {
@@ -2092,7 +2092,7 @@ fn a_cards_height_is_where_the_canvas_ends_its_last_place() {
     };
     for compartments in [vec![], vec![vec![]], vec![vec![row()]], vec![vec![], vec![]], vec![vec![row(), row()], vec![], vec![row(); 3]]] {
         let c = card(compartments);
-        let laid = slots(&c).last().map_or(ENTITY_HEADER, |(top, _, _)| top + ENTITY_ROW + archforge_diagram::figure::CARD_FOOT);
+        let laid = slots(&c).last().map_or(CARD_HEADER, |(top, _, _)| top + CARD_ROW + archforge_diagram::figure::CARD_FOOT);
         assert_eq!(card_height(&c), laid, "{:?}", c.compartments.iter().map(Vec::len).collect::<Vec<_>>());
     }
 }

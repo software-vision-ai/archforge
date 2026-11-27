@@ -20618,7 +20618,7 @@ fn a_class_cards_compartments_are_padded_so_no_row_sits_on_a_dividing_line() {
     // a pitch for each row, and made too short for its last row it counts the rows it hides, the
     // last one that fits saying so.
     assert_eq!(crate::uml_ui::members_height(1, 1), archforge_uml::CLASS_SIZE.1);
-    assert_eq!(crate::uml_ui::members_height(2, 1) - crate::uml_ui::members_height(1, 1), f64::from(crate::canvas::ENTITY_ROW));
+    assert_eq!(crate::uml_ui::members_height(2, 1) - crate::uml_ui::members_height(1, 1), f64::from(crate::canvas::CARD_ROW));
     let (mut h, order, _) = nested_orders(ThemeKind::Light);
     let node = node_of(&h, order);
     let height = crate::uml_ui::members_height(2, 1) - 11.0;
@@ -20745,10 +20745,10 @@ fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_
             let above = boxes.iter().find(|(t, r)| t == over && card.contains(r.center())).map(|(_, r)| *r).expect("the row over the draft");
             let typed = boxes.iter().find(|(t, r)| t == "Returned" && ring.contains(r.center())).map(|(_, r)| *r).expect("the typed name");
             assert!(ring.top() >= above.bottom(), "{theme:?}: {kind:?}'s ring at {} clear of {over} ending at {}", ring.top(), above.bottom());
-            assert!((ring.height() - crate::canvas::ENTITY_ROW).abs() < 0.5, "{theme:?}: a row's pitch, not {}", ring.height());
+            assert!((ring.height() - crate::canvas::CARD_ROW).abs() < 0.5, "{theme:?}: a row's pitch, not {}", ring.height());
             // The typed text sits on the line a row's text takes: a pitch under the row over it.
             let pitch = typed.center().y - above.center().y;
-            assert!((pitch - crate::canvas::ENTITY_ROW).abs() < 1.0, "{theme:?}: {kind:?}'s draft a pitch under {over}, not {pitch}");
+            assert!((pitch - crate::canvas::CARD_ROW).abs() < 1.0, "{theme:?}: {kind:?}'s draft a pitch under {over}, not {pitch}");
             // Its ⋯ on the surface at the ring's right.
             assert!(
                 rect_shapes(&h)
@@ -21028,7 +21028,7 @@ fn literals_and_values_a_tool_writes_grow_the_cards_that_show_them() {
         assert_eq!(node_size(&h, order_node), low, "{theme:?}: no value shows yet");
         execute(&mut h, "uml.stereotype.show-values", serde_json::json!({ "diagram": d.to_string(), "show": true }));
         // Its members, then the line, «Entity» and table = "orders".
-        let shown = crate::uml_ui::members_height(counts.0, counts.1) + 3.0 * f64::from(crate::canvas::ENTITY_ROW);
+        let shown = crate::uml_ui::members_height(counts.0, counts.1) + 3.0 * f64::from(crate::canvas::CARD_ROW);
         assert_eq!(node_size(&h, order_node), (low.0, shown), "{theme:?}");
         assert_eq!(node_size(&h, diamond), (44.0, 28.0), "{theme:?}: a diamond keeps its size");
         h.run();
@@ -24633,7 +24633,7 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
     let r = rect_of(&h, &format!("workspace.canvas.node.{node_id}"));
     let z = h.state().canvas.zoom;
     // Two attributes shown when it was placed, the dividing line, then the operation.
-    let y = r.top() + (crate::canvas::ENTITY_FIRST_ROW + 3.5 * crate::canvas::ENTITY_ROW + 6.0) * z;
+    let y = r.top() + (crate::canvas::CARD_FIRST_ROW + 3.5 * crate::canvas::CARD_ROW + 6.0) * z;
     let at = egui::pos2(r.center().x, y);
     h.event(egui::Event::PointerMoved(at));
     for _ in 0..2 {
@@ -26567,7 +26567,7 @@ fn literal_sample(
 fn card_row(h: &Harness<'static, Shell>, node: &str, i: usize) -> egui::Pos2 {
     let card = rect_of(h, &format!("workspace.canvas.node.{node}"));
     let z = h.state().canvas.zoom;
-    let y = crate::canvas::ENTITY_FIRST_ROW + i as f32 * crate::canvas::ENTITY_ROW + crate::canvas::ENTITY_ROW / 2.0;
+    let y = crate::canvas::CARD_FIRST_ROW + i as f32 * crate::canvas::CARD_ROW + crate::canvas::CARD_ROW / 2.0;
     egui::pos2(card.left() + 60.0 * z, card.top() + y * z)
 }
 

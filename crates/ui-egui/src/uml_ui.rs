@@ -740,19 +740,19 @@ fn content_height(store: &Store, c: Obj) -> f64 {
 
 /// How tall an enumeration's card is to show `literals` rows in its one compartment, none a row.
 pub(crate) fn literals_height(literals: usize) -> f64 {
-    use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_ROW};
+    use crate::canvas::{CARD_FIRST_ROW, CARD_ROW};
     let slots = literals.max(1) as f64;
-    (f64::from(ENTITY_FIRST_ROW) + f64::from(archforge_diagram::figure::CARD_FOOT) + slots * f64::from(ENTITY_ROW))
+    (f64::from(CARD_FIRST_ROW) + f64::from(archforge_diagram::figure::CARD_FOOT) + slots * f64::from(CARD_ROW))
         .clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
 }
 
 /// How tall a card is to show `attributes` and `operations` rows, each compartment padded at its
 /// foot and the next at its head.
 pub(crate) fn members_height(attributes: usize, operations: usize) -> f64 {
-    use crate::canvas::{COMPARTMENT_GAP, ENTITY_FIRST_ROW, ENTITY_ROW};
+    use crate::canvas::{CARD_FIRST_ROW, CARD_ROW, COMPARTMENT_GAP};
     let rows = |n: usize| n.max(1) as f64;
     let slots = rows(attributes) + f64::from(COMPARTMENT_GAP) + rows(operations);
-    (f64::from(ENTITY_FIRST_ROW) + f64::from(archforge_diagram::figure::CARD_FOOT) + slots * f64::from(ENTITY_ROW))
+    (f64::from(CARD_FIRST_ROW) + f64::from(archforge_diagram::figure::CARD_FOOT) + slots * f64::from(CARD_ROW))
         .clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
 }
 
