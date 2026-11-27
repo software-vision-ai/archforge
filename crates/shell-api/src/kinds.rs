@@ -350,8 +350,7 @@ pub trait DiagramKind: Sync {
     /// AR-127): the canvas paints it right after the line, under its marks and texts, which sit at
     /// the ends as moved. The canvas asks the diagram's own kind first, then every other kind it
     /// knows in turn, each after the one before, so a line is drawn as the kind that draws its
-    /// element says whatever diagram shows it. None by default: the ends stay where they are.
-    #[allow(clippy::too_many_arguments, reason = "a line's ends are moved over the drawing, recorded and drawn over it")]
+    /// element says whatever diagram shows it. Nothing by default: the ends stay where they are.
     fn line_ends(
         &self,
         paint: &egui::Painter,
@@ -378,7 +377,6 @@ pub trait DiagramKind: Sync {
     /// or else the name the diagram's kind drew with it ([`DiagramKind::line_extras`]) (UML's
     /// stereotypes, above the name, AR-135). The canvas asks the diagram's own kind first, then every
     /// other kind it knows in turn. Nothing by default.
-    #[allow(clippy::too_many_arguments, reason = "a caption is drawn over the line, by its name, and recorded")]
     fn line_caption(&self, paint: &egui::Painter, d: &Drawing<'_>, line: &LineDrawn<'_>, name: Option<Rect>, registry: &mut Registry, ui: &egui::Ui) {
         let _ = (paint, d, line, name, registry, ui);
     }
