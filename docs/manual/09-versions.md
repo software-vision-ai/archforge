@@ -644,7 +644,7 @@ deleting a branch.* `main` and the branch you are on can't be deleted.
 | **Couldn't switch to** and the branch's name, with the reason and *You are still on* your branch | The switch didn't happen. The message says whether your work is unchanged, or saved | Choose **Close**, then try again |
 | **Switching is refused**, with *Your work could not be kept, so the switch was not made.* | Your work couldn't be written to the project, so it stayed on screen | Choose **Close**, and switch again once the status bar no longer says your changes could not be written |
 | *Couldn't rename the branch:* and a reason | The name stays | Try again |
-| *Another program is using this branch. Close that program, then try again.* | A program other than Archforge is connected to the project's database on that branch, so the name stays | Close that program, or move it off the branch, then try again |
+| *Another program is using this branch. Close that program, then try again.* | A program other than Archforge is connected to the project's database on that branch, so the branch keeps its name, or isn't deleted | Close that program, or move it off the branch, then try again |
 | *Archforge could not tell whether the branch was renamed to* a name | The answer was lost | Rename it to that name again to find out |
 | **Couldn't delete** and the branch's name, with *The branch stays:* and a reason | Nothing was deleted | Try again |
 | *Archforge could not tell whether the branch was deleted. Delete it again to find out.* | The answer was lost | Delete it again |

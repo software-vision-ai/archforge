@@ -21707,7 +21707,7 @@ fn a_restore_refused_for_a_changed_branch_keeps_the_folder_and_only_that_reason_
 /// has come is taken; a conversation a panel shows keeps its folder. In both appearances.
 #[test]
 fn a_deleted_branchs_conversation_folders_go_only_once_it_is_seen_gone() {
-    use crate::BranchNotDeleted::{Failed, Moved, Unclear};
+    use crate::BranchNotDeleted::{Failed, InUse, Moved, Unclear};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, rig) = chat_harness(theme, true);
         let host = std::sync::Arc::new(SavingHost::default());
@@ -21718,7 +21718,7 @@ fn a_deleted_branchs_conversation_folders_go_only_once_it_is_seen_gone() {
             host.branch_deletes.lock().unwrap().pop().unwrap()
         };
         let id = |n: u8| archforge_mof::Uuid::v7(1_762_400_000_000, [n; 10]);
-        for refusal in [Unclear("why".into()), Moved, Failed("why".into())] {
+        for refusal in [Unclear("why".into()), Moved, InUse, Failed("why".into())] {
             let answer = ask(&mut h);
             h.run();
             answer.send(Err(refusal.clone())).unwrap();

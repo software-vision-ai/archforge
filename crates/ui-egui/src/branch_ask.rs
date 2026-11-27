@@ -155,6 +155,7 @@ fn words(refused: &BranchRefused, renaming: Option<&str>) -> String {
 fn undeleted(refused: &BranchRefused) -> String {
     match refused {
         BranchRefused::Moved => tr("The project changed before the branch was deleted, so it stays."),
+        BranchRefused::InUse => tr("Another program is using this branch. Close that program, then try again."),
         BranchRefused::Unclear(_) => tr("Archforge could not tell whether the branch was deleted. Delete it again to find out."),
         other => fmt(&tr("The branch stays: {why}"), &[("why", &other.to_string())]),
     }

@@ -118,7 +118,7 @@ back a deleted conversation (`chat.rs:1535-1570`). What Dolt gives us, measured:
 | `dolt_diff` on a list table | Inserting at the front reports every later position as modified |
 | `dolt_diff` after a column was added | Every row reports modified, changed or not |
 | `DOLT_BRANCH('-m')` and `'-D'` on `main` | Refused: it is the default branch |
-| `DOLT_BRANCH('-d', name)` | Refused unless merged, so a branch that cannot be merged needs `-D` |
+| `DOLT_BRANCH('-d', name)` | Refused while any other session is on the branch, by its database or by a checkout, and only then unless merged. `-D` skips both; no flag skips only the second (measured on 2.7.7, and so in 2.7.5's source) |
 | Trigger on a branch | Not visible from `main`'s `information_schema` |
 | A new branch at `HEAD` before the first Save | Holds only what the creation commit holds: no `model_tables`, no fingerprint |
 
@@ -544,25 +544,29 @@ All run on the writer, in order with every model and conversation write.
 | **Create from a version** | **Start a branch here…** in details and the viewing banner | The creation record; `DOLT_BRANCH` at that hash; removes inherited conversations; removes the record; switches. Viewing ends | The same. Not offered on a version that cannot be read |
 | **Switch** | Branch row, chip list | Section 6's rules, then: writes what waits, commits waiting conversations, runs the opening checks on the target and builds its model, moves the connection, reloads. A conversation commit that fails does not stop it: those rows wait in that branch's working set for the next chat commit | Connection and session stay on the current branch |
 | **Rename** | Branch row menu | `DOLT_BRANCH('-m')`. Allowed on the current branch; the connection and the stored current branch follow. Dolt refuses while any other session has the branch as its database, idle or not, so the project lets go of it first (below) | Name stays. Another program's session on the branch: refused by its own reason (`RenameBranchError::InUse`, *Another program is using this branch*), not Dolt's words |
-| **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); then `DOLT_BRANCH('-D')`; once the branch is seen gone, conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
+| **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); the project lets go of its own sessions on the branch (below); then `DOLT_BRANCH('-d')`, and `'-D'` only once that refuses the branch as not merged; once the branch is seen gone, conversation folders are let go through `chat_delete::settle`'s host path | Branch stays. Another program's session on the branch: refused by its own reason (`DeleteBranchError::InUse`, *Another program is using this branch*), as for a rename |
 
 Every connection of a project is a session it knows by its connection id, with the databases it
 may be using (`crates/project/src/sessions.rs`). A session leaves its database for
 `information_schema` before it closes: Dolt drops a closed session some time after its quit, and
 also after a `KILL`, and a session it still holds on the branch made renames fail now and then
-(AR-771, measured on dolt 2.7.5). Before a rename, the project ends its own sessions still on the
-branch, a read in flight there included, which then fails as it would after the rename, waits
+(AR-771, measured on dolt 2.7.5). Before a rename or a delete, the project ends its own sessions
+still on the branch, a read in flight there included, which then fails as it would after it, waits
 until the server's process list no longer holds them (go-mysql-server removes a session from the
 list the in-use check walks before it leaves the process list), and holds new sessions off the
 branch until the answer is read. Ending them and waiting for the server takes at most 10 seconds,
 whatever the server does: its requests run over a connection of their own, on a thread of their
-own, and once the 10 seconds are spent the rename sends no further request, the thread starts none
-it was sent, and the rename fails, nothing renamed (a request already running ends at the server's
+own, and once the 10 seconds are spent no further request is sent, the thread starts none it was
+sent, and the rename or delete fails, nothing renamed or deleted (a request already running ends at the server's
 answer or at the connection's 30-second timeout; a `KILL` among them may still end its session). A new
-session waits at most 10 seconds too, and then goes on. `--force` is never used: it skips the check
-for every session, another program's too, and overwrites a branch of the new name (measured). A
-refusal that remains is another program's, unless a session of the project's own went on to the
-branch during the hold, whether it is still there or not: that fails the rename with Dolt's words.
+session waits at most 10 seconds too, and then goes on. A rename never uses `--force`: it skips the
+check for every session, another program's too, and overwrites a branch of the new name (measured).
+A delete's force, `-D`, skips that check too, and Dolt has none that forces only past a branch not
+merged, so a delete asks `-d` first, which looks at the sessions before the merge, and `-D` only
+once `-d` has refused the branch as not merged. That leaves one race: a session of another program
+that moves to the branch between the two is passed over, and its branch goes. A refusal that
+remains is another program's, unless a session of the project's own went on to the branch during
+the hold, whether it is still there or not: that fails the rename or delete with Dolt's words.
 
 Creating a branch keeps a record in the project folder, beside the `.creating` marker: the branch being
 made and the branch it was made from. The record is written atomically and flushed to disk, its folder included, once

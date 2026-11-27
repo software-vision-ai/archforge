@@ -12,7 +12,7 @@ use crate::creation::{self, BranchStore, CreationRecord, CreationRecovery, Found
 use crate::model::{ModelSchema, database_connection, database_name, sql, unsaved_tables};
 #[cfg(feature = "testing")]
 use crate::sessions::Watch;
-use crate::sessions::{Renaming, Session};
+use crate::sessions::{Hold, Session};
 use crate::{DATABASE, Error, Project, VersionReader};
 use archforge_mof::Uuid;
 use archforge_mof::rows::Rows;
@@ -34,14 +34,30 @@ pub(crate) fn branch_now(current: &CurrentBranch) -> SafeBranch {
 /// The branches over one connection, as recovery asks of them.
 struct OpenBranches(Result<Session, String>);
 
-/// What Dolt says, in no code of its own, when another session has the branch a rename names.
+/// What Dolt says, in no code of its own, when another session has the branch a rename or a delete
+/// names.
 const IN_USE: &str = "branches in use in other sessions";
+/// What Dolt's `-d` says, in no code of its own, of a branch with commits the branch asking lacks.
+const UNMERGED: &str = "is not fully merged";
 
 impl OpenBranches {
     /// Renames the branch; what the answer is worth is for the caller to read back.
     fn rename(&mut self, from: &SafeBranch, to: &SafeBranch) -> Result<(), String> {
         let c = self.0.as_mut().map_err(|e| e.clone())?;
         c.exec_drop("CALL DOLT_BRANCH('-m', ?, ?)", (from.stored(), to.stored())).map_err(|e| e.to_string())
+    }
+
+    /// Deletes the branch, merged or not, unless another session is on it. Dolt's `-d` refuses while
+    /// any other session is on the branch, by its database or by a checkout, and only then while it
+    /// is not merged; `-D` skips both, and nothing skips only the second (measured on 2.7.7, and so
+    /// in 2.7.5's source). So `-D` comes only once `-d` has refused the branch as not merged, and a
+    /// session that moves to it between the two is passed over.
+    fn delete_unless_in_use(&mut self, branch: &SafeBranch) -> Result<(), String> {
+        let c = self.0.as_mut().map_err(|e| e.clone())?;
+        match c.exec_drop("CALL DOLT_BRANCH('-d', ?)", (branch.stored(),)) {
+            Err(e) if e.to_string().contains(UNMERGED) => c.exec_drop("CALL DOLT_BRANCH('-D', ?)", (branch.stored(),)).map_err(|e| e.to_string()),
+            answer => answer.map_err(|e| e.to_string()),
+        }
     }
 }
 
@@ -76,6 +92,13 @@ impl OutsideSession {
     pub fn active_branch(&mut self) -> Result<Option<String>, String> {
         let on: Option<Option<String>> = self.0.query_first("SELECT active_branch()").map_err(|e| e.to_string())?;
         Ok(on.flatten())
+    }
+
+    /// Puts this session on `branch` as a `dolt sql` shell can: on the project's database, with the
+    /// branch checked out, rather than on the branch's own database.
+    pub fn check_out(&mut self, branch: &str) -> Result<(), String> {
+        self.0.query_drop(format!("USE `{DATABASE}`")).map_err(|e| e.to_string())?;
+        self.0.exec_drop("CALL DOLT_CHECKOUT(?)", (branch,)).map_err(|e| e.to_string())
     }
 }
 
@@ -214,6 +237,9 @@ pub enum DeleteBranchError {
     NoSuchBranch,
     /// An unclear rename holds the project until it is settled or closes.
     Held,
+    /// Another program's session on the project's server is on the branch, so it was not deleted.
+    /// This Archforge's own sessions are no reason: they let go of it first.
+    InUse,
     /// It is still there, or what it held could not be read; nothing was deleted.
     Failed(String),
     /// Whether it went cannot be told. Asking for the same delete again settles it.
@@ -229,6 +255,7 @@ impl fmt::Display for DeleteBranchError {
             DeleteBranchError::RecordRemains => f.write_str("the last new branch is not cleaned up yet"),
             DeleteBranchError::NoSuchBranch => f.write_str("there is no such branch"),
             DeleteBranchError::Held => f.write_str("whether a branch was renamed cannot be told"),
+            DeleteBranchError::InUse => f.write_str("another program is using the branch"),
             DeleteBranchError::Failed(why) | DeleteBranchError::CannotTell(why) => f.write_str(why),
         }
     }
@@ -487,7 +514,7 @@ impl Project {
         &self,
         from: &SafeBranch,
         to: &SafeBranch,
-        let_go: impl FnOnce(&str) -> Result<Renaming, String>,
+        let_go: impl FnOnce(&str) -> Result<Hold, String>,
         ask: impl FnOnce(&mut OpenBranches) -> Result<(), String>,
         read: impl Fn() -> Result<(bool, bool), String>,
     ) -> Result<(), RenameBranchError> {
@@ -561,17 +588,29 @@ impl Project {
     ) -> Result<Vec<Uuid>, DeleteBranchError> {
         let ask = |store: &mut OpenBranches| {
             asked.set(true);
-            if lands { store.delete(branch) } else { Err("the reply was lost".to_string()) }
+            if lands { store.delete_unless_in_use(branch) } else { Err("the reply was lost".to_string()) }
         };
         self.delete_steps(branch, ask, |name| if readable { self.branch_is_there(name) } else { Err("it cannot be read".to_string()) })
     }
 
+    /// [`Project::delete_branch`] with `meanwhile` run once this project's own sessions have let go
+    /// of `branch`, just before the delete is asked for.
+    #[cfg(feature = "testing")]
+    pub fn delete_branch_meanwhile(&self, branch: &SafeBranch, meanwhile: impl FnOnce()) -> Result<Vec<Uuid>, DeleteBranchError> {
+        let ask = |store: &mut OpenBranches| {
+            meanwhile();
+            store.delete_unless_in_use(branch)
+        };
+        self.delete_steps(branch, ask, |name| self.branch_is_there(name))
+    }
+
     /// Deletes the branch for good, on the writer only, and answers the conversations that held
     /// only there, for their private folders to be let go: none unless the branch is seen gone.
-    /// A read on the branch at that moment fails; it never answers for something else. No reader
-    /// starts on it, as readers follow the current branch, which this refuses.
+    /// Another program's session on the branch refuses it; this project's own sessions there let go
+    /// of it first, so a read on the branch at that moment fails; it never answers for something
+    /// else. No reader starts on it, as readers follow the current branch, which this refuses.
     pub fn delete_branch(&self, branch: &SafeBranch) -> Result<Vec<Uuid>, DeleteBranchError> {
-        self.delete_steps(branch, |store| store.delete(branch), |name| self.branch_is_there(name))
+        self.delete_steps(branch, |store| store.delete_unless_in_use(branch), |name| self.branch_is_there(name))
     }
 
     /// Whether `branch` exists, over a connection of its own on `main`.
@@ -592,8 +631,8 @@ impl Project {
     }
 
     /// [`Project::delete_branch`], `ask` deleting and `read` saying whether a branch exists. The
-    /// read decides, whatever the answer was. Not being able to tell keeps what it held, so
-    /// that asking again answers as the first would have.
+    /// read decides, whatever the answer was: only "still there" is a refusal or a failure. Not
+    /// being able to tell keeps what it held, so that asking again answers as the first would have.
     fn delete_steps(
         &self,
         branch: &SafeBranch,
@@ -636,10 +675,17 @@ impl Project {
             return Err(DeleteBranchError::NoSuchBranch);
         }
         let chats = self.version_reader().chats_only_on(branch).map_err(|e| failed(e.to_string()))?;
+        // As before a rename: this project's own sessions let go first, held off the branch until
+        // the answer is read, so a refusal for a session on it is another program's.
+        let held = self.sessions.let_go(&database_name(branch)).map_err(failed)?;
         let asked = ask(&mut store);
         match read(branch) {
             Ok(false) => Ok(chats),
-            Ok(true) => Err(failed(asked.err().unwrap_or_else(|| "the branch is still there".into()))),
+            // Only when no session of this project's entered during the hold, as for a rename.
+            Ok(true) => match asked {
+                Err(why) if why.contains(IN_USE) && !held.entered() => Err(DeleteBranchError::InUse),
+                asked => Err(failed(asked.err().unwrap_or_else(|| "the branch is still there".into()))),
+            },
             Err(why) => {
                 *self.unclear_delete() = Some((branch.clone(), chats));
                 Err(DeleteBranchError::CannotTell(why))
