@@ -2562,7 +2562,8 @@ fn key_name(p: &Params) -> Result<&str, CommandError> {
 }
 
 /// The columns the array parameter `key` names, at most [`rules::MAX_KEY_COLUMNS`] ids of live
-/// elements, none twice, each a column; every refusal typed, the list's as of key columns.
+/// elements, none twice, each a column; every refusal typed, the list's as of key columns, and one
+/// named twice by the element's label ([`rules::label`]), as the key's rules name it.
 fn attribute_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError> {
     const KIND: &str = "key column";
     let items = p.get(key).and_then(Json::as_array).cloned().unwrap_or_default();
@@ -2575,7 +2576,8 @@ fn attribute_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, Comman
         let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string").because(Reason::IdsExpected { kind: KIND }))?;
         let obj = element(ctx.doc, key, id, KIND)?;
         if out.contains(&obj) {
-            return Err(refuse(key, format!("{id} is listed twice")).because(Reason::NamedTwice { kind: KIND, name: short(id) }));
+            let twice = Reason::NamedTwice { kind: KIND, name: rules::label(ctx.doc, obj) };
+            return Err(refuse(key, format!("{id} is listed twice")).because(twice));
         }
         out.push(obj);
     }

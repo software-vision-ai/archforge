@@ -131,6 +131,7 @@ str		No id is given. Give the id of {what}.	Es ist keine ID angegeben. Hier wird
 str		{name} is not {what}.	{name} passt hier nicht: erwartet wird {what}.
 str		Give the key's columns as a list of ids.	Geben Sie die Spalten des Schlüssels als Liste von IDs an.
 str		A key holds at most {max} columns.	Ein Schlüssel umfasst höchstens {max} Spalten.
+str		{name} appears twice in the key. Give each column once.	{name} kommt im Schlüssel zweimal vor. Geben Sie jede Spalte nur einmal an.
 str		A key needs at least one column.	Ein Schlüssel braucht mindestens eine Spalte.
 str		{column} is not a column of {table}.	{column} ist keine Spalte von {table}.
 str		{name} may be null, which a primary key column never is.	{name} darf leer sein, was eine Primärschlüsselspalte nie darf.

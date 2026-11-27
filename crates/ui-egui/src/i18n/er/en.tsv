@@ -130,6 +130,7 @@ str		No id is given. Give the id of {what}.	No id is given. Give the id of {what
 str		{name} is not {what}.	{name} is not {what}.
 str		Give the key's columns as a list of ids.	Give the key's columns as a list of ids.
 str		A key holds at most {max} columns.	A key holds at most {max} columns.
+str		{name} appears twice in the key. Give each column once.	{name} appears twice in the key. Give each column once.
 str		A key needs at least one column.	A key needs at least one column.
 str		{column} is not a column of {table}.	{column} is not a column of {table}.
 str		{name} may be null, which a primary key column never is.	{name} may be null, which a primary key column never is.

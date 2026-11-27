@@ -238,7 +238,8 @@ fn name_and_text_rules_carry_their_reason_typed() {
 /// An id, a key's columns and a constraint name refused carry their reason typed, the kind as the
 /// interface names it, beside the English sentence, which stays as it was: no id, one malformed or
 /// of no element, an element of another kind (a subtype's too) by its name or, unnamed, its id; too many columns, one
-/// no id, given twice or no column; and a constraint name the schema has, by the other's name (AR-438).
+/// no id, given twice (by its name or, unnamed, its id, AR-544) or no column; and a constraint name the schema has, by
+/// the other's name (AR-438).
 #[test]
 fn ids_key_columns_and_constraint_names_carry_their_reason_typed() {
     use archforge_engine::Reason;
@@ -290,9 +291,10 @@ fn ids_key_columns_and_constraint_names_carry_their_reason_typed() {
         (
             "er.unique.add",
             unique(json!([sm.key, sm.key])),
-            Reason::NamedTwice { kind: "key column", name: sm.key.clone() },
+            Reason::NamedTwice { kind: "key column", name: "id".into() },
             format!("{} is listed twice", sm.key),
         ),
+        ("er.unique.add", unique(json!([fk, fk])), Reason::NamedTwice { kind: "key column", name: fk.clone() }, format!("{fk} is listed twice")),
         ("er.unique.add", unique(json!([sm.key, fk])), not("column", &fk), format!("{fk} is not an attribute")),
         (
             "er.unique.add",
