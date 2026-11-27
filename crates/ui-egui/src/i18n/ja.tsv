@@ -137,7 +137,7 @@ str		Sort recent projects by name	最近のプロジェクトを名前で並べ�
 str		Sort recent projects by last opened	最近のプロジェクトを最後に開いた順で並べ替え
 # ワークスペース
 str		Find an element, view, or action	要素、ビュー、操作を検索
-str		No schemas yet	スキーマはまだありません
+str		Nothing in the model yet	モデルにはまだ何もありません
 str		Add	追加
 str		Schema	スキーマ
 str		Folder	フォルダー
@@ -153,10 +153,6 @@ str		What it holds moves to {parent}.	含まれているものは {parent} に�
 str		Remove from this diagram only	この図からのみ削除
 plural		It disappears from {n} diagram.	{n} 個の図から消えます。
 plural		{n} relationship goes with it.	{n} 件のリレーションシップが一緒に削除されます。
-plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
-plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
-plural		{n} nested classifier goes with it: {names}.	{n} 個の入れ子の分類子も一緒に削除されます：{names}。
-plural		{n} stereotype application goes with it: {names}.	{n} 件のステレオタイプの適用も一緒に削除されます：{names}。
 str		Delete	削除
 str		Element · model	要素 · モデル
 str		Skill · model	スキル · モデル
@@ -209,18 +205,6 @@ str		Remove	削除
 str		Edit	編集
 str		Apply	適用
 str		Inherited · {n}	継承 · {n}
-str		every table	すべてのテーブル
-str		every relationship	すべてのリレーションシップ
-str		every column	すべての列
-str		every class	すべてのクラス
-str		every interface	すべてのインターフェース
-str		every enumeration	すべての列挙
-str		every data type	すべてのデータ型
-str		every primitive type	すべてのプリミティブ型
-str		every association class	すべての関連クラス
-str		every attribute	すべての属性
-str		every operation	すべての操作
-str		every association	すべての関連
 str		project	プロジェクト
 str		overridden below	下で上書き
 str		Open the skill	スキルを開く
@@ -617,8 +601,6 @@ str		Compared with the version of {when}	{when} のバージョンと比較
 str		There is no version to compare with yet.	比較するバージョンはまだありません。
 str		This diagram couldn't be compared.	この図を比較できませんでした。
 str		This element couldn't be compared.	この要素を比較できませんでした。
-str		Attributes	属性
-str		Operations	操作
 str		Literals	リテラル
 str		Members	メンバー
 str		Relationships	関連
@@ -856,7 +838,6 @@ str		Remove from this diagram	この図から削除
 str		Delete from the model…	モデルから削除…
 str		Start	始点
 str		Identifying	識別
-str		Columns	列
 str		{name} removed	{name} を削除しました
 str		Undo	元に戻す
 str		Redo	やり直す
@@ -1004,7 +985,7 @@ str		Relationships carry no skills	関係はスキルを持ちません
 str		This element carries no skills	この要素はスキルを持ちません
 str		Diagram	図
 str		Default diagram	既定の図
-str		Diagram · of {schema}	図 · {schema} の
+str		Diagram · of {owner}	図 · {owner} の
 str		This diagram	この図
 str		On this diagram · {n}	この図に · {n}
 str		Role	ロール
@@ -1033,7 +1014,6 @@ str		Association class	関連クラス
 str		Classifier kinds	分類子の種類
 str		Package	パッケージ
 # プロパティのクラスメンバー
-str		Owner: {path}	所有者: {path}
 str		Stereotype	ステレオタイプ
 str		{first} and {second}	{first} と {second}
 str		{first}, {second} and {third}	{first}、{second}、{third}

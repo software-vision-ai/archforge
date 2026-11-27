@@ -29,6 +29,7 @@ use serde_json::json;
 use crate::canvas::{Drawing, LineDrawn, along, exit_point};
 use crate::cx::{Ctx, CtxRef};
 use crate::i18n::{fmt, tr};
+use crate::notation_ui::NotationUi;
 use crate::panels::{
     Combo, ComboOut, FIELD, FieldOut, PAD, Subject, check_cx, control_cx, editable_select_cx, menu_cx, run_cx, section_cx, select_field_cx,
     text_field_cx,
@@ -321,11 +322,12 @@ fn realization_refusal(store: &Store, implementing: Option<Obj>, contract: Optio
 
 /// Why a generalization from `specific` to `general` is refused, in the user's words, when it is:
 /// the model's rules (`generalization_problem`) said as a refusal of the engine is, a final general
-/// classifier by its name (AR-137). `except` is the generalization being reconnected.
-fn generalization_refusal(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<String> {
+/// classifier by its name (AR-137), a typed refusal by the notations of `uis`. `except` is the
+/// generalization being reconnected.
+fn generalization_refusal(uis: &[&'static dyn NotationUi], store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<String> {
     let problem = archforge_uml::relations::generalization_problem(store, specific, general, except)?;
     let reason = problem.reason(store, specific, general);
-    Some(crate::panels::said(crate::notation_ui::UIS, &reason).unwrap_or_else(|| problem.why(store, specific, general)))
+    Some(crate::panels::said(uis, &reason).unwrap_or_else(|| problem.why(store, specific, general)))
 }
 
 /// Whether `element` is a class: a plain class or an association class, which is one too.
@@ -414,7 +416,7 @@ pub(crate) fn connect(cx: &mut Ctx, d: Obj, from_node: Uuid, to_node: Uuid) {
         .or_else(|| association_refusal(kind, store, to))
         .or_else(|| class_end_refusal(kind, store, from))
         .or_else(|| class_end_refusal(kind, store, to))
-        .or_else(|| (kind == Relate::Generalization).then(|| generalization_refusal(store, from, to, None)).flatten());
+        .or_else(|| (kind == Relate::Generalization).then(|| generalization_refusal(cx.notation_uis, store, from, to, None)).flatten());
     if let Some(why) = refusal {
         cx.canvas.notice = Some(why);
         return;
@@ -425,7 +427,7 @@ pub(crate) fn connect(cx: &mut Ctx, d: Obj, from_node: Uuid, to_node: Uuid) {
     }
     // A template binding writes nothing yet: its draft opens in Properties for the arguments (C3).
     if kind == Relate::TemplateBinding {
-        match crate::uml_bindings::refusal(store, from, to, None) {
+        match crate::uml_bindings::refusal(cx.notation_uis, store, from, to, None) {
             Some(why) => cx.canvas.notice = Some(why),
             None => crate::uml_bindings::open_new(cx, d, (from_node, to_node), from, to),
         }
@@ -706,7 +708,7 @@ pub(crate) fn reconnect(cx: &mut Ctx, element: Uuid, source: bool, to_node: Uuid
     // A binding's ends keep the binding rules; another template needs its arguments picked (AR-131).
     if let (Some(r), Some((bound, template))) = (line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::TEMPLATE_BINDING)), ends) {
         let (b, t) = if source { (target, template) } else { (bound, target) };
-        let why = crate::uml_bindings::refusal(store, b, t, Some(r))
+        let why = crate::uml_bindings::refusal(cx.notation_uis, store, b, t, Some(r))
             .or_else(|| (!source).then(|| crate::uml_bindings::needs_arguments(store, t)).flatten());
         if let Some(why) = why {
             cx.canvas.notice = Some(why);
@@ -726,7 +728,7 @@ pub(crate) fn reconnect(cx: &mut Ctx, element: Uuid, source: bool, to_node: Uuid
     // A generalization's moved end keeps the classifier rules, said in the user's words.
     if let (Some(r), Some((specific, general))) = (line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::GENERALIZATION)), ends) {
         let (s, g) = if source { (target, general) } else { (specific, target) };
-        if let Some(why) = generalization_refusal(store, s, g, Some(r)) {
+        if let Some(why) = generalization_refusal(cx.notation_uis, store, s, g, Some(r)) {
             cx.canvas.notice = Some(why);
             return;
         }
@@ -889,12 +891,13 @@ fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
 
 /// Why end `end`'s modifiers as edited cannot be written, in the user's words, with the field it
 /// sits under: a default its type does not read, or a property it adds to what it subsets or
-/// redefines that the rules refuse; the commands keep the same rules.
-pub(crate) fn end_refusal(store: &Store, end: Obj, m: &EndModifiers) -> Option<(&'static str, String)> {
+/// redefines that the rules refuse; the commands keep the same rules. A typed refusal is said by
+/// the notations of `uis`.
+pub(crate) fn end_refusal(uis: &[&'static dyn NotationUi], store: &Store, end: Obj, m: &EndModifiers) -> Option<(&'static str, String)> {
     let ty = store.get(end, archforge_uml::typed_element::TYPE).ok().and_then(|v| v.as_ref());
     let form = archforge_uml::modifiers::DefaultForm::of(store, ty);
     if let Err(e) = archforge_uml::modifiers::parse_default(store, form, &m.default) {
-        return Some(("default", crate::uml_panel::default_refusal(store, &e)));
+        return Some(("default", crate::uml_panel::default_refusal(uis, store, &e)));
     }
     let shape = archforge_uml::modifiers::Shape::of(store, end);
     let had = EndModifiers::of(store, end);
@@ -1491,7 +1494,7 @@ fn apply_end_modifiers(cx: &mut Ctx, id: Uuid, end: Obj, i: usize, role: &str, m
     let Some(m) = uml(cx.notation_states).and_then(|uml| uml.ends.as_ref()).filter(|e| e.association == id).map(|e| e.modifiers[i].clone()) else {
         return;
     };
-    if let Some(why) = cx.session.as_ref().and_then(|s| end_refusal(s.doc(), end, &m)) {
+    if let Some(why) = cx.session.as_ref().and_then(|s| end_refusal(cx.notation_uis, s.doc(), end, &m)) {
         if let Some(e) = uml_mut(cx.notation_states).and_then(|uml| uml.ends.as_mut()) {
             e.modifier_refused[i] = Some(why);
         }

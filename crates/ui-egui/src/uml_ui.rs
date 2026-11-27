@@ -375,6 +375,11 @@ impl DiagramKind for UmlKind {
         crate::panels::run_cx(cx, cmd, json!({ key: element.to_string(), "name": name })).map(|_| ())
     }
 
+    /// A package's name is typed in its tab, which grows with it (AR-113).
+    fn name_field(&self, paint: &egui::Painter, store: &Store, node: Obj, rect: Rect, text: &str, z: f32) -> Option<(Rect, crate::ux::Type)> {
+        crate::uml_package::name_field(paint, store, node, rect, text, z)
+    }
+
     /// A class, an interface, an enumeration, a data type, or a package on the diagram, goes from the model with
     /// ⇧⌫ (AR-95).
     fn deletes(&self, store: &Store, element: Obj) -> bool {
@@ -576,6 +581,19 @@ impl DiagramKind for UmlKind {
         ui: &egui::Ui,
     ) -> Vec<crate::canvas::ExtraLabel> {
         crate::uml_sets::draw_sets(paint, d, registry, ui)
+    }
+
+    /// A package's card: its tab, the path of its owners and its own diagram's thumbnail (AR-113,
+    /// AR-565).
+    fn draw_card(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> bool {
+        crate::uml_package::draw_card(paint, d, card, registry, ui)
     }
 
     /// A generalization set's label gets a node where it is let go, on this diagram alone (AR-129).
@@ -823,9 +841,9 @@ impl NotationUi for UmlUi {
 
     /// The package Types stays while it keeps the built-in types, which Models does not show: said
     /// under the tree before anything is asked.
-    fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {
+    fn remove_refusal(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<String> {
         // A profile, a stereotype or a package whose profiles its elements use stays (AR-134).
-        if let Some(why) = crate::uml_profiles::removal_refusal(store, obj) {
+        if let Some(why) = crate::uml_profiles::removal_refusal(uis, store, obj) {
             return Some(why);
         }
         let package = class(store, obj) == Some(archforge_uml::PACKAGE);
@@ -834,15 +852,37 @@ impl NotationUi for UmlUi {
             .map(|_| tr("Types keeps the built-in types, so it stays while it holds them"))
     }
 
-    /// The relationships that go with a classifier, or with a package's, counted as `element.remove`
-    /// takes them (`going_with`): an association class going along takes what touches it too.
-    fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
-        let held = match class(store, obj) {
-            Some(c) if archforge_uml::is_classifier(c) => vec![obj],
-            Some(c) if c == archforge_uml::PACKAGE => classifiers(store, obj),
-            _ => Vec::new(),
+    /// What goes with `obj`, a sentence for each there is: the relationships, counted as
+    /// `element.remove` takes them (`relationships_going`, AR-843): a classifier's, an association
+    /// class going along taking what touches it too; a package with no parent's with everything in
+    /// it; a nested package's own alone, as it hands what it holds up. Then a classifier's nested
+    /// classifiers at any depth, by the names they read by, `Order::Priority` (AR-132), and the
+    /// stereotype applications on it and on what it takes along, `«Entity» on Order` (AR-135), an
+    /// element without a name by its kind as the notations of `uis` name it.
+    fn consequences(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Vec<String> {
+        let n = |count: usize| u64::try_from(count).unwrap_or(u64::MAX);
+        let relationships = archforge_uml::commands::relationships_going(store, &[obj]).len();
+        let nested: Vec<String> = if classifier(store, obj) {
+            archforge_uml::nesting::nested_within(store, obj).into_iter().map(|c| archforge_uml::nesting::qualified_name(store, c)).collect()
+        } else {
+            Vec::new()
         };
-        (archforge_uml::commands::going_with(store, &held).len(), 0, 0)
+        let applications = crate::uml_stereotypes::going_along(uis, store, obj);
+        let mut said = Vec::new();
+        if relationships > 0 {
+            said.push(trn("{n} relationship goes with it.", "{n} relationships go with it.", n(relationships)));
+        }
+        if !nested.is_empty() {
+            let count = n(nested.len());
+            let line = trn("{n} nested classifier goes with it: {names}.", "{n} nested classifiers go with it: {names}.", count);
+            said.push(fmt(&line, &[("names", &nested.join(", "))]));
+        }
+        if !applications.is_empty() {
+            let count = n(applications.len());
+            let line = trn("{n} stereotype application goes with it: {names}.", "{n} stereotype applications go with it: {names}.", count);
+            said.push(fmt(&line, &[("names", &applications.join(", "))]));
+        }
+        said
     }
 
     /// New inside ▸ on a classifier: the kinds it may nest (AR-132).
@@ -859,20 +899,6 @@ impl NotationUi for UmlUi {
             return crate::uml_profiles::add_inside(cx, key, obj);
         }
         crate::uml_nesting::add_inside(cx, key, obj)
-    }
-
-    /// A classifier's nested classifiers at any depth, by the names they read by, `Order::Priority`
-    /// (AR-132): they go with it.
-    fn goes_along(&self, store: &Store, obj: Obj) -> Vec<String> {
-        if !classifier(store, obj) {
-            return Vec::new();
-        }
-        archforge_uml::nesting::nested_within(store, obj).into_iter().map(|n| archforge_uml::nesting::qualified_name(store, n)).collect()
-    }
-
-    /// The stereotype applications that go with `obj` and what it takes along (AR-135).
-    fn applications_along(&self, store: &Store, obj: Obj) -> Vec<String> {
-        crate::uml_stereotypes::going_along(store, obj)
     }
 
     /// Whether `obj` has rows under it: a package what it holds (the built-in types in Types, which
@@ -1081,6 +1107,23 @@ impl NotationUi for UmlUi {
         }
     }
 
+    /// A skill for every one of its kinds says so: every class, every attribute and the rest, a
+    /// property being an attribute. None of them takes a type pattern.
+    fn skill_target(&self, kind: archforge_mof::ClassId, _: &str) -> Option<String> {
+        Some(match kind {
+            c if c == archforge_uml::CLASS => tr("every class"),
+            c if c == archforge_uml::INTERFACE => tr("every interface"),
+            c if c == archforge_uml::ENUMERATION => tr("every enumeration"),
+            c if c == archforge_uml::DATA_TYPE => tr("every data type"),
+            c if c == archforge_uml::PRIMITIVE_TYPE => tr("every primitive type"),
+            c if c == archforge_uml::ASSOCIATION_CLASS => tr("every association class"),
+            c if c == archforge_uml::PROPERTY => tr("every attribute"),
+            c if c == archforge_uml::OPERATION => tr("every operation"),
+            c if c == archforge_uml::ASSOCIATION => tr("every association"),
+            _ => return None,
+        })
+    }
+
     /// How Properties names `o`: its kind line, its word, This …, and On this … · {n}.
     fn words(&self, store: &Store, o: Obj) -> Option<Words> {
         // An n-ary association's kind line counts its ends (AR-128, A4).
@@ -1247,8 +1290,8 @@ impl NotationUi for UmlUi {
 
     /// UML's own refusals: those its commands alone give, and a diagram the diagrams' commands keep
     /// as a package's default, in its editors' and the canvas's words.
-    fn said(&self, reason: &archforge_engine::Reason) -> Option<String> {
-        crate::uml_said::said(reason)
+    fn said(&self, uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        crate::uml_said::said(uis, reason)
     }
 
     /// No element yet of the kind a UML command needs: a package, a classifier, a relationship, a
@@ -1280,6 +1323,17 @@ impl NotationUi for UmlUi {
             c if c == archforge_uml::PROPERTY => tr("Attribute"),
             c if c == archforge_uml::ENUMERATION_LITERAL => tr("Literal"),
             c if c == archforge_uml::PROFILE => tr_ctx("uml", "Profile"),
+            _ => return None,
+        })
+    }
+
+    /// A classifier's properties are its Attributes, then its Operations, and an enumeration's
+    /// literals its Literals.
+    fn list_heading(&self, class: archforge_mof::ClassId) -> Option<String> {
+        Some(match class {
+            c if c == archforge_uml::PROPERTY => tr("Attributes"),
+            c if c == archforge_uml::OPERATION => tr("Operations"),
+            c if c == archforge_uml::ENUMERATION_LITERAL => tr("Literals"),
             _ => return None,
         })
     }

@@ -1,11 +1,12 @@
 //! The interface `DiagramKind`, what a diagram kind does with the canvas's tools and gestures and
 //! what it draws, with the data types it hands between the shell's canvas and a kind: what a kind's
 //! tool does, the tool itself, a press on the canvas as the kind reads it, a line as the canvas drew
-//! it, a label the kind drew of no one node or line, a row a kind adds to its elements' menu and a
-//! row it gives the Model menu; and the kind of a diagram, of the diagram the canvas shows and
-//! whether the open popover takes the keys, each asked of the kinds it is handed. The shell keeps
-//! its list of kinds (`archforge_ui_egui::kinds::KINDS`, which names ER's and UML's) and
-//! re-exports these under their old paths (`archforge_ui_egui::kinds` and `canvas`).
+//! it, a card the kind may draw itself, a label the kind drew of no one node or line, a row a kind
+//! adds to its elements' menu and a row it gives the Model menu; and the kind of a diagram, of the
+//! diagram the canvas shows and whether the open popover takes the keys, each asked of the kinds it
+//! is handed. The shell keeps its list of kinds (`archforge_ui_egui::kinds::KINDS`, which names
+//! ER's and UML's) and re-exports these under their old paths (`archforge_ui_egui::kinds` and
+//! `canvas`).
 
 use archforge_diagram::ProjectView;
 use archforge_mof::{Obj, Store, Uuid};
@@ -55,8 +56,8 @@ pub struct Press<'a> {
     /// The diagram the canvas shows, and what is selected.
     pub d: Obj,
     pub selection: &'a [Obj],
-    /// The node under a screen point that takes the press: a card, or a package's tab, the one
-    /// drawn on top.
+    /// The node under a screen point that takes the press: a card, or a part of one its kind drew
+    /// outside it ([`DiagramKind::draw_card`]), the one drawn on top.
     pub node_at: &'a dyn Fn(Pos2) -> Option<Obj>,
     /// The line under a screen point, nodes aside.
     pub line_at: &'a dyn Fn(Pos2) -> Option<Obj>,
@@ -82,6 +83,18 @@ pub struct LineDrawn<'a> {
     pub line: Obj,
     pub element: Obj,
     pub points: &'a [Pos2],
+    pub selected: bool,
+}
+
+/// A node's card as the canvas is about to draw it this frame, for its diagram's kind to draw it
+/// itself ([`DiagramKind::draw_card`]): the node, its element, the card its notation describes (a
+/// row typed in place already in it), its rectangle on screen (grown to hold that row), and whether
+/// it is drawn selected.
+pub struct CardDrawn<'a> {
+    pub node: Obj,
+    pub element: Obj,
+    pub card: &'a archforge_diagram::figure::Card,
+    pub rect: Rect,
     pub selected: bool,
 }
 
@@ -146,7 +159,9 @@ pub trait DiagramKind: Sync {
     fn icon(&self) -> &'static Icon {
         &crate::ux::icons::ER_DIAGRAM
     }
-    /// What its diagrams are of: the word for it, and the choice that makes a new one.
+    /// What its diagrams are of: the word for it, as the New diagram dialog labels its choice, and
+    /// as Properties labels what one of its diagrams is of when that element's notation gives it
+    /// no word of its own.
     fn owner_word(&self) -> String;
     /// The choice that makes a new one of what its diagrams are of, in the New diagram dialog.
     fn new_owner(&self) -> String;
@@ -211,6 +226,15 @@ pub trait DiagramKind: Sync {
     }
     /// Renames the element as typed in place.
     fn rename(&self, cx: &mut Ctx, element: Uuid, name: &str) -> Result<(), String>;
+    /// Where the name typed in place on the node `node`, whose card the kind drew itself in the last
+    /// frame ([`DiagramKind::draw_card`]), goes on its card at `rect` at zoom `z` while it reads
+    /// `text`, and in which text style, laid out with `paint` (a UML package's name in its tab, which
+    /// grows with it). Asked as the field is drawn, so it follows a rename opened after the card was
+    /// drawn. None, and by default: in the card's header, where the canvas's own cards hold it.
+    fn name_field(&self, paint: &egui::Painter, store: &Store, node: Obj, rect: Rect, text: &str, z: f32) -> Option<(Rect, crate::ux::Type)> {
+        let _ = (paint, store, node, rect, text, z);
+        None
+    }
     /// Opens the element's editor, at the row of its card under a double click (None: the editor's
     /// new row, as the second adorner asks).
     fn open(&self, cx: &mut Ctx, element: Uuid, row: Option<usize>);
@@ -324,6 +348,19 @@ pub trait DiagramKind: Sync {
     fn draw_extras(&self, paint: &egui::Painter, d: &Drawing<'_>, registry: &mut Registry, ui: &egui::Ui) -> Vec<ExtraLabel> {
         let _ = (paint, d, registry, ui);
         Vec::new()
+    }
+    /// Draws the card `card` itself in place of the canvas's own figure for it, over the lines and
+    /// the cards drawn before it, recording each part in `registry`, and in `d` the parts outside
+    /// the card that take a press as it does (`Drawing::parts`) and the labels a screen reader and
+    /// the pointer read (`Drawing::labels`) (UML's package: its tab, the path of its owners under
+    /// it and its own diagram's thumbnail). The canvas asks the diagram's own kind first, then every
+    /// other kind it knows in turn, so a card is drawn by the kind that draws its element whatever
+    /// diagram shows it. True when it drew the card; the canvas then draws only what goes over any
+    /// card: the selection ring, a template's signature and the problem badge. False, and by
+    /// default: the next kind is asked, and when none draws it, the canvas does.
+    fn draw_card(&self, paint: &egui::Painter, d: &Drawing<'_>, card: &CardDrawn<'_>, registry: &mut Registry, ui: &egui::Ui) -> bool {
+        let _ = (paint, d, card, registry, ui);
+        false
     }
     /// Places a label of those figures that no node holds yet on diagram `d` alone, its top left
     /// corner at `(x, y)`, as a drag lets it go there: `element` is the element the label stands

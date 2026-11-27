@@ -591,8 +591,8 @@ fn decide(
             }
             if resp.clicked() {
                 let (x, y) = view.to_canvas(pos);
-                // A package's tab is its card's (AR-113), over any line that crosses it; a card and a
-                // tab over each other give the one drawn on top.
+                // A part of a card its kind drew outside it is the card's, over any line that crosses
+                // it; a card and a part over each other give the one drawn on top.
                 let hit = hit(store, notations, grid, x, y);
                 let card = match hit {
                     Some(Hit::Node(n)) => Some(n),
@@ -936,8 +936,8 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
 }
 
 /// The topmost node of `d` under a screen point whose element takes part in the diagram kind's
-/// gestures: on its card, or on its package's tab, the one drawn on top where a card covers a tab
-/// (AR-570).
+/// gestures: on its card, or on a part of one its kind drew outside it, the one drawn on top where
+/// a card covers a part (AR-570).
 fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
     let session = shell.session.as_ref()?;
     let store = session.doc();
@@ -949,19 +949,20 @@ fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
         .and_then(|n| uuid(store, n))
 }
 
-/// Of the card under a point and the package tab under it, the one drawn on top: the later in
+/// Of the card under a point and the part of a card under it, the one drawn on top: the later in
 /// the grid's drawing order, nested nodes included, as the canvas draws them (AR-113).
 fn on_top(shell: &Shell, store: &Store, grid: &Grid, card: Option<Obj>, at: Pos2) -> Option<Obj> {
-    match (card, tab_at(shell, store, at)) {
+    match (card, part_at(shell, store, at)) {
         (Some(c), Some(t)) if c != t => Some(if grid.drawn_at(t) > grid.drawn_at(c) { t } else { c }),
         (c, t) => c.or(t),
     }
 }
 
-/// The package whose tab the last frame drew under a screen point, the topmost first: the tab is
-/// part of its card (AR-113).
-fn tab_at(shell: &Shell, store: &Store, at: Pos2) -> Option<Obj> {
-    shell.canvas.package_tabs.iter().rev().find(|t| t.rect.contains(at)).and_then(|t| store.by_uuid(t.node)).filter(|n| store.is_alive(*n))
+/// The node of the part of a card its kind drew outside it in the last frame under a screen point,
+/// the topmost first: the part takes a press as its card does
+/// (`archforge_shell_api::kinds::DiagramKind::draw_card`).
+fn part_at(shell: &Shell, store: &Store, at: Pos2) -> Option<Obj> {
+    shell.canvas.card_parts.iter().rev().find(|t| t.rect.contains(at)).and_then(|t| store.by_uuid(t.node)).filter(|n| store.is_alive(*n))
 }
 
 /// Places a note at `(x, y)`, its centre under the click, and opens its text for typing.
@@ -1174,27 +1175,21 @@ fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
     // What its notation keeps (UML's package Types with the built-in types) is said, not asked.
-    if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(store, e)) {
+    if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(cx.notation_uis, store, e)) {
         cx.canvas.notice = Some(why);
         cx.canvas.menu = None;
         return;
     }
-    let (relationships, keys, foreign_keys) = crate::notation_ui::of(cx.notation_uis, store, e).map_or((0, 0, 0), |ui| ui.consequences(store, e));
+    let consequences = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.consequences(cx.notation_uis, store, e)).unwrap_or_default();
     let diagrams = diagrams_showing(store, e);
-    let along = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.goes_along(store, e)).unwrap_or_default();
-    let applications = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.applications_along(store, e)).unwrap_or_default();
     // A nested package hands what it holds up: the dialog says where, and so does the toast.
     let hands_to = crate::notation_ui::of(cx.notation_uis, store, e)
         .and_then(|ui| Some((archforge_core::name_of(store, ui.hands_up(store, e)?), ui.has_children(store, e))));
     cx.requests.push(Request::AskDelete(crate::explorer::Delete {
-        along,
-        applications,
         ids: vec![entity],
         // Named as every path that asks names it, an unnamed relationship by its ends (AR-216).
         name: crate::notation_ui::label(cx.notation_uis, store, e),
-        relationships,
-        keys,
-        foreign_keys,
+        consequences,
         diagrams,
         node,
         hands_to,
@@ -1558,20 +1553,20 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
     pos2(x as f32, y as f32)
 }
 
-/// The name typed in the node's header: the design's tinted field over the name, the text
-/// selected when the entity is new; Enter commits, Escape closes, a refusal stays under it.
+/// The name typed in the node's header, or where a kind places it on a card the kind drew itself
+/// in the last frame: the design's tinted field over the name, the text selected when
+/// the entity is new; Enter commits, Escape closes, a refusal stays under it.
 fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
     let paint = ui.painter().clone();
-    // A package's name is typed in its tab, which grows with it (AR-113).
-    let in_tab = shell.canvas.rename.as_ref().is_some_and(|rn| shell.canvas.package_tabs.iter().any(|t| t.node == rn.node));
-    let field = if in_tab {
-        let text = shell.canvas.rename.as_ref().map(|rn| rn.text.clone()).unwrap_or_default();
-        let (tab, _, _) = crate::canvas::package_tab(&paint, rect, &text, z, p.text);
-        tab.shrink2(vec2(4.0, 3.0) * z)
-    } else {
-        Rect::from_min_size(rect.min + vec2(14.0, 28.0) * z, vec2((rect.width() - 28.0 * z).max(0.0), 30.0 * z))
-    };
-    let font = if in_tab { types::SMALL_STRONG.scaled(z) } else { types::SECTION.scaled(z) };
+    let placed = shell.canvas.rename.as_ref().and_then(|rn| {
+        let drew = shell.canvas.kind_cards.iter().find(|(node, _)| *node == rn.node)?.1;
+        let kind = shell.kinds.iter().find(|k| k.kind() == drew)?;
+        let store = shell.session.as_ref()?.doc();
+        kind.name_field(&paint, store, store.by_uuid(rn.node)?, rect, &rn.text, z)
+    });
+    let (field, font) = placed.unwrap_or_else(|| {
+        (Rect::from_min_size(rect.min + vec2(14.0, 28.0) * z, vec2((rect.width() - 28.0 * z).max(0.0), 30.0 * z)), types::SECTION.scaled(z))
+    });
     paint.rect_filled(field, 2.0 * z, p.accent_tint);
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.rename", "field", field);
     let Some(entity) = shell.canvas.rename.as_ref().map(|rn| rn.entity) else { return };

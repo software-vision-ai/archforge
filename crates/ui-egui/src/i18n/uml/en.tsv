@@ -66,6 +66,15 @@ str		Literals carry no skills	Literals carry no skills
 str		Built-in types carry no skills	Built-in types carry no skills
 str		Types keeps the built-in types, so it stays while it holds them	Types keeps the built-in types, so it stays while it holds them
 str		Generalization sets carry no skills	Generalization sets carry no skills
+str		every class	every class
+str		every interface	every interface
+str		every enumeration	every enumeration
+str		every data type	every data type
+str		every primitive type	every primitive type
+str		every association class	every association class
+str		every attribute	every attribute
+str		every operation	every operation
+str		every association	every association
 str		Add class	Add class
 str		Add interface	Add interface
 str		Add enumeration	Add enumeration
@@ -130,16 +139,20 @@ str		An enumeration holds at most {n} literals.	An enumeration holds at most {n}
 str		Several types are named {name}; pick one from the menu.	Several types are named {name}; pick one from the menu.
 str		Add parameter	Add parameter
 str		Attribute	Attribute
+str		Attributes	Attributes
+str		Operations	Operations
 str		Literal	Literal
 str		Attribute · model	Attribute · model
 str		Literal · model	Literal · model
 str		Attributes · {n}	Attributes · {n}
 str		Literals · {n}	Literals · {n}
 str		Owner	Owner
+str		Owner: {path}	Owner: {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · nested in {owner} · model, in every diagram
 str		Nested classifiers · {n}	Nested classifiers · {n}
 str		Add nested classifier	Add nested classifier
+plural		{n} nested classifier goes with it: {names}.	{n} nested classifier goes with it: {names}.|{n} nested classifiers go with it: {names}.
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.
 str		New	New
 str		New in {name}	New in {name}
@@ -206,6 +219,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} holds the profile {profile}, which is in use: {uses}. Remove those first.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.
 str		«{stereotype}» on {elements}	«{stereotype}» on {elements}
+plural		{n} stereotype application goes with it: {names}.	{n} stereotype application goes with it: {names}.|{n} stereotype applications go with it: {names}.
 plural		Show the use	Show the use|Show the {n} uses
 str		A stereotype is shown on its profile's diagram	A stereotype is shown on its profile's diagram
 str		Place stereotype	Place stereotype

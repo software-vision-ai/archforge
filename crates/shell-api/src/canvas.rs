@@ -513,10 +513,17 @@ pub struct State {
     pub skills: Vec<crate::skill_tab::Doc>,
     /// The cardinality texts the last frame drew, where a press grabs one.
     pub ends: Vec<EndText>,
-    /// The packages' tabs the last frame drew, which take a press as their cards do (AR-113).
-    pub package_tabs: Vec<PackageTab>,
-    /// The owning paths the last frame drew under the packages' cards (AR-565).
-    pub path_badges: Vec<PathBadge>,
+    /// The parts of cards their diagram's kind drew outside them in the last frame, which take a
+    /// press as their cards do.
+    pub card_parts: Vec<CardPart>,
+    /// The labels the last frame's diagram kind drew with its cards, which a screen reader and the
+    /// pointer read.
+    pub card_labels: Vec<CardLabel>,
+    /// The nodes whose cards a diagram kind drew itself in the last frame
+    /// ([`crate::kinds::DiagramKind::draw_card`]), each with that kind (its
+    /// [`crate::kinds::DiagramKind::kind`]): a name typed in place on one goes where that kind says
+    /// ([`crate::kinds::DiagramKind::name_field`]).
+    pub kind_cards: Vec<(Uuid, &'static str)>,
     /// The labels of the figures of no one node or line the last frame drew, which take a press
     /// (a UML generalization set's, AR-129).
     pub extra_labels: Vec<ExtraLabel>,
@@ -559,22 +566,26 @@ pub struct EndText {
     pub anchor: Pos2,
 }
 
-/// A package's tab as drawn (AR-113): where it was on screen, its node, and the whole name when
-/// the tab could show it only cut.
+/// A part of a card that its diagram's kind drew outside the card's rectangle and that takes a
+/// press as the card does ([`crate::kinds::DiagramKind::draw_card`]): where it was on screen, its
+/// node, and what the pointer on it shows, when anything (the whole of a text the part shows only
+/// cut). Of a card and a part over each other, the one drawn later takes the press.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PackageTab {
+pub struct CardPart {
     pub rect: Rect,
     pub node: Uuid,
-    pub cut: Option<String>,
+    pub hover: Option<String>,
 }
 
-/// A package's owning path as drawn under its card (AR-565): where it was on screen, its node, the
-/// text shown, its first owners folded into `…` when the card is too narrow, and the whole
-/// sentence, which its tooltip and a screen reader say.
+/// A label that a diagram's kind drew with a card ([`crate::kinds::DiagramKind::draw_card`]):
+/// where it was on screen, its node, its automation id, the text shown, which may be cut to the
+/// room it has, and the whole sentence, which a screen reader says as the label's value and the
+/// pointer on it shows while no gesture runs.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PathBadge {
+pub struct CardLabel {
     pub rect: Rect,
     pub node: Uuid,
+    pub id: String,
     pub shown: String,
     pub whole: String,
 }
@@ -609,8 +620,9 @@ impl Default for State {
             note_edit: None,
             skills: Vec::new(),
             ends: Vec::new(),
-            package_tabs: Vec::new(),
-            path_badges: Vec::new(),
+            card_parts: Vec::new(),
+            card_labels: Vec::new(),
+            kind_cards: Vec::new(),
             extra_labels: Vec::new(),
             qualified_ends: Vec::new(),
             views: HashMap::new(),
@@ -644,7 +656,8 @@ pub fn hex(c: ux::Colour) -> String {
 
 /// What one frame's drawing reads: the palette, the store, the view, the selection, the rectangles
 /// a gesture previews, the key status toggle and the node whose name is being typed. A diagram's
-/// kind draws its own figures from it ([`crate::kinds::DiagramKind::draw_extras`]).
+/// kind draws its own figures and cards from it ([`crate::kinds::DiagramKind::draw_extras`],
+/// [`crate::kinds::DiagramKind::draw_card`]).
 pub struct Drawing<'a> {
     pub p: &'a Palette,
     pub store: &'a Store,
@@ -660,6 +673,10 @@ pub struct Drawing<'a> {
     pub diagram: Obj,
     pub notations: &'a archforge_diagram::ProjectView,
     pub kind: Option<&'static dyn crate::kinds::DiagramKind>,
+    /// Every kind the shell knows: after the diagram's own, each is asked in turn to draw a card
+    /// itself ([`crate::kinds::DiagramKind::draw_card`]), so a card is drawn by the kind that
+    /// draws its element whatever diagram shows it.
+    pub kinds: &'a [&'static dyn crate::kinds::DiagramKind],
     /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
     /// and where each line's ends sit along their sides: worked out once a frame.
     pub boxes: Vec<(Obj, archforge_diagram::Rect)>,
@@ -676,14 +693,18 @@ pub struct Drawing<'a> {
     pub qualified_ends: std::cell::RefCell<Vec<(Pos2, Pos2)>>,
     /// A row typed in place on a card: its element, compartment and row (none for a new one).
     pub draft: Option<(Obj, usize, Option<usize>)>,
-    /// The name being typed in place, which a package's tab follows as it is typed.
+    /// The name being typed in place on the node `renaming`, as typed when the frame began, which
+    /// a card its kind draws may follow as it is typed.
     pub rename_text: Option<&'a str>,
-    /// The packages' tabs drawn this frame, for the next frame's press and hover.
-    pub tabs: std::cell::RefCell<Vec<PackageTab>>,
-    /// The packages' owning paths drawn this frame, for their tooltips and screen readers.
-    pub paths: std::cell::RefCell<Vec<PathBadge>>,
-    /// The diagram each element leads to, by the element: worked out once a frame, when a card
-    /// first shows one (a package's own diagram, AR-113).
+    /// The parts of cards their kind drew outside them this frame, for the next press and hover.
+    pub parts: std::cell::RefCell<Vec<CardPart>>,
+    /// The labels their kind drew with cards this frame, for their tooltips and screen readers.
+    pub labels: std::cell::RefCell<Vec<CardLabel>>,
+    /// The nodes whose cards a kind drew itself this frame, each with that kind, written down by
+    /// the canvas.
+    pub kind_cards: std::cell::RefCell<Vec<(Uuid, &'static str)>>,
+    /// The diagram each element leads to, by the element (a diagram of it, the first in the
+    /// store's order): worked out once a frame, when a card its kind draws first asks.
     pub led: std::cell::OnceCell<std::collections::HashMap<Obj, Obj>>,
     /// A label of the figures of no one node or line being dragged where no node holds it yet: the
     /// element it stands for and how far it moved.

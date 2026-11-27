@@ -156,9 +156,7 @@ fn the_list_cannot_open_behind_a_hold_or_a_dialog() {
         &crate::new_project::open,
         &crate::settings::open,
         &|s| s.explorer.delete = Some(Default::default()),
-        &|s| {
-            s.diagrams.new = Some(NewDiagram { step: Step::Kind, name: "".into(), kind: "", schema: None, menu: None, refused: None, opened: false })
-        },
+        &|s| s.diagrams.new = Some(NewDiagram { step: Step::Kind, name: "".into(), kind: "", owner: None, menu: None, refused: None, opened: false }),
         &|s| s.chat_panel.ask = Some(Ask { chat: archforge_mof::Uuid([0; 16]), row: 0, summary: "".into(), running: false, focused: false }),
     ];
     for block in blocks {

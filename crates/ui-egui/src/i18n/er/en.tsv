@@ -1,6 +1,7 @@
 # ER · English catalogue. Columns: kind, context, key, text (see i18n/mod.rs). Rows go beside related entries.
 str		Table	Table
 str		Column	Column
+str		Columns	Columns
 str		Schema · model	Schema · model
 str		Table · model, in every diagram	Table · model, in every diagram
 str		Column · model	Column · model
@@ -14,6 +15,9 @@ str		Subtype · {sub} is a {super}	Subtype · {sub} is a {super}
 str		Subtype	Subtype
 str		This subtype	This subtype
 str		On this subtype · {n}	On this subtype · {n}
+str		every table	every table
+str		every relationship	every relationship
+str		every column	every column
 str		Columns · {n}	Columns · {n}
 str		Keys · {n}	Keys · {n}
 str		Add a column	Add a column
@@ -87,6 +91,8 @@ str		Every {one} has at least one {many} only on the diagram: no database key ca
 str		{name} has no primary key	{name} has no primary key
 str		{name} has subtypes but no primary key to share	{name} has subtypes but no primary key to share
 str		{name} removed · {keys} went with it	{name} removed · {keys} went with it
+plural		{n} key goes with it.	{n} key goes with it.|{n} keys go with it.
+plural		{n} foreign key goes with it.	{n} foreign key goes with it.|{n} foreign keys go with it.
 str		Add column	Add column
 str		Edit column	Edit column
 str		Mapping table	Mapping table

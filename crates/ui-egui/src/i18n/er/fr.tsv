@@ -2,6 +2,7 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 str		Table	Table
 str		Column	Colonne
+str		Columns	Colonnes
 str		Schema · model	Schéma · modèle
 str		Table · model, in every diagram	Table · modèle, dans chaque diagramme
 str		Column · model	Colonne · modèle
@@ -15,6 +16,9 @@ str		Subtype · {sub} is a {super}	Sous-type · {sub} est un {super}
 str		Subtype	Sous-type
 str		This subtype	Ce sous-type
 str		On this subtype · {n}	Sur ce sous-type · {n}
+str		every table	chaque table
+str		every relationship	chaque relation
+str		every column	chaque colonne
 str		Columns · {n}	Colonnes · {n}
 str		Keys · {n}	Clés · {n}
 str		Add a column	Ajouter une colonne
@@ -88,6 +92,8 @@ str		Every {one} has at least one {many} only on the diagram: no database key ca
 str		{name} has no primary key	{name} n’a pas de clé primaire
 str		{name} has subtypes but no primary key to share	{name} a des sous-types mais aucune clé primaire à partager
 str		{name} removed · {keys} went with it	{name} supprimée · {keys} est parti avec
+plural		{n} key goes with it.	{n} clé part avec lui.|{n} clés partent avec lui.
+plural		{n} foreign key goes with it.	{n} clé étrangère part avec lui.|{n} clés étrangères partent avec lui.
 str		Add column	Ajouter une colonne
 str		Edit column	Modifier la colonne
 str		Mapping table	Table d’association

@@ -137,7 +137,7 @@ str		Sort recent projects by name	Letzte Projekte nach Name sortieren
 str		Sort recent projects by last opened	Letzte Projekte nach zuletzt geöffnet sortieren
 # Arbeitsbereich
 str		Find an element, view, or action	Element, Ansicht oder Aktion finden
-str		No schemas yet	Noch keine Schemas
+str		Nothing in the model yet	Noch nichts im Modell
 str		Add	Hinzufügen
 str		Schema	Schema
 str		Folder	Ordner
@@ -153,10 +153,6 @@ str		What it holds moves to {parent}.	Was es enthält, wandert nach {parent}.
 str		Remove from this diagram only	Nur aus diesem Diagramm entfernen
 plural		It disappears from {n} diagram.	Es verschwindet aus {n} Diagramm.|Es verschwindet aus {n} Diagrammen.
 plural		{n} relationship goes with it.	{n} Beziehung geht mit.|{n} Beziehungen gehen mit.
-plural		{n} key goes with it.	{n} Schlüssel geht mit.|{n} Schlüssel gehen mit.
-plural		{n} foreign key goes with it.	{n} Fremdschlüssel geht mit.|{n} Fremdschlüssel gehen mit.
-plural		{n} nested classifier goes with it: {names}.	{n} verschachtelter Klassifizierer geht mit: {names}.|{n} verschachtelte Klassifizierer gehen mit: {names}.
-plural		{n} stereotype application goes with it: {names}.	{n} Stereotyp-Anwendung geht mit: {names}.|{n} Stereotyp-Anwendungen gehen mit: {names}.
 str		Delete	Löschen
 str		Element · model	Element · Modell
 str		Skill · model	Skill · Modell
@@ -209,18 +205,6 @@ str		Remove	Entfernen
 str		Edit	Bearbeiten
 str		Apply	Übernehmen
 str		Inherited · {n}	Geerbt · {n}
-str		every table	jede Tabelle
-str		every relationship	jede Beziehung
-str		every column	jede Spalte
-str		every class	jede Klasse
-str		every interface	jede Schnittstelle
-str		every enumeration	jede Aufzählung
-str		every data type	jeder Datentyp
-str		every primitive type	jeder primitive Typ
-str		every association class	jede Assoziationsklasse
-str		every attribute	jedes Attribut
-str		every operation	jede Operation
-str		every association	jede Assoziation
 str		project	Projekt
 str		overridden below	weiter unten überschrieben
 str		Open the skill	Skill öffnen
@@ -617,8 +601,6 @@ str		Compared with the version of {when}	Verglichen mit der Version vom {when}
 str		There is no version to compare with yet.	Es gibt noch keine Version zum Vergleichen.
 str		This diagram couldn't be compared.	Dieses Diagramm konnte nicht verglichen werden.
 str		This element couldn't be compared.	Dieses Element konnte nicht verglichen werden.
-str		Attributes	Attribute
-str		Operations	Operationen
 str		Literals	Literale
 str		Members	Elemente
 str		Relationships	Beziehungen
@@ -856,7 +838,6 @@ str		Remove from this diagram	Aus diesem Diagramm entfernen
 str		Delete from the model…	Aus dem Modell löschen…
 str		Start	Anfang
 str		Identifying	Identifizierend
-str		Columns	Spalten
 str		{name} removed	{name} entfernt
 str		Undo	Rückgängig
 str		Redo	Wiederholen
@@ -1004,7 +985,7 @@ str		Relationships carry no skills	Beziehungen tragen keine Skills
 str		This element carries no skills	Dieses Element trägt keine Skills
 str		Diagram	Diagramm
 str		Default diagram	Standarddiagramm
-str		Diagram · of {schema}	Diagramm · von {schema}
+str		Diagram · of {owner}	Diagramm · von {owner}
 str		This diagram	Dieses Diagramm
 str		On this diagram · {n}	Auf diesem Diagramm · {n}
 str		Role	Rolle
@@ -1033,7 +1014,6 @@ str		Association class	Assoziationsklasse
 str		Classifier kinds	Klassifikatorarten
 str		Package	Paket
 # Klassenmerkmale in den Eigenschaften
-str		Owner: {path}	Besitzer: {path}
 str		Stereotype	Stereotyp
 str		{first} and {second}	{first} und {second}
 str		{first}, {second} and {third}	{first}, {second} und {third}

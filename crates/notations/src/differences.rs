@@ -100,14 +100,17 @@ pub struct ElementSides {
     pub lists: Arc<CardLists>,
 }
 
-/// One list of a side, in the order a view shows them (frames V1.1 and V3.3 of page 09).
+/// One list of a side. A card holds its lists in the order a view shows them (frames V1.1 and
+/// V3.3 of page 09), its own features first as its box lists them, then its other members, its
+/// relationships and its owner; the order of the kinds themselves is no card's. A list of features
+/// is named by the notation of their class, never here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ListKind {
-    Attributes,
-    /// A table's columns, which are an ER notation's attributes.
-    Columns,
-    Operations,
-    Literals,
+    /// Its own features of one class, by that class: a class's attributes or operations, an
+    /// enumeration's literals, a table's columns, or an enum type's literals, whose rows are the
+    /// enum type's own as its literals are no elements.
+    Features(ClassId),
+    /// Its other members, of any class.
     Members,
     /// The lines that join it to another element, whoever owns them.
     Relationships,
@@ -326,15 +329,15 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
         marked(&mut after_lists, &before_lists, ChangeKind::Added, &changed);
     }
     // A changed row is on both sides, so it counts once, on the before side.
-    let count = |kinds: &[ListKind]| {
+    let count = |counted: fn(ListKind) -> bool| {
         let marks = |of: &[CardList], only: Option<ChangeKind>| {
-            let rows = of.iter().filter(|l| kinds.contains(&l.kind)).flat_map(|l| &l.rows);
+            let rows = of.iter().filter(|l| counted(l.kind)).flat_map(|l| &l.rows);
             rows.filter(|r| r.change.is_some() && (only.is_none() || r.change == only)).count()
         };
         marks(&before_lists, None) + marks(&after_lists, Some(ChangeKind::Added))
     };
-    use ListKind::{Attributes, Columns, Literals, Members, Operations};
-    let (member_changes, relationship_changes) = (count(&[Attributes, Columns, Operations, Literals, Members]), count(&[ListKind::Relationships]));
+    let members = |kind| matches!(kind, ListKind::Features(_) | ListKind::Members);
+    let (member_changes, relationship_changes) = (count(members), count(|kind| kind == ListKind::Relationships));
     let related = related::connected_to(id, [("after", &new), ("before", &old)])?;
     let lists = Arc::new(CardLists { before: before_lists, after: after_lists, related, member_changes, relationship_changes });
     Ok(Some(ElementSides { id, before: card_before, after: card_after, fields: aligned(&was, &is, on_both), lists }))
@@ -498,7 +501,7 @@ fn read_side(side: &'static str, store: &Store, id: Uuid) -> Result<Option<(Elem
 /// card's owner is one row whatever the owner's id, so a move reads as a changed owner and a renamed owner doesn't.
 fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind, changed: &BTreeSet<Uuid>) {
     let key = |kind: ListKind, row: &ListRow| {
-        let text = (kind == ListKind::Literals && row.class == archforge_er::ENUM_TYPE).then(|| row.name.clone());
+        let text = (kind == ListKind::Features(archforge_er::ENUM_TYPE)).then(|| row.name.clone());
         (kind, if kind == ListKind::Ownership { None } else { Some(row.id) }, text)
     };
     let differ = |kind: ListKind, a: &ListRow, b: &ListRow| match (&a.name, &b.name) {
@@ -549,10 +552,32 @@ fn lists_of(store: &Store, obj: Obj) -> Result<Vec<CardList>, Invalid> {
     }
     if store.class_of(obj)? == archforge_er::ENUM_TYPE {
         let literal = |text: String| ListRow { name: Named::Said(text), ..plain_row(store, obj, archforge_er::ENUM_TYPE) };
-        lists.entry(ListKind::Literals).or_default().extend(archforge_er::rules::literals_of(store, obj).into_iter().map(literal));
+        lists
+            .entry(ListKind::Features(archforge_er::ENUM_TYPE))
+            .or_default()
+            .extend(archforge_er::rules::literals_of(store, obj).into_iter().map(literal));
     }
     lists.entry(ListKind::Ownership).or_default().push(owner_row(store, obj));
-    Ok(lists.into_iter().map(|(kind, rows)| CardList { kind, rows }).collect())
+    let mut lists: Vec<CardList> = lists.into_iter().map(|(kind, rows)| CardList { kind, rows }).collect();
+    lists.sort_by_key(|list| place(list.kind));
+    Ok(lists)
+}
+
+/// The classes whose members a card lists as its features, each class in a list of its own, in
+/// the order a view shows those lists: attributes, columns, operations, then literals, an
+/// enumeration's and an enum type's (frames V1.1 and V3.3 of page 09).
+const FEATURES: [ClassId; 5] =
+    [archforge_uml::PROPERTY, archforge_er::ATTRIBUTE, archforge_uml::OPERATION, archforge_uml::ENUMERATION_LITERAL, archforge_er::ENUM_TYPE];
+
+/// Where a list of `kind` stands on a card: its features in the order of [`FEATURES`], then its
+/// other members, its relationships and its owner.
+fn place(kind: ListKind) -> usize {
+    match kind {
+        ListKind::Features(class) => FEATURES.iter().position(|c| *c == class).unwrap_or(FEATURES.len()),
+        ListKind::Members => FEATURES.len(),
+        ListKind::Relationships => FEATURES.len() + 1,
+        ListKind::Ownership => FEATURES.len() + 2,
+    }
 }
 
 /// A row for `obj` naming it, unmarked.
@@ -623,15 +648,11 @@ fn owner_row(store: &Store, obj: Obj) -> ListRow {
     }
 }
 
-/// The list a member of `class` belongs to.
+/// The list a member of `class` belongs to: its features of that class for an attribute, a
+/// column, an operation or an enumeration literal, its other members for anything else. An enum
+/// type is a feature only of itself, by its literals: one a schema holds is the schema's member.
 fn kind_of(class: ClassId) -> ListKind {
-    match class {
-        c if c == archforge_uml::PROPERTY => ListKind::Attributes,
-        c if c == archforge_er::ATTRIBUTE => ListKind::Columns,
-        c if c == archforge_uml::OPERATION => ListKind::Operations,
-        c if c == archforge_uml::ENUMERATION_LITERAL => ListKind::Literals,
-        _ => ListKind::Members,
-    }
+    if class != archforge_er::ENUM_TYPE && FEATURES.contains(&class) { ListKind::Features(class) } else { ListKind::Members }
 }
 
 /// What a member's row writes: a feature as its element box lists it, a column with its type, anything else what [`named`] gives.

@@ -67,6 +67,15 @@ str		Literals carry no skills	Literale tragen keine Skills
 str		Built-in types carry no skills	Eingebaute Typen tragen keine Skills
 str		Types keeps the built-in types, so it stays while it holds them	Types enthält die eingebauten Typen und bleibt daher, solange es sie enthält
 str		Generalization sets carry no skills	Generalisierungsmengen tragen keine Skills
+str		every class	jede Klasse
+str		every interface	jede Schnittstelle
+str		every enumeration	jede Aufzählung
+str		every data type	jeder Datentyp
+str		every primitive type	jeder primitive Typ
+str		every association class	jede Assoziationsklasse
+str		every attribute	jedes Attribut
+str		every operation	jede Operation
+str		every association	jede Assoziation
 str		Add class	Klasse hinzufügen
 str		Add interface	Schnittstelle hinzufügen
 str		Add enumeration	Aufzählung hinzufügen
@@ -131,16 +140,20 @@ str		An enumeration holds at most {n} literals.	Eine Aufzählung enthält höchs
 str		Several types are named {name}; pick one from the menu.	Mehrere Typen heißen {name}; wählen Sie einen aus dem Menü.
 str		Add parameter	Parameter hinzufügen
 str		Attribute	Attribut
+str		Attributes	Attribute
+str		Operations	Operationen
 str		Literal	Literal
 str		Attribute · model	Attribut · Modell
 str		Literal · model	Literal · Modell
 str		Attributes · {n}	Attribute · {n}
 str		Literals · {n}	Literale · {n}
 str		Owner	Besitzer
+str		Owner: {path}	Besitzer: {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Der Besitzer ist ein Paket oder ein Klassifizierer. Ein Wechsel behält die Identität, die Member, die Beziehungen von {name} und jeden Typ, der es verwendet.
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · verschachtelt in {owner} · Modell, in jedem Diagramm
 str		Nested classifiers · {n}	Verschachtelte Klassifizierer · {n}
 str		Add nested classifier	Verschachtelten Klassifizierer hinzufügen
+plural		{n} nested classifier goes with it: {names}.	{n} verschachtelter Klassifizierer geht mit: {names}.|{n} verschachtelte Klassifizierer gehen mit: {names}.
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	Noch keine. Hier oder über Modelle ▸ Neu in {name} hinzufügen; beide bieten dieselben Arten.
 str		New	Neu
 str		New in {name}	Neu in {name}
@@ -207,6 +220,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} enthält das Profil {profile}, das verwendet wird: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» auf {metaclass} wird verwendet: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {elements}	«{stereotype}» auf {elements}
+plural		{n} stereotype application goes with it: {names}.	{n} Stereotyp-Anwendung geht mit: {names}.|{n} Stereotyp-Anwendungen gehen mit: {names}.
 plural		Show the use	Die Verwendung zeigen|Die {n} Verwendungen zeigen
 str		A stereotype is shown on its profile's diagram	Ein Stereotyp erscheint im Diagramm seines Profils
 str		Place stereotype	Stereotyp platzieren

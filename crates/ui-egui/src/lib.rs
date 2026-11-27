@@ -68,6 +68,8 @@ pub mod save_version;
 pub mod settings;
 mod settings_agents;
 pub mod skill_tab;
+#[cfg(any(test, feature = "snapshot"))]
+pub mod snapshot;
 pub mod state;
 pub mod subtypes;
 pub mod support;
@@ -80,6 +82,7 @@ mod uml_constraints;
 mod uml_inline;
 mod uml_nary;
 mod uml_nesting;
+mod uml_package;
 mod uml_panel;
 mod uml_profiles;
 mod uml_qualifiers;
@@ -102,7 +105,6 @@ pub mod workspace;
 /// The automation registry, from the shell's interfaces, under the path the shell's code names it by.
 pub use archforge_shell_api::widgets;
 pub use fonts::{FontEntry, FontSource};
-pub use notation_ui::open_repair;
 pub use state::UiState;
 
 /// Host functions the shell may call; each is optional, and a missing one degrades rather than
@@ -245,6 +247,10 @@ impl From<String> for VersionReadError {
     }
 }
 
+/// What an opening does to a model, as a shell hands it to the host for a restore
+/// ([`Shell::open_repair`]).
+pub type Repair = Box<dyn Fn(&mut archforge_mof::Store) + Send>;
+
 /// A version's model, or why it could not be read.
 pub type VersionRead = Result<std::sync::Arc<archforge_mof::rows::Rows>, VersionReadError>;
 
@@ -344,14 +350,7 @@ pub trait ProjectHost: Send + Sync {
     /// which names the new version, and when the restore was asked for, which names the version
     /// unsaved work is kept as first, both as the list says them. `repair` is what an opening does
     /// to a model. Its callbacks only hand the work over.
-    fn restore_job(
-        &self,
-        _project: &std::path::Path,
-        _commit: String,
-        _dates: (String, String),
-        _by: SavedBy,
-        _repair: fn(&mut archforge_mof::Store),
-    ) -> replace::Job {
+    fn restore_job(&self, _project: &std::path::Path, _commit: String, _dates: (String, String), _by: SavedBy, _repair: Repair) -> replace::Job {
         let (failed, answer) = std::sync::mpsc::channel();
         let _ = failed.send(Err(replace::JobFailure::Failed("this host keeps no versions".into())));
         let (unread, read) = std::sync::mpsc::channel();
@@ -1031,15 +1030,16 @@ impl Shell {
     /// A shell over the host's `services`, on Home, with the notations it knows
     /// ([`notation_ui::UIS`]) and their catalogues and its own registered.
     pub fn new(services: Services) -> Self {
+        let notation_uis = notation_ui::UIS;
         // The catalogues go in with the notations the shell knows, before anything is said.
-        i18n::registered();
+        i18n::register_notations(notation_uis);
         Self {
             services,
             state: UiState::default(),
             frames: 0,
             registry: widgets::Registry::default(),
             kinds: kinds::KINDS,
-            notation_uis: notation_ui::UIS,
+            notation_uis,
             fonts: fonts::FontState::default(),
             #[cfg(test)]
             font_notices: Vec::new(),
@@ -1090,7 +1090,7 @@ impl Shell {
             versions: versions::State::default(),
             canvas: canvas::State::default(),
             panels: panels::State::default(),
-            notation_states: notation_ui::NotationStates::new(notation_ui::UIS),
+            notation_states: notation_ui::NotationStates::new(notation_uis),
             markdown: Default::default(),
             problems: Default::default(),
             quit_requested: false,
@@ -1578,6 +1578,13 @@ impl Shell {
         path.parent().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned())
     }
 
+    /// What an opening does to a model with the shell's notations
+    /// ([`notation_ui::open_repair`]), for the threads that open, restore and compare models and
+    /// for the host's restore.
+    pub fn open_repair(&self) -> impl Fn(&mut archforge_mof::Store) + Copy + Send + use<> {
+        notation_ui::open_repair(self.notation_uis)
+    }
+
     /// The session of the open project, made once per project from its notations, with the
     /// host's ids. Without an id source, or when the engine refuses, the reason is kept for the
     /// status bar and said once in the log.
@@ -1596,7 +1603,7 @@ impl Shell {
                 let source = source.clone();
                 let ids = Box::new(move || source());
                 match rows {
-                    Some(rows) => archforge_notations::session_from_rows_repaired(rows, ids, open_repair).map(|mut s| {
+                    Some(rows) => archforge_notations::session_from_rows_repaired(rows, ids, self.open_repair()).map(|mut s| {
                         if project.unsaved {
                             s.mark_unsaved();
                         }

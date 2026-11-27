@@ -78,7 +78,15 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   (`panels::refusal`, `said`, `a_kind`, `engine_said::disabled`, in `crates/shell-api/src/`) and
   Chat's counts of the elements a tool row names (`chat_words::tool_words`, by
   `NotationUi::chat_kind` and `chat_count`) ask the notations they are handed: pass
-  `cx.notation_uis`, or the shell's `notation_uis`.
+  `cx.notation_uis`, or the shell's `notation_uis`. So do the hooks that say a refusal, a problem
+  or what goes with a removal (`NotationUi::said`, `problems`, `remove_refusal`, `consequences`),
+  for the reasons and kinds they name inside their sentences; a model's kind words
+  (`model_words::kind_label`); and what an opening does to a model (`Shell::open_repair`, which
+  the comparisons' threads and the host's restore take). Nothing reads the app's lists
+  (`notation_ui::UIS`, `kinds::KINDS`) but `Shell::new`, which gives them to the shell, and tests. The delete dialog says what goes with a
+  removal as the element's notation counts and words it (`NotationUi::consequences`, one finished
+  sentence each, carried in `explorer::Delete`); the shell adds only the diagrams it disappears
+  from and what happens to what it holds, and asks only when there is something to say.
 - A control whose screen does not exist yet says "Not available yet" on hover. A canvas tool that
   is not built is left out of the toolbar instead.
 - The interface never touches the file system: what it needs from the host comes through
@@ -98,8 +106,10 @@ after every visible change, in both appearances, beside the design.
   table goes through a function the test calls, as `home::start_texts` does.
 - The catalogues are `crates/ui-egui/src/i18n/<code>.tsv`, the shell's, and one table per
   notation, `crates/ui-egui/src/i18n/er/<code>.tsv` and `crates/ui-egui/src/i18n/uml/<code>.tsv`,
-  which the notation hands over (`NotationUi::catalogues`) and the shell registers with its own
-  as it sets up its notations (`Shell::new`), so nothing is looked up before them. A row only one notation's screens name goes in that notation's table;
+  which the notation hands over (`NotationUi::catalogues`). The shell's own is registered before
+  the first lookup; a shell registers those of the notations it is given as it sets them up
+  (`Shell::new`, `i18n::register_notations`), so nothing a notation says is looked up before them.
+  A test that says a notation's words without a shell makes one first, as the app does. A row only one notation's screens name goes in that notation's table;
   a row the shell names, or both notations, goes in the shell's. Each is keyed by the English
   text, four tab-separated columns: kind, context, key, text. All seven languages are complete,
   so a new string needs its row in every language of its table. Rows go beside related entries,

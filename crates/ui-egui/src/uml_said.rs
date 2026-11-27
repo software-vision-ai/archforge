@@ -10,6 +10,7 @@
 use archforge_engine::{BindingFault, Reason};
 
 use crate::i18n::{fmt, tr, tr_ctx, trn};
+use crate::notation_ui::NotationUi;
 
 /// A kind of UML element as a refusal names it, with its article where the language has one, as
 /// `archforge_uml`'s commands alone type it; none for another kind.
@@ -38,14 +39,15 @@ pub(crate) fn a_kind(kind: &str) -> Option<String> {
 }
 
 /// A refusal only UML's commands give, or the diagrams' commands give of a package's default
-/// diagram, in the user's words; none for another reason or for a kind of element the catalogues
-/// don't name, which the engine's sentence then says.
-pub(crate) fn said(reason: &Reason) -> Option<String> {
+/// diagram, in the user's words, a kind of element it names as the notations of `uis` name it; none
+/// for another reason or for a kind of element the catalogues don't name, which the engine's
+/// sentence then says.
+pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
     Some(match reason {
         Reason::DependsOnItself { kind } => {
             let template = tr("{what} cannot depend on itself.");
-            let what = crate::panels::a_kind(crate::notation_ui::UIS, kind)?;
+            let what = crate::panels::a_kind(uis, kind)?;
             // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
             let what = if template.starts_with("{what}") {
                 what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect()
@@ -55,7 +57,7 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
             fmt(&template, &[("what", &what)])
         }
         Reason::PackageIntoItself => tr("A package cannot go into itself or a package it holds."),
-        Reason::InUse(used) => crate::uml_profiles::in_use(used),
+        Reason::InUse(used) => crate::uml_profiles::in_use(uis, used),
         Reason::UmlOwn { metaclass: None } => tr("The UML library holds the metaclasses that stereotypes extend. It never changes."),
         Reason::UmlOwn { metaclass: Some(name) } => {
             fmt(&tr("{name} is a UML metaclass, kept in the UML library. It never changes."), &[("name", name)])
@@ -70,7 +72,7 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         }
         Reason::HoldsBuiltInName { kind, name } => fmt(
             &tr("The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first."),
-            &[("what", &crate::panels::a_kind(crate::notation_ui::UIS, kind)?), ("name", name), ("types", types)],
+            &[("what", &crate::panels::a_kind(uis, kind)?), ("name", name), ("types", types)],
         ),
         Reason::InvalidBinding(BindingFault::Missing) => {
             tr("The package has class diagrams, but none is its default. Choose one of them as its default diagram.")
@@ -124,9 +126,9 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         ),
         other => {
             return relationship_said(other)
-                .or_else(|| template_said(other))
+                .or_else(|| template_said(uis, other))
                 .or_else(|| set_and_end_said(other))
-                .or_else(|| profile_said(other))
+                .or_else(|| profile_said(uis, other))
                 .or_else(|| constraint_said(other))
                 .or_else(|| target_said(other));
         }
@@ -208,8 +210,9 @@ fn target_said(reason: &Reason) -> Option<String> {
     })
 }
 
-/// A profile's or a stereotype's rule broken; none for a reason or a kind the catalogues don't say.
-fn profile_said(reason: &Reason) -> Option<String> {
+/// A profile's or a stereotype's rule broken, an element it names without a name by its kind as the
+/// notations of `uis` name it; none for a reason or a kind the catalogues don't say.
+fn profile_said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<String> {
     let offered = || archforge_uml::profiles::METACLASSES.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ");
     Some(match reason {
         Reason::ProfileApplied { package, profile } => {
@@ -238,7 +241,7 @@ fn profile_said(reason: &Reason) -> Option<String> {
             let set = trn("{name} has values on {n} element. Remove those first.", "{name} has values on {n} elements. Remove those first.", n);
             fmt(&set, &[("name", name)])
         }
-        other => return crate::uml_stereotypes::said(other),
+        other => return crate::uml_stereotypes::said(uis, other),
     })
 }
 
@@ -293,9 +296,9 @@ fn relationship_said(reason: &Reason) -> Option<String> {
     })
 }
 
-/// A template rule broken, in the words the template and binding editors say it with; none for a
-/// reason or a kind the catalogues don't say.
-fn template_said(reason: &Reason) -> Option<String> {
+/// A template rule broken, in the words the template and binding editors say it with, a kind of
+/// element as the notations of `uis` name it; none for a reason or a kind the catalogues don't say.
+fn template_said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<String> {
     use archforge_uml::templates::Kind;
     let kind = |noun: &str| Kind::ALL.into_iter().find(|k| k.noun() == noun);
     Some(match reason {
@@ -328,7 +331,7 @@ fn template_said(reason: &Reason) -> Option<String> {
         ),
         Reason::BuiltInTaken { kind, name } => fmt(
             &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type."),
-            &[("what", &crate::panels::a_kind(crate::notation_ui::UIS, kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
+            &[("what", &crate::panels::a_kind(uis, kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
         ),
         _ => return None,
     })

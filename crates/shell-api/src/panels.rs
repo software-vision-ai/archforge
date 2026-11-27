@@ -175,7 +175,7 @@ pub fn said(uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) 
             fmt(&tr("{value} is not a literal of {enumeration}."), &[("value", value), ("enumeration", en)])
         }
         other => {
-            return diagram_said(other).or_else(|| crate::engine_said::reason(other)).or_else(|| uis.iter().find_map(|ui| ui.said(other)));
+            return diagram_said(other).or_else(|| crate::engine_said::reason(other)).or_else(|| uis.iter().find_map(|ui| ui.said(uis, other)));
         }
     })
 }

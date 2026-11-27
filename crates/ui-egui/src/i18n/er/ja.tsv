@@ -2,6 +2,7 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 str		Table	テーブル
 str		Column	列
+str		Columns	列
 str		Schema · model	スキーマ · モデル
 str		Table · model, in every diagram	テーブル · モデル、すべての図に
 str		Column · model	列 · モデル
@@ -15,6 +16,9 @@ str		Subtype · {sub} is a {super}	サブタイプ · {sub} は {super} の一�
 str		Subtype	サブタイプ
 str		This subtype	このサブタイプ
 str		On this subtype · {n}	このサブタイプに · {n}
+str		every table	すべてのテーブル
+str		every relationship	すべてのリレーションシップ
+str		every column	すべての列
 str		Columns · {n}	列 · {n}
 str		Keys · {n}	キー · {n}
 str		Add a column	列を追加
@@ -88,6 +92,8 @@ str		Every {one} has at least one {many} only on the diagram: no database key ca
 str		{name} has no primary key	{name} に主キーがありません
 str		{name} has subtypes but no primary key to share	{name} にはサブタイプがありますが、共有する主キーがありません
 str		{name} removed · {keys} went with it	{name} を削除しました · {keys} も削除されました
+plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
+plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
 str		Add column	列を追加
 str		Edit column	列を編集
 str		Mapping table	対応テーブル

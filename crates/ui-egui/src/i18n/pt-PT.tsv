@@ -137,7 +137,7 @@ str		Sort recent projects by name	Ordenar os projetos recentes por nome
 str		Sort recent projects by last opened	Ordenar os projetos recentes pela última abertura
 # Área de trabalho
 str		Find an element, view, or action	Encontrar um elemento, vista ou ação
-str		No schemas yet	Ainda sem esquemas
+str		Nothing in the model yet	Ainda nada no modelo
 str		Add	Adicionar
 str		Schema	Esquema
 str		Folder	Pasta
@@ -153,10 +153,6 @@ str		What it holds moves to {parent}.	O que contém passa para {parent}.
 str		Remove from this diagram only	Remover apenas deste diagrama
 plural		It disappears from {n} diagram.	Desaparece de {n} diagrama.|Desaparece de {n} diagramas.
 plural		{n} relationship goes with it.	{n} relação vai com ele.|{n} relações vão com ele.
-plural		{n} key goes with it.	{n} chave vai com ele.|{n} chaves vão com ele.
-plural		{n} foreign key goes with it.	{n} chave estrangeira vai com ele.|{n} chaves estrangeiras vão com ele.
-plural		{n} nested classifier goes with it: {names}.	{n} classificador aninhado vai com ele: {names}.|{n} classificadores aninhados vão com ele: {names}.
-plural		{n} stereotype application goes with it: {names}.	{n} aplicação de estereótipo vai com ele: {names}.|{n} aplicações de estereótipo vão com ele: {names}.
 str		Delete	Eliminar
 str		Element · model	Elemento · modelo
 str		Skill · model	Competência · modelo
@@ -209,18 +205,6 @@ str		Remove	Remover
 str		Edit	Editar
 str		Apply	Aplicar
 str		Inherited · {n}	Herdadas · {n}
-str		every table	todas as tabelas
-str		every relationship	todas as relações
-str		every column	todas as colunas
-str		every class	todas as classes
-str		every interface	todas as interfaces
-str		every enumeration	todas as enumerações
-str		every data type	todos os tipos de dados
-str		every primitive type	todos os tipos primitivos
-str		every association class	todas as classes de associação
-str		every attribute	todos os atributos
-str		every operation	todas as operações
-str		every association	todas as associações
 str		project	projeto
 str		overridden below	substituída abaixo
 str		Open the skill	Abrir a competência
@@ -617,8 +601,6 @@ str		Compared with the version of {when}	Comparado com a versão de {when}
 str		There is no version to compare with yet.	Ainda não há nenhuma versão com que comparar.
 str		This diagram couldn't be compared.	Não foi possível comparar este diagrama.
 str		This element couldn't be compared.	Não foi possível comparar este elemento.
-str		Attributes	Atributos
-str		Operations	Operações
 str		Literals	Literais
 str		Members	Membros
 str		Relationships	Relações
@@ -856,7 +838,6 @@ str		Remove from this diagram	Remover deste diagrama
 str		Delete from the model…	Eliminar do modelo…
 str		Start	Início
 str		Identifying	Identificadora
-str		Columns	Colunas
 str		{name} removed	{name} removida
 str		Undo	Anular
 str		Redo	Refazer
@@ -1004,7 +985,7 @@ str		Relationships carry no skills	As relações não têm competências
 str		This element carries no skills	Este elemento não tem competências
 str		Diagram	Diagrama
 str		Default diagram	Diagrama predefinido
-str		Diagram · of {schema}	Diagrama · de {schema}
+str		Diagram · of {owner}	Diagrama · de {owner}
 str		This diagram	Este diagrama
 str		On this diagram · {n}	Neste diagrama · {n}
 str		Role	Papel
@@ -1033,7 +1014,6 @@ str		Association class	Classe de associação
 str		Classifier kinds	Tipos de classificador
 str		Package	Pacote
 # Membros de classe nas Propriedades
-str		Owner: {path}	Proprietário: {path}
 str		Stereotype	Estereótipo
 str		{first} and {second}	{first} e {second}
 str		{first}, {second} and {third}	{first}, {second} e {third}

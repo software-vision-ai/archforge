@@ -67,6 +67,15 @@ str		Literals carry no skills	リテラルはスキルを持ちません
 str		Built-in types carry no skills	組み込み型はスキルを持ちません
 str		Types keeps the built-in types, so it stays while it holds them	Types は組み込み型を保持しているため、保持している間は残ります
 str		Generalization sets carry no skills	汎化セットはスキルを持ちません
+str		every class	すべてのクラス
+str		every interface	すべてのインターフェース
+str		every enumeration	すべての列挙
+str		every data type	すべてのデータ型
+str		every primitive type	すべてのプリミティブ型
+str		every association class	すべての関連クラス
+str		every attribute	すべての属性
+str		every operation	すべての操作
+str		every association	すべての関連
 str		Add class	クラスを追加
 str		Add interface	インターフェースを追加
 str		Add enumeration	列挙を追加
@@ -131,16 +140,20 @@ str		An enumeration holds at most {n} literals.	列挙が持てるリテラル�
 str		Several types are named {name}; pick one from the menu.	{name} という名前の型が複数あります。メニューから 1 つ選んでください。
 str		Add parameter	パラメーターを追加
 str		Attribute	属性
+str		Attributes	属性
+str		Operations	操作
 str		Literal	リテラル
 str		Attribute · model	属性 · モデル
 str		Literal · model	リテラル · モデル
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	リテラル · {n}
 str		Owner	所有者
+str		Owner: {path}	所有者: {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者はパッケージまたは分類子です。変更しても {name} の同一性、メンバー、リレーションシップ、それを使うすべての型は保たれます。
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · {owner} の中に入れ子 · モデル、すべての図で
 str		Nested classifiers · {n}	入れ子の分類子 · {n}
 str		Add nested classifier	入れ子の分類子を追加
+plural		{n} nested classifier goes with it: {names}.	{n} 個の入れ子の分類子も一緒に削除されます：{names}。
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	まだありません。ここか、モデル ▸ {name} の中に新規作成から追加します。どちらも同じ種類を提供します。
 str		New	新規
 str		New in {name}	{name} に新規
@@ -207,6 +220,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} には使われているプロファイル {profile} があります: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {elements}	{elements} に «{stereotype}»
+plural		{n} stereotype application goes with it: {names}.	{n} 件のステレオタイプの適用も一緒に削除されます：{names}。
 plural		Show the use	{n} 件の使用箇所を表示
 str		A stereotype is shown on its profile's diagram	ステレオタイプはそのプロファイルの図に表示されます
 str		Place stereotype	ステレオタイプを配置

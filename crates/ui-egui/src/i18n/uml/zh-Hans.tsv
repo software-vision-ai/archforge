@@ -67,6 +67,15 @@ str		Literals carry no skills	字面量不带技能
 str		Built-in types carry no skills	内置类型不带技能
 str		Types keeps the built-in types, so it stays while it holds them	Types 存放内置类型，因此在存放它们期间会保留
 str		Generalization sets carry no skills	泛化集不带技能
+str		every class	所有类
+str		every interface	所有接口
+str		every enumeration	所有枚举
+str		every data type	所有数据类型
+str		every primitive type	所有基本类型
+str		every association class	所有关联类
+str		every attribute	所有属性
+str		every operation	所有操作
+str		every association	所有关联
 str		Add class	添加类
 str		Add interface	添加接口
 str		Add enumeration	添加枚举
@@ -131,16 +140,20 @@ str		An enumeration holds at most {n} literals.	一个枚举最多包含 {n} 个
 str		Several types are named {name}; pick one from the menu.	有多个名为 {name} 的类型；请从菜单中选择一个。
 str		Add parameter	添加参数
 str		Attribute	属性
+str		Attributes	属性
+str		Operations	操作
 str		Literal	字面量
 str		Attribute · model	属性 · 模型
 str		Literal · model	字面量 · 模型
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	字面量 · {n}
 str		Owner	所有者
+str		Owner: {path}	所有者：{path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者是包或分类器。更改它会保留 {name} 的标识、成员、关系以及使用它的每个类型。
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · 嵌套于 {owner} · 模型，所有图中
 str		Nested classifiers · {n}	嵌套分类器 · {n}
 str		Add nested classifier	添加嵌套分类器
+plural		{n} nested classifier goes with it: {names}.	{n} 个嵌套分类器将一并删除：{names}。
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	暂无。可在此处或从“模型 ▸ 在 {name} 中新建”添加；两者提供相同的种类。
 str		New	新建
 str		New in {name}	在 {name} 中新建
@@ -207,6 +220,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} 包含正在使用的配置文件 {profile}：{uses}。请先移除这些使用。
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} 上的 «{stereotype}» 正在使用：{uses}。请先移除这些使用。
 str		«{stereotype}» on {elements}	{elements} 上的 «{stereotype}»
+plural		{n} stereotype application goes with it: {names}.	{n} 个构造型应用将一并删除：{names}。
 plural		Show the use	显示 {n} 处使用
 str		A stereotype is shown on its profile's diagram	构造型显示在其配置文件的图中
 str		Place stereotype	放置构造型

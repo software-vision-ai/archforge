@@ -136,7 +136,7 @@ str		Sort recent projects by name	Sort recent projects by name
 str		Sort recent projects by last opened	Sort recent projects by last opened
 # Workspace
 str		Find an element, view, or action	Find an element, view, or action
-str		No schemas yet	No schemas yet
+str		Nothing in the model yet	Nothing in the model yet
 str		Add	Add
 str		Schema	Schema
 str		Folder	Folder
@@ -152,10 +152,6 @@ str		What it holds moves to {parent}.	What it holds moves to {parent}.
 str		Remove from this diagram only	Remove from this diagram only
 plural		It disappears from {n} diagram.	It disappears from {n} diagram.|It disappears from {n} diagrams.
 plural		{n} relationship goes with it.	{n} relationship goes with it.|{n} relationships go with it.
-plural		{n} key goes with it.	{n} key goes with it.|{n} keys go with it.
-plural		{n} foreign key goes with it.	{n} foreign key goes with it.|{n} foreign keys go with it.
-plural		{n} nested classifier goes with it: {names}.	{n} nested classifier goes with it: {names}.|{n} nested classifiers go with it: {names}.
-plural		{n} stereotype application goes with it: {names}.	{n} stereotype application goes with it: {names}.|{n} stereotype applications go with it: {names}.
 str		Delete	Delete
 str		Element · model	Element · model
 str		Skill · model	Skill · model
@@ -208,18 +204,6 @@ str		Remove	Remove
 str		Edit	Edit
 str		Apply	Apply
 str		Inherited · {n}	Inherited · {n}
-str		every table	every table
-str		every relationship	every relationship
-str		every column	every column
-str		every class	every class
-str		every interface	every interface
-str		every enumeration	every enumeration
-str		every data type	every data type
-str		every primitive type	every primitive type
-str		every association class	every association class
-str		every attribute	every attribute
-str		every operation	every operation
-str		every association	every association
 str		project	project
 str		overridden below	overridden below
 str		Open the skill	Open the skill
@@ -616,8 +600,6 @@ str		Compared with the version of {when}	Compared with the version of {when}
 str		There is no version to compare with yet.	There is no version to compare with yet.
 str		This diagram couldn't be compared.	This diagram couldn't be compared.
 str		This element couldn't be compared.	This element couldn't be compared.
-str		Attributes	Attributes
-str		Operations	Operations
 str		Literals	Literals
 str		Members	Members
 str		Relationships	Relationships
@@ -855,7 +837,6 @@ str		Remove from this diagram	Remove from this diagram
 str		Delete from the model…	Delete from the model…
 str		Start	Start
 str		Identifying	Identifying
-str		Columns	Columns
 str		{name} removed	{name} removed
 str		Undo	Undo
 str		Redo	Redo
@@ -1003,7 +984,7 @@ str		Relationships carry no skills	Relationships carry no skills
 str		This element carries no skills	This element carries no skills
 str		Diagram	Diagram
 str		Default diagram	Default diagram
-str		Diagram · of {schema}	Diagram · of {schema}
+str		Diagram · of {owner}	Diagram · of {owner}
 str		This diagram	This diagram
 str		On this diagram · {n}	On this diagram · {n}
 str		Role	Role
@@ -1032,7 +1013,6 @@ str		Association class	Association class
 str		Classifier kinds	Classifier kinds
 str		Package	Package
 # Class members in Properties
-str		Owner: {path}	Owner: {path}
 str		Stereotype	Stereotype
 str		{first} and {second}	{first} and {second}
 str		{first}, {second} and {third}	{first}, {second} and {third}

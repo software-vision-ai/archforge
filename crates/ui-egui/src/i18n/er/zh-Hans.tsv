@@ -2,6 +2,7 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 str		Table	表
 str		Column	列
+str		Columns	列
 str		Schema · model	架构 · 模型
 str		Table · model, in every diagram	表 · 模型，出现在每张图中
 str		Column · model	列 · 模型
@@ -15,6 +16,9 @@ str		Subtype · {sub} is a {super}	子类型 · {sub} 是一种 {super}
 str		Subtype	子类型
 str		This subtype	此子类型
 str		On this subtype · {n}	此子类型上 · {n}
+str		every table	所有表
+str		every relationship	所有关系
+str		every column	所有列
 str		Columns · {n}	列 · {n}
 str		Keys · {n}	键 · {n}
 str		Add a column	添加一列
@@ -88,6 +92,8 @@ str		Every {one} has at least one {many} only on the diagram: no database key ca
 str		{name} has no primary key	{name} 没有主键
 str		{name} has subtypes but no primary key to share	{name} 有子类型，但没有可共享的主键
 str		{name} removed · {keys} went with it	已删除 {name} · {keys} 随之删除
+plural		{n} key goes with it.	{n} 个键将一并删除。
+plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
 str		Add column	添加列
 str		Edit column	编辑列
 str		Mapping table	映射表

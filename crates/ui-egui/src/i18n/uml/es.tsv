@@ -67,6 +67,15 @@ str		Literals carry no skills	Los literales no llevan habilidades
 str		Built-in types carry no skills	Los tipos integrados no llevan habilidades
 str		Types keeps the built-in types, so it stays while it holds them	Types guarda los tipos integrados, así que se queda mientras los contenga
 str		Generalization sets carry no skills	Los conjuntos de generalización no llevan habilidades
+str		every class	todas las clases
+str		every interface	todas las interfaces
+str		every enumeration	todas las enumeraciones
+str		every data type	todos los tipos de datos
+str		every primitive type	todos los tipos primitivos
+str		every association class	todas las clases de asociación
+str		every attribute	todos los atributos
+str		every operation	todas las operaciones
+str		every association	todas las asociaciones
 str		Add class	Añadir clase
 str		Add interface	Añadir interfaz
 str		Add enumeration	Añadir enumeración
@@ -131,16 +140,20 @@ str		An enumeration holds at most {n} literals.	Una enumeración contiene como m
 str		Several types are named {name}; pick one from the menu.	Hay varios tipos llamados {name}; elige uno del menú.
 str		Add parameter	Añadir parámetro
 str		Attribute	Atributo
+str		Attributes	Atributos
+str		Operations	Operaciones
 str		Literal	Literal
 str		Attribute · model	Atributo · modelo
 str		Literal · model	Literal · modelo
 str		Attributes · {n}	Atributos · {n}
 str		Literals · {n}	Literales · {n}
 str		Owner	Propietario
+str		Owner: {path}	Propietario: {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	El propietario es un paquete o un clasificador. Cambiarlo conserva la identidad, los miembros y las relaciones de {name} y cada tipo que lo usa.
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · anidado en {owner} · modelo, en cada diagrama
 str		Nested classifiers · {n}	Clasificadores anidados · {n}
 str		Add nested classifier	Añadir clasificador anidado
+plural		{n} nested classifier goes with it: {names}.	{n} clasificador anidado se va con él: {names}.|{n} clasificadores anidados se van con él: {names}.
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	Ninguno aún. Añade uno aquí o desde Modelos ▸ Nuevo dentro de {name}; ambos ofrecen los mismos tipos.
 str		New	Nuevo
 str		New in {name}	Nuevo en {name}
@@ -207,6 +220,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} contiene el perfil {profile}, que está en uso: {uses}. Quítalos primero.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» en {metaclass} está en uso: {uses}. Quítalos primero.
 str		«{stereotype}» on {elements}	«{stereotype}» en {elements}
+plural		{n} stereotype application goes with it: {names}.	{n} aplicación de estereotipo se va con él: {names}.|{n} aplicaciones de estereotipo se van con él: {names}.
 plural		Show the use	Mostrar el uso|Mostrar los {n} usos
 str		A stereotype is shown on its profile's diagram	Un estereotipo se muestra en el diagrama de su perfil
 str		Place stereotype	Colocar estereotipo

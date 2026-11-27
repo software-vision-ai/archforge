@@ -1,4 +1,4 @@
-//! The notations the shell knows (`UIS`), what an opening does to a model with them
+//! The notations the shell knows (`UIS`), what an opening does to a model with a shell's notations
 //! (`open_repair`), how their overlays are drawn over the canvas (`overlays`), and the forwarders
 //! over the whole shell for code not on the narrow context yet. What a notation brings to the shell
 //! (`NotationUi`, `NotationState`, `NotationStates`), the free functions that ask the shell's
@@ -32,14 +32,16 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, layer: Layer, on: &
 /// The notations the shell knows.
 pub(crate) static UIS: &[&dyn NotationUi] = &[&crate::er_ui::ErUi, &crate::uml_ui::UmlUi];
 
-/// What an opening does to a project's model before its session starts: every notation of `UIS`
-/// puts its own layout right (`NotationUi::open_repair`), in the order of the notations. The
-/// shell opens, restores and compares models with it, and hands it to the host for a restore. It
-/// reads `UIS` itself rather than a shell's `notation_uis`: the host and the comparisons' threads
-/// take it as a plain function, and one opening must repair a model the same way wherever it runs.
-pub fn open_repair(store: &mut Store) {
-    for notation in UIS {
-        notation.open_repair(store);
+/// What an opening does to a project's model before its session starts with the notations `uis`:
+/// each puts its own layout right (`NotationUi::open_repair`), in the order of the notations. A
+/// shell takes it for its own notations ([`Shell::open_repair`]) to open, restore and compare
+/// models on the threads that do it, and hands it to the host for a restore, so one opening
+/// repairs a model the same way wherever it runs.
+pub(crate) fn open_repair(uis: &'static [&'static dyn NotationUi]) -> impl Fn(&mut Store) + Copy + Send + 'static {
+    move |store: &mut Store| {
+        for notation in uis {
+            notation.open_repair(store);
+        }
     }
 }
 

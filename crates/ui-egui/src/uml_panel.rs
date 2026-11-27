@@ -22,6 +22,7 @@ use serde_json::json;
 
 use crate::cx::{Ctx, Request};
 use crate::i18n::{fmt, tr, trn};
+use crate::notation_ui::NotationUi;
 use crate::panels::{
     FIELD, MenuId, PAD, ROW, Subject, check_cx, control_cx, field_inner, icon_button_cx, menu_cx, run_cx, section_cx, select_field_cx, text_field_cx,
 };
@@ -1127,9 +1128,9 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
         if let Some(uml) = uml_mut(cx.notation_states) {
             uml.member = None;
         }
-    } else if remove && let Some(asked) = ask_for_applications(cx, &edit) {
-        // Its stereotype applications would go with it: the delete dialog names them first, as
-        // every other delete of a carrier does (AR-135).
+    } else if remove && let Some(asked) = ask_for_consequences(cx, &edit) {
+        // Something would go with it, its stereotype applications: the delete dialog names them
+        // first, as every other delete of a carrier does (AR-135).
         if let Some(uml) = uml_mut(cx.notation_states) {
             uml.member = None;
         }
@@ -1155,24 +1156,22 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
     card.bottom() + 8.0
 }
 
-/// The delete dialog for the member `edit` edits, when stereotype applications would go with it
-/// (AR-135): naming them, so removing it never takes them along unasked. None when none would.
-fn ask_for_applications(cx: &Ctx, edit: &MemberEdit) -> Option<crate::explorer::Delete> {
+/// The delete dialog for the member `edit` edits, when anything would go with it, as UML says
+/// what goes ([`NotationUi::consequences`]): its stereotype applications (AR-135), named, so
+/// removing it never takes them along unasked. None when nothing would.
+///
+/// [`NotationUi::consequences`]: crate::notation_ui::NotationUi::consequences
+fn ask_for_consequences(cx: &Ctx, edit: &MemberEdit) -> Option<crate::explorer::Delete> {
+    use crate::notation_ui::NotationUi;
     let target = edit.target?;
     let store = cx.session.as_ref()?.doc();
     let member = store.by_uuid(target)?;
-    let applications = crate::uml_stereotypes::going_along(store, member);
-    (!applications.is_empty()).then(|| crate::explorer::Delete {
+    let consequences = crate::uml_ui::UmlUi.consequences(cx.notation_uis, store, member);
+    (!consequences.is_empty()).then(|| crate::explorer::Delete {
         ids: vec![target],
         name: crate::notation_ui::label(cx.notation_uis, store, member),
-        relationships: 0,
-        keys: 0,
-        foreign_keys: 0,
-        diagrams: 0,
-        node: None,
-        along: Vec::new(),
-        applications,
-        hands_to: None,
+        consequences,
+        ..crate::explorer::Delete::default()
     })
 }
 
@@ -1553,9 +1552,9 @@ fn edit_shape(store: &Store, edit: &MemberEdit, bounds: Option<(u64, Option<u64>
 /// Why the attribute as edited cannot be written, in the user's words, with the field it sits
 /// under: a multiplicity that does not read; a default its type does not read (a type change the
 /// kept default does not fit said under the type, naming the default); a property it subsets or
-/// redefines that the rules refuse, named with why. The commands keep the same rules. None for any
-/// other member.
-pub(crate) fn modifier_refusal(store: &Store, edit: &MemberEdit) -> Option<(&'static str, String)> {
+/// redefines that the rules refuse, named with why. The commands keep the same rules. A typed
+/// refusal is said by the notations of `uis`. None for any other member.
+pub(crate) fn modifier_refusal(uis: &[&'static dyn NotationUi], store: &Store, edit: &MemberEdit) -> Option<(&'static str, String)> {
     if edit.kind != MemberKind::Attribute {
         return None;
     }
@@ -1578,7 +1577,7 @@ pub(crate) fn modifier_refusal(store: &Store, edit: &MemberEdit) -> Option<(&'st
             );
             return Some(("type", said));
         }
-        return Some(("default", default_refusal(store, &e)));
+        return Some(("default", default_refusal(uis, store, &e)));
     }
     let shape = edit_shape(store, edit, bounds)?;
     let current = edit.target.and_then(|t| store.by_uuid(t));
@@ -1618,9 +1617,10 @@ pub(crate) fn target_refusals(
     None
 }
 
-/// Why a default does not read, in the user's words: the value and the form its type takes.
-pub(crate) fn default_refusal(store: &Store, e: &archforge_uml::modifiers::DefaultError) -> String {
-    crate::panels::said(crate::notation_ui::UIS, &e.reason(store)).unwrap_or_else(|| e.said(store))
+/// Why a default does not read, in the user's words: the value and the form its type takes, said
+/// by the notations of `uis` where the reason is typed.
+pub(crate) fn default_refusal(uis: &[&'static dyn NotationUi], store: &Store, e: &archforge_uml::modifiers::DefaultError) -> String {
+    crate::panels::said(uis, &e.reason(store)).unwrap_or_else(|| e.said(store))
 }
 
 /// A property's default refused, typed, in the user's words: too long, not read as its type's
@@ -1716,7 +1716,7 @@ fn move_member(cx: &mut Ctx, edit: &MemberEdit, up: bool) {
 fn commit(cx: &mut Ctx, edit: &MemberEdit) {
     let refusal = cx.session.as_ref().and_then(|s| {
         let store = s.doc();
-        member_leaf_refusal(store, edit, edit.is_leaf).map(|why| ("leaf", why)).or_else(|| modifier_refusal(store, edit))
+        member_leaf_refusal(store, edit, edit.is_leaf).map(|why| ("leaf", why)).or_else(|| modifier_refusal(cx.notation_uis, store, edit))
     });
     if let Some((field, why)) = refusal {
         refuse(cx, Some(why));
@@ -1815,12 +1815,13 @@ pub(crate) fn attribute_refusal(store: &Store, edit: &MemberEdit) -> Option<Stri
 /// clashes, an association class's attribute named as one of its ends' roles, or a modifier the
 /// rules refuse (AR-126), is refused first, in the user's words, and nothing is run.
 pub(crate) fn write_in_sight(cx: &mut Ctx, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    let uis = cx.notation_uis;
     let Some(session) = cx.session.as_mut() else { return Err(tr("The model could not be opened")) };
     let store = session.doc();
     if let Some(why) = literal_refusal(store, edit)
         .or_else(|| attribute_refusal(store, edit))
         .or_else(|| member_leaf_refusal(store, edit, edit.is_leaf))
-        .or_else(|| modifier_refusal(store, edit).map(|(_, w)| w))
+        .or_else(|| modifier_refusal(uis, store, edit).map(|(_, w)| w))
     {
         return Err(why);
     }

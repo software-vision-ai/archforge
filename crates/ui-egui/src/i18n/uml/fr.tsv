@@ -67,6 +67,15 @@ str		Literals carry no skills	Les littéraux ne portent pas de compétences
 str		Built-in types carry no skills	Les types intégrés ne portent pas de compétences
 str		Types keeps the built-in types, so it stays while it holds them	Types garde les types intégrés, il reste donc tant qu’il les contient
 str		Generalization sets carry no skills	Les ensembles de généralisations ne portent pas de compétences
+str		every class	chaque classe
+str		every interface	chaque interface
+str		every enumeration	chaque énumération
+str		every data type	chaque type de données
+str		every primitive type	chaque type primitif
+str		every association class	chaque classe d’association
+str		every attribute	chaque attribut
+str		every operation	chaque opération
+str		every association	chaque association
 str		Add class	Ajouter une classe
 str		Add interface	Ajouter une interface
 str		Add enumeration	Ajouter une énumération
@@ -131,16 +140,20 @@ str		An enumeration holds at most {n} literals.	Une énumération contient au pl
 str		Several types are named {name}; pick one from the menu.	Plusieurs types s’appellent {name} ; choisissez-en un dans le menu.
 str		Add parameter	Ajouter un paramètre
 str		Attribute	Attribut
+str		Attributes	Attributs
+str		Operations	Opérations
 str		Literal	Littéral
 str		Attribute · model	Attribut · modèle
 str		Literal · model	Littéral · modèle
 str		Attributes · {n}	Attributs · {n}
 str		Literals · {n}	Littéraux · {n}
 str		Owner	Propriétaire
+str		Owner: {path}	Propriétaire : {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Le propriétaire est un paquetage ou un classificateur. Le changer conserve l’identité, les membres et les relations de {name}, et chaque type qui l’utilise.
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · imbriqué dans {owner} · modèle, dans chaque diagramme
 str		Nested classifiers · {n}	Classificateurs imbriqués · {n}
 str		Add nested classifier	Ajouter un classificateur imbriqué
+plural		{n} nested classifier goes with it: {names}.	{n} classificateur imbriqué part avec lui : {names}.|{n} classificateurs imbriqués partent avec lui : {names}.
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	Aucun pour l’instant. Ajoutez-en un ici ou depuis Modèles ▸ Nouveau dans {name} ; les deux proposent les mêmes sortes.
 str		New	Nouveau
 str		New in {name}	Nouveau dans {name}
@@ -207,6 +220,7 @@ str		Moving {name} there takes stereotypes out of the packages that apply their 
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} contient le profil {profile}, qui est utilisé : {uses}. Retirez-les d’abord.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» sur {metaclass} est utilisé : {uses}. Retirez-les d’abord.
 str		«{stereotype}» on {elements}	«{stereotype}» sur {elements}
+plural		{n} stereotype application goes with it: {names}.	{n} application de stéréotype part avec lui : {names}.|{n} applications de stéréotype partent avec lui : {names}.
 plural		Show the use	Afficher l’utilisation|Afficher les {n} utilisations
 str		A stereotype is shown on its profile's diagram	Un stéréotype s’affiche sur le diagramme de son profil
 str		Place stereotype	Placer le stéréotype
