@@ -15,6 +15,7 @@ use serde_json::json;
 
 use super::Screen;
 use crate::chat_words::Clock;
+use crate::snapshot;
 use crate::{BranchEntry, Shell, VersionEntry, VersionRead, VersionReadError, VersionsPage};
 
 /// The screens built here.
@@ -97,7 +98,7 @@ fn run(shell: &mut Shell, command: &str, params: serde_json::Value) -> Result<St
 /// and adds email since; its Compare page and moved box save the rename as Renamed email first.
 /// Versions is the explorer, the clock Chat's.
 pub(super) fn sample(shell: &mut Shell, screen: Screen) -> Result<(), String> {
-    shell.adopt_project();
+    snapshot::adopt_project(shell);
     let root = run(shell, "uml.model.root", json!({}))?;
     let diagram = run(shell, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "Commerce" }))?;
     let customer = run(shell, "uml.class.add", json!({ "package": root, "name": "Customer" }))?;
@@ -168,18 +169,8 @@ pub(super) fn sample(shell: &mut Shell, screen: Screen) -> Result<(), String> {
 
 /// Whether nothing the screens read, compare or hold the project for is still on its way.
 fn idle(shell: &Shell) -> bool {
-    let v = &shell.versions;
     // Current work alone is compared: a version in view never is.
-    (shell.viewing().is_some() || crate::versions::settled(shell))
-        && v.reading.is_none()
-        && v.element_reading.is_none()
-        && v.details_comparing.is_none()
-        && v.details_reading.is_none()
-        && v.compare_results.reading.is_none()
-        && v.compare_results.comparing.is_none()
-        && shell.version_list.steps.reading.is_none()
-        && !shell.loads.waiting()
-        && !shell.is_held()
+    (shell.viewing().is_some() || snapshot::changes_settled(shell)) && !snapshot::reading_versions(shell) && !shell.is_held()
 }
 
 /// Draws frames until nothing is on its way twice running, giving the comparing threads their turn
@@ -200,7 +191,7 @@ fn settle(h: &mut egui_kittest::Harness<'static, Shell>) -> Result<(), String> {
 
 /// The version listed as `hash`.
 fn listed(shell: &Shell, hash: &str) -> Result<VersionEntry, String> {
-    let page = shell.versions.page.as_ref().ok_or("the versions were not read")?;
+    let page = snapshot::versions_page(shell).ok_or("the versions were not read")?;
     page.versions.iter().find(|v| v.hash == hash).cloned().ok_or_else(|| format!("no version {hash}"))
 }
 
@@ -223,22 +214,22 @@ pub(super) fn reach(h: &mut egui_kittest::Harness<'static, Shell>, screen: Scree
     let shell = h.state_mut();
     let clock = crate::chat_panel::clock(shell);
     match screen {
-        Screen::WorkspaceVersionList => crate::version_chip::open(shell),
-        Screen::WorkspaceVersionDetails => crate::version_details::open(shell, listed(shell, "c2")?),
+        Screen::WorkspaceVersionList => snapshot::open_version_list(shell),
+        Screen::WorkspaceVersionDetails => snapshot::open_version_details(shell, listed(shell, "c2")?),
         Screen::GuideCompare => {
-            crate::version_details::open(shell, listed(shell, "c2")?);
-            crate::version_details::compare_from_menu(shell);
-            if !crate::version_details::compare_open(shell) {
+            snapshot::open_version_details(shell, listed(shell, "c2")?);
+            snapshot::compare_from_menu(shell);
+            if !snapshot::compare_open(shell) {
                 return Err("the Compare page did not open".into());
             }
         }
         Screen::GuideVersionChange => {
-            let row = shell.versions.changes.iter().find(|d| d.name.as_deref() == Some("email")).cloned().ok_or("no change to email")?;
-            crate::change_view::open(shell, row);
+            let row = snapshot::changes(shell).iter().find(|d| d.name.as_deref() == Some("email")).cloned().ok_or("no change to email")?;
+            snapshot::open_change(shell, row);
         }
         Screen::WorkspaceVersionViewing | Screen::GuideVersionViewing => {
-            let label = crate::version_chip::when(&listed(shell, "c1")?.date, clock);
-            if !crate::version_chip::view(shell, "c1".into(), label) {
+            let label = snapshot::version_when(&listed(shell, "c1")?.date, clock);
+            if !snapshot::view_version(shell, "c1".into(), label) {
                 return Err("the version could not be shown".into());
             }
         }
@@ -248,13 +239,13 @@ pub(super) fn reach(h: &mut egui_kittest::Harness<'static, Shell>, screen: Scree
             } else {
                 archforge_notations::differences::Area::Diagram
             };
-            let row = shell.versions.changes.iter().find(|d| d.area == area).cloned().ok_or("no such change")?;
-            crate::change_view::open(shell, row);
+            let row = snapshot::changes(shell).iter().find(|d| d.area == area).cloned().ok_or("no such change")?;
+            snapshot::open_change(shell, row);
         }
         Screen::WorkspaceRestoreAsk => {
             let entry = listed(shell, "c1")?;
-            let saved = crate::version_chip::when(&entry.date, clock);
-            crate::restore_ask::ask(shell, ("c1".into(), saved, crate::versions::dated(&entry, clock)));
+            let saved = snapshot::version_when(&entry.date, clock);
+            snapshot::ask_restore(shell, ("c1".into(), saved, snapshot::version_dated(&entry, clock)));
         }
         _ => {}
     }
