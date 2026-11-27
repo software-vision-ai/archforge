@@ -32,6 +32,8 @@ str		The package has more than one default diagram. Choose the one of its class 
 str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets existiert nicht mehr. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
 str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets ist kein Klassendiagramm. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Das Standarddiagramm des Pakets gehört zu einem anderen Element. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Dieses Diagramm ist das Standarddiagramm von {package}. Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von {package}.
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. Wählen Sie zuerst eines seiner eigenen Klassendiagramme.
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	Diese Verbindung besteht bereits: die Abhängigkeit {dependency}. Wählen Sie die bestehende Beziehung aus.
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr. Wählen Sie erneut unter denen, die sie verbinden. Es wurde nichts geändert.
 str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr, und keine andere tut es jetzt. Es wurde nichts geändert.
@@ -424,6 +426,7 @@ str		This is the top package: zooming out goes no further	Dies ist das oberste P
 str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
 str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnittstelle
 str		A relationship joins two classes or interfaces	Eine Beziehung verbindet zwei Klassen oder Schnittstellen
+str		Drag onto another class to move this end	Auf eine andere Klasse ziehen, um dieses Ende zu verschieben
 str		An association class does not join itself	Eine Assoziationsklasse verbindet sich nicht mit sich selbst
 str		This association class has an attribute named {name}; an end's role takes another name.	Diese Assoziationsklasse hat ein Attribut namens {name}; die Rolle eines Endes braucht einen anderen Namen.
 str		An end of this association class has the role {name}; an attribute takes another name.	Ein Ende dieser Assoziationsklasse hat die Rolle {name}; ein Attribut braucht einen anderen Namen.

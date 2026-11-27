@@ -503,13 +503,15 @@ pub trait NotationUi: Sync {
     #[allow(clippy::too_many_arguments, reason = "the body is drawn into the panel from its top, for its subject")]
     fn body(&self, cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject);
 
-    // Refusals: each is said by the one notation whose commands give it; one the engine, the
-    // diagrams or both notations give is the shell's own ([`crate::panels::said`]).
+    // Refusals: each is said by the one notation whose commands give it, or whose diagrams alone
+    // it is about; one the engine, the diagrams or both notations give otherwise is the shell's
+    // own ([`crate::panels::said`]).
 
-    /// A typed refusal only its own commands give, in the user's words; none for any other reason
-    /// or for a kind of element the catalogues don't name. A reason or a kind of element it names
-    /// inside its sentence is said by the notations the shell was given, `uis`
-    /// ([`crate::panels::said`], [`crate::panels::a_kind`]).
+    /// A typed refusal only its own commands give, or the diagrams' commands give about what only
+    /// its diagrams have (a diagram a binding keeps as an element's default), in the user's words;
+    /// none for any other reason or for a kind of element the catalogues don't name. A reason or a
+    /// kind of element it names inside its sentence is said by the notations the shell was given,
+    /// `uis` ([`crate::panels::said`], [`crate::panels::a_kind`]).
     fn said(&self, uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
         let _ = (uis, reason);
         None

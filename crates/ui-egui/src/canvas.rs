@@ -1776,9 +1776,9 @@ struct Layout {
     /// Each kind tool's x, and the x after them, where Note goes.
     kind_tools: Vec<f32>,
     note: f32,
-    /// The view group's x and its toggles.
+    /// The view group's x and its toggles, each with its hover text.
     group: f32,
-    toggles: Vec<(&'static str, &'static str)>,
+    toggles: Vec<(&'static str, String)>,
     arrange: f32,
     width: f32,
 }
@@ -1796,10 +1796,10 @@ fn layout(kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Layout {
         };
     }
     let mut toggles = Vec::new();
-    if kind.is_some_and(|k| k.status_marks()) {
-        toggles.push(("key-status", "Key status"));
+    if let Some(hint) = kind.and_then(|k| k.status_marks()) {
+        toggles.push(("key-status", hint));
     }
-    toggles.push(("grid", "Grid"));
+    toggles.push(("grid", tr("Grid")));
     let group = x + 79.0;
     let arrange = group + 2.0 + 34.0 * toggles.len() as f32 + 6.0 + 8.0;
     Layout { kind_tools, note: x, group, toggles, arrange, width: arrange + 32.0 + 7.0 }
@@ -1965,7 +1965,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             paint.circle_filled(box_.min + vec2(2.5, 2.5), 2.5, p.green);
             paint.circle_filled(box_.min + vec2(11.5, 9.5), 2.5, p.warning);
         }
-        if control(shell, ui, &format!("workspace.tools.{key}"), "toggle", b, true).on_hover_text(tr(hint)).clicked() {
+        if control(shell, ui, &format!("workspace.tools.{key}"), "toggle", b, true).on_hover_text(hint.as_str()).clicked() {
             match *key {
                 "grid" => shell.canvas.grid = !shell.canvas.grid,
                 _ => shell.canvas.key_status = !shell.canvas.key_status,
@@ -2033,5 +2033,5 @@ fn a_cards_height_is_where_the_canvas_ends_its_last_place() {
 /// say their own words, which the scan reads from each kind (`kinds::DiagramKind::tools`).
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    TOOLS.iter().map(|(_, _, hint)| *hint).chain(["Key status", "Grid", "Arrange diagram"])
+    TOOLS.iter().map(|(_, _, hint)| *hint).chain(["Grid", "Arrange diagram"])
 }

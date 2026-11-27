@@ -1,10 +1,11 @@
 //! The UML commands' refusals in the user's words (AR-786): the typed reasons only UML's commands
 //! give, each in the words of the editor or the canvas that meets it (relationships, templates and
 //! bindings, generalization sets and association ends, profiles and stereotypes, constraints, what
-//! a property subsets or redefines, defaults, packages and their default diagrams), and the reasons
-//! a UML command is not available now, and the kinds of element only UML's commands name in a
-//! refusal (AR-785). A reason the engine, the diagrams or ER give too is the
-//! shell's own (`panels::said`, `engine_said`).
+//! a property subsets or redefines, defaults, packages and their default diagrams), a diagram the
+//! diagrams' commands keep as a package's default, since only UML's diagrams take one, and the
+//! reasons a UML command is not available now, and the kinds of element only UML's commands name
+//! in a refusal (AR-785). Another reason the engine, the diagrams or ER give too is the shell's own
+//! (`panels::said`, `engine_said`).
 
 use archforge_engine::{BindingFault, Reason};
 
@@ -37,9 +38,10 @@ pub(crate) fn a_kind(kind: &str) -> Option<String> {
     })
 }
 
-/// A refusal only UML's commands give, in the user's words, a kind of element it names as the
-/// notations of `uis` name it; none for another reason or for a kind of element the catalogues
-/// don't name, which the engine's sentence then says.
+/// A refusal only UML's commands give, or the diagrams' commands give of a package's default
+/// diagram, in the user's words, a kind of element it names as the notations of `uis` name it; none
+/// for another reason or for a kind of element the catalogues don't name, which the engine's
+/// sentence then says.
 pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
     Some(match reason {
@@ -87,6 +89,15 @@ pub(crate) fn said(uis: &[&'static dyn NotationUi], reason: &Reason) -> Option<S
         Reason::InvalidBinding(BindingFault::WrongOwner) => {
             tr("The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.")
         }
+        // The diagram commands give these, of the class diagrams UML's packages take as defaults.
+        Reason::DefaultDiagramOf { package, fault: None } => fmt(
+            &tr("This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first."),
+            &[("package", package)],
+        ),
+        Reason::DefaultDiagramOf { package, fault: Some(BindingFault::WrongOwner) } => fmt(
+            &tr("{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first."),
+            &[("package", package)],
+        ),
         Reason::ConnectionExists { dependency } => {
             fmt(&tr("This connection already exists: the dependency {dependency}. Select the existing relationship."), &[("dependency", dependency)])
         }

@@ -274,6 +274,7 @@ str		Entity	Entität
 str		Relationship types	Beziehungsarten
 str		Place table	Tabelle platzieren
 str		Show related tables	Verwandte Tabellen zeigen
+str		Key status	Schlüsselstatus
 str		The diagram is of no schema	Das Diagramm gehört zu keinem Schema
 str		A relationship joins two tables	Eine Beziehung verbindet zwei Tabellen
 str		Add relationship	Beziehung hinzufügen

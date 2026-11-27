@@ -274,6 +274,7 @@ str		Entity	エンティティ
 str		Relationship types	リレーションシップの種類
 str		Place table	テーブルを配置
 str		Show related tables	関連テーブルを表示
+str		Key status	キーの状態
 str		The diagram is of no schema	この図はどのスキーマにも属していません
 str		A relationship joins two tables	リレーションシップは2つのテーブルを結びます
 str		Add relationship	リレーションシップを追加

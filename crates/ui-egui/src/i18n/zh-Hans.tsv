@@ -503,8 +503,6 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	撤销和重做不能作为其他更改的一部分运行。
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	模型在读取后已更改，或读取的是另一个项目。请重新读取，然后再试一次。未作任何更改。
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	此更改未说明它针对的是模型的哪个修订版本。请读取模型，然后再试一次。未作任何更改。
-str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	此图是 {package} 的默认图。请先选择另一个类图作为 {package} 的默认图。
-str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} 将另一个元素的图作为其默认图，因此该图会保留。请先选择 {package} 自己的一个类图。
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	图在删除时不能替换自身。请选择另一个图作为替换。
 str		Choose either an existing diagram or a new one as the replacement, not both.	请选择现有的图或新图作为替换，不能同时选择两者。
 str		A name has to be text.	名称必须是文本。
@@ -658,7 +656,6 @@ str		Pan	平移
 str		Relationship	关系
 str		Note	备注
 str		Link note	链接备注
-str		Key status	键状态
 str		Grid	网格
 str		Arrange diagram	整理图
 str		Move cardinality	移动基数
@@ -889,7 +886,7 @@ str		Creates the folder {file} here: the project and every version of it.	在此
 str		The project is made here as one folder, with every version of it inside.	项目在此创建为一个文件夹，其每个版本都在其中。
 str		Diagrams	图表
 str		Elements	元素
-str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	随时添加 ER 图和 UML 类图。每个图表都显示同一个模型。
+str		Add {diagrams} as you go. Every diagram shows the same model.	随时添加 {diagrams}。每个图表都显示同一个模型。
 str		In every project	每个项目都包含
 str		Guidance for agents, written on the elements it applies to.	写在所适用元素上的代理指导说明。
 str		Agent access	代理访问
@@ -961,6 +958,7 @@ str		More	更多
 str		No	否
 # 类图
 # 属性面板中的类成员
+str		{list}, {next}	{list}、{next}
 str		{first} and {second}	{first} 和 {second}
 str		{first}, {second} and {third}	{first}、{second} 和 {third}
 # Stereotypes applied (AR-135)
@@ -1028,7 +1026,6 @@ str		An item holds a key without a name. It takes {takes}.	条目包含一个没
 str		There is no element with the id {id}.	不存在 ID 为 {id} 的元素。
 str		{value} is not a literal of {enumeration}.	{value} 不是 {enumeration} 的字面量。
 # 关联类
-str		Drag onto another class to move this end	拖到另一个类上以移动此端
 # Templates (AR-130)
 str		Value	值
 # Template bindings (AR-131)

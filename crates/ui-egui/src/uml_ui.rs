@@ -353,8 +353,9 @@ impl DiagramKind for UmlKind {
         crate::uml_relate::connect_to_new(cx, d, from_node, x, y);
     }
 
-    fn reconnects(&self) -> bool {
-        true
+    /// A relationship's ends drag onto another class.
+    fn reconnects(&self) -> Option<String> {
+        Some(tr("Drag onto another class to move this end"))
     }
 
     /// Moves an end of a selected line onto the classifier of `to_node`, the Relationship tool's rules
@@ -1344,7 +1345,8 @@ impl NotationUi for UmlUi {
         }
     }
 
-    /// UML's own refusals: those its commands alone give, in its editors' and the canvas's words.
+    /// UML's own refusals: those its commands alone give, and a diagram the diagrams' commands keep
+    /// as a package's default, in its editors' and the canvas's words.
     fn said(&self, uis: &[&'static dyn NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
         crate::uml_said::said(uis, reason)
     }

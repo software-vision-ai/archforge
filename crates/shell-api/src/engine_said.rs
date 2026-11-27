@@ -5,11 +5,12 @@
 //! errors only a mistake in the program reaches (a parameter the engine refuses before the command
 //! runs, a command that stopped on an internal error) as one sentence, so no engine text reaches
 //! the user. The engine's own typed refusal, a change made for a revision of the model other than
-//! the one it would run on (AR-574), is said here too, as is a diagram that stays because a
-//! package's binding names it as its default (AR-578), and a default diagram's replacement refused
-//! (AR-640, AR-641). Those only UML's commands give are UML's (`uml_said`).
+//! the one it would run on (AR-574), is said here too, as is a default diagram's replacement
+//! refused (AR-640, AR-641). A diagram that stays because a binding names it as its element's
+//! default (AR-578) is said by the notation whose diagrams take a default, as are those only its
+//! commands give ([`NotationUi::said`]).
 
-use archforge_engine::{BindingFault, EngineError, Reason};
+use archforge_engine::{EngineError, Reason};
 
 use crate::i18n::{fmt, tr};
 use crate::notation_ui::NotationUi;
@@ -32,12 +33,11 @@ pub fn disabled(uis: &[&'static dyn NotationUi], reason: &str) -> Option<String>
 }
 
 /// A refusal the engine or the diagrams' commands type in the user's words: a change made for
-/// another revision of the model than the one it would run on, or for none, a diagram a package's
-/// binding keeps, its own default or another element's diagram, with the choice to make first, and
-/// a default diagram's replacement that is the diagram removed, is no other diagram of the same
-/// kind of its package, or is named for a diagram that is no default (AR-640), or is given both as
-/// another diagram and as a new one, or a new one's name that is no text (AR-641); none for another
-/// reason.
+/// another revision of the model than the one it would run on, or for none, and a default
+/// diagram's replacement that is the diagram removed, is no other diagram of the same kind of its
+/// package, or is named for a diagram that is no default (AR-640), or is given both as another
+/// diagram and as a new one, or a new one's name that is no text (AR-641); none for another reason,
+/// a diagram a binding keeps among them, which the notation whose diagrams take a default says.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     Some(match reason {
         Reason::StaleRevision { expected: Some(_), .. } => {
@@ -46,14 +46,6 @@ pub(crate) fn reason(reason: &Reason) -> Option<String> {
         Reason::StaleRevision { expected: None, .. } => {
             tr("The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.")
         }
-        Reason::DefaultDiagramOf { package, fault: None } => fmt(
-            &tr("This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first."),
-            &[("package", package)],
-        ),
-        Reason::DefaultDiagramOf { package, fault: Some(BindingFault::WrongOwner) } => fmt(
-            &tr("{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first."),
-            &[("package", package)],
-        ),
         Reason::ReplacementIsRemoved => tr("A diagram cannot replace itself as it is removed. Choose another diagram as the replacement."),
         Reason::OneReplacement => tr("Choose either an existing diagram or a new one as the replacement, not both."),
         Reason::NameNotText => tr("A name has to be text."),

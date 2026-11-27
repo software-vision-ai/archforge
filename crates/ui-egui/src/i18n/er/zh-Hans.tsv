@@ -274,6 +274,7 @@ str		Entity	实体
 str		Relationship types	关系类型
 str		Place table	放置表
 str		Show related tables	显示相关表
+str		Key status	键状态
 str		The diagram is of no schema	此图不属于任何架构
 str		A relationship joins two tables	关系连接两张表
 str		Add relationship	添加关系

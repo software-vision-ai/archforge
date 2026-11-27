@@ -503,8 +503,6 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	Anular e refazer não podem fazer parte de outra alteração.
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	O modelo mudou desde que foi lido, ou foi lido outro projeto. Leia-o novamente e tente outra vez. Nada foi alterado.
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	A alteração não indica para que revisão do modelo foi feita. Leia o modelo e tente outra vez. Nada foi alterado.
-str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Este diagrama é o diagrama predefinido de {package}. Escolha primeiro outro diagrama de classes como diagrama predefinido de {package}.
-str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} tem como diagrama predefinido o diagrama de outro elemento, por isso esse diagrama fica. Escolha primeiro um dos seus próprios diagramas de classes.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Um diagrama não pode substituir-se a si próprio ao ser removido. Escolha outro diagrama como substituto.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Escolha como substituto um diagrama existente ou um novo, não ambos.
 str		A name has to be text.	Um nome tem de ser texto.
@@ -658,7 +656,6 @@ str		Pan	Deslocar
 str		Relationship	Relação
 str		Note	Nota
 str		Link note	Ligar nota
-str		Key status	Estado das chaves
 str		Grid	Grelha
 str		Arrange diagram	Organizar o diagrama
 str		Move cardinality	Mover a cardinalidade
@@ -889,7 +886,7 @@ str		Creates the folder {file} here: the project and every version of it.	Cria a
 str		The project is made here as one folder, with every version of it inside.	O projeto é criado aqui como uma pasta, com cada uma das suas versões lá dentro.
 str		Diagrams	Diagramas
 str		Elements	Elementos
-str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Adicione diagramas ER e de classes UML à medida que trabalha. Cada diagrama mostra o mesmo modelo.
+str		Add {diagrams} as you go. Every diagram shows the same model.	Adicione à medida que trabalha: {diagrams}. Cada diagrama mostra o mesmo modelo.
 str		In every project	Em cada projeto
 str		Guidance for agents, written on the elements it applies to.	Orientações para agentes, escritas nos elementos a que se aplicam.
 str		Agent access	Acesso de agentes
@@ -961,6 +958,7 @@ str		More	Mais
 str		No	Não
 # Diagramas de classes
 # Membros de classe nas Propriedades
+str		{list}, {next}	{list}, {next}
 str		{first} and {second}	{first} e {second}
 str		{first}, {second} and {third}	{first}, {second} e {third}
 # Stereotypes applied (AR-135)
@@ -1028,7 +1026,6 @@ str		An item holds a key without a name. It takes {takes}.	Uma entrada contém u
 str		There is no element with the id {id}.	Não existe nenhum elemento com o identificador {id}.
 str		{value} is not a literal of {enumeration}.	{value} não é um literal de {enumeration}.
 # Relacionar classes
-str		Drag onto another class to move this end	Arraste para outra classe para mover esta ponta
 # Templates (AR-130)
 str		Value	Valor
 # Template bindings (AR-131)

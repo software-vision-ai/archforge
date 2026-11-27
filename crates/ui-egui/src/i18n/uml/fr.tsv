@@ -32,6 +32,8 @@ str		The package has more than one default diagram. Choose the one of its class 
 str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	Le diagramme par défaut du paquetage n’existe plus. Choisissez l’un de ses diagrammes de classes comme diagramme par défaut.
 str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	Le diagramme par défaut du paquetage n’est pas un diagramme de classes. Choisissez l’un de ses diagrammes de classes comme diagramme par défaut.
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Le diagramme par défaut du paquetage appartient à un autre élément. Choisissez l’un de ses propres diagrammes de classes comme diagramme par défaut.
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Ce diagramme est le diagramme par défaut de {package}. Choisissez d’abord un autre diagramme de classes comme diagramme par défaut de {package}.
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} a pour diagramme par défaut le diagramme d’un autre élément, ce diagramme reste donc. Choisissez d’abord l’un de ses propres diagrammes de classes.
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	Cette connexion existe déjà : la dépendance {dependency}. Sélectionnez la relation existante.
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	La relation choisie ne relie pas ces deux éléments, ou ne les relie plus. Choisissez à nouveau parmi celles qui les relient. Rien n'a été modifié.
 str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	La relation choisie ne relie pas ces deux éléments, ou ne les relie plus, et aucune ne les relie désormais. Rien n'a été modifié.
@@ -424,6 +426,7 @@ str		This is the top package: zooming out goes no further	Ceci est le paquetage 
 str		A bound can be at most {max}.	Une borne vaut au plus {max}.
 str		A class realizes only an interface	Une classe ne réalise qu’une interface
 str		A relationship joins two classes or interfaces	Une relation joint deux classes ou interfaces
+str		Drag onto another class to move this end	Faire glisser sur une autre classe pour déplacer cette extrémité
 str		An association class does not join itself	Une classe d’association ne se joint pas à elle-même
 str		This association class has an attribute named {name}; an end's role takes another name.	Cette classe d’association a un attribut nommé {name} ; le rôle d’une extrémité prend un autre nom.
 str		An end of this association class has the role {name}; an attribute takes another name.	Une extrémité de cette classe d’association a le rôle {name} ; un attribut prend un autre nom.

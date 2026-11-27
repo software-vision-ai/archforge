@@ -184,8 +184,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   the location with the system's folder picker, titled Choose project location (Home's
   Pin a folder keeps its own title), and shows it in the field; a cancel keeps the
   folder before it, and a picker that cannot appear says why under the field. What it says
-  a project holds is only what is built: ER and UML class diagrams, skills, agent access, undo
-  and saves; nothing still to come is promised.
+  a project holds is only what is built: the kinds of diagram the shell was given, listed by the
+  names of their groups in the Diagrams explorer, skills, agent access, undo and saves; nothing
+  still to come is promised.
 - Open project uses the system's folder picker; a damaged, newer or foreign project is refused
   with a dialog, and the project open already stays as it was.
 - The shortest way to drawing: + in the diagram tab strip, Enter, a name, Enter. New diagram has

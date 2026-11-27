@@ -503,8 +503,6 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	元に戻すとやり直しは、別の変更の一部としては実行できません。
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	モデルは読み込まれた後に変更されたか、別のプロジェクトが読み込まれました。もう一度読み込んでから、再度お試しください。何も変更されていません。
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	この変更には、どのリビジョンのモデルに対するものかが示されていません。モデルを読み込んでから、再度お試しください。何も変更されていません。
-str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	この図は {package} の既定の図です。先に別のクラス図を {package} の既定の図として選んでください。
-str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} は別の要素の図を既定の図にしているため、その図は残ります。先に {package} 自身のクラス図のいずれかを選んでください。
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	図は削除されるときに自分自身を置き換えることはできません。置き換える図として別の図を選んでください。
 str		Choose either an existing diagram or a new one as the replacement, not both.	置き換える図として、既存の図か新しい図のどちらか一方を選んでください。両方は選べません。
 str		A name has to be text.	名前はテキストでなければなりません。
@@ -658,7 +656,6 @@ str		Pan	パン
 str		Relationship	リレーションシップ
 str		Note	ノート
 str		Link note	ノートをリンク
-str		Key status	キーの状態
 str		Grid	グリッド
 str		Arrange diagram	ダイアグラムを整列
 str		Move cardinality	多重度を移動
@@ -889,7 +886,7 @@ str		Creates the folder {file} here: the project and every version of it.	ここ
 str		The project is made here as one folder, with every version of it inside.	プロジェクトはここに 1 つのフォルダーとして作成され、そのすべてのバージョンが中に入ります。
 str		Diagrams	ダイアグラム
 str		Elements	要素
-str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	作業しながら ER 図と UML クラス図を追加できます。どのダイアグラムも同じモデルを表示します。
+str		Add {diagrams} as you go. Every diagram shows the same model.	作業しながら {diagrams} を追加できます。どのダイアグラムも同じモデルを表示します。
 str		In every project	すべてのプロジェクトに
 str		Guidance for agents, written on the elements it applies to.	エージェント向けのガイダンスを、適用先の要素に書き込みます。
 str		Agent access	エージェントのアクセス
@@ -961,6 +958,7 @@ str		More	その他
 str		No	いいえ
 # クラス図
 # プロパティのクラスメンバー
+str		{list}, {next}	{list}、{next}
 str		{first} and {second}	{first} と {second}
 str		{first}, {second} and {third}	{first}、{second}、{third}
 # Stereotypes applied (AR-135)
@@ -1028,7 +1026,6 @@ str		An item holds a key without a name. It takes {takes}.	項目に名前のな
 str		There is no element with the id {id}.	ID が {id} の要素はありません。
 str		{value} is not a literal of {enumeration}.	{value} は {enumeration} のリテラルではありません。
 # クラスの関係
-str		Drag onto another class to move this end	別のクラスへドラッグしてこの端を移動
 # Templates (AR-130)
 str		Value	値
 # Template bindings (AR-131)

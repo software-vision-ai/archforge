@@ -155,6 +155,75 @@ fn the_new_project_dialog_opens_from_home_in_both_appearances_with_its_controls(
     }
 }
 
+/// The kinds a New project dialog lists: the sketch alone, then the sketch between ER and UML.
+static SKETCH_ALONE: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH)];
+static SKETCH_BETWEEN: &[&dyn crate::kinds::DiagramKind] = &[&crate::er_kind::ErKind, &SketchKind(SKETCH), &crate::uml_ui::UmlKind];
+
+/// The New project dialog's line on diagrams lists the kinds the shell was given, each by the name
+/// of its group in the Diagrams explorer, as a sentence lists them: the two kinds the app registers
+/// joined by "and"; the sketch alone, which the shell never names, with neither ER's nor UML's;
+/// three with a comma before "and". In light and dark.
+#[test]
+fn the_new_project_line_lists_the_kinds_the_shell_was_given() {
+    let line = |kinds: &'static [&'static dyn crate::kinds::DiagramKind], theme| {
+        let mut h = harness(theme);
+        h.state_mut().kinds = kinds;
+        open_new_project(&mut h);
+        painted(&h).into_iter().filter(|t| t.ends_with("Every diagram shows the same model.")).collect::<Vec<_>>()
+    };
+    in_both_appearances(|theme| {
+        let two = "Add ER diagrams and UML structure diagrams as you go. Every diagram shows the same model.";
+        assert_eq!(line(SCREENS.kinds(), theme), [two], "{theme:?}");
+        let alone = line(SKETCH_ALONE, theme);
+        assert_eq!(alone, ["Add Sketches as you go. Every diagram shows the same model."], "{theme:?}");
+        assert!(!alone.iter().any(|t| t.contains("ER diagrams") || t.contains("UML structure diagrams")), "{theme:?}: {alone:?}");
+        let three = "Add ER diagrams, Sketches and UML structure diagrams as you go. Every diagram shows the same model.";
+        assert_eq!(line(SKETCH_BETWEEN, theme), [three], "{theme:?}");
+    });
+}
+
+/// Twelve kinds, so the New project line runs past the two rows the design leaves it.
+static SKETCH_DOZEN: [&dyn crate::kinds::DiagramKind; 12] = [&SketchKind(SKETCH); 12];
+
+/// A New project line longer than the design's two rows, in a narrow dialog, is drawn whole, in
+/// as many rows as it takes, and what every project holds starts below it, not over it. In light
+/// and dark.
+#[test]
+fn a_long_new_project_line_is_drawn_whole_and_moves_the_strip_below_it() {
+    in_both_appearances(|theme| {
+        crate::i18n::set_language("en");
+        let mut shell = Shell::new(Services::default(), &SCREENS);
+        shell.state.theme = theme;
+        shell.kinds = &SKETCH_DOZEN;
+        let mut h = Harness::builder().with_size(egui::vec2(640.0, 1100.0)).build_ui_state(
+            |ui, shell: &mut Shell| {
+                shell.logic(ui.ctx());
+                shell.ui(ui);
+            },
+            shell,
+        );
+        h.run();
+        crate::new_project::open(h.state_mut());
+        h.run();
+        h.run();
+        /// Collects every text under `s`, with where it is drawn, its rows and whether it was cut.
+        fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Rect, usize, bool)>) {
+            match s {
+                egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.visual_bounding_rect(), t.galley.rows.len(), t.galley.elided)),
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                _ => {}
+            }
+        }
+        let mut texts = Vec::new();
+        h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
+        let line = texts.iter().find(|(t, ..)| t.ends_with("Every diagram shows the same model.")).expect("the line");
+        assert!(line.0.starts_with("Add Sketches, Sketches,"), "{theme:?}: {}", line.0);
+        assert!(line.2 > 2 && !line.3, "{theme:?}: whole, in {} rows, cut: {}", line.2, line.3);
+        let strip = texts.iter().find(|(t, ..)| t == "In every project").expect("the strip's heading");
+        assert!(strip.1.top() >= line.1.bottom() + 8.0, "{theme:?}: the strip at {:?} starts below the line at {:?}", strip.1, line.1);
+    });
+}
+
 #[test]
 fn the_name_field_has_the_keyboard_and_takes_a_name() {
     let mut h = harness(ThemeKind::Light);
@@ -17925,6 +17994,12 @@ static SKETCH_OPENED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec:
 /// it is given ([`SKETCH`] for the canvas's tests), so two of them are told apart.
 struct SketchKind(&'static str);
 
+/// What the sketch kind's status marks toggle says on hover.
+const SKETCH_MARKS: &str = "Sketch marks";
+
+/// What the sketch kind's line end handles say on hover.
+const SKETCH_ENDS: &str = "Drag onto another sketch card";
+
 static SKETCH_TOOLS: &[crate::kinds::KindTool] = &[
     crate::kinds::KindTool {
         key: "class",
@@ -17999,6 +18074,10 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn add_owner(&self, _: &mut crate::cx::Ctx, _: &str) -> Result<String, String> {
         Err("the sketch makes no package".into())
     }
+    /// Its status marks toggle, in its own words, so a test sees it asked.
+    fn status_marks(&self) -> Option<String> {
+        Some(SKETCH_MARKS.into())
+    }
     /// A UML class takes part in the sketch's gestures.
     fn takes_part(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
         store.class_of(element).ok() == Some(archforge_uml::CLASS)
@@ -18033,6 +18112,11 @@ impl crate::kinds::DiagramKind for SketchKind {
         let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(element).map(|e| archforge_core::name_of(s.doc(), e)));
         let calls = if name.as_deref() == Some(SKETCH_OPENS) { &SKETCH_OPENED } else { &SKETCH_CALLS };
         calls.lock().unwrap().push(format!("open {row:?}"));
+    }
+    /// Its lines' ends take handles, which move nothing and say its own words on hover, so a test
+    /// sees it asked.
+    fn reconnects(&self) -> Option<String> {
+        Some(SKETCH_ENDS.into())
     }
     /// Party's menu: a first row that is off, then one after Open in Models that writes down what
     /// it was picked on; Customer takes none.
@@ -18134,10 +18218,6 @@ impl crate::kinds::DiagramKind for SketchKind {
         if let Ok(id) = d.store.uuid(card.node) {
             crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.sketch-over.{id}"), "label", rect);
         }
-    }
-    /// Its lines' ends take handles, which move nothing.
-    fn reconnects(&self) -> bool {
-        true
     }
     /// Moves each line's source end [`SKETCH_END_SHIFT`] on along the line, writing it down as
     /// moved, and gives a square in the line's ink at the moved end, recorded.
@@ -18278,15 +18358,16 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
     h.run();
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select);
     let found = ids(&h);
-    for shared in ["select", "pan", "class", "inherit", "note", "link", "grid", "arrange"] {
+    for shared in ["select", "pan", "class", "inherit", "note", "link", "key-status", "grid", "arrange"] {
         assert!(found.iter().any(|i| *i == format!("workspace.tools.{shared}")), "{shared} is on the toolbar: {found:?}");
     }
-    for er in ["entity", "relationship", "relationship-types", "key-status"] {
+    for er in ["entity", "relationship", "relationship-types"] {
         assert!(!found.iter().any(|i| *i == format!("workspace.tools.{er}")), "ER's {er} is not");
     }
-    // The toolbar keeps its order: Select, Pan, the kind's tools, Note, Link note, Grid, Arrange.
+    // The toolbar keeps its order: Select, Pan, the kind's tools, Note, Link note, the kind's
+    // status marks, Grid, Arrange.
     let left = |key: &str| rect_of(&h, &format!("workspace.tools.{key}")).left();
-    let xs: Vec<f32> = ["select", "pan", "class", "inherit", "note", "link", "grid", "arrange"].iter().map(|k| left(k)).collect();
+    let xs: Vec<f32> = ["select", "pan", "class", "inherit", "note", "link", "key-status", "grid", "arrange"].iter().map(|k| left(k)).collect();
     assert!(xs.windows(2).all(|w| w[0] < w[1]), "{xs:?}");
     // Class places where the canvas is clicked.
     let at = rect_of(&h, "workspace.tools.class").center();
@@ -18321,6 +18402,61 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
         *SKETCH_CALLS.lock().unwrap(),
         ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]
     );
+}
+
+/// A diagram kind's own words on the shared canvas, a kind the shell never names included: its
+/// status marks toggle on the toolbar and a selected line's two end handles say on hover what the
+/// kind answers, never ER's or UML's words; in light and dark.
+#[test]
+fn a_kinds_status_toggle_and_line_ends_say_its_own_words() {
+    let hover = |h: &mut Harness<'static, Shell>, id: &str| {
+        let at = rect_of(h, id).center();
+        h.event(egui::Event::PointerMoved(at));
+        for _ in 0..90 {
+            h.step();
+        }
+        painted(h)
+    };
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ..) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        h.run();
+        let said = hover(&mut h, "workspace.tools.key-status");
+        assert!(said.iter().any(|t| t == SKETCH_MARKS), "{theme:?}: the toggle says the sketch's words: {said:?}");
+        assert!(!said.iter().any(|t| t == "Key status"), "{theme:?}: not ER's");
+        // Customer's generalization selected, its line shows the two end handles, in the sketch's words.
+        let g = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let g = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::GENERALIZATION)).unwrap();
+            st.uuid(g).unwrap().to_string()
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [g] })).unwrap();
+        h.run();
+        for end in ["source", "target"] {
+            let said = hover(&mut h, &format!("workspace.canvas.line-end.{end}"));
+            assert!(said.iter().any(|t| t == SKETCH_ENDS), "{theme:?}: the {end} handle says the sketch's words: {said:?}");
+            assert!(!said.iter().any(|t| t == "Drag onto another class to move this end"), "{theme:?}: not UML's");
+        }
+    }
+}
+
+/// A diagram a binding keeps as its element's default is said by the notation whose diagrams take
+/// one, among the notations the shell is handed: UML's, of a package and its class diagrams. The
+/// shell has no words of its own for it, so among notations whose diagrams take none, or none at
+/// all, nothing says it.
+#[test]
+fn a_kept_default_diagram_is_said_by_the_notations_handed() {
+    use archforge_engine::{BindingFault, Reason};
+    crate::i18n::set_language("en");
+    let kept = |fault| Reason::DefaultDiagramOf { package: "Sales".into(), fault };
+    let own = "This diagram is the default diagram of Sales. Choose another class diagram as the default of Sales first.";
+    assert_eq!(crate::panels::said(SCREENS.notation_uis(), &kept(None)).as_deref(), Some(own));
+    let foreign = "Sales has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.";
+    assert_eq!(crate::panels::said(SCREENS.notation_uis(), &kept(Some(BindingFault::WrongOwner))).as_deref(), Some(foreign));
+    for fault in [None, Some(BindingFault::WrongOwner)] {
+        assert_eq!(crate::panels::said(SKETCH_UIS, &kept(fault)), None, "{fault:?}: ER and the sketch take no default diagram");
+        assert_eq!(crate::panels::said(&[], &kept(fault)), None, "{fault:?}: the shell alone has no words for it");
+    }
 }
 
 /// The sketch harness in `theme` with Customer renamed [`SKETCH_DRAWN`], whose card the sketch kind

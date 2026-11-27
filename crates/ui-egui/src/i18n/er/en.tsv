@@ -273,6 +273,7 @@ str		Entity	Entity
 str		Relationship types	Relationship types
 str		Place table	Place table
 str		Show related tables	Show related tables
+str		Key status	Key status
 str		The diagram is of no schema	The diagram is of no schema
 str		A relationship joins two tables	A relationship joins two tables
 str		Add relationship	Add relationship
