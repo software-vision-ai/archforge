@@ -18209,26 +18209,30 @@ fn a_card_its_kind_draws_replaces_the_canvass_and_keeps_the_ring_badge_parts_and
             matches!(&c.shape, egui::Shape::Rect(r) if r.stroke.color == accent && r.rect.min.distance(ring.min) < 0.5 && r.rect.max.distance(ring.max) < 0.5)
         });
         assert!(ringed, "{theme:?}: the selection ring");
+        // Neither the part's words nor the label's are painted anywhere but in their tooltips: with
+        // the pointer on empty canvas, none shows; on the part, its words; on the label, its
+        // sentence. Each is moved to and settled before it is read, whatever the click left.
+        let shown = |h: &Harness<'static, Shell>, words: &str| painted(h).iter().filter(|t| *t == words).count();
+        let settle_at = |h: &mut Harness<'static, Shell>, at: egui::Pos2| {
+            h.event(egui::Event::PointerMoved(at));
+            for _ in 0..45 {
+                h.step();
+            }
+        };
+        let label = rect_of(&h, &format!("workspace.canvas.node.{b}.sketch-label"));
+        let off = body.center_bottom() + egui::vec2(0.0, 150.0);
+        settle_at(&mut h, off);
+        assert_eq!((shown(&h, SKETCH_PART_SAYS), shown(&h, SKETCH_LABEL_SAYS)), (0, 0), "{theme:?}: off the card, no hover text");
         // The pointer on the part shows its words, a gesture under way or not.
-        for _ in 0..45 {
-            h.step();
-        }
-        let before = painted(&h).iter().filter(|t| *t == SKETCH_PART_SAYS).count();
-        h.event(egui::Event::PointerMoved(part.center()));
-        for _ in 0..40 {
-            h.step();
-        }
-        assert_eq!(painted(&h).iter().filter(|t| *t == SKETCH_PART_SAYS).count(), before + 1, "{theme:?}: the part's words on hover");
+        settle_at(&mut h, part.center());
+        assert_eq!(shown(&h, SKETCH_PART_SAYS), 1, "{theme:?}: the part's words on hover");
+        settle_at(&mut h, off);
+        assert_eq!(shown(&h, SKETCH_PART_SAYS), 0, "{theme:?}: gone off the part");
         // The label is read out whole, as a label, and shown whole on hover.
         let said = h.get_by_label(SKETCH_LABEL_SAYS).accesskit_node();
         assert_eq!(said.role(), egui::accesskit::Role::Label, "{theme:?}");
-        let label = rect_of(&h, &format!("workspace.canvas.node.{b}.sketch-label"));
-        let before = painted(&h).iter().filter(|t| *t == SKETCH_LABEL_SAYS).count();
-        h.event(egui::Event::PointerMoved(label.center()));
-        for _ in 0..40 {
-            h.step();
-        }
-        assert_eq!(painted(&h).iter().filter(|t| *t == SKETCH_LABEL_SAYS).count(), before + 1, "{theme:?}: the label's tooltip");
+        settle_at(&mut h, label.center());
+        assert_eq!(shown(&h, SKETCH_LABEL_SAYS), 1, "{theme:?}: the label's tooltip");
         // Drawn with no shell, the kind's card gives its problem badge back.
         let session = h.state_mut().session.take().unwrap();
         drop(h);
