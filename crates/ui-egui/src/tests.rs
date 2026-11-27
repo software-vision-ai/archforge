@@ -24391,6 +24391,8 @@ fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can
     assert_eq!(h.state().generate.as_ref().unwrap().copied, None);
 }
 
+/// A class selected on the sample diagram takes attributes and operations typed on its card, each
+/// one undo step.
 #[test]
 fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_undo_step() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
@@ -24517,6 +24519,8 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     }
 }
 
+/// A row typed on a card keeps its type by what it is, refuses a name two types share, and keeps
+/// rows it moves in sight.
 #[test]
 fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_keeps_moved_rows_in_sight() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
@@ -24593,6 +24597,7 @@ fn harness_over(shell: Shell) -> Harness<'static, Shell> {
     h
 }
 
+/// A project opened again resumes its tabs, the diagram it showed and its view.
 #[test]
 fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
@@ -24692,6 +24697,8 @@ fn each_rail_icon_opens_its_own_panel_in_both_appearances() {
     }
 }
 
+/// A class dragged from Models onto a second diagram stays one element, and leaves that diagram by
+/// Delete or the model by Shift+Delete.
 #[test]
 fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leaves_by_delete_or_shift_delete() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
@@ -30067,6 +30074,7 @@ fn select_named(h: &mut Harness<'static, Shell>, class: archforge_mof::ClassId, 
     id
 }
 
+/// The Models tree nests packages, lists members, and moves a class by a drag or by Properties.
 #[test]
 fn the_models_tree_nests_packages_lists_members_and_moves_a_class_by_drag_or_properties() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));

@@ -803,6 +803,7 @@ pub fn real(store: &Store, o: Obj, prop: archforge_mof::PropId) -> f64 {
     }
 }
 
+/// The text `o` holds in `prop`, or an empty one when it holds none.
 pub fn string(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
     store.get(o, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
