@@ -186,27 +186,6 @@ pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, 
     shell.cx(|cx| menu_cx(cx, ui, p, anchor, id, items))
 }
 
-/// A type menu's choices kept between frames: whose and which state of it they were built for (a
-/// revision means something only in its session's history, as another session of the same model,
-/// a version shown or a replacement, starts its revisions anew), in which interface language (the
-/// labels are translated), their labels, the values the commands take and the muted notes that
-/// tell same-named ones apart, in the same order.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct TypeChoices {
-    pub project: Option<Uuid>,
-    pub history: u64,
-    pub revision: u64,
-    pub language: &'static str,
-    /// The classifier whose member is typed, whose template parameters the menu offers (AR-130).
-    pub within: Option<Uuid>,
-    pub labels: Vec<String>,
-    pub values: Vec<String>,
-    pub notes: Vec<String>,
-    /// Each note's parts, a package's path by its names, folded from its front when its row is
-    /// too narrow; empty for none.
-    pub note_parts: Vec<Vec<String>>,
-}
-
 /// [`icon_button_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn icon_button(
     shell: &mut Shell,
@@ -566,7 +545,11 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     }
     // A description typed on the element selected before goes to it first.
     flush_description(shell, s.id);
-    shell.cx(|cx| crate::uml_relate::finish_ends(cx, s.id));
+    // What a notation had typed for the element selected before ends too, whichever panel shows.
+    let uis = shell.notation_uis;
+    for notation in uis {
+        shell.cx(|cx| notation.selection_moved(cx, s.id));
+    }
     match panel {
         Panel::Agent => {
             crate::chat_view::draw(shell, ui, p, r, y);
@@ -578,25 +561,15 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         }
         Panel::Properties | Panel::Skills => {}
     }
-    // A template binding being drawn: its draft, nothing in the model yet (AR-131).
-    if panel == Panel::Properties && shell.cx(|cx| crate::uml_bindings::draft_panel(cx, ui, p, r, y)) {
-        return;
-    }
-    // Several elements, generalizations among them: what a set may be made of them (AR-129).
-    if panel == Panel::Properties
-        && let Some(all) = crate::uml_sets::selected(&shell.cx_ref()).filter(|all| all.len() >= 2)
-    {
-        shell.cx(|cx| crate::uml_sets::selection_body(cx, ui, p, r, y, &all));
-        return;
-    }
-    // An n-ary association being drawn: its draft, not yet in the model (AR-128).
-    if panel == Panel::Properties && shell.cx(|cx| crate::uml_nary::draft_body(cx, ui, p, r, y)) {
+    // A notation's own panel in place of the selection's: a drawing under way, or a selection of
+    // several elements it has a panel for.
+    if panel == Panel::Properties && uis.iter().any(|notation| shell.cx(|cx| notation.properties_in_place(cx, ui, p, r, y))) {
         return;
     }
     ux::text(&paint, r.min + vec2(PAD, y), &s.name, types::CARD_TITLE, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));
     ux::text(&paint, r.min + vec2(PAD, y + 26.0), &s.kind, types::CAPTION, p.text_secondary, Some((r.width() - 2.0 * PAD).max(0.0)));
-    // Every element of the model takes a description: an ER element's is the text DDL writes as its
-    // comment, a UML element's a Comment it owns (AR-186).
+    // Every element of the model takes a description, which its notation keeps its own way
+    // (AR-186).
     let mut body_y = r.top() + y + 51.0;
     if panel == Panel::Properties && s.obj.is_some() && s.class != Some(archforge_diagram::DIAGRAM) {
         description_field(shell, ui, p, pos2(r.left() + PAD, r.top() + y + 49.0), (r.width() - 2.0 * PAD).max(0.0), &s);
