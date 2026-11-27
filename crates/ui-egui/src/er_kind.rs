@@ -153,8 +153,9 @@ impl DiagramKind for ErKind {
             .map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
-    fn status_marks(&self) -> bool {
-        true
+    /// The toggle of the key marks on the tables' columns.
+    fn status_marks(&self) -> Option<String> {
+        Some(tr("Key status"))
     }
 
     /// The relationship tool shows the ends it draws, as the cardinality popover sets them.

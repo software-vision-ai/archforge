@@ -560,8 +560,6 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	Anular e refazer não podem fazer parte de outra alteração.
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	O modelo mudou desde que foi lido, ou foi lido outro projeto. Leia-o novamente e tente outra vez. Nada foi alterado.
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	A alteração não indica para que revisão do modelo foi feita. Leia o modelo e tente outra vez. Nada foi alterado.
-str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Este diagrama é o diagrama predefinido de {package}. Escolha primeiro outro diagrama de classes como diagrama predefinido de {package}.
-str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} tem como diagrama predefinido o diagrama de outro elemento, por isso esse diagrama fica. Escolha primeiro um dos seus próprios diagramas de classes.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Um diagrama não pode substituir-se a si próprio ao ser removido. Escolha outro diagrama como substituto.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Escolha como substituto um diagrama existente ou um novo, não ambos.
 str		A name has to be text.	Um nome tem de ser texto.
@@ -719,7 +717,6 @@ str		Relationship	Relação
 str		Relationship types	Tipos de relação
 str		Note	Nota
 str		Link note	Ligar nota
-str		Key status	Estado das chaves
 str		Grid	Grelha
 str		Arrange diagram	Organizar o diagrama
 str		Move cardinality	Mover a cardinalidade
@@ -1132,7 +1129,6 @@ str		Aggregation	Agregação
 str		Association	Associação
 str		Composite	Composta
 str		Dependency	Dependência
-str		Drag onto another class to move this end	Arraste para outra classe para mover esta ponta
 # Templates (AR-130)
 str		Value	Valor
 # Template bindings (AR-131)

@@ -560,8 +560,6 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	Annuler et rétablir ne peuvent pas faire partie d’une autre modification.
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	Le modèle a changé depuis sa lecture, ou c’est un autre projet qui a été lu. Relisez-le, puis réessayez. Rien n’a été modifié.
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	La modification n’indique pas pour quelle révision du modèle elle a été faite. Lisez le modèle, puis réessayez. Rien n’a été modifié.
-str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Ce diagramme est le diagramme par défaut de {package}. Choisissez d’abord un autre diagramme de classes comme diagramme par défaut de {package}.
-str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} a pour diagramme par défaut le diagramme d’un autre élément, ce diagramme reste donc. Choisissez d’abord l’un de ses propres diagrammes de classes.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Un diagramme ne peut pas se remplacer lui-même lors de sa suppression. Choisissez un autre diagramme comme remplaçant.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Choisissez comme remplaçant soit un diagramme existant, soit un nouveau, mais pas les deux.
 str		A name has to be text.	Un nom doit être du texte.
@@ -719,7 +717,6 @@ str		Relationship	Relation
 str		Relationship types	Types de relation
 str		Note	Note
 str		Link note	Lier une note
-str		Key status	État des clés
 str		Grid	Grille
 str		Arrange diagram	Organiser le diagramme
 str		Move cardinality	Déplacer la cardinalité
@@ -1132,7 +1129,6 @@ str		Aggregation	Agrégation
 str		Association	Association
 str		Composite	Composite
 str		Dependency	Dépendance
-str		Drag onto another class to move this end	Faire glisser sur une autre classe pour déplacer cette extrémité
 # Templates (AR-130)
 str		Value	Valeur
 # Template bindings (AR-131)

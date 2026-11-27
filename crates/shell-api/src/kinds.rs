@@ -161,9 +161,10 @@ pub trait DiagramKind: Sync {
     fn owner_of(&self, store: &Store, selected: Obj) -> Option<Obj>;
     /// Makes a new element for a diagram to be of, named `name`; its id.
     fn add_owner(&self, cx: &mut Ctx, name: &str) -> Result<String, String>;
-    /// Whether the toolbar shows the status marks toggle.
-    fn status_marks(&self) -> bool {
-        false
+    /// The hover text of the toolbar's status marks toggle, in its own words in the language in use
+    /// when asked, where its cards mark a status; none: the toolbar shows no such toggle.
+    fn status_marks(&self) -> Option<String> {
+        None
     }
     /// Draws a tool's face itself; false draws its icon.
     #[allow(clippy::too_many_arguments, reason = "a face is drawn from the tool, its button, its ink and its state")]
@@ -213,9 +214,11 @@ pub trait DiagramKind: Sync {
     /// Opens the element's editor, at the row of its card under a double click (None: the editor's
     /// new row, as the second adorner asks).
     fn open(&self, cx: &mut Ctx, element: Uuid, row: Option<usize>);
-    /// Whether a selected line's ends drag onto another element to reconnect it.
-    fn reconnects(&self) -> bool {
-        false
+    /// What a selected line's two end handles say on hover, in its own words in the language in use
+    /// when asked, where its lines reconnect: each end drags onto another element to move there;
+    /// none: a selected line shows no end handles.
+    fn reconnects(&self) -> Option<String> {
+        None
     }
     /// Moves the source or target end of the line element `element` to the element of `to_node`,
     /// only while the model is at `at`, the revision the drag began on, where the command checks one.

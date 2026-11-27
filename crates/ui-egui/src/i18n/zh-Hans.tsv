@@ -560,8 +560,6 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	撤销和重做不能作为其他更改的一部分运行。
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	模型在读取后已更改，或读取的是另一个项目。请重新读取，然后再试一次。未作任何更改。
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	此更改未说明它针对的是模型的哪个修订版本。请读取模型，然后再试一次。未作任何更改。
-str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	此图是 {package} 的默认图。请先选择另一个类图作为 {package} 的默认图。
-str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} 将另一个元素的图作为其默认图，因此该图会保留。请先选择 {package} 自己的一个类图。
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	图在删除时不能替换自身。请选择另一个图作为替换。
 str		Choose either an existing diagram or a new one as the replacement, not both.	请选择现有的图或新图作为替换，不能同时选择两者。
 str		A name has to be text.	名称必须是文本。
@@ -719,7 +717,6 @@ str		Relationship	关系
 str		Relationship types	关系类型
 str		Note	备注
 str		Link note	链接备注
-str		Key status	键状态
 str		Grid	网格
 str		Arrange diagram	整理图
 str		Move cardinality	移动基数
@@ -1132,7 +1129,6 @@ str		Aggregation	聚合
 str		Association	关联
 str		Composite	组合
 str		Dependency	依赖
-str		Drag onto another class to move this end	拖到另一个类上以移动此端
 # Templates (AR-130)
 str		Value	值
 # Template bindings (AR-131)

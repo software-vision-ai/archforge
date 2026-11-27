@@ -559,8 +559,6 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	Undo and redo cannot run as part of another change.
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.
-str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.
-str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.
 str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.
 str		Choose either an existing diagram or a new one as the replacement, not both.	Choose either an existing diagram or a new one as the replacement, not both.
 str		A name has to be text.	A name has to be text.
@@ -718,7 +716,6 @@ str		Relationship	Relationship
 str		Relationship types	Relationship types
 str		Note	Note
 str		Link note	Link note
-str		Key status	Key status
 str		Grid	Grid
 str		Arrange diagram	Arrange diagram
 str		Move cardinality	Move cardinality
@@ -1131,7 +1128,6 @@ str		Aggregation	Aggregation
 str		Association	Association
 str		Composite	Composite
 str		Dependency	Dependency
-str		Drag onto another class to move this end	Drag onto another class to move this end
 # Templates (AR-130)
 str		Value	Value
 # Template bindings (AR-131)

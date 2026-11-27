@@ -1295,8 +1295,10 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     if !many.is_empty() && shell.canvas.gesture.is_none() {
         arrange_bar(shell, ui, p, r, view, &many);
     }
-    if kind.is_some_and(|k| k.reconnects()) && shell.canvas.gesture.is_none() {
-        line_ends(shell, ui, p, r, view, d);
+    if let Some(hint) = kind.and_then(|k| k.reconnects())
+        && shell.canvas.gesture.is_none()
+    {
+        line_ends(shell, ui, p, r, view, d, &hint);
     }
     if let Some(rect) = rename_rect {
         rename_field(shell, ui, p, rect, view.zoom);
@@ -1340,8 +1342,9 @@ fn selected_line(
 
 /// A selected line's two end handles, each on the line clear of its end's mark so the mark shows
 /// whole, on the end itself where it has none, the two kept apart on screen
-/// ([`crate::canvas::end_handles_at`]): each drags onto another element to move that end there.
-fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d: Obj) {
+/// ([`crate::canvas::end_handles_at`]): each drags onto another element to move that end there,
+/// and says `hint` on hover, in the diagram kind's words.
+fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d: Obj, hint: &str) {
     if shell.looking_only() {
         return;
     }
@@ -1375,7 +1378,7 @@ fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View,
         let resp = ui
             .interact(handle.expand(2.0), widgets::egui_id(&id), egui::Sense::click_and_drag())
             .on_hover_cursor(egui::CursorIcon::Crosshair)
-            .on_hover_text(tr("Drag onto another class to move this end"));
+            .on_hover_text(hint);
         if resp.drag_started_by(egui::PointerButton::Primary)
             && let Some(at) = shell.session.as_ref().map(|s| s.token())
         {

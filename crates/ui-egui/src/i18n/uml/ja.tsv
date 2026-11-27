@@ -32,6 +32,8 @@ str		The package has more than one default diagram. Choose the one of its class 
 str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	このパッケージの既定の図はもう存在しません。そのクラス図のいずれかを既定の図として選んでください。
 str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	このパッケージの既定の図はクラス図ではありません。そのクラス図のいずれかを既定の図として選んでください。
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	このパッケージの既定の図は別の要素のものです。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	この図は {package} の既定の図です。先に別のクラス図を {package} の既定の図として選んでください。
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} は別の要素の図を既定の図にしているため、その図は残ります。先に {package} 自身のクラス図のいずれかを選んでください。
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	この接続はすでに存在します（依存 {dependency}）。既存のリレーションシップを選択してください。
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	選択したリレーションシップはこの 2 つの要素を結んでいないか、もう結んでいません。結んでいるものの中からもう一度選択してください。何も変更されていません。
 str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	選択したリレーションシップはこの 2 つの要素を結んでいないか、もう結んでおらず、現在結んでいるものはありません。何も変更されていません。
@@ -388,6 +390,7 @@ str		Parent package	親パッケージ
 str		A bound can be at most {max}.	境界は最大 {max} までです。
 str		A class realizes only an interface	クラスが実現できるのはインターフェースだけです
 str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
+str		Drag onto another class to move this end	別のクラスへドラッグしてこの端を移動
 str		An association class does not join itself	関連クラスは自分自身を結びません
 str		This association class has an attribute named {name}; an end's role takes another name.	この関連クラスには {name} という属性があります。端のロールには別の名前を付けてください。
 str		An end of this association class has the role {name}; an attribute takes another name.	この関連クラスの端にはロール {name} があります。属性には別の名前を付けてください。

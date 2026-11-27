@@ -207,6 +207,7 @@ str		Entity · {schema}	Entidad · {schema}
 str		Add table	Añadir tabla
 str		Place table	Colocar tabla
 str		Show related tables	Mostrar tablas relacionadas
+str		Key status	Estado de claves
 str		The diagram is of no schema	El diagrama no es de ningún esquema
 str		A relationship joins two tables	Una relación une dos tablas
 str		Add relationship	Añadir relación

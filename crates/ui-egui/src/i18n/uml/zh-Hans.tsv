@@ -32,6 +32,8 @@ str		The package has more than one default diagram. Choose the one of its class 
 str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	该包的默认图已不存在。请选择它的一个类图作为默认图。
 str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	该包的默认图不是类图。请选择它的一个类图作为默认图。
 str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	该包的默认图属于另一个元素。请选择它自己的一个类图作为默认图。
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	此图是 {package} 的默认图。请先选择另一个类图作为 {package} 的默认图。
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} 将另一个元素的图作为其默认图，因此该图会保留。请先选择 {package} 自己的一个类图。
 str		This connection already exists: the dependency {dependency}. Select the existing relationship.	此连接已存在：依赖 {dependency}。请选择现有的关系。
 str		The chosen relationship does not join these two elements, or no longer does. Choose again among those that do. Nothing was changed.	所选的关系未连接这两个元素，或已不再连接。请在连接它们的关系中重新选择。未做任何更改。
 str		The chosen relationship does not join these two elements, or no longer does, and none does now. Nothing was changed.	所选的关系未连接这两个元素，或已不再连接，目前也没有任何关系连接它们。未做任何更改。
@@ -388,6 +390,7 @@ str		Parent package	上级包
 str		A bound can be at most {max}.	界限最多为 {max}。
 str		A class realizes only an interface	类只能实现接口
 str		A relationship joins two classes or interfaces	关系连接两个类或接口
+str		Drag onto another class to move this end	拖到另一个类上以移动此端
 str		An association class does not join itself	关联类不连接自身
 str		This association class has an attribute named {name}; an end's role takes another name.	此关联类已有名为 {name} 的属性；端的角色需使用其他名称。
 str		An end of this association class has the role {name}; an attribute takes another name.	此关联类的一端已有角色 {name}；属性需使用其他名称。
