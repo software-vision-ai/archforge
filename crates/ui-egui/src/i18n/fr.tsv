@@ -1020,7 +1020,6 @@ str		Association class	Classe d’association
 str		Classifier kinds	Types de classificateur
 str		Package	Paquetage
 # Membres de classe dans Propriétés
-str		Owner: {path}	Propriétaire : {path}
 str		Stereotype	Stéréotype
 str		{first} and {second}	{first} et {second}
 str		{first}, {second} and {third}	{first}, {second} et {third}

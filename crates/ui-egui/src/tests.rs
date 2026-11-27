@@ -11628,7 +11628,7 @@ fn a_package_of_another_branch_dropped_from_models_is_shown_once_and_keeps_its_o
         let (owner, cards) = owner_and_cards(&h);
         let [(card, Some(on))] = cards[..] else { panic!("{theme:?}: one card of Archive: {cards:?}") };
         assert_eq!((owner, on), (Some(operations), shown), "{theme:?}: on Commerce's diagram, still owned by Operations");
-        let line = h.state().canvas.path_badges.iter().find(|b| b.node == card).map(|b| b.whole.clone());
+        let line = h.state().canvas.card_labels.iter().find(|b| b.node == card).map(|b| b.whole.clone());
         assert_eq!(line.as_deref(), Some("Owner: Commerce platform › Operations"), "{theme:?}: its owner line");
         // Dropped again: said so, nothing changed.
         let state = |h: &Harness<'static, Shell>| {
@@ -11999,7 +11999,7 @@ fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner
             for (d, card) in [(overview, sales_card2), (top, sales_card)] {
                 crate::canvas::open(h.state_mut(), d);
                 h.run();
-                said.push(h.state().canvas.path_badges.iter().find(|b| b.node == card).map(|b| b.whole.clone()));
+                said.push(h.state().canvas.card_labels.iter().find(|b| b.node == card).map(|b| b.whole.clone()));
             }
             let st = h.state().session.as_ref().unwrap().doc();
             let mut on: Vec<_> = archforge_diagram::views_of(st, st.by_uuid(sales).unwrap()).2.into_iter().map(|n| st.uuid(n).unwrap()).collect();
@@ -12440,7 +12440,7 @@ fn a_package_card_names_its_package_in_a_tab_that_fits_the_name_and_follows_a_re
         let in_tab = texts_in(&h, longest);
         assert!(in_tab.iter().any(|(t, glyphs)| t == whole && *glyphs < whole.chars().count()), "cut: {in_tab:?}");
         let before = painted(&h).iter().filter(|t| *t == whole).count();
-        assert!(h.state().canvas.package_tabs.iter().any(|t| t.cut.as_deref() == Some("Customer Relationship Management Integrations")));
+        assert!(h.state().canvas.card_parts.iter().any(|t| t.hover.as_deref() == Some("Customer Relationship Management Integrations")));
         // On the tab, the pointer shows the whole name.
         h.event(egui::Event::PointerMoved(longest.center()));
         for _ in 0..40 {
@@ -12460,12 +12460,12 @@ fn a_package_cards_thumbnail_is_its_own_diagram_scaled_and_follows_it() {
     let shown = |h: &Harness<'static, Shell>| {
         let s = h.state().session.as_ref().unwrap();
         let st = s.doc();
-        crate::canvas::preview(st, s.view(), st.by_uuid(own).unwrap(), area).expect("a thumbnail")
+        crate::uml_package::preview(st, s.view(), st.by_uuid(own).unwrap(), area).expect("a thumbnail")
     };
     let first = shown(&h);
     assert_eq!(first.cards.len(), 2, "both classes");
     assert_eq!(first.lines.len(), 1, "and the association between them");
-    assert!(first.cards.iter().all(|c| area.contains_rect(c.rect) && c.look == crate::canvas::MiniLook::Plain && c.rows == vec![0, 0]));
+    assert!(first.cards.iter().all(|c| area.contains_rect(c.rect) && c.look == crate::uml_package::MiniLook::Plain && c.rows == vec![0, 0]));
     let (a, b) = (first.cards[0].rect, first.cards[1].rect);
     assert!(a.right() < b.left() && (a.top() - b.top()).abs() < 0.5, "laid out as on the diagram: side by side");
     assert!(first.scale > 0.0 && first.scale <= 0.5);
@@ -12481,8 +12481,35 @@ fn a_package_cards_thumbnail_is_its_own_diagram_scaled_and_follows_it() {
     s.execute("diagram.unplace", &serde_json::json!({ "nodes": [order.to_string(), line.to_string()] })).unwrap();
     h.run();
     let st = h.state().session.as_ref().unwrap();
-    assert!(crate::canvas::preview(st.doc(), st.view(), st.doc().by_uuid(own).unwrap(), area).is_none());
+    assert!(crate::uml_package::preview(st.doc(), st.view(), st.doc().by_uuid(own).unwrap(), area).is_none());
     assert!(painted(&h).iter().any(|t| t == "Empty diagram"));
+}
+
+/// A package's card is drawn by the kind that draws packages whatever the scene's own kind: on a
+/// scene of UML's kind, of a kind that leaves the card to the canvas (ER's) and of no kind, its tab
+/// and thumbnail are drawn alike, as a stored project may put the card anywhere it opens; with no
+/// kind asked at all, the canvas's own card is all there is. In light and dark.
+#[test]
+fn a_package_card_is_drawn_by_the_kind_that_draws_packages_whatever_the_scenes_kind() {
+    let (mut h, top, _, card, _, _) = package_preview_harness(ThemeKind::Light);
+    let session = h.state_mut().session.take().unwrap();
+    drop(h);
+    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
+    let (tab, preview) = (format!("workspace.canvas.node.{card}.tab"), format!("workspace.canvas.node.{card}.preview"));
+    let uml: &'static dyn crate::kinds::DiagramKind = &crate::uml_ui::UmlKind;
+    let er: &'static dyn crate::kinds::DiagramKind = &crate::er_kind::ErKind;
+    for dark in [false, true] {
+        for scene in [Some(uml), Some(er), None] {
+            let (texts, at, _) = drawn_alone_at(&session, &top.to_string(), (scene, crate::kinds::KINDS), dark, 1000.0, &none, &clean);
+            let ids: Vec<&String> = at.iter().map(|(i, _)| i).collect();
+            let named = scene.map(|k| k.kind());
+            assert!(ids.contains(&&tab) && ids.contains(&&preview), "{dark} {named:?}: the package's card: {ids:?}");
+            assert!(texts.iter().any(|t| t == "Sales"), "{dark} {named:?}: its name in its tab");
+        }
+        let (_, at, _) = drawn_alone_at(&session, &top.to_string(), (None, &[]), dark, 1000.0, &none, &clean);
+        assert!(at.iter().all(|(i, _)| *i != tab && *i != preview), "{dark}: the canvas's own card, no tab: {at:?}");
+        assert!(at.iter().any(|(i, _)| *i == format!("workspace.canvas.node.{card}")), "{dark}: the card still drawn");
+    }
 }
 
 /// A project whose root's structure diagram is open at 100 % (AR-565), with the root's id and the
@@ -12566,7 +12593,7 @@ fn a_long_owning_path_folds_its_first_owners_and_a_narrow_card_keeps_the_nearest
         h.run();
         let whole = "Owner: Commerce platform › Operations and logistics › Regional fulfilment";
         let badge = |h: &Harness<'static, Shell>, card: &str| {
-            h.state().canvas.path_badges.iter().find(|b| b.node.to_string() == card).cloned().unwrap_or_else(|| panic!("a path under {card}"))
+            h.state().canvas.card_labels.iter().find(|b| b.node.to_string() == card).cloned().unwrap_or_else(|| panic!("a path under {card}"))
         };
         // Too long for its card: the first owners fold, the nearest stays.
         let long = badge(&h, &wide);
@@ -12856,6 +12883,28 @@ fn a_packages_tab_selects_drags_and_renames_its_card_and_the_name_is_typed_in_th
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_core::name_of(st, st.by_uuid(sales).unwrap()), "Sales and Marketing");
+}
+
+/// A double click on a package's card opens its name in its tab in the very frame of the second
+/// click, before the card is drawn renamed, in light and dark (AR-113).
+#[test]
+fn a_packages_name_is_typed_in_its_tab_from_the_frame_the_double_click_opens_it() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _, card, _, _) = package_preview_harness(theme);
+        let tab = rect_of(&h, &format!("workspace.canvas.node.{card}.tab"));
+        let body = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+        let at = body.center();
+        h.event(egui::Event::PointerMoved(at));
+        for _ in 0..2 {
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+            }
+            h.step();
+        }
+        assert!(h.state().canvas.rename.as_ref().is_some_and(|r| r.text == "Sales"), "{theme:?}: {:?}", h.state().canvas.rename);
+        let field = rect_of(&h, "workspace.canvas.rename");
+        assert!(tab.contains_rect(field), "{theme:?}: in the tab from the first frame: {field:?} {tab:?}");
+    }
 }
 
 #[test]
@@ -16300,15 +16349,16 @@ fn drawn_alone(
     overrides: &std::collections::BTreeMap<archforge_mof::Uuid, egui::Rect>,
     problems: &std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
 ) -> (Vec<String>, Vec<String>, usize) {
-    let (texts, recorded, badges) = drawn_alone_at(session, d, kind, dark, width, overrides, problems);
+    let (texts, recorded, badges) = drawn_alone_at(session, d, (kind, crate::kinds::KINDS), dark, width, overrides, problems);
     (texts, recorded.into_iter().map(|(id, _)| id).collect(), badges)
 }
 
-/// [`drawn_alone`], each id recorded with its rectangle.
+/// [`drawn_alone`], each id recorded with its rectangle, `kinds` the kinds asked after `kind` for
+/// a card they draw themselves.
 fn drawn_alone_at(
     session: &archforge_notations::Session,
     d: &str,
-    kind: Option<&'static dyn crate::kinds::DiagramKind>,
+    (kind, kinds): (Option<&'static dyn crate::kinds::DiagramKind>, &'static [&'static dyn crate::kinds::DiagramKind]),
     dark: bool,
     width: f32,
     overrides: &std::collections::BTreeMap<archforge_mof::Uuid, egui::Rect>,
@@ -16327,8 +16377,17 @@ fn drawn_alone_at(
             ui.ctx().set_fonts(crate::fonts::definitions());
             return;
         }
-        let scene =
-            crate::canvas::Scene { p: crate::ux::palette(dark), store, notations: session.view(), kind, diagram, view: &view, grid: &grid, area };
+        let scene = crate::canvas::Scene {
+            p: crate::ux::palette(dark),
+            store,
+            notations: session.view(),
+            kind,
+            kinds,
+            diagram,
+            view: &view,
+            grid: &grid,
+            area,
+        };
         let live = crate::canvas::Live {
             selection: &[],
             overrides,
@@ -17974,6 +18033,66 @@ impl crate::kinds::DiagramKind for SketchKind {
         };
         (archforge_core::name_of(store, element) == "Party").then(|| vec![first, own])
     }
+    /// The name typed on a card the sketch draws itself goes in the card's part over its top left,
+    /// in the small style; any other card's in its header.
+    fn name_field(
+        &self,
+        _: &egui::Painter,
+        store: &archforge_mof::Store,
+        node: archforge_mof::Obj,
+        rect: egui::Rect,
+        _: &str,
+        z: f32,
+    ) -> Option<(egui::Rect, crate::ux::Type)> {
+        let element = crate::canvas::element_of(store, node, archforge_diagram::node::ELEMENT)?;
+        (archforge_core::name_of(store, element) == SKETCH_DRAWN).then(|| (sketch_part(rect, z), crate::ux::types::SMALL.scaled(z)))
+    }
+    /// Draws the card of a class named [`SKETCH_DRAWN`] itself: a plain box with its own word, a
+    /// part over its top left that takes a press and says [`SKETCH_PART_SAYS`] on hover, and a
+    /// label under it that says [`SKETCH_LABEL_SAYS`]; any other card is the canvas's.
+    fn draw_card(
+        &self,
+        paint: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> bool {
+        if archforge_core::name_of(d.store, card.element) != SKETCH_DRAWN {
+            return false;
+        }
+        let z = d.view.zoom;
+        paint.rect_filled(card.rect, 0.0, d.p.surface);
+        crate::ux::text(paint, card.rect.min + egui::vec2(8.0, 8.0) * z, SKETCH_WORD, crate::ux::types::UI.scaled(z), d.p.text, None);
+        let Ok(id) = d.store.uuid(card.node) else { return true };
+        let part = sketch_part(card.rect, z);
+        paint.rect_filled(part, 0.0, d.p.surface);
+        crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.sketch-part"), "tab", part);
+        d.parts.borrow_mut().push(crate::canvas::CardPart { rect: part, node: id, hover: Some(SKETCH_PART_SAYS.into()) });
+        let label = egui::Rect::from_min_size(card.rect.left_bottom() + egui::vec2(0.0, 6.0) * z, egui::vec2(card.rect.width(), 16.0 * z));
+        let label_id = format!("workspace.canvas.node.{id}.sketch-label");
+        crate::widgets::record_visible(ui, registry, &label_id, "label", label);
+        d.labels.borrow_mut().push(crate::canvas::CardLabel {
+            rect: label,
+            node: id,
+            id: label_id,
+            shown: SKETCH_LABEL_SAYS.into(),
+            whole: SKETCH_LABEL_SAYS.into(),
+        });
+        true
+    }
+}
+
+/// The name of a class whose card the sketch kind draws itself, the word it draws on it, and what
+/// its part and its label say.
+const SKETCH_DRAWN: &str = "Drawn by the sketch";
+const SKETCH_WORD: &str = "Sketched";
+const SKETCH_PART_SAYS: &str = "The sketch's part";
+const SKETCH_LABEL_SAYS: &str = "The sketch's label, whole";
+
+/// The part over the top left of a card at `rect` that the sketch kind draws itself, at zoom `z`.
+fn sketch_part(rect: egui::Rect, z: f32) -> egui::Rect {
+    egui::Rect::from_min_size(rect.left_top() - egui::vec2(0.0, 24.0) * z, egui::vec2(90.0, 24.0) * z)
 }
 
 /// The element menu's rows as drawn, top to bottom: each key, with the gap above it from the row
@@ -18086,6 +18205,132 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
         *SKETCH_CALLS.lock().unwrap(),
         ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]
     );
+}
+
+/// The sketch harness in `theme` with Customer renamed [`SKETCH_DRAWN`], whose card the sketch kind
+/// draws itself; gives the diagram, Party's node and Customer's node.
+fn sketch_drawn_harness(theme: ThemeKind) -> (Harness<'static, Shell>, String, String, String) {
+    let (mut h, d, a, b, _e) = sketch_harness();
+    h.state_mut().state.theme = theme;
+    let s = h.state_mut().session.as_mut().unwrap();
+    let st = s.doc();
+    let customer = st
+        .uuid(crate::canvas::element_of(st, st.by_uuid(archforge_mof::Uuid::parse(&b).unwrap()).unwrap(), archforge_diagram::node::ELEMENT).unwrap())
+        .unwrap();
+    s.execute("uml.class.rename", &serde_json::json!({ "class": customer.to_string(), "name": SKETCH_DRAWN })).unwrap();
+    h.run();
+    (h, d, a, b)
+}
+
+/// The elements selected, by id.
+fn selected_ids(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Uuid> {
+    let s = h.state().session.as_ref().unwrap();
+    s.view().selection.iter().filter_map(|o| s.doc().uuid(*o).ok()).collect()
+}
+
+/// A card its diagram's kind draws itself takes the place of the canvas's own (the sketch's box
+/// and word, none of the canvas's rows), while the canvas's other cards stay its own; its part over
+/// the card takes a press as the card does and says its words on hover; its label is read out whole
+/// and shown on hover; and the canvas still draws the selection ring round it and gives its problem
+/// badge back. In light and dark.
+#[test]
+fn a_card_its_kind_draws_replaces_the_canvass_and_keeps_the_ring_badge_parts_and_labels() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, d, _a, b) = sketch_drawn_harness(theme);
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == SKETCH_WORD), "{theme:?}: the kind's card: {texts:?}");
+        assert!(!texts.iter().any(|t| t == "since"), "{theme:?}: none of the canvas's card");
+        assert_eq!(texts.iter().filter(|t| *t == "CLASS").count(), 1, "{theme:?}: Party's eyebrow alone");
+        assert!(texts.iter().any(|t| t == "partyId"), "{theme:?}: Party's card is still the canvas's");
+        let node = archforge_mof::Uuid::parse(&b).unwrap();
+        assert_eq!(h.state().canvas.kind_cards, vec![(node, SKETCH)], "{theme:?}");
+        let body = rect_of(&h, &format!("workspace.canvas.node.{b}"));
+        let part = rect_of(&h, &format!("workspace.canvas.node.{b}.sketch-part"));
+        assert!(!body.contains(part.center()), "{theme:?}: the part lies outside the card");
+        // A click on the part selects the card's element.
+        click(&mut h, part.center());
+        let element = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(crate::canvas::element_of(st, st.by_uuid(node).unwrap(), archforge_diagram::node::ELEMENT).unwrap()).unwrap()
+        };
+        assert_eq!(selected_ids(&h), vec![element], "{theme:?}: the part selects its card");
+        // The canvas draws the selection ring round the kind's card.
+        let accent = egui::Color32::from(crate::ux::palette(theme == ThemeKind::Dark).accent);
+        let ring = body.expand(4.0);
+        let ringed = h.output().shapes.iter().any(|c| {
+            matches!(&c.shape, egui::Shape::Rect(r) if r.stroke.color == accent && r.rect.min.distance(ring.min) < 0.5 && r.rect.max.distance(ring.max) < 0.5)
+        });
+        assert!(ringed, "{theme:?}: the selection ring");
+        // Neither the part's words nor the label's are painted anywhere but in their tooltips: with
+        // the pointer on empty canvas, none shows; on the part, its words; on the label, its
+        // sentence. Each is moved to and settled before it is read, whatever the click left.
+        let shown = |h: &Harness<'static, Shell>, words: &str| painted(h).iter().filter(|t| *t == words).count();
+        let settle_at = |h: &mut Harness<'static, Shell>, at: egui::Pos2| {
+            h.event(egui::Event::PointerMoved(at));
+            for _ in 0..45 {
+                h.step();
+            }
+        };
+        let label = rect_of(&h, &format!("workspace.canvas.node.{b}.sketch-label"));
+        let off = body.center_bottom() + egui::vec2(0.0, 150.0);
+        settle_at(&mut h, off);
+        assert_eq!((shown(&h, SKETCH_PART_SAYS), shown(&h, SKETCH_LABEL_SAYS)), (0, 0), "{theme:?}: off the card, no hover text");
+        // The pointer on the part shows its words, a gesture under way or not.
+        settle_at(&mut h, part.center());
+        assert_eq!(shown(&h, SKETCH_PART_SAYS), 1, "{theme:?}: the part's words on hover");
+        settle_at(&mut h, off);
+        assert_eq!(shown(&h, SKETCH_PART_SAYS), 0, "{theme:?}: gone off the part");
+        // The label is read out whole, as a label, and shown whole on hover.
+        let said = h.get_by_label(SKETCH_LABEL_SAYS).accesskit_node();
+        assert_eq!(said.role(), egui::accesskit::Role::Label, "{theme:?}");
+        settle_at(&mut h, label.center());
+        assert_eq!(shown(&h, SKETCH_LABEL_SAYS), 1, "{theme:?}: the label's tooltip");
+        // Drawn with no shell, the kind's card gives its problem badge back.
+        let session = h.state_mut().session.take().unwrap();
+        drop(h);
+        let st = session.doc();
+        let flagged = [(st.by_uuid(element).unwrap(), vec!["A problem".to_string()])].into_iter().collect();
+        let (texts, _, badges) = drawn_alone(&session, &d, Some(&SketchKind), theme == ThemeKind::Dark, 1000.0, &Default::default(), &flagged);
+        assert!(texts.iter().any(|t| t == SKETCH_WORD), "{theme:?}: drawn by the kind");
+        assert_eq!(badges, 1, "{theme:?}: its badge");
+    }
+}
+
+/// The name typed in place on a card its kind draws goes where the kind says, from the very frame
+/// the double click opens it, and stays there while it is typed; a canvas card's goes in its
+/// header. In light and dark.
+#[test]
+fn the_name_typed_on_a_card_its_kind_draws_goes_where_the_kind_says_from_the_first_frame() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _d, a, b) = sketch_drawn_harness(theme);
+        let body = rect_of(&h, &format!("workspace.canvas.node.{b}"));
+        let part = sketch_part(body, 1.0);
+        // The frame the second click lands in opens the name, and the field is in the part.
+        let at = rect_of(&h, &format!("workspace.canvas.node.{b}.sketch-part")).center();
+        h.event(egui::Event::PointerMoved(at));
+        for _ in 0..2 {
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+            }
+            h.step();
+        }
+        assert!(h.state().canvas.rename.as_ref().is_some_and(|r| r.text == SKETCH_DRAWN), "{theme:?}: {:?}", h.state().canvas.rename);
+        let field = rect_of(&h, "workspace.canvas.rename");
+        assert_eq!(field, part, "{theme:?}: in the part from the first frame");
+        h.state_mut().canvas.rename.as_mut().unwrap().text = "Typed".into();
+        h.run();
+        assert_eq!(rect_of(&h, "workspace.canvas.rename"), part, "{theme:?}: still there while typed");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Party's card is the canvas's: its name is typed in its header.
+        for _ in 0..45 {
+            h.step();
+        }
+        let party = rect_of(&h, &format!("workspace.canvas.node.{a}"));
+        double_click(&mut h, party.left_top() + egui::vec2(60.0, 30.0));
+        let field = rect_of(&h, "workspace.canvas.rename");
+        assert!(party.contains_rect(field) && field.top() > party.top() + 20.0, "{theme:?}: in Party's header: {field:?} {party:?}");
+    }
 }
 
 /// ER's screens alone: the sketch's package then has no notation in the shell to word it.
@@ -34185,7 +34430,7 @@ fn the_canvas_starts_n_ary_legs_where_umls_kind_says() {
     let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
     for dark in [false, true] {
         let leg_rects = |kind: &'static dyn crate::kinds::DiagramKind| {
-            let (_, at, _) = drawn_alone_at(&session, &ids["diagram"], Some(kind), dark, 1000.0, &none, &clean);
+            let (_, at, _) = drawn_alone_at(&session, &ids["diagram"], (Some(kind), crate::kinds::KINDS), dark, 1000.0, &none, &clean);
             legs.iter().map(|l| at.iter().find(|(id, _)| id == l).map(|(_, r)| *r).unwrap()).collect::<Vec<_>>()
         };
         let (uml, er) = (leg_rects(&crate::uml_ui::UmlKind), leg_rects(&crate::er_kind::ErKind));

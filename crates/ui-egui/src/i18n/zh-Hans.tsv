@@ -1020,7 +1020,6 @@ str		Association class	关联类
 str		Classifier kinds	分类器类型
 str		Package	包
 # 属性面板中的类成员
-str		Owner: {path}	所有者：{path}
 str		Stereotype	构造型
 str		{first} and {second}	{first} 和 {second}
 str		{first}, {second} and {third}	{first}、{second} 和 {third}
