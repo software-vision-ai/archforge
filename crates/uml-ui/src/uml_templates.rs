@@ -21,12 +21,12 @@ use archforge_uml::templates::{self, Kind};
 use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::cx::Ctx;
-use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, PAD, ROW, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx, text_field_cx};
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::i18n::{fmt, tr, trn};
+use archforge_shell_api::panels::{FIELD, PAD, ROW, control_cx, icon_button_cx, run_cx, section_cx, select_field_cx, text_field_cx};
 
 /// The ids' stem: `workspace.properties.class.templateParameters.add`,
 /// `workspace.properties.class.templateParameter.<k>` and its fields.
@@ -101,7 +101,7 @@ pub(crate) fn kind_word(kind: Kind) -> String {
 }
 
 /// Opens the editor on parameter `target`, or on a new one of `classifier`.
-pub(crate) fn open(cx: &mut Ctx, classifier: Uuid, target: Option<Uuid>) {
+pub fn open(cx: &mut Ctx, classifier: Uuid, target: Option<Uuid>) {
     let mut edit = TemplateEdit {
         classifier,
         target,
@@ -232,7 +232,7 @@ pub(crate) fn section_of(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, 
             paint.rect_filled(row, 6.0, p.page);
         }
         ux::text(&paint, pos2(row.left() + 10.0, row.top() + 9.0), text, types::UI, p.text, Some((width - 50.0).max(0.0)));
-        if crate::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
+        if archforge_shell_api::panels::edit_button_cx(cx, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
             open(cx, c_id, Some(*id));
         }
         y += ROW;
@@ -257,7 +257,7 @@ fn in_use_box(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32,
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
     paint.galley(pos2(left + 32.0, y + 10.0), text, p.text.into());
-    crate::widgets::record_visible(ui, cx.registry, &format!("{ID}.refusal"), "text", card);
+    archforge_shell_api::widgets::record_visible(ui, cx.registry, &format!("{ID}.refusal"), "text", card);
     y = card.bottom() + 12.0;
     let label = tr("Show the binding");
     let g = ux::galley(&paint, &label, types::UI, p.text, None);
@@ -270,7 +270,7 @@ fn in_use_box(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32,
         if let Some(uml) = uml_mut(cx.notation_states) {
             uml.template_in_use = None;
         }
-        crate::panels::select_element_cx(cx, binding);
+        archforge_shell_api::panels::select_element_cx(cx, binding);
     }
     y = b.bottom() + 12.0;
     let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(u.parameter).map(|o| templates::parameter_name(s.doc(), o))).unwrap_or_default();
@@ -366,7 +366,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k: usiz
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal_cx(cx, ui, crate::uml_state::TEMPLATE, card);
+    archforge_shell_api::panels::reveal_cx(cx, ui, crate::uml_state::TEMPLATE, card);
     // The menus last, over the card; Escape with one open closes the menu alone.
     let menu_open = cx.panels.menu.is_some();
     if cx.panels.menu == Some(menus::TEMPLATE_KIND)
@@ -387,7 +387,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k: usiz
         && let Some(choices) = cx.session.as_ref().map(|s| constraint_choices(s.doc(), edit.kind))
     {
         let items: Vec<String> = choices.iter().map(|(l, _)| l.clone()).collect();
-        if let Some(v) = crate::panels::menu_cx(cx, ui, p, c_field, &c_id, &items).and_then(|i| choices.get(i)) {
+        if let Some(v) = archforge_shell_api::panels::menu_cx(cx, ui, p, c_field, &c_id, &items).and_then(|i| choices.get(i)) {
             edit.constraint = v.1.clone();
             if let Some(st) = cx.session.as_ref().map(|s| s.doc())
                 && !default_choices(st, edit.kind, &edit.constraint).iter().any(|(_, d)| *d == edit.default)
@@ -400,7 +400,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k: usiz
         && let Some(choices) = cx.session.as_ref().map(|s| default_choices(s.doc(), edit.kind, &edit.constraint))
     {
         let items: Vec<String> = choices.iter().map(|(l, _)| l.clone()).collect();
-        if let Some(v) = crate::panels::menu_cx(cx, ui, p, d_field, &d_id, &items).and_then(|i| choices.get(i)) {
+        if let Some(v) = archforge_shell_api::panels::menu_cx(cx, ui, p, d_field, &d_id, &items).and_then(|i| choices.get(i)) {
             edit.default = v.1.clone();
         }
     }
@@ -444,12 +444,12 @@ fn kind_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, cu
         field.bottom() + 4.0
     };
     let m = Rect::from_min_size(pos2(left, top), vec2(width, height));
-    let picked = ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), m, |ui| {
+    let picked = ux::overlay(ui, archforge_shell_api::widgets::egui_id(&format!("{id}.layer")), m, |ui| {
         let paint = ui.painter().clone();
         ux::shadow(&paint, m, 8.0, p.shadow);
         paint.rect_filled(m, 8.0, p.surface);
         paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-        let eyebrow = crate::canvas::eyebrow_case(&tr("Parameter kind"));
+        let eyebrow = archforge_shell_api::canvas::eyebrow_case(&tr("Parameter kind"));
         ux::text(&paint, pos2(m.left() + 14.0, m.top() + 12.0), &eyebrow, types::EYEBROW, p.text_muted, Some(m.width() - 28.0));
         let mut reached = cx.panels.menu_reached.as_ref().filter(|(of, _)| of == id).map(|(_, i)| *i);
         let (down, up, enter) = ui.input_mut(|i| {
@@ -485,9 +485,9 @@ fn kind_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, cu
             } else {
                 // Named, disabled and saying why, never taken for another kind.
                 let why = fmt(&tr("{kind} template parameters are not supported yet."), &[("kind", &word)]);
-                crate::widgets::record_visible(ui, cx.registry, &item, "menu-item", r);
-                let resp = ui.interact(r, crate::widgets::egui_id(&item), Sense::hover());
-                ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&item), |node| {
+                archforge_shell_api::widgets::record_visible(ui, cx.registry, &item, "menu-item", r);
+                let resp = ui.interact(r, archforge_shell_api::widgets::egui_id(&item), Sense::hover());
+                ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(&item), |node| {
                     node.set_role(egui::accesskit::Role::MenuItem);
                     node.set_disabled();
                     node.set_description(why.clone());
@@ -697,8 +697,8 @@ fn commit(cx: &mut Ctx, edit: &TemplateEdit) {
 
 /// The open editor's bin pressed, as a sample to look at: the removal refused while a binding
 /// uses the parameter.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn remove_sample(cx: &mut Ctx) {
+#[cfg(feature = "snapshot")]
+pub fn remove_sample(cx: &mut Ctx) {
     if let Some(edit) = uml(cx.notation_states).and_then(|uml| uml.template.clone()) {
         remove_parameter(cx, &edit);
     }
@@ -723,7 +723,7 @@ pub(crate) fn kind_line(kind: &str, n: usize) -> String {
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add template parameter"].into_iter()
 }

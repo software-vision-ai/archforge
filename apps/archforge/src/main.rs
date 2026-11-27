@@ -34,7 +34,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use archforge_shell_api::screens::ScreensRegistry;
-use archforge_ui_egui::{ER, Shell, UML};
+use archforge_ui_egui::{ER, Shell};
+use archforge_uml_ui::UML;
 
 /// The notations' screens parts the app registers at start-up (ADR 0003, "Two registries"), in
 /// the order the shell lists them: ER's, then UML's. Every shell the app makes is given them. A

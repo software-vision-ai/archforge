@@ -1,18 +1,17 @@
 //! What UML keeps between frames for its own editors, menus, drawings and tools: the Properties
 //! editors of a member, a constraint, a qualifier, a template parameter, an extension or applied
 //! profile, an n-ary end and an association's ends, the refusals said under their sections, the
-//! Stereotypes section, a template binding before it is written and the type menus' choices; and
-//! on the canvas a member typed in place, the generalization lines' and n-ary associations' menus,
-//! an n-ary association being drawn, what the Relationship and classifier tools make, and package
-//! navigation's ways back and landings. The
-//! shell holds it as one notation's state among others ([`crate::notation_ui::NotationState`]);
-//! UML's screens reach it through [`uml`] and [`uml_mut`].
+//! Stereotypes section, a template binding before it is written and the type menus' choices; and on
+//! the canvas a member typed in place, the generalization lines' and n-ary associations' menus, an
+//! n-ary association being drawn, what the Relationship and classifier tools make, and package
+//! navigation's ways back and landings. The shell holds it as one notation's state among others
+//! ([`archforge_shell_api::notation_ui::NotationState`]); UML's screens reach it through [`uml`]
+//! and [`uml_mut`].
 
 use archforge_mof::{Obj, Store, Uuid};
 use egui::Pos2;
 
-use crate::notation_ui::{NotationState, NotationStates};
-use crate::panels::{Editor, MenuId, OpenEditor};
+use archforge_shell_api::notation_ui::{Editor, MenuId, NotationState, NotationStates, OpenEditor};
 
 /// A class member editor's card.
 pub(crate) const MEMBER: Editor = Editor { notation: archforge_uml::INDEX, card: "member" };
@@ -30,8 +29,8 @@ pub(crate) const NARY_END: Editor = Editor { notation: archforge_uml::INDEX, car
 /// UML's menus in the shell's one open-menu slot, each by its key among UML's: only UML's screens
 /// open, recognise and close them. A menu shown once per row is the first of its kind here, and
 /// [`MenuId::at`] names the row's.
-pub(crate) mod menus {
-    use crate::panels::MenuId;
+pub mod menus {
+    use archforge_shell_api::notation_ui::MenuId;
 
     /// The menu `key` of UML.
     const fn uml(key: &'static str) -> MenuId {
@@ -40,65 +39,65 @@ pub(crate) mod menus {
 
     /// A class member editor's visibility, its type or return type, and a parameter's type, by the
     /// parameter.
-    pub(crate) const MEMBER_VISIBILITY: MenuId = uml("member-visibility");
-    pub(crate) const MEMBER_TYPE: MenuId = uml("member-type");
-    pub(crate) const PARAM_TYPE: MenuId = uml("param-type");
+    pub const MEMBER_VISIBILITY: MenuId = uml("member-visibility");
+    pub const MEMBER_TYPE: MenuId = uml("member-type");
+    pub const PARAM_TYPE: MenuId = uml("param-type");
     /// An attribute editor's default literal (for an enumeration's type), Subsets and Redefines
     /// (AR-126).
-    pub(crate) const MEMBER_DEFAULT: MenuId = uml("member-default");
-    pub(crate) const MEMBER_SUBSETS: MenuId = uml("member-subsets");
-    pub(crate) const MEMBER_REDEFINES: MenuId = uml("member-redefines");
+    pub const MEMBER_DEFAULT: MenuId = uml("member-default");
+    pub const MEMBER_SUBSETS: MenuId = uml("member-subsets");
+    pub const MEMBER_REDEFINES: MenuId = uml("member-redefines");
     /// The type menu of a member typed in place on its class's card.
-    pub(crate) const INLINE_TYPE: MenuId = uml("inline-type");
+    pub const INLINE_TYPE: MenuId = uml("inline-type");
     /// An association end's aggregation and its multiplicity's presets, by the end.
-    pub(crate) const END_AGGREGATION: MenuId = uml("end-aggregation");
-    pub(crate) const END_MULTIPLICITY: MenuId = uml("end-multiplicity");
+    pub const END_AGGREGATION: MenuId = uml("end-aggregation");
+    pub const END_MULTIPLICITY: MenuId = uml("end-multiplicity");
     /// An association end's default literal (for an enumeration's type), Subsets and Redefines, by
     /// the end (AR-126).
-    pub(crate) const END_DEFAULT: MenuId = uml("end-default");
-    pub(crate) const END_SUBSETS: MenuId = uml("end-subsets");
-    pub(crate) const END_REDEFINES: MenuId = uml("end-redefines");
+    pub const END_DEFAULT: MenuId = uml("end-default");
+    pub const END_SUBSETS: MenuId = uml("end-subsets");
+    pub const END_REDEFINES: MenuId = uml("end-redefines");
     /// A qualifier editor's type (AR-127).
-    pub(crate) const QUALIFIER_TYPE: MenuId = uml("qualifier-type");
+    pub const QUALIFIER_TYPE: MenuId = uml("qualifier-type");
     /// A template parameter editor's kind, constraint and default (AR-130).
-    pub(crate) const TEMPLATE_KIND: MenuId = uml("template-kind");
-    pub(crate) const TEMPLATE_CONSTRAINT: MenuId = uml("template-constraint");
-    pub(crate) const TEMPLATE_DEFAULT: MenuId = uml("template-default");
+    pub const TEMPLATE_KIND: MenuId = uml("template-kind");
+    pub const TEMPLATE_CONSTRAINT: MenuId = uml("template-constraint");
+    pub const TEMPLATE_DEFAULT: MenuId = uml("template-default");
     /// A template binding's bound element, template, and a parameter's argument, by the parameter
     /// (AR-131).
-    pub(crate) const BINDING_BOUND: MenuId = uml("binding-bound");
-    pub(crate) const BINDING_TEMPLATE: MenuId = uml("binding-template");
-    pub(crate) const BINDING_ARGUMENT: MenuId = uml("binding-argument");
+    pub const BINDING_BOUND: MenuId = uml("binding-bound");
+    pub const BINDING_TEMPLATE: MenuId = uml("binding-template");
+    pub const BINDING_ARGUMENT: MenuId = uml("binding-argument");
     /// An n-ary association's end editor's type and multiplicity (AR-128).
-    pub(crate) const NARY_END_TYPE: MenuId = uml("nary-end-type");
-    pub(crate) const NARY_END_MULTIPLICITY: MenuId = uml("nary-end-multiplicity");
+    pub const NARY_END_TYPE: MenuId = uml("nary-end-type");
+    pub const NARY_END_MULTIPLICITY: MenuId = uml("nary-end-multiplicity");
     /// A classifier's owner, a package or a classifier (AR-132), and the kinds its Nested
     /// classifiers `+` offers.
-    pub(crate) const CLASS_OWNER: MenuId = uml("class-owner");
-    pub(crate) const NESTED_KIND: MenuId = uml("nested-kind");
+    pub const CLASS_OWNER: MenuId = uml("class-owner");
+    pub const NESTED_KIND: MenuId = uml("nested-kind");
     /// The package a package sits in (AR-102).
-    pub(crate) const PACKAGE_PARENT: MenuId = uml("package-parent");
+    pub const PACKAGE_PARENT: MenuId = uml("package-parent");
     /// A generalization set's Add member, and a generalization's sets' `+` (AR-129).
-    pub(crate) const SET_MEMBER: MenuId = uml("set-member");
-    pub(crate) const SET_JOIN: MenuId = uml("set-join");
+    pub const SET_MEMBER: MenuId = uml("set-member");
+    pub const SET_JOIN: MenuId = uml("set-join");
     /// A constraint editor's language presets and the elements it may name (AR-133).
-    pub(crate) const CONSTRAINT_LANGUAGE: MenuId = uml("constraint-language");
-    pub(crate) const CONSTRAINT_ELEMENT: MenuId = uml("constraint-element");
+    pub const CONSTRAINT_LANGUAGE: MenuId = uml("constraint-language");
+    pub const CONSTRAINT_ELEMENT: MenuId = uml("constraint-element");
     /// A stereotype's profile, its Extends `+` and an extension editor's metaclass, and a
     /// package's Applied profiles `+` (AR-134).
-    pub(crate) const STEREOTYPE_PROFILE: MenuId = uml("stereotype-profile");
-    pub(crate) const STEREOTYPE_EXTENDS: MenuId = uml("stereotype-extends");
-    pub(crate) const EXTENSION_METACLASS: MenuId = uml("extension-metaclass");
-    pub(crate) const APPLIED_PROFILE: MenuId = uml("applied-profile");
+    pub const STEREOTYPE_PROFILE: MenuId = uml("stereotype-profile");
+    pub const STEREOTYPE_EXTENDS: MenuId = uml("stereotype-extends");
+    pub const EXTENSION_METACLASS: MenuId = uml("extension-metaclass");
+    pub const APPLIED_PROFILE: MenuId = uml("applied-profile");
     /// The Stereotypes section's picker, and a property's value select by its place among the
     /// section's properties (AR-135).
-    pub(crate) const STEREOTYPE_PICK: MenuId = uml("stereotype-pick");
-    pub(crate) const STEREOTYPE_VALUE: MenuId = uml("stereotype-value");
+    pub const STEREOTYPE_PICK: MenuId = uml("stereotype-pick");
+    pub const STEREOTYPE_VALUE: MenuId = uml("stereotype-value");
 }
 
 /// UML's editors, menus, drawings and tools between frames.
 #[derive(Debug, Default)]
-pub(crate) struct UmlState {
+pub struct UmlState {
     /// A type menu's choices as built for one state of one project (its model root and its
     /// revision), each label with the value the commands take: the model is walked for them once
     /// per change, not on every frame the menu is open.
@@ -156,16 +155,16 @@ pub(crate) struct UmlState {
     pub classifier: crate::uml_classifier::Classifier,
     /// Package navigation between a package's diagram and its parent's: each tab's way back and a
     /// landing still to be shown (AR-95).
-    pub nav: crate::package_nav::Nav,
+    pub nav: crate::uml_package_nav::Nav,
 }
 
 /// UML's state among the shell's; none while UML is not one of its notations.
-pub(crate) fn uml(states: &NotationStates) -> Option<&UmlState> {
+pub fn uml(states: &NotationStates) -> Option<&UmlState> {
     states.own()
 }
 
 /// UML's state among the shell's, to change; none while UML is not one of its notations.
-pub(crate) fn uml_mut(states: &mut NotationStates) -> Option<&mut UmlState> {
+pub fn uml_mut(states: &mut NotationStates) -> Option<&mut UmlState> {
     states.own_mut()
 }
 
@@ -173,7 +172,7 @@ impl NotationState for UmlState {
     /// Drops an editor, a draft or a refusal whose element is gone, an association's ends once the
     /// association is, and a drawing that no longer holds on the diagram `canvas` shows
     /// ([`crate::uml_nary::retain`]).
-    fn retain_valid(&mut self, store: &Store, canvas: &crate::canvas::State) {
+    fn retain_valid(&mut self, store: &Store, canvas: &archforge_shell_api::canvas::State) {
         crate::uml_panel::retain_valid(&mut self.member, store);
         crate::uml_constraints::retain_valid(&mut self.constraint, store);
         crate::uml_qualifiers::retain_valid(&mut self.qualifier, store);

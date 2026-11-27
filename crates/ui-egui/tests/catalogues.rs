@@ -9,7 +9,8 @@ use archforge_shell_api::i18n::set_language;
 use archforge_shell_api::notation_ui::Subject;
 use archforge_shell_api::panels::refusal;
 use archforge_shell_api::screens::ScreensRegistry;
-use archforge_ui_egui::{ER, Services, Shell, UML};
+use archforge_ui_egui::{ER, Services, Shell};
+use archforge_uml_ui::UML;
 
 /// The app's screens parts, ER's then UML's, which the shell is given.
 static SCREENS: ScreensRegistry = ScreensRegistry::new(&[ER, UML]);

@@ -9,8 +9,9 @@ use archforge_diagram::node;
 use archforge_mof::{Obj, Store};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
-use crate::canvas::{CardDrawn, DETAIL_ZOOM, Drawing, element_of, exit_point, eyebrow_case, ink_for, look_of, say};
 use crate::ux::{self, types};
+use archforge_shell_api::canvas::{DETAIL_ZOOM, Drawing, element_of, exit_point, eyebrow_case, ink_for, look_of, say};
+use archforge_shell_api::kinds::CardDrawn;
 
 /// Draws the card of a constraint, braces or a note, in place of the canvas's own figure for it;
 /// false for any other card, which the canvas draws.

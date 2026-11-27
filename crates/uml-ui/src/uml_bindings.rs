@@ -22,14 +22,14 @@ use archforge_uml::templates::{self, Kind};
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::{Map, Value as Json, json};
 
-use crate::cx::{Ctx, CtxRef, Request};
-use crate::i18n::{fmt, tr, trn};
-use crate::notation_ui::NotationUi;
-use crate::panels::{FIELD, PAD, Subject, run_cx, section_cx, select_field_cx};
-use crate::state::Panel;
 use crate::uml_state::menus;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::cx::{Ctx, CtxRef, Request};
+use archforge_shell_api::i18n::{fmt, tr, trn};
+use archforge_shell_api::notation_ui::{NotationUi, Subject};
+use archforge_shell_api::panels::{FIELD, PAD, run_cx, section_cx, select_field_cx};
+use archforge_shell_api::state::Panel;
 
 /// The ids' stem: `workspace.properties.templateBinding.bound`, `.template`,
 /// `.substitution.<k>.argument`, `.cancel`, `.apply`, `.refusal`.
@@ -73,7 +73,7 @@ fn empty_args(store: &Store, template: Obj) -> Vec<(Uuid, String)> {
 
 /// Opens the draft of a new binding from the class of `nodes.0` to the template of `nodes.1` on
 /// diagram `d`, in Properties.
-pub(crate) fn open_new(cx: &mut Ctx, d: Obj, nodes: (Uuid, Uuid), bound: Obj, template: Obj) {
+pub fn open_new(cx: &mut Ctx, d: Obj, nodes: (Uuid, Uuid), bound: Obj, template: Obj) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let (Ok(b), Ok(t)) = (store.uuid(bound), store.uuid(template)) else { return };
     let draft = BindingDraft {
@@ -84,7 +84,7 @@ pub(crate) fn open_new(cx: &mut Ctx, d: Obj, nodes: (Uuid, Uuid), bound: Obj, te
         template: t,
         args: empty_args(store, template),
         refused: None,
-        opened_over: crate::panels::selected_id_cx(&cx.cx_ref()),
+        opened_over: archforge_shell_api::panels::selected_id_cx(&cx.cx_ref()),
     };
     if let Some(uml) = uml_mut(cx.notation_states) {
         uml.binding = Some(draft);
@@ -114,7 +114,7 @@ fn open_for_template(cx: &mut Ctx, b: Obj, template: Obj) {
 
 /// The line of a new binding's draft on diagram `d`, from the bound class's node to the template's:
 /// the nodes it joins, while one is open there.
-pub(crate) fn draft_line(cx: &CtxRef, d: Obj) -> Option<(Uuid, Uuid)> {
+pub fn draft_line(cx: &CtxRef, d: Obj) -> Option<(Uuid, Uuid)> {
     let draft = uml(cx.notation_states).and_then(|uml| uml.binding.as_ref()).filter(|b| b.binding.is_none())?;
     let store = cx.session.as_ref()?.doc();
     (draft.diagram == store.uuid(d).ok()).then_some(draft.nodes).flatten()
@@ -123,7 +123,7 @@ pub(crate) fn draft_line(cx: &CtxRef, d: Obj) -> Option<(Uuid, Uuid)> {
 /// A new binding's draft over the canvas `on` (AR-131): dashed in the accent colour from the bound
 /// class to the template until Apply, nothing in the model yet; its nodes where a gesture under way
 /// previews them.
-pub(crate) fn draw_draft(cx: &CtxRef, ui: &egui::Ui, on: &crate::notation_ui::Overlaid<'_>) {
+pub(crate) fn draw_draft(cx: &CtxRef, ui: &egui::Ui, on: &archforge_shell_api::notation_ui::Overlaid<'_>) {
     let Some((from, to)) = draft_line(cx, on.d) else { return };
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let rect = |id: Uuid| on.overrides.get(&id).copied().or_else(|| store.by_uuid(id).map(|n| on.view.rect(&bounds_of(store, n))));
@@ -135,11 +135,11 @@ pub(crate) fn draw_draft(cx: &CtxRef, ui: &egui::Ui, on: &crate::notation_ui::Ov
 /// Draws the draft's line between the rectangles `from` and `to` on screen: dashed in the accent
 /// colour, an open arrow at the template, as the binding will draw once applied.
 fn paint_draft(paint: &egui::Painter, p: &Palette, from: Rect, to: Rect, z: f32) {
-    let start = crate::canvas::exit_point(from, to.center());
-    let end = crate::canvas::exit_point(to, from.center());
+    let start = archforge_shell_api::canvas::exit_point(from, to.center());
+    let end = archforge_shell_api::canvas::exit_point(to, from.center());
     let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), p.accent);
     paint.extend(egui::Shape::dashed_line(&[start, end], stroke, 5.0 * z.max(0.5), 4.0 * z.max(0.5)));
-    crate::canvas::line_mark(paint, archforge_diagram::figure::EndMark::OpenArrow, end, start, stroke, z, p.surface);
+    archforge_shell_api::canvas::line_mark(paint, archforge_diagram::figure::EndMark::OpenArrow, end, start, stroke, z, p.surface);
 }
 
 /// The argument a parameter shows, as the commands take it: the draft's pick, or the binding's
@@ -249,7 +249,7 @@ fn fixed_field(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, i
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
     paint.rect_filled(field, 6.0, p.field);
     ux::text_mid(paint, field.left() + 8.0, field.center().y, value, types::SMALL, p.text, Some((width - 16.0).max(0.0)));
-    let _ = crate::panels::control_cx(cx, ui, id, "field", field, false).accessible_name(format!("{label}: {value}"));
+    let _ = archforge_shell_api::panels::control_cx(cx, ui, id, "field", field, false).accessible_name(format!("{label}: {value}"));
 }
 
 /// The refusal on the danger tint, with its icon; gives its height.
@@ -260,7 +260,7 @@ fn refusal_box(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, w
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(paint, Rect::from_min_size(card.min + vec2(10.0, 11.5), Vec2::splat(14.0)), &icons::WARNING, p.danger);
     paint.galley(card.min + vec2(32.0, 10.0), g, p.text.into());
-    crate::widgets::record_visible(ui, cx.registry, &format!("{ID}.refusal"), "text", card);
+    archforge_shell_api::widgets::record_visible(ui, cx.registry, &format!("{ID}.refusal"), "text", card);
     card.height()
 }
 
@@ -385,7 +385,7 @@ fn sections(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, bindi
         ux::icon_mid(&paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
         let id = format!("{ID}.substitution.{k}.argument");
         let said = if on_default { format!("{name}: {shown} ({})", tr("default")) } else { format!("{name}: {shown}") };
-        let resp = crate::panels::control_cx(cx, ui, &id, "select", field, true).accessible_name(said);
+        let resp = archforge_shell_api::panels::control_cx(cx, ui, &id, "select", field, true).accessible_name(said);
         let resp = match default {
             Some(dflt) => resp.on_hover_text(fmt(&tr("Default ({name})"), &[("name", dflt)])),
             None => resp,
@@ -405,7 +405,7 @@ fn sections(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, bindi
         let choices = argument_choices(store, *q);
         let items: Vec<String> = choices.iter().map(|(l, _)| l.clone()).collect();
         let id = format!("{ID}.substitution.{k}.argument");
-        if let Some((_, v)) = crate::panels::menu_cx(cx, ui, p, *field, &id, &items).and_then(|i| choices.get(i)).cloned() {
+        if let Some((_, v)) = archforge_shell_api::panels::menu_cx(cx, ui, p, *field, &id, &items).and_then(|i| choices.get(i)).cloned() {
             pick_argument(cx, binding, *q, v);
         }
     }
@@ -414,7 +414,7 @@ fn sections(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, bindi
     {
         let choices = bound_choices(store, b, template);
         let items: Vec<String> = choices.iter().map(|c| name_of(store, *c)).collect();
-        if let Some(c) = crate::panels::menu_cx(cx, ui, p, field, &bound_id, &items).and_then(|i| choices.get(i)).copied() {
+        if let Some(c) = archforge_shell_api::panels::menu_cx(cx, ui, p, field, &bound_id, &items).and_then(|i| choices.get(i)).copied() {
             set_bound(cx, b, c);
         }
     }
@@ -423,7 +423,7 @@ fn sections(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, bindi
     {
         let choices = template_choices(store, b, bound);
         let items: Vec<String> = choices.iter().map(|c| name_of(store, *c)).collect();
-        if let Some(t) = crate::panels::menu_cx(cx, ui, p, field, &template_id, &items).and_then(|i| choices.get(i)).copied() {
+        if let Some(t) = archforge_shell_api::panels::menu_cx(cx, ui, p, field, &template_id, &items).and_then(|i| choices.get(i)).copied() {
             if Some(t) == current_template {
                 if let Some(uml) = uml_mut(cx.notation_states) {
                     uml.binding = None;
@@ -486,25 +486,25 @@ fn draft_foot(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32)
         ux::galley(paint, &tr("Cancel"), types::UI, p.text, None).size().x + 20.0
     };
     let right = r.right() - PAD;
-    let (_, apply) = crate::settings::button_in(
+    let (_, apply) = archforge_shell_api::panels::button_in(
         cx.registry,
         ui,
         p,
         &format!("{ID}.apply"),
         pos2(right - apply_w, y),
         &tr("Apply"),
-        crate::settings::Look::Primary,
+        archforge_shell_api::panels::Look::Primary,
         true,
         None,
     );
-    let (_, cancel) = crate::settings::button_in(
+    let (_, cancel) = archforge_shell_api::panels::button_in(
         cx.registry,
         ui,
         p,
         &format!("{ID}.cancel"),
         pos2(right - apply_w - 8.0 - cancel_w, y),
         &tr("Cancel"),
-        crate::settings::Look::Secondary,
+        archforge_shell_api::panels::Look::Secondary,
         true,
         None,
     );
@@ -565,7 +565,7 @@ fn apply_draft(cx: &mut Ctx) {
                     Ok(())
                 })
                 .map(|o| o.value.get(0).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse))
-                .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
+                .map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e))
         }
         _ => return,
     };
@@ -575,7 +575,7 @@ fn apply_draft(cx: &mut Ctx) {
                 uml.binding = None;
             }
             if let Some(b) = made {
-                crate::panels::select_element_cx(cx, b);
+                archforge_shell_api::panels::select_element_cx(cx, b);
             }
         }
         Err(e) => {
@@ -614,7 +614,7 @@ pub(crate) fn drop_stale(cx: &mut Ctx) {
             || st.by_uuid(d.template).is_none_or(|o| !st.is_alive(o))
             || d.binding.is_some_and(|b| st.by_uuid(b).is_none_or(|o| !st.is_alive(o)))
     });
-    let moved = crate::panels::selected_id_cx(&cx.cx_ref()) != d.opened_over || (d.binding.is_none() && d.diagram != cx.canvas.active);
+    let moved = archforge_shell_api::panels::selected_id_cx(&cx.cx_ref()) != d.opened_over || (d.binding.is_none() && d.diagram != cx.canvas.active);
     if (gone || moved)
         && let Some(uml) = uml_mut(cx.notation_states)
     {
@@ -664,9 +664,9 @@ pub(crate) fn start_problem(store: &Store, element: Obj) -> Option<String> {
 /// Why `bound` may not bind `template`, in the user's words, when it may not: the model's rule said
 /// as a refusal of the engine is, by the notations of `uis`. `except` is a binding being
 /// reconnected.
-pub(crate) fn refusal(uis: &[&'static dyn NotationUi], store: &Store, bound: Obj, template: Obj, except: Option<Obj>) -> Option<String> {
+pub fn refusal(uis: &[&'static dyn NotationUi], store: &Store, bound: Obj, template: Obj, except: Option<Obj>) -> Option<String> {
     let problem = bindings::problem(store, bound, template, except)?;
-    Some(crate::panels::said(uis, &problem.reason(store, bound, template)).unwrap_or_else(|| problem.said(store, bound, template)))
+    Some(archforge_shell_api::panels::said(uis, &problem.reason(store, bound, template)).unwrap_or_else(|| problem.said(store, bound, template)))
 }
 
 /// Whether moving binding `b`'s template end onto `template` needs arguments first: a parameter
@@ -688,13 +688,13 @@ pub(crate) fn retain_valid(draft: &mut Option<BindingDraft>, store: &Store) {
 }
 
 /// The open draft's Apply pressed, as a sample to look at.
-#[cfg(any(test, feature = "snapshot"))]
-pub(crate) fn apply_sample(cx: &mut Ctx) {
+#[cfg(feature = "snapshot")]
+pub fn apply_sample(cx: &mut Ctx) {
     apply_draft(cx);
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     [DRAFT_HELP, SELECTOR_HELP, LINE_HELP].into_iter()
 }

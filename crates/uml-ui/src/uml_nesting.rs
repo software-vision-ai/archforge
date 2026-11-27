@@ -11,21 +11,21 @@ use archforge_uml::nesting::{self, OwnerProblem};
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
-use crate::cx::{Ctx, Request};
-use crate::explorer::fresh_name;
-use crate::i18n::{fmt, tr};
-use crate::panels::{PAD, PATH_SEP, ROW, control_cx, run_cx, section_cx};
-use crate::state::Explorer;
 use crate::uml_classifier::Classifier;
 use crate::uml_state::menus;
 use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::cx::{Ctx, Request};
+use archforge_shell_api::explorer::fresh_name;
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::panels::{PAD, PATH_SEP, ROW, control_cx, run_cx, section_cx};
+use archforge_shell_api::state::Explorer;
 
 /// The Owner select's id; its menu's rows add `.{i}` (D3).
-pub(crate) const OWNER_ID: &str = "workspace.properties.class.owner";
+pub const OWNER_ID: &str = "workspace.properties.class.owner";
 /// The Nested classifiers section's `+`, its menu's rows `.{kind}`, and its rows `.{id}` under
 /// [`NESTED_ROW_ID`] (D1).
-pub(crate) const NESTED_ADD_ID: &str = "workspace.properties.class.nested.add";
-pub(crate) const NESTED_ROW_ID: &str = "workspace.properties.class.nested";
+pub const NESTED_ADD_ID: &str = "workspace.properties.class.nested.add";
+pub const NESTED_ROW_ID: &str = "workspace.properties.class.nested";
 
 /// The kinds a classifier may nest, in the menus' order: those Models' New inside ▸ and the
 /// section's `+` offer.
@@ -119,7 +119,7 @@ pub(crate) fn reason(store: &Store, c: Obj, owner: Obj, problem: &OwnerProblem) 
 /// One row of the Owner menu: the owner, its path, its kind, whether it owns the classifier now,
 /// and why it may not, short and whole, when it may not.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct OwnerRow {
+pub struct OwnerRow {
     pub owner: Obj,
     pub id: Uuid,
     pub parts: Vec<String>,
@@ -130,7 +130,7 @@ pub(crate) struct OwnerRow {
 
 /// The Owner menu's rows for `c` (D3): every owner that may take it, in the model's order, then,
 /// after them, those that may not, each with its reason; those nested in `c` never.
-pub(crate) fn owner_rows(store: &Store, c: Obj) -> Vec<OwnerRow> {
+pub fn owner_rows(store: &Store, c: Obj) -> Vec<OwnerRow> {
     let current = nesting::owner_of(store, c);
     let rows: Vec<OwnerRow> = nesting::candidates(store, c)
         .into_iter()
@@ -153,7 +153,7 @@ pub(crate) fn owner_rows(store: &Store, c: Obj) -> Vec<OwnerRow> {
 /// own name shows, the whole path its tooltip and accessible name; a click opens its menu.
 pub(crate) fn owner_field(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, class: Obj) -> Rect {
     let here = cx.session.as_ref().and_then(|s| nesting::owner_of(s.doc(), class).map(|o| owner_parts(s.doc(), o))).unwrap_or_default();
-    crate::panels::path_select_field_cx(cx, ui, p, at, width, OWNER_ID, &tr("Owner"), &here, menus::CLASS_OWNER)
+    archforge_shell_api::panels::path_select_field_cx(cx, ui, p, at, width, OWNER_ID, &tr("Owner"), &here, menus::CLASS_OWNER)
 }
 
 /// What the Owner explains under its field for a nested classifier (D2).
@@ -195,7 +195,9 @@ pub(crate) fn owner_menu(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, field: Rect, 
     let height = full.min(below.max(8.0 + heading + 30.0));
     let left = field.left().min(window.right() - 8.0 - width).max(window.left() + 8.0);
     let m = Rect::from_min_size(pos2(left, field.bottom() + 4.0), vec2(width, height));
-    let picked = ux::overlay(ui, crate::widgets::egui_id(&format!("{OWNER_ID}.layer")), m, |ui| owner_menu_body(cx, ui, p, m, &rows, open, heading));
+    let picked = ux::overlay(ui, archforge_shell_api::widgets::egui_id(&format!("{OWNER_ID}.layer")), m, |ui| {
+        owner_menu_body(cx, ui, p, m, &rows, open, heading)
+    });
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || field.contains(pos)));
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         cx.panels.menu = None;
@@ -220,7 +222,7 @@ fn owner_menu_body(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, m: Rect, rows: &[Ow
     ux::text(
         &paint,
         pos2(m.left() + 14.0, m.top() + 12.0),
-        &crate::canvas::eyebrow_case(&tr("Owner")),
+        &archforge_shell_api::canvas::eyebrow_case(&tr("Owner")),
         types::EYEBROW,
         p.text_muted,
         Some(m.width() - 28.0),
@@ -280,9 +282,9 @@ fn owner_menu_body(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, m: Rect, rows: &[Ow
             None => control_cx(cx, ui, &id, "menu-item", r.intersect(list), true).accessible_name(format!("{path} · {}", row.kind)),
             Some((_, whole)) => {
                 // Disabled, it says why on hover and to a screen reader.
-                crate::widgets::record_visible(ui, cx.registry, &id, "menu-item", r.intersect(list));
-                let resp = ui.interact(r.intersect(list), crate::widgets::egui_id(&id), Sense::hover());
-                ui.ctx().accesskit_node_builder(crate::widgets::egui_id(&id), |node| {
+                archforge_shell_api::widgets::record_visible(ui, cx.registry, &id, "menu-item", r.intersect(list));
+                let resp = ui.interact(r.intersect(list), archforge_shell_api::widgets::egui_id(&id), Sense::hover());
+                ui.ctx().accesskit_node_builder(archforge_shell_api::widgets::egui_id(&id), |node| {
                     node.set_role(egui::accesskit::Role::MenuItem);
                     node.set_disabled();
                     node.set_description(whole.clone());
@@ -325,7 +327,7 @@ fn owner_menu_body(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, m: Rect, rows: &[Ow
 /// Makes a classifier of `kind` nested in `owner`, named afresh among everything the owner holds
 /// (`Enumeration 1`), as one undo step, selected; Models opens the rows above it and its name for
 /// typing there (D1), so it is named in place whichever way it was asked for.
-pub(crate) fn add_nested(cx: &mut Ctx, owner: Uuid, kind: Classifier) -> Result<Uuid, String> {
+pub fn add_nested(cx: &mut Ctx, owner: Uuid, kind: Classifier) -> Result<Uuid, String> {
     let store = cx.session.as_ref().map(|s| s.doc()).ok_or_else(|| tr("The model could not be opened"))?;
     let o = store.by_uuid(owner).ok_or_else(|| tr("The model could not be opened"))?;
     // Free among everything the owner holds: a nested classifier clashes only with its other
@@ -336,7 +338,7 @@ pub(crate) fn add_nested(cx: &mut Ctx, owner: Uuid, kind: Classifier) -> Result<
     let id = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).ok_or_else(|| tr("The model could not be opened"))?;
     if let Some(store) = cx.session.as_ref().map(|s| s.doc())
         && let Some(c) = store.by_uuid(id)
-        && let Some(ui) = crate::notation_ui::of(cx.notation_uis, store, c)
+        && let Some(ui) = archforge_shell_api::notation_ui::of(cx.notation_uis, store, c)
     {
         let parents: Vec<Uuid> = ui.parents(store, c).into_iter().filter_map(|p| store.uuid(p).ok()).collect();
         cx.requests.push(Request::ExpandRows(parents));
@@ -373,7 +375,7 @@ pub(crate) fn nested_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Re
         paint.galley(pos2(r.left() + PAD, y + 4.0), g, p.text_muted.into());
         y += tall + 14.0;
     }
-    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
+    let chosen = archforge_shell_api::panels::selected_id_cx(&cx.cx_ref());
     for (id, label, kind) in &rows {
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, ROW));
         let resp = control_cx(cx, ui, &format!("{NESTED_ROW_ID}.{id}"), "row", row, true).accessible_name(format!("{label} · {}", kind.word()));
@@ -385,13 +387,13 @@ pub(crate) fn nested_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Re
         ux::icon_mid(&paint, pos2(row.left() + 17.0, row.center().y), kind.icon(), p.text_secondary);
         ux::text_mid(&paint, row.left() + 34.0, row.center().y, label, types::UI, p.text, Some((width - 44.0).max(0.0)));
         if resp.clicked() {
-            crate::panels::select_element_cx(cx, *id);
+            archforge_shell_api::panels::select_element_cx(cx, *id);
         }
         y += ROW;
     }
     if cx.panels.menu == Some(menus::NESTED_KIND) {
         let words: Vec<String> = KINDS.iter().map(|k| k.word()).collect();
-        if let Some(i) = crate::panels::menu_cx(cx, ui, p, add, NESTED_ADD_ID, &words)
+        if let Some(i) = archforge_shell_api::panels::menu_cx(cx, ui, p, add, NESTED_ADD_ID, &words)
             && let Some(kind) = KINDS.get(i)
             && let Err(e) = add_nested(cx, class_id, *kind)
         {
@@ -404,7 +406,7 @@ pub(crate) fn nested_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Re
 /// What Models' New inside ▸ offers on `o` (D1): the kinds it may nest, live; or, on an enumeration,
 /// a data type or a primitive type, the row disabled with why. None on anything that is no
 /// classifier.
-pub(crate) fn inside(store: &Store, o: Obj) -> Option<crate::notation_ui::Inside> {
+pub(crate) fn inside(store: &Store, o: Obj) -> Option<archforge_shell_api::notation_ui::Inside> {
     let kind = Classifier::of(store, o)?;
     if archforge_uml::members::is_built_in(store, o) {
         return None;
@@ -416,7 +418,7 @@ pub(crate) fn inside(store: &Store, o: Obj) -> Option<crate::notation_ui::Inside
             &[("name", &owner), ("kind", &a_kind(kind))],
         )
     });
-    Some(crate::notation_ui::Inside {
+    Some(archforge_shell_api::notation_ui::Inside {
         word: fmt(&tr("New inside {name}"), &[("name", &owner)]),
         heading: fmt(&tr("New inside {name}"), &[("name", &owner)]),
         kinds: KINDS.iter().map(|k| (k.key(), k.word(), k.icon())).collect(),
@@ -447,7 +449,7 @@ pub(crate) fn add_inside(cx: &mut Ctx, key: &str, o: Obj) -> Option<Result<Uuid,
 
 /// The words this module hands to `tr` by a name rather than a literal, for the catalogue's
 /// coverage test: the section's `+` hint.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add nested classifier"].into_iter()
 }

@@ -7,11 +7,11 @@
 use archforge_mof::{ClassId, Obj, Store};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
-use crate::cx::{Ctx, CtxRef};
-use crate::i18n::tr;
-use crate::panels::control_cx;
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Icon, Palette, icons, types};
+use archforge_shell_api::cx::{Ctx, CtxRef};
+use archforge_shell_api::i18n::tr;
+use archforge_shell_api::panels::control_cx;
 
 /// What the classifier tool places.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -32,7 +32,7 @@ pub enum Classifier {
 
 impl Classifier {
     /// The kinds the menu lists, in its order: those the tool places and Models' `+` adds.
-    pub(crate) const ALL: [Classifier; 5] =
+    pub const ALL: [Classifier; 5] =
         [Classifier::Class, Classifier::Interface, Classifier::Enumeration, Classifier::DataType, Classifier::PrimitiveType];
     /// Every kind a class diagram shows as a card: the menu's, and the association class, which is
     /// only drawn.
@@ -46,7 +46,7 @@ impl Classifier {
     ];
 
     /// Its name, in the menu, the tooltip and the Models' `+`.
-    pub(crate) fn word(self) -> String {
+    pub fn word(self) -> String {
         match self {
             Classifier::Class => tr("Class"),
             Classifier::Interface => tr("Interface"),
@@ -58,7 +58,7 @@ impl Classifier {
     }
 
     /// Its automation key.
-    pub(crate) fn key(self) -> &'static str {
+    pub fn key(self) -> &'static str {
         match self {
             Classifier::Class => "class",
             Classifier::Interface => "interface",
@@ -84,7 +84,7 @@ impl Classifier {
 
     /// Its icon on the tool's face, and beside its name in the menu and in Models; an association
     /// class, which no tool places, shows its tree icon.
-    pub(crate) fn tool_icon(self) -> &'static Icon {
+    pub fn tool_icon(self) -> &'static Icon {
         match self {
             Classifier::Class => &icons::TOOL_CLASS,
             Classifier::Interface => &icons::TOOL_INTERFACE,
@@ -284,7 +284,7 @@ pub(crate) fn popover(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, anchor:
         if let Some(uml) = uml_mut(cx.notation_states) {
             uml.classifier = kind;
         }
-        cx.canvas.tool = crate::canvas::Tool::Place(TOOL);
+        cx.canvas.tool = archforge_shell_api::canvas::Tool::Place(TOOL);
         cx.canvas.popover = None;
         cx.canvas.menu_focus = None;
         return;
@@ -307,7 +307,7 @@ pub(crate) fn takes_keys(key: &str) -> bool {
 }
 
 /// The classifier tool's chevron key.
-pub(crate) const KINDS: &str = "classifier-kinds";
+pub const KINDS: &str = "classifier-kinds";
 
 /// The classifier tool's automation key.
-pub(crate) const TOOL: &str = "classifier";
+pub const TOOL: &str = "classifier";

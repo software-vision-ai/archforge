@@ -265,6 +265,7 @@ dependencies = [
  "archforge-shell-api",
  "archforge-ui-egui",
  "archforge-uml",
+ "archforge-uml-ui",
  "craft-atomic",
  "craft-dialogs",
  "craft-testkit",
@@ -463,6 +464,7 @@ dependencies = [
  "archforge-notations",
  "archforge-shell-api",
  "archforge-uml",
+ "archforge-uml-ui",
  "craft-i18n",
  "egui",
  "egui_commonmark",
@@ -484,6 +486,21 @@ dependencies = [
  "archforge-diagram",
  "archforge-engine",
  "archforge-mof",
+ "serde_json",
+]
+
+[[package]]
+name = "archforge-uml-ui"
+version = "0.14.0"
+dependencies = [
+ "archforge-core",
+ "archforge-diagram",
+ "archforge-engine",
+ "archforge-mof",
+ "archforge-notations",
+ "archforge-shell-api",
+ "archforge-uml",
+ "egui",
  "serde_json",
 ]
 

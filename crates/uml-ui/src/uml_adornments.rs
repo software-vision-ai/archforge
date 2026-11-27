@@ -9,9 +9,10 @@ use archforge_diagram::edge;
 use archforge_diagram::figure::Tone;
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 
-use crate::canvas::{CardDrawn, DETAIL_ZOOM, Drawing, LineDrawn, LineEnds, along, dashed_rect, element_of};
 use crate::ux::{self, Palette, types};
-use crate::widgets::{self, Registry};
+use archforge_shell_api::canvas::{DETAIL_ZOOM, Drawing, along, dashed_rect, element_of};
+use archforge_shell_api::kinds::{CardDrawn, LineDrawn, LineEnds};
+use archforge_shell_api::widgets::{self, Registry};
 
 /// Moves each end of `line` that holds qualifiers out to its qualifier box (AR-127) in `points`,
 /// writing it in `Drawing::moved_ends`, and gives the boxes to draw over the line: a box sits

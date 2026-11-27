@@ -8,23 +8,24 @@
 //! - **In**: a selected package's Open, ⌘↓, or zooming in until one package covers
 //!   [`ENTER_COVER`] of the canvas opens the package's diagram at 100 %, its content centred.
 //! - **Out by zoom**: a package's diagram stays open until the zoom reaches its least, 10 %
-//!   ([`crate::canvas::ZOOM_RANGE`]); there the diagram it was entered from opens again, even when
-//!   that diagram is in another branch (Decision 4): fitted, down to 10 %, when it no longer has
-//!   a card of the package; else as it was left when that view is still sound ([`restorable`]);
-//!   else at 100 %, the package left centred (AR-668). The return takes its step off the tab's route
-//!   and makes none. With no way in left, the parent's default opens instead, landing as a return
-//!   with no view kept does; at the root, 10 % stays put and says so.
+//!   ([`archforge_shell_api::canvas::ZOOM_RANGE`]); there the diagram it was entered from opens
+//!   again, even when that diagram is in another branch (Decision 4): fitted, down to 10 %, when it
+//!   no longer has a card of the package; else as it was left when that view is still sound
+//!   ([`restorable`]); else at 100 %, the package left centred (AR-668). The return takes its step
+//!   off the tab's route and makes none. With no way in left, the parent's default opens instead,
+//!   landing as a return with no view kept does; at the root, 10 % stays put and says so.
 //! - **Out by the path bar or ⌘↑**: the owning ancestor's default diagram as it was last left, by
 //!   ownership and never the way in; its tab starts a new route.
 //! - One switch per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
-//!   seconds must pass, before the next switch. A switch fades in over
-//!   [`crate::canvas::SWITCH_FADE`] seconds.
+//!   seconds must pass, before the next switch. A switch fades in over the shell's
+//!   `canvas::SWITCH_FADE` seconds.
 //!
 //! It is UML's own: UML's diagram kind runs it before and after the canvas draws a diagram
-//! ([`crate::kinds::DiagramKind::before_draw`], [`crate::kinds::DiagramKind::after_draw`]), and
-//! what it keeps between frames is UML's ([`crate::uml_state::UmlState::nav`]). The canvas keeps
-//! what any diagram's view needs: the view each diagram was left with, the zoom made this frame,
-//! and when a switch was last marked, from which the canvas fades in.
+//! ([`archforge_shell_api::kinds::DiagramKind::before_draw`],
+//! [`archforge_shell_api::kinds::DiagramKind::after_draw`]), and what it keeps between frames is
+//! UML's ([`crate::uml_state::UmlState::nav`]). The canvas keeps what any diagram's view needs: the
+//! view each diagram was left with, the zoom made this frame, and when a switch was last marked,
+//! from which the canvas fades in.
 
 use std::collections::HashMap;
 
@@ -33,12 +34,12 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::cx::Ctx;
-use crate::i18n::tr;
-use crate::nav_route::{Route, Step};
-use crate::panels::control_cx;
+use crate::uml_nav_route::{Route, Step};
 use crate::uml_state::{uml, uml_mut};
 use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::i18n::tr;
+use archforge_shell_api::panels::control_cx;
 
 /// The share of the canvas one package covers once zooming in opens it.
 pub const ENTER_COVER: f32 = 0.6;
@@ -53,7 +54,7 @@ const MAX_DEPTH: usize = 256;
 
 /// Where a switch on the way out lands, on the next frame of the diagram it opened.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct Landing {
+pub struct Landing {
     /// The package just left, whose card the landing measures or centres.
     pub(crate) package: Uuid,
     /// The view the diagram was left with when the package was entered from it, which a return
@@ -67,19 +68,19 @@ pub struct Nav {
     /// The return route of each tab, by the tab's diagram: the package entries that led to it, so
     /// going back returns the way the user came in, though the parent package has other class
     /// diagrams too. Browsing state only: never written into the model, and no undo step.
-    pub(crate) routes: HashMap<Uuid, Route>,
+    pub routes: HashMap<Uuid, Route>,
     /// Where the next frame lands after a zoom out: the package left and the view to restore.
-    pub(crate) reveal: Option<Landing>,
+    pub reveal: Option<Landing>,
     /// True while the diagram just entered is still to be centred at [`LANDING`].
-    pub(crate) centre: bool,
-    /// The canvas's count of tabs opened ([`crate::canvas::State::settled`]) when `reveal` or
-    /// `centre` was set: they are for the tab the switch opened, and any tab opened since drops
-    /// them.
+    pub centre: bool,
+    /// The canvas's count of tabs opened ([`archforge_shell_api::canvas::State::settled`]) when
+    /// `reveal` or `centre` was set: they are for the tab the switch opened, and any tab opened
+    /// since drops them.
     pub(crate) settled: u64,
     /// When the user last zoomed, and whether the gesture that made the last switch is still on:
     /// no switch happens until it has ended.
-    pub(crate) last_zoom: Option<f64>,
-    pub(crate) disarmed: bool,
+    pub last_zoom: Option<f64>,
+    pub disarmed: bool,
 }
 
 /// Package navigation's state, UML's own; none while UML is not one of the shell's notations.
@@ -101,7 +102,7 @@ fn is_package(store: &Store, o: Obj) -> bool {
 }
 
 /// The package a class diagram is of.
-pub(crate) fn package_of_diagram(store: &Store, d: Obj) -> Option<Obj> {
+pub fn package_of_diagram(store: &Store, d: Obj) -> Option<Obj> {
     let kind = store.get(d, diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string))?;
     if kind != archforge_uml::STRUCTURE_DIAGRAM {
         return None;
@@ -130,7 +131,7 @@ fn element(store: &Store, n: Obj) -> Option<Obj> {
     store.get(n, node::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|e| store.is_alive(*e))
 }
 
-fn screen(view: crate::canvas::View, store: &Store, n: Obj) -> Rect {
+fn screen(view: archforge_shell_api::canvas::View, store: &Store, n: Obj) -> Rect {
     view.rect(&bounds_of(store, n))
 }
 
@@ -139,9 +140,9 @@ fn area(r: Rect) -> f32 {
 }
 
 /// Runs a command on the open project's session; a refusal comes back in Properties' plain words
-/// ([`crate::panels::refusal`]).
+/// ([`archforge_shell_api::panels::refusal`]).
 fn run(cx: &mut Ctx, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    crate::panels::run_cx(cx, id, params)
+    archforge_shell_api::panels::run_cx(cx, id, params)
 }
 
 /// The default diagram of `package`, which entry opens, as the query `uml.package.diagram` gives it
@@ -161,7 +162,7 @@ fn default_of(cx: &mut Ctx, package: Uuid) -> Option<Uuid> {
 /// Opens the diagram of `package`, fitted, keeping the view of the diagram left. The diagram's tab
 /// takes the route of the tab left plus this entry; entering the diagram already open records
 /// nothing.
-pub(crate) fn enter(cx: &mut Ctx, package: Uuid, now: f64) {
+pub fn enter(cx: &mut Ctx, package: Uuid, now: f64) {
     enter_by(cx, package, now, false);
 }
 
@@ -183,7 +184,7 @@ fn enter_by(cx: &mut Ctx, package: Uuid, now: f64, by_zoom: bool) {
         route.push(Step { source: from, destination: d, source_name, view, history: session.history() });
         nav.routes.insert(d, route);
     }
-    crate::canvas::open_cx(cx, d);
+    archforge_shell_api::canvas::open_cx(cx, d);
     // At 100 %, its content centred on the next frame (AR-110).
     cx.canvas.fit_pending = false;
     cx.canvas.zoom = LANDING;
@@ -198,7 +199,7 @@ fn enter_by(cx: &mut Ctx, package: Uuid, now: f64, by_zoom: bool) {
 /// ⌘↑: as it was last left, or fitted when it never was. It follows ownership, never the way in,
 /// and starts a new route in the tab it opens, with no step made up from the diagram left
 /// (Decision 4). Browsing state only: no model change and no undo step.
-pub(crate) fn leave(cx: &mut Ctx, package: Uuid, now: f64) {
+pub fn leave(cx: &mut Ctx, package: Uuid, now: f64) {
     let Some(d) = default_of(cx, package) else { return };
     if let Some(nav) = nav(cx) {
         nav.routes.remove(&d);
@@ -210,7 +211,7 @@ pub(crate) fn leave(cx: &mut Ctx, package: Uuid, now: f64) {
 /// out (`reveal`) as its next frame lands it ([`land`]); else as `d` was left, or fitted when it
 /// never was.
 fn switch_out(cx: &mut Ctx, d: Uuid, reveal: Option<Landing>, now: f64) {
-    crate::canvas::open_cx(cx, d);
+    archforge_shell_api::canvas::open_cx(cx, d);
     match (reveal, cx.canvas.views.get(&d).copied()) {
         (Some(_), _) => {
             cx.canvas.zoom = LANDING;
@@ -251,7 +252,7 @@ fn take_return(cx: &mut Ctx) -> Option<(Uuid, Option<(Vec2, f32)>)> {
 /// The package whose card on diagram `d` covers the most of canvas `r` at `view`, with the share of
 /// the canvas it covers; none when `d` shows no package. Zooming in enters it once that share
 /// reaches [`ENTER_COVER`].
-fn most_covered(store: &Store, d: Obj, view: crate::canvas::View, r: Rect) -> Option<(Obj, f32)> {
+fn most_covered(store: &Store, d: Obj, view: archforge_shell_api::canvas::View, r: Rect) -> Option<(Obj, f32)> {
     let canvas_area = area(r).max(1.0);
     nodes(store, d)
         .into_iter()
@@ -261,24 +262,25 @@ fn most_covered(store: &Store, d: Obj, view: crate::canvas::View, r: Rect) -> Op
 
 /// Whether `view`, the pan and zoom diagram `d` was left with, can be shown again on canvas `r`
 /// holding `card`, `d`'s card of the package left: both finite, the zoom within
-/// [`crate::canvas::ZOOM_RANGE`], the card at least partly on the canvas there, and no package card
-/// of `d` covering [`ENTER_COVER`] of it, the measure zooming in enters by ([`most_covered`]). A
-/// view that hides the package left, as a window narrowed since can, is no place to come back to,
-/// nor one some package covers more of, since the next zoom-in tick would take that package
-/// (delegated UX decision, AR-668); a zoom entry keeps no view at all ([`enter_by`]).
+/// [`archforge_shell_api::canvas::ZOOM_RANGE`], the card at least partly on the canvas there, and
+/// no package card of `d` covering [`ENTER_COVER`] of it, the measure zooming in enters by
+/// ([`most_covered`]). A view that hides the package left, as a window narrowed since can, is no
+/// place to come back to, nor one some package covers more of, since the next zoom-in tick would
+/// take that package (delegated UX decision, AR-668); a zoom entry keeps no view at all
+/// ([`enter_by`]).
 fn restorable(store: &Store, r: Rect, d: Obj, card: Obj, (pan, zoom): (Vec2, f32)) -> bool {
-    let (least, most) = crate::canvas::ZOOM_RANGE;
+    let (least, most) = archforge_shell_api::canvas::ZOOM_RANGE;
     if !pan.is_finite() || !zoom.is_finite() || !(least..=most).contains(&zoom) {
         return false;
     }
-    let view = crate::canvas::View { origin: r.min, pan, zoom };
+    let view = archforge_shell_api::canvas::View { origin: r.min, pan, zoom };
     area(screen(view, store, card).intersect(r)) > 0.0 && most_covered(store, d, view, r).is_none_or(|(_, cover)| cover < ENTER_COVER)
 }
 
-/// Lands diagram `d` on canvas `r` after a zoom out. When `d` has no card of the package left,
-/// its content fitted, down to the least zoom, its middle shown when it is too big for that
-/// ([`crate::canvas::fit`]), as an emptied diagram is; else at the view it was left with when
-/// that is [`restorable`]; else at [`LANDING`] with that card centred.
+/// Lands diagram `d` on canvas `r` after a zoom out. When `d` has no card of the package left, its
+/// content fitted, down to the least zoom, its middle shown when it is too big for that
+/// ([`archforge_shell_api::canvas::fit`]), as an emptied diagram is; else at the view it was left
+/// with when that is [`restorable`]; else at [`LANDING`] with that card centred.
 fn land(cx: &mut Ctx, r: Rect, d: Obj, landing: Landing) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let card = store.by_uuid(landing.package).and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p)));
@@ -291,15 +293,15 @@ fn land(cx: &mut Ctx, r: Rect, d: Obj, landing: Landing) {
             centre_at_landing(cx.canvas, r, Some(centre));
         }
         (None, _) => {
-            let bounds = crate::canvas::diagram_bounds(store, d);
-            crate::canvas::fit(cx.canvas, r.size(), bounds, crate::canvas::ZOOM_RANGE.0);
+            let bounds = archforge_shell_api::canvas::diagram_bounds(store, d);
+            archforge_shell_api::canvas::fit(cx.canvas, r.size(), bounds, archforge_shell_api::canvas::ZOOM_RANGE.0);
         }
     }
 }
 
 /// Shows canvas `r` at [`LANDING`] with `centre`, a point of the diagram, in its middle; with
 /// none, from the diagram's top left, as a new diagram opens.
-fn centre_at_landing(state: &mut crate::canvas::State, r: Rect, centre: Option<Vec2>) {
+fn centre_at_landing(state: &mut archforge_shell_api::canvas::State, r: Rect, centre: Option<Vec2>) {
     state.zoom = LANDING;
     state.fit_pending = false;
     let pan = centre.map_or(Vec2::ZERO, |c| r.size() / 2.0 - c * LANDING);
@@ -355,7 +357,7 @@ pub(crate) fn before_draw(cx: &mut Ctx, ui: &egui::Ui, r: Rect, d: Obj) {
         return;
     }
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
-    let view = crate::canvas::View { origin: r.min, pan: cx.canvas.pan, zoom: cx.canvas.zoom };
+    let view = archforge_shell_api::canvas::View { origin: r.min, pan: cx.canvas.pan, zoom: cx.canvas.zoom };
     if intent > 1.0 {
         // In: the package covering the most of the canvas, once it covers enough.
         if let Some((package, cover)) = most_covered(store, d, view, r)
@@ -364,7 +366,7 @@ pub(crate) fn before_draw(cx: &mut Ctx, ui: &egui::Ui, r: Rect, d: Obj) {
         {
             enter_by(cx, id, now, true);
         }
-    } else if cx.canvas.zoom <= crate::canvas::ZOOM_RANGE.0 + f32::EPSILON {
+    } else if cx.canvas.zoom <= archforge_shell_api::canvas::ZOOM_RANGE.0 + f32::EPSILON {
         // Out: the zoom has reached its least, 10 %: back the way in came, even into another
         // branch; with no way in, one level up; at the root, no further.
         let Ok(left) = store.uuid(here) else { return };
@@ -400,7 +402,11 @@ fn keys(cx: &mut Ctx, ui: &egui::Ui, r: Rect, d: Obj, here: Obj, now: f64) {
     }
     let (down, up, zoom_in, zoom_out) = ui.input_mut(pressed);
     if zoom_in || zoom_out {
-        crate::canvas::zoom_by(cx.canvas, if zoom_in { crate::canvas::ZOOM_STEP } else { 1.0 / crate::canvas::ZOOM_STEP }, r.size() / 2.0);
+        archforge_shell_api::canvas::zoom_by(
+            cx.canvas,
+            if zoom_in { archforge_shell_api::canvas::ZOOM_STEP } else { 1.0 / archforge_shell_api::canvas::ZOOM_STEP },
+            r.size() / 2.0,
+        );
     }
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     if down && let Some(package) = selected_package(cx, store, d) {
@@ -416,7 +422,7 @@ fn keys(cx: &mut Ctx, ui: &egui::Ui, r: Rect, d: Obj, here: Obj, now: f64) {
 /// with a command key, Control or Alt they stay, but Shift is free, since + is Shift and = on many
 /// layouts and some systems report that press as = with Shift.
 fn pressed(i: &mut egui::InputState) -> (bool, bool, bool, bool) {
-    use crate::actions::{Keys, take, take_plain};
+    use archforge_shell_api::actions::{Keys, take, take_plain};
     let chord = |key| Keys { modifiers: egui::Modifiers::COMMAND, key };
     (
         take(i, &chord(egui::Key::ArrowDown)),
@@ -516,7 +522,7 @@ fn path_bar(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, here: Obj, now: f
                 go = Some(*id);
             }
         } else {
-            crate::widgets::record_visible(ui, cx.registry, &format!("workspace.canvas.path.{i}"), "text", b.intersect(bar));
+            archforge_shell_api::widgets::record_visible(ui, cx.registry, &format!("workspace.canvas.path.{i}"), "text", b.intersect(bar));
         }
         let ink = if last { p.text } else { p.accent };
         clip.galley(pos2(b.left() + 10.0, b.center().y - g.size().y / 2.0), g, ink.into());
@@ -534,7 +540,7 @@ fn path_bar(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, here: Obj, now: f
 
 /// Records the path bar `bar` for automation, as a toolbar.
 fn widgets_record(cx: &mut Ctx, ui: &egui::Ui, bar: Rect) {
-    crate::widgets::record_visible(ui, cx.registry, "workspace.canvas.path", "toolbar", bar);
+    archforge_shell_api::widgets::record_visible(ui, cx.registry, "workspace.canvas.path", "toolbar", bar);
 }
 
 /// A selected package's Open, inside its card's top right while the card is big enough to hold it.
@@ -543,7 +549,7 @@ fn open_control(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj, now: 
     let Some(package) = selected_package(cx, store, d) else { return };
     let Some(n) = store.by_uuid(package).and_then(|o| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(o))) else { return };
     let Ok(node_id) = store.uuid(n) else { return };
-    let view = crate::canvas::View { origin: r.min, pan: cx.canvas.pan, zoom: cx.canvas.zoom };
+    let view = archforge_shell_api::canvas::View { origin: r.min, pan: cx.canvas.pan, zoom: cx.canvas.zoom };
     let card = screen(view, store, n);
     let paint = ui.painter().with_clip_rect(r);
     let label = tr("Open");
@@ -573,7 +579,7 @@ fn open_control(cx: &mut Ctx, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj, now: 
 /// and a drop in Models both do: its cards stay where they are, and none is added to the diagram of
 /// `to` (Decision 26, AR-568). One undo step, "Move package", with a toast offering Undo; already in
 /// `to`, nothing happens. A refusal (into itself or a package it holds, beside the package Types)
-/// comes back in plain words ([`crate::panels::refusal`]) for the caller to say.
+/// comes back in plain words ([`archforge_shell_api::panels::refusal`]) for the caller to say.
 pub(crate) fn move_package(cx: &mut Ctx, package: Obj, to: Obj) -> Result<(), String> {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return Ok(()) };
     if archforge_uml::commands::package_of(store, package) == Some(to) {
@@ -585,9 +591,9 @@ pub(crate) fn move_package(cx: &mut Ctx, package: Obj, to: Obj) -> Result<(), St
     let Some(session) = cx.session.as_mut() else { return Ok(()) };
     let moved =
         session.batch(&label, |b| b.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() })).map(|_| ()));
-    moved.map_err(|e| crate::panels::refusal(cx.notation_uis, &e))?;
-    let text = crate::i18n::fmt(&tr("{what} moved into {where}"), &[("what", what.as_str()), ("where", into.as_str())]);
-    cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(300), undo_label: Some(label) });
+    moved.map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e))?;
+    let text = archforge_shell_api::i18n::fmt(&tr("{what} moved into {where}"), &[("what", what.as_str()), ("where", into.as_str())]);
+    cx.canvas.toast = Some(archforge_shell_api::canvas::Toast { text, until: cx.frames.saturating_add(300), undo_label: Some(label) });
     Ok(())
 }
 

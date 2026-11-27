@@ -9,8 +9,9 @@ repository.workspace = true
 publish = false
 
 [features]
-# Offscreen rendering of the window to an image, for screenshots.
-snapshot = ["dep:egui_kittest"]
+# Offscreen rendering of the window to an image, for screenshots, with UML's screens and what the
+# tool reaches in them (until the tool moves to the app).
+snapshot = ["dep:egui_kittest", "dep:archforge-uml", "dep:archforge-uml-ui"]
 # What the app's window tests reach in the shell (`archforge_ui_egui::testing`); never shipped.
 testing = ["dep:egui_kittest"]
 
@@ -20,7 +21,9 @@ archforge-diagram.workspace = true
 archforge-engine.workspace = true
 archforge-er.workspace = true
 archforge-notations.workspace = true
-archforge-uml.workspace = true
+# UML's model and screens, for the screenshot tool only.
+archforge-uml = { workspace = true, optional = true }
+archforge-uml-ui = { workspace = true, optional = true, features = ["snapshot"] }
 archforge-mof.workspace = true
 archforge-names.workspace = true
 archforge-shell-api.workspace = true
@@ -42,6 +45,10 @@ craft-i18n.workspace = true
 
 [dev-dependencies]
 archforge-mof = { workspace = true, features = ["testing"] }
+# The shell's tests build the shell with UML's model and screens, as the app registers them, until
+# they are given the fake notation.
+archforge-uml.workspace = true
+archforge-uml-ui = { workspace = true, features = ["snapshot"] }
 egui_kittest = { workspace = true, features = ["wgpu"] }
 serde_json.workspace = true
 

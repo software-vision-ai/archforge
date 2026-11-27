@@ -271,7 +271,7 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
         ("no project shown", |s| (canvas(s), s.active = None).1, &[]),
         ("no diagram on the canvas, the model's view still on one", |s| (canvas(s), s.canvas.active = None).1, &[]),
         ("a line's menu open on the canvas", |s| (canvas(s), uml_of_mut(s).line_menu = Some(egui::Pos2::ZERO)).1, &[]),
-        ("the classifier's menu of kinds open", |s| (canvas(s), s.canvas.popover = Some(crate::uml_classifier::KINDS)).1, &[]),
+        ("the classifier's menu of kinds open", |s| (canvas(s), s.canvas.popover = Some(uml_classifier::KINDS)).1, &[]),
     ];
     let select_all = Event::Key { key: Key::A, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND };
     for ((name, setup, on), theme) in states.into_iter().zip([ThemeKind::Light, ThemeKind::Dark].into_iter().cycle()) {
@@ -687,7 +687,7 @@ fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
         );
 
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        h.state_mut().cx(crate::uml_ui::open_sample).unwrap();
+        h.state_mut().cx(uml_ui::open_sample).unwrap();
         h.state_mut().in_window_menu = true;
         let st = h.state().session.as_ref().unwrap().doc();
         let catalog = st
@@ -976,7 +976,7 @@ fn delete_after_select_all_deletes_no_line_or_set_from_the_model() {
         let d = s.view().open_diagram.unwrap();
         assert!(s.doc().list(d, archforge_diagram::diagram::NODE).unwrap().is_empty(), "the boxes are off the diagram");
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, payment) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
+        let (gens, payment) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
         let s = h.state_mut().session.as_mut().unwrap();
         let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method" })).unwrap().value["id"]
             .as_str()
@@ -1015,7 +1015,7 @@ fn delete_on_a_set_label_removes_the_set_and_keeps_its_lines() {
         (ThemeKind::Dark, true, true),
     ] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, payment) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
+        let (gens, payment) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
         (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.75, egui::vec2(-470.0, -230.0));
         let d = h.state().canvas.active.unwrap().to_string();
         let s = h.state_mut().session.as_mut().unwrap();
@@ -1063,7 +1063,7 @@ fn delete_on_a_set_label_removes_the_set_and_keeps_its_lines() {
 fn select_all_takes_a_generalization_set_whether_its_label_was_moved_or_not() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = h.state_mut().cx(crate::uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
         let d = h.state().canvas.active.unwrap().to_string();
         let s = h.state_mut().session.as_mut().unwrap();
         let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method" })).unwrap().value["id"]

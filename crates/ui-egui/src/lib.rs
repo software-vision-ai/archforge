@@ -52,13 +52,11 @@ pub mod markdown;
 mod menu_bar;
 pub mod model_menu;
 pub mod model_words;
-mod nav_route;
 pub mod new_project;
 mod notation_ui;
 pub mod objects;
 #[cfg(any(test, feature = "snapshot"))]
 pub mod offscreen;
-pub(crate) mod package_nav;
 pub mod panels;
 pub mod problems;
 mod project_search;
@@ -79,25 +77,6 @@ mod switch_ask;
 pub mod testing;
 pub mod theme;
 pub mod types;
-mod uml_adornments;
-mod uml_bindings;
-mod uml_classifier;
-mod uml_constraint_draw;
-mod uml_constraints;
-mod uml_inline;
-mod uml_nary;
-mod uml_nesting;
-mod uml_package;
-mod uml_panel;
-mod uml_profiles;
-mod uml_qualifiers;
-mod uml_relate;
-mod uml_said;
-mod uml_sets;
-mod uml_state;
-mod uml_stereotypes;
-mod uml_templates;
-mod uml_ui;
 pub mod ux;
 pub mod version_chip;
 mod version_details;
@@ -112,7 +91,6 @@ pub use archforge_shell_api::widgets;
 pub use er_ui::ER;
 pub use fonts::{FontEntry, FontSource};
 pub use state::UiState;
-pub use uml_ui::UML;
 
 /// Host functions the shell may call; each is optional, and a missing one degrades rather than
 /// failing.
