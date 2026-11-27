@@ -11,6 +11,7 @@ use crate::ai_agents::{Look, Provider};
 use crate::chat::ChatEvent;
 use crate::chat_store::fake::Memory;
 use crate::chat_words::Clock;
+use crate::snapshot;
 
 /// 2026-11-07 13:26 UTC: 14:26 where the screens are set, an hour east of UTC.
 pub const NOW: u64 = 1_794_057_960;
@@ -61,11 +62,11 @@ pub fn rig(shell: &mut Shell, ready: bool) -> Rig {
 pub fn settle(shell: &mut Shell) {
     let ctx = egui::Context::default();
     for _ in 0..6 {
-        crate::ai_agents::start(shell);
-        crate::ai_agents::poll(shell, &ctx);
+        snapshot::start_agents(shell);
+        snapshot::poll_agents(shell, &ctx);
         crate::chat_panel::showing(shell);
-        crate::chat::frame(shell, &ctx);
-        crate::chat_panel::frame(shell);
+        snapshot::chat_frame(shell, &ctx);
+        snapshot::chat_panel_frame(shell);
     }
 }
 
@@ -149,10 +150,10 @@ pub fn history(shell: &mut Shell, rig: &Rig) -> Result<Vec<archforge_mof::Uuid>,
 
 /// The sample class model open with Order selected and the Chat panel over it, ready or not.
 pub fn sample(shell: &mut Shell, ready: bool) -> Result<Rig, String> {
-    shell.adopt_project();
+    snapshot::adopt_project(shell);
     crate::uml_ui::open_sample(shell)?;
     if let Some(order) = element(shell, archforge_uml::CLASS, "Order") {
-        crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
+        snapshot::run(shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
     }
     let rig = rig(shell, ready);
     settle(shell);
