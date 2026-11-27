@@ -1128,8 +1128,8 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
             uml.member = None;
         }
     } else if remove && let Some(asked) = ask_for_consequences(cx, &edit) {
-        // Its stereotype applications would go with it: the delete dialog names them first, as
-        // every other delete of a carrier does (AR-135).
+        // Something would go with it, its stereotype applications: the delete dialog names them
+        // first, as every other delete of a carrier does (AR-135).
         if let Some(uml) = uml_mut(cx.notation_states) {
             uml.member = None;
         }
