@@ -14,7 +14,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     listing the failing test prints, and a new screen, a row of the `screens!` list in the same
     file (its one list of screens, `offscreen::SCREENS`), gets its rows under its name
   - translations: the shell's and the notations' catalogues in `crates/ui-egui/src/i18n/tests.rs`;
-    the machinery (lookups, plural rules, registering, the build-time row check) in
+    the tests across every catalogue (every literal has a row, every row is read and is in the
+    catalogue of the code that reads it, no key twice, the model words) in the app, the one crate
+    that knows every catalogue: `apps/archforge/src/catalogues.rs`; the machinery (lookups, plural rules, registering, the build-time row check) in
     `crates/shell-api/src/i18n/tests.rs`
   - the desktop app (arguments, preferences, graphics): the `tests` module in `apps/archforge/src/main.rs`
   - the native menu bar's queue, wake and items: the `tests` module in

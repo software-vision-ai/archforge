@@ -130,7 +130,7 @@ fn shown_starts() -> Vec<&'static (&'static str, &'static str, &'static str, &'s
 
 /// Every text of the start cards to translate: they reach `tr` through the table, where the
 /// catalogue tests cannot find them as literals.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn start_texts() -> impl Iterator<Item = &'static str> {
     STARTS.iter().flat_map(|(_, title, line, link, _, _)| [*title, *line, *link])
 }

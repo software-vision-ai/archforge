@@ -221,7 +221,10 @@ fn each_kind_answers_its_own_rows() {
     assert_eq!(all, [ER_ROWS.to_vec(), uml.concat(), SHARED.to_vec()].concat());
     assert!(all.iter().enumerate().all(|(n, id)| !all[n + 1..].contains(id)), "{all:?}");
     assert!(all.iter().all(|id| crate::actions::keys(id).is_none() && !crate::actions::ACTIONS.iter().any(|a| a.id == *id)), "{all:?}");
-    assert_eq!(crate::model_menu::every_menu(), [[ER_ROWS.to_vec(), SHARED.to_vec()].concat(), [uml.concat(), SHARED.to_vec()].concat()]);
+    assert_eq!(
+        crate::model_menu::every_menu(crate::tests::SCREENS.kinds()),
+        [[ER_ROWS.to_vec(), SHARED.to_vec()].concat(), [uml.concat(), SHARED.to_vec()].concat()]
+    );
     // The data itself: each row's word, the tool it arms, whether it makes a choice first, and the
     // kind it is of.
     let data: Vec<(&str, String, Tool, bool, Option<&str>)> = crate::model_menu::rows(crate::tests::SCREENS.kinds())

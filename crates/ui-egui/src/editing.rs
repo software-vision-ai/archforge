@@ -1796,7 +1796,7 @@ pub fn retain_valid(state: &mut crate::canvas::State, store: &Store) {
 }
 
 /// Every hover text and menu row to translate, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     [
         "Connect",

@@ -879,7 +879,7 @@ fn commit_column(cx: &mut Ctx, edit: &ColumnEdit) {
 
 /// The words of the table's panel that reach `tr` through a variable: the hover hints of its icon
 /// buttons and the generations' names, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add column", "Remove", "Cancel", "Apply", "Unlink", "Pick a type"].into_iter().chain(GENERATIONS.iter().map(|(_, w)| *w))
 }

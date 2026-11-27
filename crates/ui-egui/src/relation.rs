@@ -751,7 +751,7 @@ fn menu_body(
 }
 
 /// Every table text to translate, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ACTIONS
         .iter()

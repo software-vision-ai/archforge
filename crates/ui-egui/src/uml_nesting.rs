@@ -447,7 +447,7 @@ pub(crate) fn add_inside(cx: &mut Ctx, key: &str, o: Obj) -> Option<Result<Uuid,
 
 /// The words this module hands to `tr` by a name rather than a literal, for the catalogue's
 /// coverage test: the section's `+` hint.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add nested classifier"].into_iter()
 }

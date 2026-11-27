@@ -518,7 +518,7 @@ fn skill_row(shell: &mut Shell, ui: &egui::Ui, paint: &egui::Painter, p: &Palett
 
 /// Every text that reaches `tr` through a variable: the hover hints of the icon buttons, for the
 /// catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add skill"].into_iter()
 }

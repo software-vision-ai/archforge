@@ -107,9 +107,9 @@ after every visible change, in both appearances, beside the design.
 - Every string the user sees goes through `tr("…")`, `tr_ctx("context", "…")` for a word with
   several meanings, or `trn("{n} thing", "{n} things", n)` (the machinery is
   `crates/shell-api/src/i18n/mod.rs`, whose lookups register the interfaces' own catalogues; the
-  shell's `crate::i18n` re-exports it with its catalogues registered). Pass the English text as a literal: the coverage test reads the
+  shell's `crate::i18n` re-exports it with its catalogues registered). Pass the English text as a literal: the coverage test (`apps/archforge/src/catalogues.rs`) reads the
   literals in `crates/ui-egui/src`, `crates/shell-api/src` and `apps/archforge/src`. Text from a
-  table goes through a function the test calls, as `home::start_texts` does.
+  table goes through a function the test calls, listed in `testing::word_lists`, as `home::start_texts` is.
 - The catalogues are `crates/ui-egui/src/i18n/<code>.tsv`, the shell's,
   `crates/shell-api/src/i18n/<code>.tsv`, the shell's interfaces' (registered by their own
   lookups, and checked by their build script), and one table per notation, `crates/ui-egui/src/i18n/er/<code>.tsv` and `crates/ui-egui/src/i18n/uml/<code>.tsv`,

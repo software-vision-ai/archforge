@@ -643,7 +643,7 @@ fn picker_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, pane
 }
 
 /// Every text that reaches `tr` through a variable, for the catalogue tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Fill", "Border", "Text colour", "Cancel", "Apply"].into_iter()
 }

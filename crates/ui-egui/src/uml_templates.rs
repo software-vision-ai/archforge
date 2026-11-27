@@ -723,7 +723,7 @@ pub(crate) fn kind_line(kind: &str, n: usize) -> String {
 }
 
 /// Every word this module says through `tr` at run time, for the catalogue.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add template parameter"].into_iter()
 }

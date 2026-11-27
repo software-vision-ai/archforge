@@ -31,10 +31,10 @@ fn is_kind(uis: &[&'static dyn NotationUi], class: ClassId) -> bool {
     CORE_KINDS.contains(&class) || of_class(uis, class).is_some_and(|ui| ui.created_classes().contains(&class))
 }
 
-/// Every class that gets a kind word of its own, the core's and each notation's of the app.
-#[cfg(test)]
-pub(crate) fn kinds() -> Vec<ClassId> {
-    CORE_KINDS.iter().chain(crate::tests::SCREENS.notation_uis().iter().flat_map(|ui| ui.created_classes())).copied().collect()
+/// Every class that gets a kind word of its own, the core's and each notation's of `uis`.
+#[cfg(any(test, feature = "testing"))]
+pub(crate) fn kinds(uis: &[&'static dyn NotationUi]) -> Vec<ClassId> {
+    CORE_KINDS.iter().chain(uis.iter().flat_map(|ui| ui.created_classes())).copied().collect()
 }
 
 /// Whether `metamodel` is one these words cover: the core's, or the metamodel of a notation of `uis`
@@ -109,13 +109,12 @@ pub fn kind_label(uis: &[&'static dyn NotationUi], universe: &Universe, class: C
 
 /// Every key these labels look up, for the catalogue tests, each with the index of the metamodel
 /// that names it, so the tests can tell whose catalogue holds its row: each property a card shows
-/// and each literal of the core and of each notation's metamodel the tests register as the app
-/// does, and the kinds ([`kinds`]) but those with a notation's word, whose rows the scan reads from
-/// each notation's [`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word).
-#[cfg(test)]
-pub(crate) fn texts() -> Vec<(u16, String)> {
+/// and each literal of the core and of the metamodel of each notation of `uis`, and the kinds
+/// ([`kinds`]) but those with a notation's word, whose rows the scan reads from each notation's
+/// [`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word).
+#[cfg(any(test, feature = "testing"))]
+pub(crate) fn texts(uis: &[&'static dyn NotationUi]) -> Vec<(u16, String)> {
     let Ok(universe) = archforge_notations::universe() else { return Vec::new() };
-    let uis = crate::tests::SCREENS.notation_uis();
     let mut all = Vec::new();
     for metamodel in universe.metamodels().filter(|m| in_the_model(uis, m.index)) {
         let named = |name: &str| (metamodel.index, words(name));
@@ -126,7 +125,7 @@ pub(crate) fn texts() -> Vec<(u16, String)> {
             }
         }
     }
-    let worded = kinds().into_iter().filter(|c| notation_word(uis, *c).is_none());
+    let worded = kinds(uis).into_iter().filter(|c| notation_word(uis, *c).is_none());
     all.extend(worded.filter_map(|c| universe.class(c).map(|known| (c.metamodel(), words(&known.name)))));
     all
 }
