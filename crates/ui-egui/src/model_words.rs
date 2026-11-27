@@ -11,7 +11,7 @@
 //! for the core and the notations the shell was given, whose catalogues it registered, and for no
 //! other metamodel. Kind words go only to the classes
 //! the core and the notations the shell was given create ([`NotationUi::created_classes`](crate::notation_ui::NotationUi::created_classes)), as the catalogues stay
-//! smaller that way, and to a package's default-diagram binding, the one class of the diagrams a
+//! smaller that way, and to the default-diagram binding, the one class of the diagrams a
 //! comparison lists as the model's; the rest say Element.
 
 use archforge_mof::{ClassId, DataId, DataKind, PropId, Universe};
@@ -85,8 +85,8 @@ pub fn literal_label(uis: &[&'static dyn NotationUi], universe: &Universe, ty: D
 }
 
 /// The word Models and Properties use for `class` where it isn't its metamodel's name: its
-/// notation's own, of `uis` ([`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word): a table and its columns, a subtype, an attribute, a
-/// literal), and the word a comparison says for a package's default-diagram binding.
+/// notation's own, of `uis` ([`NotationUi::kind_word`](crate::notation_ui::NotationUi::kind_word)),
+/// and the word a comparison says for the default-diagram binding.
 fn notation_word(uis: &[&'static dyn NotationUi], class: ClassId) -> Option<String> {
     if class == archforge_diagram::DEFAULT_DIAGRAM_BINDING {
         return Some(tr("Default diagram"));

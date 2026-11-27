@@ -1,9 +1,9 @@
 //! What the top bar's search finds in an open project: its diagrams and its
-//! elements (schemas, tables, columns, relationships, domains, enum types, sequences, views,
-//! skills and notes) by name, each with what it is and where it lives. The index is made once the
-//! list opens and again only when the model changes, so typing stays quick in a large model. A
-//! diagram opens in its tab; an element is selected, its row shows in the Models tree, and the
-//! canvas brings it into view on the open diagram, or on the first diagram that shows it.
+//! elements (those each notation lists, skills and notes) by name, each with what it is and where
+//! it lives. The index is made once the list opens and again only when the model changes, so typing
+//! stays quick in a large model. A diagram opens in its tab; an element is selected, its row shows
+//! in the Models tree, and the canvas brings it into view on the open diagram, or on the first
+//! diagram that shows it.
 
 use archforge_diagram::{DIAGRAM, NODE, diagram, node};
 use archforge_mof::{Obj, Store, Uuid};
@@ -137,8 +137,8 @@ pub(crate) fn go(shell: &mut Shell, found: Found) {
         Found::Element(id) => {
             let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
             let Some(o) = store.by_uuid(id) else { return };
-            // What the canvas draws for it: a column's table, a relationship's line's first table,
-            // a note's own node.
+            // What the canvas draws for it: the element a part belongs to, the first end of a
+            // line's element, a note's own node.
             let shown = match crate::notation_ui::of(shell.notation_uis, store, o) {
                 Some(ui) => ui.shown(store, o),
                 None => Some(o),
@@ -199,7 +199,7 @@ mod tests {
         let index = index(crate::tests::SCREENS.kinds(), crate::tests::SCREENS.notation_uis(), s.doc());
         let (diagrams, elements) = hits(&index, "order");
         assert_eq!(diagrams.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(), ["Orders"]);
-        // The table named so first, then what starts so, then a word inside a name.
+        // The element named so first, then what starts so, then a word inside a name.
         assert_eq!(elements.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(), ["Order", "order_id", "Customer_order"]);
         // Every word must be found, in the name or where it lives.
         let (_, both) = hits(&index, "ORDER_ID order");

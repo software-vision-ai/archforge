@@ -188,7 +188,7 @@ pub(crate) fn paste(shell: &mut Shell) {
 /// nothing covers it or holds its keys, the window is free, no gesture runs and the project is not
 /// held. Viewing a version may select, as a click there does.
 fn canvas_diagram(shell: &Shell) -> Option<archforge_mof::Obj> {
-    // A popover's menu the keys walk (UML's classifier kinds) walks its rows while the canvas
+    // A popover's menu the keys walk (a menu of kinds of element) walks its rows while the canvas
     // keeps the focus.
     let walked = crate::kinds::popover_takes_keys(shell);
     let shows =

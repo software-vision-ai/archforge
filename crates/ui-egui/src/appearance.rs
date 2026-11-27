@@ -1,12 +1,12 @@
 //! The Appearance panel (the design's frames "ER · Appearance · Entity selected" and "ER ·
 //! Appearance · Relationship selected"): how the selection looks on the diagram open in the centre,
-//! and on that diagram only. A table, a note or another card takes a fill, a border and a text
+//! and on that diagram only. A card, a note's included, takes a fill, a border and a text
 //! colour and a border width; a line takes a colour and a width. Each colour is one of the design's
 //! swatches or one of the user's own; Use diagram defaults takes the selection's own look away.
 //! Every change goes through `diagram.style`, one undo step for the whole selection. A line's own
 //! colour shows while the key status is off, which the panel offers to turn off. Lines run
 //! straight, at right angles or curved, as the diagram says or as a line's own look says; right
-//! angles can go around the tables in the way. With nothing selected the panel sets the diagram's
+//! angles can go around the cards in the way. With nothing selected the panel sets the diagram's
 //! routing (owner decisions).
 
 use archforge_diagram::{DIAGRAM, NODE, ProjectView, diagram, edge, node, style};
@@ -57,7 +57,7 @@ fn targets(shell: &Shell) -> (Vec<Obj>, Vec<Obj>) {
             }
         }
         for e in all_edges.iter().filter(|e| **e == *o || element(**e, edge::ELEMENT) == Some(*o)) {
-            // A line its notation draws in its own fixed look (ER's generalization) keeps it.
+            // A line its notation draws in its own fixed look keeps it.
             let styled = element(*e, edge::ELEMENT)
                 .is_some_and(|el| session.view().of_element(store, el).and_then(|n| n.line(store, el)).is_none_or(|l| l.styled));
             if styled && !edges.contains(e) {
@@ -71,8 +71,7 @@ fn targets(shell: &Shell) -> (Vec<Obj>, Vec<Obj>) {
 /// The colour a node shows for `group` without a look of its own.
 fn default_colour(view: &ProjectView, store: &Store, n: Obj, group: Group, p: &Palette) -> Colour {
     let el = store.get(n, node::ELEMENT).ok().and_then(|v| v.as_ref());
-    // A tinted card its notation draws (ER's table) takes the card's colours; a plain one (a
-    // class) the surface's.
+    // A tinted card its notation draws takes the card's colours; a plain one the surface's.
     let tinted = el.is_some_and(|e| {
         let d = archforge_diagram::diagram_of(store, n);
         let card = d.zip(view.of_element(store, e)).and_then(|(d, notation)| notation.card(store, e, d));
@@ -184,7 +183,7 @@ fn restyle(shell: &mut Shell, targets: &[Obj], edit: impl Fn(&mut serde_json::Va
 }
 
 /// The routing `o`'s own style gives (a `Routing` literal past as-diagram) and whether it avoids
-/// tables; none when it leaves that to its diagram.
+/// the cards in its way; none when it leaves that to its diagram.
 fn own_routing(store: &Store, o: Obj) -> Option<(usize, bool)> {
     let s = store.get(o, style_prop(store, o)).ok()?.as_ref()?;
     match store.get(s, style::ROUTING).ok()? {
@@ -206,7 +205,7 @@ fn open_diagram(shell: &Shell) -> Option<Obj> {
 }
 
 /// The routing row (Straight, Right-angled, Curved) under its label, and for right angles the
-/// switch that takes the lines around the tables in their way. `current` is the routing every
+/// switch that takes the lines around the cards in their way. `current` is the routing every
 /// target shows and whether it avoids, or none when they differ. Gives the y under them.
 #[allow(clippy::too_many_arguments)]
 fn routing_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, current: Option<(usize, bool)>, targets: &[Obj]) -> f32 {
@@ -240,7 +239,7 @@ fn routing_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, width: f
         }
     }
     let mut y = at.y + 19.0 + FIELD + 14.0;
-    // Around the tables: only for right angles.
+    // Around the cards in the way: only for right angles.
     if let Some((2, avoid)) = current {
         let label = ux::text(&paint, pos2(at.x, y + 2.0), &tr("Route around tables"), types::UI, p.text, Some((width - 48.0).max(0.0)));
         let sw = Rect::from_min_size(pos2(at.x + width - 36.0, label.center().y - 10.0), vec2(36.0, 20.0));
@@ -256,7 +255,7 @@ fn routing_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, width: f
         y += 36.0;
     }
     if let Some(literal) = picked {
-        // Right angles go around the tables unless the targets said otherwise already.
+        // Right angles go around the cards unless the targets said otherwise already.
         let avoid = current.is_none_or(|(r, a)| r != 2 || a);
         restyle(shell, targets, |params| {
             params["routing"] = json!(ROUTINGS[literal]);

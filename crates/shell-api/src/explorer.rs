@@ -18,8 +18,8 @@ pub struct Delete {
     pub diagrams: usize,
     /// The node the canvas asked from, when it did.
     pub node: Option<Uuid>,
-    /// The package what it holds moves up to, a nested package's parent, and whether it holds
-    /// anything: the dialog says so instead of saying what it holds goes with it, and the toast
-    /// says where it went, as a removal without the dialog does.
+    /// The name of the element what it holds moves up to (the parent of an element nested in
+    /// another), and whether it holds anything: the dialog says so instead of saying what it holds
+    /// goes with it, and the toast says where it went, as a removal without the dialog does.
     pub hands_to: Option<(String, bool)>,
 }

@@ -192,7 +192,7 @@ enum Kind<'a> {
     Diagram,
     /// A skill.
     Skill,
-    /// A line: a relationship of any notation.
+    /// A line: the element of a line, of any notation.
     Line,
     /// A notation's own kind: the notation's place among those handed, and its key.
     Own(usize, &'static str),

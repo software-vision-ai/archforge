@@ -55,8 +55,8 @@ pub struct Inside {
     pub kinds: Vec<(&'static str, String, &'static Icon)>,
     pub refused: Vec<(&'static str, String, String)>,
     pub why_not: Option<String>,
-    /// Where a line parts the kinds, when not before the disabled rows: after a package's
-    /// Package and Profile (AR-134, F2).
+    /// Where a line parts the kinds, when not before the disabled rows: after the first so many,
+    /// to set a group of kinds apart from the rest.
     pub split: Option<usize>,
 }
 
@@ -70,7 +70,8 @@ pub struct Entry {
 }
 
 /// How Properties names an element: the kind line under the heading, the word for the
-/// selection, "This table", "On this table · {n}", and the heading's name.
+/// selection, the selection itself ("This" and its word), the title of its own skills section
+/// ("On this" and its word, with a count), and the heading's name.
 pub struct Words {
     pub kind: String,
     pub word: String,
@@ -84,7 +85,7 @@ pub struct Words {
 pub enum ChatKind {
     /// Not counted: a part of another element, as a description's comment is.
     Part,
-    /// A line, summed with the relationships of every notation: "2 lines".
+    /// A line, summed with the lines of every notation: "2 lines".
     Line,
     /// A kind of its own, by its key: summed with the elements of the same key and said in its
     /// words ([`NotationUi::chat_count`]).
@@ -101,9 +102,10 @@ pub struct Subject {
     /// The kind line under the heading and the word for the selection.
     pub kind: String,
     pub word: String,
-    /// "This table": the selection itself, as the applies-to choice and the own skill rows say it.
+    /// The selection itself ("This" and its word), as the applies-to choice and the own skill rows
+    /// say it.
     pub this: String,
-    /// "On this table · {n}": the title of the own skills section.
+    /// The title of the own skills section ("On this" and its word, with the count `{n}`).
     pub on_this: String,
 }
 
@@ -133,10 +135,10 @@ impl Subject {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Removal {
     /// What goes with the elements that the toast of a line's removal names after the element's
-    /// own words (`NotationUi::removed_text`): UML's generalization sets a line alone made up.
+    /// own words (`NotationUi::removed_text`): the elements that line alone made up.
     pub went: Vec<String>,
-    /// What it says after the toast of any removal, of what else the removal changes: UML's
-    /// constraints that name what goes (`say_after`); none when it changes nothing else.
+    /// What it says after the toast of any removal, of what else the removal changes: its elements
+    /// that name what goes (`say_after`); none when it changes nothing else.
     pub after: Option<String>,
 }
 
@@ -145,17 +147,17 @@ pub struct Removal {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Layer {
     /// Over the lines being drawn and a line's end being moved, under the marquee and the
-    /// adorners: a line not in the model yet (UML's template binding's draft).
+    /// adorners: a line not in the model yet, as it is drawn.
     Drafts,
     /// Over the name typed in a node, under a note's text being typed: a row typed in place on a
-    /// card (UML's member row).
+    /// card.
     Rows,
     /// Over the element menu, before the canvas reads its keys: its own menus and what goes with
-    /// them (UML's menu of generalization lines, then an n-ary association's draft, its legs' end
-    /// handles and its menu).
+    /// them (a menu for several lines at once, then a figure drawn click by click, its end handles
+    /// and its menu).
     Menus,
     /// Over what the diagram's kind draws over the canvas and the fade of a switch, under the
-    /// toast: a card offered over the canvas (ER's mapping table offer).
+    /// toast: a card offered over the canvas (a way out of a problem, offered from its badge).
     Offers,
 }
 
@@ -175,19 +177,19 @@ pub struct Row {
     pub id: Uuid,
     pub obj: Obj,
     pub depth: u8,
-    /// What the row is, as its notation names it (`schema`, `table`, `column`, `skill`), and its
-    /// icon, drawn muted for a row under another's (a column).
+    /// What the row is, as its notation names it (`skill` for a skill), and its icon, drawn muted
+    /// for a row under another's (a part of the element above it).
     pub kind: &'static str,
     pub icon: &'static ux::Icon,
     pub muted: bool,
     pub label: String,
-    /// A column's type, after its name.
+    /// What the row says after its name (a part's type).
     pub detail: Option<String>,
-    /// What the row is, muted after its name (a UML generalization set's `generalization set`).
+    /// What the row is, muted after its name, for a row whose icon and name do not say it.
     pub note: Option<String>,
     pub expandable: bool,
     pub expanded: bool,
-    /// Whether the row drags onto the canvas (a table).
+    /// Whether the row drags onto the canvas (an element a diagram shows as a card).
     pub draggable: bool,
 }
 
@@ -274,8 +276,8 @@ pub struct Editor {
     pub card: &'static str,
 }
 
-/// Where an open editor edits: the item, or none for one being added, and the list it belongs to (a
-/// kind of member, type, object or key, or an association's end), so a move to either is new.
+/// Where an open editor edits: the item, or none for one being added, and the list it belongs to
+/// (one of the card's lists of rows), so a move to either is new.
 pub type Place = (Option<Uuid>, usize);
 
 /// An open editor: where it edits, and the refusal its card shows.
@@ -290,9 +292,10 @@ pub enum Scope {
 }
 
 /// A menu of the shell's one open-menu slot (`State::menu`): whose it is, which of its owner's
-/// menus by key, and which one of a kind shown more than once (a key pair's, an association end's;
-/// 0 for a menu shown once). Only its owner opens, recognises and closes it: the shell keeps its
-/// own beside the screens they belong to, each notation its own beside its state.
+/// menus by key, and which one of a kind shown more than once (the row it belongs to among rows
+/// that each show one; 0 for a menu shown once). Only its owner opens, recognises and closes it:
+/// the shell keeps its own beside the screens they belong to, each notation its own beside its
+/// state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MenuId {
     pub scope: Scope,
@@ -330,7 +333,7 @@ pub trait NotationUi: Sync {
 
     // The Models tree.
 
-    /// Whether a member of the model is one of its top rows (ER's schemas).
+    /// Whether a member of the model is one of its top rows.
     fn is_top(&self, store: &Store, member: Obj) -> bool;
     /// The rows of a top element: its own and, opened, those under it.
     fn tree(&self, store: &Store, top: Obj, t: &Tree<'_>) -> Vec<Row>;
@@ -342,14 +345,14 @@ pub trait NotationUi: Sync {
     /// The command that renames an element of `class` in place, and its key for the element.
     fn rename(&self, store: &Store, obj: Obj) -> Option<(&'static str, &'static str)>;
     /// Why `obj` cannot be renamed `name`, in the user's words, checked before the rename command
-    /// runs (a UML literal's name another literal has); none lets the command decide.
+    /// runs (a name another element beside it has); none lets the command decide.
     fn rename_refusal(&self, store: &Store, obj: Obj, name: &str) -> Option<String> {
         let _ = (store, obj, name);
         None
     }
     /// What goes with `obj` when it is removed, as the delete dialog says it: one finished
-    /// sentence each, counted and worded by the notation in the user's language (`2 relationships
-    /// go with it.`), in the order the dialog lists them, after the diagrams it disappears from;
+    /// sentence each, counted and worded by the notation in the user's language (`2 lines go with
+    /// it.`), in the order the dialog lists them, after the diagrams it disappears from;
     /// an element it names without a name by its kind in the words of the notations the shell was
     /// given, `uis` ([`crate::panels::a_kind`]). None by default; the removal asks first when there
     /// is any.
@@ -368,15 +371,15 @@ pub trait NotationUi: Sync {
         None
     }
     /// Why `obj` cannot be removed, in the user's words, checked before the removal or its dialog
-    /// (UML's package Types while it keeps the built-in types), an element it names without a name
+    /// (an element that holds what the notation itself needs), an element it names without a name
     /// by its kind in the words of the notations the shell was given, `uis`
     /// ([`crate::panels::a_kind`]); none lets the command decide.
     fn remove_refusal(&self, uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<String> {
         let _ = (uis, store, obj);
         None
     }
-    /// The element that takes what `obj` holds when `obj` is removed (a nested package's
-    /// parent), when it hands its contents up rather than taking them along.
+    /// The element that takes what `obj` holds when `obj` is removed (the parent of an element
+    /// nested in another), when it hands its contents up rather than taking them along.
     fn hands_up(&self, store: &Store, obj: Obj) -> Option<Obj> {
         let _ = (store, obj);
         None
@@ -386,25 +389,25 @@ pub trait NotationUi: Sync {
     /// go and what goes with them are asked above.
     fn before_removal(&self, store: &Store, objs: &[Obj]) -> Removal;
     /// The toast once a line's element of its own was removed from the model, `what` being its
-    /// kind's word (`Generalization`), with what [`before_removal`] worked out.
+    /// kind's word, with what [`before_removal`] worked out.
     ///
     /// [`before_removal`]: NotationUi::before_removal
     fn removed_text(&self, what: &str, removal: &Removal) -> String;
-    /// Whether a drop of `dragged` on `target` is one the model refuses (a package into itself):
+    /// Whether a drop of `dragged` on `target` is one the model refuses (an element into itself):
     /// its target is ringed in amber, not the accent.
     fn drop_refused(&self, store: &Store, dragged: Obj, target: Obj) -> bool {
         let _ = (store, dragged, target);
         false
     }
     /// The command, with its parameters, that a tree row `dragged` dropped on the row `target`
-    /// runs (a class moved into a package); none when the drop means nothing there.
+    /// runs (an element moved into another); none when the drop means nothing there.
     fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
         let _ = (store, dragged, target);
         None
     }
     /// Runs the command `cmd` with `params` that a tree row dropped on another gives ([`drop_on`]),
-    /// as one undo step: by default as any command runs; a notation may run it its own way (UML
-    /// moves a package as Properties' Parent package does, with a toast offering Undo). A refusal
+    /// as one undo step: by default as any command runs; a notation may run it its own way (as its
+    /// own Properties field for the same move does, with a toast offering Undo). A refusal
     /// comes back in the user's words, for the tree to say.
     ///
     /// [`drop_on`]: NotationUi::drop_on
@@ -412,15 +415,15 @@ pub trait NotationUi: Sync {
         crate::panels::run_cx(cx, cmd, params).map(|_| ())
     }
     /// Why `obj`, which the model says carries no skill, carries none, in the user's words for the
-    /// Skills panel ("Relationships carry no skills"); none takes the panel's general line.
+    /// Skills panel (that a kind of element carries none); none takes the panel's general line.
     fn no_skills(&self, store: &Store, obj: Obj) -> Option<String> {
         let _ = (store, obj);
         None
     }
     /// What the Skills panel says a skill aims at when it aims at `kind`, one of its own skill
-    /// kinds, in the user's words ("every table"), `pattern` being the skill's type pattern, empty
-    /// when it has none; none for a kind it has no words for, or where the pattern says it better
-    /// (a column's type), which leaves the shell's: the pattern, or nothing.
+    /// kinds, in the user's words ("every" and the kind's word), `pattern` being the skill's type
+    /// pattern, empty when it has none; none for a kind it has no words for, or where the pattern
+    /// says it better (a part's type), which leaves the shell's: the pattern, or nothing.
     fn skill_target(&self, kind: ClassId, pattern: &str) -> Option<String> {
         let _ = (kind, pattern);
         None
@@ -439,7 +442,7 @@ pub trait NotationUi: Sync {
 
     /// The search's entry for `obj`, when it lists it.
     fn entry(&self, store: &Store, obj: Obj) -> Option<Entry>;
-    /// What the canvas brings into view for `obj` (a column's table).
+    /// What the canvas brings into view for `obj` (the element a part belongs to).
     fn shown(&self, store: &Store, obj: Obj) -> Option<Obj> {
         let _ = store;
         Some(obj)
@@ -452,7 +455,7 @@ pub trait NotationUi: Sync {
     fn problems(&self, uis: &[&'static dyn NotationUi], store: &Store, out: &mut Vec<Problem>) {
         let _ = (uis, store, out);
     }
-    /// The element whose problems a selection of `obj` shows (a column's table).
+    /// The element whose problems a selection of `obj` shows (the element a part belongs to).
     fn problem_holder(&self, store: &Store, obj: Obj) -> Obj {
         let _ = store;
         obj
@@ -462,22 +465,23 @@ pub trait NotationUi: Sync {
 
     /// How Properties names `obj`.
     fn words(&self, store: &Store, obj: Obj) -> Option<Words>;
-    /// What a sentence calls `obj` when it has no name of its own (AR-216): a relationship by its
+    /// What a sentence calls `obj` when it has no name of its own (AR-216): a line's element by its
     /// ends as its line runs, `CardPayment → Payment`; none leaves its kind's word ([`label`]).
     fn unnamed(&self, store: &Store, obj: Obj) -> Option<String> {
         let _ = (store, obj);
         None
     }
-    /// The title of the first section, when it is not the selection's word (a column's panel is
-    /// its table's).
+    /// The title of the first section, when it is not the selection's word (a part's panel is the
+    /// one of the element it belongs to).
     fn heading(&self, store: &Store, obj: Obj) -> Option<String> {
         let _ = (store, obj);
         None
     }
     /// The element `obj` shares a page with, as the right panel decides whether to keep its scroll:
     /// selecting `obj` after that element, or that element after `obj`, in the same panel keeps it
-    /// where it was scrolled (a column shares its table's, whose Properties it shows); by default
-    /// its own, none when it has none. It changes only the scroll, never what a panel draws.
+    /// where it was scrolled (a part shares the page of the element it belongs to, whose Properties
+    /// it shows); by default its own, none when it has none. It changes only the scroll, never what
+    /// a panel draws.
     fn page(&self, store: &Store, obj: Obj) -> Option<Obj> {
         let _ = store;
         Some(obj)
@@ -523,7 +527,7 @@ pub trait NotationUi: Sync {
         None
     }
     /// Whether its rename command `cmd` may empty the name, which leaves the element unnamed (a
-    /// relationship's); false for any other command.
+    /// line's element); false for any other command.
     fn may_be_unnamed(&self, cmd: &str) -> bool {
         let _ = cmd;
         false
@@ -541,8 +545,8 @@ pub trait NotationUi: Sync {
     /// The classes of its metamodel it creates, the only ones of it that get a kind word of their
     /// own (the shell's `model_words::kind_label`); the rest of its classes say Element.
     fn created_classes(&self) -> &'static [ClassId];
-    /// Its own word for `class` where the metamodel's name is not what the interface says (ER's
-    /// Entity is a Table); none takes the metamodel's name.
+    /// Its own word for `class` where the metamodel's name is not what the interface says; none
+    /// takes the metamodel's name.
     fn kind_word(&self, class: ClassId) -> Option<String> {
         let _ = class;
         None
@@ -553,14 +557,14 @@ pub trait NotationUi: Sync {
         let _ = class;
         None
     }
-    /// A kind of element as a refusal names it, with its article where the language has one (`a
-    /// table`), for a kind only its own commands name; none for any other kind.
+    /// A kind of element as a refusal names it, with its article where the language has one ("a"
+    /// and the kind's word), for a kind only its own commands name; none for any other kind.
     fn a_kind(&self, kind: &str) -> Option<String> {
         let _ = kind;
         None
     }
     /// The kind word of `obj` when File → Generate… can be about it, as the agent's resources read
-    /// it (a schema, a table, a class); none for anything else.
+    /// it; none for anything else.
     fn scope_word(&self, store: &Store, obj: Obj) -> Option<String> {
         let _ = (store, obj);
         None
@@ -591,7 +595,7 @@ pub trait NotationUi: Sync {
     /// leaves the key to the next notation and then to the shared removals.
     fn canvas_delete(&self, cx: &mut Ctx, shift: bool) -> bool;
     /// Reads a chord of its own on the selection, once the canvas has the keys and changes are
-    /// allowed (UML's ⌥⌘G); true when it took the keys this frame, false by default.
+    /// allowed; true when it took the keys this frame, false by default.
     fn canvas_keys(&self, cx: &mut Ctx, ui: &egui::Ui) -> bool {
         let _ = (cx, ui);
         false
@@ -604,14 +608,13 @@ pub trait NotationUi: Sync {
     /// rows, menus and offers it has open; nothing at a layer it has nothing for.
     fn canvas_overlay(&self, cx: &mut Ctx, ui: &mut egui::Ui, layer: Layer, on: &Overlaid<'_>);
     /// What a problem badge on one of its elements says on hover when the badge offers a way out
-    /// of the problem, as the element's figure says it does (ER's many-to-many relationship: "Many
-    /// to many · add a mapping table"); none leaves the badge a plain one, its problems on hover
-    /// and no click.
+    /// of the problem, as the element's figure says it does (the problem and its way out, in one
+    /// line); none leaves the badge a plain one, its problems on hover and no click.
     fn resolve_hint(&self) -> Option<String> {
         None
     }
-    /// A click on such a badge on its element `element`: ER opens the mapping table offer for the
-    /// relationship; nothing by default.
+    /// A click on such a badge on its element `element`: the notation offers its way out of the
+    /// problem; nothing by default.
     fn resolve(&self, cx: &mut Ctx, element: Uuid) {
         let _ = (cx, element);
     }
@@ -619,9 +622,9 @@ pub trait NotationUi: Sync {
     // As a project opens.
 
     /// Puts right, in `store`, a project's model read as it opens and before its session starts, a
-    /// layout of its own elements that depends on what its screens draw: ER grows a table box an
-    /// earlier version left too short for its columns. No undo step; it is written with the next
-    /// change. Nothing by default, for a notation whose boxes show what they hold at any size.
+    /// layout of its own elements that depends on what its screens draw: a box an earlier version
+    /// left too short for its rows grows. No undo step; it is written with the next change. Nothing
+    /// by default, for a notation whose boxes show what they hold at any size.
     fn open_repair(&self, store: &mut Store) {
         let _ = store;
     }
@@ -664,8 +667,8 @@ pub trait NotationState: Any {
         false
     }
     /// Whether `menu`, open in the shell's one menu slot, is one of its own that takes typing,
-    /// Backspace, the arrows and Enter (UML's Stereotypes picker), so the canvas and the Models tree
-    /// leave those keys to it; false for any other menu, another owner's included.
+    /// Backspace, the arrows and Enter (a picker filtered as it is typed), so the canvas and the
+    /// Models tree leave those keys to it; false for any other menu, another owner's included.
     fn menu_takes_keys(&self, menu: MenuId) -> bool {
         let _ = menu;
         false
@@ -673,11 +676,11 @@ pub trait NotationState: Any {
     /// Ends a drawing under way as the project it is on is set aside: it never outlives that
     /// project.
     fn set_aside(&mut self) {}
-    /// Closes what of its own a press on the canvas closes, whatever diagram it shows (UML's menus
-    /// of generalization lines and of an n-ary association); nothing by default.
+    /// Closes what of its own a press on the canvas closes, whatever diagram it shows (its menus
+    /// over the canvas); nothing by default.
     fn canvas_pressed(&mut self) {}
-    /// Closes what of its own Escape on the canvas ends, whatever diagram it shows (ER's mapping
-    /// table offer); nothing by default.
+    /// Closes what of its own Escape on the canvas ends, whatever diagram it shows (an offer over
+    /// the canvas); nothing by default.
     fn canvas_escape(&mut self) {}
     /// The row typed in place on a card, as the canvas draws the card with it: the card's element,
     /// its compartment, and the row counted across the compartments (none for a new one); none
@@ -846,8 +849,8 @@ pub fn label(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> String
     ui.and_then(|u| u.unnamed(store, obj)).or_else(|| ui.and_then(|u| u.words(store, obj)).map(|w| w.word)).unwrap_or_default()
 }
 
-/// An unnamed relationship by its ends, as its line runs: `CardPayment → Payment`, as the
-/// generalization set's members and the project search's relationships read.
+/// A line's unnamed element by its ends, as its line runs: `CardPayment → Payment`, as every
+/// notation's lists and the project search read it.
 pub fn ends_label(from: &str, to: &str) -> String {
     format!("{from} → {to}")
 }

@@ -13,7 +13,7 @@
 //! line, the figures of no one node or line, a card it draws itself, and the hint bar; and its rows
 //! of the Model menu.
 //! Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows where
-//! a kind has marks (ER's key status).
+//! a kind has marks.
 
 use archforge_mof::{Obj, Store};
 

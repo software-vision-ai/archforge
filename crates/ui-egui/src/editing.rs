@@ -1,12 +1,11 @@
 //! Editing on the canvas, shared by every diagram kind (from the design's cards "Two entities
 //! selected", "Entity menu" and "Delete from the model"): a kind's tool places or connects through
-//! the kind's hooks ([`crate::kinds::DiagramKind`]; ER's tables: [`crate::er_place`]); Select drags
-//! nodes, resizes them by their handles, draws a marquee, nudges with the arrows and arranges two or
-//! more with the Arrange bar; a selected card shows its kind's adorners (connect, and its new row);
-//! the element menu opens in Models, hands the element to an agent, removes it from the diagram or
-//! deletes it from the model after the dialog, with the rows its kind adds. Every change is one
-//! engine step: a drag is previewed on the canvas and committed as one command or one batch on
-//! release.
+//! the kind's hooks ([`crate::kinds::DiagramKind`]); Select drags nodes, resizes them by their
+//! handles, draws a marquee, nudges with the arrows and arranges two or more with the Arrange bar;
+//! a selected card shows its kind's adorners (connect, and its new row); the element menu opens in
+//! Models, hands the element to an agent, removes it from the diagram or deletes it from the model
+//! after the dialog, with the rows its kind adds. Every change is one engine step: a drag is
+//! previewed on the canvas and committed as one command or one batch on release.
 
 use std::collections::BTreeMap;
 
@@ -54,9 +53,9 @@ const MENU_ROW: f32 = 30.0;
 const NOTE_SIZE: (f64, f64) = (200.0, 72.0);
 
 /// What lies at diagram point `(x, y)`: the grid's topmost node or nearest line, looking through a
-/// node its notation says holds a label (a UML generalization set's, AR-129). A label takes a press
-/// only where the last frame drew it (`canvas.extra_labels`), so one that draws nothing, its diagram
-/// showing none of its set's lines, is never hit.
+/// node its notation says holds a label (the label of a figure drawn across several lines). A label
+/// takes a press only where the last frame drew it (`canvas.extra_labels`), so one that draws
+/// nothing, its diagram showing none of its figure's lines, is never hit.
 pub(crate) fn hit(store: &Store, notations: &ProjectView, grid: &Grid, x: f64, y: f64) -> Option<Hit> {
     grid.hit_keeping(x, y, |n| !notations.node_is_label(store, n))
 }
@@ -87,7 +86,7 @@ pub(crate) fn select_cx(cx: &mut Ctx, ids: Vec<Uuid>) {
 
 /// Selects what each box and line drawn on diagram `d` stands for, as a click on it would, boxes
 /// nested in others included, and what the diagram's kind takes in beside them
-/// ([`crate::kinds::DiagramKind::also_selects`]: UML's generalization sets of its lines); or the
+/// ([`crate::kinds::DiagramKind::also_selects`]: the figures that span its lines); or the
 /// diagram itself when it draws nothing.
 pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
     let Some(session) = shell.session.as_ref() else { return };
@@ -287,7 +286,7 @@ fn slid(route: &[(f64, f64)], k: usize, by: Vec2) -> Vec<(f64, f64)> {
 
 /// The segment of a right-angled line `e` at diagram point (x, y), within `reach` units: its index
 /// and the route. A middle segment slides across; the first or last slides where the line meets
-/// its table, along the table's side.
+/// its card, along the card's side.
 fn segment_at(store: &Store, grid: &Grid, e: Obj, x: f64, y: f64, reach: f64) -> Option<(usize, Vec<(f64, f64)>)> {
     use archforge_diagram::Way;
     if !matches!(archforge_diagram::route::way_of(store, e), Way::RightAngled | Way::Avoiding) {
@@ -334,7 +333,7 @@ fn decide(
         on_top(shell, store, grid, card, pos)
     };
     // A label of the figures of no one node or line as the last frame drew it, where no card is
-    // over it (a UML generalization set's, AR-129).
+    // over it (the label of a figure drawn across several lines).
     let label_at = |pos: Pos2| {
         if hit_node(pos).is_some() {
             return None;
@@ -366,8 +365,7 @@ fn decide(
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
         Tool::Connect(tool) => {
-            // The kind's own clicks come first (UML's n-ary association, drawn class by class,
-            // AR-128).
+            // The kind's own clicks come first (a figure drawn click by click).
             if let Some(action) = own(&press) {
                 return action;
             }
@@ -395,7 +393,7 @@ fn decide(
             Action::Nothing
         }
         Tool::Link => {
-            // Pressed on a note and dragged onto a table or a relationship's line, as the note's
+            // Pressed on a note and dragged onto a card or a line, as the note's
             // own link handle does.
             if (resp.drag_stopped_by(egui::PointerButton::Primary) || released) && shell.canvas.gesture.is_some() {
                 return Action::Commit;
@@ -441,15 +439,15 @@ fn decide(
                 return Action::Commit;
             }
             let Some(pos) = pos else { return Action::Nothing };
-            // The kind's own clicks come before a drag starts (UML's Add end, waiting on a class,
-            // AR-128).
+            // The kind's own clicks come before a drag starts (a step waiting for the element it
+            // needs).
             if let Some(action) = own(&press) {
                 return action;
             }
             if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
                 // The gesture starts where the button went down, not where the pointer is now.
                 let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
-                // A cardinality text, grabbed where the last frame drew it, unless a table or its
+                // A cardinality text, grabbed where the last frame drew it, unless a card or its
                 // handle is over it there.
                 if handle_at(store, notations, d, selection, view, from).is_none()
                     && hit_node(from).is_none()
@@ -501,8 +499,8 @@ fn decide(
                     }
                 };
             }
-            // A right click means what the diagram's kind says first (UML's menus of an n-ary
-            // association and of generalization lines, AR-128, AR-129).
+            // A right click means what the diagram's kind says first (a menu of its own for a
+            // figure, or for several lines at once).
             if resp.secondary_clicked()
                 && let Some(action) = kind.and_then(|k| k.secondary_click(&cx, &press))
             {
@@ -541,7 +539,8 @@ fn decide(
             {
                 return Action::EditNote(node);
             }
-            // A double click on a card that renames in place alone (a package): it renames.
+            // A double click on a card that renames in place alone (one that takes no part in the
+            // gestures): it renames.
             if (resp.double_clicked() || resp.triple_clicked())
                 && let Some(n) = hit_node(pos)
                 && let Some(e) = element_of(store, n).filter(|e| kind.is_some_and(|k| k.renames_in_place(store, *e)))
@@ -734,7 +733,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
             if delta.length() < DRAG_MIN {
                 return;
             }
-            // Only the layout changes, wherever the nodes are let go: over a package or the path
+            // Only the layout changes, wherever the nodes are let go: over another card or the path
             // bar too, ownership stays (AR-566).
             let ids: Vec<String> = nodes.iter().map(Uuid::to_string).collect();
             if let Err(e) = run(shell, "diagram.move", json!({ "nodes": ids, "dx": delta.x as f64, "dy": delta.y as f64 })) {
@@ -787,7 +786,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 return;
             }
             // The corners between the ends become the line's waypoints; a line straight across keeps
-            // both its ends, which the route then meets its tables at.
+            // both its ends, which the route then meets its cards at.
             let moved = slid(&route, index, by);
             let kept = if moved.len() == 2 { &moved[..] } else { &moved[1..moved.len() - 1] };
             let points: Vec<serde_json::Value> = kept.iter().map(|(x, y)| json!({ "x": x, "y": y })).collect();
@@ -862,8 +861,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
     }
 }
 
-/// What a note link dropped at `at` points at: the table under it, else the relationship's line
-/// nearest it.
+/// What a note link dropped at `at` points at: the card under it, else the line nearest it.
 fn link_target(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
     if let Some(n) = node_at(shell, view, d, at) {
         return Some(n);
@@ -893,10 +891,9 @@ fn remove_selected_link(shell: &mut Shell) -> bool {
     true
 }
 
-/// Removes the selected line's element of any notation (a class diagram's association,
-/// generalization or dependency) with the lines that show it, as one undo step, and says so in the
-/// toast with Undo; false when no such line is selected. An element its notation also draws as a
-/// card (an association class) is never deleted from the model here, card or no card: Delete on
+/// Removes the selected line's element of any notation with the lines that show it, as one undo
+/// step, and says so in the toast with Undo; false when no such line is selected. An element its
+/// notation also draws as a card is never deleted from the model here, card or no card: Delete on
 /// its line takes it from the diagram, and only ⇧⌫ and its dialog delete it.
 pub fn remove_selected_line(shell: &mut Shell) -> bool {
     let Some(session) = shell.session.as_ref() else { return false };
@@ -914,8 +911,8 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
     let Some(id) = store.uuid(element).ok() else { return false };
     let ui = crate::notation_ui::of(shell.notation_uis, store, element);
     let word = ui.and_then(|ui| ui.words(store, element)).map(|w| w.word).unwrap_or_default();
-    // What its notation says of the removal is worked out while the element is still there: UML
-    // names the generalization sets it alone made up, which go with it (AR-129). The one notation
+    // What its notation says of the removal is worked out while the element is still there: a
+    // notation may name the elements it alone made up, which go with it. The one notation
     // that gives the toast answers, so the toast names only what that notation worked out.
     let removal = ui.map_or_else(crate::notation_ui::Removal::default, |ui| ui.before_removal(store, &[element]));
     let Some(session) = shell.session.as_mut() else { return false };
@@ -1145,9 +1142,9 @@ pub(crate) fn unplace_cx(cx: &mut Ctx, nodes: Vec<Uuid>) {
     }
 }
 
-/// How many diagrams show `element`, as a node or as a line (an association class drawn by its
-/// line alone), each diagram once: the count the Delete from the model dialog gives, from the
-/// canvas and from Models alike. A diagram that belongs to `element` (a package's own) counts only
+/// How many diagrams show `element`, as a node or as a line (an element drawn by its line alone),
+/// each diagram once: the count the Delete from the model dialog gives, from the canvas and from
+/// Models alike. A diagram that belongs to `element` (its own diagram) counts only
 /// when it shows `element` too.
 pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
     let (_, edges, nodes) = archforge_diagram::views_of(store, element);
@@ -1160,20 +1157,21 @@ pub(crate) fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
     shell.cx(|cx| ask_delete_cx(cx, node, entity));
 }
 
-/// Asks before an entity goes from the model, with what goes with it; what its notation keeps
-/// (the package Types while it holds the built-in types) is said at the canvas's top instead.
+/// Asks before an element goes from the model, with what goes with it; what its notation keeps
+/// (an element that holds what the notation itself needs) is said at the canvas's top instead.
 pub(crate) fn ask_delete_cx(cx: &mut Ctx, node: Uuid, entity: Uuid) {
     ask_delete_of(cx, Some(node), entity);
 }
 
-/// [`ask_delete_cx`] for an entity selected on the diagram by its card `node`, or with none by a
-/// line alone (an association class drawn without its card): the dialog then offers no removal
+/// [`ask_delete_cx`] for an element selected on the diagram by its card `node`, or with none by a
+/// line alone (an element whose card is not on the diagram): the dialog then offers no removal
 /// from the diagram, as the line's own Delete does that. The shell opens the dialog once the call
 /// that asked returns ([`Request::AskDelete`]).
 fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
-    // What its notation keeps (UML's package Types with the built-in types) is said, not asked.
+    // What its notation keeps (an element that holds what the notation itself needs) is said, not
+    // asked.
     if let Some(why) = crate::notation_ui::of(cx.notation_uis, store, e).and_then(|ui| ui.remove_refusal(cx.notation_uis, store, e)) {
         cx.canvas.notice = Some(why);
         cx.canvas.menu = None;
@@ -1181,12 +1179,13 @@ fn ask_delete_of(cx: &mut Ctx, node: Option<Uuid>, entity: Uuid) {
     }
     let consequences = crate::notation_ui::of(cx.notation_uis, store, e).map(|ui| ui.consequences(cx.notation_uis, store, e)).unwrap_or_default();
     let diagrams = diagrams_showing(store, e);
-    // A nested package hands what it holds up: the dialog says where, and so does the toast.
+    // An element nested in another may hand what it holds up: the dialog says where, and so does
+    // the toast.
     let hands_to = crate::notation_ui::of(cx.notation_uis, store, e)
         .and_then(|ui| Some((archforge_core::name_of(store, ui.hands_up(store, e)?), ui.has_children(store, e))));
     cx.requests.push(Request::AskDelete(crate::explorer::Delete {
         ids: vec![entity],
-        // Named as every path that asks names it, an unnamed relationship by its ends (AR-216).
+        // Named as every path that asks names it, an unnamed line's element by its ends (AR-216).
         name: crate::notation_ui::label(cx.notation_uis, store, e),
         consequences,
         diagrams,
@@ -1321,9 +1320,9 @@ fn selected_line(
     selection: &[Obj],
 ) -> Option<(Uuid, Vec<(f64, f64)>, [archforge_diagram::figure::EndMark; 2])> {
     let [element] = selection else { return None };
-    // Its notation says whether its line has handles: an n-ary association's leg moves only its
-    // class end, by its own handle (AR-128); a card's element has no line, but an association class
-    // has both, and its line keeps its handles.
+    // Its notation says whether its line has handles: a leg of a figure drawn on a node moves only
+    // its far end, by its own handle; a card's element has no line, but an element drawn as both a
+    // card and a line has both, and its line keeps its handles.
     if !view.line_handles(store, *element) {
         return None;
     }
@@ -1382,7 +1381,7 @@ fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View,
 }
 
 /// The adorners of a selected element: connect (E2), with the kind's first connect tool, and the
-/// kind's own (ER's add column) with its card's controls, when its card takes new rows.
+/// kind's own (a new row) with its card's controls, when its card takes new rows.
 #[allow(clippy::too_many_arguments, reason = "the adorners sit beside a node over the canvas, for its kind")]
 fn adorners(
     shell: &mut Shell,
@@ -1399,7 +1398,7 @@ fn adorners(
     }
     let paint = ui.painter().with_clip_rect(r);
     let connect = kind.tools().iter().find(|t| t.use_ == crate::kinds::ToolUse::Connect).map(|t| t.key);
-    // The second adorner is the element's own: a class's attribute, an enumeration's literal.
+    // The second adorner is the element's own: a new row of its card.
     let second = shell.session.as_ref().and_then(|s| s.doc().by_uuid(entity).and_then(|e| kind.adorner(s.doc(), e)));
     let mut boxes = Vec::new();
     if connect.is_some() {
@@ -1449,7 +1448,7 @@ fn adorners(
     shell.cx(|cx| kind.card_controls(cx, ui, p, r, rect, entity));
 }
 
-/// A selected note's link handle at its top right: dragged onto a table or a relationship's line,
+/// A selected note's link handle at its top right: dragged onto a card or a line,
 /// it links the note to it (owner decision).
 fn link_handle(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, note: Uuid) {
     if shell.looking_only() {
@@ -1554,7 +1553,7 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
 
 /// The name typed in the node's header, or where a kind places it on a card the kind drew itself
 /// in the last frame: the design's tinted field over the name, the text selected when
-/// the entity is new; Enter commits, Escape closes, a refusal stays under it.
+/// the element is new; Enter commits, Escape closes, a refusal stays under it.
 fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
     let paint = ui.painter().clone();
     let placed = shell.canvas.rename.as_ref().and_then(|rn| {
@@ -1617,8 +1616,8 @@ pub(crate) fn new_row_keys(mac: bool) -> &'static str {
 
 /// The element menu: the design's rows with their shortcuts. Open in Models, Generate…, Remove from
 /// this diagram and Delete from the model… are every element's; the diagram's kind adds its own
-/// ([`crate::kinds::DiagramKind::menu`]: a table's related tables, new column and collapse, a
-/// class's new attribute), each with what it does.
+/// ([`crate::kinds::DiagramKind::menu`]: rows that open, add to or change the element its own
+/// way), each with what it does.
 fn element_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &ElementMenu) {
     let paint = ui.painter().clone();
     let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
@@ -1700,8 +1699,8 @@ fn element_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &E
 
 /// Whether something open on the canvas holds its keys: an editor, a menu, something a notation
 /// opened there ([`crate::notation_ui::NotationState::holds_keys`]), or a notation's menu that takes
-/// typing, Backspace, the arrows and Enter, as UML's Stereotypes picker does (AR-135,
-/// [`crate::notation_ui::NotationState::menu_takes_keys`]).
+/// typing, Backspace, the arrows and Enter, as a picker filtered as it is typed does
+/// ([`crate::notation_ui::NotationState::menu_takes_keys`]).
 pub(crate) fn canvas_busy(shell: &Shell) -> bool {
     let c = &shell.canvas;
     c.rename.is_some()
@@ -1712,7 +1711,7 @@ pub(crate) fn canvas_busy(shell: &Shell) -> bool {
 }
 
 /// The keys while the canvas has them: a drawing under way on the diagram's kind takes its own
-/// first, then a notation's chord on the selection (UML's ⌥⌘G); Escape back to Select, Delete
+/// first, then a notation's chord on the selection; Escape back to Select, Delete
 /// removes a notation's selected element its own way or the selected nodes from the diagram (with
 /// Shift, asks before deleting from the model), the arrows nudge (plain or with Shift, never as
 /// part of a chord), ⌘↩ opens a new row on a card that takes one and ⇧⌘↩ its second kind of row;
@@ -1735,14 +1734,14 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if ui.memory(|m| m.focused().is_some()) {
         return;
     }
-    // A drawing under way on the diagram's kind takes its keys first (UML's n-ary association, or
-    // Add end: Enter, Backspace and Escape, AR-128).
+    // A drawing under way on the diagram's kind takes its keys first (Enter, Backspace and Escape
+    // while a figure is drawn click by click).
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
     if kind.is_some_and(|k| shell.cx(|cx| k.keys(cx, ui, d))) {
         return;
     }
-    // An open menu the keys walk (UML's classifier kinds) takes the arrows and Enter itself; the
-    // other popovers leave them to the canvas.
+    // An open menu the keys walk (a menu of kinds of element) takes the arrows and Enter itself;
+    // the other popovers leave them to the canvas.
     let menu = crate::kinds::popover_takes_keys(shell);
     let (escape, delete, shift, add_row, add_second, left, right, up, down) = ui.input(|i| {
         let command = egui::Modifiers::COMMAND;
@@ -1767,7 +1766,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         shell.canvas.menu_focus = None;
         return;
     }
-    // A notation's chord on the selection (UML's ⌥⌘G makes a generalization set, AR-129).
+    // A notation's chord on the selection.
     let uis = shell.notation_uis;
     if uis.iter().any(|u| shell.cx(|cx| u.canvas_keys(cx, ui))) {
         return;
@@ -1793,11 +1792,10 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     };
     // A selection that holds boxes, such as Select all's, takes the boxes off below: a set or a
     // line selected beside them is never deleted from the model on its own.
-    // A notation removes one of its own selected elements its own way: UML a generalization set,
-    // its generalizations kept, with Shift too (AR-129); ER a relationship with its foreign key,
-    // without. A set's label's node never counts as a box here: `selected` holds the diagram's own
-    // nodes alone, and a label's node is always nested in a classifier's, so a set selected by its
-    // label, moved or not, leaves `selected` empty
+    // A notation removes one of its own selected elements its own way, with Shift or without as the
+    // notation says. A label's node never counts as a box here: `selected` holds the diagram's own
+    // nodes alone, and a label's node is always nested in another card's, so an element selected by
+    // its label, moved or not, leaves `selected` empty
     // (`delete_on_a_set_label_removes_the_set_and_keeps_its_lines`).
     if delete && selected.is_empty() && uis.iter().any(|u| shell.cx(|cx| u.canvas_delete(cx, shift))) {
         return;
@@ -1806,9 +1804,9 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         return;
     }
     if selected.is_empty() {
-        // A line whose element has its card on another diagram only, or on none (an association
-        // class's, drawn here with its classes): Delete takes the line from this diagram, and
-        // Shift+Delete asks to delete the element from the model.
+        // A line whose element has its card on another diagram only, or on none (an element drawn
+        // as both a card and a line, here with the cards at its ends): Delete takes the line from
+        // this diagram, and Shift+Delete asks to delete the element from the model.
         if delete && !shift {
             remove_lines_here(shell, d);
         } else if delete && let Some(entity) = line_element_here(shell, d, kind) {
@@ -1816,7 +1814,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         }
         return;
     }
-    // The kind's new row, as its adorner opens it (ER's add column).
+    // The kind's new row, as its adorner opens it.
     if add_row || add_second {
         let takes_rows = |k: &&'static dyn crate::kinds::DiagramKind, entity: Uuid| {
             shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(entity).is_some_and(|e| k.adorner(s.doc(), e).is_some()))
@@ -1830,8 +1828,8 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     }
     if delete {
         if shift {
-            // Deleting from the model takes any element the kind deletes, a package's card too,
-            // not only those taking part in its gestures.
+            // Deleting from the model takes any element the kind deletes, a card that takes no part
+            // in the gestures too, not only those taking part in its gestures.
             let deletable = |node: Uuid| {
                 let store = shell.session.as_ref()?.doc();
                 let e = element_of(store, store.by_uuid(node)?)?;

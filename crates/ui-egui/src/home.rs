@@ -751,7 +751,7 @@ fn sorted_recent(recent: &[crate::state::RecentProject], sort: RecentSort) -> Ve
 }
 
 /// A recent project's model picture in `r`: the design's 82 by 48 thumbnail, scaled to fit `r`
-/// and centred in it, four tables joined by links on the hue's tint.
+/// and centred in it, four cards joined by links on the hue's tint.
 fn model_thumb(p: &Palette, paint: &egui::Painter, r: Rect, hue: Hue) {
     let k = (r.width() / 82.0).min(r.height() / 48.0);
     let art = Rect::from_center_size(r.center(), vec2(82.0, 48.0) * k);
