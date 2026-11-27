@@ -188,10 +188,12 @@ pub(crate) fn draw(painter: &egui::Painter, at: Pos2, icon: &Icon, scale: f32, w
 mod tests {
     use super::*;
 
+    /// A line two pixels wide on the pixel grid inks its two rows fully and nothing beside them, and
+    /// two lines meeting at a corner ink the corner as fully as the lines, never more.
     #[test]
     fn a_line_on_the_grid_has_hard_edges_and_joins_carry_no_double_ink() {
         // A horizontal line two pixels wide: full ink in two rows, none beside them.
-        let line = Icon { size: [10.0, 4.0], stroke: 1.0, segments: &[Seg::L([0.0, 2.0], [10.0, 2.0])] };
+        let line = Icon { size: [10.0, 4.0], stroke: 1.0, standard_size: None, segments: &[Seg::L([0.0, 2.0], [10.0, 2.0])] };
         let (img, pad) = mask(&line, 1.0, 2).unwrap();
         let w = img.size[0];
         let alpha = |x: usize, y: usize| img.pixels[y * w + x].a();
@@ -199,7 +201,8 @@ mod tests {
         assert_eq!((alpha(5, row - 1), alpha(5, row)), (255, 255));
         assert_eq!((alpha(5, row - 2), alpha(5, row + 1)), (0, 0));
         // Two segments meeting at a corner: the corner is as inked as the lines, never more.
-        let corner = Icon { size: [8.0, 8.0], stroke: 1.0, segments: &[Seg::L([0.0, 0.0], [8.0, 0.0]), Seg::L([8.0, 0.0], [8.0, 8.0])] };
+        let corner =
+            Icon { size: [8.0, 8.0], stroke: 1.0, standard_size: None, segments: &[Seg::L([0.0, 0.0], [8.0, 0.0]), Seg::L([8.0, 0.0], [8.0, 8.0])] };
         let (img, pad) = mask(&corner, 2.0, 2).unwrap();
         let w = img.size[0];
         let at = |x: f32, y: f32| img.pixels[(y + pad) as usize * w + (x + pad) as usize].a();
@@ -207,9 +210,11 @@ mod tests {
         assert_eq!(at(17.0, -2.0), 0, "nothing outside the round corner");
     }
 
+    /// No mask is made at an infinite scale, or at a scale or weight too large for one, and making
+    /// room in a cache that holds no mask leaves its byte count alone, however full it says it is.
     #[test]
     fn a_mask_never_grows_past_its_bounds() {
-        let line = Icon { size: [10.0, 4.0], stroke: 1.0, segments: &[Seg::L([0.0, 2.0], [10.0, 2.0])] };
+        let line = Icon { size: [10.0, 4.0], stroke: 1.0, standard_size: None, segments: &[Seg::L([0.0, 2.0], [10.0, 2.0])] };
         assert!(mask(&line, f32::INFINITY, 2).is_none());
         assert!(mask(&line, 1.0e9, 2).is_none());
         assert!(mask(&line, 1.0, u32::MAX).is_none());

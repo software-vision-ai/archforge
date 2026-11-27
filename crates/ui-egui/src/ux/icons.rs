@@ -8,16 +8,25 @@ use super::{Icon, Seg::C, Seg::L};
 
 /// The sort arrows of an index column: ascending points up, descending down (thin, as the design's
 /// Icon / Sort · Ascending and · Descending).
-pub const SORT_ASCENDING: Icon =
-    Icon { size: [7.0, 9.0], stroke: 1.1, segments: &[L([3.5, 9.0], [3.5, 0.0]), L([0.0, 3.5], [3.5, 0.0]), L([3.5, 0.0], [7.0, 3.5])] };
-pub const SORT_DESCENDING: Icon =
-    Icon { size: [7.0, 9.0], stroke: 1.1, segments: &[L([3.5, 0.0], [3.5, 9.0]), L([0.0, 5.5], [3.5, 9.0]), L([3.5, 9.0], [7.0, 5.5])] };
+pub const SORT_ASCENDING: Icon = Icon {
+    size: [7.0, 9.0],
+    stroke: 1.1,
+    standard_size: None,
+    segments: &[L([3.5, 9.0], [3.5, 0.0]), L([0.0, 3.5], [3.5, 0.0]), L([3.5, 0.0], [7.0, 3.5])],
+};
+pub const SORT_DESCENDING: Icon = Icon {
+    size: [7.0, 9.0],
+    stroke: 1.1,
+    standard_size: None,
+    segments: &[L([3.5, 0.0], [3.5, 9.0]), L([0.0, 5.5], [3.5, 9.0]), L([3.5, 9.0], [7.0, 5.5])],
+};
 
 /// The mark of a mapping table that becomes a line again (the design's Icon / Collapse): two
 /// arrows meeting at a bar.
 pub const MERGE_LINE: Icon = Icon {
     size: [12.0, 9.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         L([0.0, 4.5], [4.0, 4.5]),
         L([2.0, 2.5], [4.0, 4.5]),
@@ -30,13 +39,16 @@ pub const MERGE_LINE: Icon = Icon {
 };
 
 /// A chevron pointing up and one pointing down: move a row up or down its list.
-pub const MOVE_UP: Icon = Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([3.0, 10.5], [8.0, 5.5]), L([8.0, 5.5], [13.0, 10.5])] };
-pub const MOVE_DOWN: Icon = Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([3.0, 5.5], [8.0, 10.5]), L([8.0, 10.5], [13.0, 5.5])] };
+pub const MOVE_UP: Icon =
+    Icon { size: [16.0, 16.0], stroke: 1.5, standard_size: None, segments: &[L([3.0, 10.5], [8.0, 5.5]), L([8.0, 5.5], [13.0, 10.5])] };
+pub const MOVE_DOWN: Icon =
+    Icon { size: [16.0, 16.0], stroke: 1.5, standard_size: None, segments: &[L([3.0, 5.5], [8.0, 10.5]), L([8.0, 10.5], [13.0, 5.5])] };
 
 /// The entity tool: a table with its header and first column.
 pub const TOOL_ENTITY: Icon = Icon {
     size: [14.0, 11.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         L([0.0, 0.0], [14.0, 0.0]),
         L([14.0, 0.0], [14.0, 11.0]),
@@ -52,6 +64,7 @@ pub const TOOL_ENTITY: Icon = Icon {
 pub const TOOL_CLASS: Icon = Icon {
     size: [14.0, 11.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         L([0.0, 0.0], [14.0, 0.0]),
         L([14.0, 0.0], [14.0, 11.0]),
@@ -66,6 +79,7 @@ pub const TOOL_CLASS: Icon = Icon {
 pub const TOOL_INTERFACE: Icon = Icon {
     size: [10.0, 14.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         C([5.0, 0.5], [6.657, 0.5], [8.0, 1.843], [8.0, 3.5]),
         C([8.0, 3.5], [8.0, 5.157], [6.657, 6.5], [5.0, 6.5]),
@@ -80,6 +94,7 @@ pub const TOOL_INTERFACE: Icon = Icon {
 pub const TOOL_ENUMERATION: Icon = Icon {
     size: [14.0, 10.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([0.0, 0.0], [2.0, 0.0]),
         L([5.0, 0.0], [14.0, 0.0]),
@@ -94,6 +109,7 @@ pub const TOOL_ENUMERATION: Icon = Icon {
 pub const TOOL_DATA_TYPE: Icon = Icon {
     size: [14.0, 13.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         C([4.0, 0.0], [2.5, 0.0], [2.0, 1.0], [2.0, 2.5]),
         L([2.0, 2.5], [2.0, 5.0]),
@@ -114,6 +130,7 @@ pub const TOOL_DATA_TYPE: Icon = Icon {
 pub const TOOL_PRIMITIVE_TYPE: Icon = Icon {
     size: [13.0, 13.0],
     stroke: 1.2,
+    standard_size: None,
     segments: &[
         L([0.0, 0.0], [13.0, 0.0]),
         L([13.0, 0.0], [13.0, 13.0]),
@@ -129,12 +146,14 @@ pub const TOOL_PRIMITIVE_TYPE: Icon = Icon {
 pub const ATTRIBUTE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[L([4.0, 5.0], [12.0, 5.0]), L([12.0, 5.0], [12.0, 11.0]), L([12.0, 11.0], [4.0, 11.0]), L([4.0, 11.0], [4.0, 5.0])],
 };
 /// A class's operation in the Models tree: a pair of brackets.
 pub const OPERATION: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         L([6.0, 3.0], [4.0, 6.0]),
         L([4.0, 6.0], [4.0, 10.0]),
@@ -148,6 +167,7 @@ pub const OPERATION: Icon = Icon {
 pub const CLASS: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         L([1.0, 2.0], [15.0, 2.0]),
         L([15.0, 2.0], [15.0, 14.0]),
@@ -162,6 +182,7 @@ pub const CLASS: Icon = Icon {
 pub const INTERFACE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         C([8.0, 1.5], [9.933, 1.5], [11.5, 3.067], [11.5, 5.0]),
         C([11.5, 5.0], [11.5, 6.933], [9.933, 8.5], [8.0, 8.5]),
@@ -176,6 +197,7 @@ pub const INTERFACE: Icon = Icon {
 pub const ENUMERATION: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         L([2.0, 4.0], [4.0, 4.0]),
         L([6.5, 4.0], [14.0, 4.0]),
@@ -190,6 +212,7 @@ pub const ENUMERATION: Icon = Icon {
 pub const DATA_TYPE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         C([5.0, 1.5], [3.5, 1.5], [3.0, 2.5], [3.0, 4.0]),
         L([3.0, 4.0], [3.0, 6.5]),
@@ -210,6 +233,7 @@ pub const DATA_TYPE: Icon = Icon {
 pub const PRIMITIVE_TYPE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         L([1.5, 1.5], [14.5, 1.5]),
         L([14.5, 1.5], [14.5, 14.5]),
@@ -226,6 +250,7 @@ pub const PRIMITIVE_TYPE: Icon = Icon {
 pub const ASSOCIATION_CLASS: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         L([4.0, 1.5], [12.0, 1.5]),
         L([12.0, 1.5], [12.0, 7.0]),
@@ -242,6 +267,7 @@ pub const ASSOCIATION_CLASS: Icon = Icon {
 pub const PROFILE: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         L([1.5, 3.5], [1.5, 12.5]),
         L([1.5, 12.5], [12.5, 12.5]),
@@ -261,6 +287,7 @@ pub const PROFILE: Icon = Icon {
 pub const STEREOTYPE: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         L([4.0, 3.5], [1.5, 7.0]),
         L([1.5, 7.0], [4.0, 10.5]),
@@ -278,6 +305,7 @@ pub const STEREOTYPE: Icon = Icon {
 pub const GENERALIZATION_SET: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.1,
+    standard_size: None,
     segments: &[
         L([7.0, 1.5], [12.0, 8.0]),
         L([12.0, 8.0], [2.0, 8.0]),
@@ -289,11 +317,13 @@ pub const GENERALIZATION_SET: Icon = Icon {
     ],
 };
 /// An enumeration's literal in the Models tree: one row of the enumeration's list.
-pub const LITERAL: Icon = Icon { size: [16.0, 16.0], stroke: 1.3, segments: &[L([3.0, 8.0], [5.0, 8.0]), L([7.5, 8.0], [13.0, 8.0])] };
+pub const LITERAL: Icon =
+    Icon { size: [16.0, 16.0], stroke: 1.3, standard_size: None, segments: &[L([3.0, 8.0], [5.0, 8.0]), L([7.5, 8.0], [13.0, 8.0])] };
 /// A UML package: a box with its tab at the top left.
 pub const PACKAGE: Icon = Icon {
     size: [16.0, 16.0],
     stroke: 1.3,
+    standard_size: None,
     segments: &[
         L([1.0, 2.0], [7.0, 2.0]),
         L([7.0, 2.0], [7.0, 5.0]),
@@ -308,6 +338,7 @@ pub const PACKAGE: Icon = Icon {
 pub const CLASS_DIAGRAM: Icon = Icon {
     size: [13.0, 12.0],
     stroke: 1.5,
+    standard_size: None,
     segments: &[
         L([0.0, 0.0], [6.0, 0.0]),
         L([6.0, 0.0], [6.0, 5.0]),
@@ -326,3 +357,45 @@ pub const CLASS_DIAGRAM: Icon = Icon {
         L([6.0, 2.0], [6.0, 4.0]),
     ],
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// No icon only one notation draws here has a standard size, as the table of sizes in `ux`
+    /// named none of them before each icon carried its own (AR-842): each keeps the size it is
+    /// given.
+    #[test]
+    fn no_icon_here_has_a_standard_size() {
+        let icons: [(&str, Icon); 25] = [
+            ("SORT_ASCENDING", SORT_ASCENDING),
+            ("SORT_DESCENDING", SORT_DESCENDING),
+            ("MERGE_LINE", MERGE_LINE),
+            ("MOVE_UP", MOVE_UP),
+            ("MOVE_DOWN", MOVE_DOWN),
+            ("TOOL_ENTITY", TOOL_ENTITY),
+            ("TOOL_CLASS", TOOL_CLASS),
+            ("TOOL_INTERFACE", TOOL_INTERFACE),
+            ("TOOL_ENUMERATION", TOOL_ENUMERATION),
+            ("TOOL_DATA_TYPE", TOOL_DATA_TYPE),
+            ("TOOL_PRIMITIVE_TYPE", TOOL_PRIMITIVE_TYPE),
+            ("ATTRIBUTE", ATTRIBUTE),
+            ("OPERATION", OPERATION),
+            ("CLASS", CLASS),
+            ("INTERFACE", INTERFACE),
+            ("ENUMERATION", ENUMERATION),
+            ("DATA_TYPE", DATA_TYPE),
+            ("PRIMITIVE_TYPE", PRIMITIVE_TYPE),
+            ("ASSOCIATION_CLASS", ASSOCIATION_CLASS),
+            ("PROFILE", PROFILE),
+            ("STEREOTYPE", STEREOTYPE),
+            ("GENERALIZATION_SET", GENERALIZATION_SET),
+            ("LITERAL", LITERAL),
+            ("PACKAGE", PACKAGE),
+            ("CLASS_DIAGRAM", CLASS_DIAGRAM),
+        ];
+        for (name, icon) in icons {
+            assert_eq!(icon.standard_size, None, "{name}");
+        }
+    }
+}
