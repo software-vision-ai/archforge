@@ -578,6 +578,7 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
     let origin = panel.chat.as_ref().and_then(|c| c.origin.clone());
     let project = shell.project.as_ref().map(|p| p.name.clone()).unwrap_or_default();
     let now = crate::chat_panel::clock(shell).now;
+    let uis = shell.notation_uis;
     // Laid out in content coordinates from the top, then moved by the scroll.
     let drawn = panel.scroll;
     let top = area.top() - drawn;
@@ -635,7 +636,7 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
             let Some(item) = turn.items.get_mut(i) else { continue };
             y += ENTRY_GAP;
             match item {
-                Item::Tool(facts) => y += tool_row(&paint, p, pos2(left, y), width, facts),
+                Item::Tool(facts) => y += tool_row(&paint, p, pos2(left, y), width, uis, facts),
                 Item::Text { text, shortened, laid, .. } => {
                     y += reply(shell, &clip, p, pos2(left, y), width, text, laid, look, &mut link_n, acts);
                     if *shortened {
@@ -799,9 +800,17 @@ fn link_rect(galley: &egui::Galley, range: std::ops::Range<usize>) -> Rect {
     Rect::from_min_max(a.min, pos2(right.max(a.min.x + 4.0), a.max.y))
 }
 
-/// A tool row: its icon, its words and its detail. Gives its height.
-fn tool_row(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, facts: &crate::chat_store::ToolFacts) -> f32 {
-    let (label, detail) = crate::chat_words::tool_words(facts);
+/// A tool row: its icon, its words, the elements counted as the notations `uis` count them, and its
+/// detail. Gives its height.
+fn tool_row(
+    paint: &egui::Painter,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    uis: &[&'static dyn crate::notation_ui::NotationUi],
+    facts: &crate::chat_store::ToolFacts,
+) -> f32 {
+    let (label, detail) = crate::chat_words::tool_words(uis, facts);
     let v = crate::chat_words::verb(facts.command.as_deref(), facts.changed_model, facts.status);
     let (icon, ink) = match (facts.status, v) {
         (ToolStatus::Refused | ToolStatus::Failed, _) => (&icons::WARNING, p.amber),
