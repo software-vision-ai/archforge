@@ -1,11 +1,13 @@
 //! The server against a real dolt: start, the password, no usage records, a second start, a killed
-//! owner, crash recovery, leftovers, the socket limit, an odd folder name, and a lock that names another
-//! program. These tests need dolt 2.6 or later; without it they fail and say how to install it.
+//! owner, crash recovery, leftovers, the socket limit, an odd folder name, a lock that names another
+//! program, and a port another program took. These tests need dolt 2.6 or later; without it they
+//! fail and say how to install it.
 //! Measured on macOS; the Linux and Windows runs are still to be done.
 #![cfg(unix)]
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use std::io::BufRead;
+use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -416,6 +418,71 @@ fn a_lock_naming_another_program_does_not_stop_a_start_and_that_program_lives_on
     server.stop().unwrap();
     sleeper.kill().unwrap();
     sleeper.wait().unwrap();
+}
+
+/// Another program on this machine, for the start of the server at `program`: once that start's
+/// script says it is `waiting`, it listens on the port the start chose, puts dolt itself at
+/// `program` for every later start, lets the script go on by making `taken`, accepts the one
+/// connection with which dolt checks whether the port is taken, and lets the port go. Returns the
+/// port and whether dolt checked it while it was taken.
+fn take_the_port(run_root: &Path, waiting: &Path, taken: &Path, program: &Path, dolt: &Path) -> (u16, bool) {
+    let until = Instant::now() + Duration::from_secs(30);
+    while !waiting.exists() {
+        assert!(Instant::now() < until, "the start never ran its server");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let config = std::fs::read_dir(run_root).unwrap().map(|e| e.unwrap().path().join("server.yaml")).find(|c| c.is_file()).unwrap();
+    let text = std::fs::read_to_string(&config).unwrap();
+    let port: u16 = text.split_once("  port: ").and_then(|(_, rest)| rest.split_once('\n')).and_then(|(p, _)| p.parse().ok()).unwrap();
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).unwrap();
+    std::fs::remove_file(program).unwrap();
+    std::os::unix::fs::symlink(dolt, program).unwrap();
+    std::fs::write(taken, "").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let checked = loop {
+        match listener.accept() {
+            Ok(_) => break true,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < until => std::thread::sleep(Duration::from_millis(5)),
+            Err(_) => break false,
+        }
+    };
+    // The listener goes here, and the port is free again before the start can look.
+    (port, checked)
+}
+
+/// Another program took the port a start chose before the server listened on it, and let it go
+/// again before the start looked: the server said so in its log and stopped, and the start tried
+/// again on another port. The first start runs through a script that waits until the port is
+/// taken, as a slow start under load may; every later start runs dolt itself, by the same path.
+#[test]
+fn a_start_whose_port_was_taken_and_let_go_again_starts_on_another_port() {
+    let env = Env::new("port-race");
+    let (program, waiting, taken) = (env.base.join("dolt"), env.base.join("waiting"), env.base.join("taken"));
+    std::os::unix::fs::symlink(env.dolt.path(), &program).unwrap();
+    let dolt = Dolt::at(&program, &env.home).unwrap();
+    std::fs::remove_file(&program).unwrap();
+    let script = format!(
+        "#!/bin/sh\n: > '{}'\nwhile [ ! -e '{}' ]; do /bin/sleep 0.01; done\nexec '{}' \"$@\"\n",
+        waiting.display(),
+        taken.display(),
+        env.dolt.path().display()
+    );
+    std::fs::write(&program, script).unwrap();
+    std::fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+    let other = {
+        let (run_root, real) = (env.run_root.clone(), env.dolt.path().to_path_buf());
+        std::thread::spawn(move || take_the_port(&run_root, &waiting, &taken, &program, &real))
+    };
+    let started = Server::start(&dolt, &env.data(), &env.opts());
+    let (port, checked) = other.join().unwrap();
+    let server = started.unwrap();
+    let _guard = KillOnDrop(server.pid());
+    assert!(checked, "dolt checked the port {port} while it was taken");
+    assert_ne!(server.port(), port, "the server runs on another port");
+    assert_eq!(one(&mut server.connect().unwrap()), 1);
+    assert_eq!(env.leftovers(), (1, 1), "one record and one run folder");
+    server.stop().unwrap();
+    assert_eq!(env.leftovers(), (0, 0));
 }
 
 /// Runs the test's dolt in `dir` with the test's home, failing the test on an error.
