@@ -97,7 +97,6 @@ str		Generate	生成
 str		An agent connected to Archforge writes it from the model and its skills.	Archforge に接続したエージェントが、モデルとそのスキルから作成します。
 str		Nothing selected	何も選択されていません
 str		{kind} · {name}	{kind} · {name}
-str		{name} · {where}	{name} · {where}
 str		Output	出力
 str		SQL DDL	SQL DDL
 str		Documentation	ドキュメント
@@ -158,7 +157,6 @@ str		Skill · model	スキル · モデル
 plural		{n} literal	{n} 件のリテラル
 str		Complete	完全
 str		Disjoint	排他
-str		Problems · {n}	問題 · {n}
 str		{key}: {problem}	{key}: {problem}
 str		Link to a table or a relationship	テーブルまたはリレーションシップにリンク
 str		Drop the link on a table or a relationship's line	リンクはテーブルまたはリレーションシップの線の上で離してください
@@ -432,7 +430,6 @@ str		The project could not be opened: {why}	プロジェクトを開けません
 str		The branch {name} is no longer in this project	ブランチ {name} はこのプロジェクトにもうありません
 str		The branch {name} could not be opened: {why}	ブランチ {name} を開けませんでした: {why}
 str		The project could not be closed: {why}	プロジェクトを閉じられませんでした: {why}
-str		Model · the project's root	モデル · プロジェクトのルート
 str		Model	モデル
 str		Name	名前
 str		Models	モデル
@@ -489,34 +486,7 @@ str		The branch stays: {why}	ブランチは残ります: {why}
 str		At most {n} characters.	{n} 文字以内。
 str		Enter a name.	名前を入力してください。
 str		A name has to be one line.	名前は 1 行にしてください。
-str		A name can't be empty.	名前は空にできません。
-str		There is {what} named {name} already.	{name} という名前の{what}はすでにあります。
-str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
-str		There is nothing to undo.	元に戻す操作はありません。
-str		There is nothing to redo.	やり直す操作はありません。
-str		The project has no model root yet.	プロジェクトにはまだモデルのルートがありません。
-str		There is no skill yet.	スキルはまだありません。
-str		There is no diagram yet.	図はまだありません。
-str		There is nothing to remove or describe yet.	削除や説明の対象はまだありません。
-str		Another change is still under way. Try again once it ends.	別の変更がまだ進行中です。終わってからもう一度お試しください。
-str		The model could not be put back as it was after a failure. Reopen the project to go on.	失敗の後、モデルを元の状態に戻せませんでした。続けるにはプロジェクトを開き直してください。
-str		Undo and redo cannot run as part of another change.	元に戻すとやり直しは、別の変更の一部としては実行できません。
-str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	モデルは読み込まれた後に変更されたか、別のプロジェクトが読み込まれました。もう一度読み込んでから、再度お試しください。何も変更されていません。
-str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	この変更には、どのリビジョンのモデルに対するものかが示されていません。モデルを読み込んでから、再度お試しください。何も変更されていません。
-str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	図は削除されるときに自分自身を置き換えることはできません。置き換える図として別の図を選んでください。
-str		Choose either an existing diagram or a new one as the replacement, not both.	置き換える図として、既存の図か新しい図のどちらか一方を選んでください。両方は選べません。
-str		A name has to be text.	名前はテキストでなければなりません。
-str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} は既定の図ではないため、置き換えなしで削除されます。
-str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} は {package} の同じ種類の別の図ではないため、削除する図を置き換えられません。
-str		This could not be done because of an internal error. Nothing was changed.	内部エラーのため実行できませんでした。何も変更されていません。
-str		The text can't be empty.	テキストは空にできません。
-str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。
-str		It can't hold a control or hidden character.	制御文字や不可視の文字は使えません。
-str		It can't start or end with a space.	先頭や末尾に空白は使えません。
-str		This element takes no description.	この要素には説明を付けられません。
 str	refusal	an element	要素
-str	refusal	a constraint	制約
-str	refusal	a skill	スキル
 str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
@@ -847,8 +817,6 @@ str		Selection · this diagram	選択 · この図
 str		{kind} · this diagram	{kind} · この図
 plural		{n} item	{n} 個の項目
 str		The model could not be opened	モデルを開けませんでした
-str		Not kept on {name}: {why}	{name} には反映されませんでした: {why}
-str		Not kept on the element selected before: {why}	前に選択していた要素には反映されませんでした: {why}
 str		The host gives no ids for the model's elements	ホストがモデル要素の ID を提供していません
 str		It holds diagrams whose kind Archforge does not support; create a new project to carry on.	Archforge が対応していない種類の図が含まれています。続けるには新しいプロジェクトを作成してください。
 str		It holds diagrams whose kind Archforge does not support ({kinds}); create a new project to carry on.	Archforge が対応していない種類の図が含まれています ({kinds})。続けるには新しいプロジェクトを作成してください。
@@ -940,10 +908,8 @@ str		Your models, your workspace.	あなたのモデル、あなたのワーク�
 str		Help & shortcuts	ヘルプとショートカット
 str		Switch to the dark appearance	ダーク表示に切り替え
 str		Switch to the light appearance	ライト表示に切り替え
-str		This model	このモデル
 str		This skill	このスキル
 str		This element	この要素
-str		On this model · {n}	このモデルに · {n}
 str		On this skill · {n}	このスキルに · {n}
 str		On this element · {n}	この要素に · {n}
 str		Relationships carry no skills	関係はスキルを持ちません
@@ -962,69 +928,11 @@ str		{list}, {next}	{list}、{next}
 str		{first} and {second}	{first} と {second}
 str		{first}, {second} and {third}	{first}、{second}、{third}
 # Stereotypes applied (AR-135)
-str		No element is given. Give its id.	要素が指定されていません。その ID を指定してください。
-str		No diagram is given. Give its id.	図が指定されていません。その ID を指定してください。
-str		No box is given. Give its id.	ボックスが指定されていません。その ID を指定してください。
-str		No line is given. Give its id.	線が指定されていません。その ID を指定してください。
-str		No label is given. Give its id.	ラベルが指定されていません。その ID を指定してください。
-str		No diagram, box or line is given. Give its id.	図、ボックス、線のいずれも指定されていません。その ID を指定してください。
-str		{name} is not a diagram.	{name} は図ではありません。
-str		{name} is not a box on a diagram.	{name} は図上のボックスではありません。
-str		{name} is not a line on a diagram.	{name} は図上の線ではありません。
-str		{name} is not a label on a line.	{name} は線のラベルではありません。
-str		{name} is not a diagram, a box or a line.	{name} は図でもボックスでも線でもありません。
-str		The width is not between {min} and {max}.	幅が {min} から {max} の範囲にありません。
-str		The height is not between {min} and {max}.	高さが {min} から {max} の範囲にありません。
-str		{name} cannot have a diagram of this kind.	{name} にはこの種類の図を作成できません。
-str		A diagram of this kind does not show {name}.	この種類の図には {name} を表示できません。
-str		{name} is outside what this diagram shows.	{name} はこの図が表示する範囲の外にあります。
-str		This diagram shows {name} already.	この図にはすでに {name} が表示されています。
-str		That box is on another diagram.	そのボックスは別の図にあります。
-str		Give at least one box.	ボックスを 1 つ以上指定してください。
-str		Give at least one diagram, box or line.	図、ボックス、線のいずれかを 1 つ以上指定してください。
-str		Give at least one element.	要素を 1 つ以上指定してください。
-str		Give the boxes as a list of ids.	ボックスは ID のリストで指定してください。
-str		Give the diagrams, boxes and lines as a list of ids.	図、ボックス、線は ID のリストで指定してください。
-str		Boxes nest at most {max} deep.	ボックスの入れ子は最大 {max} 階層までです。
-str		This box shows an element and draws its text. Only a note takes a text of its own.	このボックスは要素を表示し、その要素のテキストを描画します。独自のテキストを持てるのはノートだけです。
-str		A note's link is a straight line and does not bend.	ノートのリンクは直線で、折れ曲がりません。
-str		A line between two elements shows a relationship. Name the relationship.	2 つの要素の間の線はリレーションシップを表します。リレーションシップを指定してください。
-str		This element lacks an end, so no line shows it.	この要素には端が欠けているため、線で表示できません。
-str		The first box does not show the relationship's first end.	最初のボックスはリレーションシップの最初の端を表示していません。
-str		The second box does not show the relationship's second end.	2 番目のボックスはリレーションシップの 2 番目の端を表示していません。
-str		This box shows {name}. Only a note links to a box or a line.	このボックスは {name} を表示しています。ボックスや線にリンクできるのはノートだけです。
-str		A note does not link to itself.	ノートは自分自身にはリンクしません。
-str		A note links to a box that shows an element or to a relationship's line.	ノートは要素を表示するボックスか、リレーションシップの線にリンクします。
-str		What the note links to is on another diagram.	ノートのリンク先は別の図にあります。
-str		The note is linked to it already.	ノートはすでにそこにリンクされています。
-str		A note's link shows no element, so it takes no label.	ノートのリンクは要素を表示しないため、ラベルを付けられません。
-str		This line has the label text {slot} already.	この線にはすでにラベルのテキスト {slot} があります。
-str		Give the fill colour as #rrggbb, such as #3366cc.	塗りの色を #rrggbb の形で指定してください（例: #3366cc）。
-str		Give the border or line colour as #rrggbb, such as #3366cc.	枠線または線の色を #rrggbb の形で指定してください（例: #3366cc）。
-str		Give the text colour as #rrggbb, such as #3366cc.	文字色を #rrggbb の形で指定してください（例: #3366cc）。
-str		This diagram shows no box to arrange.	この図には整列するボックスがありません。
-str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	整列すると、ボックスが原点から {max} より離れた位置に置かれます。先にボックスを原点に近づけてください。
-str		A line bends at most {max} times.	線が折れ曲がれるのは最大 {max} 回です。
-str		{notation} elements cannot be removed yet.	{notation} の要素はまだ削除できません。
-str		{name} cannot be removed yet.	{name} はまだ削除できません。
-str		{notation} elements cannot be described yet.	{notation} の要素はまだ説明を付けられません。
-str		{name} is not an element of any notation in this project.	{name} はこのプロジェクトのどの表記法の要素でもありません。
-str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	英小文字で始まり、英小文字、数字、_、-、. だけからなる単純な語を使ってください。
-str		{word} is not a diagram kind. The kinds are {kinds}.	{word} は図の種類ではありません。種類は {kinds} です。
-str		This project holds no notation, so it knows no diagram kind.	このプロジェクトには表記法がないため、図の種類がありません。
-str		This line has no label text {word}. It has {slots}.	この線にはラベルのテキスト {word} がありません。あるのは {slots} です。
-str		This line has no label text {word}. It has none.	この線にはラベルのテキスト {word} がありません。ラベルのテキストはありません。
 str		Type an expression. A constraint without one states no rule.	式を入力してください。式のない制約はルールを表しません。
 str		Give the elements as a list of ids.	要素は ID のリストで指定してください。
-str		The {axis} is not a number.	{axis} の値が数値ではありません。
-str		The {axis} is farther than {max} from the origin.	{axis} の値が原点から {max} より離れています。
 str		An element is named twice. Name each element once.	要素が 2 回指定されています。要素はそれぞれ 1 回だけ指定してください。
 str		{name} deleted	{name} を削除しました
 str		Read only	読み取り専用
-str		An item takes no {key}. It takes {takes}.	項目に {key} は指定できません。指定できるのは {takes} です。
-str		An item holds a key without a name. It takes {takes}.	項目に名前のないキーがあります。指定できるのは {takes} です。
-str		There is no element with the id {id}.	ID が {id} の要素はありません。
-str		{value} is not a literal of {enumeration}.	{value} は {enumeration} のリテラルではありません。
 # クラスの関係
 # Templates (AR-130)
 str		Value	値
@@ -1084,7 +992,6 @@ str		Current work · unsaved changes	現在の作業 · 未保存の変更
 str		Viewing the version of {date}	{date} のバージョンを表示中
 str		Viewing a version	バージョンを表示中
 str		Viewing an earlier version · Read only	以前のバージョンを表示中 · 読み取り専用
-str		Read only while viewing a version	バージョンの表示中は読み取り専用です
 str		Back to current work	現在の作業に戻る
 str		Back to current work to chat	チャットするには現在の作業に戻ってください
 str		Viewing the version of {date} · Read only	{date} のバージョンを表示中 · 読み取り専用

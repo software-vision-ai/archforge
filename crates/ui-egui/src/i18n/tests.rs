@@ -1,6 +1,6 @@
 //! Coverage tests: every wrapped literal in the shell's, its interfaces' and the desktop app's
 //! source, and every start card text, has a row in every complete language, in the shell's
-//! catalogue or a notation's; every row is read, and is in the catalogue of the code that reads it;
+//! catalogue, the interfaces' or a notation's; every row is read, and is in the catalogue of the code that reads it;
 //! no key is in a language's catalogues twice; a partial catalogue reports its gaps without
 //! failing. The catalogues are screened for hidden characters, addresses and instructions, and
 //! every row of every table is found by its key in every language. The machinery's own tests are in
@@ -11,16 +11,36 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 
-/// Every catalogue of a language the shell registers ([`tables`]): its own, then each notation's.
-fn catalogues_of(lang: &Language) -> Vec<&'static super::Rows> {
-    tables(crate::tests::SCREENS.catalogues()).map(|table| table.iter().find(|rows| rows.code == lang.code).unwrap()).collect()
+/// Every catalogue table the tests' shell looks its rows up in, each with whose it is: the shell's
+/// interfaces', which their own lookups register, then those the shell registers ([`tables`]): its
+/// own, then each notation's.
+fn every_table() -> Vec<(Reader, &'static [super::Rows])> {
+    let shell = tables(crate::tests::SCREENS.catalogues())
+        .enumerate()
+        .map(|(index, table)| (index.checked_sub(1).map_or(Reader::Shell, Reader::Notation), table));
+    std::iter::once((Reader::Interfaces, archforge_shell_api::i18n::CATALOGUES)).chain(shell).collect()
+}
+
+/// A catalogue's name in a message: its file name in its folder (`er/de.tsv`), the interfaces'
+/// after their crate's folder, as their file names are the shell's.
+fn named(holder: Reader, rows: &super::Rows) -> String {
+    if holder == Reader::Interfaces { format!("shell-api/{}", rows.catalogue) } else { rows.catalogue.to_string() }
+}
+
+/// Every catalogue of a language the tests' shell looks its rows up in ([`every_table`]), each by
+/// its name ([`named`]) and its text.
+fn catalogues_of(lang: &Language) -> Vec<(String, &'static str)> {
+    let of = |(holder, table): (Reader, &'static [super::Rows])| {
+        table.iter().find(|rows| rows.code == lang.code).map(|rows| (named(holder, rows), rows.text))
+    };
+    every_table().into_iter().map(|table| of(table).unwrap()).collect()
 }
 
 /// A language's rows in all its catalogues, read into one as the lookups read them.
 fn parsed(lang: &Language) -> Catalogue {
     let mut all = Catalogue::default();
-    for rows in catalogues_of(lang) {
-        let one = parse(rows.text);
+    for (_, text) in catalogues_of(lang) {
+        let one = parse(text);
         all.strings.extend(one.strings);
         all.plurals.extend(one.plurals);
     }
@@ -81,12 +101,14 @@ fn literal_args(text: &str, name: &str, index: usize) -> Vec<String> {
     found
 }
 
-/// Who reads a row: the shell's code (its interfaces' and the desktop app's with it), one
-/// notation's code, by the index of its screens part in `SCREENS.parts()`, or a test, which reads a
-/// row to check it and so says nothing about whose catalogue holds it.
+/// Who reads a row: the shell's code (the desktop app's with it), the shell's interfaces' code
+/// (`archforge_shell_api`), one notation's code, by the index of its screens part in
+/// `SCREENS.parts()`, or a test, which reads a row to check it and so says nothing about whose
+/// catalogue holds it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Reader {
     Shell,
+    Interfaces,
     Notation(usize),
     Test,
 }
@@ -327,6 +349,8 @@ fn reads() -> Vec<(Key, Reader)> {
     for file in files.iter().filter(|f| !f.ends_with("i18n/tests.rs")) {
         let text = std::fs::read_to_string(file).unwrap_or_default();
         for (reader, text) in split(file, &text) {
+            // The interfaces name no notation: their code is their own.
+            let reader = if reader == Reader::Shell && file.starts_with(&interfaces) { Reader::Interfaces } else { reader };
             reads.extend(literal_args(&text, "tr", 0).iter().map(|s| (str_key(s), reader)));
             let contexts = literal_args(&text, "tr_ctx", 0);
             let keys = literal_args(&text, "tr_ctx", 1);
@@ -479,10 +503,12 @@ fn a_key_twice_in_a_catalogue_is_named_with_both_lines() {
 fn every_complete_catalogue_has_every_row() {
     let (strings, plurals) = required();
     assert!(!strings.is_empty(), "the scan found nothing; the scanner is broken");
-    let twice: Vec<String> = LANGUAGES.iter().flat_map(catalogues_of).flat_map(|rows| duplicates(rows.catalogue, rows.text)).collect();
+    let twice: Vec<String> = LANGUAGES.iter().flat_map(catalogues_of).flat_map(|(name, text)| duplicates(&name, text)).collect();
     assert!(twice.is_empty(), "{} key(s) are in a catalogue twice; keep one row of each:\n{}", twice.len(), twice.join("\n"));
-    let shared: Vec<String> =
-        LANGUAGES.iter().flat_map(|lang| in_two(&catalogues_of(lang).iter().map(|rows| (rows.catalogue, rows.text)).collect::<Vec<_>>())).collect();
+    let shared: Vec<String> = LANGUAGES
+        .iter()
+        .flat_map(|lang| in_two(&catalogues_of(lang).iter().map(|(name, text)| (name.as_str(), *text)).collect::<Vec<_>>()))
+        .collect();
     assert!(shared.is_empty(), "{} key(s) are in two catalogues of a language; keep the row where it is read:\n{}", shared.len(), shared.join("\n"));
     for lang in LANGUAGES {
         let c = parsed(lang);
@@ -504,8 +530,7 @@ fn every_complete_catalogue_has_every_row() {
 fn every_catalogue_row_is_read() {
     // A row nothing looks up is dead text a translator would keep for nothing.
     let (strings, plurals) = required();
-    for rows in LANGUAGES.iter().flat_map(catalogues_of) {
-        let text = rows.text;
+    for (catalogue, text) in LANGUAGES.iter().flat_map(catalogues_of) {
         let unread: Vec<&str> = text
             .lines()
             .filter(|l| !l.is_empty() && !l.starts_with('#'))
@@ -518,15 +543,15 @@ fn every_catalogue_row_is_read() {
                 }
             })
             .collect();
-        assert!(unread.is_empty(), "{} has {} row(s) nothing reads:\n{}", rows.catalogue, unread.len(), unread.join("\n"));
+        assert!(unread.is_empty(), "{catalogue} has {} row(s) nothing reads:\n{}", unread.len(), unread.join("\n"));
     }
 }
 
 /// Every row is in the catalogue of the code that reads it: a row only one notation's code reads
 /// (the words its own code says, the words for what only its metamodel names, its tools' hover
-/// texts and its cards' plurals) in that notation's catalogue, and a row the shell reads, or both
-/// notations, in the shell's. A test that reads a row places it nowhere, so a row no other code
-/// reads stays in the shell's.
+/// texts and its cards' plurals) in that notation's catalogue, a row only the shell's interfaces'
+/// code reads in theirs, and a row the shell reads, or more than one of them, in the shell's. A
+/// test that reads a row places it nowhere, so a row no other code reads stays in the shell's.
 #[test]
 fn every_row_is_in_the_catalogue_of_the_code_that_reads_it() {
     let mut readers: HashMap<Key, std::collections::BTreeSet<Reader>> = HashMap::new();
@@ -534,18 +559,19 @@ fn every_row_is_in_the_catalogue_of_the_code_that_reads_it() {
         readers.entry(key).or_default().insert(reader);
     }
     let parts = crate::tests::SCREENS.parts();
+    let found = |reader: Reader| readers.values().any(|by| by.contains(&reader));
     assert!(
-        (0..parts.len()).all(|part| readers.values().any(|by| by.contains(&Reader::Notation(part)))),
-        "the scan found no reader in some notation's code; the scanner is broken"
+        found(Reader::Interfaces) && (0..parts.len()).all(|part| found(Reader::Notation(part))),
+        "the scan found no reader in the interfaces' or some notation's code; the scanner is broken"
     );
-    // A reader by its name: the shell, or a notation by the folder of its catalogues.
+    // A reader by its name: the shell, its interfaces, or a notation by the folder of its catalogues.
     let name = |reader: &Reader| match reader {
         Reader::Notation(part) => parts[*part].ui.catalogues()[0].catalogue.split('/').next().unwrap_or_default().to_string(),
+        Reader::Interfaces => "shell-api".to_string(),
         _ => "the shell".to_string(),
     };
     let mut wrong = Vec::new();
-    for (index, table) in tables(crate::tests::SCREENS.catalogues()).enumerate() {
-        let holder = index.checked_sub(1).map_or(Reader::Shell, Reader::Notation);
+    for (holder, table) in every_table() {
         for rows in table {
             for line in rows.text.lines().filter(|l| !l.is_empty() && !l.starts_with('#')) {
                 let cols: Vec<&str> = line.split('\t').collect();
@@ -553,12 +579,13 @@ fn every_row_is_in_the_catalogue_of_the_code_that_reads_it() {
                 let by: Vec<&Reader> = readers.get(&key_of(kind, context, key)).into_iter().flatten().collect();
                 let home = match by.as_slice() {
                     [Reader::Notation(part)] => Reader::Notation(*part),
+                    [Reader::Interfaces] => Reader::Interfaces,
                     _ => Reader::Shell,
                 };
                 if home != holder {
                     let names: Vec<String> = by.iter().map(|reader| name(reader)).collect();
                     let read = if names.is_empty() { "no code but a test".to_string() } else { names.join(" and ") };
-                    wrong.push(format!("{}: {kind} {key:?} is read by {read}; it belongs in {}'s catalogue", rows.catalogue, name(&home)));
+                    wrong.push(format!("{}: {kind} {key:?} is read by {read}; it belongs in {}'s catalogue", named(holder, rows), name(&home)));
                 }
             }
         }
@@ -1199,12 +1226,12 @@ fn the_screen_refuses_hidden_characters_addresses_and_instructions() {
     assert_eq!(placeholders("{b} vor {a} und {a}"), ["a", "b"]);
 }
 
-/// Every catalogue, the shell's and each notation's, holds the keys of its table's English
-/// catalogue and no other, with the provenance line, the placeholders, the plural forms and the
-/// ellipses English asks for, and passes the screen.
+/// Every catalogue, the shell's interfaces', the shell's and each notation's, holds the keys of its
+/// table's English catalogue and no other, with the provenance line, the placeholders, the plural
+/// forms and the ellipses English asks for, and passes the screen.
 #[test]
 fn every_catalogue_is_keyed_as_english_and_passes_the_screen() {
-    for table in tables(crate::tests::SCREENS.catalogues()) {
+    for (_, table) in every_table() {
         let english_text = table[0].text;
         let english = rows(english_text);
         assert!(!english.is_empty(), "the English catalogue {} is empty", table[0].catalogue);
@@ -1312,16 +1339,16 @@ fn every_catalogue_in_the_folder_is_registered() {
     assert_eq!((names.len(), codes.len()), (LANGUAGES.len(), LANGUAGES.len()), "each language has a code and a name of its own");
 }
 
-/// Every row of every catalogue, the shell's and each notation's, is found through the shell's
-/// lookups in every language: each key of a table's English catalogue has its row in that table's
-/// catalogue of every complete language, and each row gives its own text, a `str` row by its
-/// context and key, a `plural` row in the form each edge count picks. No test registers a table
-/// itself, so this also proves that a shell registers the catalogues of every notation it is given
-/// as it is made.
+/// Every row of every catalogue, the shell's interfaces', the shell's and each notation's, is found
+/// through the shell's lookups in every language: each key of a table's English catalogue has its
+/// row in that table's catalogue of every complete language, and each row gives its own text, a
+/// `str` row by its context and key, a `plural` row in the form each edge count picks. No test
+/// registers a table itself, so this also proves that a shell registers the catalogues of every
+/// notation it is given as it is made, and that the interfaces' lookups register their own.
 #[test]
 fn every_row_finds_its_text_in_every_language() {
     let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
-    for table in tables(crate::tests::SCREENS.catalogues()) {
+    for (_, table) in every_table() {
         let english = rows(table.first().expect("a table has its English catalogue").text);
         for (lang, catalogue) in LANGUAGES.iter().zip(table) {
             assert_eq!(catalogue.code, lang.code, "{} is in the languages' order", catalogue.catalogue);

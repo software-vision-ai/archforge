@@ -1,0 +1,95 @@
+# shell-api · Deutscher Katalog. Spalten: kind, context, key, text (siehe i18n/mod.rs). Zeilen stehen neben verwandten Einträgen.
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
+str		{name} · {where}	{name} · {where}
+str		Problems · {n}	Probleme · {n}
+str		Model · the project's root	Modell · die Wurzel des Projekts
+str		A name can't be empty.	Ein Name darf nicht leer sein.
+str		There is {what} named {name} already.	Den Namen {name} trägt bereits {what}.
+str		The model cannot be changed at the moment; nothing was changed.	Das Modell kann gerade nicht geändert werden; nichts wurde geändert.
+str		There is nothing to undo.	Es gibt nichts rückgängig zu machen.
+str		There is nothing to redo.	Es gibt nichts zu wiederholen.
+str		The project has no model root yet.	Das Projekt hat noch keine Modellwurzel.
+str		There is no skill yet.	Es gibt noch keinen Skill.
+str		There is no diagram yet.	Es gibt noch kein Diagramm.
+str		There is nothing to remove or describe yet.	Es gibt noch nichts zu entfernen oder zu beschreiben.
+str		Another change is still under way. Try again once it ends.	Eine andere Änderung läuft noch. Versuchen Sie es erneut, sobald sie beendet ist.
+str		The model could not be put back as it was after a failure. Reopen the project to go on.	Das Modell konnte nach einem Fehler nicht wiederhergestellt werden. Öffnen Sie das Projekt erneut, um fortzufahren.
+str		Undo and redo cannot run as part of another change.	Rückgängig und Wiederholen können nicht Teil einer anderen Änderung sein.
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	Das Modell hat sich geändert, seit es gelesen wurde, oder ein anderes Projekt wurde gelesen. Lesen Sie es erneut und versuchen Sie es noch einmal. Es wurde nichts geändert.
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	Die Änderung gibt nicht an, für welchen Stand des Modells sie gedacht ist. Lesen Sie das Modell und versuchen Sie es noch einmal. Es wurde nichts geändert.
+str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Ein Diagramm kann sich beim Entfernen nicht selbst ersetzen. Wählen Sie ein anderes Diagramm als Ersatz.
+str		Choose either an existing diagram or a new one as the replacement, not both.	Wählen Sie als Ersatz entweder ein vorhandenes Diagramm oder ein neues, nicht beides.
+str		A name has to be text.	Ein Name muss Text sein.
+str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} ist kein Standarddiagramm und wird daher ohne Ersatz entfernt.
+str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} ist kein anderes Diagramm derselben Art von {package} und kann das zu entfernende Diagramm daher nicht ersetzen.
+str		This could not be done because of an internal error. Nothing was changed.	Dies war wegen eines internen Fehlers nicht möglich. Es wurde nichts geändert.
+str		The text can't be empty.	Der Text darf nicht leer sein.
+str		It can't be longer than {max} characters.	Höchstens {max} Zeichen sind möglich.
+str		It can't hold a control or hidden character.	Steuerzeichen und unsichtbare Zeichen sind nicht erlaubt.
+str		It can't start or end with a space.	Am Anfang und am Ende darf kein Leerzeichen stehen.
+str		This element takes no description.	Dieses Element erhält keine Beschreibung.
+str	refusal	a constraint	eine Einschränkung
+str	refusal	a skill	ein Skill
+str		Not kept on {name}: {why}	Nicht übernommen bei {name}: {why}
+str		Not kept on the element selected before: {why}	Beim zuvor ausgewählten Element nicht übernommen: {why}
+str		This model	Dieses Modell
+str		On this model · {n}	Auf diesem Modell · {n}
+str		No element is given. Give its id.	Es ist kein Element angegeben. Geben Sie seine ID an.
+str		No diagram is given. Give its id.	Es ist kein Diagramm angegeben. Geben Sie seine ID an.
+str		No box is given. Give its id.	Es ist kein Kasten angegeben. Geben Sie seine ID an.
+str		No line is given. Give its id.	Es ist keine Linie angegeben. Geben Sie ihre ID an.
+str		No label is given. Give its id.	Es ist keine Beschriftung angegeben. Geben Sie ihre ID an.
+str		No diagram, box or line is given. Give its id.	Es ist kein Diagramm, kein Kasten und keine Linie angegeben. Geben Sie die ID an.
+str		{name} is not a diagram.	{name} ist kein Diagramm.
+str		{name} is not a box on a diagram.	{name} ist kein Kasten in einem Diagramm.
+str		{name} is not a line on a diagram.	{name} ist keine Linie in einem Diagramm.
+str		{name} is not a label on a line.	{name} ist keine Beschriftung an einer Linie.
+str		{name} is not a diagram, a box or a line.	{name} ist weder ein Diagramm noch ein Kasten noch eine Linie.
+str		The width is not between {min} and {max}.	Die Breite liegt nicht zwischen {min} und {max}.
+str		The height is not between {min} and {max}.	Die Höhe liegt nicht zwischen {min} und {max}.
+str		{name} cannot have a diagram of this kind.	{name} kann kein Diagramm dieser Art haben.
+str		A diagram of this kind does not show {name}.	Ein Diagramm dieser Art zeigt {name} nicht.
+str		{name} is outside what this diagram shows.	{name} liegt außerhalb dessen, was dieses Diagramm zeigt.
+str		This diagram shows {name} already.	Dieses Diagramm zeigt {name} bereits.
+str		That box is on another diagram.	Dieser Kasten ist in einem anderen Diagramm.
+str		Give at least one box.	Geben Sie mindestens einen Kasten an.
+str		Give at least one diagram, box or line.	Geben Sie mindestens ein Diagramm, einen Kasten oder eine Linie an.
+str		Give at least one element.	Geben Sie mindestens ein Element an.
+str		Give the boxes as a list of ids.	Geben Sie die Kästen als Liste von IDs an.
+str		Give the diagrams, boxes and lines as a list of ids.	Geben Sie die Diagramme, Kästen und Linien als Liste von IDs an.
+str		Boxes nest at most {max} deep.	Kästen lassen sich höchstens {max} Ebenen tief verschachteln.
+str		This box shows an element and draws its text. Only a note takes a text of its own.	Dieser Kasten zeigt ein Element und zeichnet dessen Text. Nur eine Notiz hat einen eigenen Text.
+str		A note's link is a straight line and does not bend.	Die Verbindung einer Notiz ist eine gerade Linie und knickt nicht ab.
+str		A line between two elements shows a relationship. Name the relationship.	Eine Linie zwischen zwei Elementen zeigt eine Beziehung. Geben Sie die Beziehung an.
+str		This element lacks an end, so no line shows it.	Diesem Element fehlt ein Ende, daher zeigt keine Linie es.
+str		The first box does not show the relationship's first end.	Der erste Kasten zeigt nicht das erste Ende der Beziehung.
+str		The second box does not show the relationship's second end.	Der zweite Kasten zeigt nicht das zweite Ende der Beziehung.
+str		This box shows {name}. Only a note links to a box or a line.	Dieser Kasten zeigt {name}. Nur eine Notiz wird mit einem Kasten oder einer Linie verbunden.
+str		A note does not link to itself.	Eine Notiz wird nicht mit sich selbst verbunden.
+str		A note links to a box that shows an element or to a relationship's line.	Eine Notiz wird mit einem Kasten verbunden, der ein Element zeigt, oder mit der Linie einer Beziehung.
+str		What the note links to is on another diagram.	Womit die Notiz verbunden wird, liegt in einem anderen Diagramm.
+str		The note is linked to it already.	Die Notiz ist bereits damit verbunden.
+str		A note's link shows no element, so it takes no label.	Die Verbindung einer Notiz zeigt kein Element und erhält daher keine Beschriftung.
+str		This line has the label text {slot} already.	Diese Linie hat den Beschriftungstext {slot} bereits.
+str		Give the fill colour as #rrggbb, such as #3366cc.	Geben Sie die Füllfarbe als #rrggbb an, etwa #3366cc.
+str		Give the border or line colour as #rrggbb, such as #3366cc.	Geben Sie die Rahmen- oder Linienfarbe als #rrggbb an, etwa #3366cc.
+str		Give the text colour as #rrggbb, such as #3366cc.	Geben Sie die Textfarbe als #rrggbb an, etwa #3366cc.
+str		This diagram shows no box to arrange.	Dieses Diagramm zeigt keinen Kasten, der sich anordnen ließe.
+str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	Angeordnet läge ein Kasten weiter als {max} vom Ursprung entfernt. Rücken Sie die Kästen zuerst näher an ihn heran.
+str		A line bends at most {max} times.	Eine Linie knickt höchstens {max}-mal ab.
+str		{notation} elements cannot be removed yet.	{notation}-Elemente lassen sich noch nicht entfernen.
+str		{name} cannot be removed yet.	{name} lässt sich noch nicht entfernen.
+str		{notation} elements cannot be described yet.	{notation}-Elemente lassen sich noch nicht beschreiben.
+str		{name} is not an element of any notation in this project.	{name} ist kein Element einer Notation dieses Projekts.
+str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Verwenden Sie ein einfaches Wort: Kleinbuchstaben, Ziffern, _, - und ., beginnend mit einem Buchstaben.
+str		{word} is not a diagram kind. The kinds are {kinds}.	{word} ist keine Diagrammart. Die Arten sind {kinds}.
+str		This project holds no notation, so it knows no diagram kind.	Dieses Projekt enthält keine Notation und kennt daher keine Diagrammart.
+str		This line has no label text {word}. It has {slots}.	Diese Linie hat keinen Beschriftungstext {word}. Sie hat {slots}.
+str		This line has no label text {word}. It has none.	Diese Linie hat keinen Beschriftungstext {word}. Sie hat keinen.
+str		The {axis} is not a number.	Der Wert {axis} ist keine Zahl.
+str		The {axis} is farther than {max} from the origin.	Der Wert {axis} liegt weiter als {max} vom Ursprung entfernt.
+str		An item takes no {key}. It takes {takes}.	Ein Eintrag kennt keinen Schlüssel {key}. Er kennt {takes}.
+str		An item holds a key without a name. It takes {takes}.	Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt {takes}.
+str		There is no element with the id {id}.	Es gibt kein Element mit der ID {id}.
+str		{value} is not a literal of {enumeration}.	{value} ist kein Literal von {enumeration}.
+str		Read only while viewing a version	Schreibgeschützt, solange eine Version angezeigt wird

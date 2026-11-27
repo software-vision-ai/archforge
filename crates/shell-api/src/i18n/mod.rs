@@ -2,7 +2,8 @@
 //!
 //! A crate that brings text keeps one tab-separated catalogue per language, `<code>.tsv`, keyed by
 //! the English source string; it embeds them, registers them here (`register`), and its build
-//! script refuses a malformed row (`check`). Each row has four columns: kind, context, key, text.
+//! script refuses a malformed row (`check`). The interfaces keep their own the same way, the words
+//! only their code says (`CATALOGUES`), and the lookups register them before the first one. Each row has four columns: kind, context, key, text.
 //! Kinds: `str` (a wrapped literal, with an optional context for ambiguous words) and `plural`
 //! (key is the English singular; text holds the plural forms separated by `|`). Each key is in a
 //! catalogue once: a `str` row by its context and key, a `plural` row by its key alone, as `parse`
@@ -185,6 +186,30 @@ fn with_current<T>(f: impl FnOnce(Option<&Catalogue>, &Language) -> T) -> Option
     Some(f(registry.catalogues.get(code), lang))
 }
 
+/// The interfaces' own catalogue of each language, in the order of `LANGUAGES`, embedded: the rows
+/// only their own code says (the panels' and the engine's refusal words among them).
+pub static CATALOGUES: &[Rows] = &[
+    Rows { code: "en", catalogue: "en.tsv", text: include_str!("en.tsv") },
+    Rows { code: "de", catalogue: "de.tsv", text: include_str!("de.tsv") },
+    Rows { code: "es", catalogue: "es.tsv", text: include_str!("es.tsv") },
+    Rows { code: "fr", catalogue: "fr.tsv", text: include_str!("fr.tsv") },
+    Rows { code: "pt-PT", catalogue: "pt-PT.tsv", text: include_str!("pt-PT.tsv") },
+    Rows { code: "ja", catalogue: "ja.tsv", text: include_str!("ja.tsv") },
+    Rows { code: "zh-Hans", catalogue: "zh-Hans.tsv", text: include_str!("zh-Hans.tsv") },
+];
+
+/// Registers the interfaces' own catalogue table once, before the first lookup: what their code
+/// says is found in the user's language whoever looks it up, a shell or a notation's screens
+/// without one. A refusal, which the tests rule out, is said in the log.
+fn registered() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        if let Err(e) = register(CATALOGUES) {
+            log::warn!("{e}");
+        }
+    });
+}
+
 /// Translates a literal.
 pub fn tr(s: &str) -> String {
     tr_ctx("", s)
@@ -192,11 +217,13 @@ pub fn tr(s: &str) -> String {
 
 /// Translates a literal that needs a context key to be unambiguous.
 pub fn tr_ctx(context: &str, s: &str) -> String {
+    registered();
     with_current(|c, _| c.and_then(|c| c.strings.get(&(context.to_string(), s.to_string())).cloned())).flatten().unwrap_or_else(|| s.to_string())
 }
 
 /// A plural: `one` is the English singular and the key; `{n}` is replaced by the count.
 pub fn trn(one: &str, other: &str, n: u64) -> String {
+    registered();
     let form = with_current(|c, lang| c.and_then(|c| c.plurals.get(one)).and_then(|forms| forms.get((lang.plural)(n)).cloned())).flatten();
     let english = if n == 1 { one } else { other };
     form.unwrap_or_else(|| english.to_string()).replace("{n}", &n.to_string())

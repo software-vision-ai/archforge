@@ -1,0 +1,95 @@
+# shell-api · Catálogo en español. Columnas: kind, context, key, text (véase i18n/mod.rs). Las filas van junto a las entradas relacionadas.
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
+str		{name} · {where}	{name} · {where}
+str		Problems · {n}	Problemas · {n}
+str		Model · the project's root	Modelo · la raíz del proyecto
+str		A name can't be empty.	Un nombre no puede estar vacío.
+str		There is {what} named {name} already.	Ya existe {what} con el nombre {name}.
+str		The model cannot be changed at the moment; nothing was changed.	El modelo no se puede cambiar en este momento; no se ha cambiado nada.
+str		There is nothing to undo.	No hay nada que deshacer.
+str		There is nothing to redo.	No hay nada que rehacer.
+str		The project has no model root yet.	El proyecto aún no tiene raíz de modelo.
+str		There is no skill yet.	Aún no hay ninguna habilidad.
+str		There is no diagram yet.	Aún no hay ningún diagrama.
+str		There is nothing to remove or describe yet.	Aún no hay nada que quitar ni describir.
+str		Another change is still under way. Try again once it ends.	Otro cambio sigue en curso. Vuelva a intentarlo cuando termine.
+str		The model could not be put back as it was after a failure. Reopen the project to go on.	No se pudo devolver el modelo a su estado anterior tras un fallo. Vuelva a abrir el proyecto para continuar.
+str		Undo and redo cannot run as part of another change.	Deshacer y rehacer no pueden formar parte de otro cambio.
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	El modelo ha cambiado desde que se leyó, o se leyó otro proyecto. Vuelva a leerlo e inténtelo de nuevo. No se ha cambiado nada.
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	El cambio no indica para qué revisión del modelo se hizo. Lea el modelo e inténtelo de nuevo. No se ha cambiado nada.
+str		A diagram cannot replace itself as it is removed. Choose another diagram as the replacement.	Un diagrama no puede sustituirse a sí mismo al eliminarse. Elija otro diagrama como sustituto.
+str		Choose either an existing diagram or a new one as the replacement, not both.	Elija como sustituto un diagrama existente o uno nuevo, no ambos.
+str		A name has to be text.	Un nombre tiene que ser texto.
+str		{diagram} is not a default diagram, so it is removed without a replacement.	{diagram} no es un diagrama predeterminado, así que se elimina sin sustituto.
+str		{diagram} is not another diagram of {package} of the same kind, so it cannot replace the diagram being removed.	{diagram} no es otro diagrama del mismo tipo de {package}, así que no puede sustituir al diagrama que se elimina.
+str		This could not be done because of an internal error. Nothing was changed.	No se pudo hacer por un error interno. No se ha cambiado nada.
+str		The text can't be empty.	El texto no puede estar vacío.
+str		It can't be longer than {max} characters.	Se admiten como máximo {max} caracteres.
+str		It can't hold a control or hidden character.	No se admiten caracteres de control ni ocultos.
+str		It can't start or end with a space.	No puede empezar ni terminar con un espacio.
+str		This element takes no description.	Este elemento no admite descripción.
+str	refusal	a constraint	una restricción
+str	refusal	a skill	una habilidad
+str		Not kept on {name}: {why}	No se guardó en {name}: {why}
+str		Not kept on the element selected before: {why}	No se guardó en el elemento seleccionado antes: {why}
+str		This model	Este modelo
+str		On this model · {n}	En este modelo · {n}
+str		No element is given. Give its id.	No se ha indicado ningún elemento. Indica su identificador.
+str		No diagram is given. Give its id.	No se ha indicado ningún diagrama. Indica su identificador.
+str		No box is given. Give its id.	No se ha indicado ninguna caja. Indica su identificador.
+str		No line is given. Give its id.	No se ha indicado ninguna línea. Indica su identificador.
+str		No label is given. Give its id.	No se ha indicado ninguna etiqueta. Indica su identificador.
+str		No diagram, box or line is given. Give its id.	No se ha indicado ningún diagrama, caja ni línea. Indica su identificador.
+str		{name} is not a diagram.	{name} no es un diagrama.
+str		{name} is not a box on a diagram.	{name} no es una caja de un diagrama.
+str		{name} is not a line on a diagram.	{name} no es una línea de un diagrama.
+str		{name} is not a label on a line.	{name} no es una etiqueta de una línea.
+str		{name} is not a diagram, a box or a line.	{name} no es un diagrama, una caja ni una línea.
+str		The width is not between {min} and {max}.	El ancho no está entre {min} y {max}.
+str		The height is not between {min} and {max}.	La altura no está entre {min} y {max}.
+str		{name} cannot have a diagram of this kind.	{name} no puede tener un diagrama de este tipo.
+str		A diagram of this kind does not show {name}.	Un diagrama de este tipo no muestra {name}.
+str		{name} is outside what this diagram shows.	{name} queda fuera de lo que muestra este diagrama.
+str		This diagram shows {name} already.	Este diagrama ya muestra {name}.
+str		That box is on another diagram.	Esa caja está en otro diagrama.
+str		Give at least one box.	Indica al menos una caja.
+str		Give at least one diagram, box or line.	Indica al menos un diagrama, una caja o una línea.
+str		Give at least one element.	Indica al menos un elemento.
+str		Give the boxes as a list of ids.	Indica las cajas como una lista de identificadores.
+str		Give the diagrams, boxes and lines as a list of ids.	Indica los diagramas, las cajas y las líneas como una lista de identificadores.
+str		Boxes nest at most {max} deep.	Las cajas se anidan como máximo {max} niveles.
+str		This box shows an element and draws its text. Only a note takes a text of its own.	Esta caja muestra un elemento y dibuja su texto. Solo una nota tiene un texto propio.
+str		A note's link is a straight line and does not bend.	El enlace de una nota es una línea recta y no se dobla.
+str		A line between two elements shows a relationship. Name the relationship.	Una línea entre dos elementos muestra una relación. Indica la relación.
+str		This element lacks an end, so no line shows it.	A este elemento le falta un extremo, así que ninguna línea lo muestra.
+str		The first box does not show the relationship's first end.	La primera caja no muestra el primer extremo de la relación.
+str		The second box does not show the relationship's second end.	La segunda caja no muestra el segundo extremo de la relación.
+str		This box shows {name}. Only a note links to a box or a line.	Esta caja muestra {name}. Solo una nota se enlaza a una caja o a una línea.
+str		A note does not link to itself.	Una nota no se enlaza a sí misma.
+str		A note links to a box that shows an element or to a relationship's line.	Una nota se enlaza a una caja que muestra un elemento o a la línea de una relación.
+str		What the note links to is on another diagram.	Aquello a lo que se enlaza la nota está en otro diagrama.
+str		The note is linked to it already.	La nota ya está enlazada a ello.
+str		A note's link shows no element, so it takes no label.	El enlace de una nota no muestra ningún elemento, así que no lleva etiqueta.
+str		This line has the label text {slot} already.	Esta línea ya tiene el texto de etiqueta {slot}.
+str		Give the fill colour as #rrggbb, such as #3366cc.	Indica el color de relleno como #rrggbb, por ejemplo #3366cc.
+str		Give the border or line colour as #rrggbb, such as #3366cc.	Indica el color del borde o de la línea como #rrggbb, por ejemplo #3366cc.
+str		Give the text colour as #rrggbb, such as #3366cc.	Indica el color del texto como #rrggbb, por ejemplo #3366cc.
+str		This diagram shows no box to arrange.	Este diagrama no muestra ninguna caja que organizar.
+str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	Al organizar, una caja quedaría a más de {max} del origen. Acerca primero las cajas a él.
+str		A line bends at most {max} times.	Una línea se dobla como máximo {max} veces.
+str		{notation} elements cannot be removed yet.	Los elementos {notation} aún no se pueden eliminar.
+str		{name} cannot be removed yet.	{name} aún no se puede eliminar.
+str		{notation} elements cannot be described yet.	Los elementos {notation} aún no se pueden describir.
+str		{name} is not an element of any notation in this project.	{name} no es un elemento de ninguna notación de este proyecto.
+str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Usa una palabra simple: letras minúsculas, dígitos, _, - y ., empezando por una letra.
+str		{word} is not a diagram kind. The kinds are {kinds}.	{word} no es un tipo de diagrama. Los tipos son {kinds}.
+str		This project holds no notation, so it knows no diagram kind.	Este proyecto no contiene ninguna notación, así que no conoce ningún tipo de diagrama.
+str		This line has no label text {word}. It has {slots}.	Esta línea no tiene el texto de etiqueta {word}. Tiene {slots}.
+str		This line has no label text {word}. It has none.	Esta línea no tiene el texto de etiqueta {word}. No tiene ninguno.
+str		The {axis} is not a number.	El valor {axis} no es un número.
+str		The {axis} is farther than {max} from the origin.	El valor {axis} está a más de {max} del origen.
+str		An item takes no {key}. It takes {takes}.	Una entrada no admite {key}. Admite {takes}.
+str		An item holds a key without a name. It takes {takes}.	Una entrada contiene una clave sin nombre. Admite {takes}.
+str		There is no element with the id {id}.	No hay ningún elemento con el identificador {id}.
+str		{value} is not a literal of {enumeration}.	{value} no es un literal de {enumeration}.
+str		Read only while viewing a version	Solo lectura mientras se ve una versión

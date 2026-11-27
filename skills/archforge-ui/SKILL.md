@@ -106,28 +106,31 @@ after every visible change, in both appearances, beside the design.
 ## Text and translations
 - Every string the user sees goes through `tr("…")`, `tr_ctx("context", "…")` for a word with
   several meanings, or `trn("{n} thing", "{n} things", n)` (the machinery is
-  `crates/shell-api/src/i18n/mod.rs`; the shell's `crate::i18n` re-exports it with its
-  catalogues registered). Pass the English text as a literal: the coverage test reads the
+  `crates/shell-api/src/i18n/mod.rs`, whose lookups register the interfaces' own catalogues; the
+  shell's `crate::i18n` re-exports it with its catalogues registered). Pass the English text as a literal: the coverage test reads the
   literals in `crates/ui-egui/src`, `crates/shell-api/src` and `apps/archforge/src`. Text from a
   table goes through a function the test calls, as `home::start_texts` does.
-- The catalogues are `crates/ui-egui/src/i18n/<code>.tsv`, the shell's, and one table per
-  notation, `crates/ui-egui/src/i18n/er/<code>.tsv` and `crates/ui-egui/src/i18n/uml/<code>.tsv`,
+- The catalogues are `crates/ui-egui/src/i18n/<code>.tsv`, the shell's,
+  `crates/shell-api/src/i18n/<code>.tsv`, the shell's interfaces' (registered by their own
+  lookups, and checked by their build script), and one table per notation, `crates/ui-egui/src/i18n/er/<code>.tsv` and `crates/ui-egui/src/i18n/uml/<code>.tsv`,
   which the notation hands over (`NotationUi::catalogues`). The shell's own is registered before
   the first lookup; a shell registers those of the notations it is given as it sets them up
   (`Shell::new`, from its screens parts, `i18n::register_notations`), so nothing a notation says is looked up before them.
   A test that says a notation's words without a shell makes one first, as the app does. A row only one notation's screens name goes in that notation's table;
-  a row the shell names, or both notations, goes in the shell's. The words for what the metamodel
+  a row only the shell's interfaces' code names goes in theirs; a row the shell names, or more
+  than one of them, goes in the shell's. The words for what the metamodel
   names (`model_words`, the change view's labels) follow their metamodel: the core's in the
   shell's table, a word only one notation's metamodel names in that notation's, which the shell
   says only for the notations it was given; the hover text of a diagram kind's tool is its
   notation's too. `every_row_is_in_the_catalogue_of_the_code_that_reads_it` holds every row to
   this. To it, a source file is a notation's code when, its tests aside, it names that notation's
-  crate (`archforge_er`) and no other notation's; a test reading a row places it nowhere. Each is keyed by the English
+  crate (`archforge_er`) and no other notation's, and the interfaces' code when it is in
+  `crates/shell-api/src`; a test reading a row places it nowhere. Each is keyed by the English
   text, four tab-separated columns: kind, context, key, text. All seven languages are complete,
   so a new string needs its row in every language of its table. Rows go beside related entries,
   never at the end of the file. A key is in a language's catalogues once (a `str` row by context
   and key, a `plural` row by key alone): check that the row is not there already, in the shell's
-  table or a notation's, as the coverage test refuses a second one.
+  table, the interfaces' or a notation's, as the coverage test refuses a second one.
 - `every_row_finds_its_text_in_every_language` looks every row of every table up through the
   shell's `tr_ctx` and `trn`, in every language, so a row a table lacks in one language, or a
   table the shell does not register, fails it. It reads the texts from the catalogues
@@ -136,9 +139,9 @@ after every visible change, in both appearances, beside the design.
   model translated says so, as the catalogue header records its provenance.
 - The catalogue screen test refuses hidden characters, addresses and instructions in a row.
 - A new language is a catalogue in every table plus a row in `LANGUAGES`
-  (`crates/shell-api/src/i18n/mod.rs`), in the shell's `CATALOGUES`
-  (`crates/ui-egui/src/i18n/mod.rs`) and in each notation's (`er_ui.rs`, `uml_ui.rs`);
-  `every_catalogue_in_the_folder_is_registered` fails without the rows. Japanese and Chinese draw with an installed family
+  (`crates/shell-api/src/i18n/mod.rs`), in the interfaces' `CATALOGUES` (the same file), in the
+  shell's `CATALOGUES` (`crates/ui-egui/src/i18n/mod.rs`) and in each notation's (`er_ui.rs`,
+  `uml_ui.rs`); each crate's `every_catalogue_in_the_folder_is_registered` fails without the rows. Japanese and Chinese draw with an installed family
   (`crates/ui-egui/src/fonts.rs`).
 - Wording is plain and UK English: colour, licence, catalogue.
 

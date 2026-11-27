@@ -1,6 +1,8 @@
 //! The machinery's tests: each language's plural rule, placeholders, the registering of a crate's
-//! catalogues and what the lookups find in them, and the build-time row check. The shell's own
-//! catalogues are tested in the shell (`archforge_ui_egui::i18n`).
+//! catalogues and what the lookups find in them, the interfaces' own catalogue table, and the
+//! build-time row check. That each lookup registers the interfaces' own catalogue
+//! when it is the process's first is tested in binaries of their own (`tests/`). The rows of every
+//! catalogue, the interfaces' own among them, are tested in the shell (`archforge_ui_egui::i18n`).
 
 use super::*;
 
@@ -110,6 +112,26 @@ fn a_table_for_an_unknown_language_is_refused_whole() {
     );
     set_language("pt-PT");
     assert_eq!(tr("Never registered"), "Never registered", "the known language's rows were not taken either");
+}
+
+/// Every catalogue file in the interfaces' folder, which the build script checks, is one of their
+/// table, and every one of the table is a file there; the table has one catalogue for each
+/// language, in the languages' order, and the machinery takes it.
+#[test]
+fn every_catalogue_in_the_folder_is_registered() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("i18n");
+    let mut files: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(".tsv"))
+        .collect();
+    files.sort();
+    let mut registered: Vec<&str> = CATALOGUES.iter().map(|rows| rows.catalogue).collect();
+    registered.sort_unstable();
+    assert_eq!(files, registered, "a catalogue the build checks is a registered one, and the other way round");
+    let codes: Vec<&str> = CATALOGUES.iter().map(|rows| rows.code).collect();
+    assert_eq!(codes, LANGUAGES.iter().map(|l| l.code).collect::<Vec<_>>(), "one catalogue for each language, in the languages' order");
+    assert_eq!(register(CATALOGUES), Ok(()), "the machinery takes the interfaces' catalogues");
 }
 
 /// The build-time row check names the first row without four tab-separated columns, by its line
