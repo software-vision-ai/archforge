@@ -34616,6 +34616,27 @@ fn the_canvas_starts_n_ary_legs_where_umls_kind_says() {
     }
 }
 
+/// An n-ary association's card is UML's to draw (AR-128): the canvas records it as drawn by UML's
+/// kind, and its diamond, filled with the canvas's colour, has its corners at the middles of its
+/// node's sides. In light and dark.
+#[test]
+fn umls_kind_draws_an_n_ary_associations_diamond_as_its_card() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (h, ids) = nary_sample(theme, true);
+        let node = archforge_mof::Uuid::parse(&ids["diamond"]).unwrap();
+        let uml = crate::kinds::DiagramKind::kind(&crate::uml_ui::UmlKind);
+        assert!(h.state().canvas.kind_cards.contains(&(node, uml)), "{theme:?}: {:?}", h.state().canvas.kind_cards);
+        let r = rect_of(&h, &format!("workspace.canvas.node.{node}"));
+        let corners = [r.left_center(), r.center_top(), r.right_center(), r.center_bottom()];
+        let fill = egui::Color32::from(crate::ux::palette(theme == ThemeKind::Dark).canvas);
+        let drawn = h.output().shapes.iter().any(|c| {
+            matches!(&c.shape, egui::Shape::Path(p) if p.closed && p.fill == fill && p.points.len() == 4
+                && p.points.iter().zip(corners).all(|(a, b)| a.distance(b) < 0.5))
+        });
+        assert!(drawn, "{theme:?}: the diamond in {r:?}");
+    }
+}
+
 /// The zoom the user makes is the diagram's kind's to follow once (AR-788): zooms made before a
 /// drawing add up, and once a diagram whose kind follows none has drawn, none is left over for the
 /// next. In light and dark.
