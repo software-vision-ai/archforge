@@ -7,10 +7,10 @@
 //! shell's own is registered with the machinery before the first lookup through this module
 //! ([`registered`]), and a shell registers those of the notations it is given as it sets them up
 //! ([`register_notations`]); the build script refuses a malformed row in any of them with the
-//! machinery's row check. Each row has four
-//! columns: kind (`str` or `plural`), context, key, text, as the machinery describes them. A row
-//! only one notation's screens name is in that notation's catalogue; the rest are the shell's, read
-//! by the shell, by both notations or by the desktop app (its menu).
+//! machinery's row check. Each row has four columns: kind (`str` or `plural`), context, key, text,
+//! as the machinery describes them. A row only one notation's screens name is in that notation's
+//! catalogue; the rest are the shell's, read by the shell, by both notations or by the desktop app
+//! (its menu).
 
 pub use archforge_shell_api::i18n::*;
 
