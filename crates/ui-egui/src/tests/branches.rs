@@ -1010,6 +1010,7 @@ fn a_refused_delete_says_why_the_branch_stays() {
     let unclear = "Archforge could not tell whether the branch was deleted. Delete it again to find out.";
     let cases = [
         (Some(crate::BranchNotDeleted::Moved), "The project changed before the branch was deleted, so it stays."),
+        (Some(crate::BranchNotDeleted::InUse), "Another program is using this branch. Close that program, then try again."),
         (Some(crate::BranchNotDeleted::Failed("disk full".into())), "The branch stays: disk full"),
         (Some(crate::BranchNotDeleted::Unclear("lost".into())), unclear),
         (None, unclear),

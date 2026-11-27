@@ -2469,6 +2469,7 @@ fn not_deleted(error: DeleteJobError) -> BranchNotDeleted {
     match error {
         DeleteJobError::BranchChanged | DeleteJobError::Reopened | DeleteJobError::NotOpen => BranchNotDeleted::Moved,
         DeleteJobError::Delete(DeleteBranchError::CannotTell(why)) => BranchNotDeleted::Unclear(why),
+        DeleteJobError::Delete(DeleteBranchError::InUse) => BranchNotDeleted::InUse,
         other => BranchNotDeleted::Failed(other.to_string()),
     }
 }
@@ -6044,6 +6045,76 @@ mod tests {
         assert!(has_branch(&open[0], "moved") && !has_branch(&open[0], "elsewhere"));
     }
 
+    /// Another program's session on the branch is left alone, as for a rename: the delete is
+    /// refused by its own reason, whether the branch is merged or holds versions no other branch
+    /// has, and whether that session moved to it, in any case, or checked it out. Once those
+    /// sessions leave, every one of them is deleted, unmerged ones too.
+    #[test]
+    fn a_delete_is_refused_while_another_program_is_on_the_branch() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        for unmerged in ["ahead", "checked"] {
+            open[0].run_on_branch("main", &format!("CALL DOLT_BRANCH('{unmerged}')")).unwrap();
+            open[0].run_on_branch(unmerged, "CALL DOLT_COMMIT('--allow-empty', '-m', 'only here')").unwrap();
+        }
+        let names = ["elsewhere", "ahead", "checked"];
+        let mut outside = [open[0].outside_session_on("ELSEWHERE").unwrap(), open[0].outside_session_on("ahead").unwrap(), {
+            let mut checked_out = open[0].outside_session_on("main").unwrap();
+            checked_out.check_out("checked").unwrap();
+            checked_out
+        }];
+        for (name, on) in names.into_iter().zip(&mut outside) {
+            assert_eq!(open[0].delete_branch(&branch(name)), Err(DeleteBranchError::InUse), "{name}");
+            assert!(has_branch(&open[0], name), "{name}");
+            assert_eq!(on.active_branch(), Ok(Some(name.into())), "{name}: the other program's session goes on");
+        }
+        drop(outside);
+        let until = Instant::now() + Duration::from_secs(30);
+        for name in names {
+            while open[0].delete_branch(&branch(name)) == Err(DeleteBranchError::InUse) && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(!has_branch(&open[0], name), "{name}");
+        }
+    }
+
+    /// This Archforge's own sessions on the branch never stop a delete, merged or not, whatever case
+    /// they name it in: an idle one and a read in flight are let go of first, and the read fails; one
+    /// closed but not yet dropped by the server has left it already. Dolt's `-d` refuses while one
+    /// is there.
+    #[test]
+    fn a_delete_lets_go_of_this_archforges_own_sessions_on_the_branch() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        open[0].run_on_branch("main", "CALL DOLT_BRANCH('ahead')").unwrap();
+        open[0].run_on_branch("ahead", "CALL DOLT_COMMIT('--allow-empty', '-m', 'only here')").unwrap();
+        for (name, held) in [("elsewhere", "ELSEWHERE"), ("ahead", "ahead")] {
+            let mut idle = open[0].own_session_on(held).unwrap();
+            let closed = open[0].closed_session_on(held).unwrap();
+            let deleted = || assert_eq!(open[0].delete_branch(&branch(name)), Ok(Vec::new()), "{name}");
+            let read = open[0].version_reader().branch_counts_interrupted(&branch(held), deleted);
+            assert!(read.is_err(), "{name}: {read:?}");
+            assert!(idle.active_branch().is_err(), "{name}: the idle session on it was ended");
+            assert!(!has_branch(&open[0], name), "{name}");
+            drop(closed);
+        }
+    }
+
+    /// A session of this Archforge's own that waited for the delete past its bound and went on to the
+    /// branch is not taken for another program's: the delete fails with Dolt's words, and the branch
+    /// and that session stay.
+    #[test]
+    fn a_delete_never_blames_another_program_for_its_own_session() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let late = std::cell::RefCell::new(None);
+        let enter = || *late.borrow_mut() = Some(open[0].own_session_on("ELSEWHERE").unwrap());
+        let answer = open[0].delete_branch_meanwhile(&branch("elsewhere"), enter);
+        assert!(matches!(&answer, Err(DeleteBranchError::Failed(why)) if why.contains("in use")), "{answer:?}");
+        assert!(has_branch(&open[0], "elsewhere"));
+        assert_eq!(late.into_inner().map(|mut s| s.active_branch()), Some(Ok(Some("elsewhere".into()))));
+    }
+
     /// A session the project closes leaves its branch first and is forgotten, so the project keeps
     /// no record of every read it made.
     #[test]
@@ -6190,7 +6261,7 @@ mod tests {
     /// an unclear delete or a failure, each by its reason; asked again, the delete names them.
     #[test]
     fn the_window_hears_of_conversations_only_for_a_branch_seen_gone() {
-        use BranchNotDeleted::{Failed, Moved, Unclear};
+        use BranchNotDeleted::{Failed, InUse, Moved, Unclear};
         use DeleteBranchError::{CannotTell, Current, Held, Main, NoSuchBranch, RecordRemains};
         use archforge_ui_egui::ai_agents::Provider;
         use archforge_ui_egui::chat_store::{Answer, ChatStore, Write};
@@ -6199,6 +6270,7 @@ mod tests {
             (DeleteJobError::Reopened, Moved),
             (DeleteJobError::NotOpen, Moved),
             (DeleteJobError::Delete(CannotTell("why".into())), Unclear("why".into())),
+            (DeleteJobError::Delete(DeleteBranchError::InUse), InUse),
             (DeleteJobError::Delete(DeleteBranchError::Failed("why".into())), Failed("why".into())),
             (DeleteJobError::Failed("why".into()), Failed("why".into())),
         ] {

@@ -708,6 +708,8 @@ pub enum BranchNotDeleted {
     Unclear(String),
     /// The project moved, closed or reopened after this was asked for: nothing was tried.
     Moved,
+    /// Another program is connected to the project on the branch, so it stays.
+    InUse,
     /// It was refused or failed, and the branch stays; `why` is the host's own technical text.
     Failed(String),
 }
@@ -718,6 +720,7 @@ impl std::fmt::Display for BranchNotDeleted {
         match self {
             BranchNotDeleted::Unclear(why) => write!(f, "whether the branch went cannot be told: {why}"),
             BranchNotDeleted::Moved => f.write_str("the project moved or closed after this was asked for"),
+            BranchNotDeleted::InUse => f.write_str("another program is using the branch"),
             BranchNotDeleted::Failed(why) => f.write_str(why),
         }
     }
@@ -731,6 +734,7 @@ impl From<BranchNotDeleted> for BranchRefused {
         match not {
             BranchNotDeleted::Unclear(why) => BranchRefused::Unclear(why),
             BranchNotDeleted::Moved => BranchRefused::Moved,
+            BranchNotDeleted::InUse => BranchRefused::InUse,
             BranchNotDeleted::Failed(why) => BranchRefused::Failed(why),
         }
     }

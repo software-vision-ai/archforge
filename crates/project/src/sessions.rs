@@ -1,15 +1,15 @@
-//! The project's own sessions on its server, so a rename can let go of the branch first.
+//! The project's own sessions on its server, so a rename or a delete can let go of the branch first.
 //!
-//! Dolt refuses to rename a branch that any other session has as its database, idle or not, and
-//! only `--force` skips that, which also overwrites a branch of the new name and passes over another
-//! program's session. A dropped connection is no help: its quit is not waited for, and the server
-//! drops the session some time later, as it also does after a `KILL`. So every connection of the
-//! project is a [`Session`] the project knows by its connection id, with the databases it may be
-//! using. Each one leaves its database before it closes, which the server has done once the reply
-//! comes. Before a rename, [`Sessions::let_go`] ends the ones still on the branch and waits until
-//! the server's process list no longer holds them, within [`LET_GO_BUDGET`] of wall-clock time; a
-//! session that still holds the branch after that is another program's, unless one of the
-//! project's own entered during the hold, and Dolt's refusal stands.
+//! Dolt refuses to rename or delete a branch that any other session has as its database, idle or
+//! not, and only forcing it skips that, which also passes over another program's session (and for a
+//! rename overwrites a branch of the new name). A dropped connection is no help: its quit is not
+//! waited for, and the server drops the session some time later, as it also does after a `KILL`. So
+//! every connection of the project is a [`Session`] the project knows by its connection id, with
+//! the databases it may be using. Each one leaves its database before it closes, which the server
+//! has done once the reply comes. Before a rename or a delete, [`Sessions::let_go`] ends the ones
+//! still on the branch and waits until the server's process list no longer holds them, within
+//! [`LET_GO_BUDGET`] of wall-clock time; a session that still holds the branch after that is another
+//! program's, unless one of the project's own entered during the hold, and Dolt's refusal stands.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -19,9 +19,9 @@ use mysql::prelude::Queryable;
 
 use crate::Error;
 
-/// How long a rename may take to end its own sessions and see them dropped, all requests included,
-/// and how long a new session waits for a rename of its database to finish: a bound, not a guess,
-/// as the server says when it is done.
+/// How long a rename or a delete may take to end its own sessions and see them dropped, all requests
+/// included, and how long a new session waits for one on its database to finish: a bound, not a
+/// guess, as the server says when it is done.
 const LET_GO_BUDGET: Duration = Duration::from_secs(10);
 /// The pause between two looks at the process list.
 const LOOK_AGAIN: Duration = Duration::from_millis(5);
@@ -36,14 +36,15 @@ struct Known {
     /// By connection id, the databases each may be using, lower case as the server compares
     /// branches: the one it last moved to, and one it was asked to move to if no answer came.
     sessions: HashMap<u32, BTreeSet<String>>,
-    /// The database, lower case, whose branch is being renamed: no session moves to it meanwhile.
-    renaming: Option<String>,
+    /// The database, lower case, whose branch is being renamed or deleted: no session moves to it
+    /// meanwhile.
+    holding: Option<String>,
     /// Whether a session moved to that database during the hold, once its wait ran out, whether it
     /// is still there or not.
     entered: bool,
 }
 
-/// The register and the signal that a rename has let go.
+/// The register and the signal that a rename or a delete has let go.
 #[derive(Debug, Default)]
 struct Register {
     known: Mutex<Known>,
@@ -75,12 +76,13 @@ pub(crate) struct Session {
     closing: bool,
 }
 
-/// A rename's hold on its branch's database: no session moves to it until this is dropped.
-pub(crate) struct Renaming {
+/// A rename's or a delete's hold on its branch's database: no session moves to it until this is
+/// dropped.
+pub(crate) struct Hold {
     register: Arc<Register>,
 }
 
-impl Renaming {
+impl Hold {
     /// Whether a session of the project's moved to the database during the hold: a refusal then
     /// may be the project's own doing, even if that session has left since.
     pub(crate) fn entered(&self) -> bool {
@@ -97,7 +99,7 @@ struct Release {
     asks: std::sync::mpsc::Sender<String>,
     answers: std::sync::mpsc::Receiver<Answer>,
     until: Instant,
-    /// Told of each answer, on the renaming thread.
+    /// Told of each answer, on the thread letting go.
     answered: Box<dyn Fn()>,
 }
 
@@ -107,7 +109,7 @@ pub(crate) struct Watch {
     pub(crate) received: Box<dyn Fn() + Send>,
     /// Run on the release's thread just before a request is started.
     pub(crate) started: Box<dyn Fn() + Send>,
-    /// Run on the renaming thread after each answer.
+    /// Run on the thread letting go after each answer.
     pub(crate) answered: Box<dyn Fn()>,
 }
 
@@ -183,7 +185,7 @@ impl Sessions {
     /// Ends every session of the project's that may be using `database` and waits until the server
     /// has dropped them, within [`LET_GO_BUDGET`]. Until the hold it gives is dropped, a session asked
     /// to move to `database` waits. A read on the branch at that moment fails.
-    pub(crate) fn let_go(&self, database: &str) -> Result<Renaming, String> {
+    pub(crate) fn let_go(&self, database: &str) -> Result<Hold, String> {
         self.let_go_within(database, LET_GO_BUDGET, Watch::none())
     }
 
@@ -193,16 +195,16 @@ impl Sessions {
     /// release sends no request, its thread starts none it was sent, and it waits for nothing more. A request left running ends at the server's answer or at the
     /// connection's own timeout, and its thread with it; a `KILL` left running may still end its
     /// session, which was on the branch.
-    pub(crate) fn let_go_within(&self, database: &str, budget: Duration, watch: Watch) -> Result<Renaming, String> {
+    pub(crate) fn let_go_within(&self, database: &str, budget: Duration, watch: Watch) -> Result<Hold, String> {
         let until = Instant::now() + budget;
         let database = database.to_ascii_lowercase();
         let ended: Vec<u32> = {
             let mut known = self.register.lock();
-            known.renaming = Some(database.clone());
+            known.holding = Some(database.clone());
             known.entered = false;
             known.sessions.iter().filter(|(_, dbs)| dbs.contains(&database)).map(|(id, _)| *id).collect()
         };
-        let held = Renaming { register: self.register.clone() };
+        let held = Hold { register: self.register.clone() };
         if ended.is_empty() {
             return Ok(held);
         }
@@ -254,23 +256,23 @@ impl Session {
         self
     }
 
-    /// Moves this session to `database`, once no rename holds it; the register has it first, so a
-    /// rename that starts meanwhile ends this session. A hold that lasts past [`LET_GO_BUDGET`] is
-    /// waited out no longer, and the hold records that a session entered: the rename then meets
-    /// this session as Dolt reports it, never as another program's.
+    /// Moves this session to `database`, once no rename or delete holds it; the register has it
+    /// first, so one that starts meanwhile ends this session. A hold that lasts past
+    /// [`LET_GO_BUDGET`] is waited out no longer, and the hold records that a session entered: the
+    /// rename or delete then meets this session as Dolt reports it, never as another program's.
     pub(crate) fn use_database(&mut self, database: &str) -> Result<(), mysql::Error> {
         let name = database.to_ascii_lowercase();
         {
             let until = Instant::now() + LET_GO_BUDGET;
             let mut known = self.register.lock();
-            while known.renaming.as_ref() == Some(&name) {
+            while known.holding.as_ref() == Some(&name) {
                 let left = until.saturating_duration_since(Instant::now());
                 if left.is_zero() {
                     break;
                 }
                 known = self.register.done.wait_timeout(known, left).map(|(k, _)| k).unwrap_or_else(|poisoned| poisoned.into_inner().0);
             }
-            if known.renaming.as_ref() == Some(&name) {
+            if known.holding.as_ref() == Some(&name) {
                 known.entered = true;
             }
             known.sessions.entry(self.id).or_default().insert(name.clone());
@@ -337,18 +339,18 @@ impl Queryable for Session {
 
 impl Drop for Session {
     /// Leaves the database, then forgets the session: once the server has answered, it is on no
-    /// branch, however long it takes to drop it. One that cannot leave stays known, for a rename to
-    /// end, until the server no longer lists it.
+    /// branch, however long it takes to drop it. One that cannot leave stays known, for a rename or
+    /// a delete to end, until the server no longer lists it.
     fn drop(&mut self) {
         self.leave();
     }
 }
 
-impl Drop for Renaming {
-    /// Lets sessions move to the database again. Renames run one at a time, on the writer, so the
-    /// database held is this one's.
+impl Drop for Hold {
+    /// Lets sessions move to the database again. Renames and deletes run one at a time, on the
+    /// writer, so the database held is this one's.
     fn drop(&mut self) {
-        self.register.lock().renaming = None;
+        self.register.lock().holding = None;
         self.register.done.notify_all();
     }
 }
