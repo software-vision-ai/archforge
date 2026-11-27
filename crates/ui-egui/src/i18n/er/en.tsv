@@ -1,6 +1,7 @@
 # ER · English catalogue. Columns: kind, context, key, text (see i18n/mod.rs). Rows go beside related entries.
 str		Table	Table
 str		Column	Column
+str		Columns	Columns
 str		Schema · model	Schema · model
 str		Table · model, in every diagram	Table · model, in every diagram
 str		Column · model	Column · model

@@ -18641,6 +18641,10 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn a_kind(&self, kind: &str) -> Option<String> {
         (kind == "sketch").then(|| format!("a {}", self.0))
     }
+    /// A class's attributes as its fields, by its name, so a test sees it asked.
+    fn list_heading(&self, class: archforge_mof::ClassId) -> Option<String> {
+        (class == archforge_uml::PROPERTY).then(|| format!("Fields of the {}", self.0))
+    }
     /// A skill for every class, signed with its name, so a test sees it asked; none for the other
     /// kinds of its metamodel, which leaves the shell's words.
     fn skill_target(&self, kind: archforge_mof::ClassId, _: &str) -> Option<String> {

@@ -583,6 +583,15 @@ impl NotationUi for ErUi {
         })
     }
 
+    /// A table's attributes are its Columns, and an enum type's own list its Literals.
+    fn list_heading(&self, class: ClassId) -> Option<String> {
+        Some(match class {
+            c if c == archforge_er::ATTRIBUTE => tr("Columns"),
+            c if c == archforge_er::ENUM_TYPE => tr("Literals"),
+            _ => return None,
+        })
+    }
+
     /// The ER kinds its commands name in a refusal: a table, a column, a key and the rest.
     fn a_kind(&self, kind: &str) -> Option<String> {
         crate::er_said::a_kind(kind)

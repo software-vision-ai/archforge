@@ -11,6 +11,7 @@ use crate::Shell;
 use crate::explorer::scroll_tree;
 use crate::i18n::{fmt, tr};
 use crate::model_words::{kind_label, literal_label, property_label};
+use crate::notation_ui::{NotationUi, of_class};
 use crate::settings::control;
 use crate::ux::{self, Palette, types};
 use crate::version_details::{MARGIN, page_keys, scroll_keys};
@@ -163,12 +164,13 @@ fn lists_height(lists: &[CardList]) -> f32 {
 /// list of any length costs a frame only what shows.
 fn lists(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (body, before): (Rect, bool), sides: &ElementSides) {
     let (side, held) = if before { ("before", &sides.lists.before) } else { ("after", &sides.lists.after) };
+    let uis = shell.notation_uis;
     let (paint, view) = (clip.painter().clone(), clip.clip_rect());
     let mut top = body.top() + ROWS_AT + sides.fields.len() as f32 * ROW;
     for (l, list) in held.iter().enumerate() {
         let (first, end) = (top + HEADING, top + HEADING + list.rows.len() as f32 * ROW + AFTER_LIST);
         if end >= view.top() && top <= view.bottom() {
-            let heading = heading(list.kind);
+            let heading = heading(uis, list.kind);
             ux::text_mid(&paint, body.left() + INSET, top + 14.0, &heading.to_uppercase(), types::EYEBROW_SMALL, p.text_secondary, None);
             // `as usize` floors a fraction and stops at zero, so the range never leaves the list.
             let shown = ((view.top() - first) / ROW).floor() as usize..(((view.bottom() - first) / ROW).ceil() as usize).min(list.rows.len());
@@ -191,13 +193,11 @@ fn lists(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (
     }
 }
 
-/// The heading of a list in the language shown.
-fn heading(kind: ListKind) -> String {
+/// The heading of a list in the language shown: a list of features as the notation of their class
+/// among `uis` names it ([`NotationUi::list_heading`]), Members when none does.
+fn heading(uis: &[&'static dyn NotationUi], kind: ListKind) -> String {
     match kind {
-        ListKind::Attributes => tr("Attributes"),
-        ListKind::Columns => tr("Columns"),
-        ListKind::Operations => tr("Operations"),
-        ListKind::Literals => tr("Literals"),
+        ListKind::Features(class) => of_class(uis, class).and_then(|ui| ui.list_heading(class)).unwrap_or_else(|| tr("Members")),
         ListKind::Members => tr("Members"),
         ListKind::Relationships => tr("Relationships"),
         ListKind::Ownership => tr("Ownership"),

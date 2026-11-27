@@ -3174,12 +3174,20 @@ fn lists_are_headed_and_their_changes_marked() {
         let (id, key) = element_open(h, host);
         let p = colours(h);
         let before = vec![
-            list(ListKind::Attributes, vec![(Named::Said("id".into()), None), (Named::Said("status : String".into()), Some(ChangeKind::Changed))]),
-            list(ListKind::Operations, vec![(Named::Said("old()".into()), Some(ChangeKind::Removed))]),
+            list(
+                ListKind::Features(archforge_uml::PROPERTY),
+                vec![(Named::Said("id".into()), None), (Named::Said("status : String".into()), Some(ChangeKind::Changed))],
+            ),
+            list(ListKind::Features(archforge_uml::OPERATION), vec![(Named::Said("old()".into()), Some(ChangeKind::Removed))]),
+            list(ListKind::Features(archforge_uml::ENUMERATION_LITERAL), vec![(Named::Said("open".into()), None)]),
         ];
         let after = vec![
-            list(ListKind::Attributes, vec![(Named::Said("id".into()), None), (Named::Said("status : Kind".into()), Some(ChangeKind::Changed))]),
-            list(ListKind::Operations, vec![(Named::Said("new()".into()), Some(ChangeKind::Added))]),
+            list(
+                ListKind::Features(archforge_uml::PROPERTY),
+                vec![(Named::Said("id".into()), None), (Named::Said("status : Kind".into()), Some(ChangeKind::Changed))],
+            ),
+            list(ListKind::Features(archforge_uml::OPERATION), vec![(Named::Said("new()".into()), Some(ChangeKind::Added))]),
+            list(ListKind::Features(archforge_uml::ENUMERATION_LITERAL), vec![(Named::Said("open".into()), None)]),
         ];
         let lists = CardLists { before, after, ..CardLists::default() };
         landed(h, id, key, listed(id, "kept", lists));
@@ -3188,6 +3196,7 @@ fn lists_are_headed_and_their_changes_marked() {
         assert_eq!(named(h, "Attributes, status : Kind, Changed"), 1);
         assert_eq!(named(h, "Operations, old(), Removed"), 1);
         assert_eq!(named(h, "Operations, new(), Added"), 1);
+        assert_eq!(named(h, "Literals, open"), 2);
         assert!(!painted_has(h, "The owner changed."), "a member is not the owner");
         assert_eq!((painted_times(h, "ATTRIBUTES"), painted_times(h, "OPERATIONS")), (2, 2));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (2, 2), "text marks as well as colour: {:?}", painted(h));
@@ -3250,12 +3259,38 @@ fn an_er_element_reads_in_its_notations_words() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
         let line = |name: &str| Some(ElementCard { class: archforge_er::ENTITY, name: Some(name.into()), made: true });
-        let rows = |words: &str| vec![list(ListKind::Columns, vec![(Named::Made(words.into()), None)])];
+        let rows = |words: &str| vec![list(ListKind::Features(archforge_er::ATTRIBUTE), vec![(Named::Made(words.into()), None)])];
         let lists = CardLists { before: rows("a → b"), after: rows("c → b"), ..CardLists::default() };
         landed(h, id, key, Ok(Some(ElementSides { lists: Arc::new(lists), ..sided(id, line("a → b"), line("c → b"), Vec::new()) })));
         assert_eq!((named(h, "Table, a → b"), named(h, "Table, c → b")), (1, 1), "unmarked: {:?}", painted(h));
         assert_eq!((named(h, "Columns, a → b"), named(h, "Columns, c → b")), (1, 1));
         assert!(!painted_has(h, "The name changed"), "{:?}", painted(h));
+    });
+}
+
+/// A list of features is headed as the notation the shell registered names it, not the app's own
+/// list: the sketch, which answers for UML here, heads UML's attributes its own way, ER still heads
+/// its columns and an enum type's literals, and a list of a class no notation of the shell's holds
+/// is headed Members.
+#[test]
+fn a_list_of_features_is_headed_by_its_notation() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        h.state_mut().notation_uis = SKETCH_UIS;
+        let side = || {
+            vec![
+                list(ListKind::Features(archforge_uml::PROPERTY), vec![(Named::Said("id".into()), None)]),
+                list(ListKind::Features(archforge_er::ATTRIBUTE), vec![(Named::Said("code".into()), None)]),
+                list(ListKind::Features(archforge_er::ENUM_TYPE), vec![(Named::Said("open".into()), None)]),
+                list(ListKind::Features(archforge_core::MODEL), vec![(Named::Said("odd".into()), None)]),
+            ]
+        };
+        let lists = CardLists { before: side(), after: side(), ..CardLists::default() };
+        landed(h, id, key, listed(id, "kept", lists));
+        assert_eq!(named(h, "Fields of the sketch, id"), 2, "{:?}", painted(h));
+        assert_eq!((painted_times(h, "FIELDS OF THE SKETCH"), painted_times(h, "ATTRIBUTES")), (2, 0));
+        assert_eq!((named(h, "Columns, code"), named(h, "Literals, open")), (2, 2));
+        assert_eq!(named(h, "Members, odd"), 2);
     });
 }
 
