@@ -539,7 +539,7 @@ pub trait NotationUi: Sync {
         None
     }
     /// Chat's words for `n` elements of its own kind `kind`, a key its [`NotationUi::chat_kind`]
-    /// gives ("8 classes"); none for a key not its own.
+    /// gives, with the count in them; none for a key not its own.
     fn chat_count(&self, kind: &str, n: u64) -> Option<String> {
         let _ = (kind, n);
         None
