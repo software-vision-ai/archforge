@@ -20,7 +20,7 @@ use crate::editing::Action;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{Rows, fmt, tr, tr_ctx, trn};
 use crate::kinds::{DiagramKind, KindTool, MenuRow, ModelRow, Press, ToolUse};
-use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
+use crate::notation_ui::{Added, ChatKind, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
 use crate::panels::Subject;
 use crate::uml_classifier::Classifier;
 use crate::uml_panel::{MemberKind, member_of};
@@ -1302,6 +1302,47 @@ impl NotationUi for UmlUi {
     /// A class, as the agent reads it for documentation.
     fn scope_word(&self, store: &Store, obj: Obj) -> Option<String> {
         (class(store, obj)? == archforge_uml::CLASS).then(|| tr("Class"))
+    }
+
+    /// Every relationship counts as a line, a primitive type as a data type and a description's
+    /// comment as a part of its element; a class, an interface, an enumeration, a data type, a
+    /// package, an attribute, an operation and a literal as kinds of their own.
+    fn chat_kind(&self, table: &str) -> Option<ChatKind> {
+        Some(match table {
+            "uml_association"
+            | "uml_association_class"
+            | "uml_generalization"
+            | "uml_dependency"
+            | "uml_realization"
+            | "uml_abstraction"
+            | "uml_usage"
+            | "uml_interface_realization" => ChatKind::Line,
+            "uml_data_type" | "uml_primitive_type" => ChatKind::Own("uml_data_type"),
+            "uml_class" => ChatKind::Own("uml_class"),
+            "uml_interface" => ChatKind::Own("uml_interface"),
+            "uml_enumeration" => ChatKind::Own("uml_enumeration"),
+            "uml_package" => ChatKind::Own("uml_package"),
+            "uml_property" => ChatKind::Own("uml_property"),
+            "uml_operation" => ChatKind::Own("uml_operation"),
+            "uml_enumeration_literal" => ChatKind::Own("uml_enumeration_literal"),
+            "uml_comment" => ChatKind::Part,
+            _ => return None,
+        })
+    }
+
+    /// "8 classes", "2 attributes", "1 literal".
+    fn chat_count(&self, kind: &str, n: u64) -> Option<String> {
+        Some(match kind {
+            "uml_class" => trn("{n} class", "{n} classes", n),
+            "uml_interface" => trn("{n} interface", "{n} interfaces", n),
+            "uml_enumeration" => trn("{n} enumeration", "{n} enumerations", n),
+            "uml_data_type" => trn("{n} data type", "{n} data types", n),
+            "uml_package" => trn("{n} package", "{n} packages", n),
+            "uml_property" => trn("{n} attribute", "{n} attributes", n),
+            "uml_operation" => trn("{n} operation", "{n} operations", n),
+            "uml_enumeration_literal" => trn("{n} literal", "{n} literals", n),
+            _ => return None,
+        })
     }
 
     /// The longest name its commands take.

@@ -221,6 +221,9 @@ str		Keep the line	Keep the line
 str		Remove relationship	Remove relationship
 str		Relationship removed	Relationship removed
 plural		+ {n} more column	+ {n} more column|+ {n} more columns
+plural		{n} table	{n} table|{n} tables
+plural		{n} column	{n} column|{n} columns
+plural		{n} schema	{n} schema|{n} schemas
 str		This schema	This schema
 str		This table	This table
 str		This column	This column

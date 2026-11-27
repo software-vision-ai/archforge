@@ -15,7 +15,7 @@ use serde_json::json;
 use crate::cx::Ctx;
 use crate::explorer::{Row, Tree, fresh_name};
 use crate::i18n::{Rows, fmt, tr, trn};
-use crate::notation_ui::{Added, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
+use crate::notation_ui::{Added, ChatKind, Entry, Layer, NotationState, NotationUi, Offer, Overlaid, Removal, Words};
 use crate::panels::{FIELD, Subject};
 use crate::problems::Problem;
 use crate::ux::{Palette, icons};
@@ -582,6 +582,28 @@ impl NotationUi for ErUi {
         Some(match class(store, obj)? {
             c if c == archforge_er::SCHEMA => tr("Schema"),
             c if c == archforge_er::ENTITY => tr("Table"),
+            _ => return None,
+        })
+    }
+
+    /// A relationship and a generalization count as lines; a table, a column and a schema as
+    /// kinds of their own.
+    fn chat_kind(&self, table: &str) -> Option<ChatKind> {
+        Some(match table {
+            "er_relationship" | "er_generalization" => ChatKind::Line,
+            "er_entity" => ChatKind::Own("er_entity"),
+            "er_attribute" => ChatKind::Own("er_attribute"),
+            "er_schema" => ChatKind::Own("er_schema"),
+            _ => return None,
+        })
+    }
+
+    /// "8 tables", "3 columns", "1 schema".
+    fn chat_count(&self, kind: &str, n: u64) -> Option<String> {
+        Some(match kind {
+            "er_entity" => trn("{n} table", "{n} tables", n),
+            "er_attribute" => trn("{n} column", "{n} columns", n),
+            "er_schema" => trn("{n} schema", "{n} schemas", n),
             _ => return None,
         })
     }

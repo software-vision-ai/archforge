@@ -222,6 +222,9 @@ str		Keep the line	保留连线
 str		Remove relationship	删除关系
 str		Relationship removed	已删除关系
 plural		+ {n} more column	+ 另 {n} 列
+plural		{n} table	{n} 个表
+plural		{n} column	{n} 个列
+plural		{n} schema	{n} 个架构
 str		This schema	此架构
 str		This table	此表
 str		This column	此列
