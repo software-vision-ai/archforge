@@ -2561,11 +2561,18 @@ fn key_name(p: &Params) -> Result<&str, CommandError> {
     Ok(name)
 }
 
+/// A key's columns, as the key's rules name them ([`rules::KeyColumnsProblem::reason`]).
+const KEY_COLUMN: &str = "key column";
+
+/// A foreign key's columns, as the foreign key's rules name them ([`rules::KeyProblem::reason`]).
+const FOREIGN_KEY_COLUMN: &str = "foreign key column";
+
 /// The columns the array parameter `key` names, at most [`rules::MAX_KEY_COLUMNS`] ids of live
-/// elements, none twice, each a column; every refusal typed, the list's as of key columns, and one
-/// named twice by the element's label ([`rules::label`]), as the key's rules name it.
-fn attribute_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError> {
-    const KIND: &str = "key column";
+/// elements, none twice, each a column; every refusal typed, the list's as of key columns, except
+/// one named twice: of the kind `twice` (a key's or a foreign key's column, as their rules name
+/// them), by the element's label ([`rules::label`]).
+fn attribute_list(ctx: &C<'_>, p: &Params, key: &str, twice: &'static str) -> Result<Vec<Obj>, CommandError> {
+    const KIND: &str = KEY_COLUMN;
     let items = p.get(key).and_then(Json::as_array).cloned().unwrap_or_default();
     if items.len() > rules::MAX_KEY_COLUMNS {
         let most = Reason::TooMany { kind: KIND, max: rules::MAX_KEY_COLUMNS };
@@ -2576,8 +2583,8 @@ fn attribute_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, Comman
         let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string").because(Reason::IdsExpected { kind: KIND }))?;
         let obj = element(ctx.doc, key, id, KIND)?;
         if out.contains(&obj) {
-            let twice = Reason::NamedTwice { kind: KIND, name: rules::label(ctx.doc, obj) };
-            return Err(refuse(key, format!("{id} is listed twice")).because(twice));
+            let again = Reason::NamedTwice { kind: twice, name: rules::label(ctx.doc, obj) };
+            return Err(refuse(key, format!("{id} is listed twice")).because(again));
         }
         out.push(obj);
     }
@@ -2692,7 +2699,7 @@ fn target_key(ctx: &C<'_>, p: &Params) -> Result<Obj, CommandError> {
 fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let k = target_key(ctx, p)?;
-    let given = attribute_list(ctx, p, "columns")?;
+    let given = attribute_list(ctx, p, "columns", FOREIGN_KEY_COLUMN)?;
     let name = constraint_name(ctx, p, e, None)?;
     let actions = [action(p, "on_delete")?, action(p, "on_update")?];
     let (matching, deferrable) = (match_type(p)?, deferrability(p)?);
@@ -2773,7 +2780,7 @@ fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
     let fk = id_of(ctx, p, "foreign_key", FOREIGN_KEY)?;
     not_subtype_key(ctx.doc, rules::key_parts(ctx.doc, fk).relationship, "foreign_key")?;
     let k = key_id(ctx, p, "key")?;
-    let given = attribute_list(ctx, p, "columns")?;
+    let given = attribute_list(ctx, p, "columns", FOREIGN_KEY_COLUMN)?;
     let parts = rules::key_parts(ctx.doc, fk);
     let e = parts.entity.ok_or_else(|| refuse("foreign_key", "the foreign key belongs to no entity"))?;
     let actions = [parts.on_delete, parts.on_update];
@@ -2843,7 +2850,7 @@ fn foreign_key_remove(ctx: &mut C<'_>, p: &Params) -> R {
 /// that foreign keys point at keeps its columns.
 fn primary_key_set(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
-    let columns = attribute_list(ctx, p, "columns")?;
+    let columns = attribute_list(ctx, p, "columns", KEY_COLUMN)?;
     let existing = rules::primary_key_of(ctx.doc, e);
     let name = constraint_name(ctx, p, e, existing)?;
     if columns.is_empty() {
@@ -2890,9 +2897,11 @@ fn nulls_distinct(p: &Params) -> bool {
     p.bool("nulls_distinct").unwrap_or(true)
 }
 
+/// Adds a unique constraint to an entity: its columns in key order, each a column of the entity
+/// and none twice, its name, free in the schema or empty, and whether nulls are distinct.
 fn unique_add(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
-    let columns = attribute_list(ctx, p, "columns")?;
+    let columns = attribute_list(ctx, p, "columns", KEY_COLUMN)?;
     let name = constraint_name(ctx, p, e, None)?;
     key_columns_fit(ctx.doc, e, &columns)?;
     let distinct = nulls_distinct(p);
@@ -2901,10 +2910,13 @@ fn unique_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, u)? }))
 }
 
+/// Sets a unique constraint's columns, name and whether nulls are distinct; the foreign keys that
+/// point at it grow with its columns, and the step is refused when a key or a foreign key near it
+/// would break.
 fn unique_set(ctx: &mut C<'_>, p: &Params) -> R {
     let u = id_of(ctx, p, "unique", UNIQUE_CONSTRAINT)?;
     let e = rules::entity_of(ctx.doc, u).ok_or_else(|| refuse("unique", "the constraint belongs to no entity"))?;
-    let columns = attribute_list(ctx, p, "columns")?;
+    let columns = attribute_list(ctx, p, "columns", KEY_COLUMN)?;
     let name = constraint_name(ctx, p, u, Some(u))?;
     key_columns_fit(ctx.doc, e, &columns)?;
     let distinct = nulls_distinct(p);

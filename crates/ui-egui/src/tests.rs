@@ -7718,6 +7718,35 @@ fn an_er_key_column_given_twice_is_said_by_its_name_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A foreign key's column given twice is said by the column's name in the foreign key's own words in
+/// the chosen language, not a key's: refused when adding a foreign key and when pointing one at
+/// another key. In light and dark (AR-544).
+#[test]
+fn an_er_foreign_key_column_given_twice_is_said_as_the_foreign_keys_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
+        let bestellung = id("er.entity.add", json!({ "schema": schema, "name": "Bestellung" }));
+        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        let mail = id("er.attribute.add", json!({ "entity": kunde, "name": "mail", "type": "TEXT", "nullable": "no" }));
+        let uq = id("er.unique.add", json!({ "entity": kunde, "columns": [mail], "name": "uq_mail" }));
+        let column = id("er.attribute.add", json!({ "entity": bestellung, "name": "kunde_nummer", "type": "BIGINT", "nullable": "no" }));
+        let fk = id("er.foreign-key.add", json!({ "entity": bestellung, "references": kunde, "columns": [column], "name": "fk_kunde" }));
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let twice = "kunde_nummer kommt im Fremdschlüssel zweimal vor.";
+        let add = json!({ "entity": bestellung, "references": kunde, "columns": [column, column], "name": "fk_zwei" });
+        assert_eq!(refused("er.foreign-key.add", add), twice, "{theme:?}");
+        assert_eq!(refused("er.foreign-key.set-key", json!({ "foreign_key": fk, "key": uq, "columns": [column, column] })), twice, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The key a foreign key points at, refused, is said in the chosen language, never in the engine's
 /// English: a key of another table, a table without a primary key, the key it points at already
 /// and identifying relationships that would run in a cycle; a key without columns, which only a
