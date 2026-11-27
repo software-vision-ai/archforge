@@ -74,6 +74,8 @@ pub mod state;
 pub mod subtypes;
 pub mod support;
 mod switch_ask;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 pub mod theme;
 pub mod types;
 mod uml_adornments;
