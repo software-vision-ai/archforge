@@ -65,6 +65,15 @@ str		Literals carry no skills	字面量不带技能
 str		Built-in types carry no skills	内置类型不带技能
 str		Types keeps the built-in types, so it stays while it holds them	Types 存放内置类型，因此在存放它们期间会保留
 str		Generalization sets carry no skills	泛化集不带技能
+str		every class	所有类
+str		every interface	所有接口
+str		every enumeration	所有枚举
+str		every data type	所有数据类型
+str		every primitive type	所有基本类型
+str		every association class	所有关联类
+str		every attribute	所有属性
+str		every operation	所有操作
+str		every association	所有关联
 str		Add class	添加类
 str		Add interface	添加接口
 str		Add enumeration	添加枚举

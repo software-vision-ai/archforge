@@ -449,6 +449,17 @@ impl NotationUi for ErUi {
         (class(store, o) == Some(archforge_er::RELATIONSHIP)).then(|| tr("Relationships carry no skills"))
     }
 
+    /// A skill for every table or every relationship says so, and one for every column too unless
+    /// a type pattern narrows the columns: the pattern says it then, as the shell does.
+    fn skill_target(&self, kind: ClassId, pattern: &str) -> Option<String> {
+        Some(match kind {
+            c if c == archforge_er::ENTITY => tr("every table"),
+            c if c == archforge_er::RELATIONSHIP => tr("every relationship"),
+            c if c == archforge_er::ATTRIBUTE && pattern.is_empty() => tr("every column"),
+            _ => return None,
+        })
+    }
+
     /// A column's panel is its table's, so its first section says Table.
     fn heading(&self, store: &Store, o: Obj) -> Option<String> {
         (class(store, o) == Some(archforge_er::ATTRIBUTE)).then(|| tr("Table"))

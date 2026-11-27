@@ -1080,6 +1080,23 @@ impl NotationUi for UmlUi {
         }
     }
 
+    /// A skill for every one of its kinds says so: every class, every attribute and the rest, a
+    /// property being an attribute. None of them takes a type pattern.
+    fn skill_target(&self, kind: archforge_mof::ClassId, _: &str) -> Option<String> {
+        Some(match kind {
+            c if c == archforge_uml::CLASS => tr("every class"),
+            c if c == archforge_uml::INTERFACE => tr("every interface"),
+            c if c == archforge_uml::ENUMERATION => tr("every enumeration"),
+            c if c == archforge_uml::DATA_TYPE => tr("every data type"),
+            c if c == archforge_uml::PRIMITIVE_TYPE => tr("every primitive type"),
+            c if c == archforge_uml::ASSOCIATION_CLASS => tr("every association class"),
+            c if c == archforge_uml::PROPERTY => tr("every attribute"),
+            c if c == archforge_uml::OPERATION => tr("every operation"),
+            c if c == archforge_uml::ASSOCIATION => tr("every association"),
+            _ => return None,
+        })
+    }
+
     /// How Properties names `o`: its kind line, its word, This …, and On this … · {n}.
     fn words(&self, store: &Store, o: Obj) -> Option<Words> {
         // An n-ary association's kind line counts its ends (AR-128, A4).
