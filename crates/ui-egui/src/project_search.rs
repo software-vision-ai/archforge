@@ -23,7 +23,7 @@ const MAX_TEXT: usize = 120;
 
 /// One thing the search can find: a diagram, or an element (a note's node is one too).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Found {
+pub enum Found {
     Diagram(Uuid),
     Element(Uuid),
 }
@@ -31,7 +31,7 @@ pub(crate) enum Found {
 /// A row of the index: what it finds, its icon, its name, what it is and where, its kind's place
 /// in the list, its name folded for ranking and its words folded for matching.
 #[derive(Debug, Clone)]
-pub(crate) struct Entry {
+pub struct Entry {
     pub found: Found,
     pub icon: &'static ux::Icon,
     pub label: String,

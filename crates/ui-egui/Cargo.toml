@@ -11,6 +11,8 @@ publish = false
 [features]
 # Offscreen rendering of the window to an image, for screenshots.
 snapshot = ["dep:egui_kittest"]
+# What the app's window tests reach in the shell (`archforge_ui_egui::testing`); never shipped.
+testing = ["dep:egui_kittest"]
 
 [dependencies]
 archforge-core.workspace = true
