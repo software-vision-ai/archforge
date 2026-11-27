@@ -9,8 +9,10 @@
 //! ([`register_notations`]); the build script refuses a malformed row in any of them with the
 //! machinery's row check. Each row has four columns: kind (`str` or `plural`), context, key, text,
 //! as the machinery describes them. A row only one notation's screens name is in that notation's
-//! catalogue; the rest are the shell's, read by the shell, by both notations or by the desktop app
-//! (its menu).
+//! catalogue, and a row only the shell's interfaces' code says is in theirs
+//! (`archforge_shell_api::i18n::CATALOGUES`, which their lookups register); the rest are the
+//! shell's, read by the shell, by more than one of them or by the desktop app (its menu). The
+//! interfaces' `CATALOGUES` is not re-exported here: this module's is the shell's own.
 
 pub use archforge_shell_api::i18n::*;
 

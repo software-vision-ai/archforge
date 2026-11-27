@@ -18,7 +18,8 @@ with the problems a selection shows (`problems`) and the key presses they take (
 interface `DiagramKind` with the data types it hands across (`kinds`, with what one frame's
 drawing reads, `canvas::Drawing`, and what the pointer asked for, `editing::Action`), how a search
 or a filter matches what is typed (`search`) and the translations machinery (`i18n`), with which
-each crate registers its own catalogues, and the screens registry's type (`screens`): the
+each crate registers its own catalogues, the interfaces' own among them (`src/i18n/<code>.tsv`,
+the words only their code says, registered before their first lookup), and the screens registry's type (`screens`): the
 notations' screens parts the app registers, with the lists the shell reads made from them. The app
 registers ER's and UML's parts and gives them to every shell it makes, and a test of the app's
 holds them in step with the model registry (`archforge_notations::NOTATIONS`): one part for each
@@ -125,10 +126,11 @@ against, and `icu_properties`, which says where a letter ends so a search never 
 | `i18n::{Language, LANGUAGES, plural_forms, codes, set_language, language}` | the languages (code, native name, plural rule, complete or not), English first; how many plural forms a language's catalogue holds; the codes for a message; this thread's language |
 | `i18n::{Rows, register, Unregistered}` | one language's rows in a crate's catalogue (code, file name, text); registering a crate's catalogues, once, a later table's row replacing an earlier one's under the same key; the refusal of a table with a catalogue for a code no language has, before anything is registered |
 | `i18n::{Catalogue, parse}` | a catalogue's `str` and `plural` rows, as the lookups read them; malformed rows skipped |
+| `i18n::CATALOGUES` | `pub static CATALOGUES: &[Rows]`: the interfaces' own catalogue of each language, in the order of `LANGUAGES`, embedded from `src/i18n/<code>.tsv`: the rows only their code says (the panels' and the engine's refusal words among them); `tr`, `tr_ctx` and `trn` register it before their first lookup, and the build script refuses a malformed row in it |
 | `i18n::check::malformed_row` | `pub fn malformed_row(text: &str) -> Option<(usize, usize)>`: the build-time row check, the first row without four tab-separated columns (line, columns found); a build script takes the file as a module of its own (`#[path]`) |
 
 **Non-goals.** Installing fonts and the app icon, which stay in the shell, as do the icons only one
-notation draws until its screens crate takes them; the catalogues, which each crate that brings
-text keeps, embeds and registers (the shell's are in `crates/ui-egui/src/i18n/`, ER's and UML's in
-its `er/` and `uml/` folders until their screens crates take them); anything that
+notation draws until its screens crate takes them; the other crates' catalogues, which each crate
+that brings text keeps, embeds and registers (the shell's are in `crates/ui-egui/src/i18n/`, ER's
+and UML's in its `er/` and `uml/` folders until their screens crates take them); anything that
 touches the file system or the operating system, which the host does through `Services`.
