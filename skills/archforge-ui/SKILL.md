@@ -82,8 +82,9 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   or what goes with a removal (`NotationUi::said`, `problems`, `remove_refusal`, `consequences`),
   for the reasons and kinds they name inside their sentences; a model's kind words
   (`model_words::kind_label`); and what an opening does to a model (`Shell::open_repair`, which
-  the comparisons' threads and the host's restore take). Only tests read the app's lists
-  (`notation_ui::UIS`, `kinds::KINDS`); a shell takes its own from the screens parts it is given. The delete dialog says what goes with a
+  the comparisons' threads and the host's restore take). No global list of notations or kinds
+  exists: a shell takes its own from the screens parts it is given, and the tests ask the parts
+  they register (`tests::SCREENS`). The delete dialog says what goes with a
   removal as the element's notation counts and words it (`NotationUi::consequences`, one finished
   sentence each, carried in `explorer::Delete`); the shell adds only the diagrams it disappears
   from and what happens to what it holds, and asks only when there is something to say.

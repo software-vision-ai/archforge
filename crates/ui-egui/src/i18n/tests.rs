@@ -318,8 +318,8 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
     assert_ne!(german("Is abstract"), "Is abstract", "the row checked is really a translation");
     assert_eq!(property_label(&universe, archforge_er::foreign_key::ON_DELETE), Some(german("On delete")));
     assert_eq!(literal_label(&universe, visibility, package), Some(german("Package")));
-    assert_eq!(kind_label(crate::notation_ui::UIS, &universe, archforge_uml::INTERFACE_REALIZATION), german("Interface realization"));
-    assert_eq!(kind_label(crate::notation_ui::UIS, &universe, archforge_er::ENTITY), german("Table"));
+    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_uml::INTERFACE_REALIZATION), german("Interface realization"));
+    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_er::ENTITY), german("Table"));
     // Each notation's own word, where the metamodel's name isn't what the rest of the interface says.
     for (class, word) in [
         (archforge_er::ATTRIBUTE, "Column"),
@@ -327,14 +327,18 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
         (archforge_uml::PROPERTY, "Attribute"),
         (archforge_uml::ENUMERATION_LITERAL, "Literal"),
     ] {
-        assert_eq!(kind_label(crate::notation_ui::UIS, &universe, class), german(word), "{word}");
+        assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, class), german(word), "{word}");
     }
-    assert_eq!(kind_label(crate::notation_ui::UIS, &universe, archforge_uml::GENERALIZATION), german("Generalization"), "UML's keeps its name");
+    assert_eq!(
+        kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_uml::GENERALIZATION),
+        german("Generalization"),
+        "UML's keeps its name"
+    );
     // A package's default-diagram binding is the diagrams' one class a comparison lists as the model's.
-    assert_eq!(kind_label(crate::notation_ui::UIS, &universe, archforge_diagram::DEFAULT_DIAGRAM_BINDING), german("Default diagram"));
+    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_diagram::DEFAULT_DIAGRAM_BINDING), german("Default diagram"));
     // A concrete class no notation creates, and a diagram's own, say the one word for the rest.
-    assert_eq!(kind_label(crate::notation_ui::UIS, &universe, archforge_uml::ACTOR), german("Element"));
-    assert_eq!(kind_label(crate::notation_ui::UIS, &universe, archforge_diagram::NODE), german("Element"));
+    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_uml::ACTOR), german("Element"));
+    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_diagram::NODE), german("Element"));
     // What the words have no row for is told apart from a word.
     assert_eq!(literal_label(&universe, visibility, u32::MAX), None);
     assert_eq!(literal_label(&universe, data(archforge_uml::comment::BODY), 0), None, "a string is no enumeration");
@@ -342,7 +346,7 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
     assert_eq!(literal_label(&universe, data(archforge_diagram::style::ROUTING), 0), None);
     // The class Profile says the modeller's word, not the row of a person's profile.
     set_language("ja");
-    assert_eq!(kind_label(crate::notation_ui::UIS, &universe, archforge_uml::PROFILE), row("ja", "uml", "Profile"));
+    assert_eq!(kind_label(crate::tests::SCREENS.notation_uis(), &universe, archforge_uml::PROFILE), row("ja", "uml", "Profile"));
     assert_ne!(row("ja", "uml", "Profile"), row("ja", "", "Profile"), "the two rows differ here, so the check can tell them apart");
     set_language("en");
 }
@@ -442,7 +446,7 @@ fn every_reason_a_command_is_not_available_has_its_row() {
     }
     for reason in &reasons {
         assert_eq!(
-            archforge_shell_api::engine_said::disabled(crate::notation_ui::UIS, reason).as_deref(),
+            archforge_shell_api::engine_said::disabled(crate::tests::SCREENS.notation_uis(), reason).as_deref(),
             Some(*reason),
             "no row keyed by {reason:?}"
         );

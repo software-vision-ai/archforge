@@ -2100,9 +2100,10 @@ fn a_cards_height_is_where_the_canvas_ends_its_last_place() {
 /// Every hover text of the tables, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    TOOLS
-        .iter()
-        .map(|(_, _, hint)| *hint)
-        .chain(["Key status", "Grid", "complete", "disjoint", "overlapping", "Arrange diagram"])
-        .chain(crate::kinds::KINDS.iter().flat_map(|k| k.tools().iter().flat_map(|t| std::iter::once(t.hint).chain(t.chevron.map(|(_, hint)| hint)))))
+    TOOLS.iter().map(|(_, _, hint)| *hint).chain(["Key status", "Grid", "complete", "disjoint", "overlapping", "Arrange diagram"]).chain(
+        crate::tests::SCREENS
+            .kinds()
+            .iter()
+            .flat_map(|k| k.tools().iter().flat_map(|t| std::iter::once(t.hint).chain(t.chevron.map(|(_, hint)| hint)))),
+    )
 }

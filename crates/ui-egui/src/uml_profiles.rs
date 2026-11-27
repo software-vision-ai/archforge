@@ -1094,7 +1094,10 @@ mod tests {
         let said = |names: Vec<Named>| {
             let n = names.len();
             let held = Used::HeldProfile { package: "Tools".into(), profile: "Audit".into() };
-            crate::panels::said(crate::notation_ui::UIS, &Reason::InUse(Box::new(InUse { what: held, uses: vec![("Tracked".into(), names, n)] })))
+            crate::panels::said(
+                crate::tests::SCREENS.notation_uis(),
+                &Reason::InUse(Box::new(InUse { what: held, uses: vec![("Tracked".into(), names, n)] })),
+            )
         };
         let cases = [
             (vec!["bills".into(), unnamed("generalization")], "bills and a generalization", "bills und eine Generalisierung"),
@@ -1124,7 +1127,7 @@ mod tests {
         use archforge_engine::{AppliedTo, LiteralValued};
         let said = |element| {
             let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Entity".into(), element };
-            crate::panels::said(crate::notation_ui::UIS, &Reason::LiteralValued(Box::new(valued)))
+            crate::panels::said(crate::tests::SCREENS.notation_uis(), &Reason::LiteralValued(Box::new(valued)))
         };
         let on = |element: &str, french: &str| {
             (
@@ -1186,7 +1189,7 @@ mod tests {
         let order = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
         for (language, said) in [("en", "«Trace» on an association"), ("de", "«Trace» auf eine Assoziation")] {
             set_language(language);
-            assert_eq!(crate::uml_stereotypes::going_along(crate::notation_ui::UIS, st, order), [said], "{language}");
+            assert_eq!(crate::uml_stereotypes::going_along(crate::tests::SCREENS.notation_uis(), st, order), [said], "{language}");
         }
         set_language("en");
     }

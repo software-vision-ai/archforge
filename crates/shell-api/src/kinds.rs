@@ -4,9 +4,9 @@
 //! about to draw it and as it drew it, a card the kind may draw itself, a label the kind drew of no one node or line, a row a kind
 //! adds to its elements' menu and a row it gives the Model menu; and the kind of a diagram, of the
 //! diagram the canvas shows and whether the open popover takes the keys, each asked of the kinds it
-//! is handed. The shell keeps its list of kinds (`archforge_ui_egui::kinds::KINDS`, which names
-//! ER's and UML's) and re-exports these under their old paths (`archforge_ui_egui::kinds` and
-//! `canvas`).
+//! is handed. The shell takes its kinds from the screens parts it is given
+//! ([`ScreensRegistry::kinds`](crate::screens::ScreensRegistry::kinds)) and re-exports these under
+//! their old paths (`archforge_ui_egui::kinds` and `canvas`).
 
 use archforge_diagram::ProjectView;
 use archforge_mof::{Obj, Store, Uuid};

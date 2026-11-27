@@ -12,8 +12,6 @@
 use archforge_mof::{ClassId, DataId, DataKind, PropId, Universe};
 
 use crate::i18n::tr;
-#[cfg(test)]
-use crate::notation_ui::UIS;
 use crate::notation_ui::{NotationUi, of_class};
 
 /// The classes the core creates, the only ones beside those the notations create
@@ -31,7 +29,7 @@ fn is_kind(uis: &[&'static dyn NotationUi], class: ClassId) -> bool {
 /// Every class that gets a kind word of its own, the core's and each notation's of the app.
 #[cfg(test)]
 pub(crate) fn kinds() -> Vec<ClassId> {
-    CORE_KINDS.iter().chain(UIS.iter().flat_map(|ui| ui.created_classes())).copied().collect()
+    CORE_KINDS.iter().chain(crate::tests::SCREENS.notation_uis().iter().flat_map(|ui| ui.created_classes())).copied().collect()
 }
 
 /// Whether `metamodel` is in the model area, the one these words cover: not the diagrams'.
@@ -117,6 +115,12 @@ pub(crate) fn texts() -> Vec<String> {
             }
         }
     }
-    all.extend(kinds().into_iter().filter(|c| notation_word(UIS, *c).is_none()).filter_map(|c| universe.class(c)).map(|c| words(&c.name)));
+    all.extend(
+        kinds()
+            .into_iter()
+            .filter(|c| notation_word(crate::tests::SCREENS.notation_uis(), *c).is_none())
+            .filter_map(|c| universe.class(c))
+            .map(|c| words(&c.name)),
+    );
     all
 }
