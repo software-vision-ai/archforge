@@ -8,6 +8,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
 ## Placement
 - A test goes into the existing test file of its area, never a new file named after the bug:
   - the shell and its screens: `crates/ui-egui/src/tests.rs`
+  - UML's screens without the shell, what UML's own code draws or decides (its refusal words, its
+    hooks, its Properties bodies and editors), against the shell's interfaces' test context:
+    `crates/uml-ui/src/tests.rs`
   - every offscreen screen's automation ids, in both appearances: the `tests` module in
     `crates/ui-egui/src/offscreen.rs`, against `crates/ui-egui/src/offscreen/automation-ids.tsv`;
     a change that renames, adds or removes an id on purpose updates the screen's rows from the

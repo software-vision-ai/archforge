@@ -1353,7 +1353,7 @@ pub(crate) fn retain_valid(state: &mut UmlState, store: &Store) {
 /// between the three as one step, its Catalog end at `1`. The project is then marked saved as it
 /// stands. Gives the ids by name: the classes, their cards (lower case), the diagram, and, drawn,
 /// the association and its diamond.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub fn put_recommends(cx: &mut Ctx, drawn: bool) -> Result<std::collections::BTreeMap<&'static str, String>, String> {
     let session = cx.session.as_mut().ok_or("the sample needs a session")?;
     let store = session.doc();

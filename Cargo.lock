@@ -501,6 +501,7 @@ dependencies = [
  "archforge-shell-api",
  "archforge-uml",
  "egui",
+ "egui_kittest",
  "serde_json",
 ]
 

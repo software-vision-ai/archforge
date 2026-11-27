@@ -1964,7 +1964,7 @@ pub fn put_payment_kinds(cx: &mut Ctx) -> Result<([String; 3], String), String> 
 /// Adds literals named `names` at the end of the enumeration `enumeration` through
 /// `uml.literal.add`, as one step, for the snapshot screens and the tests; the project is then
 /// marked saved as it stands.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub fn put_literals(cx: &mut Ctx, enumeration: Uuid, names: &[&str]) -> Result<(), String> {
     let session = cx.session.as_mut().ok_or("the literals need a session")?;
     session
@@ -1984,7 +1984,7 @@ pub fn put_literals(cx: &mut Ctx, enumeration: Uuid, names: &[&str]) -> Result<(
 /// navigate one way and both, a composition and a shared aggregation, a generalization and a
 /// dependency. Built on the store, since commands for members and relationships come with their
 /// own journeys. Gives the package.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn sample_model(st: &mut Store, model: Obj) -> Result<Obj, archforge_mof::Invalid> {
     use archforge_mof::Value;
     use archforge_uml as u;
@@ -2120,7 +2120,7 @@ pub(crate) fn sample_model(st: &mut Store, model: Obj) -> Result<Obj, archforge_
 /// Opens the sample class model (`sample_model`) on a class diagram in the context's project: its
 /// classes laid out in three rows, every association, generalization and dependency drawn, the
 /// named ones labelled. Gives the diagram's id.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub fn open_sample(cx: &mut Ctx) -> Result<Uuid, String> {
     use archforge_mof::rows;
     let fail = |e: &dyn std::fmt::Display| e.to_string();
