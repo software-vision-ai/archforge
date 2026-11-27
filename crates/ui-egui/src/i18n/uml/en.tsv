@@ -143,6 +143,7 @@ str		Literal · model	Literal · model
 str		Attributes · {n}	Attributes · {n}
 str		Literals · {n}	Literals · {n}
 str		Owner	Owner
+str		Owner: {path}	Owner: {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · nested in {owner} · model, in every diagram
 str		Nested classifiers · {n}	Nested classifiers · {n}

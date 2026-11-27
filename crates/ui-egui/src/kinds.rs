@@ -2,14 +2,16 @@
 //! what it draws, the interface `DiagramKind`, is `archforge-shell-api`'s `kinds`, re-exported here
 //! under its old paths with the data types it hands across: a kind brings its toolbar
 //! tools, each placing an element or connecting two, and the hooks the canvas's gestures run on
-//! its elements: place, connect, a line dropped on empty canvas, renaming in place, opening an
+//! its elements: place, connect, a line dropped on empty canvas, renaming in place and where the
+//! name typed goes on a card it draws, opening an
 //! element's editor at a row of its card, a second adorner, the rows its element menu adds with
 //! what each does, the live line while connecting, a press and a right click it reads before the
 //! shared gestures, the keys a drawing under way takes, whether its popover's menu takes the keys,
 //! what Select all takes in beside the boxes and lines, and where a label of its own figures is
 //! let go; and the hooks the canvas runs as it
 //! draws one of its diagrams: before and after the drawing, where a line starts, what goes with a
-//! line, the figures of no one node or line, and the hint bar; and its rows of the Model menu.
+//! line, the figures of no one node or line, a card it draws itself, and the hint bar; and its rows
+//! of the Model menu.
 //! Select, Pan, Note, Link note, Grid and Arrange stay shared; the status marks toggle shows where
 //! a kind has marks (ER's key status).
 
