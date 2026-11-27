@@ -8,6 +8,11 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# The test context a notation's screens are tested against without the shell
+# (`archforge_shell_api::testing`, ADR 0005); never shipped.
+testing = ["dep:egui_kittest"]
+
 [dependencies]
 # The skills a row of the Models tree lists under its element (notation_ui::Tree).
 archforge-core.workspace = true
@@ -16,6 +21,8 @@ archforge-diagram.workspace = true
 archforge-engine.workspace = true
 archforge-mof.workspace = true
 egui.workspace = true
+# Draws a screen over the test context (`testing::harness`), with the feature `testing` only.
+egui_kittest = { workspace = true, optional = true }
 # What an engine error the panels say as an internal one was, kept for the log (engine_said::said).
 log.workspace = true
 serde.workspace = true
@@ -25,6 +32,9 @@ serde_json.workspace = true
 craft-i18n.workspace = true
 # Where a letter ends, so a search never matches inside one (search::joins).
 icu_properties.workspace = true
+
+[dev-dependencies]
+archforge-shell-api = { path = ".", features = ["testing"] }
 
 [lints]
 workspace = true

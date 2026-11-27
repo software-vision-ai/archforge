@@ -58,6 +58,12 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   behind the feature `testing` for the app's window tests as well).
   Every harness pins the language with `set_language`; `every_harness_pins_the_language` fails a
   harness that does not.
+- A notation's screens are tested without the shell against the shell's interfaces' test context
+  (`crates/shell-api/src/testing.rs`, behind the feature `testing`, ADR 0005): a `TestContext` for
+  the notations given owns what the narrow context borrows and keeps every `Request` made, and
+  `harness` draws a screen over it in one language, pinned each frame, and one appearance, with
+  `centre` and `click` to press a control by automation id. Its own tests, over a stub notation,
+  are in the same file.
 - A screen test scrolls to a control before it presses it, at the design's window height, and never
   makes the window taller to reach it. A panel's scrolled body lists a control only while part of it
   is inside the body (`record_visible` in `crates/shell-api/src/widgets.rs`), so a control under the
