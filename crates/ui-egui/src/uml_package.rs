@@ -12,7 +12,7 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke, StrokeKind, pos2, vec2};
 
 use crate::canvas::{
-    COMPARTMENT_GAP, CardDrawn, CardLabel, CardPart, DETAIL_ZOOM, Drawing, ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_INSET, ENTITY_ROW, card_palette,
+    CARD_FIRST_ROW, CARD_HEADER, CARD_INSET, CARD_ROW, COMPARTMENT_GAP, CardDrawn, CardLabel, CardPart, DETAIL_ZOOM, Drawing, card_palette,
     dashed_rect, element_of, name_from_afar,
 };
 use crate::i18n::{fmt, tr};
@@ -46,16 +46,16 @@ pub(crate) fn draw_card(paint: &egui::Painter, d: &Drawing<'_>, c: &CardDrawn<'_
     // Its tab, over its top left, holding its name: the name as it is typed while it is renamed.
     let name = if renaming { d.rename_text.unwrap_or(&card.name) } else { card.name.as_str() };
     let (tab, shown, cut) = package_tab(paint, rect, name, z, p.text);
-    paint.rect_filled(tab, 5.0 * z, p.entity);
-    paint.rect_stroke(tab, 5.0 * z, Stroke::new(border, if c.selected { p.accent } else { p.entity_edge }), StrokeKind::Inside);
-    paint.rect_filled(rect, 6.0 * z, p.entity);
+    paint.rect_filled(tab, 5.0 * z, p.card);
+    paint.rect_stroke(tab, 5.0 * z, Stroke::new(border, if c.selected { p.accent } else { p.card_edge }), StrokeKind::Inside);
+    paint.rect_filled(rect, 6.0 * z, p.card);
     if card.elsewhere {
-        dashed_rect(paint, rect, Stroke::new(border, p.entity_edge), 4.0 * z, 3.0 * z);
+        dashed_rect(paint, rect, Stroke::new(border, p.card_edge), 4.0 * z, 3.0 * z);
     } else {
-        paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, p.entity_edge), StrokeKind::Inside);
+        paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, p.card_edge), StrokeKind::Inside);
     }
     // The tab joins the card: no border between them.
-    paint.rect_filled(Rect::from_min_max(pos2(tab.left() + border, rect.top() - z), pos2(tab.right() - border, rect.top() + border)), 0.0, p.entity);
+    paint.rect_filled(Rect::from_min_max(pos2(tab.left() + border, rect.top() - z), pos2(tab.right() - border, rect.top() + border)), 0.0, p.card);
     if z >= DETAIL_ZOOM && !renaming {
         paint.galley(tab.min + vec2(PACKAGE_TAB_PAD * z, (tab.height() - shown.size().y) / 2.0), shown, p.text.into());
     }
@@ -278,7 +278,7 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
         return;
     }
     let (fill, edge) = match c.look {
-        MiniLook::Tinted => (p.entity, p.entity_edge),
+        MiniLook::Tinted => (p.card, p.card_edge),
         MiniLook::Note => (p.amber_tint, p.amber),
         MiniLook::Constraint => (p.surface, p.purple),
         MiniLook::Plain | MiniLook::Tabbed | MiniLook::Braces | MiniLook::Diamond => (p.surface, p.border),
@@ -296,22 +296,22 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
     }
     let bar = |y: f32, w: f32, h: f32, colour: ux::Colour| {
         if y + h <= r.bottom() - 1.0 {
-            paint.rect_filled(Rect::from_min_size(pos2(r.left() + ENTITY_INSET * s, y), vec2((r.width() * w).max(1.0), h.max(1.0))), 1.0, colour);
+            paint.rect_filled(Rect::from_min_size(pos2(r.left() + CARD_INSET * s, y), vec2((r.width() * w).max(1.0), h.max(1.0))), 1.0, colour);
         }
     };
     bar(r.top() + 30.0 * s, 0.5, 8.0 * s, p.text_muted);
-    let header = r.top() + ENTITY_HEADER * s;
+    let header = r.top() + CARD_HEADER * s;
     if header < r.bottom() {
         paint.rect_filled(Rect::from_min_size(pos2(r.left(), header), vec2(r.width(), 1.0)), 0.0, edge);
     }
-    let mut y = r.top() + ENTITY_FIRST_ROW * s;
+    let mut y = r.top() + CARD_FIRST_ROW * s;
     for (i, rows) in c.rows.iter().enumerate() {
         if i > 0 {
-            y += COMPARTMENT_GAP * ENTITY_ROW * s;
+            y += COMPARTMENT_GAP * CARD_ROW * s;
         }
         for _ in 0..*rows {
             bar(y + 4.0 * s, 0.45, 5.0 * s, p.border);
-            y += ENTITY_ROW * s;
+            y += CARD_ROW * s;
         }
     }
 }

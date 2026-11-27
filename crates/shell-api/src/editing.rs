@@ -69,9 +69,9 @@ pub enum Gesture {
     ExtraLabel { element: Uuid, from: Pos2, rect: Rect },
 }
 
-/// The entity menu, open at a screen point.
+/// The element menu, open at a screen point.
 #[derive(Debug, Clone, PartialEq)]
-pub struct EntityMenu {
+pub struct ElementMenu {
     pub node: Uuid,
     pub entity: Uuid,
     pub at: Pos2,
@@ -85,7 +85,7 @@ pub enum Action {
     Start(Gesture, Option<Uuid>),
     Commit,
     Place(&'static str, f64, f64),
-    Menu(EntityMenu),
+    Menu(ElementMenu),
     Rename(Uuid, Uuid),
     Open(Uuid, Option<usize>),
     PlaceNote(f64, f64),

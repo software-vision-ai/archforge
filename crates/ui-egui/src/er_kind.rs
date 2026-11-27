@@ -108,12 +108,12 @@ impl DiagramKind for ErKind {
         // The sample tables' names, in the user's language, as the rest of the card is.
         for (x, name) in [(24.0, tr("Customer")), (160.0, tr("Order"))] {
             let table = egui::Rect::from_min_size(at(x, 20.0), vec2(84.0, 58.0));
-            paint.rect_filled(table, 5.0, p.entity);
-            paint.rect_stroke(table, 5.0, Stroke::new(1.0, p.entity_edge), StrokeKind::Inside);
+            paint.rect_filled(table, 5.0, p.card);
+            paint.rect_stroke(table, 5.0, Stroke::new(1.0, p.card_edge), StrokeKind::Inside);
             crate::ux::text(paint, table.min + vec2(8.0, 3.0), &name, crate::ux::types::TINY, p.text, Some(table.width() - 12.0));
-            paint.line_segment([pos2(table.left(), table.top() + 18.0), pos2(table.right(), table.top() + 18.0)], Stroke::new(1.0, p.entity_line));
+            paint.line_segment([pos2(table.left(), table.top() + 18.0), pos2(table.right(), table.top() + 18.0)], Stroke::new(1.0, p.card_line));
             for (i, w) in [52.0, 38.0].into_iter().enumerate() {
-                paint.rect_filled(egui::Rect::from_min_size(table.min + vec2(8.0, 26.0 + i as f32 * 11.0), vec2(w, 4.0)), 2.0, p.entity_line);
+                paint.rect_filled(egui::Rect::from_min_size(table.min + vec2(8.0, 26.0 + i as f32 * 11.0), vec2(w, 4.0)), 2.0, p.card_line);
             }
         }
         let (from, to) = (at(108.0, 49.0), at(160.0, 49.0));
