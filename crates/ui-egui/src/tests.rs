@@ -7561,9 +7561,9 @@ fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
 
 /// An ER command's id, key columns and constraint name refused are said in the chosen language,
 /// never in the engine's English: no id, as the id of what the parameter takes, or of no element,
-/// an element of another kind by its name, a subtype's among them, a key's columns too many, no ids or given twice, and a
-/// constraint name the schema has; a kind ER does not name is left to the other rows. In a window
-/// of the design's height, in light and dark (AR-438).
+/// an element of another kind by its name, a subtype's among them, a key's columns too many, no ids or one given twice,
+/// by the column's name (AR-544), and a constraint name the schema has; a kind ER does not name is left to the other
+/// rows. In a window of the design's height, in light and dark (AR-438).
 #[test]
 fn an_er_id_key_column_or_constraint_name_refused_is_said_in_the_chosen_language() {
     use crate::i18n::{fmt, tr, tr_ctx};
@@ -7601,7 +7601,7 @@ fn an_er_id_key_column_or_constraint_name_refused_is_said_in_the_chosen_language
         let most = fmt(&tr("A key holds at most {max} columns."), &[("max", "32")]);
         assert_eq!(refused(&mut h, "er.unique.add", columns(json!(many))), most, "{theme:?}");
         assert_eq!(refused(&mut h, "er.unique.add", columns(json!([7]))), tr("Give the key's columns as a list of ids."), "{theme:?}");
-        let twice = tr("An element is named twice. Name each element once.");
+        let twice = "nummer kommt im Schlüssel zweimal vor. Geben Sie jede Spalte nur einmal an.";
         assert_eq!(refused(&mut h, "er.unique.add", columns(json!([column, column]))), twice, "{theme:?}");
         let taken = fmt(&tr("There is {what} named {name} already."), &[("what", &tr_ctx("refusal", "a constraint")), ("name", "uq_nummer")]);
         let clash = json!({ "entity": table, "columns": [column], "name": "UQ_NUMMER" });
@@ -7683,6 +7683,65 @@ fn an_er_keys_columns_refused_are_said_in_the_chosen_language() {
         assert_eq!(nullable.as_deref(), Some("notiz darf leer sein, was eine Primärschlüsselspalte nie darf."), "{theme:?}");
         // At least two columns is no rule of a key's.
         assert_eq!(crate::er_said::said(&Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A key's column given twice is said by the column's name in the chosen language: refused when a
+/// primary key or a unique constraint lists it twice, and as the key rules' problem the Problems
+/// panel says, which no document holds, as a key's columns are a list without repeats. In light and
+/// dark (AR-544).
+#[test]
+fn an_er_key_column_given_twice_is_said_by_its_name_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
+        let nummer = id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "nullable": "no" }));
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let twice = "nummer kommt im Schlüssel zweimal vor. Geben Sie jede Spalte nur einmal an.";
+        let pk = json!({ "entity": kunde, "columns": [nummer, nummer], "name": "pk_kunde" });
+        assert_eq!(refused("er.primary-key.set", pk), twice, "{theme:?}");
+        assert_eq!(refused("er.unique.add", json!({ "entity": kunde, "columns": [nummer, nummer] })), twice, "{theme:?}");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let obj = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+        let (table, column) = (obj(&kunde), obj(&nummer));
+        let problem = archforge_er::rules::key_columns_problem(st, table, &[column, column], true).unwrap();
+        assert_eq!(crate::panels::said(crate::notation_ui::UIS, &problem.reason()).as_deref(), Some(twice), "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A foreign key's column given twice is said by the column's name in the foreign key's own words in
+/// the chosen language, not a key's: refused when adding a foreign key and when pointing one at
+/// another key. In light and dark (AR-544).
+#[test]
+fn an_er_foreign_key_column_given_twice_is_said_as_the_foreign_keys_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
+        let bestellung = id("er.entity.add", json!({ "schema": schema, "name": "Bestellung" }));
+        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        let mail = id("er.attribute.add", json!({ "entity": kunde, "name": "mail", "type": "TEXT", "nullable": "no" }));
+        let uq = id("er.unique.add", json!({ "entity": kunde, "columns": [mail], "name": "uq_mail" }));
+        let column = id("er.attribute.add", json!({ "entity": bestellung, "name": "kunde_nummer", "type": "BIGINT", "nullable": "no" }));
+        let fk = id("er.foreign-key.add", json!({ "entity": bestellung, "references": kunde, "columns": [column], "name": "fk_kunde" }));
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let twice = "kunde_nummer kommt im Fremdschlüssel zweimal vor.";
+        let add = json!({ "entity": bestellung, "references": kunde, "columns": [column, column], "name": "fk_zwei" });
+        assert_eq!(refused("er.foreign-key.add", add), twice, "{theme:?}");
+        assert_eq!(refused("er.foreign-key.set-key", json!({ "foreign_key": fk, "key": uq, "columns": [column, column] })), twice, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");

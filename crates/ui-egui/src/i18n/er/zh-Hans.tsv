@@ -131,6 +131,7 @@ str		No id is given. Give the id of {what}.	未给出 ID。请给出{what}的 ID
 str		{name} is not {what}.	{name} 不是{what}。
 str		Give the key's columns as a list of ids.	请以 ID 列表的形式给出键的列。
 str		A key holds at most {max} columns.	一个键最多包含 {max} 列。
+str		{name} appears twice in the key. Give each column once.	{name} 在键中出现了两次。每列只需给出一次。
 str		A key needs at least one column.	一个键至少需要一列。
 str		{column} is not a column of {table}.	{column} 不是 {table} 的列。
 str		{name} may be null, which a primary key column never is.	{name} 允许为空，而主键列绝不允许为空。

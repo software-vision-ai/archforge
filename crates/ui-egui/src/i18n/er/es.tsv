@@ -131,6 +131,7 @@ str		No id is given. Give the id of {what}.	No se ha indicado ningún identifica
 str		{name} is not {what}.	{name} no es {what}.
 str		Give the key's columns as a list of ids.	Indica las columnas de la clave como una lista de identificadores.
 str		A key holds at most {max} columns.	Una clave tiene como máximo {max} columnas.
+str		{name} appears twice in the key. Give each column once.	{name} aparece dos veces en la clave. Indica cada columna una sola vez.
 str		A key needs at least one column.	Una clave necesita al menos una columna.
 str		{column} is not a column of {table}.	{column} no es una columna de {table}.
 str		{name} may be null, which a primary key column never is.	{name} admite nulos, y una columna de clave primaria nunca los admite.
