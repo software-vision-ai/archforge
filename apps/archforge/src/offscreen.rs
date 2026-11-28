@@ -2,9 +2,10 @@
 //! fresh shell with the screens parts the app registers, in the headless harness, drawn once
 //! settled and rendered to RGBA.
 
+mod uml_samples;
 mod versions;
 
-use archforge_ui_egui::snapshot;
+use archforge_ui_egui::testing;
 use archforge_ui_egui::theme::ThemeKind;
 use archforge_ui_egui::{Folder, Services, Shell};
 // ER's screens' modules, as their crate's `snapshot` lists them for the tool.
@@ -600,7 +601,7 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                 if screen == Screen::WorkspaceChatDeleted {
                     archforge_ui_egui::chat_delete::confirm(shell);
                     fx::settle(shell);
-                    snapshot::chat_delete_frame(shell);
+                    testing::chat_delete_frame(shell);
                 }
             }
         }
@@ -624,7 +625,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     shell.state.theme = theme;
     if matches!(screen, Screen::HomeGallery | Screen::HomeSearch) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
-        let now = snapshot::now();
+        let now = testing::now();
         for (name, ago) in [("Billing", 9 * 86_400), ("Warehouse", 2 * 86_400), ("Customer care", 3 * 3_600), ("Commerce platform", 600)] {
             shell.state.remember(name, std::path::Path::new(&format!("/Users/robin/Documents/Archforge/{name}.archforge")), now - ago);
         }
@@ -687,7 +688,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         if let Some(d) = shell.new_project.as_mut() {
             d.name = "Commerce platform".into();
             if screen == Screen::NewProjectFailed {
-                snapshot::show_create_failure(
+                testing::show_create_failure(
                     d,
                     archforge_ui_egui::CreateError::DoltMissing {
                         detail: "no dolt found (ARCHFORGE_DOLT is not set and no dolt is on the PATH)".into(),
@@ -705,7 +706,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if screen == Screen::WorkspaceSchema {
         // The session first, as the first frame would make it, then the schema the + adds.
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         archforge_ui_egui::explorer::add(&mut shell, "schema");
     }
     if matches!(
@@ -722,7 +723,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             | Screen::WorkspaceSchemaTypes
             | Screen::WorkspaceSchemaObjects
     ) {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         let skill_tab = matches!(screen, Screen::WorkspaceSkillTab | Screen::WorkspaceSkillPreview | Screen::WorkspaceSkillLink);
         sample_table(&mut shell, screen == Screen::WorkspaceSkills || skill_tab || screen == Screen::WorkspaceSkillNew)?;
         if skill_tab {
@@ -754,8 +755,8 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             if let Some((column, entity)) = email
                 && let Ok(entity) = store.uuid(entity)
             {
-                snapshot::cx(&mut shell, |cx| er_table::open_column(cx, entity, Some(column)));
-                if let Some(c) = er_mut(snapshot::notation_states(&mut shell)).and_then(|er| er.column.as_mut()) {
+                testing::cx(&mut shell, |cx| er_table::open_column(cx, entity, Some(column)));
+                if let Some(c) = er_mut(testing::notation_states(&mut shell)).and_then(|er| er.column.as_mut()) {
                     c.more = true;
                 }
             }
@@ -769,8 +770,8 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 && let Ok(entity) = store.uuid(e)
                 && let Some(index) = er_indexes::rows(store, e).into_iter().next()
             {
-                snapshot::cx(&mut shell, |cx| er_indexes::open(cx, entity, Some(&index)));
-                if let Some(i) = er_mut(snapshot::notation_states(&mut shell)).and_then(|er| er.index.as_mut()) {
+                testing::cx(&mut shell, |cx| er_indexes::open(cx, entity, Some(&index)));
+                if let Some(i) = er_mut(testing::notation_states(&mut shell)).and_then(|er| er.index.as_mut()) {
                     i.more = true;
                 }
             }
@@ -784,20 +785,20 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 && let Ok(entity) = store.uuid(e)
                 && let Some(unique) = er_keys::rows(store, e).into_iter().find(|k| !k.primary)
             {
-                snapshot::cx(&mut shell, |cx| er_keys::open(cx, entity, Some(&unique)));
+                testing::cx(&mut shell, |cx| er_keys::open(cx, entity, Some(&unique)));
             }
         }
     }
     if screen == Screen::WorkspaceColumnSelected {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_column_selected(&mut shell)?;
     }
     if screen == Screen::WorkspaceClassDiagram {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_class_diagram(&mut shell)?;
     }
     if matches!(screen, Screen::WorkspaceNewDiagramKind | Screen::WorkspaceNewDiagramDetails) {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_diagram(&mut shell, true)?;
         archforge_ui_egui::diagrams::open_new(&mut shell);
         if let Some(edit) = shell.diagrams.new.as_mut() {
@@ -810,7 +811,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         }
     }
     if matches!(screen, Screen::WorkspacePackages | Screen::WorkspaceInsidePackage | Screen::WorkspacePackageParent) {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_packages(&mut shell, screen == Screen::WorkspaceInsidePackage)?;
         if screen == Screen::WorkspacePackageParent {
             shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
@@ -818,29 +819,29 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         }
     }
     if screen == Screen::WorkspacePackagePaths {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_packages(&mut shell, false)?;
         sample_package_paths(&mut shell)?;
     }
     if screen == Screen::WorkspacePackageOverlap {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_packages(&mut shell, false)?;
         sample_package_overlap(&mut shell)?;
     }
     if screen == Screen::WorkspacePackageTop {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_packages(&mut shell, false)?;
         shell.canvas.fit_pending = false;
-        shell.canvas.zoom = snapshot::ZOOM_RANGE.0;
+        shell.canvas.zoom = testing::ZOOM_RANGE.0;
         shell.canvas.pan = egui::vec2(420.0, 380.0);
         shell.canvas.notice = Some(archforge_ui_egui::i18n::tr("This is the top package: zooming out goes no further"));
     }
     if screen == Screen::WorkspaceDiagrams {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_diagrams(&mut shell)?;
     }
     if screen == Screen::WorkspaceClassSizing {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_class_sizing(&mut shell)?;
     }
     if matches!(
@@ -864,12 +865,12 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         versions::sample(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceClassDiagramRead {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
     }
     if screen == Screen::WorkspaceCloseAsk {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         if let Some(s) = shell.session.as_mut() {
             s.mark_unsaved();
         }
@@ -877,8 +878,8 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     let association = matches!(screen, Screen::WorkspaceAssociation | Screen::WorkspaceMultiplicityPresets | Screen::WorkspaceMultiplicityRefused);
     if association || screen == Screen::WorkspaceRelateKinds {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         if association {
             let id = {
                 let store = shell.session.as_ref().ok_or("no project is open")?.doc();
@@ -888,27 +889,27 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                     .ok_or("the sample has no such association")?;
                 store.uuid(a).map_err(|e| e.to_string())?
             };
-            snapshot::run(&mut shell, "view.select", serde_json::json!({ "ids": [id.to_string()] }))?;
+            testing::run(&mut shell, "view.select", serde_json::json!({ "ids": [id.to_string()] }))?;
             shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
             if screen == Screen::WorkspaceMultiplicityPresets {
                 shell.panels.menu = Some(menus::END_MULTIPLICITY.at(1));
             }
             if screen == Screen::WorkspaceMultiplicityRefused {
-                snapshot::cx(&mut shell, |cx| uml_relate::refuse_typed(cx, id, 1, "5..2"))?;
+                testing::cx(&mut shell, |cx| uml_samples::refuse_typed(cx, id, 1, "5..2"))?;
             }
         } else {
             shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
-            if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
+            if let Some(uml) = uml_mut(testing::notation_states(&mut shell)) {
                 uml.relation = uml_relate::Relate::Composition;
             }
             shell.canvas.popover = Some("relationship-kinds");
         }
     }
     if matches!(screen, Screen::WorkspaceInterface | Screen::WorkspaceClassifierKinds) {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_interfaces(&mut shell)?;
         if screen == Screen::WorkspaceClassifierKinds {
-            if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
+            if let Some(uml) = uml_mut(testing::notation_states(&mut shell)) {
                 uml.classifier = uml_classifier::Classifier::Interface;
             }
             shell.canvas.tool = archforge_ui_egui::canvas::Tool::Place(uml_classifier::TOOL);
@@ -916,51 +917,51 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         }
     }
     if matches!(screen, Screen::WorkspaceEnumeration | Screen::WorkspaceLiterals) {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_enumerations(&mut shell)?;
         if screen == Screen::WorkspaceLiterals {
             literal_draft(&mut shell)?;
         }
     }
     if screen == Screen::WorkspaceDataType {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_data_types(&mut shell)?;
     }
     if screen == Screen::WorkspacePrimitiveType {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_primitive_types(&mut shell)?;
     }
     if screen == Screen::WorkspaceRealization {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_realizations(&mut shell)?;
         // The Relationship tool armed after the line was selected, as a click on it leaves the
         // selection: the toolbar shows Interface realization active beside its Properties.
         shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
-        if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
+        if let Some(uml) = uml_mut(testing::notation_states(&mut shell)) {
             uml.relation = uml_relate::Relate::Realization;
         }
     }
     if screen == Screen::WorkspaceAssociationClass {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_association_class(&mut shell)?;
         // The Relationship tool armed after the element was selected, as the realization's screen.
         shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
-        if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
+        if let Some(uml) = uml_mut(testing::notation_states(&mut shell)) {
             uml.relation = uml_relate::Relate::AssociationClass;
         }
     }
     if screen == Screen::WorkspaceModifiers {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_modifiers(&mut shell)?;
     }
     if screen == Screen::WorkspaceFinal {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         sample_final(&mut shell)?;
     }
     if screen == Screen::WorkspaceLeaf {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         sample_leaf(&mut shell)?;
     }
     let mut hover: Option<String> = None;
@@ -968,25 +969,25 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         hover = Some("workspace.chat.history.2".into());
     }
     if matches!(screen, Screen::WorkspaceNaryDrawing | Screen::WorkspaceNary | Screen::WorkspaceNaryBinary) {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         hover = sample_nary(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceNestedClassifiers {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         sample_nested(&mut shell)?;
     }
     if screen == Screen::WorkspaceProfiles || screen == Screen::WorkspaceProfileRefused {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         sample_profiles(&mut shell, screen == Screen::WorkspaceProfileRefused)?;
     }
     if screen == Screen::WorkspaceStereotypes || screen == Screen::WorkspaceStereotypePicker {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
-        let order = snapshot::cx(&mut shell, uml_stereotypes::put_values)?;
-        snapshot::run(&mut shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
+        let order = testing::cx(&mut shell, uml_samples::put_values)?;
+        testing::run(&mut shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
         shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
         shell.state.show_explorer(archforge_ui_egui::state::Explorer::Models);
         if screen == Screen::WorkspaceStereotypePicker {
@@ -994,27 +995,27 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         }
     }
     if screen == Screen::WorkspaceGeneralizationSets {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         sample_generalization_sets(&mut shell)?;
     }
     if matches!(screen, Screen::WorkspaceTemplate | Screen::WorkspaceTemplateKinds | Screen::WorkspaceTemplateInUse) {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         sample_template(&mut shell, screen)?;
     }
     if matches!(screen, Screen::WorkspaceTemplateBinding | Screen::WorkspaceTemplateBindingNew) {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         sample_binding(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceQualifiers || screen == Screen::WorkspaceQualifierRefused {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         sample_qualifiers(&mut shell, screen == Screen::WorkspaceQualifierRefused)?;
     }
     if let Some(step) = guide_step(screen) {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_guide(&mut shell, step)?;
     }
     if matches!(
@@ -1030,12 +1031,12 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             | Screen::GuideProfile
             | Screen::GuideStereotype
     ) {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_guide_more(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceInlineMember {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         let class = {
             let store = shell.session.as_ref().ok_or("no project is open")?.doc();
             let c = store
@@ -1044,10 +1045,10 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 .ok_or("the sample has no such class")?;
             store.uuid(c).map_err(|e| e.to_string())?
         };
-        if !snapshot::cx(&mut shell, |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)) {
+        if !testing::cx(&mut shell, |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)) {
             return Err("the class's card cannot hold a row".into());
         }
-        if let Some(inline) = uml_mut(snapshot::notation_states(&mut shell)).and_then(|uml| uml.inline.as_mut()) {
+        if let Some(inline) = uml_mut(testing::notation_states(&mut shell)).and_then(|uml| uml.inline.as_mut()) {
             inline.edit.name = "code".into();
             inline.ty = "Integer".into();
         }
@@ -1064,8 +1065,8 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         }
     }
     if matches!(screen, Screen::WorkspaceClassMembers | Screen::WorkspaceMemberEditor) {
-        snapshot::adopt_project(&mut shell);
-        snapshot::cx(&mut shell, uml_ui::open_sample)?;
+        testing::adopt_project(&mut shell);
+        testing::cx(&mut shell, uml_ui::open_sample)?;
         sample_class_members(&mut shell, screen == Screen::WorkspaceMemberEditor)?;
     }
     if matches!(
@@ -1086,7 +1087,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             | Screen::WorkspaceRouting
             | Screen::WorkspaceSearch
     ) {
-        snapshot::adopt_project(&mut shell);
+        testing::adopt_project(&mut shell);
         sample_diagram(
             &mut shell,
             matches!(
@@ -1109,7 +1110,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             sample_routing(&mut shell)?;
         }
         if screen == Screen::WorkspaceSearch {
-            snapshot::open_home_search(&mut shell, "order");
+            testing::open_home_search(&mut shell, "order");
         }
         if screen == Screen::WorkspaceGenerate {
             sample_generate(&mut shell)?;
@@ -1421,7 +1422,7 @@ fn sample_appearance(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Appearance);
     if screen == Screen::WorkspaceAppearancePicker {
-        let c = snapshot::colour("#C25E0A").ok_or_else(|| "the sample colour is no colour code".to_string())?;
+        let c = testing::colour("#C25E0A").ok_or_else(|| "the sample colour is no colour code".to_string())?;
         shell.panels.picker = Some(archforge_ui_egui::appearance::Picker::new(archforge_ui_egui::appearance::Group::Fill, c));
     }
     Ok(())
@@ -1506,10 +1507,10 @@ fn sample_class_members(shell: &mut Shell, editor: bool) -> Result<(), String> {
         let op = archforge_uml::members::operations(store, c).first().and_then(|o| store.uuid(*o).ok());
         (store.uuid(c).map_err(|e| e.to_string())?, op)
     };
-    snapshot::run(shell, "view.select", serde_json::json!({ "ids": [class.to_string()] }))?;
+    testing::run(shell, "view.select", serde_json::json!({ "ids": [class.to_string()] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     if editor && let Some(op) = op {
-        snapshot::cx(shell, |cx| uml_panel::open(cx, class, uml_panel::MemberKind::Operation, Some(op)));
+        testing::cx(shell, |cx| uml_panel::open(cx, class, uml_panel::MemberKind::Operation, Some(op)));
     }
     Ok(())
 }
@@ -1527,11 +1528,11 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
     };
     let pricing = id(shell, "PricingService")?;
     let payment = id(shell, "Payment")?;
-    snapshot::run(shell, "uml.classifier.set", serde_json::json!({ "classifier": pricing.to_string(), "final": true }))?;
-    snapshot::run(shell, "view.select", serde_json::json!({ "ids": [payment.to_string()] }))?;
+    testing::run(shell, "uml.classifier.set", serde_json::json!({ "classifier": pricing.to_string(), "final": true }))?;
+    testing::run(shell, "view.select", serde_json::json!({ "ids": [payment.to_string()] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     shell.panels.editors_for = Some(payment);
-    if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
+    if let Some(uml) = uml_mut(testing::notation_states(shell)) {
         uml.final_refused = Some(payment);
     }
     // At full size, PricingService over Payment and CardPayment, so its `{final}` reads.
@@ -1546,7 +1547,7 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
 /// editor or the question its removal asks. Gives the control the pointer rests on.
 fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, String> {
     let drawn = screen != Screen::WorkspaceNaryDrawing;
-    let ids = snapshot::cx(shell, |cx| uml_nary::put_recommends(cx, drawn))?;
+    let ids = testing::cx(shell, |cx| uml_nary::put_recommends(cx, drawn))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
@@ -1554,7 +1555,7 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
     let uuid = |k: &str| ids.get(k).and_then(|v| archforge_mof::Uuid::parse(v)).ok_or_else(|| format!("the sample's {k}"));
     if !drawn {
         shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
-        if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
+        if let Some(uml) = uml_mut(testing::notation_states(shell)) {
             uml.relation = uml_relate::Relate::NAry;
         }
         let diagram = uuid("diagram")?;
@@ -1562,18 +1563,18 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
             uml_nary::DraftEnd { class: uuid("Customer")?, node: uuid("customer")? },
             uml_nary::DraftEnd { class: uuid("Product")?, node: uuid("product")? },
         ];
-        if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
+        if let Some(uml) = uml_mut(testing::notation_states(shell)) {
             uml.nary = Some(uml_nary::Nary::Draft { diagram, ends });
         }
         return Ok(Some(format!("workspace.canvas.node.{}", uuid("catalog")?)));
     }
     let a = uuid("recommends")?;
-    snapshot::run(shell, "view.select", serde_json::json!({ "ids": [a.to_string()] }))?;
+    testing::run(shell, "view.select", serde_json::json!({ "ids": [a.to_string()] }))?;
     shell.panels.editors_for = Some(a);
     if screen == Screen::WorkspaceNary {
-        snapshot::cx(shell, |cx| uml_nary::open(cx, a, 2));
+        testing::cx(shell, |cx| uml_nary::open(cx, a, 2));
     } else {
-        if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
+        if let Some(uml) = uml_mut(testing::notation_states(shell)) {
             uml.nary_remove = Some(uml_nary::RemoveAsk { association: a, end: 2, opened: true });
         }
     }
@@ -1583,8 +1584,8 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
 /// In the sample class model, Priority nested in Order, placed under it with the ⊕ line, selected
 /// with its Properties open and its row in Models in sight (AR-132, D2).
 fn sample_nested(shell: &mut Shell) -> Result<(), String> {
-    let (priority, order) = snapshot::cx(shell, uml_ui::put_nested_priority)?;
-    snapshot::run(shell, "view.select", serde_json::json!({ "ids": [priority] }))?;
+    let (priority, order) = testing::cx(shell, uml_ui::put_nested_priority)?;
+    testing::run(shell, "view.select", serde_json::json!({ "ids": [priority] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     // At 80 %, Priority's card over Order's, the ⊕ line between them in sight.
     let store = shell.session.as_ref().ok_or("no project is open")?.doc();
@@ -1601,21 +1602,21 @@ fn sample_nested(shell: &mut Shell) -> Result<(), String> {
 /// The profile Persistence of F1 in the sample: its diagram open with Entity selected and the
 /// editor on cached; or, `refused`, Commerce selected with Unapply refused for its uses (F6).
 fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
-    let (commerce, persistence, entity) = snapshot::cx(shell, |cx| uml_profiles::put_profiles(cx, refused))?;
+    let (commerce, persistence, entity) = testing::cx(shell, |cx| uml_profiles::put_profiles(cx, refused))?;
     let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "an id".to_string());
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     shell.state.show_explorer(archforge_ui_egui::state::Explorer::Models);
     if refused {
-        snapshot::run(shell, "view.select", serde_json::json!({ "ids": [commerce] }))?;
+        testing::run(shell, "view.select", serde_json::json!({ "ids": [commerce] }))?;
         shell.explorer.expanded.insert(id(&commerce)?);
         let (package, profile) = (id(&commerce)?, id(&persistence)?);
-        snapshot::cx(shell, |cx| uml_profiles::unapply_profile(cx, package, profile));
+        testing::cx(shell, |cx| uml_profiles::unapply_profile(cx, package, profile));
         shell.panels.editors_for = Some(id(&commerce)?);
         return Ok(());
     }
     let profile = id(&persistence)?;
-    snapshot::cx(shell, |cx| uml_profiles::open_profile_diagram(cx, profile))?;
-    snapshot::run(shell, "view.select", serde_json::json!({ "ids": [entity] }))?;
+    testing::cx(shell, |cx| uml_profiles::open_profile_diagram(cx, profile))?;
+    testing::run(shell, "view.select", serde_json::json!({ "ids": [entity] }))?;
     shell.explorer.expanded.insert(id(&persistence)?);
     let cached = {
         let store = shell.session.as_ref().ok_or("no project is open")?.doc();
@@ -1624,7 +1625,7 @@ fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
         store.uuid(c).map_err(|e| e.to_string())?
     };
     let class = id(&entity)?;
-    snapshot::cx(shell, |cx| uml_panel::open(cx, class, uml_panel::MemberKind::Attribute, Some(cached)));
+    testing::cx(shell, |cx| uml_panel::open(cx, class, uml_panel::MemberKind::Attribute, Some(cached)));
     shell.panels.editors_for = Some(id(&entity)?);
     if let Some(s) = shell.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;
@@ -1639,14 +1640,14 @@ fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
 /// generalizations to Payment grouped in the set method {complete, disjoint}, the set selected with
 /// its Properties open, Payment and its three kinds in sight (AR-129).
 fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
-    let (gens, _) = snapshot::cx(shell, uml_ui::put_payment_kinds)?;
-    let out = snapshot::run(
+    let (gens, _) = testing::cx(shell, uml_ui::put_payment_kinds)?;
+    let out = testing::run(
         shell,
         "uml.generalization-set.add",
         serde_json::json!({ "generalizations": gens, "name": "method", "complete": true, "disjoint": true }),
     )?;
     let set = out["id"].as_str().ok_or("the set's id")?.to_string();
-    snapshot::run(shell, "view.select", serde_json::json!({ "ids": [set] }))?;
+    testing::run(shell, "view.select", serde_json::json!({ "ids": [set] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     if let Some(s) = shell.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;
@@ -1662,11 +1663,11 @@ fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
 /// OrderRepository binding it and Key's removal refused (AR-130).
 fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     let in_use = screen == Screen::WorkspaceTemplateInUse;
-    let (repo, [_, key]) = snapshot::cx(shell, |cx| uml_ui::put_repository(cx, in_use))?;
+    let (repo, [_, key]) = testing::cx(shell, |cx| uml_ui::put_repository(cx, in_use))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
-    snapshot::cx(shell, |cx| uml_templates::open(cx, repo, Some(key)));
+    testing::cx(shell, |cx| uml_templates::open(cx, repo, Some(key)));
     if in_use {
-        snapshot::cx(shell, uml_templates::remove_sample);
+        testing::cx(shell, uml_samples::remove_sample);
     } else if screen == Screen::WorkspaceTemplateKinds {
         shell.panels.menu = Some(menus::TEMPLATE_KIND);
     }
@@ -1682,7 +1683,7 @@ fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
 /// again and a new one's draft opened from OrderRepository's card to Repository's, Apply pressed
 /// with T still to pick.
 fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
-    let (repo, _) = snapshot::cx(shell, |cx| uml_ui::put_repository(cx, true))?;
+    let (repo, _) = testing::cx(shell, |cx| uml_ui::put_repository(cx, true))?;
     let d = shell.canvas.active.ok_or("the sample's diagram")?;
     let session = shell.session.as_mut().ok_or("the binding sample needs a session")?;
     let store = session.doc();
@@ -1707,8 +1708,8 @@ fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                 .and_then(|n| store.uuid(n).ok())
         };
         let (Some(from), Some(to)) = (node_of(bound), node_of(r)) else { return Err("the sample's nodes".into()) };
-        snapshot::cx(shell, |cx| uml_bindings::open_new(cx, d_obj, (from, to), bound, r));
-        snapshot::cx(shell, uml_bindings::apply_sample);
+        testing::cx(shell, |cx| uml_bindings::open_new(cx, d_obj, (from, to), bound, r));
+        testing::cx(shell, uml_bindings::apply_draft);
     }
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 0.75;
@@ -1732,19 +1733,19 @@ fn sample_qualifiers(shell: &mut Shell, refused: bool) -> Result<(), String> {
         store.uuid(a).map_err(|e| e.to_string())?
     };
     let id = a_id.to_string();
-    snapshot::run(shell, "uml.relationship.rename", json!({ "relationship": id, "name": "contains" }))?;
-    snapshot::run(shell, "uml.association.set-end", json!({ "association": id, "end": 1, "role": "line", "multiplicity": "0..1" }))?;
-    let out = snapshot::run(shell, "uml.qualifier.add", json!({ "association": id, "end": 0, "name": "lineNo", "type": "Integer" }))?;
+    testing::run(shell, "uml.relationship.rename", json!({ "relationship": id, "name": "contains" }))?;
+    testing::run(shell, "uml.association.set-end", json!({ "association": id, "end": 1, "role": "line", "multiplicity": "0..1" }))?;
+    let out = testing::run(shell, "uml.qualifier.add", json!({ "association": id, "end": 0, "name": "lineNo", "type": "Integer" }))?;
     let q = archforge_mof::Uuid::parse(out["id"].as_str().ok_or("the qualifier's id")?).ok_or("the qualifier's id")?;
-    snapshot::run(shell, "view.select", json!({ "ids": [id] }))?;
+    testing::run(shell, "view.select", json!({ "ids": [id] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     if let Some(s) = shell.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;
     }
     if refused {
-        snapshot::cx(shell, |cx| uml_qualifiers::refuse_sample(cx, a_id, 0, "lineNo", "String"));
+        testing::cx(shell, |cx| uml_samples::refuse_sample(cx, a_id, 0, "lineNo", "String"));
     } else {
-        snapshot::cx(shell, |cx| uml_qualifiers::open(cx, a_id, 0, Some(q)));
+        testing::cx(shell, |cx| uml_qualifiers::open(cx, a_id, 0, Some(q)));
     }
     shell.panels.editors_for = Some(a_id);
     shell.canvas.fit_pending = false;
@@ -1790,14 +1791,14 @@ fn sample_leaf(shell: &mut Shell) -> Result<(), String> {
     let amount_edit = edit_of(Some(store), payment_id, MemberKind::Attribute, Some(amount_id));
     for edit in [&total_edit, &card_amount] {
         let (cmd, params) = command_of(edit);
-        snapshot::cx(shell, |cx| write_in_sight(cx, edit, cmd, params))?;
+        testing::cx(shell, |cx| write_in_sight(cx, edit, cmd, params))?;
     }
-    snapshot::run(shell, "uml.classifier.set", serde_json::json!({ "classifier": pricing_id.to_string(), "final": true, "leaf": true }))?;
-    snapshot::run(shell, "view.select", serde_json::json!({ "ids": [payment_id.to_string()] }))?;
+    testing::run(shell, "uml.classifier.set", serde_json::json!({ "classifier": pricing_id.to_string(), "final": true, "leaf": true }))?;
+    testing::run(shell, "view.select", serde_json::json!({ "ids": [payment_id.to_string()] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     shell.panels.editors_for = Some(payment_id);
     let refused = shell.session.as_ref().and_then(|s| uml_panel::member_leaf_refusal(s.doc(), &amount_edit, true));
-    if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
+    if let Some(uml) = uml_mut(testing::notation_states(shell)) {
         uml.member = Some(MemberEdit { refused, refused_at: Some("leaf"), opened: false, ..amount_edit });
     }
     // Order, PricingService, Payment and CardPayment in sight, so `{leaf}` reads on Order's total()
@@ -1898,7 +1899,7 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
 /// (AR-565): Archive in Operations, and one in a long branch, whose path folds at its front.
 fn sample_package_paths(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
-    let top = snapshot::active_diagram(shell).and_then(|d| shell.session.as_ref()?.doc().uuid(d).ok());
+    let top = testing::active_diagram(shell).and_then(|d| shell.session.as_ref()?.doc().uuid(d).ok());
     let top = top.ok_or_else(|| "the sample needs its diagram open".to_string())?.to_string();
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
     let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
@@ -1923,7 +1924,7 @@ fn sample_package_paths(shell: &mut Shell) -> Result<(), String> {
 /// A package Archive placed on the open diagram after Customer, its card over Customer's (AR-570).
 fn sample_package_overlap(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
-    let top = snapshot::active_diagram(shell).and_then(|d| shell.session.as_ref()?.doc().uuid(d).ok());
+    let top = testing::active_diagram(shell).and_then(|d| shell.session.as_ref()?.doc().uuid(d).ok());
     let top = top.ok_or_else(|| "the sample needs its diagram open".to_string())?.to_string();
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
     let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
@@ -2063,7 +2064,7 @@ fn sample_interfaces(shell: &mut Shell) -> Result<(), String> {
         shell.explorer.expanded.insert(root);
     }
     archforge_ui_egui::canvas::open(shell, diagram);
-    snapshot::run(shell, "view.select", json!({ "ids": [payable] }))?;
+    testing::run(shell, "view.select", json!({ "ids": [payable] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
@@ -2101,13 +2102,13 @@ fn sample_enumerations(shell: &mut Shell) -> Result<(), String> {
     else {
         return Err("the sample's ids".into());
     };
-    snapshot::cx(shell, |cx| uml_ui::put_literals(cx, status, &["Placed", "Paid", "Shipped", "Cancelled"]))?;
+    testing::cx(shell, |cx| uml_ui::put_literals(cx, status, &["Placed", "Paid", "Shipped", "Cancelled"]))?;
     shell.explorer.expanded.extend([package, status]);
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
     archforge_ui_egui::canvas::open(shell, diagram);
-    snapshot::run(shell, "view.select", json!({ "ids": [status.to_string()] }))?;
+    testing::run(shell, "view.select", json!({ "ids": [status.to_string()] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
@@ -2161,7 +2162,7 @@ fn sample_data_types(shell: &mut Shell) -> Result<(), String> {
         shell.explorer.expanded.insert(root);
     }
     archforge_ui_egui::canvas::open(shell, diagram);
-    snapshot::run(shell, "view.select", json!({ "ids": [money.to_string()] }))?;
+    testing::run(shell, "view.select", json!({ "ids": [money.to_string()] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
@@ -2212,7 +2213,7 @@ fn sample_primitive_types(shell: &mut Shell) -> Result<(), String> {
         shell.explorer.expanded.insert(root);
     }
     archforge_ui_egui::canvas::open(shell, diagram);
-    snapshot::run(shell, "view.select", json!({ "ids": [sku.to_string()] }))?;
+    testing::run(shell, "view.select", json!({ "ids": [sku.to_string()] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
@@ -2232,10 +2233,10 @@ fn literal_draft(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.25;
     shell.canvas.pan = egui::vec2(160.0 - bounds.x as f32 * 1.25, 120.0 - bounds.y as f32 * 1.25);
-    if !snapshot::cx(shell, |cx| uml_inline::open(cx, status, uml_panel::MemberKind::Literal, None)) {
+    if !testing::cx(shell, |cx| uml_inline::open(cx, status, uml_panel::MemberKind::Literal, None)) {
         return Err("OrderStatus's card cannot hold a row".into());
     }
-    if let Some(inline) = uml_mut(snapshot::notation_states(shell)).and_then(|uml| uml.inline.as_mut()) {
+    if let Some(inline) = uml_mut(testing::notation_states(shell)).and_then(|uml| uml.inline.as_mut()) {
         inline.edit.name = "Returned".into();
     }
     Ok(())
@@ -2286,7 +2287,7 @@ fn sample_realizations(shell: &mut Shell) -> Result<(), String> {
         shell.explorer.expanded.insert(root);
     }
     archforge_ui_egui::canvas::open(shell, diagram);
-    snapshot::run(shell, "view.select", json!({ "ids": [realized] }))?;
+    testing::run(shell, "view.select", json!({ "ids": [realized] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
@@ -2328,7 +2329,7 @@ fn sample_association_class(shell: &mut Shell) -> Result<(), String> {
         shell.explorer.expanded.insert(root);
     }
     archforge_ui_egui::canvas::open(shell, diagram);
-    snapshot::run(shell, "view.select", json!({ "ids": [review] }))?;
+    testing::run(shell, "view.select", json!({ "ids": [review] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
@@ -2397,9 +2398,9 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
         shell.explorer.expanded.insert(root);
     }
     archforge_ui_egui::canvas::open(shell, diagram);
-    snapshot::run(shell, "view.select", json!({ "ids": [order.to_string()] }))?;
+    testing::run(shell, "view.select", json!({ "ids": [order.to_string()] }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
-    snapshot::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(total)));
+    testing::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(total)));
     Ok(())
 }
 
@@ -2598,7 +2599,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
     }
     shell.explorer.expanded.insert(root);
     archforge_ui_egui::canvas::open(shell, diagram);
-    snapshot::run(shell, "view.select", json!({ "ids": selected.into_iter().collect::<Vec<_>>() }))?;
+    testing::run(shell, "view.select", json!({ "ids": selected.into_iter().collect::<Vec<_>>() }))?;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     // The view: Order and the cards the step is about, at a zoom that reads; the finished model
     // whole.
@@ -2610,24 +2611,24 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
     };
     match step {
         1 => {
-            if !snapshot::cx(shell, |cx| uml_inline::open(cx, order, uml_panel::MemberKind::Attribute, None)) {
+            if !testing::cx(shell, |cx| uml_inline::open(cx, order, uml_panel::MemberKind::Attribute, None)) {
                 return Err("Order's card cannot hold a row".into());
             }
-            if let Some(inline) = uml_mut(snapshot::notation_states(shell)).and_then(|uml| uml.inline.as_mut()) {
+            if let Some(inline) = uml_mut(testing::notation_states(shell)).and_then(|uml| uml.inline.as_mut()) {
                 inline.edit.name = "number".into();
                 inline.ty = "Integer".into();
             }
         }
         2 => {
             shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
-            if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
+            if let Some(uml) = uml_mut(testing::notation_states(shell)) {
                 uml.relation = uml_relate::Relate::Association;
             }
             shell.canvas.popover = Some("relationship-kinds");
         }
         4 => {
             shell.canvas.tool = archforge_ui_egui::canvas::Tool::Place(uml_classifier::TOOL);
-            if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
+            if let Some(uml) = uml_mut(testing::notation_states(shell)) {
                 uml.classifier = uml_classifier::Classifier::Class;
             }
             shell.canvas.popover = Some(uml_classifier::KINDS);
@@ -2635,10 +2636,10 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
         }
         5 => {
             let status = id(&status)?;
-            if !snapshot::cx(shell, |cx| uml_inline::open(cx, status, uml_panel::MemberKind::Literal, None)) {
+            if !testing::cx(shell, |cx| uml_inline::open(cx, status, uml_panel::MemberKind::Literal, None)) {
                 return Err("OrderStatus's card cannot hold a row".into());
             }
-            if let Some(inline) = uml_mut(snapshot::notation_states(shell)).and_then(|uml| uml.inline.as_mut()) {
+            if let Some(inline) = uml_mut(testing::notation_states(shell)).and_then(|uml| uml.inline.as_mut()) {
                 inline.edit.name = "Cancelled".into();
             }
         }
@@ -2652,11 +2653,11 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
                     .and_then(|a| store.uuid(a).ok())
                     .ok_or("Order has no status")?
             };
-            snapshot::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(status_attribute)));
+            testing::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(status_attribute)));
         }
         11 => {
             let paid = id(&paid)?;
-            snapshot::cx(shell, |cx| uml_constraints::open(cx, order, Some(paid)));
+            testing::cx(shell, |cx| uml_constraints::open(cx, order, Some(paid)));
         }
         12 => shell.state.panel_collapsed = true,
         _ => {}
@@ -2678,7 +2679,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     sample_guide(shell, 12)?;
     shell.state.panel_collapsed = false;
     shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
-    let run = |shell: &mut Shell, command: &str, params: Value| snapshot::run(shell, command, params).map_err(|e| format!("{command}: {e}"));
+    let run = |shell: &mut Shell, command: &str, params: Value| testing::run(shell, command, params).map_err(|e| format!("{command}: {e}"));
     let id = |v: &Value| v.get("id").and_then(Value::as_str).and_then(Uuid::parse).ok_or_else(|| "a command gave no id".to_string());
     let find = |shell: &Shell, class: Option<archforge_mof::ClassId>, name: &str| -> Result<Uuid, String> {
         let store = shell.session.as_ref().ok_or("no project is open")?.doc();
@@ -2749,7 +2750,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             )?)?;
             grow_order(shell, (3, 2))?;
             select(shell, &[order])?;
-            snapshot::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Operation, Some(op)));
+            testing::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Operation, Some(op)));
             guide_view(shell, &[order], 1.0)?;
         }
         Screen::GuideQualifier => {
@@ -2761,7 +2762,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             let n = node(shell, customer)?;
             run(shell, "diagram.move", json!({ "nodes": [n.to_string()], "dx": -100.0, "dy": 0.0 }))?;
             select(shell, &[places])?;
-            snapshot::cx(shell, |cx| uml_qualifiers::open(cx, places, 0, Some(q)));
+            testing::cx(shell, |cx| uml_qualifiers::open(cx, places, 0, Some(q)));
             guide_view(shell, &[customer, order], 0.75)?;
         }
         Screen::GuideNary => {
@@ -2800,7 +2801,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                 run(shell, "uml.classifier.set", json!({ "classifier": card.to_string(), "final": true }))?;
                 run(shell, "uml.attribute.set", json!({ "attribute": amount.to_string(), "leaf": true }))?;
                 select(shell, &[payment])?;
-                snapshot::cx(shell, |cx| uml_panel::open(cx, payment, uml_panel::MemberKind::Attribute, Some(amount)));
+                testing::cx(shell, |cx| uml_panel::open(cx, payment, uml_panel::MemberKind::Attribute, Some(amount)));
             }
             guide_view(shell, &cards, 0.85)?;
         }
@@ -2833,7 +2834,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             if screen == Screen::GuideTemplate {
                 select(shell, &[repo])?;
                 let key = id(&key)?;
-                snapshot::cx(shell, |cx| uml_templates::open(cx, repo, Some(key)));
+                testing::cx(shell, |cx| uml_templates::open(cx, repo, Some(key)));
                 guide_view(shell, &[repo], 1.0)?;
             } else {
                 let bound = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": "OrderRepository" }))?)?;
@@ -2859,7 +2860,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             run(shell, "uml.attribute.add", json!({ "class": entity.to_string(), "name": "table", "type": "String" }))?;
             shell.state.show_explorer(archforge_ui_egui::state::Explorer::Models);
             if screen == Screen::GuideProfile {
-                snapshot::cx(shell, |cx| uml_profiles::open_profile_diagram(cx, profile))?;
+                testing::cx(shell, |cx| uml_profiles::open_profile_diagram(cx, profile))?;
                 select(shell, &[entity])?;
                 shell.explorer.expanded.insert(profile);
                 shell.canvas.fit_pending = false;
@@ -2874,7 +2875,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                     json!({ "element": order.to_string(), "stereotype": entity.to_string(), "property": "table", "values": ["orders"] }),
                 )?;
                 let d = shell.canvas.active.ok_or("no diagram is open")?;
-                snapshot::cx(shell, |cx| uml_stereotypes::show_values(cx, d, true))?;
+                testing::cx(shell, |cx| uml_stereotypes::show_values(cx, d, true))?;
                 braces_under_order(shell)?;
                 select(shell, &[order])?;
                 guide_view(shell, &[order], 1.0)?;

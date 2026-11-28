@@ -49,7 +49,7 @@ fn a_diagram_refusal_is_said_in_the_chosen_language() {
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         h.state_mut().state.language = "de".into();
         h.run();
-        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p);
+        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| archforge_ui_egui::testing::run(h.state_mut(), cmd, p);
         let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).err().unwrap_or_default();
         let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).unwrap()["id"].as_str().unwrap().to_string();
         let order = named(&h, archforge_uml::CLASS, "Order").to_string();
@@ -119,7 +119,7 @@ fn a_shared_commands_element_refused_is_said_in_the_chosen_language() {
         let st = h.state().session.as_ref().unwrap().doc();
         let not_of = format!("{} ist kein Element einer Notation dieses Projekts.", archforge_core::name_of(st, st.by_uuid(d).unwrap()));
         let d = d.to_string();
-        let mut refused = |cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let mut refused = |cmd: &str, p: serde_json::Value| archforge_ui_egui::testing::run(h.state_mut(), cmd, p).err().unwrap_or_default();
         assert_eq!(refused("view.select", json!({ "ids": [7] })), "Geben Sie die Elemente als Liste von IDs an.", "{theme:?}");
         assert_eq!(refused("view.select", json!({ "ids": [""] })), "Es ist kein Element angegeben. Geben Sie seine ID an.", "{theme:?}");
         assert_eq!(refused("element.remove", json!({ "ids": [] })), "Geben Sie mindestens ein Element an.", "{theme:?}");
@@ -162,10 +162,10 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+            archforge_ui_egui::testing::run(h.state_mut(), cmd, p).err().unwrap_or_default()
         };
         let fill = json!({ "ids": [&nodes["Order"]], "fill": "#3366cc" });
-        archforge_ui_egui::snapshot::run(h.state_mut(), "diagram.style", fill.clone()).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "diagram.style", fill.clone()).unwrap();
         assert_eq!(refused(&mut h, "edit.redo", json!({})), "Es gibt nichts zu wiederholen.", "{theme:?}");
         let unheld = EngineError::Disabled { id: "edit.redo".into(), reason: "a reason no catalogue holds" };
         assert_eq!(archforge_shell_api::panels::refusal(SCREENS.notation_uis(), &unheld), "A reason no catalogue holds.", "{theme:?}");
@@ -295,7 +295,7 @@ fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let mut id =
-            |cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+            |cmd: &str, p: serde_json::Value| archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
         let sales = id("uml.package.add", serde_json::json!({ "name": "Sales" }));
         let order = id("uml.class.add", serde_json::json!({ "package": sales, "name": "Order" }));
         id("uml.attribute.add", serde_json::json!({ "class": order, "name": "status" }));
@@ -316,7 +316,7 @@ fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
                 &archforge_ui_egui::i18n::tr("There is {what} named {name} already."),
                 &[("what", &what), ("name", name)],
             );
-            let refused = archforge_ui_egui::snapshot::run(h.state_mut(), cmd, params).err().unwrap_or_default();
+            let refused = archforge_ui_egui::testing::run(h.state_mut(), cmd, params).err().unwrap_or_default();
             assert_eq!(refused.to_lowercase(), said.to_lowercase(), "{theme:?} {cmd}: the kind and the other's name in German");
             assert!(refused.starts_with(char::is_uppercase) && refused.contains(name), "{theme:?} {cmd}: a sentence naming {name}: {refused}");
         }
@@ -495,14 +495,14 @@ fn an_empty_name_is_refused_unless_the_rename_may_leave_it_unnamed() {
     let mut shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     for cmd in ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"] {
         assert!(
-            !archforge_ui_egui::snapshot::cx(&mut shell, |cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, cmd, "  ")),
+            !archforge_ui_egui::testing::cx(&mut shell, |cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, cmd, "  ")),
             "{cmd} may leave its element unnamed"
         );
         assert_eq!(shell.panels.notice, None, "{cmd}");
     }
     for cmd in ["er.schema.rename", "uml.class.rename"] {
         assert!(
-            archforge_ui_egui::snapshot::cx(&mut shell, |cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, cmd, "  ")),
+            archforge_ui_egui::testing::cx(&mut shell, |cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, cmd, "  ")),
             "{cmd} needs a name"
         );
         assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."), "{cmd}");
@@ -528,13 +528,13 @@ fn a_drop_in_models_runs_as_its_notation_runs_it() {
         };
         let shell = h.state_mut();
         let params = |package: &str| serde_json::json!({ "package": package, "to": sales });
-        archforge_ui_egui::snapshot::cx(shell, |cx| er_ui::ErUi.run_drop(cx, "uml.package.move", params(&orders))).unwrap();
+        archforge_ui_egui::testing::cx(shell, |cx| er_ui::ErUi.run_drop(cx, "uml.package.move", params(&orders))).unwrap();
         assert_eq!((parent(shell, &orders).as_str(), shell.canvas.toast.is_none()), ("Sales", true), "{theme:?}: run plainly");
-        archforge_ui_egui::snapshot::cx(shell, |cx| uml_ui::UmlUi.run_drop(cx, "uml.package.move", params(&billing))).unwrap();
+        archforge_ui_egui::testing::cx(shell, |cx| uml_ui::UmlUi.run_drop(cx, "uml.package.move", params(&billing))).unwrap();
         assert_eq!(parent(shell, &billing), "Sales", "{theme:?}");
         assert_eq!(shell.canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Billing moved into Sales"), "{theme:?}: as Properties moves it");
         assert_eq!(shell.session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}");
-        let refused = archforge_ui_egui::snapshot::cx(shell, |cx| {
+        let refused = archforge_ui_egui::testing::cx(shell, |cx| {
             uml_ui::UmlUi.run_drop(cx, "uml.package.move", serde_json::json!({ "package": sales, "to": billing }))
         });
         assert!(refused.is_err(), "{theme:?}: into a package it holds, refused in words: {refused:?}");
@@ -624,7 +624,7 @@ fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes
 #[test]
 fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     h.run();
     let class_diagram = h.state().canvas.active.expect("the sample's class diagram");
     // An ER diagram beside it, then the class diagram shown again, panned and zoomed.
@@ -956,7 +956,7 @@ fn the_kind_reads_a_press_first_and_ers_leaves_it() {
         assert_eq!(ask(shell, &uml_ui::UmlKind, Some(customer), false).0, "nothing", "{theme:?}: no line starts");
         let (word, run) = ask(shell, &uml_ui::UmlKind, Some(customer), true);
         assert_eq!(word, "own", "{theme:?}");
-        archforge_ui_egui::snapshot::cx(shell, |cx| run.unwrap()(cx));
+        archforge_ui_egui::testing::cx(shell, |cx| run.unwrap()(cx));
         let ends = |shell: &Shell| match &uml_of(shell).nary {
             Some(uml_nary::Nary::Draft { ends, .. }) => ends.len(),
             _ => 0,
@@ -964,7 +964,7 @@ fn the_kind_reads_a_press_first_and_ers_leaves_it() {
         assert_eq!(ends(shell), 1, "{theme:?}: Customer is the first end");
         let (word, run) = ask(shell, &uml_ui::UmlKind, None, true);
         assert_eq!(word, "own", "{theme:?}");
-        archforge_ui_egui::snapshot::cx(shell, |cx| run.unwrap()(cx));
+        archforge_ui_egui::testing::cx(shell, |cx| run.unwrap()(cx));
         assert!(uml_of(shell).nary.is_none() && shell.canvas.tool == archforge_shell_api::canvas::Tool::Select, "{theme:?}: empty canvas cancels");
         // Add end waits on a class.
         let st = shell.session.as_ref().unwrap().doc();
@@ -975,7 +975,7 @@ fn the_kind_reads_a_press_first_and_ers_leaves_it() {
         assert_eq!(ask(shell, &uml_ui::UmlKind, Some(customer), false).0, "none", "{theme:?}: a drag may start");
         let (word, run) = ask(shell, &uml_ui::UmlKind, Some(customer), true);
         assert_eq!(word, "own", "{theme:?}");
-        archforge_ui_egui::snapshot::cx(shell, |cx| run.unwrap()(cx));
+        archforge_ui_egui::testing::cx(shell, |cx| run.unwrap()(cx));
         let st = shell.session.as_ref().unwrap().doc();
         let ends = archforge_uml::nary::ends(st, st.by_uuid(association).unwrap()).len();
         assert_eq!((ends, uml_of(shell).nary.is_none()), (4, true), "{theme:?}: a fourth end, at Customer");
@@ -1005,14 +1005,14 @@ fn the_kind_reads_a_right_click_first_and_ers_leaves_it() {
         assert_eq!(ask(shell, &uml_ui::UmlKind, Some(customer), None).0, "none", "{theme:?}: a card's menu is the element menu");
         let (word, run) = ask(shell, &uml_ui::UmlKind, Some(diamond), None);
         assert_eq!(word, "own", "{theme:?}");
-        archforge_ui_egui::snapshot::cx(shell, |cx| run.unwrap()(cx));
+        archforge_ui_egui::testing::cx(shell, |cx| run.unwrap()(cx));
         assert_eq!(uml_of(shell).nary_menu, Some((PRESSED_AT, a_id)), "{theme:?}: its menu, where pressed");
         let st = shell.session.as_ref().unwrap().doc();
         assert_eq!(shell.session.as_ref().unwrap().view().selection, vec![st.by_uuid(a_id).unwrap()], "{theme:?}: the association selected");
     }
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         h.run();
         let shell = h.state_mut();
         let st = shell.session.as_ref().unwrap().doc();
@@ -1024,13 +1024,13 @@ fn the_kind_reads_a_right_click_first_and_ers_leaves_it() {
         assert_eq!(ask(shell, &er_kind::ErKind).0, "none", "{theme:?}: ER's kind leaves it");
         let (word, run) = ask(shell, &uml_ui::UmlKind);
         assert_eq!(word, "own", "{theme:?}");
-        archforge_ui_egui::snapshot::cx(shell, |cx| run.unwrap()(cx));
+        archforge_ui_egui::testing::cx(shell, |cx| run.unwrap()(cx));
         assert_eq!(uml_of(shell).line_menu, Some(PRESSED_AT), "{theme:?}: the set actions, where pressed");
         assert_eq!(shell.session.as_ref().unwrap().view().selection, vec![g], "{theme:?}: the line selected first");
         uml_of_mut(shell).line_menu = None;
         shell.session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
         let run = ask(shell, &uml_ui::UmlKind).1.unwrap();
-        archforge_ui_egui::snapshot::cx(shell, |cx| run(cx));
+        archforge_ui_egui::testing::cx(shell, |cx| run(cx));
         assert_eq!(shell.session.as_ref().unwrap().view().selection.len(), 3, "{theme:?}: a selection holding it is kept");
     }
 }
@@ -1046,14 +1046,14 @@ fn the_kind_takes_its_drawings_keys_first_and_ers_takes_none() {
         let shell = h.state_mut();
         let d = shell.session.as_ref().unwrap().doc().by_uuid(shell.canvas.active.unwrap()).unwrap();
         let escape = |shell: &mut Shell, kind: &dyn DiagramKind| {
-            keyed_alone(shell, &[egui::Key::Escape], egui::Modifiers::NONE, |s, ui| archforge_ui_egui::snapshot::cx(s, |cx| kind.keys(cx, ui, d)))
+            keyed_alone(shell, &[egui::Key::Escape], egui::Modifiers::NONE, |s, ui| archforge_ui_egui::testing::cx(s, |cx| kind.keys(cx, ui, d)))
         };
         assert!(!escape(shell, &uml_ui::UmlKind), "{theme:?}: nothing drawn");
         shell.canvas.tool = archforge_shell_api::canvas::Tool::Connect("relationship");
         uml_of_mut(shell).relation = uml_relate::Relate::NAry;
         let customer = node_here(shell, &ids["Customer"]);
         let node = shell.session.as_ref().unwrap().doc().uuid(customer).unwrap();
-        archforge_ui_egui::snapshot::cx(shell, |cx| uml_nary::click(cx, d, node, false));
+        archforge_ui_egui::testing::cx(shell, |cx| uml_nary::click(cx, d, node, false));
         assert!(uml_of(shell).nary.is_some(), "{theme:?}: a drawing under way");
         assert!(!escape(shell, &er_kind::ErKind), "{theme:?}: ER's kind takes none");
         assert!(uml_of(shell).nary.is_some(), "{theme:?}: and leaves the drawing");
@@ -1094,9 +1094,9 @@ fn select_all_takes_in_what_the_kind_adds() {
     use archforge_shell_api::kinds::DiagramKind;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        assert!(archforge_ui_egui::snapshot::cx(h.state_mut(), uml_sets::shortcut), "{theme:?}: a set made");
+        assert!(archforge_ui_egui::testing::cx(h.state_mut(), uml_sets::shortcut), "{theme:?}: a set made");
         let st = h.state().session.as_ref().unwrap().doc();
         let set = st.alive().find(|o| archforge_uml::generalization_sets::is_set(st, *o)).unwrap();
         let lines: Vec<archforge_mof::Obj> = gens.iter().map(|g| st.by_uuid(archforge_mof::Uuid::parse(g).unwrap()).unwrap()).collect();
@@ -1127,27 +1127,24 @@ fn delete_removes_each_notations_own_selected_element_its_own_way() {
             s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
             (rel, fk)
         };
-        assert!(!archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::UmlUi.canvas_delete(cx, false)), "{theme:?}: UML leaves a relationship");
-        assert!(
-            !archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_ui::ErUi.canvas_delete(cx, true)),
-            "{theme:?}: Shift leaves it to the dialog"
-        );
+        assert!(!archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::UmlUi.canvas_delete(cx, false)), "{theme:?}: UML leaves a relationship");
+        assert!(!archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_ui::ErUi.canvas_delete(cx, true)), "{theme:?}: Shift leaves it to the dialog");
         assert!(alive(&h, rel), "{theme:?}");
-        assert!(archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_ui::ErUi.canvas_delete(cx, false)), "{theme:?}");
+        assert!(archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_ui::ErUi.canvas_delete(cx, false)), "{theme:?}");
         assert!(!alive(&h, rel) && !alive(&h, fk), "{theme:?}: with its foreign key");
         assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("places removed"), "{theme:?}");
     }
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        assert!(archforge_ui_egui::snapshot::cx(h.state_mut(), uml_sets::shortcut), "{theme:?}: a set made, and selected");
+        assert!(archforge_ui_egui::testing::cx(h.state_mut(), uml_sets::shortcut), "{theme:?}: a set made, and selected");
         let st = h.state().session.as_ref().unwrap().doc();
         let set = st.alive().find(|o| archforge_uml::generalization_sets::is_set(st, *o)).unwrap();
         let g = st.by_uuid(archforge_mof::Uuid::parse(&gens[0]).unwrap()).unwrap();
-        assert!(!archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_ui::ErUi.canvas_delete(cx, false)), "{theme:?}: ER leaves a set");
+        assert!(!archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_ui::ErUi.canvas_delete(cx, false)), "{theme:?}: ER leaves a set");
         assert!(alive(&h, set), "{theme:?}");
-        assert!(archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::UmlUi.canvas_delete(cx, true)), "{theme:?}: Shift held too");
+        assert!(archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::UmlUi.canvas_delete(cx, true)), "{theme:?}: Shift held too");
         assert!(!alive(&h, set) && alive(&h, g), "{theme:?}: its generalizations kept");
     }
 }
@@ -1161,7 +1158,7 @@ fn a_notations_chord_on_the_selection_is_its_own() {
     let chord = egui::Modifiers::COMMAND | egui::Modifiers::ALT;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
         let sets = |h: &Harness<'static, Shell>| {
             let st = h.state().session.as_ref().unwrap().doc();
@@ -1169,17 +1166,17 @@ fn a_notations_chord_on_the_selection_is_its_own() {
         };
         let shell = h.state_mut();
         assert!(
-            !keyed_alone(shell, &[egui::Key::G], chord, |s, ui| archforge_ui_egui::snapshot::cx(s, |cx| er_ui::ErUi.canvas_keys(cx, ui))),
+            !keyed_alone(shell, &[egui::Key::G], chord, |s, ui| archforge_ui_egui::testing::cx(s, |cx| er_ui::ErUi.canvas_keys(cx, ui))),
             "{theme:?}: ER takes none"
         );
         assert!(
-            !keyed_alone(shell, &[egui::Key::G], egui::Modifiers::COMMAND, |s, ui| archforge_ui_egui::snapshot::cx(s, |cx| uml_ui::UmlUi
+            !keyed_alone(shell, &[egui::Key::G], egui::Modifiers::COMMAND, |s, ui| archforge_ui_egui::testing::cx(s, |cx| uml_ui::UmlUi
                 .canvas_keys(cx, ui))),
             "{theme:?}"
         );
         assert_eq!(sets(&h), 0, "{theme:?}");
         assert!(
-            keyed_alone(h.state_mut(), &[egui::Key::G], chord, |s, ui| archforge_ui_egui::snapshot::cx(s, |cx| uml_ui::UmlUi.canvas_keys(cx, ui))),
+            keyed_alone(h.state_mut(), &[egui::Key::G], chord, |s, ui| archforge_ui_egui::testing::cx(s, |cx| uml_ui::UmlUi.canvas_keys(cx, ui))),
             "{theme:?}: ⌥⌘G"
         );
         assert_eq!(sets(&h), 1, "{theme:?}: a set made");
@@ -1221,10 +1218,7 @@ fn a_card_draft_is_the_notations_row_typed_in_place() {
         };
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(uml_of(h.state()).card_draft(st), None, "{theme:?}");
-        assert!(
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)),
-            "{theme:?}"
-        );
+        assert!(archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)), "{theme:?}");
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(uml_of(h.state()).card_draft(st), Some((catalog, 0, None)), "{theme:?}: a new attribute on Catalog");
         assert_eq!(er_of(h.state()).card_draft(st), None, "{theme:?}: ER types no row on a card");
@@ -1246,9 +1240,9 @@ fn a_resolvable_badge_says_and_does_what_its_notation_answers() {
             let st = h.state().session.as_ref().unwrap().doc();
             st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
         };
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::UmlUi.resolve(cx, rel));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::UmlUi.resolve(cx, rel));
         assert!(er_of(h.state()).mapping.is_none(), "{theme:?}: UML opens nothing");
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_ui::ErUi.resolve(cx, rel));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_ui::ErUi.resolve(cx, rel));
         assert_eq!(er_of(h.state()).mapping.as_ref().map(|m| m.relationship), Some(rel), "{theme:?}: ER opens the offer");
     }
 }
@@ -1471,19 +1465,19 @@ fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
     let node = store.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
     let class = store.uuid(store.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap();
     assert!(
-        archforge_ui_egui::snapshot::cx(s, |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)),
+        archforge_ui_egui::testing::cx(s, |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)),
         "Catalog's card takes a row"
     );
     assert!(
-        archforge_ui_egui::snapshot::notation_states(s).editing() && archforge_ui_egui::snapshot::notation_states(s).holds_keys(),
+        archforge_ui_egui::testing::notation_states(s).editing() && archforge_ui_egui::testing::notation_states(s).holds_keys(),
         "a row typed in place is edited and holds the keys"
     );
-    archforge_ui_egui::snapshot::cx(s, |cx| er_table::open_column(cx, table, None));
-    archforge_ui_egui::snapshot::cx(s, |cx| er_keys::open(cx, table, None));
-    archforge_ui_egui::snapshot::cx(s, |cx| er_checks::open(cx, table, None));
-    archforge_ui_egui::snapshot::cx(s, |cx| er_indexes::open(cx, table, None));
-    archforge_ui_egui::snapshot::cx(s, |cx| er_types::open(cx, schema, TypeKind::Domain, None));
-    archforge_ui_egui::snapshot::cx(s, |cx| er_objects::open(cx, schema, ObjectKind::Sequence, None));
+    archforge_ui_egui::testing::cx(s, |cx| er_table::open_column(cx, table, None));
+    archforge_ui_egui::testing::cx(s, |cx| er_keys::open(cx, table, None));
+    archforge_ui_egui::testing::cx(s, |cx| er_checks::open(cx, table, None));
+    archforge_ui_egui::testing::cx(s, |cx| er_indexes::open(cx, table, None));
+    archforge_ui_egui::testing::cx(s, |cx| er_types::open(cx, schema, TypeKind::Domain, None));
+    archforge_ui_egui::testing::cx(s, |cx| er_objects::open(cx, schema, ObjectKind::Sequence, None));
     let er = er_of_mut(s);
     er.role = Some(er_relation::RoleEdit { target: table, end: 0, text: "buyer".into() });
     er.no_key_card = Some(table);
@@ -1555,26 +1549,26 @@ fn package_navigation_is_umls_kinds_and_ers_does_none() {
         let (_, first, sales, sales_d) = first_and_sales(&mut h);
         archforge_ui_egui::canvas::open(h.state_mut(), first);
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.5, egui::vec2(33.0, 44.0));
         let shell = h.state_mut();
         let d = shell.session.as_ref().unwrap().doc().by_uuid(sales_d).unwrap();
         let p = archforge_ui_egui::ux::palette(theme == ThemeKind::Dark);
         let view = |shell: &Shell| (shell.canvas.zoom, shell.canvas.pan, uml_of(shell).nav.centre);
         archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
-            archforge_ui_egui::snapshot::cx(shell, |cx| er_kind::ErKind.before_draw(cx, ui, CANVAS, d))
+            archforge_ui_egui::testing::cx(shell, |cx| er_kind::ErKind.before_draw(cx, ui, CANVAS, d))
         });
         assert_eq!(view(shell), (0.5, egui::vec2(33.0, 44.0), true), "{theme:?}: the default lands nothing");
         archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
-            archforge_ui_egui::snapshot::cx(shell, |cx| uml_ui::UmlKind.before_draw(cx, ui, CANVAS, d))
+            archforge_ui_egui::testing::cx(shell, |cx| uml_ui::UmlKind.before_draw(cx, ui, CANVAS, d))
         });
         assert_eq!(view(shell), (uml_package_nav::LANDING, egui::Vec2::ZERO, false), "{theme:?}: UML lands the entry");
         let mut room = (0.0, 0.0);
         let er = archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
-            room.0 = archforge_ui_egui::snapshot::cx(shell, |cx| er_kind::ErKind.after_draw(cx, ui, p, CANVAS, d))
+            room.0 = archforge_ui_egui::testing::cx(shell, |cx| er_kind::ErKind.after_draw(cx, ui, p, CANVAS, d))
         });
         let uml = archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
-            room.1 = archforge_ui_egui::snapshot::cx(shell, |cx| uml_ui::UmlKind.after_draw(cx, ui, p, CANVAS, d))
+            room.1 = archforge_ui_egui::testing::cx(shell, |cx| uml_ui::UmlKind.after_draw(cx, ui, p, CANVAS, d))
         });
         assert!(er.is_empty() && room.0 == 0.0, "{theme:?}: the default draws nothing: {er:?}");
         assert!(uml.iter().any(|i| i == "workspace.canvas.path") && room.1 > 0.0, "{theme:?}: UML's path bar: {uml:?} {room:?}");
@@ -1621,7 +1615,7 @@ fn ers_overlay_is_its_mapping_offer_at_the_offers_layer() {
             let st = h.state().session.as_ref().unwrap().doc();
             st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
         };
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_connect::offer_mapping(cx, rel));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_connect::offer_mapping(cx, rel));
         let (shapes, ids) = overlaid(&mut h, &er_ui::ErUi, Layer::Offers);
         assert!(shapes > 0 && ids.iter().any(|i| i == "workspace.mapping.name"), "{theme:?}: the offer, {ids:?}");
         for layer in [Layer::Drafts, Layer::Rows, Layer::Menus] {
@@ -1647,7 +1641,7 @@ fn umls_overlays_go_at_their_layers() {
         let (mut h, _, (from, to)) = binding_sample(theme);
         uml_of_mut(h.state_mut()).relation = uml_relate::Relate::TemplateBinding;
         let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_relate::connect(cx, d, from, to));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_relate::connect(cx, d, from, to));
         h.run();
         for layer in all {
             let (shapes, ids) = overlaid(&mut h, &uml_ui::UmlUi, layer);
@@ -1657,14 +1651,14 @@ fn umls_overlays_go_at_their_layers() {
         }
         // A member typed on Catalog's card, and the menu of three selected generalization lines.
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         let class = {
             let st = h.state().session.as_ref().unwrap().doc();
             let node = st.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
             st.uuid(st.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap()
         };
         assert!(
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)),
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)),
             "{theme:?}: the row opens"
         );
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
@@ -1732,7 +1726,7 @@ fn the_n_ary_hint_bar_is_umls_kinds_and_ers_draws_none() {
         let hinted = |kind: &dyn DiagramKind, shell: &mut Shell| {
             let p = archforge_ui_egui::ux::palette(theme == ThemeKind::Dark);
             let ids = archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
-                archforge_ui_egui::snapshot::cx(shell, |cx| kind.hint_bar(cx, ui, p, CANVAS, 0.0))
+                archforge_ui_egui::testing::cx(shell, |cx| kind.hint_bar(cx, ui, p, CANVAS, 0.0))
             });
             ids.iter().any(|i| i == "workspace.canvas.gestureHint")
         };
@@ -2469,7 +2463,7 @@ fn a_notations_refusals_say_their_parts_by_the_notations_the_shell_registered() 
             format!("The literal lazy is the value of fetch in «Entity» on {what}. Set another value there first."),
         ]
     };
-    let said = archforge_ui_egui::snapshot::cx(&mut shell, |cx| reasons().map(|r| archforge_shell_api::panels::refusal(cx.notation_uis, &failed(r))));
+    let said = archforge_ui_egui::testing::cx(&mut shell, |cx| reasons().map(|r| archforge_shell_api::panels::refusal(cx.notation_uis, &failed(r))));
     assert_eq!(said, sentences(WORDED_ASSOCIATION, WORDED_LITERALS));
     let app = reasons().map(|r| archforge_shell_api::panels::refusal(SCREENS.notation_uis(), &failed(r)));
     assert_eq!(app, sentences("an association", "An enum type needs at least one literal."));

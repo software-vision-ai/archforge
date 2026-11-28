@@ -38,7 +38,7 @@ fn delete_on_a_set_label_removes_the_set_and_keeps_its_lines() {
         (ThemeKind::Dark, true, true),
     ] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, payment) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, payment) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.75, egui::vec2(-470.0, -230.0));
         let d = h.state().canvas.active.unwrap().to_string();
         let s = h.state_mut().session.as_mut().unwrap();
@@ -86,7 +86,7 @@ fn delete_on_a_set_label_removes_the_set_and_keeps_its_lines() {
 fn select_all_takes_a_generalization_set_whether_its_label_was_moved_or_not() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         let d = h.state().canvas.active.unwrap().to_string();
         let s = h.state_mut().session.as_mut().unwrap();
         let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method" })).unwrap().value["id"]
@@ -161,7 +161,7 @@ fn stays_open(h: &mut Harness<'static, Shell>, typed: fn(&Shell) -> Option<Strin
 fn the_member_editor_stays_open_through_the_in_window_edit_menu() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
         h.state_mut().in_window_menu = true;
         let st = h.state().session.as_ref().unwrap().doc();
         let catalog = st
@@ -198,7 +198,7 @@ fn delete_after_select_all_deletes_no_set_from_the_model() {
     };
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, payment) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, payment) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         let s = h.state_mut().session.as_mut().unwrap();
         let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method" })).unwrap().value["id"]
             .as_str()

@@ -28,7 +28,7 @@ fn uml_sized(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
 /// A version's details to open over the canvas.
 fn open_details(s: &mut Shell) {
     s.services.projects = Some(std::sync::Arc::new(FakeHost::default()));
-    archforge_ui_egui::snapshot::open_version_details(s, version_row("c1", None, (None, false), "2026-11-06T15:05:00Z"));
+    archforge_ui_egui::testing::open_version_details(s, version_row("c1", None, (None, false), "2026-11-06T15:05:00Z"));
 }
 
 /// Each thing that keeps the tools from the canvas turns every row off, stops a row already chosen,
@@ -42,7 +42,7 @@ fn every_row_is_off_where_its_tool_cannot_be_used() {
         ("read-only", |s| s.session.as_mut().unwrap().set_read_only(true).unwrap(), busy),
         ("no project shown", |s| s.active = None, Some("Open or go back to a project first")),
         ("no diagram", |s| s.canvas.active = None, show),
-        ("a changed element", |s| archforge_ui_egui::snapshot::open_change(s, found(1)), show),
+        ("a changed element", |s| archforge_ui_egui::testing::open_change(s, found(1)), show),
         ("a version's details", open_details, show),
         ("a dialog", archforge_ui_egui::support::open, None),
         ("a question", |s| s.ask = Some(archforge_ui_egui::close_ask::Ask::Unsaved { path: "/shop.archforge".into() }), None),

@@ -53,8 +53,6 @@ pub mod save_version;
 pub mod settings;
 mod settings_agents;
 pub mod skill_tab;
-#[cfg(any(test, feature = "snapshot"))]
-pub mod snapshot;
 pub mod state;
 pub mod support;
 mod switch_ask;

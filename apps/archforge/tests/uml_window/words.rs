@@ -18,7 +18,7 @@ fn a_template_rule_broken_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let mut id =
-            |cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+            |cmd: &str, p: serde_json::Value| archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
         let sales = id("uml.package.add", json!({ "name": "Sales" }));
         let [repository, order, entity, big] =
             ["Repository", "Order", "Entity", "Big"].map(|n| id("uml.class.add", json!({ "package": sales, "name": n })));
@@ -55,7 +55,7 @@ fn a_template_rule_broken_is_said_in_the_chosen_language() {
             (remove, json!({ "ids": [t] }), fmt(in_use, &order_t)),
             (remove, json!({ "ids": [m] }), fmt(last, &[("bound", "Price"), ("template", "Money"), ("name", "M")])),
         ] {
-            let refused = archforge_ui_egui::snapshot::run(h.state_mut(), cmd, params).err().unwrap_or_default();
+            let refused = archforge_ui_egui::testing::run(h.state_mut(), cmd, params).err().unwrap_or_default();
             assert_eq!(refused, said, "{theme:?}: in German");
         }
         assert_ne!(tr("A template has at most {max} parameters."), "A template has at most {max} parameters.", "{theme:?}: the language is German");
@@ -77,10 +77,10 @@ fn a_use_that_refuses_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let id = |h: &mut egui_kittest::Harness<'_, archforge_ui_egui::Shell>, cmd: &str, p: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+            archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
         };
         let refused = |h: &mut egui_kittest::Harness<'_, archforge_ui_egui::Shell>, cmd: &str, p: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+            archforge_ui_egui::testing::run(h.state_mut(), cmd, p).err().unwrap_or_default()
         };
         let commerce = id(&mut h, "uml.package.add", json!({ "name": "Commerce" }));
         let [order, customer, invoice] =
@@ -126,7 +126,7 @@ fn a_use_that_refuses_is_said_in_the_chosen_language() {
             st.by_uuid(archforge_mof::Uuid::parse(&entity).unwrap()).unwrap(),
         );
         assert_eq!(before_asking, Some(named.clone()), "{theme:?}");
-        archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", json!({ "ids": [entity] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "view.select", json!({ "ids": [entity] })).unwrap();
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
         h.run();
         for control in [format!("{}.Class.edit", uml_profiles::EXTENDS_ROW_ID), format!("{}.remove", uml_profiles::EXTENSION_ID)] {
@@ -261,7 +261,7 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+            archforge_ui_egui::testing::run(h.state_mut(), cmd, p).err().unwrap_or_default()
         };
         let [order, payment] = ["Order", "Payment"].map(|n| named(&h, archforge_uml::CLASS, n).to_string());
         let (diagram, node) = (h.state().canvas.active.unwrap().to_string(), nodes["Order"].clone());
@@ -283,7 +283,7 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "uml.constraint.add", made(json!(vec![&order; 257]))), most, "{theme:?}");
         // A description: on a constraint, which takes none, and one too long for a class.
         let rule =
-            archforge_ui_egui::snapshot::run(h.state_mut(), "uml.constraint.add", json!({ "context": payment, "expression": "x" })).unwrap()["id"]
+            archforge_ui_egui::testing::run(h.state_mut(), "uml.constraint.add", json!({ "context": payment, "expression": "x" })).unwrap()["id"]
                 .clone();
         let takes_none = tr("This element takes no description.");
         assert_eq!(refused(&mut h, "element.describe", json!({ "element": rule, "text": "About it" })), takes_none, "{theme:?}");
@@ -297,8 +297,8 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
             "{theme:?}"
         );
         // Braces picked in the editor for a class the diagram no longer shows: said under the form.
-        archforge_ui_egui::snapshot::run(h.state_mut(), "diagram.unplace", json!({ "nodes": [node] })).unwrap();
-        archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", json!({ "ids": [order] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "diagram.unplace", json!({ "nodes": [node] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "view.select", json!({ "ids": [order] })).unwrap();
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
         h.run();
         let at = reached_in_properties(&mut h, "workspace.properties.constraints.add");
@@ -354,11 +354,11 @@ fn a_constraint_parameter_refused_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+            archforge_ui_egui::testing::run(h.state_mut(), cmd, p).err().unwrap_or_default()
         };
         let order = named(&h, archforge_uml::CLASS, "Order").to_string();
         let diagram = h.state().canvas.active.unwrap().to_string();
-        let c = archforge_ui_egui::snapshot::run(h.state_mut(), "uml.constraint.add", json!({ "context": order, "expression": "x" })).unwrap()["id"]
+        let c = archforge_ui_egui::testing::run(h.state_mut(), "uml.constraint.add", json!({ "context": order, "expression": "x" })).unwrap()["id"]
             .clone();
         let no_constraint = tr("No constraint is given. Give its id.");
         assert_eq!(no_constraint, "Es ist keine Einschränkung angegeben. Geben Sie ihre ID an.", "{theme:?}: the language is German");
@@ -409,7 +409,7 @@ fn a_target_list_or_leaf_refused_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let id = |h: &mut egui_kittest::Harness<'_, archforge_ui_egui::Shell>, cmd: &str, p: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+            archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
         };
         let package = id(&mut h, "uml.package.add", json!({ "name": "Shop" }));
         let [item, order] = ["Item", "Order"].map(|n| id(&mut h, "uml.class.add", json!({ "package": package, "name": n })));
@@ -417,7 +417,7 @@ fn a_target_list_or_leaf_refused_is_said_in_the_chosen_language() {
         let lines = id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": item, "multiplicity": "*" }));
         let revision = h.state().session.as_ref().unwrap().revision();
         let mut refused = |key: &str, list: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), "uml.attribute.set", json!({ "attribute": lines, key: list })).err().unwrap_or_default()
+            archforge_ui_egui::testing::run(h.state_mut(), "uml.attribute.set", json!({ "attribute": lines, key: list })).err().unwrap_or_default()
         };
         let most = |said: String| fmt(&said, &[("max", "32")]);
         let subsets_most = most(tr("A property subsets at most {max} properties."));
@@ -438,10 +438,10 @@ fn a_target_list_or_leaf_refused_is_said_in_the_chosen_language() {
         // Made leaf: refused for a built-in type, and for a property something redefines.
         id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer" }));
         id(&mut h, "uml.generalization.add", json!({ "specific": order, "general": item }));
-        archforge_ui_egui::snapshot::run(h.state_mut(), "uml.attribute.set", json!({ "attribute": lines, "redefines": [all] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "uml.attribute.set", json!({ "attribute": lines, "redefines": [all] })).unwrap();
         let integer = named(&h, archforge_uml::PRIMITIVE_TYPE, "Integer").to_string();
         let leaf = |h: &mut egui_kittest::Harness<'_, archforge_ui_egui::Shell>, cmd: &str, p: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+            archforge_ui_egui::testing::run(h.state_mut(), cmd, p).err().unwrap_or_default()
         };
         let built_in = fmt(&tr("{name} is a built-in type, which is never made leaf."), &[("name", "Integer")]);
         assert_eq!(leaf(&mut h, "uml.classifier.set", json!({ "classifier": integer, "leaf": true })), built_in, "{theme:?}");
@@ -466,7 +466,7 @@ fn a_default_or_target_refused_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let id = |h: &mut egui_kittest::Harness<'_, archforge_ui_egui::Shell>, cmd: &str, p: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+            archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
         };
         let package = id(&mut h, "uml.package.add", json!({ "name": "Shop" }));
         let [item, order] = ["Item", "Order"].map(|n| id(&mut h, "uml.class.add", json!({ "package": package, "name": n })));
@@ -483,7 +483,7 @@ fn a_default_or_target_refused_is_said_in_the_chosen_language() {
         let all = attribute(&mut h, &order, "all", &item, json!({}));
         let size = attribute(&mut h, &order, "size", "Integer", json!({ "multiplicity": "1", "default": "3" }));
         let revision = h.state().session.as_ref().unwrap().revision();
-        let mut refused = |cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let mut refused = |cmd: &str, p: serde_json::Value| archforge_ui_egui::testing::run(h.state_mut(), cmd, p).err().unwrap_or_default();
         let unread = fmt(&tr("{value} is not a whole number, which an Integer's default is, such as 42."), &[("value", "1.5")]);
         assert_eq!(unread, "1.5 ist keine ganze Zahl, wie sie der Standardwert eines Integer ist, etwa 42.", "{theme:?}: the language is German");
         let add = |ty: &str, default: &str| json!({ "class": order, "name": "x", "type": ty, "default": default });
@@ -542,7 +542,7 @@ fn a_move_that_strands_stereotypes_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let id = |h: &mut egui_kittest::Harness<'_, archforge_ui_egui::Shell>, cmd: &str, p: serde_json::Value| {
-            archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+            archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
         };
         let [commerce, other] = ["Commerce", "Other"].map(|n| id(&mut h, "uml.package.add", json!({ "name": n })));
         let billing = id(&mut h, "uml.package.add", json!({ "name": "Billing", "parent": commerce }));
@@ -586,10 +586,10 @@ fn a_move_that_strands_stereotypes_is_said_in_the_chosen_language() {
         }
         // Given another owner, as the Owner menu does.
         let owner = json!({ "classifier": order, "owner": holder });
-        assert_eq!(archforge_ui_egui::snapshot::run(h.state_mut(), "uml.classifier.set-owner", owner).err(), Some(german.to_string()), "{theme:?}");
+        assert_eq!(archforge_ui_egui::testing::run(h.state_mut(), "uml.classifier.set-owner", owner).err(), Some(german.to_string()), "{theme:?}");
         // A list of metaclasses that holds a number, and a stereotype in no profile.
         let extends = json!({ "stereotype": entity, "extends": [7] });
-        let names = archforge_ui_egui::snapshot::run(h.state_mut(), "uml.stereotype.set", extends).err();
+        let names = archforge_ui_egui::testing::run(h.state_mut(), "uml.stereotype.set", extends).err();
         assert_eq!(names.as_deref(), Some("Die Metaklassen als Liste von Namen angeben."), "{theme:?}");
         assert_eq!(names, archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::NamesExpected { kind: "metaclass" }), "{theme:?}");
         assert_eq!(
@@ -659,7 +659,7 @@ fn the_engines_refusals_are_said_in_the_chosen_language() {
         assert_ne!(said, "A package cannot go into itself or a package it holds.", "{theme:?}: the catalogue has it in German");
         assert_eq!(h.state().explorer.notice.as_deref(), Some(said.as_str()), "{theme:?}");
         // A class that would depend on itself: the reason a canvas or a panel shows.
-        let refused = archforge_ui_egui::snapshot::run(
+        let refused = archforge_ui_egui::testing::run(
             h.state_mut(),
             "uml.dependency.add",
             serde_json::json!({ "client": order.to_string(), "supplier": order.to_string() }),
@@ -706,7 +706,7 @@ fn the_engines_refusals_are_said_in_the_chosen_language() {
 fn the_delete_dialog_names_the_applications_in_the_chosen_language() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
         h.state_mut().state.language = "de".into();
         h.run();
         select_named(&mut h, archforge_uml::CLASS, "Order");

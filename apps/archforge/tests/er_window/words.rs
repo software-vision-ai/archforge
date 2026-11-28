@@ -14,13 +14,13 @@ fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let mut id =
-            |cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+            |cmd: &str, p: serde_json::Value| archforge_ui_egui::testing::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
         let schema = id("er.schema.add", json!({ "name": "Shop" }));
         let table = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
         let column = id("er.attribute.add", json!({ "entity": table, "name": "nummer", "type": "BIGINT" }));
         let mut refused = |field: &str, value: serde_json::Value| {
             let p = json!({ "entity": table, "columns": [{ "attribute": column, field: value }] });
-            archforge_ui_egui::snapshot::run(h.state_mut(), "er.index.add", p).err().unwrap_or_default()
+            archforge_ui_egui::testing::run(h.state_mut(), "er.index.add", p).err().unwrap_or_default()
         };
         let up = "Richtung: up ist keine der Möglichkeiten. Möglich sind ascending, descending.";
         assert_eq!(refused("direction", json!("up")), up, "{theme:?}");

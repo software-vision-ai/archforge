@@ -11,13 +11,12 @@ fn viewing() -> (Harness<'static, Shell>, (archforge_ui_egui::chat_fixture::Rig,
     let store = h.state().session.as_ref().unwrap().doc();
     let diagram = store.alive().find(|o| store.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
     let id = store.uuid(diagram).unwrap().to_string();
-    let made =
-        archforge_ui_egui::snapshot::run(h.state_mut(), "diagram.note", json!({ "diagram": id, "x": 900, "y": 40, "text": "A note" })).unwrap();
+    let made = archforge_ui_egui::testing::run(h.state_mut(), "diagram.note", json!({ "diagram": id, "x": 900, "y": 40, "text": "A note" })).unwrap();
     let note = made["id"].as_str().unwrap().to_string();
     let root = archforge_ui_egui::chat_fixture::element(h.state(), archforge_uml::CLASS, "Customer").unwrap().to_string();
     let skill = json!({ "subject": root, "name": "Naming", "body": "text" });
     let skill =
-        archforge_ui_egui::snapshot::run(h.state_mut(), "skill.add", skill).unwrap()["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "skill.add", skill).unwrap()["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
     let earlier = rows_now(&h);
     start_viewing(&mut h, "c1");
     answer_read(&mut h, &host, Ok(earlier));
@@ -142,10 +141,10 @@ fn every_way_of_editing_is_off_while_a_version_shows() {
         let store = h.state().session.as_ref().unwrap().doc();
         let line = store.alive().find(|o| store.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION)).unwrap();
         let edge = store.uuid(line).unwrap().to_string();
-        archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", json!({ "ids": [edge] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "view.select", json!({ "ids": [edge] })).unwrap();
         h.run_steps(2);
         assert!(!drawn(&h, "canvas.line-end."), "no handle that moves a line's end");
-        archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", json!({ "ids": [note] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "view.select", json!({ "ids": [note] })).unwrap();
         h.run_steps(2);
         assert!(!drawn(&h, "canvas.adorn."), "no handle that links a note");
         click(&mut h, node);
@@ -221,7 +220,7 @@ fn the_banner_says_what_shows_and_goes_back() {
         assert!(painted(&h).iter().any(|t| t == "Read only"), "the badge");
         assert_eq!(archforge_ui_egui::testing::off_words(h.state()), "Read only while viewing a version");
         assert!(
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| cx.looking_only && cx.cx_ref().looking_only),
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| cx.looking_only && cx.cx_ref().looking_only),
             "the narrow context and its twin know it"
         );
         let at = rect_of(&h, "workspace.tools.pan").center();
@@ -240,7 +239,7 @@ fn the_banner_says_what_shows_and_goes_back() {
         click(&mut h, at);
         h.run_steps(2);
         assert_eq!(h.state().viewing(), None);
-        assert!(!archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| cx.looking_only), "the narrow context knows it no more");
+        assert!(!archforge_ui_egui::testing::cx(h.state_mut(), |cx| cx.looking_only), "the narrow context knows it no more");
         assert!(!painted_has(&h, "Viewing an earlier version"));
     });
 }

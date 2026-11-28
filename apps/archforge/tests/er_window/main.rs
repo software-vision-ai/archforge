@@ -1,8 +1,8 @@
 //! ER's window tests: the whole app's shell, given ER's and UML's screens as the app registers
 //! them, drawn in a harness in both appearances, its controls found and pressed by automation id
 //! (ADR 0005: whole-app behaviour with real notations is tested in the app). They reach the shell
-//! through `archforge_ui_egui::testing` and `archforge_ui_egui::snapshot`, and the notations'
-//! screens through `archforge_er_ui::snapshot` and `archforge_uml_ui::snapshot`. Here are their
+//! through `archforge_ui_egui::testing`, and the notations' screens through
+//! `archforge_er_ui::snapshot` and `archforge_uml_ui::snapshot`. Here are their
 //! harnesses, samples, fake hosts and probes; the tests are in the module of their area: ER's
 //! canvas, its tools, relationships, tables and Generate in `canvas`; ER's Properties in
 //! `properties`; ER's refusals that take a row of the shell's catalogue in `words`; what the shell
@@ -75,7 +75,7 @@ fn er_of(shell: &Shell) -> &er_state::ErState {
 
 /// ER's own state in `shell`, to change.
 fn er_of_mut(shell: &mut Shell) -> &mut er_state::ErState {
-    er_state::er_mut(archforge_ui_egui::snapshot::notation_states(shell)).expect("the shell's notations hold ER")
+    er_state::er_mut(archforge_ui_egui::testing::notation_states(shell)).expect("the shell's notations hold ER")
 }
 
 /// UML's own state in `shell`, whose notations hold UML.
@@ -85,7 +85,7 @@ fn uml_of(shell: &Shell) -> &uml_state::UmlState {
 
 /// UML's own state in `shell`, to change.
 fn uml_of_mut(shell: &mut Shell) -> &mut uml_state::UmlState {
-    uml_state::uml_mut(archforge_ui_egui::snapshot::notation_states(shell)).expect("the shell's notations hold UML")
+    uml_state::uml_mut(archforge_ui_egui::testing::notation_states(shell)).expect("the shell's notations hold UML")
 }
 
 /// The real shell in the harness at the design's frame size, given the app's screens parts.
@@ -892,7 +892,7 @@ fn harness_over(shell: Shell) -> Harness<'static, Shell> {
 /// [`related_sample`] in `theme` in a window of `size`.
 fn related_sample_in(theme: ThemeKind, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>) {
     let mut h = workspace_harness(theme, size);
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
@@ -921,7 +921,7 @@ fn named(h: &Harness<'static, Shell>, class: archforge_mof::ClassId, name: &str)
 /// Payment's.
 fn sample_with_a_set_and_a_rule(theme: ThemeKind) -> (Harness<'static, Shell>, [String; 3], String) {
     let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-    let (gens, payment) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+    let (gens, payment) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
     let s = h.state_mut().session.as_mut().unwrap();
     s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": [gens[1]], "name": "Kinds" })).unwrap();
     let rule = serde_json::json!({ "context": payment, "name": "settled", "expression": "x", "constrained": [gens[1], payment] });
@@ -945,7 +945,7 @@ fn literal_sample(
     let (mut h, nodes, [status_node, _]) = enumeration_sample(theme);
     let status = named(&h, archforge_uml::ENUMERATION, "OrderStatus");
     if !literals.is_empty() {
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, status, literals)).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, status, literals)).unwrap();
     }
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [status.to_string()] })).unwrap();
     h.run();
@@ -1066,9 +1066,9 @@ fn nary_sample(theme: ThemeKind, drawn: bool) -> (Harness<'static, Shell>, std::
 /// [`nary_sample`] in a window of `size`.
 fn nary_sample_in(theme: ThemeKind, drawn: bool, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
     let mut h = workspace_harness(theme, size);
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     h.run();
-    let ids = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_nary::put_recommends(cx, drawn)).unwrap();
+    let ids = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_nary::put_recommends(cx, drawn)).unwrap();
     h.state_mut().canvas.fit_pending = false;
     h.state_mut().canvas.zoom = 1.0;
     h.state_mut().canvas.pan = egui::vec2(20.0, 30.0);

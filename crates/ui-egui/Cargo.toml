@@ -9,11 +9,9 @@ repository.workspace = true
 publish = false
 
 [features]
-# What the screenshot tool (the app's `offscreen`) reaches in the shell (`archforge_ui_egui::snapshot`);
-# never shipped.
-snapshot = []
-# What the app's window tests and the screenshot tool reach in the shell (`archforge_ui_egui::testing`,
-# the Chat panel's states of `chat_fixture` and the fake hosts); never shipped.
+# What the app's window tests and the screenshot tool (the app's `offscreen`) reach in the shell
+# (`archforge_ui_egui::testing`, the Chat panel's states of `chat_fixture` and the fake hosts); never
+# shipped.
 testing = ["dep:egui_kittest"]
 
 [dependencies]

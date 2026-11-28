@@ -20,9 +20,9 @@ const ABSTRACT: &str = "workspace.properties.class.abstract";
 fn long_class(theme: ThemeKind) -> Harness<'static, Shell> {
     let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
     let order = named(&h, archforge_uml::CLASS, "Order").to_string();
-    archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
+    archforge_ui_egui::testing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
     for n in 0..20 {
-        archforge_ui_egui::snapshot::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("extra{n}") }))
+        archforge_ui_egui::testing::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("extra{n}") }))
             .unwrap();
     }
     h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);

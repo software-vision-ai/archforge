@@ -24,7 +24,7 @@ fn deleting_an_unnamed_constraint_from_the_canvas_names_it_by_its_braces() {
             .unwrap()
             .to_string();
         // Its note selected on the canvas, which has the keys.
-        archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [note] })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [note] })).unwrap();
         h.state_mut().canvas.focused = true;
         h.run();
         key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
@@ -718,7 +718,7 @@ fn the_path_bar_opens_the_parents_default_not_the_diagram_it_was_entered_from() 
         };
         archforge_ui_egui::canvas::open(h.state_mut(), second);
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         h.run();
         rest(&mut h);
         let at = rect_of(&h, "workspace.canvas.path.0").center();
@@ -771,7 +771,7 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
         archforge_ui_egui::canvas::open(h.state_mut(), second);
         h.run();
         let left = (h.state().canvas.pan, h.state().canvas.zoom);
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         h.run();
         let entry = uml_of(h.state()).nav.routes.get(&sales_d).and_then(|r| r.steps().next_back()).cloned().unwrap();
         let expected = uml_nav_route::Step { source: second, destination: sales_d, source_name: "Second".into(), view: Some(left), history };
@@ -779,7 +779,7 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
         assert_eq!(route(&h, second), vec![], "{theme:?}: the tab left had no route and still has none");
         // Sales > Orders: the Orders tab carries the way into Sales too; Sales keeps its own.
         rest(&mut h);
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, orders, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, orders, 0.0));
         h.run();
         assert_eq!(route(&h, orders_d), vec![(second, sales_d), (sales_d, orders_d)], "{theme:?}");
         assert_eq!(route(&h, sales_d), vec![(second, sales_d)], "{theme:?}: Sales' tab keeps its own route");
@@ -790,11 +790,11 @@ fn each_tab_keeps_the_route_it_was_entered_by_and_browsing_changes_nothing() {
         click(&mut h, at);
         assert_eq!(h.state().canvas.active, Some(sales_d), "{theme:?}");
         rest(&mut h);
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, root, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, root, 0.0));
         h.run();
         assert_eq!(h.state().canvas.active, Some(first), "{theme:?}: the root's default");
         rest(&mut h);
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         h.run();
         assert_eq!(route(&h, sales_d), vec![(sales_d, first), (first, sales_d)], "{theme:?}");
         rest(&mut h);
@@ -1559,7 +1559,7 @@ fn zooming_out_returns_across_branches_to_the_diagram_entered_from_without_a_bou
         let before = unchanged(&h);
         archforge_ui_egui::canvas::open(h.state_mut(), overview);
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
         h.run();
         assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}");
         // The path bar follows ownership, not the way in: the root, Operations, Archive.
@@ -1608,7 +1608,7 @@ fn zooming_out_walks_repeated_visits_back_one_step_a_gesture_then_follows_owners
         archforge_ui_egui::canvas::open(h.state_mut(), a);
         h.run();
         for package in [archive, commerce, archive] {
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, package, 0.0));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, package, 0.0));
             h.run();
             rest(&mut h);
         }
@@ -1655,7 +1655,7 @@ fn zooming_out_past_a_removed_way_in_opens_the_owning_parents_default() {
         };
         archforge_ui_egui::canvas::open(h.state_mut(), overview);
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
         h.run();
         h.state_mut().session.as_mut().unwrap().execute("diagram.remove", &serde_json::json!({ "diagram": overview.to_string() })).unwrap();
         h.run();
@@ -1704,13 +1704,13 @@ fn the_path_bar_and_command_up_follow_ownership_and_start_a_new_route() {
             // Operations' tab first comes from the overview; then Archive is entered from it too.
             archforge_ui_egui::canvas::open(h.state_mut(), overview);
             h.run();
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, operations, 0.0));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, operations, 0.0));
             h.run();
             assert_eq!(route_of(&h, operations_d), vec![(overview, operations_d)], "{theme:?}");
             rest(&mut h);
             archforge_ui_egui::canvas::open(h.state_mut(), overview);
             h.run();
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
             h.run();
             assert_eq!(route_of(&h, archive_d), vec![(overview, archive_d)], "{theme:?}");
             rest(&mut h);
@@ -1759,7 +1759,7 @@ fn a_switch_fades_in_over_the_canvas() {
         };
         assert!(!veiled(&h), "{theme:?}: no fade before a switch");
         let now = h.ctx.input(|i| i.time);
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, now));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, now));
         h.step();
         assert!(veiled(&h), "{theme:?}: the switch fades in");
         h.run();
@@ -1778,7 +1778,7 @@ fn the_path_bar_restores_the_view_a_diagram_was_last_left_with_by_a_tab_switch_o
             let (_, first, sales, sales_d) = first_and_sales(&mut h);
             archforge_ui_egui::canvas::open(h.state_mut(), first);
             h.run();
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
             h.run();
             rest(&mut h);
             let carried = (h.state().canvas.pan, h.state().canvas.zoom);
@@ -1818,7 +1818,7 @@ fn a_tab_left_before_its_view_is_drawn_keeps_the_view_it_was_last_shown_with() {
         let shown = (egui::vec2(-37.0, 52.0), 0.5);
         (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = shown;
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         if at_once {
             archforge_ui_egui::canvas::open(h.state_mut(), first);
         } else {
@@ -1879,7 +1879,7 @@ fn a_landing_pending_for_one_tab_never_places_another() {
             if case == "out, reopened" {
                 archforge_ui_egui::canvas::close_tab(h.state_mut(), support);
             }
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
             if case != "in, Support" {
                 h.run();
                 rest(&mut h);
@@ -1946,7 +1946,7 @@ fn a_pending_fit_or_restored_view_stays_on_its_tab_across_switches_in_one_frame(
                 (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = *view;
                 h.run();
             }
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
             h.run();
             rest(&mut h);
             zoom_out_to(&mut h, first);
@@ -2005,9 +2005,9 @@ fn a_landing_in_place_left_before_it_draws_keeps_no_view_never_drawn() {
         let drawn = (egui::vec2(-37.0, 52.0), 0.5);
         (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = drawn;
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         assert_eq!((h.state().canvas.active, h.state().canvas.zoom), (Some(sales_d), 1.0), "{theme:?}: landing in place");
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::leave(cx, archforge_mof::Uuid::parse(&root).unwrap(), 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::leave(cx, archforge_mof::Uuid::parse(&root).unwrap(), 0.0));
         assert_eq!(h.state().canvas.active, Some(first), "{theme:?}");
         let kept = h.state().canvas.views.get(&sales_d).copied();
         assert!(kept.is_none() || kept == Some(drawn), "{theme:?}: Sales keeps no view it was never drawn with, {kept:?}");
@@ -2370,7 +2370,7 @@ fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_
             (order, uml_panel::MemberKind::Attribute, "+ total : Money"),
             (order, uml_panel::MemberKind::Operation, "+ pay() : Boolean"),
         ] {
-            assert!(archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_inline::open(cx, class, kind, None)), "{kind:?}'s draft opens");
+            assert!(archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_inline::open(cx, class, kind, None)), "{kind:?}'s draft opens");
             uml_of_mut(h.state_mut()).inline.as_mut().unwrap().edit.name = "Returned".into();
             h.run();
             // Its ring: the accent's outline round the tinted row, a row's height, not a card's.
@@ -2602,7 +2602,7 @@ fn members_a_tool_adds_grow_the_class_card_in_the_same_undo_step() {
 fn literals_and_values_a_tool_writes_grow_the_cards_that_show_them() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (_, _, entity) = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
+        let (_, _, entity) = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, true)).unwrap();
         let execute = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
             let out =
                 archforge_ui_egui::control::answer(h.state_mut(), "engine.execute", &serde_json::json!({ "command": command, "params": params }));
@@ -2687,7 +2687,7 @@ fn literals_and_values_a_tool_writes_grow_the_cards_that_show_them() {
 #[test]
 fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_undo_step() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     let st = h.state().session.as_ref().unwrap().doc();
     let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Catalog").unwrap();
     let catalog = st.uuid(c).unwrap();
@@ -2815,7 +2815,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
 #[test]
 fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_keeps_moved_rows_in_sight() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     let run = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
         let out = h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
         out.value["id"].as_str().map(|i| archforge_mof::Uuid::parse(i).unwrap())
@@ -2836,14 +2836,14 @@ fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_k
         st.uuid(t).unwrap()
     };
     // Renamed in place, it keeps that Money.
-    assert!(archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_inline::open(cx, catalog, uml_panel::MemberKind::Attribute, Some(fee))));
+    assert!(archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_inline::open(cx, catalog, uml_panel::MemberKind::Attribute, Some(fee))));
     h.run();
     uml_of_mut(h.state_mut()).inline.as_mut().unwrap().edit.name = "charge".into();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     assert!(uml_of(h.state()).inline.is_none(), "{:?}", uml_of(h.state()).inline);
     assert_eq!(type_of(&h), money, "the type stays the one it was");
     // Typing a name two types share is refused, the type unchanged.
-    assert!(archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_inline::open(cx, catalog, uml_panel::MemberKind::Attribute, Some(fee))));
+    assert!(archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_inline::open(cx, catalog, uml_panel::MemberKind::Attribute, Some(fee))));
     h.run();
     uml_of_mut(h.state_mut()).inline.as_mut().unwrap().ty = "money".into();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -2859,7 +2859,7 @@ fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_k
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     // A draft at the end of Order's attributes moves its operation down, still drawn in the card.
     let order = class(&h, "Order");
-    assert!(archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_inline::open(cx, order, uml_panel::MemberKind::Attribute, None)));
+    assert!(archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_inline::open(cx, order, uml_panel::MemberKind::Attribute, None)));
     h.run();
     let canvas = rect_of(&h, "workspace.canvas");
     /// Collects the texts of `s` and of the shapes it holds into `out`, each with its place and
@@ -2882,7 +2882,7 @@ fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_k
 #[test]
 fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leaves_by_delete_or_shift_delete() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     let find = |h: &Harness<'static, Shell>, name: &str| {
         let st = h.state().session.as_ref().unwrap().doc();
         let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
@@ -3461,7 +3461,7 @@ fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragg
     let row = rows.iter().find(|r| r.label == "Payable").expect("listed under Commerce");
     assert_eq!((row.kind, row.depth), ("interface", 1), "{:?}", tree_labels(&h));
     // A name a class of the package has is refused, in place.
-    let refused = archforge_ui_egui::snapshot::run(
+    let refused = archforge_ui_egui::testing::run(
         h.state_mut(),
         "uml.interface.rename",
         serde_json::json!({ "interface": payable.to_string(), "name": "order" }),
@@ -3693,7 +3693,7 @@ fn generalization_sets_are_made_from_the_menu_the_shortcut_and_properties() {
     use uml_sets::{CREATE_ID, PANEL_CREATE_ID};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, payment) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, payment) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         h.state_mut().canvas.zoom = 0.75;
         h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
         h.run();
@@ -3870,7 +3870,7 @@ fn a_set_label_that_draws_nothing_takes_no_press() {
     use archforge_uml::generalization_sets as sets;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         h.state_mut().canvas.zoom = 0.75;
         h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
         let out = h
@@ -4438,7 +4438,7 @@ fn an_enumeration_takes_literals_typed_on_its_card_each_one_undo_step() {
 fn a_card_that_lists_only_some_of_its_members_adds_one_in_properties() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+        archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
         let catalog = named(&h, archforge_uml::CLASS, "Catalog");
         {
             let s = h.state_mut().session.as_mut().unwrap();
@@ -4690,7 +4690,7 @@ fn enumerations_are_listed_with_their_literals_edited_in_place_added_with_the_pl
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     h.run();
     let status = named(&h, archforge_uml::ENUMERATION, "OrderStatus");
-    archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, status, &["Placed", "Paid"])).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_ui::put_literals(cx, status, &["Placed", "Paid"])).unwrap();
     h.state_mut().explorer.expanded.insert(status);
     h.run();
     // Its row under Commerce, its literals below it, in their order.
@@ -4860,7 +4860,7 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         // the same dependency, one undo step that Undo takes back alone, the dependency kept.
         let (dependency, edge) = drawn(&h);
         let edge = edge.expect("the dependency's line");
-        archforge_ui_egui::snapshot::run(h.state_mut(), "diagram.disconnect", serde_json::json!({ "edge": edge.to_string() })).unwrap();
+        archforge_ui_egui::testing::run(h.state_mut(), "diagram.disconnect", serde_json::json!({ "edge": edge.to_string() })).unwrap();
         h.run();
         assert_eq!((dependencies(&h), edge_count(&h), drawn(&h)), (count, before + 1, (dependency, None)), "{theme:?}: the line alone gone");
         relate(&mut h, Relate::Dependency, from, to);
@@ -5018,7 +5018,7 @@ fn a_relationship_refused_on_a_class_diagram_says_why_in_plain_words() {
             let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
             let revision = h.state().session.as_ref().unwrap().revision();
             uml_of_mut(h.state_mut()).relation = uml_relate::Relate::Dependency;
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_relate::connect(cx, d, node, node));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_relate::connect(cx, d, node, node));
             h.run();
             // The sentence as the catalogue words it: the kind, with a capital, in its template.
             let class = archforge_ui_egui::i18n::tr_ctx("refusal", "a class");
@@ -5897,7 +5897,7 @@ fn an_association_class_shows_its_ends_and_members_in_properties_and_takes_membe
         }
         // Its name renames it as the classifier it is, a sibling's name refused.
         let ac_id = archforge_mof::Uuid::parse(&ac).unwrap();
-        let renamed = archforge_ui_egui::snapshot::run(
+        let renamed = archforge_ui_egui::testing::run(
             r.h.state_mut(),
             "uml.association-class.rename",
             serde_json::json!({ "association_class": ac, "name": "Customer" }),
@@ -6013,8 +6013,8 @@ fn delete_on_an_association_class_line_with_its_card_on_no_diagram_keeps_it_in_t
         let (ac, _, card) = r.review();
         // Its card off the diagram, then its line drawn again alone: no card anywhere.
         let d = r.diagram.clone();
-        archforge_ui_egui::snapshot::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
-        archforge_ui_egui::snapshot::run(r.h.state_mut(), "diagram.connect-all", serde_json::json!({ "diagram": d })).unwrap();
+        archforge_ui_egui::testing::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
+        archforge_ui_egui::testing::run(r.h.state_mut(), "diagram.connect-all", serde_json::json!({ "diagram": d })).unwrap();
         r.h.run();
         let before = r.shown();
         let at = r.line_middle() + egui::vec2(-60.0, 0.0);
@@ -6063,7 +6063,7 @@ fn the_delete_dialog_counts_a_diagram_with_an_association_class_s_line_alone_and
             st.uuid(st.list(d2, archforge_diagram::diagram::EDGE).unwrap()[0].as_ref().unwrap()).unwrap().to_string()
         };
         let select = |r: &mut Reviews| {
-            archforge_ui_egui::snapshot::run(r.h.state_mut(), "view.select", serde_json::json!({ "ids": [edge] })).unwrap();
+            archforge_ui_egui::testing::run(r.h.state_mut(), "view.select", serde_json::json!({ "ids": [edge] })).unwrap();
             r.h.state_mut().canvas.focused = true;
             r.h.run();
         };
@@ -6177,7 +6177,7 @@ fn a_line_selected_on_another_diagram_is_not_taken_for_this_one_s() {
     archforge_ui_egui::canvas::open(r.h.state_mut(), archforge_mof::Uuid::parse(&d2).unwrap());
     r.h.run();
     // The first diagram's line selected by its edge's id, the second diagram open.
-    archforge_ui_egui::snapshot::run(r.h.state_mut(), "view.select", serde_json::json!({ "ids": [edge] })).unwrap();
+    archforge_ui_egui::testing::run(r.h.state_mut(), "view.select", serde_json::json!({ "ids": [edge] })).unwrap();
     r.h.state_mut().canvas.focused = true;
     r.h.run();
     let revision = r.h.state().session.as_ref().unwrap().revision();
@@ -6198,8 +6198,8 @@ fn an_association_class_line_without_its_card_shows_its_name_at_its_middle() {
         let name_id = format!("workspace.canvas.edge.{edge}.name");
         assert!(!ids(&r.h).contains(&name_id), "with its card, the name is on the card");
         let d = r.diagram.clone();
-        archforge_ui_egui::snapshot::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
-        let edge = archforge_ui_egui::snapshot::run(r.h.state_mut(), "diagram.connect-all", serde_json::json!({ "diagram": d })).unwrap();
+        archforge_ui_egui::testing::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
+        let edge = archforge_ui_egui::testing::run(r.h.state_mut(), "diagram.connect-all", serde_json::json!({ "diagram": d })).unwrap();
         assert_eq!(edge["added"], 1);
         r.h.run();
         let (edge, _) = {
@@ -6222,7 +6222,7 @@ fn an_association_class_s_attributes_and_end_roles_keep_apart_on_the_card_and_in
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut r = reviews(theme);
         let (ac, _, card) = r.review();
-        archforge_ui_egui::snapshot::run(
+        archforge_ui_egui::testing::run(
             r.h.state_mut(),
             "uml.association.set-end",
             serde_json::json!({ "association": ac, "end": 0, "role": "reviewer" }),
@@ -6380,7 +6380,7 @@ fn a_selected_associations_ends_are_set_in_properties_its_end_drags_to_another_c
 #[test]
 fn the_models_tree_nests_packages_lists_members_and_moves_a_class_by_drag_or_properties() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::open_sample).unwrap();
     h.run();
     // A package added with Commerce selected goes inside it, its name open for typing.
     let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
@@ -6521,7 +6521,7 @@ fn a_moved_end_drops_what_it_no_longer_subsets_and_says_so() {
         let item = st.by_uuid(archforge_mof::Uuid::parse(&made["Item"]).unwrap()).unwrap();
         let node = archforge_diagram::views_of(st, item).2.first().and_then(|n| st.uuid(*n).ok()).unwrap();
         let at = h.state().session.as_ref().unwrap().token();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_relate::reconnect(cx, archforge_mof::Uuid::parse(&holds).unwrap(), true, node, at));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_relate::reconnect(cx, archforge_mof::Uuid::parse(&holds).unwrap(), true, node, at));
         h.run();
         assert_eq!(h.state().canvas.notice.as_deref(), Some("The moved ends no longer subset or redefine lines, so those were dropped."));
         assert!(
@@ -6531,7 +6531,7 @@ fn a_moved_end_drops_what_it_no_longer_subsets_and_says_so() {
         let st = h.state().session.as_ref().unwrap().doc();
         let end = archforge_uml::figures::member_ends(st, st.by_uuid(archforge_mof::Uuid::parse(&holds).unwrap()).unwrap()).unwrap()[1];
         assert!(archforge_uml::modifiers::subsets(st, end).is_empty());
-        let roled = archforge_ui_egui::snapshot::run(
+        let roled = archforge_ui_egui::testing::run(
             h.state_mut(),
             "uml.association.set-end",
             serde_json::json!({ "association": holds, "end": 1, "role": "goods" }),
@@ -6672,7 +6672,7 @@ fn the_nested_sample_shows_its_owner_in_models_properties_and_on_the_canvas() {
     use egui_kittest::kittest::Queryable;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (priority, order) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_nested_priority).unwrap();
+        let (priority, order) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_nested_priority).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [priority] })).unwrap();
         h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
         h.run();
@@ -6811,7 +6811,7 @@ fn a_template_binding_is_drawn_and_applied_from_its_draft() {
         uml_of_mut(h.state_mut()).relation = uml_relate::Relate::TemplateBinding;
         let draw = |h: &mut Harness<'static, Shell>| {
             let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_relate::connect(cx, d, from, to));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_relate::connect(cx, d, from, to));
             h.run();
         };
         // Another panel, folded away, gives way to the draft in Properties.
@@ -6880,7 +6880,7 @@ fn a_template_binding_is_drawn_and_applied_from_its_draft() {
 fn a_press_on_the_canvas_closes_umls_line_menu() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         h.state_mut().canvas.zoom = 0.75;
         h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
@@ -6908,7 +6908,7 @@ fn a_press_on_the_canvas_closes_umls_line_menu() {
 fn a_generalization_sets_label_says_its_hover_text_in_umls_words() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let (gens, _) = archforge_ui_egui::testing::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
         let s = h.state_mut().session.as_mut().unwrap();
         let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method", "complete": true }));
         let set = archforge_mof::Uuid::parse(set.unwrap().value["id"].as_str().unwrap()).unwrap();
@@ -6937,7 +6937,7 @@ fn the_canvas_draws_a_template_bindings_draft_with_its_arrow_at_the_template() {
         assert!(accent_segments(&h).is_empty(), "{theme:?}: nothing drafted yet");
         uml_of_mut(h.state_mut()).relation = uml_relate::Relate::TemplateBinding;
         let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_relate::connect(cx, d, from, to));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_relate::connect(cx, d, from, to));
         h.run();
         let segments = accent_segments(&h);
         assert!(segments.len() > 3, "{theme:?}: dashes and an arrow, {segments:?}");
@@ -6991,10 +6991,7 @@ fn the_canvas_draws_a_card_grown_by_the_row_typed_on_it() {
         let node = rect_of(&h, &id);
         let plain = drawn_height(&h, node);
         assert!((plain - node.height()).abs() < 0.5, "{theme:?}: drawn as its node, {plain} {node:?}");
-        assert!(
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)),
-            "{theme:?}"
-        );
+        assert!(archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)), "{theme:?}");
         h.run();
         let grown = drawn_height(&h, rect_of(&h, &id));
         assert!(grown > node.height() + 1.0, "{theme:?}: grown by the row, {grown} over {}", node.height());
@@ -7507,7 +7504,7 @@ fn two_diagrams_show_the_same_n_ary_association_and_a_dropped_class_brings_its_l
     h.run();
     assert_eq!(legs_on(&h, None), 3);
     let d = h.state().session.as_ref().unwrap().doc().by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
-    archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| {
+    archforge_ui_egui::testing::cx(h.state_mut(), |cx| {
         archforge_shell_api::kinds::DiagramKind::drop(&uml_ui::UmlKind, cx, d, archforge_mof::Uuid::parse(&ids["Catalog"]).unwrap(), (460.0, 640.0))
     });
     h.run();
@@ -7527,7 +7524,7 @@ fn stereotypes_are_applied_and_their_values_edited_in_properties() {
     use egui_kittest::kittest::Queryable;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
-        let (_, _, entity) = archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
+        let (_, _, entity) = archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_profiles::put_profiles(cx, false)).unwrap();
         let (logging, rows_p) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let logging = s.execute("uml.profile.add", &serde_json::json!({ "name": "Logging" })).unwrap().value["id"].as_str().unwrap().to_string();
@@ -7661,7 +7658,7 @@ fn a_return_by_zoom_restores_the_view_it_was_left_with_while_that_view_is_sound(
             h.run();
             (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
             h.run();
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
             h.run();
             if let Some(view) = saved {
                 let mut route = uml_nav_route::Route::default();
@@ -7712,7 +7709,7 @@ fn a_return_by_zoom_measures_the_saved_view_on_the_window_it_returns_to() {
             h.run();
             let before = share(&h);
             assert!(before > 0.0 && before < uml_package_nav::ENTER_COVER, "{theme:?} {case}: Sales covers {before} when left");
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
             h.run();
             h.set_size(egui::vec2(1000.0, 700.0));
             h.run();
@@ -7795,7 +7792,7 @@ fn a_return_by_zoom_does_not_restore_a_view_another_package_covers() {
         let (archive_share, sales_share) = (share(archive_card), share(card));
         assert!(archive_share >= uml_package_nav::ENTER_COVER, "{theme:?}: Archive covers {archive_share} at {:?}", (c.pan, c.zoom));
         assert!(sales_share > 0.0, "{theme:?}: Sales' card partly in view, {sales_share}");
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         h.run();
         rest(&mut h);
         assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
@@ -7827,7 +7824,7 @@ fn a_return_to_a_diagram_without_the_packages_card_fits_its_content() {
             (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = (egui::vec2(-50.0, 30.0), 0.6);
             h.run();
             if routed {
-                archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+                archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
             } else {
                 archforge_ui_egui::canvas::open(h.state_mut(), sales_d);
                 assert!(uml_of(h.state()).nav.routes.get(&sales_d).is_none_or(|r| r == &uml_nav_route::Route::default()), "{theme:?}: no route");
@@ -7875,7 +7872,7 @@ fn a_return_by_zoom_rejects_a_view_at_exactly_the_entry_threshold() {
         let covered = rect_of(&h, &format!("workspace.canvas.node.{card}")).intersect(canvas);
         let share = covered.width() * covered.height() / (canvas.width() * canvas.height());
         assert_eq!(share, uml_package_nav::ENTER_COVER, "{theme:?}: Sales covers exactly the threshold, {covered:?}");
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         h.run();
         rest(&mut h);
         assert_eq!(zoom_out_gesture(&mut h, 40, true), vec![sales_d, top], "{theme:?}");
@@ -7910,7 +7907,7 @@ fn returns_restore_the_view_each_visit_was_left_with() {
         for (package, view) in [archive, commerce, archive].into_iter().zip(views) {
             (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = view;
             h.run();
-            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, package, 0.0));
+            archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, package, 0.0));
             h.run();
             rest(&mut h);
         }
@@ -7943,9 +7940,9 @@ fn a_return_past_a_removed_diagram_fits_the_one_it_lands_on() {
         let left = (egui::vec2(-50.0, 30.0), 0.6);
         (h.state_mut().canvas.pan, h.state_mut().canvas.zoom) = left;
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
         h.run();
         assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
         // Sales' diagram is its default: removing it makes Sales a new, empty one.
@@ -8019,9 +8016,9 @@ fn a_return_landing_at_the_least_zoom_goes_back_on_the_next_zoom_out() {
         let archive_d = own_diagram(s, archive);
         archforge_ui_egui::canvas::open(h.state_mut(), top);
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
         h.run();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, archive, 0.0));
         h.run();
         assert_eq!(h.state().canvas.active, Some(archive_d), "{theme:?}: Archive open");
         let p = serde_json::json!({ "nodes": [archive_card.to_string()] });
@@ -8048,7 +8045,7 @@ fn a_line_link_or_label_refused_is_said_in_the_chosen_language() {
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         h.state_mut().state.language = "de".into();
         h.run();
-        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p);
+        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| archforge_ui_egui::testing::run(h.state_mut(), cmd, p);
         let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).err().unwrap_or_default();
         let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).unwrap()["id"].as_str().unwrap().to_string();
         let d = h.state().canvas.active.unwrap().to_string();

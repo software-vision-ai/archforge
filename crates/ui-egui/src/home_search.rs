@@ -139,7 +139,7 @@ fn take_found(shell: &mut Shell) {
 
 /// Opens the search in the open project with `query` typed, for the pictures of the design and
 /// the tests.
-#[cfg(any(test, feature = "snapshot"))]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) fn open_with(shell: &mut Shell, query: &str) {
     shell.home_search.open = true;
     shell.home_search.scope = scope(shell);

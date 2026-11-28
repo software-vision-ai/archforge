@@ -721,9 +721,7 @@ fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
                 .unwrap(),
         )
         .unwrap();
-    archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| {
-        er_table::open_column(cx, archforge_mof::Uuid::parse(&_customer).unwrap(), Some(customer_id))
-    });
+    archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_table::open_column(cx, archforge_mof::Uuid::parse(&_customer).unwrap(), Some(customer_id)));
     {
         let s = h.state_mut().session.as_mut().unwrap();
         s.execute("view.select", &serde_json::json!({ "ids": [_customer] })).unwrap();
@@ -1040,7 +1038,7 @@ fn escape_on_the_canvas_closes_ers_mapping_offer() {
             let st = h.state().session.as_ref().unwrap().doc();
             st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
         };
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_connect::offer_mapping(cx, rel));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_connect::offer_mapping(cx, rel));
         h.state_mut().canvas.focused = true;
         h.run();
         assert!(er_of(h.state()).mapping.is_some(), "{theme:?}: the offer is open");
@@ -1066,7 +1064,7 @@ fn a_many_to_many_badge_opens_the_mapping_offer_and_another_badge_nothing() {
         er_of_mut(h.state_mut()).relationship =
             er_connect::RelKind { from: archforge_er::Cardinality::ZeroOrMore, to: archforge_er::Cardinality::ZeroOrMore, identifying: false };
         let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
-        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_connect::connect(cx, d, customer, order));
+        archforge_ui_egui::testing::cx(h.state_mut(), |cx| er_connect::connect(cx, d, customer, order));
         er_of_mut(h.state_mut()).mapping = None;
         let edge = {
             let s = h.state_mut().session.as_mut().unwrap();

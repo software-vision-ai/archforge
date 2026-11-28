@@ -574,7 +574,7 @@ fn last_in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
 
 /// The bin: removes the parameter, or, while a binding substitutes it, closes the editor and says
 /// why under the rows, with the way to the binding (C5); nothing is written.
-fn remove_parameter(cx: &mut Ctx, edit: &TemplateEdit) {
+pub fn remove_parameter(cx: &mut Ctx, edit: &TemplateEdit) {
     let Some(target) = edit.target else { return };
     let refused = cx.session.as_ref().and_then(|s| s.doc().by_uuid(target).and_then(|o| in_use(s.doc(), o)));
     if let Some((why, binding)) = refused {
@@ -692,15 +692,6 @@ fn commit(cx: &mut Ctx, edit: &TemplateEdit) {
             cx.panels.notice = None;
         }
         Err(e) => refuse(cx, e, None),
-    }
-}
-
-/// The open editor's bin pressed, as a sample to look at: the removal refused while a binding
-/// uses the parameter.
-#[cfg(feature = "snapshot")]
-pub fn remove_sample(cx: &mut Ctx) {
-    if let Some(edit) = uml(cx.notation_states).and_then(|uml| uml.template.clone()) {
-        remove_parameter(cx, &edit);
     }
 }
 
