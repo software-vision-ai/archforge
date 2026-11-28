@@ -10257,15 +10257,18 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
     .unwrap();
     h.run();
     assert!(painted(&h).iter().any(|t| t.contains("drawn in the sketch")), "{:?}", painted(&h));
-    // What a read's answer named is kept as the sketch counts it: Customer's operation, a part of
-    // its class to the sketch, is neither kept nor in the row's count.
-    let customer = crate::chat_fixture::element(h.state(), archforge_mof::toy::CLASS, "Customer").unwrap();
-    crate::chat_fixture::call(
+    // What a read's answer named is kept as the sketch counts it: Order's operation `total`, which
+    // the answer names, is a part of its class to the sketch, so it is neither kept nor in the
+    // row's count, while Order's attributes are.
+    let order = crate::chat_fixture::element(h.state(), archforge_mof::toy::CLASS, "Order").unwrap();
+    let total = crate::chat_fixture::element(h.state(), archforge_mof::toy::OPERATION, "total").unwrap();
+    let answer = crate::chat_fixture::call(
         h.state_mut(),
         "engine.execute",
-        serde_json::json!({ "command": "sketch.class.get", "params": { "class": customer.to_string() } }),
+        serde_json::json!({ "command": "sketch.class.get", "params": { "class": order.to_string() } }),
     )
     .unwrap();
+    assert!(answer.to_string().contains(&total.to_string()), "the answer names Order's operation: {answer}");
     h.run();
     let facts = kept_chat(&h, &rig)
         .messages
@@ -10274,7 +10277,7 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
         .find_map(|m| if let crate::chat_store::StoredBody::Tool(f) = &m.body { Some(f.clone()) } else { None })
         .unwrap();
     let kept = facts.anchors.iter().filter(|a| a.role == AnchorRole::Read).count();
-    assert!(kept > 0 && facts.anchors.iter().all(|a| a.metaclass != "sketch_operation"), "{facts:?}");
+    assert!(kept > 0 && facts.anchors.iter().all(|a| a.element != total && a.metaclass != "sketch_operation"), "{facts:?}");
     assert_eq!(facts.element_count, Some(u32::try_from(kept).unwrap()), "{facts:?}");
     chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
     // A turn's changes keep what the sketch counts: a description's comment is listed beside the
@@ -10282,6 +10285,7 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
     let at = rect_of(&h, "workspace.chat.allow-changes").center();
     click(&mut h, at);
     ask_in_chat(&mut h, "Describe Customer");
+    let customer = crate::chat_fixture::element(h.state(), archforge_mof::toy::CLASS, "Customer").unwrap();
     crate::chat_fixture::call(
         h.state_mut(),
         "engine.execute",
