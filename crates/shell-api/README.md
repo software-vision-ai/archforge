@@ -25,8 +25,14 @@ notations' screens parts the app registers, with the lists the shell reads made 
 shell (`testing`, `forge-ux/adr/0005`, "Tests follow the plugin"). The app
 registers ER's and UML's parts and gives them to every shell it makes, and a test of the app's
 holds them in step with the model registry (`archforge_notations::NOTATIONS`): one part for each
-notation there, of its metamodel and with its diagram kinds, and none besides. The shell keeps the
-old lists, which name ER and UML, for its tests only.
+notation there, of its metamodel and with its diagram kinds, and none besides
+(`the_model_and_screens_registries_hold_the_same_notations` in `apps/archforge/src/lib.rs`). The
+shell's own tests register the fake notation's screens part (`SCREENS` in
+`crates/ui-egui/src/tests.rs`), never ER's or UML's. This crate is one of the shared crates: it
+links no notation crate, in production or in its tests, and none of its files names a notation's
+command; the gate's `layers` step refuses both (rules 3 and 5 of `xtask/src/notation_rules.rs`;
+`forge-ux/adr/0004`, `forge-ux/adr/0005`). The test context's own tests run over a stub notation
+(`src/testing.rs`).
 
 **Layer.** 9, the shell interfaces' layer: above `archforge-notations` (8), below the notations'
 screens (10) and the shell (11). Builds for the portable target; holds no process or network code

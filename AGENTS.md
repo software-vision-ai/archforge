@@ -59,14 +59,24 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   registered.
 - The user interface never touches the file system or the operating system itself: the host
   injects `Services`. Only `crates/ui-egui`, the shell, `crates/shell-api`, its interfaces, a
-  notation's screens crate (`crates/er-ui`, `crates/uml-ui`) and the application may use the toolkit.
+  notation's screens crate (`crates/er-ui`, `crates/uml-ui`) and the application (`apps/archforge`,
+  its library target `apps/archforge/src/lib.rs` included) may use the toolkit. The gate's `layers`
+  step refuses the toolkit in a library crate below the shell's interfaces' layer, 9
+  (`TOOLKIT_MIN_LAYER` in `xtask/src/layers.rs`), and process or network code in the shell, its
+  interfaces and the notations' screens (`xtask/src/shell_io.rs`).
 - The interface draws through `ux` (`crates/shell-api/src/ux/`, re-exported by the shell as
   `crate::ux` with the shell's own app icon and fonts, and by each notation's screens crate with the
-  icons only that notation draws): no
+  icons only that notation draws, `crates/er-ui/src/ux/icons.rs` and
+  `crates/uml-ui/src/ux/icons.rs`; an icon the shell or both notations draw is in
+  `crates/shell-api/src/ux/icons.rs`): no
   literal colour, font or icon outside it, and every control has an automation id.
 - Every string the user sees goes through the catalogues, with a row in every language: in the
-  shell's catalogues, in the shell's interfaces' own (`crates/shell-api/src/i18n/`) when only their
-  code says it, or in a notation's own when only that notation's screens say it.
+  shell's catalogues (`crates/ui-egui/src/i18n/`), in the shell's interfaces' own
+  (`crates/shell-api/src/i18n/`) when only their code says it, or in a notation's own
+  (`crates/er-ui/src/i18n/er/`, `crates/uml-ui/src/i18n/uml/`) when only that notation's screens
+  say it. The app's catalogue tests (`apps/archforge/src/catalogues.rs`), the one crate that knows
+  every catalogue, fail a literal without its row and a row in another crate's catalogue than the
+  code that reads it.
 - Behaviour, icons and wording are our own: never copy another product's.
 - The Rust version is the one `rust-toolchain.toml` pins. A lint added by a newer release is fixed
   in code in the change that raises it, never by allowing the lint or by holding the version back.
@@ -76,6 +86,44 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 - Fonts, samples and other binaries stay out of the repository (the app icon's one picture,
   `assets/app-icon/icon.png`, is the exception); every file under `assets/` has its
   row in `ATTRIBUTION.toml`.
+
+## Notations are plugins
+
+A notation is a model part and a screens part, and the shell knows none (`forge-ux/adr/0002`,
+"Notations are plugins"; the architecture decision records are in the forge-ux repository's
+`adr/` folder). Its model part is composed in `archforge-notations` (`crates/notations`), its
+screens part registered in the app's screens registry (`SCREENS` in `apps/archforge/src/lib.rs`),
+and `the_model_and_screens_registries_hold_the_same_notations` there fails when the two list
+different notations (`forge-ux/adr/0003`, "Two registries"). The shell is handed both as values,
+`Shell::new(services, notations, screens)`, so the shared crates (`crates/ui-egui`,
+`crates/shell-api`, `crates/project` and the command-line tool, `apps/archforge-cli`) name no
+notation. A question the shell's interfaces cannot answer yet gets a new hook in `NotationUi` or
+`DiagramKind` (`crates/shell-api/src/notation_ui.rs`, `crates/shell-api/src/kinds.rs`), which every
+notation answers for itself, never a special case in a shared screen.
+
+The gate's `layers` step enforces this with the notation rules (`xtask/src/notation_rules.rs`,
+`forge-ux/adr/0004`, "Layer rules are enforced by the gate, without exceptions", and
+`forge-ux/adr/0005`, "Tests follow the plugin"). They read `cargo metadata` over every kind of
+dependency, so a test's link counts as a production one; there is no exception list. Each refusal
+names its rule and its records, and says where the code belongs:
+
+1. rule 1: "only archforge-notations, the notation's own screens crate … and the app link the
+   model crate …, in production or in tests";
+2. rule 2: "only the app links a notation's screens crate, in production or in tests";
+3. rule 3: "ui-egui, shell-api, project and the command-line tool link no notation crate, in
+   production or in tests";
+4. rule 4: "the model crate has no screens crate …" and "the screens crate has no model
+   crate …": "a notation is a model part and a screens part" (a model crate on layer 7 of the
+   layer table takes a screens crate `<model>-ui` on layer 10);
+5. rule 5: "a shared crate names no notation command, in production or in tests": a scan of every
+   file of the shared crates, catalogues and tests included, for a command id under a model
+   crate's name (`er.…`, `uml.…`) and a Model menu row a screens crate declares (`model.…`).
+
+So tests follow the plugin: the shell's and the project store's run on the fake notation
+(`archforge_notations::fake`, behind `archforge-notations`' feature `testing`); a notation's screens
+are tested in its own crate against the shell's interfaces' test context
+(`archforge_shell_api::testing`); whole-app behaviour with ER and UML is tested in the app
+(`apps/archforge/tests/`). `skills/archforge-tests/SKILL.md` says where each test goes.
 
 ## Pull requests and the `deep-review` label
 

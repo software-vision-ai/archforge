@@ -1,7 +1,7 @@
-//! What the screenshot tool, the app's tests and the shell's tests reach in ER's screens, behind
-//! the `snapshot` feature: the words ER hands its lookups through a table ([`word_lists`]) and the
-//! items of ER's own modules they name, each under its module's name. ER's modules stay private:
-//! only what is listed here is reached from outside.
+//! What the app's screenshot tool and the app's tests reach in ER's screens, behind the `snapshot`
+//! feature: the words ER hands its lookups through a table ([`word_lists`]) and the items of ER's
+//! own modules they name, each under its module's name. ER's modules stay private: only what is
+//! listed here is reached from outside.
 //!
 //! Each item is ER's own code unchanged: none draws, reads or decides anything of its own.
 
@@ -73,7 +73,7 @@ pub mod er_connect {
     pub use crate::er_connect::{MappingOffer, RelKind, connect, has_foreign_key, offer_mapping};
 }
 
-/// The Entity tool's icon, which the shell's tests give a sketch kind's tool.
+/// The Entity tool's icon.
 pub mod icons {
     pub use crate::ux::icons::TOOL_ENTITY;
 }

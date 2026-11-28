@@ -11,6 +11,14 @@ only library crates that may use the toolkit. It draws the design: when the desi
 code follows it, and a correction the owner makes to the look goes into the design first. `crates/ui-egui/README.md` lists the crate's public items. The
 decisions taken so far about how it looks and behaves are in `skills/archforge-design/SKILL.md`.
 
+What a notation draws or says lives in its screens crate, never in the shell or its interfaces
+(ADR 0002, "Notations are plugins"): the shell is handed the notations as values and asks them
+through `NotationUi` and `DiagramKind`. The gate's `layers` step refuses a link from
+`crates/ui-egui` or `crates/shell-api` to a notation crate and a notation's command name or Model
+menu row in their files, the catalogues included (rules 3 and 5 of `xtask/src/notation_rules.rs`;
+`AGENTS.md`, "Notations are plugins", quotes every rule). A question the interfaces cannot answer
+yet gets a new hook there, which every notation answers for itself.
+
 ## Draw through `ux`
 - `ux` is the shell's interfaces' design (`crates/shell-api/src/ux/mod.rs`), which the shell
   re-exports as `crate::ux` (`crates/ui-egui/src/ux/mod.rs`) with what needs the shell: the app
@@ -90,8 +98,8 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
   for the reasons and kinds they name inside their sentences; a model's kind words
   (`model_words::kind_label`); and what an opening does to a model (`Shell::open_repair`, which
   the comparisons' threads and the host's restore take). No global list of notations or kinds
-  exists: a shell takes its own from the screens parts it is given, and the tests ask the parts
-  they register (`tests::SCREENS`). The delete dialog says what goes with a
+  exists: a shell takes its own from the screens parts it is given, and the shell's tests ask
+  the fake notation's screens part they register (`SCREENS` in `crates/ui-egui/src/tests.rs`). The delete dialog says what goes with a
   removal as the element's notation counts and words it (`NotationUi::consequences`, one finished
   sentence each, carried in `explorer::Delete`); the shell adds only the diagrams it disappears
   from and what happens to what it holds, and asks only when there is something to say.
@@ -102,7 +110,9 @@ decisions taken so far about how it looks and behaves are in `skills/archforge-d
 
 ## Look at the result
 `cargo xtask shot` and `cargo xtask shot dark` (`--size WxH` for another frame) draw the real
-shell offscreen and write a screenshot and a small copy under `plan/shots/`. Read the small copy
+shell offscreen, with the notations the app registers, through the app's screenshot tool
+(`apps/archforge/src/offscreen.rs`, run by `apps/archforge/examples/snapshot.rs` under the
+app's feature `snapshot`), and write a screenshot and a small copy under `plan/shots/`. Read the small copy
 after every visible change, in both appearances, beside the design.
 
 ## Text and translations
@@ -149,5 +159,9 @@ after every visible change, in both appearances, beside the design.
 - Wording is plain and UK English: colour, licence, catalogue.
 
 ## Tests
-A screen gets a harness test in `crates/ui-egui/src/tests.rs` that draws it in both appearances
-and checks its ids: `skills/archforge-tests/SKILL.md`.
+A screen of the shell gets a harness test in `crates/ui-egui/src/tests.rs`, on the fake notation;
+a notation's screen gets one in its screens crate (`crates/er-ui/src/tests.rs`,
+`crates/uml-ui/src/tests.rs`) against the shell's interfaces' test context, and the whole window
+with ER and UML is tested in the app (`apps/archforge/tests/er_window/`,
+`apps/archforge/tests/uml_window/`). Each draws both appearances and checks its ids:
+`skills/archforge-tests/SKILL.md`.
