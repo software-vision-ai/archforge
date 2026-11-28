@@ -202,9 +202,15 @@ mod tests {
         all
     }
 
+    /// The composition, the screens crate and the app link the model crate, the app the screens
+    /// crate, a shared crate the composition, and a model crate itself for its own tests' features:
+    /// none of it is refused.
     #[test]
     fn a_workspace_that_holds_to_the_rules_has_no_refusal() {
-        assert_eq!(violations(&workspace(vec![pkg("ui-egui", Class::Layer(11), &[(NOTATIONS, "normal")])])), Vec::<String>::new());
+        let extra = vec![pkg("ui-egui", Class::Layer(11), &[(NOTATIONS, "normal")]), pkg("flow", Class::Layer(MODEL_LAYER), &[("flow", "dev")])];
+        let mut packages = workspace(extra);
+        packages.remove(0);
+        assert_eq!(violations(&packages), Vec::<String>::new());
     }
 
     /// Rule 1: a model crate linked by any crate but the composition, its own screens crate and
