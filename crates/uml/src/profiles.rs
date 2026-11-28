@@ -1334,7 +1334,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Profile's diagram",
             &["Profile", "Diagram"],
             None,
-            "profile: string; the profile's id; its class diagram, made when it has none, filled with every stereotype, every metaclass they extend and the extension lines between them, in rows under what it shows already, which stays",
+            "profile: string; the profile's id; its UML structure diagram, made when it has none, filled with every stereotype, every metaclass they extend and the extension lines between them, in rows under what it shows already, which stays",
             has_profiles,
             profile_diagram
         ),

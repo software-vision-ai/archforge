@@ -1,4 +1,4 @@
-//! What a class diagram draws: a class, an interface or a data type as a plain card, an
+//! What a UML structure diagram draws: a class, an interface or a data type as a plain card, an
 //! interface's eyebrow its keyword «interface» and a data type's «dataType»; a primitive type as a
 //! plain card with the keyword «primitive» over its name and no compartment; an enumeration as a plain card with the keyword «enumeration» and one
 //! compartment of its literals, in their order; a class's, an interface's or a data type's attributes

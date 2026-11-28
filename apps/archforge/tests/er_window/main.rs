@@ -1378,7 +1378,7 @@ fn every_reason() -> Vec<archforge_engine::Reason> {
         "class|association class|interface|enumeration|data type|primitive type|built-in type|package|profile|stereotype|applied stereotype",
         "metaclass|element|attribute|operation|literal|qualifier|property|subsetted property|redefined property|template parameter",
         "generalization|generalization set|realization|binding|association|association end|dependency|constraint|constrained element",
-        "class diagram|schema|table|column|relationship|domain|enum type|enum literal|sequence|view|key|primary key|unique constraint",
+        "UML structure diagram|schema|table|column|relationship|domain|enum type|enum literal|sequence|view|key|primary key|unique constraint",
         "foreign key|foreign key column|check|index|index column|subtype|key column|skill|diagram|node|edge|label|waypoint|nesting level",
         "type|size|default|collation|width|height|fill|stroke|text|x|y|ER|UML",
     ];

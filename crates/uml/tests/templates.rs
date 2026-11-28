@@ -117,7 +117,7 @@ fn one_step(s: &mut S, cmd: &str, p: Json) -> String {
 }
 
 /// A package `shop` with Repository, Order, Entity (Order specializes it), the data type Money and
-/// the enumeration Status, and a class diagram of `shop` showing Repository and Order.
+/// the enumeration Status, and a UML structure diagram of `shop` showing Repository and Order.
 struct Shop {
     shop: String,
     repository: String,

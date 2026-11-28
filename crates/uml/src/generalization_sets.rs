@@ -220,7 +220,7 @@ pub fn label_node(store: &Store, d: Obj, s: Obj) -> Option<Obj> {
     nodes.into_iter().find(|n| archforge_diagram::diagram_of(store, *n) == Some(d))
 }
 
-/// Puts set `s`'s label on class diagram `d` with its top left at `(x, y)`: its node moved there,
+/// Puts set `s`'s label on UML structure diagram `d` with its top left at `(x, y)`: its node moved there,
 /// or made, nested in the node of the set's general classifier (or else of a member's specific
 /// one) so it moves with it. Refused when the diagram shows none of those classifiers.
 pub fn place(store: &mut Store, d: Obj, s: Obj, x: f64, y: f64) -> Result<Obj, CommandError> {
@@ -458,12 +458,12 @@ fn set_set(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, s)?, "removed": false }))
 }
 
-/// `uml.generalization-set.place`: where a class diagram shows a set's label.
+/// `uml.generalization-set.place`: where a UML structure diagram shows a set's label.
 fn set_place(ctx: &mut C<'_>, p: &Params) -> R {
     let d = object(ctx.doc, "diagram", text(p, "diagram"))?;
     let kind = ctx.doc.get(d, diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
     if ctx.doc.class_of(d).ok() != Some(archforge_diagram::DIAGRAM) || kind != crate::STRUCTURE_DIAGRAM {
-        return Err(refuse("diagram", format!("{} is not a class diagram", short(text(p, "diagram")))));
+        return Err(refuse("diagram", format!("{} is not a UML structure diagram", short(text(p, "diagram")))));
     }
     let s = set_param(ctx.doc, p, "set")?;
     let (Some(x), Some(y)) = (p.number("x"), p.number("y")) else { return Err(refuse("x", "give both x and y")) };
@@ -558,7 +558,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Generalization set", "Diagram"],
             None,
             concat!(
-                "diagram: string; the class diagram's id\n",
+                "diagram: string; the UML structure diagram's id\n",
                 "set: string; the generalization set's id\n",
                 "x: number; the label's left edge; the dashed set line runs under it across the members' lines\n",
                 "y: number; the label's top edge"

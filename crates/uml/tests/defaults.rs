@@ -5,10 +5,10 @@
 //! Each state read through `uml.package.default.get`, on the revision its caller read, as a
 //! read-only tool that leaves no undo step (AR-576). A diagram a binding names stays: removing it,
 //! or an element of another one's, is refused typed with nothing changed (AR-578), an association
-//! class's that goes with its end among them. A package's first class diagram is bound as its
+//! class's that goes with its end among them. A package's first UML structure diagram is bound as its
 //! default as it is made, and only that one (AR-579). `uml.package.default.set` makes the binding,
 //! keeps its id when it names another diagram, changes nothing for the same one, mends several into
-//! one, and refuses anything but one of the package's own class diagrams on the revision read
+//! one, and refuses anything but one of the package's own UML structure diagrams on the revision read
 //! (AR-580). A nested package handing a structure diagram up to a package with no sound default,
 //! the root among them, is refused with nothing changed; one handing up none goes (AR-673).
 //! Below a package a profile holds, read back from rows, the handoff passes the profile when it
@@ -349,7 +349,7 @@ fn the_command_answers_every_state_of_a_default_and_changes_nothing() {
         assert_eq!(ask(&mut s, ENTRY, &id(package), json!({})), Err((key, reason, said)), "{fault:?}: entry refused alike");
     }
     assert_eq!(ask(&mut s, ENTRY, &id(0x10), json!({})), Ok(json!({ "id": id(0x12) })), "entry opens the bound, not 0x11");
-    let none_yet = format!("the package {} has no class diagram yet, so none opens; make one for it with diagram.add first", id(0x20));
+    let none_yet = format!("the package {} has no UML structure diagram yet, so none opens; make one for it with diagram.add first", id(0x20));
     let no_diagram = Reason::NoDiagramYet { package: id(0x20).into() };
     assert_eq!(ask(&mut s, ENTRY, &id(0x20), json!({})), Err((Some("package".into()), Some(no_diagram), none_yet)));
     assert!(ask(&mut s, ENTRY, &id(0x30), json!({})).is_err(), "a profile opens no default");
@@ -640,7 +640,7 @@ fn a_default_removed_with_a_new_replacement_makes_binds_and_removes_in_one_undo_
     assert!(st.list(model, archforge_core::model::MEMBER).unwrap().contains(&Value::Ref(new)), "made in the Model");
     let shown = s.execute("diagram.get", &json!({ "diagram": made })).unwrap().value;
     let head = (&shown["kind"], &shown["name"], &shown["element"], &shown["nodes"]);
-    assert_eq!(head, (&json!(STRUCTURE_DIAGRAM), &json!("Sales map"), &json!(id(0x10)), &json!([])), "an empty class diagram of Sales");
+    assert_eq!(head, (&json!(STRUCTURE_DIAGRAM), &json!("Sales map"), &json!(id(0x10)), &json!([])), "an empty UML structure diagram of Sales");
     let after = rows_of(s.doc());
     s.execute("edit.undo", &json!({})).unwrap();
     assert!(rows_of(s.doc()) == before, "one undo step takes the new diagram away and brings the old default back");
@@ -785,7 +785,7 @@ fn choosing_a_default_of_a_package_with_several_keeps_one_binding() {
     assert!(rows_of(s.doc()) == before, "one undo step brings all three back");
 }
 
-/// Each choice that is not one of the package's own live class diagrams, of no package, or on a
+/// Each choice that is not one of the package's own live UML structure diagrams, of no package, or on a
 /// revision the caller did not read is refused, typed, with the store and its history as they were;
 /// a read-only session, as a version viewed, refuses the command before it runs (AR-580).
 #[test]
@@ -801,15 +801,15 @@ fn a_default_that_is_not_the_packages_own_class_diagram_is_refused() {
     let mut s = over(st);
     let at = s.token();
     let token = json!({ "history": at.history, "revision": at.revision });
-    let class_diagram = |name: &str| Reason::NotA { kind: "class diagram", name: name.into() };
+    let structure_diagram = |name: &str| Reason::NotA { kind: "UML structure diagram", name: name.into() };
     let stale = Revision { revision: at.revision + 1, ..at };
     const EXPECTED: &str = "expected_revision";
     for (package, diagram, revision, key, reason) in [
-        (id(0x10), id(0x13), token.clone(), "diagram", class_diagram("Schema")),
-        (id(0x10), id(0x10), token.clone(), "diagram", class_diagram("Sales")),
+        (id(0x10), id(0x13), token.clone(), "diagram", structure_diagram("Schema")),
+        (id(0x10), id(0x10), token.clone(), "diagram", structure_diagram("Sales")),
         (id(0x10), id(0x21), token.clone(), "diagram", Reason::NotOwnDiagram { diagram: "Invoices".into(), package: "Sales".into() }),
         (id(0x10), id(0xee), token.clone(), "diagram", Reason::NoElement { id: id(0xee) }),
-        (id(0x10), String::new(), token.clone(), "diagram", Reason::IdEmpty { kind: "class diagram" }),
+        (id(0x10), String::new(), token.clone(), "diagram", Reason::IdEmpty { kind: "UML structure diagram" }),
         (id(0x30), id(0x11), token.clone(), "package", Reason::NotA { kind: "package", name: id(0x30) }),
         (String::new(), id(0x11), token.clone(), "package", Reason::IdEmpty { kind: "package" }),
         (
@@ -841,7 +841,7 @@ fn at(s: &S, id: &str) -> Obj {
     s.doc().by_uuid(Uuid::parse(id).unwrap()).unwrap()
 }
 
-/// A package's first class diagram is its default from the start: `diagram.add` makes the binding
+/// A package's first UML structure diagram is its default from the start: `diagram.add` makes the binding
 /// with it, a member of the project's Model naming the package and the diagram, which
 /// `uml.package.default.get` reads back. One undo step takes the diagram and its binding back
 /// together, and redo brings both back under their ids, as do the project's rows read back (AR-579).
@@ -875,9 +875,9 @@ fn a_packages_first_class_diagram_is_bound_as_its_default_in_the_same_step() {
     assert!(back.container(again).unwrap().is_some() && rows_of(&back) == after, "a member still, the rows as written");
 }
 
-/// Only a package's first class diagram is bound: a second leaves its default as it was, a
+/// Only a package's first UML structure diagram is bound: a second leaves its default as it was, a
 /// profile's diagram binds nothing whether `diagram.add` or `uml.profile.diagram` makes it, a
-/// package with class diagrams but no binding stays without one, its default still missing rather
+/// package with UML structure diagrams but no binding stays without one, its default still missing rather
 /// than bound silently, and one that has a binding already gets no second (AR-579).
 #[test]
 fn a_second_diagram_a_profiles_or_one_of_a_package_without_a_binding_binds_nothing() {
@@ -894,7 +894,7 @@ fn a_second_diagram_a_profiles_or_one_of_a_package_without_a_binding_binds_nothi
     made(&mut s, "uml.profile.diagram", json!({ "profile": audit }));
     assert_eq!(archforge_diagram::defaults::bindings(s.doc()), binding, "Sales's binding alone");
     assert_eq!(resolve(s.doc(), at(&s, &persistence)), Ok(DefaultDiagram::DoesNotApply));
-    // A package whose class diagram came without a binding, as one made before bindings existed,
+    // A package whose UML structure diagram came without a binding, as one made before bindings existed,
     // and one with no diagram but a binding naming another's, which a second would duplicate.
     let (mut st, model) = store();
     let orders = add(&mut st, model, PACKAGE, 0x30);
@@ -1058,7 +1058,7 @@ fn a_handoff_inside_a_package_with_no_parent_that_goes_is_not_judged() {
     );
 }
 
-/// Removing T, in R, with C, in P below T: T hands P up to R, but C's class diagram goes past P to R,
+/// Removing T, in R, with C, in P below T: T hands P up to R, but C's UML structure diagram goes past P to R,
 /// the first package above all that go, judged in P's place: refused, named, with no diagram yet; with
 /// a bound one T and C go in either order, P lands in R diagramless, C's diagram is R's (AR-673).
 #[test]
@@ -1092,7 +1092,7 @@ fn a_handoff_past_a_removed_ancestor_goes_to_the_first_package_above_it_that_sta
 }
 
 /// Inner, a package a profile holds directly, which no command makes but a project's rows may
-/// hold, read back from them: Leaf in Inner hands its class diagram up past the profile as past any
+/// hold, read back from them: Leaf in Inner hands its UML structure diagram up past the profile as past any
 /// parent. Removed with the profile, or with Inner, Leaf goes and so does its diagram, taken along
 /// with them, nothing judged, R's lack of a diagram no more than Inner's; removed alone, Inner judges
 /// it, refused. With the profile in Shop, a nested package, removing Shop with Leaf hands the diagram
@@ -1144,7 +1144,7 @@ fn a_package_a_profile_holds_hands_its_diagrams_up_past_the_profile() {
 }
 
 /// A and B hold each other, a loop the store and a project's reading refuse, made by a recorded move
-/// of A into B applied again after B moved into A. Removing C, with a class diagram, and P, holding
+/// of A into B applied again after B moved into A. Removing C, with a UML structure diagram, and P, holding
 /// C, ends in the guard's time: B, first to stay, would take the diagram; with none yet it is refused,
 /// named, nothing changed, with A going too as well, the walk going round once more. With B too no
 /// package takes it: a loose template parameter, named after C, is what is refused (AR-673).

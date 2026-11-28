@@ -1,5 +1,5 @@
 //! UML's commands through the engine over the shared core, the diagrams and UML:
-//! packages and classes added, renamed, listed and refused by key; a class diagram of a package
+//! packages and classes added, renamed, listed and refused by key; a UML structure diagram of a package
 //! showing its own classes; removing a package takes its classes and their views; every command
 //! undoes and redoes; the sweep.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
@@ -138,7 +138,7 @@ fn a_class_diagram_shows_its_packages_classes_and_removing_the_package_takes_the
     let invoice = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Invoice" }));
     assert!(s.view().kinds().contains(&STRUCTURE_DIAGRAM));
     let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
-    assert!(s.execute("diagram.add", &json!({ "kind": STRUCTURE_DIAGRAM })).is_err(), "a class diagram is of a package");
+    assert!(s.execute("diagram.add", &json!({ "kind": STRUCTURE_DIAGRAM })).is_err(), "a UML structure diagram is of a package");
     assert!(s.execute("diagram.add", &json!({ "kind": STRUCTURE_DIAGRAM, "element": order })).is_err(), "not of a class");
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     let size = s.execute("diagram.get", &json!({ "diagram": d })).unwrap().value;

@@ -274,10 +274,10 @@ str		«{stereotype}» is not applied to {name}.	«{stereotype}» is not applied 
 str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» has no property {name}. It has {properties}.
 str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» has no property {name}. It has no properties yet.
 str		{name} is not a stereotype.	{name} is not a stereotype.
-str		{name} is not a class diagram.	{name} is not a class diagram.
+str		{name} is not a UML structure diagram.	{name} is not a UML structure diagram.
 str		Give the values as a list of texts.	Give the values as a list of texts.
 str		No stereotype is given. Give its id.	No stereotype is given. Give its id.
-str		No class diagram is given. Give its id.	No class diagram is given. Give its id.
+str		No UML structure diagram is given. Give its id.	No UML structure diagram is given. Give its id.
 str		No property is given. Give its name or id.	No property is given. Give its name or id.
 str		This element is gone.	This element is gone.
 str		{name} is a template parameter of {template} and types only its members.	{name} is a template parameter of {template} and types only its members.
@@ -575,7 +575,7 @@ str		Add end	Add end
 str		Draws a new leg	Draws a new leg
 str		Reconnect end	Reconnect end
 str		Drag a leg end	Drag a leg end
-str		Open a class diagram to pick the new end's class	Open a class diagram to pick the new end's class
+str		Open a UML structure diagram to pick the new end's class	Open a UML structure diagram to pick the new end's class
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.
 str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	An n-ary association's ends are not aggregations: only a binary association has a whole and a part.
 str		Another end has the role {role} already. Pick another role.	Another end has the role {role} already. Pick another role.

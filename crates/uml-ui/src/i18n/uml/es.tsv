@@ -275,10 +275,10 @@ str		«{stereotype}» is not applied to {name}.	«{stereotype}» no está aplica
 str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» no tiene la propiedad {name}. Tiene {properties}.
 str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» no tiene la propiedad {name}. Aún no tiene propiedades.
 str		{name} is not a stereotype.	{name} no es un estereotipo.
-str		{name} is not a class diagram.	{name} no es un diagrama de clases.
+str		{name} is not a UML structure diagram.	{name} no es un diagrama de estructura UML.
 str		Give the values as a list of texts.	Indica los valores como una lista de textos.
 str		No stereotype is given. Give its id.	No se ha indicado ningún estereotipo. Indica su identificador.
-str		No class diagram is given. Give its id.	No se ha indicado ningún diagrama de clases. Indica su identificador.
+str		No UML structure diagram is given. Give its id.	No se ha indicado ningún diagrama de estructura UML. Indica su identificador.
 str		No property is given. Give its name or id.	No se ha indicado ninguna propiedad. Indica su nombre o su identificador.
 str		This element is gone.	Este elemento ya no existe.
 str		{name} is a template parameter of {template} and types only its members.	{name} es un parámetro de plantilla de {template} y solo tipa sus miembros.
@@ -576,7 +576,7 @@ str		Add end	Añadir extremo
 str		Draws a new leg	Dibuja un nuevo tramo
 str		Reconnect end	Reconectar extremo
 str		Drag a leg end	Arrastre el final de un tramo
-str		Open a class diagram to pick the new end's class	Abra un diagrama de clases para elegir la clase del nuevo extremo
+str		Open a UML structure diagram to pick the new end's class	Abra un diagrama de estructura UML para elegir la clase del nuevo extremo
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Los extremos de una asociación n-aria no son agregaciones, así que no se ofrece Agregación. Repita un tipo para dos extremos cuando los roles difieran.
 str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	Los extremos de una asociación n-aria no son agregaciones: solo una asociación binaria tiene un todo y una parte.
 str		Another end has the role {role} already. Pick another role.	Otro extremo ya tiene el rol {role}. Elija otro rol.

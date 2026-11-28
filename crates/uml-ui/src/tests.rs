@@ -851,13 +851,13 @@ fn an_application_parameter_refused_is_said_in_the_chosen_language() {
     let (cmd, p) = apply(&order, "");
     assert_eq!(refused(tc, cmd, p), tr("No stereotype is given. Give its id."));
     let unnamed = refused(tc, "uml.stereotype.show-values", json!({ "diagram": "", "show": true }));
-    assert_eq!(unnamed, tr("No class diagram is given. Give its id."));
+    assert_eq!(unnamed, tr("No UML structure diagram is given. Give its id."));
     let (cmd, p) = apply("nope", &entity);
     assert_eq!(refused(tc, cmd, p), fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]));
     let (cmd, p) = apply(&order, &order);
     assert_eq!(refused(tc, cmd, p), fmt(&tr("{name} is not a stereotype."), &[("name", "Order")]));
     let shown = refused(tc, "uml.stereotype.show-values", json!({ "diagram": order, "show": true }));
-    assert_eq!(shown, fmt(&tr("{name} is not a class diagram."), &[("name", "Order")]));
+    assert_eq!(shown, fmt(&tr("{name} is not a UML structure diagram."), &[("name", "Order")]));
     let t = ok(tc, "uml.template-parameter.add", json!({ "classifier": order, "name": "T" }))["element"].as_str().unwrap().to_string();
     let (cmd, p) = apply(&t, &entity);
     let parameter = fmt(&tr("{name} is a template parameter of {template} and types only its members."), &[("name", "T"), ("template", "Order")]);

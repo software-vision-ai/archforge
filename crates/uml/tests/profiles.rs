@@ -884,13 +884,13 @@ fn every_application_parameter_refused_carries_its_reason_typed() {
     check(&mut s, apply, on(""), "element", empty("element"), "\"\" is not an id");
     check(&mut s, apply, json!({ "element": order, "stereotype": "" }), "stereotype", empty("stereotype"), "\"\" is not an id");
     let unnamed = json!({ "diagram": "", "show": true });
-    check(&mut s, "uml.stereotype.show-values", unnamed, "diagram", empty("class diagram"), "\"\" is not an id");
+    check(&mut s, "uml.stereotype.show-values", unnamed, "diagram", empty("UML structure diagram"), "\"\" is not an id");
     check(&mut s, apply, on("nope"), "element", Reason::NoElement { id: "nope".into() }, "\"nope\" is not an id");
     check(&mut s, apply, on(&gone), "element", Reason::NoElement { id: gone.clone() }, "there is no element");
     let not_a = |kind, name: &str| Reason::NotA { kind, name: name.into() };
     check(&mut s, apply, json!({ "element": order, "stereotype": order }), "stereotype", not_a("stereotype", "Order"), "is not a stereotype");
     let shown = json!({ "diagram": order, "show": true });
-    check(&mut s, "uml.stereotype.show-values", shown, "diagram", not_a("class diagram", "Order"), "is not a class diagram");
+    check(&mut s, "uml.stereotype.show-values", shown, "diagram", not_a("UML structure diagram", "Order"), "is not a UML structure diagram");
     // Values set where the stereotype is not applied, on a property it lacks, and values no list.
     let set = |element: &str, stereotype: &str, property: &str, values: Json| json!({ "element": element, "stereotype": stereotype, "property": property, "values": values });
     let set_value = "uml.stereotype.set-value";
@@ -1844,7 +1844,7 @@ fn cards_members_and_lines_show_their_stereotypes() {
     let st = s.doc();
     assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
     let _ = persistence;
-    assert!(refused(&mut s, "uml.stereotype.show-values", json!({ "diagram": order, "show": true })).contains("is not a class diagram"));
+    assert!(refused(&mut s, "uml.stereotype.show-values", json!({ "diagram": order, "show": true })).contains("is not a UML structure diagram"));
 }
 
 /// Deleting an element takes its stereotype applications and their values along in one step; a

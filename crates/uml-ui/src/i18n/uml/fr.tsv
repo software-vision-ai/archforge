@@ -275,10 +275,10 @@ str		«{stereotype}» is not applied to {name}.	«{stereotype}» n’est pas app
 str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» n’a pas de propriété {name}. Il a {properties}.
 str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» n’a pas de propriété {name}. Il n’a encore aucune propriété.
 str		{name} is not a stereotype.	{name} n’est pas un stéréotype.
-str		{name} is not a class diagram.	{name} n’est pas un diagramme de classes.
+str		{name} is not a UML structure diagram.	{name} n’est pas un diagramme de structure UML.
 str		Give the values as a list of texts.	Indiquez les valeurs sous forme de liste de textes.
 str		No stereotype is given. Give its id.	Aucun stéréotype n’est indiqué. Indiquez son identifiant.
-str		No class diagram is given. Give its id.	Aucun diagramme de classes n’est indiqué. Indiquez son identifiant.
+str		No UML structure diagram is given. Give its id.	Aucun diagramme de structure UML n’est indiqué. Indiquez son identifiant.
 str		No property is given. Give its name or id.	Aucune propriété n’est indiquée. Indiquez son nom ou son identifiant.
 str		This element is gone.	Cet élément n’existe plus.
 str		{name} is a template parameter of {template} and types only its members.	{name} est un paramètre de modèle de {template} et ne type que ses membres.
@@ -576,7 +576,7 @@ str		Add end	Ajouter une extrémité
 str		Draws a new leg	Trace une nouvelle branche
 str		Reconnect end	Reconnecter une extrémité
 str		Drag a leg end	Faites glisser le bout d’une branche
-str		Open a class diagram to pick the new end's class	Ouvrez un diagramme de classes pour choisir la classe de la nouvelle extrémité
+str		Open a UML structure diagram to pick the new end's class	Ouvrez un diagramme de structure UML pour choisir la classe de la nouvelle extrémité
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Les extrémités d’une association n-aire ne sont pas des agrégations, donc Agrégation n’est pas proposé. Répétez un type pour deux extrémités quand les rôles diffèrent.
 str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	Les extrémités d'une association n-aire ne sont pas des agrégations : seule une association binaire a un tout et une partie.
 str		Another end has the role {role} already. Pick another role.	Une autre extrémité a déjà le rôle {role}. Choisissez un autre rôle.

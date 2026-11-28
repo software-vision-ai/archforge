@@ -427,7 +427,7 @@ pub fn linked_nodes(store: &Store, d: Obj, c: Obj) -> Vec<Obj> {
     out
 }
 
-/// Shows `c` on the class diagram `d` in `form`, at `at` or where it reads: braces nested in the
+/// Shows `c` on the UML structure diagram `d` in `form`, at `at` or where it reads: braces nested in the
 /// node of the first of its elements the diagram shows, under it; a note right of its elements'
 /// nodes. A node showing it already in another form gives way, in the same step. Refused when
 /// braces have no element of `c` to sit by.
@@ -589,14 +589,14 @@ fn constraint_move(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
-/// `uml.constraint.show`: a constraint shown on a class diagram as braces or a note, at both
+/// `uml.constraint.show`: a constraint shown on a UML structure diagram as braces or a note, at both
 /// coordinates given or where it reads.
 fn constraint_show(ctx: &mut C<'_>, p: &Params) -> R {
-    let d = object(ctx.doc, "diagram", text(p, "diagram"), "class diagram")?;
+    let d = object(ctx.doc, "diagram", text(p, "diagram"), "UML structure diagram")?;
     let kind = ctx.doc.get(d, diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
     if ctx.doc.class_of(d).ok() != Some(archforge_diagram::DIAGRAM) || kind != crate::STRUCTURE_DIAGRAM {
-        let reason = Reason::NotA { kind: "class diagram", name: crate::applications::name_or_id(ctx.doc, d) };
-        return Err(refuse("diagram", format!("{} is not a class diagram", text(p, "diagram"))).because(reason));
+        let reason = Reason::NotA { kind: "UML structure diagram", name: crate::applications::name_or_id(ctx.doc, d) };
+        return Err(refuse("diagram", format!("{} is not a UML structure diagram", text(p, "diagram"))).because(reason));
     }
     let c = constraint_param(ctx.doc, p, "constraint")?;
     let form = match text(p, "as") {
@@ -687,7 +687,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Constraint", "Diagram"],
             None,
             concat!(
-                "diagram: string; the class diagram's id\n",
+                "diagram: string; the UML structure diagram's id\n",
                 "constraint: string; the constraint's id\n",
                 "as: string = \"note\", braces|note; braces beside the first of its elements the diagram shows, for short text, or a note linked to its elements, for long text; it replaces how the diagram showed it\n",
                 "x: number?; the left edge, with y; left out, where it reads\n",

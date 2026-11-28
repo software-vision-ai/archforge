@@ -112,7 +112,7 @@ fn one_step(s: &mut S, cmd: &str, p: Json) -> String {
 
 /// A model with a package `pay` holding Payment, CardPayment, BankTransfer, WalletPayment and
 /// Product, each of the three a generalization to Payment, a Voucher specializing Product, and a
-/// class diagram of `pay` showing them all with their lines: (pay, payment, product, the four
+/// UML structure diagram of `pay` showing them all with their lines: (pay, payment, product, the four
 /// generalizations card, bank, wallet and voucher, the diagram).
 struct Shop {
     pay: String,
@@ -383,7 +383,8 @@ fn a_set_emptied_by_a_deletion_goes_in_the_same_step() {
 }
 
 /// The label sits on each diagram that shows the grouped lines, placed per diagram: its node
-/// nested in the general classifier's node, moved there on that diagram alone.
+/// nested in the general classifier's node, moved there on that diagram alone; never on something
+/// that is no UML structure diagram.
 #[test]
 fn the_label_is_placed_on_two_diagrams_each_its_own_place() {
     let mut s = session();
@@ -424,6 +425,9 @@ fn the_label_is_placed_on_two_diagrams_each_its_own_place() {
     let empty = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "name": "Empty", "element": shop.pay }));
     let e = refused(&mut s, "uml.generalization-set.place", json!({ "diagram": empty, "set": set, "x": 0, "y": 0 }));
     assert!(e.contains("nothing to sit by"), "{e}");
+    // Something that is no UML structure diagram, as its package, is refused by that kind's name.
+    let e = refused(&mut s, "uml.generalization-set.place", json!({ "diagram": shop.pay, "set": set, "x": 0, "y": 0 }));
+    assert!(e.contains("is not a UML structure diagram"), "{e}");
 }
 
 /// Sets, their flags, members and placed labels, saved as rows, read back identical.

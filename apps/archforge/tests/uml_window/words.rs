@@ -341,7 +341,7 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
 
 /// The constraint commands' parameters, refused by the engine, are said in the chosen language: an
 /// id missing, as the id of what the parameter takes, or of no element, an element listed as no id,
-/// an element that is no constraint or no class diagram, a place past the last, one coordinate
+/// an element that is no constraint or no UML structure diagram, a place past the last, one coordinate
 /// alone or one too far; so are a coordinate that is no number and a constraint among no element's
 /// constraints. In a window of the design's height, in light and dark (AR-476).
 #[test]
@@ -366,14 +366,14 @@ fn a_constraint_parameter_refused_is_said_in_the_chosen_language() {
         let no_element = tr("No element is given. Give its id.");
         assert_eq!(refused(&mut h, "uml.constraint.add", json!({ "context": "", "expression": "x" })), no_element, "{theme:?}");
         let no_diagram = refused(&mut h, "uml.constraint.show", json!({ "diagram": "", "constraint": c }));
-        assert_eq!(no_diagram, tr("No class diagram is given. Give its id."), "{theme:?}");
+        assert_eq!(no_diagram, tr("No UML structure diagram is given. Give its id."), "{theme:?}");
         let nope = fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]);
         assert_eq!(refused(&mut h, "uml.constraint.set", json!({ "constraint": c, "constrained": ["nope"] })), nope, "{theme:?}");
         let listed = refused(&mut h, "uml.constraint.set", json!({ "constraint": c, "constrained": [7] }));
         assert_eq!(listed, tr("Give the elements as a list of ids."), "{theme:?}");
         let not_one = fmt(&tr("{name} is not a constraint of this model."), &[("name", "Order")]);
         assert_eq!(refused(&mut h, "uml.constraint.set", json!({ "constraint": order, "name": "n" })), not_one, "{theme:?}");
-        let not_diagram = fmt(&tr("{name} is not a class diagram."), &[("name", "Order")]);
+        let not_diagram = fmt(&tr("{name} is not a UML structure diagram."), &[("name", "Order")]);
         assert_eq!(refused(&mut h, "uml.constraint.show", json!({ "diagram": order, "constraint": c })), not_diagram, "{theme:?}");
         // A place past the last, one coordinate alone and one too far.
         let place = tr("There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.");

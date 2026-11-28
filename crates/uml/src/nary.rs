@@ -1,6 +1,6 @@
 //! N-ary associations (AR-128): an association with three ends or more, UML's Association with as
 //! many memberEnds, each a Property the association owns, typed by the classifier at that end. It
-//! is one element however many legs it has: on a class diagram it is a diamond, a node of the
+//! is one element however many legs it has: on a UML structure diagram it is a diamond, a node of the
 //! association itself, with a leg from the diamond to the card of each end's classifier, an edge of
 //! that end's Property. The diamond's place is the diagram's own, kept in the diagram's existing
 //! node rows; the legs are worked out of the ends wherever the diagram shows the diamond and the

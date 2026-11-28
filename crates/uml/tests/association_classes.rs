@@ -98,7 +98,7 @@ fn gone(s: &S, id: &str) -> bool {
 }
 
 /// A package Shop with classes Customer, Product and Store, an interface Rated, an enumeration
-/// Stars, a data type Money and a primitive type Sku, and a class diagram that shows the three
+/// Stars, a data type Money and a primitive type Sku, and a UML structure diagram that shows the three
 /// classes: the package, the diagram, the classifiers' ids in that order and the classes' nodes.
 fn shop(s: &mut S) -> (String, String, Vec<String>, Vec<String>) {
     let pkg = run(s, "uml.package.add", json!({ "name": "Shop" }));

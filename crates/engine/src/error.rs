@@ -261,7 +261,7 @@ pub enum Reason {
     /// The stereotype has no property `name`, as asked for and cut to its first characters, nor any
     /// other yet.
     NoProperties { stereotype: Box<str>, name: Box<str> },
-    /// The element `name` is not of `kind`, as `"stereotype"`, `"class diagram"` or, of the model,
+    /// The element `name` is not of `kind`, as `"stereotype"`, `"UML structure diagram"` or, of the model,
     /// `"constraint"`, which the parameter takes; for a new diagram's element, of
     /// `"element a diagram is of"`.
     NotA { kind: &'static str, name: String },
@@ -486,9 +486,9 @@ pub enum Reason {
     /// A package's default diagram cannot be read, as its default-diagram binding is unsound in
     /// the way the fault names; one of the package's own diagrams has to be chosen as its default.
     InvalidBinding(BindingFault),
-    /// A nested package's class diagrams cannot move up to `parent` (its name, or its id when it has
+    /// A nested package's UML structure diagrams cannot move up to `parent` (its name, or its id when it has
     /// none) as the package is removed: `parent`'s default-diagram binding is unsound in the way the
-    /// fault names or, with none, `parent` has no class diagram yet, so a default has to be chosen or
+    /// fault names or, with none, `parent` has no UML structure diagram yet, so a default has to be chosen or
     /// made for it first (AR-673).
     ParentDefaultUnsound { parent: Box<str>, fault: Option<BindingFault> },
     /// The diagram stays while the default-diagram binding of `package` (its name, or its id when
@@ -506,10 +506,10 @@ pub enum Reason {
     /// ids of those that join them now, to choose again among, none when none does. Another is
     /// never picked in its place (AR-699).
     StaleChoice { candidates: Box<[Box<str>]> },
-    /// The class diagram `diagram` is not one of `package`'s own (each its name, or its id when it
+    /// The UML structure diagram `diagram` is not one of `package`'s own (each its name, or its id when it
     /// has none), so it cannot be that package's default diagram (AR-580).
     NotOwnDiagram { diagram: Box<str>, package: Box<str> },
-    /// The package `package` (its name, or its id when it has none) has no class diagram yet, so
+    /// The package `package` (its name, or its id when it has none) has no UML structure diagram yet, so
     /// it has no default diagram to open; one has to be made for it first (AR-582).
     NoDiagramYet { package: Box<str> },
     /// The default diagram being removed is named as its own replacement; another of its
