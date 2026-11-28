@@ -753,6 +753,8 @@ fn commerce() -> crate::Opened {
     crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() }
 }
 
+/// Adds a package named `name` to the open project through the fake notation's command, and lets
+/// the window settle for two frames.
 fn add_schema(h: &mut Harness<'static, Shell>, name: &str) {
     h.state_mut().session.as_mut().unwrap().execute("sketch.package.add", &serde_json::json!({ "name": name })).unwrap();
     h.run_steps(2);
@@ -5498,6 +5500,8 @@ fn without_an_id_source_the_status_bar_says_the_model_could_not_open_once() {
     assert_eq!(h.state().session_error, Some(crate::SessionError::NoIdSource));
 }
 
+/// A long project name keeps the project chip left of the bar's controls, at every window size and
+/// in every language.
 #[test]
 fn a_long_project_name_keeps_the_chip_left_of_the_bar_controls_at_every_size_and_language() {
     for lang in crate::i18n::LANGUAGES {
@@ -5546,12 +5550,14 @@ const NOT_ALONE: [egui::Modifiers; 5] = [
     egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND),
 ];
 
+/// The names of the open project's packages of the fake notation.
 fn schema_names(h: &Harness<'static, Shell>) -> Vec<String> {
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
     st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).map(|o| archforge_core::name_of(st, o)).collect()
 }
 
+/// The Models tree's + adds a package, named in place, and Enter renames it.
 #[test]
 fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -7065,6 +7071,8 @@ fn the_link_note_tool_drags_a_link_from_a_note_to_a_table_and_hands_back_to_sele
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
 }
 
+/// The Models tree starts folded, Expand all opens every row and folds them again, and an element
+/// selected elsewhere opens the rows above it once.
 #[test]
 fn the_models_tree_starts_folded_and_opens_all_at_once() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
@@ -9716,9 +9724,11 @@ impl archforge_shell_api::notation_ui::NotationState for SketchState {
 }
 
 impl crate::notation_ui::NotationUi for SketchUi {
+    /// The toy metamodel's, the fake notation's model.
     fn metamodel(&self) -> u16 {
         archforge_mof::toy::INDEX
     }
+    /// A package is a top row of the Models tree.
     fn is_top(&self, store: &archforge_mof::Store, member: archforge_mof::Obj) -> bool {
         store.class_of(member).ok() == Some(archforge_mof::toy::PACKAGE)
     }
@@ -14720,6 +14730,7 @@ fn an_opening_waiting_for_the_hold_turns_the_strips_open_project_off() {
     }
 }
 
+/// A diagram takes a skill from the Skills panel, and shows its package's skill as inherited.
 #[test]
 fn a_diagram_takes_a_skill_from_the_skills_panel_and_shows_its_schemas_as_inherited() {
     let (mut h, _, diagram) = diagram_harness();
@@ -14844,6 +14855,7 @@ fn new_project_over_the_workspace_keeps_the_keys_from_it() {
     });
 }
 
+/// While About is open, no key reaches the Models explorer or the workspace behind it.
 #[test]
 fn while_about_is_open_no_key_reaches_the_models_explorer_or_the_workspace_behind_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -14963,6 +14975,7 @@ impl crate::ProjectHost for DoltHost {
         std::sync::mpsc::channel().1
     }
 
+    /// Counts the look, and answers at once whether dolt is installed, as the host is told.
     fn find_dolt(&self) -> std::sync::mpsc::Receiver<Result<(), String>> {
         self.looks.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -16028,6 +16041,7 @@ fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_some(), "given back");
 }
 
+/// What the open project has selected.
 fn selection(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
     h.state().session.as_ref().unwrap().view().selection.clone()
 }

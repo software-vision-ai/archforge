@@ -95,12 +95,14 @@ fn at(n: u64) -> String {
     timestamp(1_762_437_731 + n)
 }
 
+/// The model tables of the fake notation, with the core's and the diagrams'.
 fn schema() -> ModelSchema {
     let universe = archforge_notations::fake::NOTATIONS.store(ids(0)).unwrap().universe().clone();
     let (tables, junctions) = archforge_notations::fake::NOTATIONS.storage();
     ModelSchema::new(&universe, tables, junctions).unwrap()
 }
 
+/// A new project's session on the fake notation.
 fn session() -> Session {
     archforge_notations::fake::NOTATIONS.new_project_session("Commerce platform", ids(0)).unwrap()
 }
@@ -159,10 +161,12 @@ fn reply(n: u64, turn: Uuid, body: &str, when: u64) -> NewReply {
     NewReply { id: id(n), turn, body: body.into(), complete: true, shortened: false, now: at(when) }
 }
 
+/// The end of the turn `turn` at the time `when`, completed, with the changes `changes`.
 fn ended(turn: Uuid, when: u64, changes: Option<TurnChanges>) -> TurnEnd {
     TurnEnd { turn, outcome: TurnOutcome::Completed, error: None, now: at(when), changes }
 }
 
+/// An anchor of the fake notation's class `element`, named `name`, in the role `role`.
 fn anchor(element: Uuid, role: AnchorRole, name: &str) -> NewAnchor {
     NewAnchor { element, role, metaclass: "sketch_class".into(), name: Some(name.into()) }
 }
@@ -262,6 +266,8 @@ fn a_conversation_is_made_answered_listed_newest_first_and_loaded_whole() {
     p.close().unwrap();
 }
 
+/// A saved project shows its conversations again, and a turn left running when Archforge went
+/// away comes back interrupted, its question kept.
 #[test]
 fn a_saved_project_shows_its_conversations_again_and_a_turn_left_running_is_interrupted() {
     let env = Env::new("reopen");
@@ -288,6 +294,8 @@ fn a_saved_project_shows_its_conversations_again_and_a_turn_left_running_is_inte
     again.close().unwrap();
 }
 
+/// Don't save puts the model back at its last save and keeps every turn of the conversations, what
+/// was written since the last chat commit included.
 #[test]
 fn dont_save_keeps_the_conversations_and_puts_the_model_back() {
     let env = Env::new("discard");
@@ -319,6 +327,8 @@ fn dont_save_keeps_the_conversations_and_puts_the_model_back() {
     again.close().unwrap();
 }
 
+/// A Save commits the model alone, a turn half-way included, and the project opens again with
+/// its model and its conversations whole.
 #[test]
 fn a_save_commits_the_model_alone_and_the_project_opens_again_whole() {
     let env = Env::new("save");
@@ -446,6 +456,8 @@ fn a_failed_save_is_judged_on_the_branch_it_started_on() {
     p.close().unwrap();
 }
 
+/// A format 2 project that gets no conversation stays format 2 through a save, so an Archforge
+/// that reads up to format 2 still opens it.
 #[test]
 fn a_format_2_project_without_conversations_stays_format_2() {
     let env = Env::new("stay");
@@ -484,6 +496,8 @@ fn a_project_of_a_newer_format_is_refused_as_before() {
     assert!(matches!(refused, Err(Error::NewerFormat { found, supported: FORMAT }) if found == FORMAT + 1));
 }
 
+/// Deleting a conversation removes its rows from every chat table and leaves the other's, is
+/// committed, and stays in the project's earlier commits; a conversation gone is refused.
 #[test]
 fn deleting_a_conversation_removes_its_rows_and_leaves_the_others() {
     let env = Env::new("delete");
@@ -753,6 +767,8 @@ fn bringing_a_conversation_back_is_refused_when_listed_forged_its_label_taken_or
     p.close().unwrap();
 }
 
+/// A turn's change link follows undo, redo and Don't save: undone past its first step, applied
+/// again by redo, back to its state at the save, and a later turn's discarded.
 #[test]
 fn change_links_follow_undo_redo_and_dont_save() {
     let env = Env::new("links");
@@ -1015,6 +1031,8 @@ fn a_failed_turn_runs_again_in_place_with_its_question_stored_once() {
     assert_eq!(count(&p, &format!("SELECT COUNT(*) FROM chat_message WHERE body LIKE '%{CANARY}%'")), 0);
 }
 
+/// An anchor to an element deleted since is kept with its name and metaclass as they were, and
+/// points at the element again once undo brings it back.
 #[test]
 fn an_anchor_to_a_deleted_element_is_kept_with_its_snapshot_and_lives_again_after_undo() {
     let env = Env::new("anchor");
@@ -1044,6 +1062,7 @@ fn an_anchor_to_a_deleted_element_is_kept_with_its_snapshot_and_lives_again_afte
     p.close().unwrap();
 }
 
+/// Damaged conversation tables are refused with a reason, and the model still reads and saves.
 #[test]
 fn damaged_conversations_are_refused_with_a_reason_and_never_block_the_model() {
     let env = Env::new("damaged");
@@ -1183,6 +1202,7 @@ fn an_older_chat_row_without_the_chips_column_reads_as_none_removed() {
     p.close().unwrap();
 }
 
+/// A model table named as one of the conversations' tables is refused.
 #[test]
 fn a_model_table_may_not_take_a_conversations_name() {
     let universe = archforge_notations::fake::NOTATIONS.store(ids(0)).unwrap().universe().clone();

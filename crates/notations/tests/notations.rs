@@ -22,6 +22,7 @@ fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
     })
 }
 
+/// Each notation's metamodel is in the universe, and its tables and lists are in the storage once.
 #[test]
 fn every_notation_joins_the_universe_and_the_tables_once() {
     let u = NOTATIONS.universe().unwrap();
@@ -36,6 +37,8 @@ fn every_notation_joins_the_universe_and_the_tables_once() {
     assert!(tables.iter().map(|t| t.name).chain(junctions.iter().map(|j| j.name)).all(|n| names.insert(n)), "every table once");
 }
 
+/// A model holding an ER schema and a UML class beside it, members of one Model, is written to
+/// rows and comes back from them as it was.
 #[test]
 fn a_model_of_er_and_uml_comes_back_from_its_rows() {
     let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
@@ -163,10 +166,13 @@ fn id(s: &mut Session, cmd: &str, p: Json) -> String {
     out.value["id"].as_str().unwrap_or_default().to_string()
 }
 
+/// The id of `o` in `st`, as text.
 fn uuid(st: &Store, o: Obj) -> String {
     st.uuid(o).unwrap().to_string()
 }
 
+/// A diagram, a removal and a description of the second notation's elements are each handled by
+/// that notation, not by the first.
 #[test]
 fn a_second_notations_diagrams_removals_and_descriptions_route_to_it() {
     let mut st = NOTATIONS.store(ids(0)).unwrap();
@@ -264,6 +270,7 @@ fn descriptions_read_back_through_each_notation_under_one_limit() {
     }
 }
 
+/// A removal of elements of both notations that one of them refuses changes nothing in either.
 #[test]
 fn a_removal_one_notation_refuses_changes_nothing_in_any() {
     let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
@@ -358,6 +365,8 @@ fn every_shared_command_refusal_carries_its_reason_typed() {
     check("element.describe", "element", json!(&pkg), stubborn, "Stubborn elements cannot be described yet".into());
 }
 
+/// A session made for a new project, and one made from its rows, each hold the composition's
+/// notations; a view without notations knows no diagram kind and says so.
 #[test]
 fn every_session_a_project_makes_holds_its_notations() {
     let s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
@@ -376,6 +385,7 @@ fn every_session_a_project_makes_holds_its_notations() {
     assert_eq!((error.reason, error.key.as_deref()), (Some(archforge_engine::Reason::NotOneOf(Box::new(none))), Some("kind")));
 }
 
+/// A model too big to rebuild in one store transaction opens again from its rows.
 #[test]
 fn a_model_past_one_transactions_steps_opens_again_from_its_rows() {
     // 400 packages of 1,000 classes each: over a million steps to rebuild, more than one store
@@ -406,6 +416,8 @@ fn a_model_past_one_transactions_steps_opens_again_from_its_rows() {
     assert!(rows::restore_into_empty(busy, &saved, &tables, &junctions).is_err());
 }
 
+/// A class's skill named as a project skill is saved and opens again, while one subject never
+/// holds two skills of one name.
 #[test]
 fn a_class_skill_named_as_a_project_skill_opens_again_and_one_subject_never_holds_two() {
     // Every skill sits in the model's one list, so the siblings' name check refused a
@@ -474,6 +486,8 @@ fn skill_count(s: &Session) -> usize {
     archforge_core::skills::skills(s.doc()).len()
 }
 
+/// A diagram carries skills of its own and inherits the project's and those of the elements that
+/// hold it.
 #[test]
 fn a_diagram_carries_skills_and_inherits_the_projects_and_its_elements() {
     let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
@@ -516,6 +530,8 @@ fn a_schemas_first_er_diagram_binds_nothing_and_a_packages_first_class_diagram_i
     assert_eq!((named(OWNER_ELEMENT), named(DEFAULT_DIAGRAM)), (Some(sales), Some(d)));
 }
 
+/// A diagram's skills go with it, whether the diagram or its element is removed, and come back
+/// with undo.
 #[test]
 fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_with_undo() {
     let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
@@ -547,6 +563,7 @@ fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_wit
     }
 }
 
+/// A nested package's diagram keeps its own skill and inherits its package's and the parent's.
 #[test]
 fn a_nested_packages_diagram_keeps_its_skill_when_the_package_goes_and_inherits_from_the_parent() {
     let mut s = NOTATIONS.new_project_session("Shop", ids(0)).unwrap();
@@ -562,6 +579,8 @@ fn a_nested_packages_diagram_keeps_its_skill_when_the_package_goes_and_inherits_
     assert_eq!(applying(&s, &diagram), [("Sales style".into(), false), ("Layout".into(), false)], "moved up to Sales with its skill");
 }
 
+/// A diagram crafted to show itself inherits the skills of what holds it, without walking in a
+/// circle.
 #[test]
 fn a_diagram_crafted_to_show_itself_inherits_from_what_holds_it() {
     let mut st = NOTATIONS.store(ids(0)).unwrap();

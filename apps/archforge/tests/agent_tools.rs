@@ -24,6 +24,8 @@ fn infos() -> Result<Vec<Value>, String> {
 struct Recorder(std::cell::RefCell<Vec<Value>>);
 
 impl archforge_mcp::Backend for Recorder {
+    /// Records the parameters of an `engine.execute` request, the one method the tools send, and
+    /// answers with no result.
     fn call(&self, method: &str, params: Value) -> Result<Value, CallError> {
         assert_eq!(method, "engine.execute");
         self.0.borrow_mut().push(params);

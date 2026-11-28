@@ -22,6 +22,7 @@ fn run(s: &mut Session, cmd: &str, p: Json) -> String {
     out.value.get("id").and_then(Json::as_str).unwrap_or_default().to_string()
 }
 
+/// The rows `st` writes to the notations' tables.
 fn snapshot(st: &Store) -> rows::Rows {
     let (tables, junctions) = NOTATIONS.storage();
     rows::snapshot(st, &tables, &junctions).unwrap()

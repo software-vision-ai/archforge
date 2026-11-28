@@ -1134,6 +1134,8 @@ fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
     assert_eq!(h.state().canvas.tool, archforge_ui_egui::canvas::Tool::Select);
 }
 
+/// A selected note's handle, dragged onto a table or onto a relationship's line, links the note to
+/// it, and Delete on a selected link removes the link alone.
 #[test]
 fn a_selected_notes_handle_links_it_to_a_table_or_a_relationships_line_and_delete_removes_a_link() {
     let (mut h, _customer, _order) = two_tables_harness();
@@ -1189,6 +1191,8 @@ fn a_selected_notes_handle_links_it_to_a_table_or_a_relationships_line_and_delet
     assert_eq!(relationships(&h).len(), 1, "the relationship stays");
 }
 
+/// A relationship's cardinality text dragged aside keeps its new place as a label of the line, and
+/// a double click on it puts it back where the line places it.
 #[test]
 fn a_cardinality_text_is_dragged_aside_and_a_double_click_puts_it_back() {
     let (mut h, _d, e, ..) = related_tables((500.0, 100.0));

@@ -88,6 +88,7 @@ impl Drop for Env {
     }
 }
 
+/// Ids in creation order after `start`, each a version 7 id of one fixed time.
 fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
     let mut n = start;
     Box::new(move || {
@@ -98,17 +99,22 @@ fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
     })
 }
 
+/// The model tables of the app's notations, ER's and UML's with the core's and the diagrams'.
 fn schema() -> ModelSchema {
     let universe = archforge_notations::NOTATIONS.store(ids(0)).unwrap().universe().clone();
     let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     ModelSchema::new(&universe, tables, junctions).unwrap()
 }
 
+/// Runs the command `cmd` with `p` on `s`, failing the test on a refusal, and gives the id it
+/// answers, empty when it answers none.
 fn run(s: &mut Session, cmd: &str, p: Json) -> String {
     let out = s.execute(cmd, &p).unwrap_or_else(|e| panic!("{cmd} {p}: {e}"));
     out.value.get("id").and_then(Json::as_str).unwrap_or_default().to_string()
 }
 
+/// The ER test model: a schema of two tables, a relationship with its foreign key, an enum, a
+/// diagram of the schema showing the first table, and a skill on the schema.
 fn model() -> Session {
     let mut s = archforge_notations::NOTATIONS.new_project_session("Commerce platform", ids(0)).unwrap();
     let shop = run(&mut s, "er.schema.add", json!({ "name": "shop" }));
@@ -131,6 +137,7 @@ fn model() -> Session {
     s
 }
 
+/// The rows `st` writes to the tables of `schema`.
 fn rows_of(st: &Store, schema: &ModelSchema) -> rows::Rows {
     rows::snapshot(st, schema.tables(), &schema.junctions()).unwrap()
 }
@@ -172,6 +179,9 @@ const CURRENT: &str = "3afa5109a47ff478";
 /// The fingerprint of the tables of the Archforge that held ER alone (before UML joined).
 const ER_ALONE: &str = "8c7ee9a29f10f219";
 
+/// A project saved by the Archforge of ER alone opens in this one, brought up to date with its ER
+/// model as it was; a UML package and class with a trace link to an ER table, saved beside it,
+/// come back side by side.
 #[test]
 fn er_and_uml_live_in_one_project_and_a_project_of_er_alone_takes_uml() {
     assert!(EARLIER_MODELS.contains(&ER_ALONE));

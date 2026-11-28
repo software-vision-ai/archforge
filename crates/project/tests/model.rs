@@ -94,6 +94,7 @@ fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
     })
 }
 
+/// The model tables of the fake notation, with the core's and the diagrams'.
 fn schema() -> ModelSchema {
     let universe = archforge_notations::fake::NOTATIONS.store(ids(0)).unwrap().universe().clone();
     let (tables, junctions) = archforge_notations::fake::NOTATIONS.storage();
