@@ -85,6 +85,9 @@ pub const ASSOCIATION_OWNED_END: PropId = p(24);
 pub const LITERAL_INTEGER_VALUE: PropId = p(25);
 pub const LITERAL_UNLIMITED_VALUE: PropId = p(26);
 pub const ENUMERATION_OWNED_LITERAL: PropId = p(27);
+/// A multiplicity's lower bound as a number, derived from its lower value and never stored, as
+/// UML's is: a single data value a reader of cards must leave out.
+pub const MULTIPLICITY_LOWER: PropId = p(28);
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
     let mut b = Builder::new(INDEX, URI, "toy", "1", "toy-content-hash");
@@ -246,6 +249,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
             .subsets(&[NAMESPACE_OWNED_MEMBER]),
     )?;
     class(&mut b, ENUMERATION_LITERAL, "EnumerationLiteral", false, &[NAMED_ELEMENT])?;
+    prop(&mut b, MULTIPLICITY_LOWER, PropertySpec::new("lower", MULTIPLICITY_ELEMENT, TypeRef::Data(INTEGER)).derived())?;
     Ok(b.finish())
 }
 

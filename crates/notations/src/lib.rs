@@ -7,6 +7,9 @@
 //! their own. Pure: builds for the portable target.
 
 pub mod differences;
+// A fake notation for the tests of what holds notations without naming one (ADR 0005); never shipped.
+#[cfg(feature = "testing")]
+pub mod fake;
 mod labels;
 
 use std::collections::HashSet;
