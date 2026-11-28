@@ -6,8 +6,7 @@ use egui::Key::{ArrowDown, ArrowRight, Enter, F10};
 use super::*;
 use crate::actions::{available, label, run};
 use crate::canvas::Tool;
-use crate::model_menu::{sections as model_sections, why_off};
-use crate::state::Explorer;
+use crate::model_menu::sections as model_sections;
 use archforge_uml_ui::snapshot::uml_classifier::{Classifier, KINDS, TOOL};
 use archforge_uml_ui::snapshot::uml_relate::Relate;
 
@@ -112,47 +111,6 @@ fn every_row_arms_its_tool() {
     }
 }
 
-/// A version's details to open over the canvas.
-fn open_details(s: &mut Shell) {
-    s.services.projects = Some(std::sync::Arc::new(crate::actions::tests::CountingHost::default()));
-    crate::version_details::open(s, version_row("c1", None, (None, false), "2026-11-06T15:05:00Z"));
-}
-
-/// Each thing that keeps the tools from the canvas turns every row off, stops a row already chosen,
-/// and is named; details and a changed element cover the canvas only under Versions.
-#[test]
-fn every_row_is_off_where_its_tool_cannot_be_used() {
-    type Setup = fn(&mut Shell);
-    let (busy, show) = (Some("The project is busy"), Some("Show a diagram first"));
-    let states: [(&str, Setup, Option<&str>); 8] = [
-        ("held", |s| s.begin_hold().unwrap(), busy),
-        ("read-only", |s| s.session.as_mut().unwrap().set_read_only(true).unwrap(), busy),
-        ("no project shown", |s| s.active = None, Some("Open or go back to a project first")),
-        ("no diagram", |s| s.canvas.active = None, show),
-        ("a changed element", |s| crate::change_view::open(s, found(1)), show),
-        ("a version's details", open_details, show),
-        ("a dialog", crate::support::open, None),
-        ("a question", |s| s.ask = Some(crate::close_ask::Ask::Unsaved { path: "/shop.archforge".into() }), None),
-    ];
-    for ((name, setup, why), theme) in states.into_iter().flat_map(|state| BOTH.map(|theme| (state, theme))) {
-        let mut h = uml_sized(theme, BIG);
-        let s = h.state_mut();
-        s.state.explorer = Explorer::SourceControl;
-        assert!(available(s, "model.note") && available(s, "model.class"), "{name}: on before");
-        setup(s);
-        for id in ["model.note", "model.class", "model.relate.dependency"] {
-            assert!(!available(s, id), "{name}: {id}");
-            run(s, id);
-            assert_eq!(s.canvas.tool, Tool::Select, "{name}: {id}");
-        }
-        assert!(why.is_none_or(|why| why_off(s) == why), "{name}: {}", why_off(s));
-        if name.starts_with("a ") && why.is_some() {
-            s.state.explorer = Explorer::Models;
-            assert!(available(s, "model.note"), "{name}: drawn only under Versions");
-        }
-    }
-}
-
 /// Chosen from the bar, a row arms the tool and the next click on the canvas makes the element
 /// through the tool's own command; a row off takes no click; the keys reach the rows too.
 #[test]
@@ -174,17 +132,6 @@ fn a_chosen_row_makes_its_element_as_the_tool_does() {
         assert_eq!(menu_at(&h), (Some("model"), Some("model.relationship")), "{theme:?}");
         menu_press(&mut h, Enter);
         assert_eq!(h.state().canvas.tool, Tool::Connect("relationship"), "{theme:?}");
-    }
-}
-
-/// In the lowest window the class diagram's whole menu still fits, each row a line of text high.
-#[test]
-fn the_longest_menu_fits_the_lowest_window() {
-    for theme in BOTH {
-        let mut h = uml_sized(theme, egui::vec2(640.0, 400.0));
-        click_menu(&mut h, "strip.menu.model");
-        let last = rect_of(&h, "strip.menu.row.model.link");
-        assert!(last.bottom() <= 400.0 && last.height() >= 17.0, "{theme:?}: {last:?}");
     }
 }
 

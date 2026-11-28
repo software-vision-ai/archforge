@@ -84,7 +84,7 @@ impl Comparing {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 impl Shell {
     /// Whether a replacement's comparison off the frame has not answered yet.
     pub(crate) fn comparing(&mut self) -> bool {

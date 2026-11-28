@@ -176,6 +176,12 @@ pub fn clear_to_leave(shell: &mut Shell, then: Option<Leaving>) -> Result<(), Ho
     shell.clear_to_leave(then).map(|_| ())
 }
 
+/// Whether `shell`'s replacement is still waiting for its comparison off the frame, which a test
+/// waits out before it counts the frames that follow.
+pub fn replacement_comparing(shell: &mut Shell) -> bool {
+    shell.comparing()
+}
+
 /// Every word a module of the shell hands `tr` through a table rather than as a literal, which a
 /// scan of the source cannot find, each list with the name of the module that says it (its file,
 /// `src/<name>.rs`): the start cards' texts (`home`), then each module's own list of them.

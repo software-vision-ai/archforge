@@ -1,7 +1,6 @@
-//! The Properties body and the keyboard (AR-470): Tab goes on past the fold and the body follows
-//! the control it lands on, Page Up, Page Down, Home and End scroll the body while one of its
-//! controls has the keyboard, and a text field keeps its own keys. Windows and Linux are tested by
-//! the shape of their key events only: the control key sets `ctrl` and `command` together.
+//! Properties' body and the keyboard over UML's editors (AR-470): Tab goes on past the fold and the
+//! body follows the control it lands on, an editor brought into view goes no further, and the page
+//! keys scroll the body while one of its controls has the keyboard.
 
 use egui::{Key, Modifiers};
 use egui_kittest::kittest::{Queryable, by};
@@ -9,8 +8,11 @@ use egui_kittest::kittest::{Queryable, by};
 use super::*;
 
 const ADD: &str = "workspace.properties.constraints.add";
+
 const APPLY: &str = "workspace.properties.constraint.apply";
+
 const NAME: &str = "workspace.properties.name";
+
 const ABSTRACT: &str = "workspace.properties.class.abstract";
 
 /// The sample's Order with twenty more attributes in Properties, at the ordinary window height:
@@ -18,11 +20,12 @@ const ABSTRACT: &str = "workspace.properties.class.abstract";
 fn long_class(theme: ThemeKind) -> Harness<'static, Shell> {
     let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
     let order = named(&h, archforge_uml::CLASS, "Order").to_string();
-    crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
+    archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
     for n in 0..20 {
-        crate::panels::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("extra{n}") })).unwrap();
+        archforge_ui_egui::snapshot::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("extra{n}") }))
+            .unwrap();
     }
-    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
     h.run();
     assert!(!has_id(&h, ADD) && h.state().panels.scroll == 0.0, "{theme:?}: Constraints starts out of view");
     h
@@ -30,7 +33,7 @@ fn long_class(theme: ThemeKind) -> Harness<'static, Shell> {
 
 /// The control that has the keyboard, if the body laid it out: whether it is wholly in view.
 fn held_in_view(h: &Harness<'static, Shell>) -> Option<bool> {
-    let at = h.state().registry.laid_out(h.ctx.memory(|m| m.focused())?)?;
+    let at = archforge_ui_egui::testing::registry(h.state()).laid_out(h.ctx.memory(|m| m.focused())?)?;
     Some(h.state().panels.body.unwrap().contains_rect(at))
 }
 
@@ -38,7 +41,7 @@ fn held_in_view(h: &Harness<'static, Shell>) -> Option<bool> {
 /// on by the way is in view.
 fn tab_to(h: &mut Harness<'static, Shell>, id: &str, modifiers: Modifiers) {
     for _ in 0..200 {
-        if h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(id))) {
+        if h.ctx.memory(|m| m.has_focus(archforge_ui_egui::widgets::egui_id(id))) {
             return;
         }
         key(h, Key::Tab, modifiers);
@@ -62,7 +65,7 @@ fn tab_goes_on_past_the_fold_and_the_body_follows() {
         let mut h = long_class(theme);
         tab_to(&mut h, ADD, Modifiers::NONE);
         assert!(scroll(&h) > 0.0 && has_id(&h, ADD), "{theme:?}: the body followed to the + ({})", scroll(&h));
-        let node = crate::widgets::egui_id(ADD).accesskit_id();
+        let node = archforge_ui_egui::widgets::egui_id(ADD).accesskit_id();
         assert_eq!(h.query_all(by().predicate(|n| n.is_focused() && n.locate().0 == node)).count(), 1, "{theme:?}: a screen reader is on it");
         let at = scroll(&h);
         tab_to(&mut h, "workspace.panel.resize", Modifiers::NONE);
@@ -141,7 +144,7 @@ fn the_body_follows_the_keyboard_only_and_asks_for_its_frame() {
         click(&mut h, egui::pos2(field.center().x, field.bottom() - 2.0));
         assert_eq!((held_in_view(&h), scroll(&h)), (Some(false), cut), "{theme:?}: a click gives it the keyboard and moves nothing");
         // The keyboard moved by the program, as by a screen reader, with no key or pointer event.
-        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(ADD)));
+        h.ctx.memory_mut(|m| m.request_focus(archforge_ui_egui::widgets::egui_id(ADD)));
         h.step();
         assert!(scroll(&h) > cut && h.ctx.has_requested_repaint(), "{theme:?}: the body moved and asks to be drawn again");
     });
@@ -156,7 +159,7 @@ fn the_page_keys_scroll_the_body_while_it_has_the_keyboard() {
     in_both_appearances(|theme| {
         let mut h = long_class(theme);
         let room = h.state().panels.content - h.state().panels.body.unwrap().height();
-        let page = (h.state().panels.body.unwrap().height() - crate::panels::ROW).min(room);
+        let page = (h.state().panels.body.unwrap().height() - archforge_shell_api::panels::ROW).min(room);
         for key_ in [Key::PageDown, Key::End] {
             key(&mut h, key_, Modifiers::NONE);
             assert_eq!(scroll(&h), 0.0, "{theme:?}: {key_:?} with the keyboard nowhere");
@@ -186,11 +189,15 @@ fn the_page_keys_scroll_the_body_while_it_has_the_keyboard() {
         // The in-window menu bar opened by F10 leaves the keyboard on the check box; its keys are its own.
         h.state_mut().in_window_menu = true;
         key(&mut h, Key::F10, Modifiers::NONE);
-        assert!(h.state().menu_bar.open.is_some(), "{theme:?}: F10 opens the bar's first menu");
+        assert!(archforge_ui_egui::testing::open_menu(h.state()).is_some(), "{theme:?}: F10 opens the bar's first menu");
         key(&mut h, Key::End, Modifiers::NONE);
         assert_eq!(scroll(&h), 0.0, "{theme:?}: with the menu bar open");
         key(&mut h, Key::Escape, Modifiers::NONE);
-        assert!(h.state().menu_bar.open.is_none() && h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(ABSTRACT))), "{theme:?}: back");
+        assert!(
+            archforge_ui_egui::testing::open_menu(h.state()).is_none()
+                && h.ctx.memory(|m| m.has_focus(archforge_ui_egui::widgets::egui_id(ABSTRACT))),
+            "{theme:?}: back"
+        );
         for (key_, reaches) in [(Key::PageDown, page), (Key::PageUp, 0.0), (Key::End, room), (Key::Home, 0.0)] {
             key(&mut h, key_, Modifiers::NONE);
             assert_eq!(scroll(&h), reaches, "{theme:?}: {key_:?} with the keyboard on a check box of the body");
@@ -200,7 +207,7 @@ fn the_page_keys_scroll_the_body_while_it_has_the_keyboard() {
             open_file_with(&mut h, Key::End, Modifiers::NONE, pointer);
             assert_eq!(scroll(&h), 0.0, "{theme:?}: with the click that opens the menu bar, by the pointer: {pointer}");
             key(&mut h, Key::Escape, Modifiers::NONE);
-            assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(ABSTRACT))), "{theme:?}: back on the check box");
+            assert!(h.ctx.memory(|m| m.has_focus(archforge_ui_egui::widgets::egui_id(ABSTRACT))), "{theme:?}: back on the check box");
         }
     });
 }
