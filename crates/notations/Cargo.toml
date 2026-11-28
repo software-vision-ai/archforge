@@ -26,5 +26,10 @@ serde_json = { workspace = true, optional = true }
 archforge-engine = { workspace = true, features = ["testing"] }
 serde_json.workspace = true
 
+# The fake notation's own tests: its rows survive a save and a reopening.
+[[test]]
+name = "fake"
+required-features = ["testing"]
+
 [lints]
 workspace = true
