@@ -13,8 +13,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     hooks, its Properties bodies and editors), against the shell's interfaces' test context:
     `crates/uml-ui/src/tests.rs`
   - UML's window tests, the whole window with the notations the app registers (ADR 0005, whole-app
-    behaviour): the app's `apps/archforge/tests/uml_window/`, through ui-egui's `testing` and
-    `snapshot` and UML's screens' `snapshot`, in the module of their area beside `main.rs` (the
+    behaviour): the app's `apps/archforge/tests/uml_window/`, through ui-egui's `testing` and UML's
+    screens' `snapshot`, in the module of their area beside `main.rs` (the
     canvas, its tools and tabs, and relationships; Properties and its keys; Models; profiles and
     stereotypes; Chat; the menus and the rail's panels; the views of a version; UML's refusals in
     the chosen language)
@@ -22,7 +22,7 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     shell's interfaces' test context: `crates/er-ui/src/tests.rs`
   - ER's window tests, the whole window with the notations the app registers, and the tests that
     ask both notations: the app's `apps/archforge/tests/er_window/`, through ui-egui's `testing`
-    and `snapshot` and the notations' screens' `snapshot`, in the module of their area beside
+    and the notations' screens' `snapshot`, in the module of their area beside
     `main.rs` (ER's canvas, its tools, relationships, tables and Generate; ER's Properties; ER's
     refusals that take a row of the shell's catalogue; both notations asked; the Model menu)
   - every offscreen screen's automation ids, in both appearances: the `tests` module in
