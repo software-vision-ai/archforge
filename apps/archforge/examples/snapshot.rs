@@ -1,9 +1,9 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen <name>]`,
-//! where `<name>` is a screen's name in `archforge_ui_egui::offscreen::SCREENS` (`home` when none is
+//! `cargo run -p archforge --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen <name>]`,
+//! where `<name>` is a screen's name in `archforge::offscreen::SCREENS` (`home` when none is
 //! given).
 
-use archforge_ui_egui::offscreen::{SCREENS, Screen};
+use archforge::offscreen::{SCREENS, Screen};
 use archforge_ui_egui::theme::ThemeKind;
 
 fn main() {
@@ -40,7 +40,7 @@ fn run() -> Result<(), String> {
         Some(other) => return Err(format!("{other:?} is not light or dark; {USAGE}")),
     };
     let size = |i: usize, default: f32| args.get(i).map_or(Ok(default), |v| v.parse::<f32>().map_err(|_| format!("{v:?} is not a number; {USAGE}")));
-    let (w, h, rgba) = archforge_ui_egui::offscreen::render_screen(size(2, 1440.0)?, size(3, 900.0)?, size(4, 1.0)?, theme, screen)?;
+    let (w, h, rgba) = archforge::offscreen::render_screen(size(2, 1440.0)?, size(3, 900.0)?, size(4, 1.0)?, theme, screen)?;
     let file = std::fs::File::create(out).map_err(|e| format!("{out}: {e}"))?;
     let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), w, h);
     encoder.set_color(png::ColorType::Rgba);

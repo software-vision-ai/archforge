@@ -1,8 +1,8 @@
 //! What the screenshot tool reaches in the shell, behind the `snapshot` feature: the shell's
 //! narrow context, its project and notation states, its commands, and the steps that take its own
-//! screens to what a picture shows. The tool (`offscreen`, `chat_fixture` and the `snapshot`
-//! example) builds every screen through these and the crate's other public items, so it can be
-//! built outside the crate.
+//! screens to what a picture shows. The tool (the app's `offscreen` and `snapshot` example) and
+//! `chat_fixture` build every screen through these and the crate's other public items, so the tool
+//! is built outside the crate.
 //!
 //! Each item hands over to the shell's own code unchanged: none draws, reads or decides anything
 //! of its own. What a notation's screens reach is not here.

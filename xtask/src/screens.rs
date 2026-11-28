@@ -1,10 +1,10 @@
 //! `cargo xtask screens`: every screen of the application in both appearances, as release
 //! evidence.
 //!
-//! Renders each screen the shell crate's `snapshot` example knows, in the light and the dark
+//! Renders each screen the app's `snapshot` example knows, in the light and the dark
 //! appearance, into the ignored `plan/screens/`, and writes beside them one contact sheet per
 //! appearance (`light.html`, `dark.html`) with every picture under its screen's name. The names are
-//! read from the shell crate's one list of screens (`offscreen::SCREENS`, written as the `screens!`
+//! read from the app's one list of screens (`offscreen::SCREENS`, written as the `screens!`
 //! list in `offscreen.rs`), so a screen added there is rendered here too.
 //! `--gallery <dir>` renders the README's gallery and the wiki's guide screens alone, as the release
 //! workflow does to attach them to every release. The pictures are never committed; a picture is compared by eye, not by pixel, so a font or
@@ -65,12 +65,12 @@ pub const WIKI_GALLERY: [(&str, &str); 33] = [
     ("workspace-guide-change-diagram", "guide-change-diagram"),
 ];
 
-/// The file of the shell crate that holds its one list of screens, `offscreen::SCREENS`.
-pub const LIST: &str = "crates/ui-egui/src/offscreen.rs";
+/// The file of the app that holds its one list of screens, `offscreen::SCREENS`.
+pub const LIST: &str = "apps/archforge/src/offscreen.rs";
 
 /// The screens the snapshot example's `--screen` takes, in order: the names of the `screens!` list
 /// in `offscreen` (the text of [`LIST`]), one `"<name>" => <Screen>,` row each under its doc
-/// comment. The task runner cannot depend on the shell crate, which would build the whole interface
+/// comment. The task runner cannot depend on the app, which would build the whole interface
 /// before every task, so it reads the list's text; a row in any other shape is refused, never
 /// skipped, so no screen is left out unseen.
 pub fn screens(offscreen: &str) -> Result<Vec<String>, String> {
@@ -110,9 +110,11 @@ pub fn screens(offscreen: &str) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
+/// Renders `screen` in `theme` at the release's size to the PNG `out`, through the app's `snapshot`
+/// example.
 fn render(screen: &str, theme: &str, out: &Path) -> Result<(), String> {
     let mut cmd = util::cargo();
-    cmd.args(["run", "-q", "-p", "archforge-ui-egui", "--features", "snapshot", "--example", "snapshot", "--"]).arg(out).args([
+    cmd.args(["run", "-q", "-p", "archforge", "--features", "snapshot", "--example", "snapshot", "--"]).arg(out).args([
         theme.to_string(),
         SIZE.0.to_string(),
         SIZE.1.to_string(),

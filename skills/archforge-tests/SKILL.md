@@ -25,7 +25,7 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     `main.rs` (ER's canvas, its tools, relationships, tables and Generate; ER's Properties; ER's
     refusals that take a row of the shell's catalogue; both notations asked; the Model menu)
   - every offscreen screen's automation ids, in both appearances: the `tests` module in
-    `crates/ui-egui/src/offscreen.rs`, against `crates/ui-egui/src/offscreen/automation-ids.tsv`;
+    `apps/archforge/src/offscreen.rs`, against `apps/archforge/src/offscreen/automation-ids.tsv`;
     a change that renames, adds or removes an id on purpose updates the screen's rows from the
     listing the failing test prints, and a new screen, a row of the `screens!` list in the same
     file (its one list of screens, `offscreen::SCREENS`), gets its rows under its name
@@ -35,7 +35,7 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     catalogue of the code that reads it, no key twice, the model words) in the app, the one crate
     that knows every catalogue: `apps/archforge/src/catalogues.rs`; the machinery (lookups, plural rules, registering, the build-time row check) in
     `crates/shell-api/src/i18n/tests.rs`
-  - the desktop app (arguments, preferences, graphics): the `tests` module in `apps/archforge/src/main.rs`
+  - the desktop app (arguments, preferences, graphics): the `tests` module in `apps/archforge/src/lib.rs`
   - the native menu bar's queue, wake and items: the `tests` module in
     `apps/archforge/src/macos_menu.rs`, without a real menu (it needs the main thread)
   - the task runner: a `tests` module in the `xtask/src` file it checks

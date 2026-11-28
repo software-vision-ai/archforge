@@ -9,15 +9,44 @@ repository.workspace = true
 publish = false
 build = "build.rs"
 
+[features]
+# The screenshot tool (`offscreen`, the `snapshot` example): every screen drawn offscreen in the
+# headless harness, over the screens parts the app registers, with what it reaches in the shell and
+# in ER's and UML's screens. Never shipped.
+snapshot = [
+    "dep:archforge-core",
+    "dep:archforge-diagram",
+    "dep:archforge-er",
+    "dep:archforge-uml",
+    "dep:egui_kittest",
+    "dep:png",
+    "archforge-ui-egui/snapshot",
+    "archforge-er-ui/snapshot",
+    "archforge-uml-ui/snapshot",
+]
+
+[lib]
+name = "archforge"
+path = "src/lib.rs"
+
 [[bin]]
 name = "archforge"
 path = "src/main.rs"
 
+[[example]]
+name = "snapshot"
+required-features = ["snapshot"]
+
 [dependencies]
 archforge-agents.workspace = true
 archforge-control.workspace = true
+# The shared core metamodel, ER's and UML's models and the diagrams, for the screenshot tool's
+# sample models only.
+archforge-core = { workspace = true, optional = true }
+archforge-diagram = { workspace = true, optional = true }
 archforge-dolt.workspace = true
 archforge-engine.workspace = true
+archforge-er = { workspace = true, optional = true }
 # ER's screens part, which the app registers with every shell it makes.
 archforge-er-ui.workspace = true
 archforge-notations.workspace = true
@@ -28,6 +57,10 @@ archforge-shell-api.workspace = true
 archforge-ui-egui.workspace = true
 # UML's screens part, which the app registers with every shell it makes.
 archforge-uml-ui.workspace = true
+archforge-uml = { workspace = true, optional = true }
+# The screenshot tool's headless harness, and the PNG its `snapshot` example writes.
+egui_kittest = { workspace = true, optional = true, features = ["wgpu"] }
+png = { workspace = true, optional = true }
 getrandom.workspace = true
 eframe.workspace = true
 # Not called: here for its `wayland` feature, which craft-dialogs builds rfd without.
@@ -50,15 +83,18 @@ archforge-mcp.workspace = true
 archforge-secrets = { workspace = true, features = ["testing"] }
 archforge-uml.workspace = true
 # The words the shell hands its lookups through a table, for the tests across every catalogue, and
-# what ER's and UML's window tests (`tests/er_window`, `tests/uml_window`) reach in the shell.
+# what ER's and UML's window tests (`tests/er_window`, `tests/uml_window`) and the screenshot
+# tool's own tests reach in the shell.
 archforge-ui-egui = { workspace = true, features = ["snapshot", "testing"] }
 # The words ER's screens hand their lookups through a table, for the tests across every catalogue,
-# and what the app's tests reach in ER's screens.
+# and what the app's tests and the screenshot tool reach in ER's screens.
 archforge-er-ui = { workspace = true, features = ["snapshot"] }
-# The words UML's screens hand their lookups through a table, for the tests across every catalogue.
+# The words UML's screens hand their lookups through a table, for the tests across every catalogue,
+# and what the screenshot tool reaches in UML's screens.
 archforge-uml-ui = { workspace = true, features = ["snapshot"] }
 craft-testkit.workspace = true
-egui_kittest.workspace = true
+# The headless harness of the window tests and of the screenshot tool's own tests.
+egui_kittest = { workspace = true, features = ["wgpu"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 muda.workspace = true

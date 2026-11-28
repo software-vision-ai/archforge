@@ -44,8 +44,6 @@ pub mod model_menu;
 pub mod model_words;
 pub mod new_project;
 mod notation_ui;
-#[cfg(any(test, feature = "snapshot"))]
-pub mod offscreen;
 pub mod panels;
 pub mod problems;
 mod project_search;

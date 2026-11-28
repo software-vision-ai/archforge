@@ -9,9 +9,9 @@ repository.workspace = true
 publish = false
 
 [features]
-# Offscreen rendering of the window to an image, for screenshots, with ER's and UML's screens and
-# what the tool reaches in them (until the tool moves to the app).
-snapshot = ["dep:egui_kittest", "dep:archforge-er", "dep:archforge-er-ui", "dep:archforge-uml", "dep:archforge-uml-ui"]
+# What the screenshot tool (the app's `offscreen`) reaches in the shell (`archforge_ui_egui::snapshot`),
+# and the Chat panel's states it builds over UML's sample (`chat_fixture`); never shipped.
+snapshot = ["dep:archforge-uml", "dep:archforge-uml-ui"]
 # What the app's window tests reach in the shell (`archforge_ui_egui::testing`); never shipped.
 testing = ["dep:egui_kittest"]
 
@@ -19,11 +19,8 @@ testing = ["dep:egui_kittest"]
 archforge-core.workspace = true
 archforge-diagram.workspace = true
 archforge-engine.workspace = true
-# ER's model and screens, for the screenshot tool only.
-archforge-er = { workspace = true, optional = true }
-archforge-er-ui = { workspace = true, optional = true, features = ["snapshot"] }
 archforge-notations.workspace = true
-# UML's model and screens, for the screenshot tool only.
+# UML's model and screens, for the Chat panel's states over UML's sample (`chat_fixture`) only.
 archforge-uml = { workspace = true, optional = true }
 archforge-uml-ui = { workspace = true, optional = true, features = ["snapshot"] }
 archforge-mof.workspace = true
@@ -39,7 +36,7 @@ zeroize.workspace = true
 skrifa.workspace = true
 pulldown-cmark.workspace = true
 egui_commonmark.workspace = true
-# Reads the app icon built in for the bar's brand mark; it also writes the snapshot example's picture.
+# Reads the app icon built in for the bar's brand mark.
 png.workspace = true
 # The folded texts a search matches against, kept between frames (crate::home_search::Found,
 # crate::project_search::Entry).
@@ -55,10 +52,6 @@ archforge-uml.workspace = true
 archforge-uml-ui = { workspace = true, features = ["snapshot"] }
 egui_kittest = { workspace = true, features = ["wgpu"] }
 serde_json.workspace = true
-
-[[example]]
-name = "snapshot"
-required-features = ["snapshot"]
 
 [lints]
 workspace = true

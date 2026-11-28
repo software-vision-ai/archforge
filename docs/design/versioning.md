@@ -151,7 +151,7 @@ What `read_model` (`model.rs:318-394`) must change to read history:
 | Long histories | About 40 usable stops in 200 px | Paged list; step or jump | Needs its own scrolling and row |
 | Cost per stop | Each stop is a full model read and a session build, so scrubbing is the worst case | One read per deliberate step | One read per step |
 | Keyboard | Arrows only; no jump to a known version | ↑/↓, type to filter, ⌥⌘← ⌥⌘→ | Arrows only |
-| Narrow windows (minimum 640, `apps/archforge/src/main.rs:256`) | No room | One icon | A whole row |
+| Narrow windows (minimum 640, `apps/archforge/src/lib.rs:301`) | No room | One icon | A whole row |
 | Says what you are looking at | Needs a label anyway | The chip is the label | Needs a label |
 
 **The chip** sits in the project bar, left of search (`crates/ui-egui/src/workspace.rs:158-169`,

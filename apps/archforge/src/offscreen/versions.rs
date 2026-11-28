@@ -14,9 +14,9 @@ use archforge_mof::rows::Rows;
 use serde_json::json;
 
 use super::Screen;
-use crate::chat_words::Clock;
-use crate::snapshot;
-use crate::{BranchEntry, Shell, VersionEntry, VersionRead, VersionReadError, VersionsPage};
+use archforge_ui_egui::chat_words::Clock;
+use archforge_ui_egui::snapshot;
+use archforge_ui_egui::{BranchEntry, Shell, VersionEntry, VersionRead, VersionReadError, VersionsPage};
 
 /// The screens built here.
 pub(super) const SCREENS: [Screen; 13] = [
@@ -43,9 +43,9 @@ pub(super) const GUIDE: [Screen; 5] =
 /// keeps them: `main` at least.
 struct Kept(Vec<(VersionEntry, Arc<Rows>)>, Vec<BranchEntry>);
 
-impl crate::ProjectHost for Kept {
+impl archforge_ui_egui::ProjectHost for Kept {
     /// Makes no project: the screens open theirs.
-    fn create(&self, _folder: &Path, _name: &str) -> Receiver<Result<crate::Opened, crate::CreateError>> {
+    fn create(&self, _folder: &Path, _name: &str) -> Receiver<Result<archforge_ui_egui::Opened, archforge_ui_egui::CreateError>> {
         channel().1
     }
 
@@ -159,11 +159,11 @@ pub(super) fn sample(shell: &mut Shell, screen: Screen) -> Result<(), String> {
         branches.push(branch("Contact details", true, Some("2026-11-07T13:20:00Z".into())));
     }
     shell.services.projects = Some(Arc::new(Kept(kept, branches)));
-    let now = crate::chat_fixture::NOW;
-    shell.services.clock = Some(Arc::new(move || Clock { now, offset: Some(crate::chat_fixture::OFFSET) }));
-    shell.state.show_explorer(crate::state::Explorer::SourceControl);
+    let now = archforge_ui_egui::chat_fixture::NOW;
+    shell.services.clock = Some(Arc::new(move || Clock { now, offset: Some(archforge_ui_egui::chat_fixture::OFFSET) }));
+    shell.state.show_explorer(archforge_ui_egui::state::Explorer::SourceControl);
     let diagram = archforge_mof::Uuid::parse(&diagram).ok_or("the sample's diagram")?;
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     Ok(())
 }
 
@@ -212,7 +212,7 @@ fn click(h: &mut egui_kittest::Harness<'static, Shell>, id: &str) -> Result<(), 
 pub(super) fn reach(h: &mut egui_kittest::Harness<'static, Shell>, screen: Screen) -> Result<(), String> {
     settle(h)?;
     let shell = h.state_mut();
-    let clock = crate::chat_panel::clock(shell);
+    let clock = archforge_ui_egui::chat_panel::clock(shell);
     match screen {
         Screen::WorkspaceVersionList => snapshot::open_version_list(shell),
         Screen::WorkspaceVersionDetails => snapshot::open_version_details(shell, listed(shell, "c2")?),
@@ -270,6 +270,7 @@ pub(super) fn reach(h: &mut egui_kittest::Harness<'static, Shell>, screen: Scree
 mod tests {
     use super::*;
     use archforge_notations::differences::{Area, ChangeKind};
+    use archforge_ui_egui::testing;
 
     /// Every Versions screen of the manual builds its versions and reaches what it shows in both
     /// appearances: what is compared, the list, the details, the version in view, the two sides,
@@ -278,43 +279,41 @@ mod tests {
     #[test]
     fn every_versions_screen_reaches_what_it_shows_in_both_appearances() {
         for screen in SCREENS {
-            for theme in [crate::theme::ThemeKind::Light, crate::theme::ThemeKind::Dark] {
+            for theme in [archforge_ui_egui::theme::ThemeKind::Light, archforge_ui_egui::theme::ThemeKind::Dark] {
                 let h = super::super::drawn(1440.0, 900.0, 1.0, theme, screen).unwrap_or_else(|e| panic!("{screen:?} in {theme:?}: {e}"));
                 let s = h.state();
-                let v = &s.versions;
-                let side = |area| v.element.as_ref().is_some_and(|o| o.row.area == area);
+                let (changes, page, branches) = (snapshot::changes(s), snapshot::versions_page(s), testing::branches(s));
+                let side = |area| testing::opened_change(s).is_some_and(|row| row.area == area);
                 // The Compare page's pair and what it found: Added Customer to Added email adds
                 // Types, String and email.
-                let compared = v.compare_results.found.as_ref().is_some_and(|(key, found, _)| {
-                    let added = found.as_ref().map(|d| d.iter().filter(|d| d.kind == ChangeKind::Added).count());
-                    key.sides == (Some("c1".into()), Some("c2".into())) && added == Ok(3)
+                let compared = testing::compare_found(s).is_some_and(|(sides, found)| {
+                    let added = found.map(|d| d.iter().filter(|d| d.kind == ChangeKind::Added).count());
+                    *sides == (Some("c1".into()), Some("c2".into())) && added == Ok(3)
                 });
                 let shows = match screen {
-                    Screen::WorkspaceVersions => v.changes.len() == 2 && v.page.as_ref().is_some_and(|p| p.versions.len() == 2),
+                    Screen::WorkspaceVersions => changes.len() == 2 && page.is_some_and(|p| p.versions.len() == 2),
                     Screen::WorkspaceVersionList => s.widgets().iter().any(|w| w.id == "workspace.header.version.row.2"),
-                    Screen::WorkspaceVersionDetails => v.details.is_some() && crate::branch_ask::offered_at(s, "c2"),
+                    Screen::WorkspaceVersionDetails => testing::details_open(s) && testing::branch_offered_at(s, "c2"),
                     Screen::WorkspaceVersionViewing => s.viewing() == Some("c1"),
-                    Screen::WorkspaceChangeElement => side(Area::Model) && v.changes.len() == 1,
-                    Screen::WorkspaceChangeDiagram => side(Area::Diagram) && v.changes.len() == 1,
+                    Screen::WorkspaceChangeElement => side(Area::Model) && changes.len() == 1,
+                    Screen::WorkspaceChangeDiagram => side(Area::Diagram) && changes.len() == 1,
                     Screen::WorkspaceRestoreAsk => s.ask.is_some(),
                     Screen::GuideVersionChange => {
-                        let email = v.element.as_ref().is_some_and(|o| o.row.name.as_deref() == Some("email"));
-                        email && side(Area::Model) && v.changes.len() == 3 && v.page.as_ref().is_some_and(|p| p.versions.len() == 1)
+                        let email = testing::opened_change(s).is_some_and(|row| row.name.as_deref() == Some("email"));
+                        email && side(Area::Model) && changes.len() == 3 && page.is_some_and(|p| p.versions.len() == 1)
                     }
-                    Screen::GuideVersionViewing => s.viewing() == Some("c1") && v.page.as_ref().is_some_and(|p| p.versions.len() == 1),
-                    Screen::GuideChangeElement => side(Area::Model) && v.changes.len() == 1,
+                    Screen::GuideVersionViewing => s.viewing() == Some("c1") && page.is_some_and(|p| p.versions.len() == 1),
+                    Screen::GuideChangeElement => side(Area::Model) && changes.len() == 1,
                     Screen::GuideCompare => {
                         // Renamed email is saved: no changes, and the status bar says Saved.
                         compared
-                            && v.changes.is_empty()
+                            && changes.is_empty()
                             && s.session.as_ref().is_some_and(|session| !session.is_dirty())
-                            && crate::version_details::compare_open(s)
-                            && v.page.as_ref().is_some_and(|p| p.versions.len() == 3)
+                            && snapshot::compare_open(s)
+                            && page.is_some_and(|p| p.versions.len() == 3)
                     }
-                    Screen::GuideChangeDiagram => {
-                        side(Area::Diagram) && v.changes.len() == 1 && v.page.as_ref().is_some_and(|p| p.versions.len() == 3)
-                    }
-                    _ => v.branches.as_ref().is_some_and(|b| b.len() == 2) && v.changes.len() == 1,
+                    Screen::GuideChangeDiagram => side(Area::Diagram) && changes.len() == 1 && page.is_some_and(|p| p.versions.len() == 3),
+                    _ => branches.is_some_and(|b| b.len() == 2) && changes.len() == 1,
                 };
                 assert!(shows, "{screen:?} in {theme:?} shows what it is for");
                 // The wiki's pages make a project of their own; the manual's chapter keeps its.
@@ -323,9 +322,12 @@ mod tests {
                 // Their main agrees with History and the status bar: its newest version, and
                 // unsaved work only while there is some.
                 if GUIDE.contains(&screen) {
-                    let main = v.branches.as_ref().and_then(|b| b.iter().find(|b| b.name == "main").cloned());
-                    let newest = v.page.as_ref().and_then(|p| p.versions.first()).map(|e| e.date.clone());
-                    assert!(main.is_some_and(|m| m.latest == newest && m.unsaved == s.shown_unsaved()), "{screen:?} in {theme:?}: main as kept");
+                    let main = branches.and_then(|b| b.iter().find(|b| b.name == "main").cloned());
+                    let newest = page.and_then(|p| p.versions.first()).map(|e| e.date.clone());
+                    assert!(
+                        main.is_some_and(|m| m.latest == newest && m.unsaved == testing::shown_unsaved(s)),
+                        "{screen:?} in {theme:?}: main as kept"
+                    );
                 }
                 assert_eq!(s.canvas.notice, None, "{screen:?} in {theme:?} draws without a refusal");
             }

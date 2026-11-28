@@ -1,6 +1,6 @@
 //! `cargo xtask shot`: a screenshot and a small copy that is quick to read.
 //!
-//! Renders the window offscreen through the shell crate's `snapshot` example, in the light or dark
+//! Renders the window offscreen through the app's `snapshot` example, in the light or dark
 //! appearance at `--size` logical pixels (1440 by 900 by default), showing Home or, with
 //! `--screen new-project`, the New project dialog over it. The full image is kept under the
 //! ignored `plan/shots/`, and beside it a copy drawn at the scale that keeps its longer edge at most
@@ -74,9 +74,11 @@ pub fn options(args: &[String]) -> Result<Options, String> {
     Ok(o)
 }
 
+/// Renders the window in `o`'s appearance and size at `scale` to the PNG `out`, through the app's
+/// `snapshot` example.
 fn render(o: &Options, out: &std::path::Path, scale: f32) -> Result<(), String> {
     let mut cmd = util::cargo();
-    cmd.args(["run", "-q", "-p", "archforge-ui-egui", "--features", "snapshot", "--example", "snapshot", "--"]).arg(out).args([
+    cmd.args(["run", "-q", "-p", "archforge", "--features", "snapshot", "--example", "snapshot", "--"]).arg(out).args([
         o.theme.to_string(),
         o.size.0.to_string(),
         o.size.1.to_string(),
