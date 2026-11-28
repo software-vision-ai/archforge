@@ -4577,6 +4577,13 @@ fn the_bundled_faces_draw_every_character_of_the_latin_script_catalogues() {
 
 /// The shell with a project open, in the harness at the design's frame size or another.
 fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
+    workspace_harness_checking(theme, size, only_what_every_kind_and_notation_is_asked)
+}
+
+/// [`workspace_harness`], with `check` run after every frame. Every workspace harness checks that
+/// the other kind and the worded notation, in a test that registers them, were asked only what
+/// every kind and every notation are.
+fn workspace_harness_checking(theme: ThemeKind, size: egui::Vec2, check: fn()) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
     let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, NOTATIONS, &SCREENS);
     shell.state.theme = theme;
@@ -4584,9 +4591,10 @@ fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, She
     // Frames a sixtieth of a second apart, as on screen, so two clicks in a row read as a double click;
     // enough of them to settle a package switch's fade (AR-95).
     let mut h = Harness::builder().with_size(size).with_step_dt(1.0 / 60.0).with_max_steps(32).build_ui_state(
-        |ui, shell: &mut Shell| {
+        move |ui, shell: &mut Shell| {
             shell.logic(ui.ctx());
             shell.ui(ui);
+            check();
         },
         shell,
     );
@@ -5596,6 +5604,8 @@ fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         for then in ["escape", "correct", "click"] {
             let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+            // The worded notation before the sketch's: Models asks the element's own.
+            h.state_mut().notation_uis = SKETCH_UIS;
             crate::explorer::add(h.state_mut(), "package");
             h.run();
             // The default name is selected whole: Backspace empties it, and Enter is refused.
@@ -7209,6 +7219,8 @@ fn a_right_angled_lines_segment_slides_and_a_double_click_routes_it_anew() {
 #[test]
 fn the_top_bars_search_finds_a_projects_tables_and_diagrams() {
     let (mut h, _d, _e, _customer, order_node) = related_tables((900.0, 700.0));
+    // The worded notation before the sketch's: a result shows what its own notation says.
+    h.state_mut().notation_uis = SKETCH_UIS;
     let results = |h: &Harness<'static, Shell>| ids(h).into_iter().filter(|i| i.starts_with("workspace.header.search.result.")).collect::<Vec<_>>();
     // The command key with K opens it; typing narrows it to the table Order.
     h.event(egui::Event::Key { key: egui::Key::K, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
@@ -7329,9 +7341,14 @@ fn painted<S>(h: &Harness<'_, S>) -> Vec<String> {
 /// Customer (`since`) at the right, Customer a kind of Party. The shell knows another kind before
 /// the sketch's ([`SKETCH_KINDS`]) and another notation before the sketch's ([`SKETCH_UIS`]), so
 /// what the diagram's own kind and an element's own notation are asked is told apart from what the
-/// first would answer. Gives the diagram, Party's node, Customer's node and the line's edge.
+/// first would answer: after every frame, the test fails if the other kind was asked anything only
+/// the open diagram's kind is asked, or the worded notation anything only an element's own
+/// notation is asked. Gives the diagram, Party's node, Customer's node and the
+/// line's edge.
 fn sketch_harness() -> (Harness<'static, Shell>, String, String, String, String) {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    OTHER_ASKED.with_borrow_mut(std::collections::BTreeSet::clear);
+    WORDS_ASKED.with_borrow_mut(std::collections::BTreeSet::clear);
+    let mut h = workspace_harness_checking(ThemeKind::Light, egui::vec2(1600.0, 1000.0), only_what_every_kind_and_notation_is_asked);
     h.state_mut().kinds = SKETCH_KINDS;
     h.state_mut().notation_uis = SKETCH_UIS;
     let (d, a, b, e) = {
@@ -9218,6 +9235,491 @@ impl crate::kinds::DiagramKind for SketchKind {
     }
 }
 
+thread_local! {
+    /// The methods the other kind ([`OtherKind`]) was asked on this thread, so a test sees which.
+    static OTHER_ASKED: std::cell::RefCell<std::collections::BTreeSet<&'static str>> =
+        const { std::cell::RefCell::new(std::collections::BTreeSet::new()) };
+}
+
+/// Writes down that the other kind was asked `method`.
+fn other_asked(method: &'static str) {
+    eprintln!("OTHERPROBE {} {method}", std::thread::current().name().unwrap_or("?"));
+    OTHER_ASKED.with_borrow_mut(|asked| asked.insert(method));
+}
+
+/// What the other kind was asked on this thread so far, by method.
+fn other_asked_so_far() -> std::collections::BTreeSet<&'static str> {
+    OTHER_ASKED.with_borrow(Clone::clone)
+}
+
+/// What the shell asks every kind it knows, whatever kind the diagram shown is of: the Model menu's
+/// rows of every kind (for the table of actions), whether a popover takes the keys and whether a
+/// card opens whole with a double click, what each kind draws of a card, a line and the links
+/// between nodes, each kind's card in the New diagram dialog (its word, picture and sentence) and
+/// its group in the Diagrams explorer (its word and icon), and, with no kind chosen, whether it is
+/// of the element selected. The other kind is asked nothing else while the sketch's diagram is
+/// open; what the shell asks of one kind among these (an owner for the kind chosen, a diagram's
+/// icon) the tests check by what it answers.
+const EVERY_KIND_ASKS: &[&str] = &[
+    "card_extras",
+    "description",
+    "draw_card",
+    "draw_links",
+    "group_word",
+    "icon",
+    "line_caption",
+    "line_ends",
+    "menu_rows",
+    "opens_on_double_click",
+    "owner_of",
+    "popover_takes_keys",
+    "sketch",
+    "word",
+];
+
+/// Fails the test when the other kind was asked anything the shell asks only the kind of the
+/// diagram shown ([`EVERY_KIND_ASKS`] apart): the sketch harness's frames check it after each frame.
+fn only_what_every_kind_is_asked() {
+    let wrong: Vec<&str> = other_asked_so_far().into_iter().filter(|m| !EVERY_KIND_ASKS.contains(m)).collect();
+    assert!(wrong.is_empty(), "the other kind was asked what only the open diagram's kind is asked: {wrong:?}");
+}
+
+/// The other kind's key, which no notation of the shell knows.
+const OTHER_KIND: &str = "test.other";
+
+/// The name of an element the other kind draws, opens, owns and menus itself; no sketch test names
+/// one so, so on the sketch's elements it answers as no kind of theirs.
+const OTHER_OWN: &str = "Other's own";
+
+/// The other kind's popover key.
+const OTHER_POPOVER: &str = "other.kinds";
+
+/// The other kind's tools, none of them the sketch's: a box it places and a line it connects.
+static OTHER_TOOLS: &[archforge_shell_api::kinds::KindTool] = &[
+    archforge_shell_api::kinds::KindTool {
+        key: "other-box",
+        icon: &crate::ux::icons::CUBE,
+        hint: "Other box",
+        use_: crate::kinds::ToolUse::Place,
+        chevron: Some((OTHER_POPOVER, "Other kinds")),
+        wide: true,
+    },
+    archforge_shell_api::kinds::KindTool {
+        key: "other-line",
+        icon: &crate::ux::icons::LINK,
+        hint: "Other line",
+        use_: crate::kinds::ToolUse::Connect,
+        chevron: None,
+        wide: false,
+    },
+];
+
+/// The other kind's rows of the Model menu, one section of its own.
+static OTHER_ROWS: &[&[crate::kinds::ModelRow]] =
+    &[&[crate::kinds::ModelRow { key: "model.other-box", word: || "Other box".into(), tool: crate::canvas::Tool::Place("other-box"), choice: None }]];
+
+/// A kind registered before the sketch's in the sketch's canvas tests ([`SKETCH_KINDS`]), whose
+/// every answer differs from the sketch kind's: its own tools, rows, words, icon, owners, marks,
+/// handles, menu, presses, keys, drawings and fields, and hooks that write down `other: …`. Each
+/// method writes down that it was asked ([`OTHER_ASKED`]), so a test sees what the shell asked it;
+/// what the shell asks every kind it answers only for an element named [`OTHER_OWN`], which no
+/// sketch test makes, so the sketch's diagram is drawn and opened as the sketch kind says.
+struct OtherKind;
+
+impl crate::kinds::DiagramKind for OtherKind {
+    /// Its own key, [`OTHER_KIND`].
+    fn kind(&self) -> &'static str {
+        OTHER_KIND
+    }
+    /// A box with a chevron and a line, none of the sketch's.
+    fn tools(&self) -> &'static [archforge_shell_api::kinds::KindTool] {
+        other_asked("tools");
+        OTHER_TOOLS
+    }
+    /// Its own row ([`OTHER_ROWS`]).
+    fn menu_rows(&self) -> &'static [&'static [crate::kinds::ModelRow]] {
+        other_asked("menu_rows");
+        OTHER_ROWS
+    }
+    /// "Other".
+    fn word(&self) -> String {
+        other_asked("word");
+        "Other".into()
+    }
+    /// "Others".
+    fn group_word(&self) -> String {
+        other_asked("group_word");
+        "Others".into()
+    }
+    /// A sentence of its own.
+    fn description(&self) -> String {
+        other_asked("description");
+        "A diagram of others".into()
+    }
+    /// "New other".
+    fn new_word(&self) -> String {
+        other_asked("new_word");
+        "New other".into()
+    }
+    /// Its picture: the word "Other".
+    fn sketch(&self, paint: &egui::Painter, p: &crate::ux::Palette, r: egui::Rect) {
+        other_asked("sketch");
+        crate::ux::text(paint, r.min, "Other", crate::ux::types::SMALL, p.text, None);
+    }
+    /// A cube, no diagram icon.
+    fn icon(&self) -> &'static crate::ux::Icon {
+        other_asked("icon");
+        &crate::ux::icons::CUBE
+    }
+    /// "Other owner".
+    fn owner_word(&self) -> String {
+        other_asked("owner_word");
+        "Other owner".into()
+    }
+    /// "New other owner".
+    fn new_owner(&self) -> String {
+        other_asked("new_owner");
+        "New other owner".into()
+    }
+    /// "New other owner here", whatever the model holds.
+    fn new_owner_in(&self, _: &archforge_mof::Store) -> String {
+        other_asked("new_owner_in");
+        "New other owner here".into()
+    }
+    /// None: its diagrams are of nothing the sketch holds.
+    fn owners(&self, _: &archforge_mof::Store) -> Vec<archforge_mof::Obj> {
+        other_asked("owners");
+        Vec::new()
+    }
+    /// An element named [`OTHER_OWN`] itself; nothing else.
+    fn owner_of(&self, store: &archforge_mof::Store, selected: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+        other_asked("owner_of");
+        (archforge_core::name_of(store, selected) == OTHER_OWN).then_some(selected)
+    }
+    /// Refuses in its own words.
+    fn add_owner(&self, _: &mut crate::cx::Ctx, _: &str) -> Result<String, String> {
+        other_asked("add_owner");
+        Err("the other makes no owner".into())
+    }
+    /// "Other marks".
+    fn status_marks(&self) -> Option<String> {
+        other_asked("status_marks");
+        Some("Other marks".into())
+    }
+    /// Draws every face itself, as the word "O".
+    fn tool_face(
+        &self,
+        _: &crate::cx::CtxRef,
+        paint: &egui::Painter,
+        p: &crate::ux::Palette,
+        _: &str,
+        b: egui::Rect,
+        _: crate::ux::Colour,
+        _: bool,
+    ) -> bool {
+        other_asked("tool_face");
+        crate::ux::text(paint, b.min, "O", crate::ux::types::SMALL, p.text, None);
+        true
+    }
+    /// "Other tool" for every tool.
+    fn tool_hint(&self, _: &crate::cx::CtxRef, _: &str) -> Option<String> {
+        other_asked("tool_hint");
+        Some("Other tool".into())
+    }
+    /// Writes down that it opened.
+    fn popover(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: egui::Rect, key: &str) {
+        other_asked("popover");
+        sketch_call(format!("other: popover {key}"));
+    }
+    /// Nothing takes part in its gestures.
+    fn takes_part(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        other_asked("takes_part");
+        false
+    }
+    /// Refuses every line in its own words.
+    fn line_start_problem(&self, _: &crate::cx::CtxRef, _: &archforge_mof::Store, _: &'static str, _: archforge_mof::Obj) -> Option<String> {
+        other_asked("line_start_problem");
+        Some("The other starts no line here".into())
+    }
+    /// Writes down `other: place`.
+    fn place(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: f64, _: f64) {
+        other_asked("place");
+        sketch_call(format!("other: place {tool}"));
+    }
+    /// Writes down `other: connect`.
+    fn connect(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: archforge_mof::Uuid) {
+        other_asked("connect");
+        sketch_call(format!("other: connect {tool}"));
+    }
+    /// Writes down `other: connect to new`.
+    fn connect_to_new(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
+        other_asked("connect_to_new");
+        sketch_call(format!("other: connect to new {tool}"));
+    }
+    /// Deletes nothing from the canvas.
+    fn deletes(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        other_asked("deletes");
+        false
+    }
+    /// Renames every card in place.
+    fn renames_in_place(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        other_asked("renames_in_place");
+        true
+    }
+    /// Writes down `other: rename`, and renames nothing.
+    fn rename(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, name: &str) -> Result<(), String> {
+        other_asked("rename");
+        sketch_call(format!("other: rename {name}"));
+        Ok(())
+    }
+    /// An element named [`OTHER_OWN`] opens whole; nothing else.
+    fn opens_on_double_click(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
+        other_asked("opens_on_double_click");
+        archforge_core::name_of(store, element) == OTHER_OWN
+    }
+    /// Every name goes in a field of its own at the card's foot, in the caption style.
+    fn name_field(
+        &self,
+        _: &egui::Painter,
+        _: &archforge_mof::Store,
+        _: archforge_mof::Obj,
+        rect: egui::Rect,
+        _: &str,
+        z: f32,
+    ) -> Option<(egui::Rect, crate::ux::Type)> {
+        other_asked("name_field");
+        Some((egui::Rect::from_min_size(rect.left_bottom(), egui::vec2(rect.width(), 12.0 * z)), crate::ux::types::CAPTION.scaled(z)))
+    }
+    /// Writes down `other: open`.
+    fn open(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, row: Option<usize>) {
+        other_asked("open");
+        sketch_call(format!("other: open {row:?}"));
+    }
+    /// "Other ends".
+    fn reconnects(&self) -> Option<String> {
+        other_asked("reconnects");
+        Some("Other ends".into())
+    }
+    /// Writes down `other: reconnect`.
+    fn reconnect(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, source: bool, _: archforge_mof::Uuid, _: archforge_engine::Revision) {
+        other_asked("reconnect");
+        sketch_call(format!("other: reconnect {source}"));
+    }
+    /// Writes down `other: drop`.
+    fn drop(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: (f64, f64)) {
+        other_asked("drop");
+        sketch_call("other: drop".into());
+    }
+    /// An adornment of its own on every element.
+    fn adorner(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
+        other_asked("adorner");
+        Some(("other.adorn", "Other adornment"))
+    }
+    /// Writes down `other: open second`.
+    fn open_second(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid) {
+        other_asked("open_second");
+        sketch_call("other: open second".into());
+    }
+    /// Writes down `other: card controls`.
+    fn card_controls(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: egui::Rect, _: archforge_mof::Uuid) {
+        other_asked("card_controls");
+        sketch_call("other: card controls".into());
+    }
+    /// A menu of its own on every element.
+    fn menu(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: bool) -> Option<Vec<crate::kinds::MenuRow>> {
+        other_asked("menu");
+        Some(vec![crate::kinds::MenuRow {
+            key: "other-row",
+            label: "Other row",
+            keys: "",
+            live: true,
+            first: true,
+            run: |_, _| sketch_call("other: menu".into()),
+        }])
+    }
+    /// Takes every press, doing nothing with it.
+    fn pointer(&self, _: &crate::cx::CtxRef, _: &crate::kinds::Press<'_>) -> Option<archforge_shell_api::editing::Action> {
+        other_asked("pointer");
+        Some(archforge_shell_api::editing::Action::Nothing)
+    }
+    /// Takes every right click, doing nothing with it.
+    fn secondary_click(&self, _: &crate::cx::CtxRef, _: &crate::kinds::Press<'_>) -> Option<archforge_shell_api::editing::Action> {
+        other_asked("secondary_click");
+        Some(archforge_shell_api::editing::Action::Nothing)
+    }
+    /// Takes every key.
+    fn keys(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: archforge_mof::Obj) -> bool {
+        other_asked("keys");
+        true
+    }
+    /// Its own popover alone ([`OTHER_POPOVER`]).
+    fn popover_takes_keys(&self, key: &str) -> bool {
+        other_asked("popover_takes_keys");
+        key == OTHER_POPOVER
+    }
+    /// Every line selected selects itself again.
+    fn also_selects(&self, _: &archforge_mof::Store, lines: &[archforge_mof::Obj]) -> Vec<archforge_mof::Obj> {
+        other_asked("also_selects");
+        lines.to_vec()
+    }
+    /// Draws nothing before the diagram, only writing down that it was asked.
+    fn before_draw(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: egui::Rect, _: archforge_mof::Obj) {
+        other_asked("before_draw");
+    }
+    /// Takes a band of its own under the path.
+    fn after_draw(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: archforge_mof::Obj) -> f32 {
+        other_asked("after_draw");
+        24.0
+    }
+    /// Every line starts at its tip.
+    fn line_start(&self, _: &crate::canvas::Drawing<'_>, _: archforge_mof::Obj, tip: egui::Pos2, _: egui::Pos2) -> Option<egui::Pos2> {
+        other_asked("line_start");
+        Some(tip)
+    }
+    /// Its own mark at the source end of a line named [`OTHER_OWN`]; nothing on any other.
+    fn line_ends(
+        &self,
+        _: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineEnds<'_>,
+        points: &mut [egui::Pos2],
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> Vec<egui::Shape> {
+        other_asked("line_ends");
+        if archforge_core::name_of(d.store, line.element) != OTHER_OWN {
+            return Vec::new();
+        }
+        let (Some(start), Ok(id)) = (points.first().copied(), d.store.uuid(line.line)) else { return Vec::new() };
+        crate::widgets::record_visible(
+            ui,
+            registry,
+            &format!("workspace.canvas.other-end.{id}"),
+            "label",
+            egui::Rect::from_center_size(start, egui::Vec2::splat(6.0)),
+        );
+        Vec::new()
+    }
+    /// A name of its own over every line's start.
+    fn line_extras(
+        &self,
+        _: &egui::Painter,
+        _: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineDrawn<'_>,
+        _: &mut crate::widgets::Registry,
+        _: &egui::Ui,
+    ) -> Option<egui::Rect> {
+        other_asked("line_extras");
+        line.points.first().map(|at| egui::Rect::from_min_size(*at, egui::vec2(20.0, 10.0)))
+    }
+    /// Its own caption by a line named [`OTHER_OWN`]; nothing by any other.
+    fn line_caption(
+        &self,
+        _: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineDrawn<'_>,
+        name: Option<egui::Rect>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) {
+        other_asked("line_caption");
+        if archforge_core::name_of(d.store, line.element) != OTHER_OWN {
+            return;
+        }
+        if let (Some(name), Ok(id)) = (name, d.store.uuid(line.line)) {
+            crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.other-caption.{id}"), "label", name);
+        }
+    }
+    /// Records that it was asked under its own id, drawing nothing.
+    fn draw_links(&self, _: &egui::Painter, d: &crate::canvas::Drawing<'_>, registry: &mut crate::widgets::Registry, ui: &egui::Ui) {
+        other_asked("draw_links");
+        let Some((n, _)) = d.boxes.first() else { return };
+        let at = d.node_rect(*n).left_top();
+        crate::widgets::record_visible(
+            ui,
+            registry,
+            &format!("workspace.canvas.other-links.{OTHER_KIND}"),
+            "label",
+            egui::Rect::from_min_size(at, egui::Vec2::ZERO),
+        );
+    }
+    /// A label of its own on an element no model holds.
+    fn draw_extras(
+        &self,
+        _: &egui::Painter,
+        _: &crate::canvas::Drawing<'_>,
+        _: &mut crate::widgets::Registry,
+        _: &egui::Ui,
+    ) -> Vec<archforge_shell_api::kinds::ExtraLabel> {
+        other_asked("draw_extras");
+        vec![archforge_shell_api::kinds::ExtraLabel {
+            element: archforge_mof::Uuid([0xee; 16]),
+            rect: egui::Rect::NOTHING,
+            node: None,
+            hover: "Other extra".into(),
+        }]
+    }
+    /// Draws the card of an element named [`OTHER_OWN`] itself, and would draw one the sketch draws
+    /// itself ([`SKETCH_DRAWN`]) too, so a test sees the diagram's own kind asked first; no other.
+    fn draw_card(
+        &self,
+        _: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> bool {
+        other_asked("draw_card");
+        if ![OTHER_OWN, SKETCH_DRAWN].contains(&archforge_core::name_of(d.store, card.element).as_str()) {
+            return false;
+        }
+        if let Ok(id) = d.store.uuid(card.node) {
+            crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.other-card"), "label", card.rect);
+        }
+        true
+    }
+    /// Its own mark over the card of an element named [`OTHER_OWN`]; nothing over any other.
+    fn card_extras(
+        &self,
+        _: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) {
+        other_asked("card_extras");
+        if archforge_core::name_of(d.store, card.element) != OTHER_OWN {
+            return;
+        }
+        if let Ok(id) = d.store.uuid(card.node) {
+            crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.other-over.{id}"), "label", card.rect);
+        }
+    }
+    /// Writes down `other: place label`.
+    fn place_label(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
+        other_asked("place_label");
+        sketch_call("other: place label".into());
+    }
+    /// Its own hint over the canvas's foot.
+    fn hint_bar(&self, _: &mut crate::cx::Ctx, ui: &egui::Ui, p: &crate::ux::Palette, r: egui::Rect, _: f32) {
+        other_asked("hint_bar");
+        crate::ux::text(ui.painter(), r.left_bottom() - egui::vec2(-8.0, 24.0), "Other hint", crate::ux::types::SMALL, p.text, None);
+    }
+    /// Draws no live line.
+    fn live_line(
+        &self,
+        _: &crate::cx::CtxRef,
+        _: &egui::Painter,
+        _: &crate::ux::Palette,
+        _: crate::canvas::View,
+        _: archforge_mof::Uuid,
+        _: egui::Pos2,
+        _: Option<egui::Rect>,
+    ) {
+        other_asked("live_line");
+    }
+}
+
 /// The name of a class whose card the sketch kind draws itself, the word it draws on it, and what
 /// its part and its label say.
 const SKETCH_DRAWN: &str = "Drawn by the sketch";
@@ -9295,29 +9797,32 @@ fn the_element_menu_builds_from_the_kinds_answer() {
     }
 }
 
-/// The kinds the sketch's canvas tests give the shell: another kind first, then the sketch's, whose
-/// diagram is open, so a hook sent to the first kind instead of the diagram's own shows.
-static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH_OTHER), &SketchKind(SKETCH)];
-
-/// The kind the sketch's canvas tests register before the sketch's: none of the second sketch's
-/// screens part, so its popover and rows stay apart from it.
-const SKETCH_OTHER: &str = "test.other";
+/// The kinds the sketch's canvas tests give the shell: the other kind first, then the sketch's,
+/// whose diagram is open, so whatever the shell asks the first kind instead of the diagram's own
+/// shows ([`OtherKind`]).
+static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&OtherKind, &SketchKind(SKETCH)];
 
 #[test]
 fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_hooks_run() {
     let (mut h, _d, a, b, _e) = sketch_harness();
     SKETCH_CALLS.with_borrow_mut(Vec::clear);
-    // ER's tool, left on from an ER diagram, is not the sketch's: the toolbar hands back to Select.
-    h.state_mut().canvas.tool = crate::canvas::Tool::Place("entity");
+    // The other kind's tool, left on from a diagram of its own, is not the sketch's: the toolbar
+    // hands back to Select.
+    h.state_mut().canvas.tool = crate::canvas::Tool::Place("other-box");
     h.run();
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select);
     let found = ids(&h);
     for shared in ["select", "pan", "class", "inherit", "note", "link", "key-status", "grid", "arrange"] {
         assert!(found.iter().any(|i| *i == format!("workspace.tools.{shared}")), "{shared} is on the toolbar: {found:?}");
     }
-    for er in ["entity", "relationship", "relationship-types"] {
-        assert!(!found.iter().any(|i| *i == format!("workspace.tools.{er}")), "ER's {er} is not");
+    // The other kind, registered first, gives the toolbar none of its tools, its chevron, its
+    // faces or its hints, and the Model menu none of its rows.
+    for other in ["other-box", "other-line", OTHER_POPOVER] {
+        assert!(!found.iter().any(|i| i.contains(other)), "the other kind's {other} is not on the toolbar: {found:?}");
     }
+    assert_eq!(crate::model_menu::sections(h.state()), [vec!["model.sketch-class"], vec!["model.sketch-inherit"], vec!["model.note", "model.link"]]);
+    assert!(crate::model_menu::available(h.state(), "model.sketch-class"), "the sketch's row arms its tool");
+    assert!(!crate::model_menu::available(h.state(), "model.other-box"), "the other kind's row does not, on the sketch's diagram");
     // The toolbar keeps its order: Select, Pan, the kind's tools, Note, Link note, the kind's
     // status marks, Grid, Arrange.
     let left = |key: &str| rect_of(&h, &format!("workspace.tools.{key}")).left();
@@ -9353,6 +9858,162 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
     }
     double_click(&mut h, party.left_top() + egui::vec2(100.0, 77.0 + 6.0));
     assert_eq!(sketch_calls(), ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]);
+}
+
+/// The canvas's Delete and chords on the selection are asked of every notation the shell knows,
+/// the sketch's after the worded notation's: on an element the sketch holds, selected alone, Delete
+/// and K are the sketch's, and nothing is removed; on Party, Delete goes on to the shared removals.
+#[test]
+fn the_canvas_keys_on_the_selection_are_asked_of_every_notation() {
+    let (mut h, ..) = sketch_harness();
+    SKETCH_CALLS.with_borrow_mut(Vec::clear);
+    let held = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let pkg = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
+        let pkg = s.doc().uuid(pkg).unwrap().to_string();
+        let held = s.execute("sketch.class.add", &serde_json::json!({ "package": pkg, "name": SKETCH_HELD })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [held] })).unwrap();
+        held
+    };
+    h.run();
+    let at = rect_of(&h, "workspace.canvas").center();
+    h.event(egui::Event::PointerMoved(at));
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::K, egui::Modifiers::NONE);
+    assert_eq!(sketch_calls(), ["sketch delete false", "sketch key"]);
+    let alive = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.by_uuid(archforge_mof::Uuid::parse(&held).unwrap()).is_some_and(|o| st.is_alive(o))
+    };
+    assert!(alive(&h), "the sketch removed nothing");
+}
+
+/// The New diagram dialog asks the kind it is on: from a group's `+`, only that kind is asked
+/// whether it is of the element selected, so the sketch's group keeps the sketch though the other
+/// kind, registered first, is of it; the dialog's details are the sketch's words. With no kind
+/// chosen, every kind is asked, and the other kind, which is of it, is chosen.
+#[test]
+fn the_new_diagram_dialog_asks_the_kind_it_is_on() {
+    let (mut h, ..) = sketch_harness();
+    let own = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let pkg = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
+        let pkg = s.doc().uuid(pkg).unwrap().to_string();
+        s.execute("sketch.class.add", &serde_json::json!({ "package": pkg, "name": OTHER_OWN })).unwrap().value["id"].as_str().unwrap().to_string()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [own] })).unwrap();
+    h.run();
+    crate::diagrams::open_new_of(h.state_mut(), Some(SKETCH_KINDS[1]));
+    h.run();
+    assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(SKETCH), "the sketch's group keeps the sketch");
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "New sketch") && texts.iter().any(|t| t == "Package"), "the sketch's words: {texts:?}");
+    assert!(!texts.iter().any(|t| t.contains("other")), "none of the other kind's: {texts:?}");
+    h.state_mut().diagrams.new = None;
+    crate::diagrams::open_new(h.state_mut());
+    h.run();
+    assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(OTHER_KIND), "with no kind chosen, the kind that is of it");
+}
+
+/// The Diagrams explorer draws each kind's group with that kind's icon: the sketch's group not
+/// with the other kind's, registered first.
+#[test]
+fn each_kinds_group_has_its_own_icon() {
+    let (mut h, ..) = sketch_harness();
+    h.state_mut().state.explorer = crate::state::Explorer::Diagrams;
+    h.run();
+    // What is drawn where a group row's icon goes, by its size.
+    let icon = |h: &Harness<'static, Shell>, kind: &str| {
+        let row = rect_of(h, &format!("workspace.diagrams.group.{kind}"));
+        let mut strokes: Vec<(i32, i32)> = h
+            .output()
+            .shapes
+            .iter()
+            .map(|c| c.shape.visual_bounding_rect())
+            .filter(|b| {
+                b.is_positive()
+                    && b.min.x >= row.left() + 18.0
+                    && b.max.x <= row.left() + 44.0
+                    && b.center().y > row.top()
+                    && b.center().y < row.bottom()
+            })
+            .map(|b| ((b.width() * 4.0) as i32, (b.height() * 4.0) as i32))
+            .collect();
+        strokes.sort_unstable();
+        strokes
+    };
+    let (sketch, other) = (icon(&h, SKETCH), icon(&h, OTHER_KIND));
+    assert!(!sketch.is_empty() && sketch != other, "{sketch:?} against {other:?}");
+}
+
+/// A class held over a Models row is ringed as the row's own notation answers, not the notation
+/// registered before it: in the amber over the package it is in already, which refuses it, in the
+/// accent over another.
+#[test]
+fn a_row_held_over_in_models_is_ringed_as_its_notation_says() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ..) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        let (party, sales, other) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let party =
+                st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(st, *o) == "Party").unwrap();
+            let sales = st.container(party).unwrap().unwrap().0;
+            let (party, sales) = (st.uuid(party).unwrap(), st.uuid(sales).unwrap());
+            let other = s.execute("sketch.package.add", &serde_json::json!({ "name": "billing" })).unwrap().value["id"].as_str().unwrap().to_string();
+            (party, sales, archforge_mof::Uuid::parse(&other).unwrap())
+        };
+        h.state_mut().state.explorer = crate::state::Explorer::Models;
+        h.state_mut().explorer.expanded.insert(sales);
+        h.run();
+        let p = crate::ux::palette(theme == ThemeKind::Dark);
+        // Party's row pressed and held over the row `row`: the ink of the ring the frame drew round it.
+        let from = rect_of(&h, &format!("workspace.explorer.row.{party}")).center();
+        h.event(egui::Event::PointerMoved(from));
+        h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run();
+        let ring = |h: &mut Harness<'static, Shell>, row: archforge_mof::Uuid| {
+            let at = rect_of(h, &format!("workspace.explorer.row.{row}"));
+            h.event(egui::Event::PointerMoved(at.center()));
+            h.run();
+            let inks: Vec<egui::Color32> = h
+                .output()
+                .shapes
+                .iter()
+                .filter_map(|c| match &c.shape {
+                    egui::Shape::Rect(r) if r.stroke.width == 1.5 && r.rect.contains(at.center()) => Some(r.stroke.color),
+                    _ => None,
+                })
+                .collect();
+            inks
+        };
+        assert_eq!(ring(&mut h, sales), [egui::Color32::from(p.amber)], "{theme:?}: the package Party is in refuses it");
+        assert_eq!(ring(&mut h, other), [egui::Color32::from(p.accent)], "{theme:?}: another package takes it");
+        // Let go over the canvas, which the sketch's kind places nothing for.
+        let away = rect_of(&h, "workspace.canvas").center();
+        h.event(egui::Event::PointerMoved(away));
+        h.event(egui::Event::PointerButton { pos: away, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+    }
+}
+
+/// The problems Properties shows on an element are those its own notation says hold them, not the
+/// notation registered before it: an attribute's are its class's, as the sketch says.
+#[test]
+fn the_problems_shown_on_an_element_are_held_where_its_notation_says() {
+    let (h, ..) = sketch_harness();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let party = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(st, *o) == "Party").unwrap();
+    let party_id = st.alive().find(|o| archforge_core::name_of(st, *o) == "partyId").unwrap();
+    let map = std::collections::BTreeMap::from([(party, vec!["Party wants a key".to_string()])]);
+    let shown = archforge_shell_api::problems::of(SKETCH_UIS, st, &map, party_id);
+    assert_eq!(shown, [archforge_shell_api::notation_ui::Problem { element: party, text: "Party wants a key".into() }]);
+    only_what_every_notation_is_asked();
 }
 
 /// A diagram kind's own words on the shared canvas, a kind the shell never names included: its
@@ -9616,7 +10277,7 @@ fn what_the_kinds_draw_among_the_links_goes_over_the_lines_and_under_the_cards()
 
 /// The sketch kind that opens [`SKETCH_OPENS`] whole, last, after another kind and the diagram's own,
 /// neither of which does: what opens is asked of every kind, and the editor of the diagram's own.
-static OPENING_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH_OTHER), &SketchKind(SKETCH), &SketchKind(SKETCH_OPENER)];
+static OPENING_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&OtherKind, &SketchKind(SKETCH), &SketchKind(SKETCH_OPENER)];
 
 /// The sketch kind that opens a class named [`SKETCH_OPENS`] whole.
 const SKETCH_OPENER: &str = "test.opening";
@@ -9673,7 +10334,7 @@ fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
             (format!("workspace.canvas.sketch-end.{e}"), 1),
             (format!("workspace.canvas.sketch-caption.{e}"), caption),
             (format!("workspace.canvas.sketch-links.{SKETCH}"), 1),
-            (format!("workspace.canvas.sketch-links.{SKETCH_OTHER}"), 1),
+            (format!("workspace.canvas.other-links.{OTHER_KIND}"), 1),
         ]
     };
     let none = std::collections::BTreeMap::new();
@@ -9683,6 +10344,12 @@ fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
             assert_eq!(count(&recorded, &id), times, "{id} as {:?}", kind.map(|k| k.kind()));
         }
     }
+    let asked: Vec<&str> = other_asked_so_far().into_iter().collect();
+    assert_eq!(
+        asked,
+        ["card_extras", "draw_card", "draw_links", "line_caption", "line_ends"],
+        "the other kind is asked what it draws, and nothing else"
+    );
 }
 
 /// No notation's screens: the sketch's package then has no notation in the shell to word it.
@@ -9744,6 +10411,14 @@ fn sketch_classes(store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<
         .filter_map(archforge_mof::Value::as_ref)
         .filter(|o| store.class_of(*o).ok() == Some(archforge_mof::toy::CLASS))
         .collect()
+}
+
+/// The name of an element whose Delete and K the sketch takes on the canvas itself.
+const SKETCH_HELD: &str = "Held by the sketch";
+
+/// Whether the selection is one element named [`SKETCH_HELD`].
+fn sketch_holds_selection(cx: &crate::cx::Ctx) -> bool {
+    cx.session.as_ref().is_some_and(|s| matches!(s.view().selection.as_slice(), [o] if archforge_core::name_of(s.doc(), *o) == SKETCH_HELD))
 }
 
 /// The sketch notation's state: the selection it was last told of
@@ -9986,9 +10661,46 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
         Box::new(SketchState::default())
     }
-    /// The sketch removes nothing its own way: Delete goes on to the shared removals.
-    fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
-        false
+    /// A class held over a package in Models would go into it (the drop itself is not run by the
+    /// tests that ask); nothing else is dropped.
+    fn drop_on(
+        &self,
+        store: &archforge_mof::Store,
+        dragged: archforge_mof::Obj,
+        target: archforge_mof::Obj,
+    ) -> Option<(&'static str, serde_json::Value)> {
+        let class = store.class_of(dragged).ok() == Some(archforge_mof::toy::CLASS);
+        let package = store.class_of(target).ok() == Some(archforge_mof::toy::PACKAGE);
+        (class && package).then(|| ("sketch.class.move", serde_json::json!({})))
+    }
+    /// A class held over the package it is in already: a drop there is refused.
+    fn drop_refused(&self, store: &archforge_mof::Store, dragged: archforge_mof::Obj, target: archforge_mof::Obj) -> bool {
+        store.container(dragged).ok().flatten().is_some_and(|(owner, _)| owner == target)
+    }
+    /// An attribute's problems are held by its class, so Properties on the attribute shows them.
+    fn problem_holder(&self, store: &archforge_mof::Store, obj: archforge_mof::Obj) -> archforge_mof::Obj {
+        match store.class_of(obj).ok() {
+            Some(c) if c == archforge_mof::toy::PROPERTY => store.container(obj).ok().flatten().map_or(obj, |(owner, _)| owner),
+            _ => obj,
+        }
+    }
+    /// Delete on an element named [`SKETCH_HELD`], selected alone, is the sketch's, which writes it
+    /// down and removes nothing; on anything else Delete goes on to the shared removals.
+    fn canvas_delete(&self, cx: &mut crate::cx::Ctx, shift: bool) -> bool {
+        let held = sketch_holds_selection(cx);
+        if held {
+            sketch_call(format!("sketch delete {shift}"));
+        }
+        held
+    }
+    /// K on an element named [`SKETCH_HELD`], selected alone, is the sketch's chord, which it writes
+    /// down; no other key, and no key on anything else.
+    fn canvas_keys(&self, cx: &mut crate::cx::Ctx, ui: &egui::Ui) -> bool {
+        let held = sketch_holds_selection(cx) && ui.input(|i| i.key_pressed(egui::Key::K));
+        if held {
+            sketch_call("sketch key".into());
+        }
+        held
     }
     /// A class's attributes go with it, counted in its own words and signed with its name, so a
     /// test sees it asked and the dialog say it; nothing goes with anything else.
@@ -10245,6 +10957,8 @@ fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
     assert_eq!(shell.panels.notice, None);
     assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, "sketch.class.rename", "  ")), "a class is never unnamed");
     assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
+    assert!(!shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, WORDED_UNNAMED, "  ")), "the worded notation's own may go unnamed");
+    only_what_every_notation_is_asked();
     shell.notation_uis = &[];
     assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, SKETCH_UNNAMED, "  ")), "the sketch is not this shell's");
     assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
@@ -10285,8 +10999,9 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
     assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 2 drawn in the sketch");
     added.anchors.push(at(3, AnchorRole::Target, "sketch_property"));
     assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 3 elements");
-    // The window's tool row asks the shell's notations.
+    // The window's tool row asks the shell's notations, the worded notation's before the sketch's.
     let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    h.state_mut().notation_uis = SKETCH_UIS;
     ask_in_chat(&mut h, "What is on the diagram?");
     let diagram = h.state().canvas.active.unwrap();
     crate::chat_fixture::call(
@@ -10338,6 +11053,7 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
     let mut listed: Vec<String> = changes.changed.iter().map(|e| e.metaclass.clone()).collect();
     listed.sort();
     assert_eq!(listed, ["sketch_class", "sketch_comment"]);
+    only_what_every_notation_is_asked();
 }
 
 /// A notation that answers for no element, as no class is of its metamodel, and only says words of
@@ -10368,6 +11084,62 @@ static WORDED_CATALOGUES: &[crate::i18n::Rows] = &[
     crate::i18n::Rows { code: "zh-Hans", catalogue: "words/zh-Hans.tsv", text: "str\t\tA worded row\tA worded row\n" },
 ];
 
+thread_local! {
+    /// The methods the worded notation ([`WordsUi`]) was asked on this thread, so a test sees which.
+    static WORDS_ASKED: std::cell::RefCell<std::collections::BTreeSet<&'static str>> =
+        const { std::cell::RefCell::new(std::collections::BTreeSet::new()) };
+}
+
+/// Writes down that the worded notation was asked `method`.
+fn words_asked(method: &'static str) {
+    WORDS_ASKED.with_borrow_mut(|asked| asked.insert(method));
+}
+
+/// What the shell asks every notation it knows, whatever element it is about: whether a member is
+/// a top of Models, what every notation offers at the root, what it says of a refusal, of a
+/// command that is off and of a kind, how Chat counts a table, whether a command may leave its
+/// element unnamed, whether it takes Properties in place or the canvas's keys, its catalogues and
+/// the classes it makes, what it draws over the canvas, its repair as a project opens, its own
+/// state, its problems, and that the selection moved. The worded notation is asked nothing else
+/// while the sketch's elements are shown: the rest is asked of an element's own notation.
+const EVERY_NOTATION_ASKS: &[&str] = &[
+    "a_kind",
+    "canvas_delete",
+    "canvas_keys",
+    "canvas_overlay",
+    "catalogues",
+    "chat_kind",
+    "created_classes",
+    "disabled",
+    "is_top",
+    "may_be_unnamed",
+    "new_state",
+    "offers at the root",
+    "open_repair",
+    "problems",
+    "properties_in_place",
+    "said",
+    "selection_moved",
+];
+
+/// Fails the test when the worded notation was asked anything the shell asks only an element's
+/// own notation ([`EVERY_NOTATION_ASKS`] apart).
+fn only_what_every_notation_is_asked() {
+    let asked = WORDS_ASKED.with_borrow(Clone::clone);
+    let wrong: Vec<&str> = asked.into_iter().filter(|m| !EVERY_NOTATION_ASKS.contains(m)).collect();
+    assert!(wrong.is_empty(), "the worded notation was asked what only an element's own notation is asked: {wrong:?}");
+}
+
+/// What the sketch harness checks after every frame: the other kind and the worded notation were
+/// asked only what every kind and every notation are.
+fn only_what_every_kind_and_notation_is_asked() {
+    only_what_every_kind_is_asked();
+    only_what_every_notation_is_asked();
+}
+
+/// The worded notation's own command, the one it lets leave its element unnamed.
+const WORDED_UNNAMED: &str = "words.thing.rename";
+
 impl crate::notation_ui::NotationUi for WordsUi {
     /// A metamodel no class is of, so it answers for no element.
     fn metamodel(&self) -> u16 {
@@ -10375,57 +11147,244 @@ impl crate::notation_ui::NotationUi for WordsUi {
     }
     /// No element, so no top of Models.
     fn is_top(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        words_asked("is_top");
         false
     }
     /// No rows in Models.
     fn tree(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: &crate::explorer::Tree<'_>) -> Vec<crate::explorer::Row> {
+        words_asked("tree");
         Vec::new()
     }
-    /// Nothing for Models' `+`.
-    fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
-        Vec::new()
+    /// Nothing at the model's root; at an element, a word of its own.
+    fn offers(&self, _: &archforge_mof::Store, selection: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
+        match selection {
+            None => {
+                words_asked("offers at the root");
+                Vec::new()
+            }
+            Some(_) => {
+                words_asked("offers");
+                vec![crate::notation_ui::Offer { key: "words.thing", word: "Worded thing".into() }]
+            }
+        }
     }
-    /// Adds nothing, as it offers nothing.
+    /// Refuses in its own words.
     fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
-        None
+        words_asked("add");
+        Some(Err("The words add nothing.".into()))
     }
-    /// Renames nothing.
+    /// Its own command and field.
     fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
-        None
+        words_asked("rename");
+        Some((WORDED_UNNAMED, "words"))
     }
-    /// Nothing worked out, as none of its elements is removed.
+    /// Refuses every name in its own words.
+    fn rename_refusal(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: &str) -> Option<String> {
+        words_asked("rename_refusal");
+        Some("The words keep their name.".into())
+    }
+    /// One thing goes with anything, in its own words.
+    fn consequences(&self, _: &[&'static dyn crate::notation_ui::NotationUi], _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<String> {
+        words_asked("consequences");
+        vec!["A worded thing goes with it.".into()]
+    }
+    /// New inside ▸ in its own words, making nothing.
+    fn inside(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Inside> {
+        words_asked("inside");
+        Some(archforge_shell_api::notation_ui::Inside {
+            word: "Worded inside".into(),
+            heading: "Words".into(),
+            kinds: Vec::new(),
+            refused: Vec::new(),
+            why_not: Some("The words hold nothing.".into()),
+            split: None,
+        })
+    }
+    /// Refuses in its own words.
+    fn add_inside(&self, _: &mut crate::cx::Ctx, _: &str, _: archforge_mof::Obj) -> Option<Result<archforge_mof::Uuid, String>> {
+        words_asked("add_inside");
+        Some(Err("The words make nothing inside.".into()))
+    }
+    /// Keeps everything, in its own words.
+    fn remove_refusal(&self, _: &[&'static dyn crate::notation_ui::NotationUi], _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("remove_refusal");
+        Some("The words keep it.".into())
+    }
+    /// Hands every element up to itself.
+    fn hands_up(&self, _: &archforge_mof::Store, obj: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+        words_asked("hands_up");
+        Some(obj)
+    }
+    /// Its own word for what goes.
     fn before_removal(&self, _: &archforge_mof::Store, _: &[archforge_mof::Obj]) -> crate::notation_ui::Removal {
-        crate::notation_ui::Removal::default()
+        words_asked("before_removal");
+        crate::notation_ui::Removal { went: vec!["a worded thing".into()], after: Some("the words saw it go".into()) }
     }
-    /// The word alone, as none of its elements is removed.
+    /// The word in its own sentence.
     fn removed_text(&self, what: &str, _: &crate::notation_ui::Removal) -> String {
-        what.to_string()
+        words_asked("removed_text");
+        format!("{what} gone from the words")
+    }
+    /// Refuses every drop.
+    fn drop_refused(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: archforge_mof::Obj) -> bool {
+        words_asked("drop_refused");
+        true
+    }
+    /// A command of its own for every drop.
+    fn drop_on(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: archforge_mof::Obj) -> Option<(&'static str, serde_json::Value)> {
+        words_asked("drop_on");
+        Some(("words.thing.move", serde_json::Value::Null))
+    }
+    /// Refuses in its own words.
+    fn run_drop(&self, _: &mut crate::cx::Ctx, _: &'static str, _: serde_json::Value) -> Result<(), String> {
+        words_asked("run_drop");
+        Err("The words move nothing.".into())
+    }
+    /// Takes no skills, in its own words.
+    fn no_skills(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("no_skills");
+        Some("The words take no skills.".into())
+    }
+    /// Its own words for every target.
+    fn skill_target(&self, _: archforge_mof::ClassId, _: &str) -> Option<String> {
+        words_asked("skill_target");
+        Some("every worded thing".into())
+    }
+    /// Everything holds something.
+    fn has_children(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        words_asked("has_children");
+        true
     }
     /// No row opens.
     fn foldable(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        words_asked("foldable");
         Vec::new()
     }
     /// No rows to open.
     fn parents(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        words_asked("parents");
         Vec::new()
     }
-    /// No search entry.
+    /// A search entry of its own.
     fn entry(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Entry> {
+        words_asked("entry");
+        Some(archforge_shell_api::notation_ui::Entry { icon: &crate::ux::icons::BUBBLE, order: 9, label: "Worded".into(), detail: "Words".into() })
+    }
+    /// Shows nothing on the canvas.
+    fn shown(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+        words_asked("shown");
         None
     }
-    /// No words for Properties.
+    /// Finds no problem, as it holds no element.
+    fn problems(
+        &self,
+        _: &[&'static dyn crate::notation_ui::NotationUi],
+        _: &archforge_mof::Store,
+        _: &mut Vec<archforge_shell_api::notation_ui::Problem>,
+    ) {
+        words_asked("problems");
+    }
+    /// The model's root holds every problem.
+    fn problem_holder(&self, store: &archforge_mof::Store, obj: archforge_mof::Obj) -> archforge_mof::Obj {
+        words_asked("problem_holder");
+        archforge_core::skills::model_of(store).unwrap_or(obj)
+    }
+    /// Words of its own for Properties.
     fn words(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<crate::notation_ui::Words> {
+        words_asked("words");
+        Some(crate::notation_ui::Words {
+            kind: "Worded".into(),
+            word: "Worded".into(),
+            this: "This worded thing".into(),
+            on_this: "On this worded thing · {n}".into(),
+            name: "Worded".into(),
+        })
+    }
+    /// Its own word for an element without a name.
+    fn unnamed(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("unnamed");
+        Some("Unworded".into())
+    }
+    /// A heading of its own.
+    fn heading(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("heading");
+        Some("Worded heading".into())
+    }
+    /// No page of its own.
+    fn page(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+        words_asked("page");
         None
     }
-    /// Draws nothing, as Properties shows none of its elements.
-    fn body(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: f32, _: &crate::panels::Subject) {}
+    /// Keeps nothing typed, only writing down that it was asked.
+    fn selection_moved(&self, _: &mut crate::cx::Ctx, _: Option<archforge_mof::Uuid>) {
+        words_asked("selection_moved");
+    }
+    /// Takes Properties in place only with an element of its own selected, which no test makes.
+    fn properties_in_place(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: f32) -> bool {
+        words_asked("properties_in_place");
+        false
+    }
+    /// Draws its own word, as Properties shows none of its elements.
+    fn body(&self, _: &mut crate::cx::Ctx, ui: &mut egui::Ui, p: &crate::ux::Palette, r: egui::Rect, y: f32, _: &crate::panels::Subject) {
+        words_asked("body");
+        crate::ux::text(ui.painter(), egui::pos2(r.left() + 16.0, r.top() + y), "Worded body", crate::ux::types::UI, p.text, None);
+    }
+    /// Its sentence for an enum type without literals ([`WORDED_LITERALS`]), so a test sees it asked
+    /// before the sketch.
+    fn said(&self, _: &[&'static dyn crate::notation_ui::NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        words_asked("said");
+        matches!(reason, archforge_engine::Reason::TooFew { kind: "enum literal", min: 1 }).then(|| WORDED_LITERALS.to_string())
+    }
+    /// Its own command's reason alone.
+    fn disabled(&self, reason: &str) -> Option<String> {
+        words_asked("disabled");
+        (reason == "words.nothing").then(|| "The words have nothing yet.".into())
+    }
+    /// Its own command alone may leave its element unnamed ([`WORDED_UNNAMED`]).
+    fn may_be_unnamed(&self, cmd: &str) -> bool {
+        words_asked("may_be_unnamed");
+        cmd == WORDED_UNNAMED
+    }
     /// Its one row ([`WORDED_CATALOGUES`]).
     fn catalogues(&self) -> &'static [crate::i18n::Rows] {
+        words_asked("catalogues");
         WORDED_CATALOGUES
     }
     /// Creates nothing.
     fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
+        words_asked("created_classes");
         &[]
+    }
+    /// Its own word for every class.
+    fn kind_word(&self, _: archforge_mof::ClassId) -> Option<String> {
+        words_asked("kind_word");
+        Some("worded".into())
+    }
+    /// Its own heading for every list.
+    fn list_heading(&self, _: archforge_mof::ClassId) -> Option<String> {
+        words_asked("list_heading");
+        Some("Worded list".into())
+    }
+    /// Its word for an association ([`WORDED_ASSOCIATION`]), so a test sees it asked before the
+    /// sketch.
+    fn a_kind(&self, kind: &str) -> Option<String> {
+        words_asked("a_kind");
+        (kind == "association").then(|| WORDED_ASSOCIATION.to_string())
+    }
+    /// Its own word for every scope.
+    fn scope_word(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("scope_word");
+        Some("the words".into())
+    }
+    /// Its own table alone, as a kind of its own.
+    fn chat_kind(&self, table: &str) -> Option<crate::notation_ui::ChatKind> {
+        words_asked("chat_kind");
+        (table == "words_thing").then_some(crate::notation_ui::ChatKind::Own("worded"))
+    }
+    /// Its own count for every kind.
+    fn chat_count(&self, _: &str, n: u64) -> Option<String> {
+        words_asked("chat_count");
+        Some(format!("{n} worded"))
     }
     /// None of its own, so the longest of the shell's is another notation's.
     fn name_limit(&self) -> usize {
@@ -10435,28 +11394,38 @@ impl crate::notation_ui::NotationUi for WordsUi {
     fn description_limit(&self) -> usize {
         0
     }
-    /// Deletes nothing on the canvas.
+    /// Deletes nothing on the canvas, holding no element.
     fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
+        words_asked("canvas_delete");
+        false
+    }
+    /// Takes no key on the canvas, holding no element.
+    fn canvas_keys(&self, _: &mut crate::cx::Ctx, _: &egui::Ui) -> bool {
+        words_asked("canvas_keys");
         false
     }
     /// Draws nothing over the canvas.
-    fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
-    /// The sketch's state, unused.
-    fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
-        Box::new(SketchState::default())
+    fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {
+        words_asked("canvas_overlay");
     }
-    /// Its sentence for an enum type without literals ([`WORDED_LITERALS`]), so a test sees it asked
-    /// before ER.
-    fn said(&self, _: &[&'static dyn crate::notation_ui::NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
-        matches!(reason, archforge_engine::Reason::TooFew { kind: "enum literal", min: 1 }).then(|| WORDED_LITERALS.to_string())
+    /// A way out of its own.
+    fn resolve_hint(&self) -> Option<String> {
+        words_asked("resolve_hint");
+        Some("The words would fix it".into())
     }
-    /// Its word for an association ([`WORDED_ASSOCIATION`]), so a test sees it asked before UML.
-    fn a_kind(&self, kind: &str) -> Option<String> {
-        (kind == "association").then(|| WORDED_ASSOCIATION.to_string())
+    /// Writes down that it was asked.
+    fn resolve(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid) {
+        words_asked("resolve");
     }
     /// Leaves a tag in the model, so a test sees an opening's repair ask it.
     fn open_repair(&self, store: &mut archforge_mof::Store) {
+        words_asked("open_repair");
         let _ = store.create(archforge_core::TAG);
+    }
+    /// The sketch's state, unused.
+    fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
+        words_asked("new_state");
+        Box::new(SketchState::default())
     }
 }
 
@@ -10976,6 +11945,7 @@ fn the_delete_dialog_says_what_the_notation_says_goes_with_it() {
         h.run();
         let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: Delete from the model asks"));
         assert_eq!(asked.consequences, [format!("{attributes} attributes go with it in the sketch.")], "{theme:?}");
+        only_what_every_notation_is_asked();
     }
 }
 
@@ -13553,6 +14523,8 @@ fn generate_says_agent_access_is_off_with_the_queue_attached_and_no_control_port
 fn generate_says_agent_access_is_on_when_the_person_turned_it_on_for_this_start() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, f, _queue) = generate_with_the_queue(theme);
+        // The worded notation before the sketch's: the scope is worded by the element's own.
+        h.state_mut().notation_uis = SKETCH_UIS;
         h.state_mut().set_own_agent_access(true);
         h.run();
         assert!(painted_has(&h, "Agent access is on: a connected agent reads this context through MCP."), "{theme:?}: {:?}", painted(&h));
@@ -13570,6 +14542,7 @@ fn generate_says_agent_access_is_on_when_the_person_turned_it_on_for_this_start(
         h.run();
         assert!(painted_has(&h, "Agent access is on: a connected agent"), "{theme:?}: {:?}", painted(&h));
         assert!(!painted_has(&h, "Agent access is off"), "{theme:?}: {:?}", painted(&h));
+        only_what_every_notation_is_asked();
     }
 }
 
@@ -14971,6 +15944,8 @@ fn shift_f10_opens_the_models_row_menu_only_with_shift_alone() {
     use egui::Modifiers as M;
     in_both_appearances(|theme| {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        // The worded notation before the sketch's: the row's menu asks the element's own.
+        h.state_mut().notation_uis = SKETCH_UIS;
         crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Escape, M::NONE);
@@ -16117,6 +17092,13 @@ fn the_kinds_asked_are_the_shells_and_the_kind_shown_is_the_active_tabs() {
     assert!(archforge_shell_api::kinds::kind_of(others, store, diagram).is_none(), "kinds without the sketch's know no sketch");
     assert_eq!(crate::kinds::active_kind(shell).map(|k| k.kind()), Some(SKETCH));
     assert!(archforge_shell_api::kinds::active_kind(others, &shell.canvas, shell.session.as_ref()).is_none());
+    // Every kind is asked whether the open popover takes the keys: the sketch's, after the other
+    // kind, and the other kind's own.
+    for (popover, kind) in [(SKETCH_POPOVER, "the sketch"), (OTHER_POPOVER, "the other kind")] {
+        shell.canvas.popover = Some(popover);
+        assert!(crate::kinds::popover_takes_keys(shell), "{kind}'s popover takes the keys");
+    }
+    assert_eq!(crate::kinds::diagram_icon(shell.kinds, store, diagram), &crate::ux::icons::ER_DIAGRAM, "the sketch's icon, not the other kind's");
     shell.canvas.popover = Some(SECOND_KINDS);
     assert!(!crate::kinds::popover_takes_keys(shell), "the second sketch is not the shell's");
     assert!(archforge_shell_api::kinds::popover_takes_keys(others, &shell.canvas), "the second sketch's kind walks them");
@@ -16273,6 +17255,8 @@ fn card_ringed(h: &Harness<'static, Shell>, theme: ThemeKind, card: egui::Rect) 
 fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, node, package, customer, customer_node) = package_clicks_sample(theme);
+        // The other kind and the worded notation first: the diagram's own kind is asked.
+        (h.state_mut().kinds, h.state_mut().notation_uis) = (SKETCH_KINDS, SKETCH_UIS);
         let clear = |h: &mut Harness<'static, Shell>| {
             h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
             h.state_mut().canvas.tool = crate::canvas::Tool::Select;

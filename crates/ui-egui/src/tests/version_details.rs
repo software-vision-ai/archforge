@@ -3254,6 +3254,7 @@ fn a_list_of_features_is_headed_by_its_notation() {
         h.state_mut().notation_uis = &[];
         landed(h, id, key, listed(id, "kept", lists));
         assert_eq!((named(h, "Members, id"), painted_times(h, "FIELDS OF THE SKETCH")), (2, 0), "{:?}", painted(h));
+        only_what_every_notation_is_asked();
     });
 }
 
