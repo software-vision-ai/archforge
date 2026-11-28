@@ -16,6 +16,7 @@ use crate::settings::{Look, button, control, focus_ring};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, icons, types};
 use crate::versions::{change_row, dated, lines};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, VersionEntry, VersionRead};
 
 pub(crate) mod compare;

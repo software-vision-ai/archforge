@@ -38,6 +38,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use serde_json::{Value, json};
 
 use crate::i18n::tr;
+#[cfg(any())] // AR-796 parked
 use crate::{SaveState, Shell};
 
 /// One request from the control channel, where its answer goes, and whether it may still run: the
@@ -574,10 +575,10 @@ mod tests {
         assert!(queries > 0 && queries < registry.len(), "the table has queries and changes");
         assert!(!only_reads(&shell, "engine.execute", &json!({ "command": "no.such" })).unwrap(), "an unknown command may change");
         assert!(!only_reads(&shell, "engine.execute", &json!({})).unwrap());
-        let mixed = json!({ "steps": [{ "command": "er.schema.list" }, { "command": "er.schema.add", "params": { "name": "x" } }] });
+        let mixed = json!({ "steps": [{ "command": "sketch.package.list" }, { "command": "sketch.package.add", "params": { "name": "x" } }] });
         assert!(!only_reads(&shell, "engine.batch", &mixed).unwrap(), "one change makes the batch a change");
         // The step cap is checked before any step is looked at.
-        let long = json!({ "steps": vec![json!({ "command": "er.schema.list" }); MAX_STEPS + 1] });
+        let long = json!({ "steps": vec![json!({ "command": "sketch.package.list" }); MAX_STEPS + 1] });
         assert!(only_reads(&shell, "engine.batch", &long).unwrap_err().contains("1 to 256"));
     }
 
@@ -591,14 +592,14 @@ mod tests {
             ("document.inspect", json!({})),
             // not a diagram kind: the commands whose ids hold er
             ("engine.commands", json!({ "filter": "er" })),
-            ("engine.execute", json!({ "command": "er.schema.list" })),
-            ("engine.batch", json!({ "steps": [{ "command": "er.schema.list" }, { "command": "er.schema.list" }] })),
+            ("engine.execute", json!({ "command": "sketch.package.list" })),
+            ("engine.batch", json!({ "steps": [{ "command": "sketch.package.list" }, { "command": "sketch.package.list" }] })),
         ] {
             assert!(answer_request(&mut shell, &request(method, params, true, true)).is_ok(), "{method} reads");
         }
         for (method, params) in [
-            ("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "x" } })),
-            ("engine.batch", json!({ "steps": [{ "command": "er.schema.add", "params": { "name": "x" } }] })),
+            ("engine.execute", json!({ "command": "sketch.package.add", "params": { "name": "x" } })),
+            ("engine.batch", json!({ "steps": [{ "command": "sketch.package.add", "params": { "name": "x" } }] })),
             ("engine.undo", json!({})),
             ("engine.redo", json!({})),
             ("app.save", json!({})),
@@ -608,7 +609,7 @@ mod tests {
         }
         assert_eq!(revision(&shell), before, "nothing changed");
         // A token that may change writes; a revoked one runs nothing, however it is allowed.
-        let add = json!({ "command": "er.schema.add", "params": { "name": "shop" } });
+        let add = json!({ "command": "sketch.package.add", "params": { "name": "shop" } });
         assert!(answer_request(&mut shell, &request("engine.execute", add.clone(), false, false)).unwrap_err() == REVOKED);
         assert_eq!(revision(&shell), before);
         let done = answer_request(&mut shell, &request("engine.execute", add, false, true)).unwrap();
@@ -622,13 +623,13 @@ mod tests {
     fn while_held_a_changing_request_is_refused_naming_the_hold_and_reads_are_answered() {
         crate::i18n::set_language("en");
         let mut shell = project();
-        let add = json!({ "command": "er.schema.add", "params": { "name": "shop" } });
+        let add = json!({ "command": "sketch.package.add", "params": { "name": "shop" } });
         answer_request(&mut shell, &request("engine.execute", add.clone(), false, true)).unwrap();
         let before = shell.session.as_ref().unwrap().revision();
         shell.begin_hold().unwrap();
         for (method, params) in [
             ("engine.execute", add.clone()),
-            ("engine.batch", json!({ "steps": [{ "command": "er.schema.add", "params": { "name": "x" } }] })),
+            ("engine.batch", json!({ "steps": [{ "command": "sketch.package.add", "params": { "name": "x" } }] })),
             ("engine.undo", json!({})),
             ("engine.redo", json!({})),
             ("app.save", json!({})),
@@ -637,11 +638,11 @@ mod tests {
             assert!(refused.starts_with("held: "), "{method}: {refused}");
         }
         assert_eq!(shell.session.as_ref().unwrap().revision(), before);
-        for (method, params) in [("document.inspect", json!({})), ("engine.execute", json!({ "command": "er.schema.list" }))] {
+        for (method, params) in [("document.inspect", json!({})), ("engine.execute", json!({ "command": "sketch.package.list" }))] {
             assert!(answer_request(&mut shell, &request(method, params, false, true)).is_ok(), "{method} reads");
         }
         shell.end_hold();
-        let other = json!({ "command": "er.schema.add", "params": { "name": "billing" } });
+        let other = json!({ "command": "sketch.package.add", "params": { "name": "billing" } });
         assert!(answer_request(&mut shell, &request("engine.execute", other, false, true)).is_ok(), "afterwards it runs");
     }
 
@@ -651,7 +652,7 @@ mod tests {
     fn a_request_from_an_earlier_session_is_refused_and_a_later_one_runs() {
         crate::i18n::set_language("en");
         let mut shell = project();
-        let add = json!({ "command": "er.schema.add", "params": { "name": "shop" } });
+        let add = json!({ "command": "sketch.package.add", "params": { "name": "shop" } });
         let earlier = request("engine.execute", add.clone(), false, true);
         let reading = request("document.inspect", json!({}), false, true);
         let before = shell.session.as_ref().unwrap().revision();
@@ -683,7 +684,7 @@ mod tests {
         let mut shell = project();
         let session = shell.session.as_mut().unwrap();
         let committed = session.revision();
-        session.begin_interaction("er.schema.add").unwrap();
+        session.begin_interaction("sketch.package.add").unwrap();
         session.preview(&json!({ "name": "shop" })).unwrap();
         let state = answer_request(&mut shell, &request("document.inspect", json!({}), true, true)).unwrap();
         assert_ne!(state["revision"].as_u64(), Some(committed), "a preview names its own revision");

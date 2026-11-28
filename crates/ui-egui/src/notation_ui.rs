@@ -12,6 +12,7 @@ pub(crate) use archforge_shell_api::notation_ui::{
     name_limit_of_cx, of, of_class, say_after_cx,
 };
 
+#[cfg(any())] // AR-796 parked
 use crate::Shell;
 
 /// [`say_after_cx`] over the whole shell, for code not on the narrow context yet.

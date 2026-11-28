@@ -14,6 +14,7 @@ use crate::i18n::{fmt, tr};
 use crate::settings::{Look, button};
 use crate::ux::{self, Palette, types};
 use crate::versions::{last_known, last_version};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, chat_panel, version_chip, widgets};
 
 const WIDTH: f32 = 480.0;

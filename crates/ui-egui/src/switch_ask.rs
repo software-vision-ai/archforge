@@ -12,6 +12,7 @@ use crate::i18n::{fmt, tr};
 use crate::leaving::Leaving;
 use crate::settings::{Look, button};
 use crate::ux::{self, Palette, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, version_chip, widgets};
 
 /// The switch a question is about and, once tried, how it ended.

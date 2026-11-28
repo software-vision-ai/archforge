@@ -70,16 +70,16 @@ fn the_labels_cover_what_a_card_shows_and_nothing_else() {
     let universe = crate::tests::NOTATIONS.universe().unwrap();
     let texts: Vec<String> =
         crate::model_words::texts(crate::tests::NOTATIONS, crate::tests::SCREENS.notation_uis()).into_iter().map(|(_, word)| word).collect();
-    for wanted in ["Is abstract", "On delete", "Package", "Exactly one", "Interface realization", "Enum type"] {
+    for wanted in ["Is abstract", "Is ordered", "Aggregation", "Composite", "Inout", "Body"] {
         assert!(texts.iter().any(|t| t == wanted), "{wanted} is missing");
     }
     // Each is a word nothing that belongs on a card also makes, with the property it stands for
     // checked to really be of the kind the walk must drop.
     let dropped = [
-        ("Language", archforge_uml::opaque_expression::LANGUAGE, "many-valued data"),
-        ("Lower", archforge_uml::multiplicity_element::LOWER, "derived"),
-        ("Bound element", archforge_uml::template_binding::BOUND_ELEMENT, "typed by a class"),
-        ("Name", archforge_uml::named_element::NAME, "the name"),
+        ("Trigger", archforge_core::skill::TRIGGER, "many-valued data"),
+        ("Lower", archforge_mof::toy::MULTIPLICITY_LOWER, "derived"),
+        ("Type", archforge_mof::toy::TYPED_ELEMENT_TYPE, "typed by a class"),
+        ("Name", archforge_mof::toy::NAMED_ELEMENT_NAME, "the name"),
         ("Fill", archforge_diagram::style::FILL, "a diagram's own"),
     ];
     for (word, prop, why) in dropped {

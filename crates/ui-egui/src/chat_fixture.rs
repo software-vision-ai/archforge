@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use archforge_shell_api::cx::Ctx;
 
+#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::ai_agents::fake::Fake;
 use crate::ai_agents::{Look, Provider};

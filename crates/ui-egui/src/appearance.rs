@@ -23,6 +23,7 @@ use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::panels::{FIELD, PAD, section};
 use crate::ux::{self, Palette, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// The design's swatches after each row's first, which is the diagram's own colour in the theme
@@ -297,6 +298,7 @@ fn heading(uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store, n
 }
 
 /// Draws the panel body for the selection under the header, from `y` below the panel's top.
+#[cfg(any())] // AR-796 parked
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);

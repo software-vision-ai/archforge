@@ -33,6 +33,7 @@ use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
 use crate::notation_ui::{Layer, Overlaid};
 use crate::ux::{self, Palette, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// The tab strip's height, a tab's height and the first tab's x.
@@ -155,6 +156,7 @@ pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
 
 /// Says `canvas.notice`, if there is one, at `at` within `width`: wrapped to eight rows at most,
 /// and whole to a screen reader as a status. Gives the height it took.
+#[cfg(any())] // AR-796 parked
 pub(crate) fn notice(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32) -> f32 {
     let Some(notice) = shell.canvas.notice.clone() else { return 0.0 };
     let g = ux::galley_rows(ui.painter(), &notice, types::CAPTION, p.amber, Some(width), 8);
@@ -168,6 +170,7 @@ pub(crate) fn notice(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, wi
 /// toolbar of the canvas `r`, clear of the minimap and of a toast with Undo, with an amber dot.
 /// Long words wrap to eight rows at most and the card grows upwards. It takes no clicks, as
 /// nothing but the next action ends it, and is read whole as a status.
+#[cfg(any())] // AR-796 parked
 fn refused_toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let Some(words) = shell.canvas.notice.clone() else { return };
     let edge = 16.0;

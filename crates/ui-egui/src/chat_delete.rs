@@ -40,6 +40,7 @@ use crate::chat_store::{Answer, Listed, Refusal, Row, Write};
 use crate::i18n::{fmt, tr, trn};
 use crate::settings::{Look, button, control, focus_ring};
 use crate::ux::{self, Palette, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// How long the toast stays once neither the pointer nor the focus is on it, in seconds.
@@ -201,6 +202,7 @@ pub fn cancel(shell: &mut Shell) {
 /// Delete in the confirmation: the open conversation gives way (its running turn ends stopped,
 /// written first), the row leaves the list, the deletion is asked of the project, and the toast
 /// shows with Undo. The earlier toast closes.
+#[cfg(any())] // AR-796 parked
 pub fn confirm(shell: &mut Shell) {
     let Some(ask) = shell.chat_panel.ask.take() else { return };
     // A question of it on its way to the project (its key check may wait on the system's store)
@@ -813,6 +815,7 @@ pub(crate) fn toast_up(shell: &Shell) -> bool {
 /// The toast of the newest deletion of the project shown, at the foot of the centre `r`, clear of
 /// the minimap: "<title> deleted · still in the project's saved history", with Undo. It stays
 /// [`TOAST_SECONDS`] after the pointer and the focus last left it.
+#[cfg(any())] // AR-796 parked
 pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let Some(project) = shell.project.as_ref().map(|o| o.path.clone()) else { return };
     let Some(title) = shell.chats.deletions.iter().rev().find(|d| d.toast && d.project == project).map(|d| d.title.clone()) else { return };

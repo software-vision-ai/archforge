@@ -15,9 +15,11 @@
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use ux::Colour;
 
+#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::i18n::tr;
 use crate::panels::MenuId;
+#[cfg(any())] // AR-796 parked
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{self, Palette, icons, types};
@@ -32,6 +34,7 @@ const STRIP_LEFT: f32 = 10.0;
 /// The bar's height, its bottom divider included.
 pub(crate) const BAR: f32 = 48.0;
 /// The page's side margins.
+#[cfg(any())] // AR-796 parked
 const MARGIN: f32 = 72.0;
 /// The gap between start cards.
 const GAP: f32 = 24.0;
@@ -136,6 +139,7 @@ pub(crate) fn start_texts() -> impl Iterator<Item = &'static str> {
 }
 
 /// Draws Home over the whole window, on the page colour of the shell's appearance.
+#[cfg(any())] // AR-796 parked
 pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let p = *ux::palette(shell.state.theme.is_dark());
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(p.page.into())).show(ui, |ui| {
@@ -240,6 +244,7 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
 
 /// The bar: the brand at the left, then the tabs while projects are open; the search field, help
 /// and the avatar at the right. False when a tab was clicked (the frame ends).
+#[cfg(any())] // AR-796 parked
 fn bar_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> bool {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
@@ -294,6 +299,8 @@ pub(crate) const PINNED: MenuId = MenuId::shell("pinned");
 
 /// The bar's right: the search field from `start` at the earliest, help and the avatar, all on
 /// the bar's middle line. The controls' ids start with `prefix`.
+#[cfg(any())] // AR-796 parked
+#[cfg(any())] // AR-796 parked
 #[allow(clippy::too_many_arguments, reason = "the bar's two screens differ in their ids, placeholder and search kind")]
 pub(crate) fn bar_tail(
     shell: &mut Shell,
@@ -380,6 +387,7 @@ fn button_rect(paint: &egui::Painter, at: Pos2, label: &str, icon: bool) -> (Rec
 }
 
 /// The page below the bar; gives its height.
+#[cfg(any())] // AR-796 parked
 fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f32, view_height: f32) -> f32 {
     let paint = ui.painter().clone();
     let left = origin.x + MARGIN;
@@ -741,6 +749,7 @@ pub(crate) fn now() -> u64 {
 
 /// The recent projects in the order the user chose: the last opened first, or by name, A to Z
 /// whatever the case, the last opened first among equal names.
+#[cfg(any())] // AR-796 parked
 fn sorted_recent(recent: &[crate::state::RecentProject], sort: RecentSort) -> Vec<crate::state::RecentProject> {
     let mut out = recent.to_vec();
     out.sort_by_key(|r| std::cmp::Reverse(r.opened));

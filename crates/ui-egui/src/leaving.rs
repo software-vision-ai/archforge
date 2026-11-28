@@ -6,6 +6,7 @@
 
 use crate::close_ask::Ask;
 use crate::hold::HoldRefused;
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, chat_panel, panels, skill_tab, version_chip};
 
 /// What the person was leaving for, kept with its own target while Chat's question waits.

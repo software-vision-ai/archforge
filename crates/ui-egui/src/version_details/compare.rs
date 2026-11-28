@@ -4,17 +4,23 @@
 //! branches, under the band; under it [`results`] says what the two sides differ by: a version and
 //! current work, or two versions, another branch's latest version being one.
 
+#[cfg(any())] // AR-796 parked
 use egui::accesskit::Role;
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
 use super::{BAND, MARGIN, breadcrumb};
+#[cfg(any())] // AR-796 parked
 use crate::chat_words::Clock;
+#[cfg(any())] // AR-796 parked
 use crate::explorer::{TreeScroll, scroll_tree};
 use crate::i18n::tr;
+#[cfg(any())] // AR-796 parked
 use crate::settings::{Look, button, control, focus_ring};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::versions::{dated, read_more, told, when};
+#[cfg(any())] // AR-796 parked
 use crate::{BranchEntry, Shell, VersionEntry, widgets};
 
 pub(crate) mod results;
@@ -58,6 +64,8 @@ impl PartialEq for Side {
     }
 }
 
+#[cfg(any())] // AR-796 parked
+#[cfg(any())] // AR-796 parked
 impl Side {
     /// What the select shows for this side.
     fn words(&self, clock: Clock) -> String {
@@ -89,6 +97,9 @@ pub(super) struct Pair {
 /// A select's list while it is open: which side it is for, the option the keys are on, kept as
 /// itself so a page of versions read meanwhile does not move it to another row, and how far it has
 /// scrolled.
+#[cfg(any())] // AR-796 parked
+#[cfg(any())] // AR-796 parked
+#[cfg(any())] // AR-796 parked
 #[derive(Clone)]
 struct Dropdown {
     after: bool,
@@ -155,6 +166,7 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
 }
 
 /// The dropdown open on the page, if any.
+#[cfg(any())] // AR-796 parked
 fn dropdown_of(shell: &Shell) -> Option<&Dropdown> {
     shell.versions.details.as_ref()?.compare.as_ref()?.dropdown.as_ref()
 }
@@ -165,6 +177,7 @@ fn pair_mut(shell: &mut Shell) -> Option<&mut Pair> {
 }
 
 /// The versions already read, newest first: the list reads none of its own.
+#[cfg(any())] // AR-796 parked
 fn listed(shell: &Shell) -> &[VersionEntry] {
     shell.versions.page.as_ref().map_or(&[], |page| &page.versions)
 }
@@ -183,6 +196,8 @@ fn rows_of(versions: &[VersionEntry], branches: &[BranchEntry]) -> (usize, Optio
 }
 
 /// The row the keys are on in a select's open list; any list open holds the window's keys.
+#[cfg(any())] // AR-796 parked
+#[cfg(any())] // AR-796 parked
 pub(crate) fn highlight(shell: &Shell) -> Option<usize> {
     Some(row_of(&dropdown_of(shell)?.highlight, listed(shell), &others(shell)))
 }
@@ -208,6 +223,7 @@ pub(crate) fn keep(shell: &mut Shell) {
 }
 
 /// Opens the list of a side on the row it holds, or closes the list already open on that side.
+#[cfg(any())] // AR-796 parked
 fn toggle(shell: &mut Shell, after: bool) {
     let (versions, branches) = (listed(shell).to_vec(), others(shell));
     let Some(pair) = pair_mut(shell) else { return };
@@ -227,6 +243,7 @@ fn side_at(versions: &[VersionEntry], branches: &[BranchEntry], n: usize) -> Opt
 }
 
 /// Puts row `n` on the side the list was opened for and closes it.
+#[cfg(any())] // AR-796 parked
 fn pick(shell: &mut Shell, n: usize) {
     let side = side_at(listed(shell), &others(shell), n);
     if let (Some(pair), Some(side)) = (pair_mut(shell), side)
@@ -238,6 +255,8 @@ fn pick(shell: &mut Shell, n: usize) {
 
 /// The keys of an open list, before the window behind can read any of them: the arrows move, Enter
 /// or Space picks, and Esc or Tab closes it. Gives whether a list was open, keys or none.
+#[cfg(any())] // AR-796 parked
+#[cfg(any())] // AR-796 parked
 pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) -> bool {
     use egui::Key::{ArrowDown, ArrowUp, Enter, Escape, Space, Tab};
     let (versions, branches) = (listed(shell).to_vec(), others(shell));
@@ -264,6 +283,7 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) -> bool {
 /// The open list under the select `field`: This branch, current work and the versions read,
 /// reading on as its end comes into view, what could not be read, and Another branch with each
 /// other branch. `held` is the row marked.
+#[cfg(any())] // AR-796 parked
 fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, held: &Side, mut d: Dropdown) {
     let (versions, branches, clock) = (listed(shell).to_vec(), others(shell), crate::chat_panel::clock(shell));
     let ((rows, heading), failed) = (rows_of(&versions, &branches), shell.versions.more_failed.clone());
@@ -354,6 +374,7 @@ fn cut_note(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
 }
 
 /// Under the rows: that the next versions could not be read, why on hover, and Retry.
+#[cfg(any())] // AR-796 parked
 fn failure_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, why: &str) {
     let (words, label) = (tr("The next versions couldn't be read."), tr("Retry"));
     let width = (ux::galley(ui.painter(), &label, types::UI, p.text, None).size().x + 20.0).ceil();
@@ -368,6 +389,7 @@ fn failure_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, why: &str
 /// A select at `x` on the line `mid`, a press toggling its list: its label, then what it holds in a
 /// field `width` wide, the gap apart; `after` says which side. While open the select keeps the
 /// keyboard, asked for each frame, and Esc is kept from dropping it. Gives its field.
+#[cfg(any())] // AR-796 parked
 fn select(
     shell: &mut Shell,
     ui: &egui::Ui,

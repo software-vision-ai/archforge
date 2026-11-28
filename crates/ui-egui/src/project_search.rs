@@ -191,11 +191,11 @@ mod tests {
     fn the_index_finds_diagrams_and_elements_best_answers_first() {
         let mut s = session();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let schema = id(s.execute("er.schema.add", &json!({ "name": "shop" })).unwrap().value);
-        let order = id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Order" })).unwrap().value);
-        id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Customer_order" })).unwrap().value);
-        s.execute("er.attribute.add", &json!({ "entity": order, "name": "order_id", "type": "BIGINT" })).unwrap();
-        s.execute("diagram.add", &json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Orders" })).unwrap();
+        let schema = id(s.execute("sketch.package.add", &json!({ "name": "shop" })).unwrap().value);
+        let order = id(s.execute("sketch.class.add", &json!({ "package": schema, "name": "Order" })).unwrap().value);
+        id(s.execute("sketch.class.add", &json!({ "package": schema, "name": "Customer_order" })).unwrap().value);
+        s.execute("sketch.attribute.add", &json!({ "class": order, "name": "order_id" })).unwrap();
+        s.execute("diagram.add", &json!({ "kind": crate::tests::SKETCH, "element": schema, "name": "Orders" })).unwrap();
         let index = index(crate::tests::SCREENS.kinds(), crate::tests::SCREENS.notation_uis(), s.doc());
         let (diagrams, elements) = hits(&index, "order");
         assert_eq!(diagrams.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(), ["Orders"]);
@@ -212,13 +212,13 @@ mod tests {
     fn the_index_ignores_capitals_and_accents_and_keeps_the_best_answers_first() {
         let mut s = session();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let schema = id(s.execute("er.schema.add", &json!({ "name": "shop" })).unwrap().value);
-        let check = id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Prüfung" })).unwrap().value);
-        s.execute("er.entity.add", &json!({ "schema": schema, "name": "Kunde_prüfung" })).unwrap();
+        let schema = id(s.execute("sketch.package.add", &json!({ "name": "shop" })).unwrap().value);
+        let check = id(s.execute("sketch.class.add", &json!({ "package": schema, "name": "Prüfung" })).unwrap().value);
+        s.execute("sketch.class.add", &json!({ "package": schema, "name": "Kunde_prüfung" })).unwrap();
         for name in ["Bestellungen prüfen", "Straße"] {
-            s.execute("er.entity.add", &json!({ "schema": schema, "name": name })).unwrap();
+            s.execute("sketch.class.add", &json!({ "package": schema, "name": name })).unwrap();
         }
-        s.execute("er.attribute.add", &json!({ "entity": check, "name": "prüfung_id", "type": "BIGINT" })).unwrap();
+        s.execute("sketch.attribute.add", &json!({ "class": check, "name": "prüfung_id" })).unwrap();
         let index = index(crate::tests::SCREENS.kinds(), crate::tests::SCREENS.notation_uis(), s.doc());
         let labels = |query: &str| hits(&index, query).1.iter().map(|e| e.label.clone()).collect::<Vec<_>>();
         assert_eq!(labels("PRUFUNG"), ["Prüfung", "prüfung_id", "Kunde_prüfung"]);
@@ -229,7 +229,7 @@ mod tests {
         assert_eq!(labels("\u{200B} PRUFUNG"), ["Prüfung", "prüfung_id", "Kunde_prüfung"]);
         // A name past the row's cut is matched in full, its last letter's accent with it.
         let long = format!("{}Cafe\u{301}", "a".repeat(116));
-        s.execute("er.entity.add", &json!({ "schema": schema, "name": long })).unwrap();
+        s.execute("sketch.class.add", &json!({ "package": schema, "name": long })).unwrap();
         assert_eq!(hits(&super::index(crate::tests::SCREENS.kinds(), crate::tests::SCREENS.notation_uis(), s.doc()), "cafe").1.len(), 1);
     }
 

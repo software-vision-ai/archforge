@@ -14,6 +14,7 @@ use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::notation_ui::NotationUi;
 use crate::ux::{self, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// What the agent is asked for.

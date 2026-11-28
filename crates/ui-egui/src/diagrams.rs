@@ -27,6 +27,7 @@ use crate::home_search::Typed;
 use crate::i18n::tr;
 use crate::notation_ui::NotationUi;
 use crate::ux::{self, Palette, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 const FIRST_ROW: f32 = 119.0;
@@ -462,6 +463,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
 
 /// Draws the Diagrams explorer into `r`: the title with `+`, the filter field, the tree and the
 /// model behind the open diagram.
+#[cfg(any())] // AR-796 parked
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter().clone();
     let at = |x: f32, y: f32| r.min + vec2(x, y);
@@ -1099,6 +1101,7 @@ fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui:
 }
 
 /// A filled select showing `value`; a click opens or closes its menu.
+#[cfg(any())] // AR-796 parked
 fn select(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, id: &str, label: &str, value: &str, which: Field) -> Rect {
     let paint = ui.painter();
     ux::text(paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));

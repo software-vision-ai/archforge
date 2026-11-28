@@ -35,6 +35,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use archforge_mof::{Obj, Store, Uuid};
 use serde_json::Value;
 
+#[cfg(any())] // AR-796 parked
 use crate::Shell;
 use crate::ai_agents::{Provider, Readiness};
 use crate::chat::{ChatEvent, ChatFailure, ChatRefusal, ChatStart, FailureKind, TurnEnd};
@@ -1246,6 +1247,7 @@ fn from_stored(stored: Stored, spans: &BTreeMap<Uuid, Span>) -> Chat {
 
 /// Once per frame: takes in the agent's events for every project's conversation, the project's
 /// answers, and the moves of undo and redo over the turns of the project shown.
+#[cfg(any())] // AR-796 parked
 pub(crate) fn frame(shell: &mut Shell) {
     // The conversations let go of: their events are dropped until they have ended.
     let letting_go = std::mem::take(&mut shell.chats.letting_go);
@@ -1309,6 +1311,7 @@ pub(crate) fn frame(shell: &mut Shell) {
 
 /// The events of the conversation shown; a Codex turn that ends with an expired sign-in marks
 /// Codex's sign-in expired and reads it again.
+#[cfg(any())] // AR-796 parked
 fn events_shown(shell: &mut Shell) {
     let Some(key) = shell.chat_panel.chat.as_ref().map(|c| c.key.clone()) else { return };
     let events = crate::chat::take_events(shell, &key);
@@ -1477,6 +1480,7 @@ fn event(chat: &mut Chat, e: ChatEvent, session: Option<&mut archforge_notations
 /// Takes the project's answers: the step under way (the chips removed kept, then the question),
 /// the writes (a set of chips removed the project took becomes the one it holds; a refusal is said),
 /// the history and a conversation read back.
+#[cfg(any())] // AR-796 parked
 fn answers(shell: &mut Shell) {
     // The step of the conversation shown.
     let step = shell.chat_panel.chat.as_mut().map(|c| std::mem::take(&mut c.step));

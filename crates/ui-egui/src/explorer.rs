@@ -27,6 +27,7 @@ use crate::home_search::Typed;
 use crate::i18n::{fmt, tr, trn};
 use crate::notation_ui::{Added, NotationUi, Offer};
 use crate::ux::{self, Palette, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// The first row's name baseline, the pitch between rows, a row's hit height, the indent per level.
@@ -442,6 +443,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
 }
 
 /// Opens a folded row, folds an open one.
+#[cfg(any())] // AR-796 parked
 fn toggle(state: &mut State, row: &Row) {
     if row.expanded {
         state.expanded.remove(&row.id);
@@ -470,6 +472,7 @@ fn reveal(uis: &[&'static dyn NotationUi], state: &mut State, store: &Store, sel
 }
 
 /// Draws the Models explorer into `r`: the title with `+`, the filter field, the tree.
+#[cfg(any())] // AR-796 parked
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter().clone();
     let at = |x: f32, y: f32| r.min + vec2(x, y);
@@ -698,6 +701,7 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
 
 /// One row: its chevron, icon, name and type; a click selects, a second click on the name or
 /// Enter renames, the chevron folds.
+#[cfg(any())] // AR-796 parked
 fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: f32, row: &Row, is_selected: bool) {
     let paint = ui.painter().clone();
     let indent = row.depth as f32 * INDENT;

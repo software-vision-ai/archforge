@@ -6,6 +6,7 @@
 
 pub(crate) use archforge_shell_api::cx::{Ctx, CtxRef, Request};
 
+#[cfg(any())] // AR-796 parked
 use crate::Shell;
 
 impl Shell {

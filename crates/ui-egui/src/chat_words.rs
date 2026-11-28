@@ -307,6 +307,7 @@ pub fn verb(command: Option<&str>, changed_model: bool, status: ToolStatus) -> V
 /// A row's words: its label ("Read diagram Commerce", "Changed Customer", "Read 8 elements") and
 /// its detail ("2 lines", "description", "refused"), the elements counted as the notations `uis`
 /// count them.
+#[cfg(any())] // AR-796 parked
 pub fn tool_words(uis: &[&'static dyn NotationUi], facts: &ToolFacts) -> (String, Option<String>) {
     let detail_of = |d: Option<String>| match facts.status {
         ToolStatus::Done => d,
@@ -454,7 +455,7 @@ mod tests {
             tool_words(uis, &facts("engine.execute", Some("diagram.get"), false, diagram)),
             ("Read diagram Commerce".into(), Some("8 classes".into()))
         );
-        let mut listed = facts("engine.execute", Some("uml.class.list"), false, classes);
+        let mut listed = facts("engine.execute", Some("sketch.class.list"), false, classes);
         listed.detail = Some("descriptions".into());
         assert_eq!(tool_words(uis, &listed), ("Read 8 classes".into(), Some("descriptions".into())));
         let payment = vec![
@@ -468,7 +469,7 @@ mod tests {
         let mut changed = facts("engine.execute", Some("uml.class.set"), true, vec![at(1, AnchorRole::Target, "uml_class", "Customer")]);
         changed.detail = Some("description".into());
         assert_eq!(tool_words(uis, &changed), ("Changed Customer".into(), Some("description".into())));
-        let added = facts("engine.execute", Some("uml.class.add"), true, vec![at(1, AnchorRole::Target, "uml_class", "Invoice")]);
+        let added = facts("engine.execute", Some("sketch.class.add"), true, vec![at(1, AnchorRole::Target, "uml_class", "Invoice")]);
         assert_eq!(tool_words(uis, &added).0, "Added Invoice");
         let removed = facts("engine.execute", Some("er.entity.remove"), true, vec![at(1, AnchorRole::Target, "er_entity", "Tag")]);
         assert_eq!(tool_words(uis, &removed).0, "Removed Tag");
@@ -480,7 +481,7 @@ mod tests {
         assert_eq!(tool_words(uis, &failed).1.as_deref(), Some("failed"));
         assert_eq!(tool_words(uis, &facts("engine.undo", None, true, Vec::new())).0, "Undid a step");
         // More named than kept: the count in all.
-        let mut many = facts("engine.execute", Some("uml.class.list"), false, vec![at(1, AnchorRole::Read, "uml_class", "A")]);
+        let mut many = facts("engine.execute", Some("sketch.class.list"), false, vec![at(1, AnchorRole::Read, "uml_class", "A")]);
         many.element_count = Some(700);
         assert_eq!(tool_words(uis, &many).0, "Read 700 elements");
     }

@@ -12,10 +12,12 @@
 
 use egui::{Rect, Sense, Vec2, pos2, vec2};
 
+#[cfg(any())] // AR-796 parked
 use crate::home::{BAR, STRIP, control, title_strip};
 use crate::i18n::tr;
 use crate::state::{Explorer, Panel};
 use crate::ux::{self, Palette, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// The activity rail's width, the right rail's, the tab strip's and the status bar's heights.
@@ -110,6 +112,7 @@ fn room(w: f32) -> Option<f32> {
 
 /// Draws the workspace of the open project over the whole window, on the page colour of the
 /// shell's appearance.
+#[cfg(any())] // AR-796 parked
 pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let p = *ux::palette(shell.state.theme.is_dark());
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(p.page.into())).show(ui, |ui| {
@@ -167,6 +170,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
 
 /// The bar: the brand and the tabs (Home and the open projects) at the left; the search field,
 /// help and the avatar at the right. False when a tab was clicked (the frame ends).
+#[cfg(any())] // AR-796 parked
 fn bar_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> bool {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
@@ -534,6 +538,7 @@ fn agent_status(shell: &mut Shell, ui: &egui::Ui, p: &Palette, bar: Rect, right:
 }
 
 /// The status bar: what is true about the project at the left, where it lives at the right.
+#[cfg(any())] // AR-796 parked
 fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);

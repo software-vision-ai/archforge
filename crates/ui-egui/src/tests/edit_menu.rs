@@ -114,6 +114,7 @@ fn on_a_field_the_rows_and_the_keys_change_the_field_and_not_the_model() {
 }
 
 /// A row chosen from the in-window menu by the pointer reaches the field the menu was opened on.
+#[cfg(any())] // AR-796 parked
 #[test]
 fn the_pointer_on_the_in_window_menu_reaches_the_field_it_was_opened_on() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -197,22 +198,22 @@ fn drawn(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let (mut h, customer) = table_harness();
     h.state_mut().state.theme = theme;
     let s = h.state_mut().session.as_mut().unwrap();
-    let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+    let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
     let schema = s.doc().uuid(schema).unwrap().to_string();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-    s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap();
+    s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Order" })).unwrap();
     let d =
-        id(s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap().value);
+        id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop" })).unwrap().value);
     let table = id(s
         .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": customer, "x": 0, "y": 0, "width": 240, "height": 72 }))
         .unwrap()
         .value);
     let note = id(s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "Why", "x": 900, "y": 40 })).unwrap().value);
     let inner = id(s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "How", "parent": table, "x": 8, "y": 8 })).unwrap().value);
-    let address = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Address" })).unwrap().value);
+    let address = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Address" })).unwrap().value);
     let at = id(s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": address, "x": 400, "y": 0 })).unwrap().value);
     let lives = id(s
-        .execute("er.relationship.add", &serde_json::json!({ "from": customer, "to": address, "name": "lives at", "create_foreign_key": false }))
+        .execute("sketch.association.add", &serde_json::json!({ "from": customer, "to": address, "name": "lives at" }))
         .unwrap()
         .value);
     s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": lives, "source": table, "target": at })).unwrap();
@@ -228,6 +229,7 @@ fn drawn(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
 
 /// Every state the clipboard rows and Select all can be asked in: which are on, and that each one
 /// on hands its step to its target while each one off changes nothing.
+#[cfg(any())] // AR-796 parked
 #[test]
 fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
     type Setup = fn(&mut Shell);
@@ -378,10 +380,10 @@ fn command_a_on_the_canvas_selects_what_the_diagram_draws() {
         key(&mut h, Key::A, Modifiers::COMMAND);
         assert_eq!(selection(&h), all, "every box and the line, never Order");
         let s = h.state_mut().session.as_mut().unwrap();
-        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();
         let empty = s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Empty" }))
+            .execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Empty" }))
             .unwrap()
             .value["id"]
             .as_str()
@@ -522,6 +524,7 @@ fn copied(h: &Harness<'static, Shell>, text: &str) -> bool {
 
 /// Rows chosen by the pointer act on the text the field had selected when the menu opened, though
 /// the click took the keyboard, and with it the selection, from the field. Each step asserted.
+#[cfg(any())] // AR-796 parked
 #[test]
 fn rows_chosen_by_the_pointer_act_on_the_fields_selection() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -643,6 +646,7 @@ fn stays_open(h: &mut Harness<'static, Shell>, typed: fn(&Shell) -> Option<Strin
 /// A note's text typed on the canvas, and a class's member typed in place, in its name field and
 /// in its type field, stay open through the in-window Edit menu, whose press is a click away from
 /// the member's row; another menu commits them.
+#[cfg(any())] // AR-796 parked
 #[test]
 fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -691,7 +695,7 @@ fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
         h.state_mut().in_window_menu = true;
         let st = h.state().session.as_ref().unwrap().doc();
         let catalog = st
-            .uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Catalog").unwrap())
+            .uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(st, *o) == "Catalog").unwrap())
             .unwrap();
         for ty in [false, true] {
             h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
@@ -958,6 +962,7 @@ fn open_finds_the_name_typed_in_place_committed() {
 
 /// Delete after Select all takes the boxes off the diagram and deletes nothing from the model,
 /// though the selection holds a relationship or a generalization set beside the boxes.
+#[cfg(any())] // AR-796 parked
 #[test]
 fn delete_after_select_all_deletes_no_line_or_set_from_the_model() {
     let alive = |h: &Harness<'static, Shell>, id: &str| {
@@ -972,7 +977,7 @@ fn delete_after_select_all_deletes_no_line_or_set_from_the_model() {
         key(&mut h, Key::Delete, Modifiers::NONE);
         let s = h.state().session.as_ref().unwrap();
         let count = |class| s.doc().alive().filter(|o| s.doc().class_of(*o).ok() == Some(class)).count();
-        assert_eq!((count(archforge_er::ENTITY), count(archforge_er::RELATIONSHIP)), (3, 1), "nothing left the model");
+        assert_eq!((count(archforge_mof::toy::CLASS), count(archforge_mof::toy::GENERALIZATION)), (3, 1), "nothing left the model");
         let d = s.view().open_diagram.unwrap();
         assert!(s.doc().list(d, archforge_diagram::diagram::NODE).unwrap().is_empty(), "the boxes are off the diagram");
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));

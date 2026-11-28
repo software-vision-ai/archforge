@@ -14,6 +14,7 @@ use ux::Colour;
 
 use crate::i18n::tr;
 use crate::ux::{self, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 const WIDTH: f32 = 560.0;

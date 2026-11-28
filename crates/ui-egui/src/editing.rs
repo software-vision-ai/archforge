@@ -25,6 +25,7 @@ use crate::home::control;
 use crate::i18n::tr;
 use crate::notation_ui::{Layer, Overlaid};
 use crate::ux::{self, Palette, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// The least a node may be resized to: the diagram rule's.
@@ -148,6 +149,7 @@ fn handle_at(store: &Store, notations: &ProjectView, d: Obj, selection: &[Obj], 
 }
 
 /// The rectangle a resize by `corner` gives, in diagram units, never smaller than the rule's least.
+#[cfg(any())] // AR-796 parked
 fn resized(base: Rect, corner: Corner, delta: Vec2) -> Rect {
     let (mut min, mut max) = (base.min, base.max);
     match corner {
@@ -173,6 +175,7 @@ fn resized(base: Rect, corner: Corner, delta: Vec2) -> Rect {
 }
 
 /// The screen rectangles of the nodes a gesture moves or resizes, as the canvas previews them.
+#[cfg(any())] // AR-796 parked
 pub(crate) fn preview_rects(shell: &Shell, view: View, pointer: Option<Pos2>) -> BTreeMap<Uuid, Rect> {
     let mut out = BTreeMap::new();
     let (Some(store), Some(gesture), Some(pointer)) = (shell.session.as_ref().map(|s| s.doc()), shell.canvas.gesture.as_ref(), pointer) else {
@@ -207,6 +210,7 @@ pub(crate) fn preview_rects(shell: &Shell, view: View, pointer: Option<Pos2>) ->
 
 /// A label of the figures of no one node or line being dragged where no node holds it yet: the
 /// element it stands for and how far it moved.
+#[cfg(any())] // AR-796 parked
 pub(crate) fn label_preview(shell: &Shell, pointer: Option<Pos2>) -> Option<(Uuid, Vec2)> {
     match (shell.canvas.gesture.as_ref(), pointer.filter(|p| p.is_finite())) {
         (Some(Gesture::ExtraLabel { element, from, .. }), Some(at)) => Some((*element, at - *from)),
@@ -215,6 +219,7 @@ pub(crate) fn label_preview(shell: &Shell, pointer: Option<Pos2>) -> Option<(Uui
 }
 
 /// A cardinality text being dragged: its line, end and where its centre is now.
+#[cfg(any())] // AR-796 parked
 pub(crate) fn end_preview(shell: &Shell, pointer: Option<Pos2>) -> Option<(Uuid, u8, Pos2)> {
     match (shell.canvas.gesture.as_ref(), pointer.filter(|p| p.is_finite())) {
         (Some(Gesture::EndText { edge, end, from, centre, .. }), Some(at)) => Some((*edge, *end, *centre + (at - *from))),
@@ -223,6 +228,7 @@ pub(crate) fn end_preview(shell: &Shell, pointer: Option<Pos2>) -> Option<(Uuid,
 }
 
 /// A line whose segment is being slid: its route as it is now, in diagram units.
+#[cfg(any())] // AR-796 parked
 pub(crate) fn segment_preview(shell: &Shell, view: View, pointer: Option<Pos2>) -> Option<(Uuid, Vec<(f64, f64)>)> {
     match (shell.canvas.gesture.as_ref(), pointer.filter(|p| p.is_finite())) {
         (Some(Gesture::Segment { edge, index, route, from }), Some(at)) => Some((*edge, slid(route, *index, (at - *from) / view.zoom))),
@@ -232,6 +238,7 @@ pub(crate) fn segment_preview(shell: &Shell, view: View, pointer: Option<Pos2>) 
 
 /// The route with segment `k` slid across by `by`: a level segment up or down, an upright one left
 /// or right, its two corners with it.
+#[cfg(any())] // AR-796 parked
 fn slid(route: &[(f64, f64)], k: usize, by: Vec2) -> Vec<(f64, f64)> {
     let mut out = route.to_vec();
     if k + 1 >= out.len() {
@@ -966,6 +973,7 @@ fn commit_note(shell: &mut Shell) {
 /// The note's text typed in place: a field over the note; Cmd/Ctrl+Enter, exactly, or the keyboard
 /// leaving commits, though not for the in-window Edit menu, whose rows act on it; Escape closes, a
 /// refusal stays under it.
+#[cfg(any())] // AR-796 parked
 fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
     let paint = ui.painter().clone();
     let field = rect.shrink(6.0 * z);
@@ -1047,6 +1055,7 @@ pub(crate) fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
 /// Draws what sits over the diagram: the marquee, a selected node's adorners, the Arrange bar,
 /// the name typed in place and the element menu, with the notations' drafts, rows and menus each at
 /// its layer among them ([`crate::notation_ui::Layer`]); then reads the keys.
+#[cfg(any())] // AR-796 parked
 pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, view: View, d: Obj, overrides: &BTreeMap<Uuid, Rect>) {
     let paint = ui.painter().with_clip_rect(r);
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
@@ -1403,6 +1412,7 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
 /// The name typed in the node's header, or where a kind places it on a card the kind drew itself
 /// in the last frame: the design's tinted field over the name, the text selected when
 /// the element is new; Enter commits, Escape closes, a refusal stays under it.
+#[cfg(any())] // AR-796 parked
 fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
     let paint = ui.painter().clone();
     let placed = shell.canvas.rename.as_ref().and_then(|rn| {

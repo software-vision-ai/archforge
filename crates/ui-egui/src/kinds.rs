@@ -19,6 +19,7 @@ use archforge_mof::{Obj, Store};
 
 pub(crate) use archforge_shell_api::kinds::{DiagramKind, MenuRow, ModelRow, Press, ToolUse, diagram_icon};
 
+#[cfg(any())] // AR-796 parked
 use crate::Shell;
 
 /// The kind of the diagram `d`, when the shell knows it: asked of the shell's kinds.

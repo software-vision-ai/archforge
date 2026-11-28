@@ -320,12 +320,14 @@ impl State {
 }
 
 /// The host, when it runs conversations here.
+#[cfg(any())] // AR-796 parked
 fn host(shell: &crate::Shell) -> Option<Arc<dyn crate::ai_agents::AgentHost>> {
     shell.services.agents.clone().filter(|h| h.system() == crate::ai_agents::System::Supported)
 }
 
 /// Once per frame: connects the host's events to this window the first time (their wake repaints
 /// it), and takes in what the host sent.
+#[cfg(any())] // AR-796 parked
 pub(crate) fn frame(shell: &mut crate::Shell, ctx: &egui::Context) {
     let Some(host) = host(shell) else { return };
     if shell.chats.rx.is_none() {
@@ -338,6 +340,7 @@ pub(crate) fn frame(shell: &mut crate::Shell, ctx: &egui::Context) {
 }
 
 /// Takes in the host's events, at most [`PER_FRAME`] a frame.
+#[cfg(any())] // AR-796 parked
 fn poll(shell: &mut crate::Shell) {
     for _ in 0..PER_FRAME {
         let Some(rx) = &shell.chats.rx else { return };
@@ -394,6 +397,7 @@ fn drop_one(kept: &mut Kept) {
 /// Starts a conversation: checked here (its id, a duplicate, the cap),
 /// then asked of the host, which answers at once and reports the rest as events. A Codex
 /// conversation reads Codex's account the first time, as opening AI Agents does.
+#[cfg(any())] // AR-796 parked
 pub fn start(shell: &mut crate::Shell, request: ChatStart) -> Result<(), ChatRefusal> {
     check_id(&request.chat)?;
     let host = host(shell).ok_or(ChatRefusal::NotAvailable)?;
@@ -419,18 +423,21 @@ pub fn start(shell: &mut crate::Shell, request: ChatStart) -> Result<(), ChatRef
 }
 
 /// Sends the person's message to the running conversation `chat`.
+#[cfg(any())] // AR-796 parked
 pub fn send(shell: &crate::Shell, chat: &str, text: String) -> Result<(), ChatRefusal> {
     check_id(chat)?;
     host(shell).ok_or(ChatRefusal::NotAvailable)?.send(chat, text)
 }
 
 /// Stops the turn the conversation `chat` runs; the conversation stays up.
+#[cfg(any())] // AR-796 parked
 pub fn stop(shell: &crate::Shell, chat: &str) -> Result<(), ChatRefusal> {
     check_id(chat)?;
     host(shell).ok_or(ChatRefusal::NotAvailable)?.stop(chat)
 }
 
 /// Ends the conversation `chat`: its program stops and its agent access is given back.
+#[cfg(any())] // AR-796 parked
 pub fn end(shell: &crate::Shell, chat: &str) -> Result<(), ChatRefusal> {
     check_id(chat)?;
     host(shell).ok_or(ChatRefusal::NotAvailable)?.end(chat)
@@ -438,6 +445,7 @@ pub fn end(shell: &crate::Shell, chat: &str) -> Result<(), ChatRefusal> {
 
 /// Takes the events of `chat` waiting so far, oldest first; an ended conversation whose events are
 /// all taken is forgotten.
+#[cfg(any())] // AR-796 parked
 pub fn take_events(shell: &mut crate::Shell, chat: &str) -> Vec<ChatEvent> {
     let Some(kept) = shell.chats.kept.iter_mut().find(|k| k.chat == chat) else { return Vec::new() };
     let events = kept.events.drain(..).map(|(e, _)| e).collect();

@@ -14,10 +14,12 @@ use egui::{Pos2, Rect, Response, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use ux::Colour;
 
 use archforge_shell_api::panels::control_in;
+#[cfg(any())] // AR-796 parked
 pub(crate) use archforge_shell_api::panels::{Look, button_in, focus_ring, keyboard_last, note_keyboard};
 
 use crate::i18n::tr;
 use crate::ux::{self, Palette, icons, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 const WIDTH: f32 = 880.0;

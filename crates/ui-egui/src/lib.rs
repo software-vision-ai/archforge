@@ -232,6 +232,7 @@ pub struct BranchSwitch {
 }
 
 /// One branch of a project, as the Branches section lists it.
+#[cfg(any())] // AR-796 parked
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchEntry {
     /// The name as stored, which a switch asks for, and as shown.
@@ -828,6 +829,7 @@ fn kinds_of(refused: &archforge_notations::UnknownKinds) -> Vec<String> {
 /// Why a project, a branch or a version does not open when it holds diagrams of `kinds` Archforge
 /// does not support: one sentence that names the first few, each once and as stored, and says to
 /// create a new project. A kind left empty is not named.
+#[cfg(any())] // AR-796 parked
 pub fn unsupported_kinds(kinds: &[String]) -> String {
     let named = named_kinds(kinds.iter().map(String::as_str));
     if named.is_empty() {
@@ -859,6 +861,8 @@ pub struct Folder {
     pub label: String,
 }
 
+#[cfg(any())] // AR-796 parked
+#[cfg(any())] // AR-796 parked
 pub struct Shell {
     pub services: Services,
     pub state: UiState,
@@ -997,6 +1001,7 @@ pub(crate) fn typing_unkept(panels: &panels::State, canvas: &canvas::State) -> b
     panels::description_pending(panels) || !skill_tab::unkept(canvas).is_empty()
 }
 
+#[cfg(any())] // AR-796 parked
 impl Shell {
     /// A shell over the host's `services`, on Home, making its projects of the notations the app
     /// composed (`notations`), with the notations and the diagram kinds of the screens parts the app

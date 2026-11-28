@@ -11,6 +11,7 @@ use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::ux::{self, Palette, types};
+#[cfg(any())] // AR-796 parked
 use crate::{Shell, widgets};
 
 /// The question open over the window.
@@ -89,6 +90,7 @@ enum Answer {
 }
 
 /// Draws the question, when one is open, over everything, and acts on its answer.
+#[cfg(any())] // AR-796 parked
 pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let Some(ask) = shell.ask.clone() else { return };
     // The question belongs to a project still open; one gone takes it along.
