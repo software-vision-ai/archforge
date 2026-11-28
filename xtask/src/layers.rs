@@ -5,7 +5,9 @@
 //! checks toolkit crates against their minimum layer, refuses process and network crates as
 //! dependencies of the interface's crates (the shell, its interfaces and the notations' screens)
 //! and scans their sources for process and network code (`shell_io`), reports every violation and
-//! prints the table. Applications under `apps/` and the task runner are exempt.
+//! prints the table. Applications under `apps/` and the task runner are exempt from the layers. The
+//! notation rules (`notation_rules`), which hold for every crate, the applications included, run
+//! with it.
 
 use std::collections::BTreeMap;
 
@@ -124,11 +126,13 @@ fn is_toolkit(name: &str) -> bool {
     })
 }
 
-/// One package as the check sees it.
+/// One package as the check sees it: its short name, its class, its dependencies of every kind
+/// (each its short name and kind) and its folder from the workspace root.
 pub struct Package {
     pub short: String,
     pub class: Option<Class>,
     pub deps: Vec<(String, String)>,
+    pub dir: std::path::PathBuf,
 }
 
 /// Violations for the given packages (pure, so it is unit-tested without cargo).
@@ -187,6 +191,7 @@ pub fn packages() -> Result<Vec<Package>, String> {
         let name = p["name"].as_str().unwrap_or_default();
         let manifest = std::path::PathBuf::from(p["manifest_path"].as_str().unwrap_or_default());
         let rel = manifest.strip_prefix(&root).map(|r| r.to_path_buf()).unwrap_or(manifest);
+        let dir = rel.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
         let exempt = rel.starts_with("apps") || rel.starts_with("xtask");
         let short = name.strip_prefix(PREFIX).unwrap_or(name).to_string();
         let class = if exempt { Some(Class::Exempt) } else { class_of(&short) };
@@ -201,7 +206,7 @@ pub fn packages() -> Result<Vec<Package>, String> {
                 (dn.strip_prefix(PREFIX).unwrap_or(dn).to_string(), kind)
             })
             .collect();
-        result.push(Package { short, class, deps });
+        result.push(Package { short, class, deps, dir });
     }
     Ok(result)
 }
@@ -224,6 +229,8 @@ pub fn run() -> Result<(), String> {
     }
     let mut v = violations(&packages);
     v.extend(interface_findings(&util::root().join("crates"))?);
+    v.extend(crate::notation_rules::violations(&packages));
+    v.extend(crate::notation_rules::command_names(&util::root(), &packages)?);
     if v.is_empty() {
         println!("layers: {} crates, no violation", packages.len());
         Ok(())
@@ -241,7 +248,7 @@ mod tests {
 
     /// A package of the given class: the tests describe their own layers, not the repository's table.
     fn pkg(short: &str, class: Option<Class>, deps: &[(&str, &str)]) -> Package {
-        Package { short: short.into(), class, deps: deps.iter().map(|(a, b)| ((*a).into(), (*b).into())).collect() }
+        Package { short: short.into(), class, deps: deps.iter().map(|(a, b)| ((*a).into(), (*b).into())).collect(), dir: short.into() }
     }
 
     #[test]
