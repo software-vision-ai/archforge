@@ -330,7 +330,7 @@ fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
 #[test]
 fn each_kind_a_refusal_names_is_said_by_the_shell_or_one_notation() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
+    let _shell = archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     use archforge_ui_egui::i18n::{set_language, tr_ctx};
     let uis = SCREENS.notation_uis();
     let own = [("element", "an element"), ("constraint", "a constraint"), ("skill", "a skill")];
@@ -442,6 +442,24 @@ fn a_notation_s_state_answers_what_is_edited_held_set_aside_and_closed() {
     assert!(!states.editing());
 }
 
+/// A shell keeps the states of the notations whose screens parts it is given and of no other: given
+/// ER's part alone, ER keeps its state and UML keeps none; given UML's alone, the other way round.
+/// The shell's own test of the parts it is given, on the fake notation, cannot name ER or UML (ADR
+/// 0005), so this half of it is checked here, where both exist.
+#[test]
+fn a_shell_keeps_no_state_for_a_notation_whose_screens_part_it_is_not_given() {
+    static ER_ALONE: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[archforge_er_ui::ER]);
+    static UML_ALONE: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[archforge_uml_ui::UML]);
+    let shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &ER_ALONE);
+    let states = archforge_ui_egui::testing::notation_states_of(&shell);
+    assert!(er_state::er(states).is_some(), "ER keeps its state");
+    assert!(uml_state::uml(states).is_none(), "UML keeps no state when its part is not given");
+    let shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &UML_ALONE);
+    let states = archforge_ui_egui::testing::notation_states_of(&shell);
+    assert!(uml_state::uml(states).is_some(), "UML keeps its state");
+    assert!(er_state::er(states).is_none(), "ER keeps no state when its part is not given");
+}
+
 /// Only a notation's own menu that takes typing keeps the keys from the canvas and the Models tree:
 /// UML's Stereotypes picker does; another of its menus, or a menu of another owner under the
 /// picker's key, does not (AR-135, AR-787).
@@ -474,7 +492,7 @@ fn only_a_notation_s_typed_menu_takes_the_keys() {
 #[test]
 fn an_empty_name_is_refused_unless_the_rename_may_leave_it_unnamed() {
     archforge_ui_egui::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default(), &SCREENS);
+    let mut shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     for cmd in ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"] {
         assert!(
             !archforge_ui_egui::snapshot::cx(&mut shell, |cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, cmd, "  ")),
@@ -532,7 +550,7 @@ fn each_notation_answers_the_page_of_its_elements() {
         n += 1;
         archforge_mof::Uuid(n.to_le_bytes())
     });
-    let mut s = archforge_notations::new_project_session("P", ids).unwrap();
+    let mut s = archforge_notations::NOTATIONS.new_project_session("P", ids).unwrap();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
     let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
     let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
@@ -552,7 +570,7 @@ fn each_notation_answers_the_page_of_its_elements() {
 /// was given parts: ER's notation and kind, then UML's, each the part's own.
 #[test]
 fn the_apps_screens_parts_give_a_shell_er_then_uml() {
-    let shell = Shell::new(Services::default(), &SCREENS);
+    let shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     let metamodels = |uis: &[&dyn archforge_shell_api::notation_ui::NotationUi]| uis.iter().map(|ui| ui.metamodel()).collect::<Vec<_>>();
     assert_eq!(
         metamodels(archforge_ui_egui::testing::notation_uis(&shell)),
@@ -638,10 +656,10 @@ fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() 
     h.run();
     // Saved, closed and opened again in a new window with the same preferences: the same tabs,
     // the same diagram shown, panned and zoomed as it was, and nothing changed or undoable.
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let rows = std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap());
     let reopen = |state: archforge_ui_egui::state::UiState| {
-        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &archforge_notations::NOTATIONS, &SCREENS);
         shell.state = state;
         shell.open_project(archforge_ui_egui::Opened {
             name: "Commerce platform".into(),
@@ -846,9 +864,9 @@ fn a_project_saved_before_the_open_time_hooks_opens_to_the_same_model_and_boxes(
             archforge_mof::Uuid::v7(at, r)
         })
     };
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let snap = |s: &archforge_notations::Session| archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
-    let mut made = archforge_notations::new_project_session("Commerce platform", ids(1_761_670_700_000)).unwrap();
+    let mut made = archforge_notations::NOTATIONS.new_project_session("Commerce platform", ids(1_761_670_700_000)).unwrap();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
     let schema = id(made.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
     let account = id(made.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Account" })).unwrap().value);
@@ -860,20 +878,21 @@ fn a_project_saved_before_the_open_time_hooks_opens_to_the_same_model_and_boxes(
     made.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": account, "x": 0, "y": 0, "width": 240, "height": 72 }))
         .unwrap();
     // The packages as older projects saved them: at the top level, with no root package.
-    let older = archforge_notations::session_from_rows_repaired(&snap(&made), ids(1_761_670_710_000), |st| {
-        let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
-        for name in ["Commerce", "Billing"] {
-            let p = st.create(archforge_uml::PACKAGE).unwrap();
-            st.set(p, archforge_uml::named_element::NAME, archforge_mof::Value::str(name)).unwrap();
-            st.push(model, archforge_core::model::MEMBER, archforge_mof::Value::Ref(p)).unwrap();
-        }
-    })
-    .unwrap();
+    let older = archforge_notations::NOTATIONS
+        .session_from_rows_repaired(&snap(&made), ids(1_761_670_710_000), |st| {
+            let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+            for name in ["Commerce", "Billing"] {
+                let p = st.create(archforge_uml::PACKAGE).unwrap();
+                st.set(p, archforge_uml::named_element::NAME, archforge_mof::Value::str(name)).unwrap();
+                st.push(model, archforge_core::model::MEMBER, archforge_mof::Value::Ref(p)).unwrap();
+            }
+        })
+        .unwrap();
     let rows = snap(&older);
     // What the shell made of it before: the boxes fitted as the rows were read, then the root.
     // The shell's ids are the harness's, from the first.
     let shells = test_ids();
-    let mut before = archforge_notations::session_from_rows_repaired(&rows, Box::new(move || shells()), er_place::fit_tables).unwrap();
+    let mut before = archforge_notations::NOTATIONS.session_from_rows_repaired(&rows, Box::new(move || shells()), er_place::fit_tables).unwrap();
     before.execute("uml.model.root", &serde_json::json!({})).unwrap();
     let opened = archforge_ui_egui::Opened { model: Some(std::sync::Arc::new(rows)), ..commerce() };
     let (h, _host) = saving_harness(Some(opened), None);
@@ -1241,4 +1260,1259 @@ fn each_notations_figure_words_are_its_own() {
     assert!(archforge_er::figures::WORDS.iter().all(|w| er_ui::texts().any(|t| t == *w)));
     assert!(archforge_uml::WORDS.iter().all(|w| uml_ui::texts().any(|t| t == *w)));
     assert!(canvas_words().all(|t| t != "Entity · {schema}" && t != "Class · {package}"), "the canvas names neither");
+}
+
+/// Each notation answers for its own elements alone (AR-785): every class it creates is of its
+/// metamodel, so the kind words find it; a schema, a table and a class are what Generate can be
+/// about, a column and a package are not; and its limits are its commands'.
+#[test]
+fn each_notation_answers_the_words_and_limits_of_its_own_elements() {
+    use archforge_shell_api::notation_ui::NotationUi;
+    let uis = SCREENS.notation_uis();
+    archforge_ui_egui::i18n::set_language("en");
+    for ui in uis {
+        assert!(!ui.created_classes().is_empty());
+        for class in ui.created_classes() {
+            assert_eq!(class.metamodel(), ui.metamodel(), "{class:?} is not of the metamodel {}", ui.metamodel());
+        }
+    }
+    let (h, customer) = table_harness();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+    let schema = archforge_er::rules::schema_of(st, customer).unwrap();
+    let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
+    let er = er_ui::ErUi;
+    assert_eq!(er.scope_word(st, schema).as_deref(), Some("Schema"));
+    assert_eq!(er.scope_word(st, customer).as_deref(), Some("Table"));
+    assert_eq!(er.scope_word(st, email), None, "a column is no scope");
+    assert_eq!((er.name_limit(), er.description_limit()), (archforge_er::rules::MAX_NAME, archforge_er::rules::MAX_TEXT));
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "parent": root, "name": "sales" })).unwrap().value);
+        s.execute("uml.class.add", &serde_json::json!({ "package": sales, "name": "Party" })).unwrap();
+    }
+    let st = h.state().session.as_ref().unwrap().doc();
+    let o = |name: &str| st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap();
+    let uml = uml_ui::UmlUi;
+    assert_eq!(uml.scope_word(st, o("Party")).as_deref(), Some("Class"));
+    assert_eq!(uml.scope_word(st, o("sales")), None, "a package is no scope");
+    assert_eq!((uml.name_limit(), uml.description_limit()), (archforge_uml::commands::MAX_NAME, archforge_uml::descriptions::MAX_DESCRIPTION));
+}
+
+/// The notations the shell knows are never none (AR-785): a description field for an element no
+/// notation owns takes the most any of them takes, which is the 4096 characters every description
+/// field took before the notations said their own, never a fallback over an empty list.
+#[test]
+fn the_shell_knows_notations_and_their_longest_description_is_the_old_limit() {
+    let uis = SCREENS.notation_uis();
+    assert!(!uis.is_empty());
+    assert_eq!(uis.iter().map(|ui| ui.description_limit()).max(), Some(archforge_er::rules::MAX_TEXT));
+    assert_eq!(archforge_er::rules::MAX_TEXT, 4096);
+}
+
+/// Each notation the shell knows starts with a state of its own that nothing is open in, reached
+/// only as that notation's own type; a notation the shell does not know has none there. Every
+/// Properties editor card is named by its notation and its own name, so no two cards meet (AR-787).
+#[test]
+fn each_notation_starts_with_a_state_of_its_own_and_its_cards_are_its_own() {
+    use archforge_shell_api::notation_ui::NotationStates;
+    let uis = SCREENS.notation_uis();
+    let states = NotationStates::new(uis);
+    assert!(er_state::er(&states).is_some(), "ER keeps its own state");
+    assert!(uml_state::uml(&states).is_some(), "UML keeps its own state");
+    assert!(!states.editing() && !states.holds_keys(), "nothing is open in a fresh state");
+    let open = states.open_editors();
+    assert!(open.iter().all(|(_, editor)| editor.is_none()), "no editor is open in a fresh state");
+    let cards: Vec<_> = open.iter().map(|(card, _)| *card).collect();
+    let er_cards: Vec<_> = cards.iter().filter(|c| c.notation == archforge_er::INDEX).map(|c| c.card).collect();
+    let uml_cards: Vec<_> = cards.iter().filter(|c| c.notation == archforge_uml::INDEX).map(|c| c.card).collect();
+    assert_eq!(er_cards, ["column", "key", "check", "index", "type", "object"]);
+    assert_eq!(uml_cards, ["member", "constraint", "qualifier", "template", "profile", "nary-end"]);
+    assert_eq!(cards.len(), er_cards.len() + uml_cards.len(), "every card is ER's or UML's");
+    let sketch = NotationStates::new(ER_ALONE);
+    assert!(er_state::er(&sketch).is_some(), "the sketch shell knows ER");
+    assert!(uml_state::uml(&sketch).is_none(), "a notation the shell does not know keeps no state there");
+}
+
+/// A menu of the shell's one slot is its owner's alone: one of a kind shown per row is recognised
+/// whatever its row, and a menu of the same key under another owner, the shell or another
+/// notation, is never taken for it (AR-787).
+#[test]
+fn a_menu_is_recognised_only_by_its_owner_and_key() {
+    use archforge_ui_egui::panels::MenuId;
+    let (er, uml) = (archforge_er::INDEX, archforge_uml::INDEX);
+    let pair = er_state::menus::PAIR;
+    assert_eq!(pair.at(3).index_in(pair), Some(3), "a key pair's menu is ER's pair menu, by its row");
+    assert_eq!(pair.at(3), MenuId::of(er, "pair").at(3), "the row changes the index alone");
+    assert_eq!(MenuId::of(er, "points").index_in(pair), None, "another key of the same notation is another menu");
+    assert_eq!(MenuId::of(uml, "pair").at(3).index_in(pair), None, "the same key of another notation is another menu");
+    assert_eq!(MenuId::shell("pair").at(3).index_in(pair), None, "the same key of the shell is another menu");
+    assert_ne!(pair.at(1), pair.at(2), "two rows' menus are two menus");
+
+    let er_menus = {
+        use archforge_er_ui::snapshot::er_state::menus::*;
+        [
+            KIND,
+            POINTS,
+            PAIR,
+            ON_DELETE,
+            ON_UPDATE,
+            DEFERRABLE,
+            MATCH,
+            KEY_COLUMN,
+            GENERATION,
+            INDEX_COLUMN,
+            INDEX_NULLS,
+            TYPE_KIND,
+            COLUMN_TYPE,
+            SUBTYPE_ADD,
+            DISCRIMINATOR,
+            MAPPING,
+            OWNED_BY,
+        ]
+    };
+    let uml_menus = {
+        use uml_state::menus::*;
+        [
+            MEMBER_VISIBILITY,
+            MEMBER_TYPE,
+            PARAM_TYPE,
+            MEMBER_DEFAULT,
+            MEMBER_SUBSETS,
+            MEMBER_REDEFINES,
+            INLINE_TYPE,
+            END_AGGREGATION,
+            END_MULTIPLICITY,
+            END_DEFAULT,
+            END_SUBSETS,
+            END_REDEFINES,
+            QUALIFIER_TYPE,
+            TEMPLATE_KIND,
+            TEMPLATE_CONSTRAINT,
+            TEMPLATE_DEFAULT,
+            BINDING_BOUND,
+            BINDING_TEMPLATE,
+            BINDING_ARGUMENT,
+            NARY_END_TYPE,
+            NARY_END_MULTIPLICITY,
+            CLASS_OWNER,
+            NESTED_KIND,
+            PACKAGE_PARENT,
+            SET_MEMBER,
+            SET_JOIN,
+            CONSTRAINT_LANGUAGE,
+            CONSTRAINT_ELEMENT,
+            STEREOTYPE_PROFILE,
+            STEREOTYPE_EXTENDS,
+            EXTENSION_METACLASS,
+            APPLIED_PROFILE,
+            STEREOTYPE_PICK,
+            STEREOTYPE_VALUE,
+        ]
+    };
+    let shell_menus = archforge_ui_egui::testing::shell_menus();
+    for (owner, scope, menus) in [
+        ("ER", MenuId::of(er, "").scope, &er_menus[..]),
+        ("UML", MenuId::of(uml, "").scope, &uml_menus[..]),
+        ("the shell", MenuId::shell("").scope, &shell_menus[..]),
+    ] {
+        for (i, m) in menus.iter().enumerate() {
+            assert_eq!((m.scope, m.index), (scope, 0), "{owner}'s {} is {owner}'s, the first of its kind", m.key);
+            let twins: Vec<&str> = menus[..i].iter().filter(|o| o.index_in(*m).is_some()).map(|o| o.key).collect();
+            assert!(twins.is_empty(), "{owner}'s menu key {} names one menu, not {twins:?} too", m.key);
+        }
+    }
+}
+
+/// A notation's state belongs to its project, as the panels and the canvas do: a project opened
+/// beside another starts fresh, the one parked keeps its tools' kinds when shown again while its
+/// drawing under way ends, and a project opened after the last one closed starts fresh too (AR-787).
+#[test]
+fn a_notation_s_state_goes_with_its_project() {
+    use uml_classifier::Classifier;
+    let opened = |name: &str| archforge_ui_egui::Opened { name: name.into(), path: format!("/tmp/{name}.archforge").into(), ..Default::default() };
+    let mut shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
+    shell.open_project(opened("First"));
+    uml_of_mut(&mut shell).classifier = Classifier::Interface;
+    uml_of_mut(&mut shell).nary = Some(uml_nary::Nary::AddEnd { diagram: archforge_mof::Uuid([7; 16]), association: archforge_mof::Uuid([7; 16]) });
+    shell.open_project(opened("Second"));
+    assert_eq!(uml_of(&shell).classifier, Classifier::Class, "a project opened beside another starts fresh");
+    uml_of_mut(&mut shell).classifier = Classifier::DataType;
+    shell.activate(0);
+    assert_eq!(uml_of(&shell).classifier, Classifier::Interface, "the parked project keeps its own");
+    assert!(uml_of(&shell).nary.is_none(), "a drawing under way ended as its project was set aside");
+    shell.activate(1);
+    assert_eq!(uml_of(&shell).classifier, Classifier::DataType);
+    shell.close_project();
+    shell.close_project();
+    assert!(shell.tabs.is_empty(), "both closed");
+    shell.open_project(opened("Third"));
+    assert_eq!(uml_of(&shell).classifier, Classifier::Class, "a project opened after the last closed starts fresh");
+}
+
+/// What a notation keeps about an element goes when the element does, and stays while it is there:
+/// ER's editors, a role, the key card and the mapping offer once their table or schema is gone, and
+/// UML's row typed in place, profile editor, its refusal and an association's ends once their
+/// element is. A row typed in place is being edited and holds the canvas's keys (AR-787).
+#[test]
+fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
+    use archforge_er_ui::snapshot::er_objects::ObjectKind;
+    use archforge_er_ui::snapshot::er_types::TypeKind;
+    let (mut h, nodes) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let s = h.state_mut();
+    let session = s.session.as_mut().unwrap();
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let schema = id(session.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+    let table = id(session.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Customer" })).unwrap().value);
+    let store = session.doc();
+    let node = store.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
+    let class = store.uuid(store.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap();
+    assert!(
+        archforge_ui_egui::snapshot::cx(s, |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)),
+        "Catalog's card takes a row"
+    );
+    assert!(
+        archforge_ui_egui::snapshot::notation_states(s).editing() && archforge_ui_egui::snapshot::notation_states(s).holds_keys(),
+        "a row typed in place is edited and holds the keys"
+    );
+    archforge_ui_egui::snapshot::cx(s, |cx| er_table::open_column(cx, table, None));
+    archforge_ui_egui::snapshot::cx(s, |cx| er_keys::open(cx, table, None));
+    archforge_ui_egui::snapshot::cx(s, |cx| er_checks::open(cx, table, None));
+    archforge_ui_egui::snapshot::cx(s, |cx| er_indexes::open(cx, table, None));
+    archforge_ui_egui::snapshot::cx(s, |cx| er_types::open(cx, schema, TypeKind::Domain, None));
+    archforge_ui_egui::snapshot::cx(s, |cx| er_objects::open(cx, schema, ObjectKind::Sequence, None));
+    let er = er_of_mut(s);
+    er.role = Some(er_relation::RoleEdit { target: table, end: 0, text: "buyer".into() });
+    er.no_key_card = Some(table);
+    er.mapping = Some(er_connect::MappingOffer { relationship: table, name: "CustomerCustomer".into(), refused: None });
+    let modifiers = uml_relate::EndModifiers {
+        is_static: false,
+        default: String::new(),
+        derived: false,
+        read_only: false,
+        ordered: false,
+        unique: true,
+        subsets: Vec::new(),
+        redefines: Vec::new(),
+    };
+    let uml = uml_of_mut(s);
+    uml.profile_edit = Some(uml_profiles::ProfileEdit { owner: class, target: None, choice: String::new(), opened: true });
+    uml.profile_refused = Some(uml_profiles::ProfileRefusal { owner: class, why: "in use".into(), uses: Vec::new() });
+    uml.ends = Some(uml_relate::EndsEdit {
+        association: class,
+        role: Default::default(),
+        multiplicity: Default::default(),
+        written_role: Default::default(),
+        written: Default::default(),
+        refused: Default::default(),
+        role_tried: Default::default(),
+        modifiers: [modifiers.clone(), modifiers.clone()],
+        written_modifiers: [modifiers.clone(), modifiers],
+        modifier_refused: Default::default(),
+        modifiers_open: Default::default(),
+        modifiers_last: None,
+    });
+    let kept = |s: &Shell| {
+        let (er, uml) = (er_of(s), uml_of(s));
+        [
+            er.column.is_some(),
+            er.key.is_some(),
+            er.check.is_some(),
+            er.index.is_some(),
+            er.type_edit.is_some(),
+            er.object_edit.is_some(),
+            er.role.is_some(),
+            er.no_key_card.is_some(),
+            er.mapping.is_some(),
+            uml.inline.is_some(),
+            uml.profile_edit.is_some(),
+            uml.profile_refused.is_some(),
+            uml.ends.is_some(),
+        ]
+    };
+    let retain = archforge_ui_egui::testing::retain_valid;
+    retain(s);
+    assert_eq!(kept(s), [true; 13], "everything stays while its element is there");
+    let session = s.session.as_mut().unwrap();
+    session.execute("er.schema.remove", &serde_json::json!({ "schema": schema.to_string() })).unwrap();
+    session.execute("element.remove", &serde_json::json!({ "ids": [class.to_string()] })).unwrap();
+    retain(s);
+    assert_eq!(kept(s), [false; 13], "everything goes with its element");
+}
+
+/// Package navigation is UML's kind's (AR-788): before UML's kind draws a package's diagram it
+/// lands the entry still pending, at 100 % with the content centred, and after drawing it shows the
+/// path bar and gives the room it takes; ER's kind, which keeps the defaults, leaves the landing
+/// pending and the view as it is, draws no path bar and takes no room. In light and dark.
+#[test]
+fn package_navigation_is_umls_kinds_and_ers_does_none() {
+    use archforge_shell_api::kinds::DiagramKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (_, first, sales, sales_d) = first_and_sales(&mut h);
+        archforge_ui_egui::canvas::open(h.state_mut(), first);
+        h.run();
+        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_package_nav::enter(cx, sales, 0.0));
+        (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.5, egui::vec2(33.0, 44.0));
+        let shell = h.state_mut();
+        let d = shell.session.as_ref().unwrap().doc().by_uuid(sales_d).unwrap();
+        let p = archforge_ui_egui::ux::palette(theme == ThemeKind::Dark);
+        let view = |shell: &Shell| (shell.canvas.zoom, shell.canvas.pan, uml_of(shell).nav.centre);
+        archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
+            archforge_ui_egui::snapshot::cx(shell, |cx| er_kind::ErKind.before_draw(cx, ui, CANVAS, d))
+        });
+        assert_eq!(view(shell), (0.5, egui::vec2(33.0, 44.0), true), "{theme:?}: the default lands nothing");
+        archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
+            archforge_ui_egui::snapshot::cx(shell, |cx| uml_ui::UmlKind.before_draw(cx, ui, CANVAS, d))
+        });
+        assert_eq!(view(shell), (uml_package_nav::LANDING, egui::Vec2::ZERO, false), "{theme:?}: UML lands the entry");
+        let mut room = (0.0, 0.0);
+        let er = archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
+            room.0 = archforge_ui_egui::snapshot::cx(shell, |cx| er_kind::ErKind.after_draw(cx, ui, p, CANVAS, d))
+        });
+        let uml = archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
+            room.1 = archforge_ui_egui::snapshot::cx(shell, |cx| uml_ui::UmlKind.after_draw(cx, ui, p, CANVAS, d))
+        });
+        assert!(er.is_empty() && room.0 == 0.0, "{theme:?}: the default draws nothing: {er:?}");
+        assert!(uml.iter().any(|i| i == "workspace.canvas.path") && room.1 > 0.0, "{theme:?}: UML's path bar: {uml:?} {room:?}");
+    }
+}
+
+/// A package's card is drawn by the kind that draws packages whatever the scene's own kind: on a
+/// scene of UML's kind, of a kind that leaves the card to the canvas (ER's) and of no kind, its tab
+/// and thumbnail are drawn alike, as a stored project may put the card anywhere it opens; with no
+/// kind asked at all, the canvas's own card is all there is. In light and dark.
+#[test]
+fn a_package_card_is_drawn_by_the_kind_that_draws_packages_whatever_the_scenes_kind() {
+    let (mut h, top, _, card, _, _) = package_preview_harness(ThemeKind::Light);
+    let session = h.state_mut().session.take().unwrap();
+    drop(h);
+    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
+    let (tab, preview) = (format!("workspace.canvas.node.{card}.tab"), format!("workspace.canvas.node.{card}.preview"));
+    let uml: &'static dyn archforge_shell_api::kinds::DiagramKind = &uml_ui::UmlKind;
+    let er: &'static dyn archforge_shell_api::kinds::DiagramKind = &er_kind::ErKind;
+    for dark in [false, true] {
+        for scene in [Some(uml), Some(er), None] {
+            let (texts, at, _) =
+                archforge_ui_egui::testing::drawn_alone_at(&session, &top.to_string(), (scene, SCREENS.kinds()), dark, 1000.0, &none, &clean);
+            let ids: Vec<&String> = at.iter().map(|(i, _)| i).collect();
+            let named = scene.map(|k| k.kind());
+            assert!(ids.contains(&&tab) && ids.contains(&&preview), "{dark} {named:?}: the package's card: {ids:?}");
+            assert!(texts.iter().any(|t| t == "Sales"), "{dark} {named:?}: its name in its tab");
+        }
+        let (_, at, _) = archforge_ui_egui::testing::drawn_alone_at(&session, &top.to_string(), (None, &[]), dark, 1000.0, &none, &clean);
+        assert!(at.iter().all(|(i, _)| *i != tab && *i != preview), "{dark}: the canvas's own card, no tab: {at:?}");
+        assert!(at.iter().any(|(i, _)| *i == format!("workspace.canvas.node.{card}")), "{dark}: the card still drawn");
+    }
+}
+
+/// What each notation draws over the canvas goes at its own layer (AR-789): ER's mapping table
+/// offer over the fade, under the toast, and nothing at the drafts, rows and menus; UML, with
+/// nothing of its own open, draws nothing at any layer. In light and dark.
+#[test]
+fn ers_overlay_is_its_mapping_offer_at_the_offers_layer() {
+    use archforge_shell_api::notation_ui::Layer;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let rel = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
+        };
+        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| er_connect::offer_mapping(cx, rel));
+        let (shapes, ids) = overlaid(&mut h, &er_ui::ErUi, Layer::Offers);
+        assert!(shapes > 0 && ids.iter().any(|i| i == "workspace.mapping.name"), "{theme:?}: the offer, {ids:?}");
+        for layer in [Layer::Drafts, Layer::Rows, Layer::Menus] {
+            assert_eq!(overlaid(&mut h, &er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
+        }
+        for layer in [Layer::Drafts, Layer::Rows, Layer::Menus, Layer::Offers] {
+            assert_eq!(overlaid(&mut h, &uml_ui::UmlUi, layer), (0, Vec::new()), "{theme:?}: UML draws nothing at {layer:?}");
+        }
+        assert!(er_of(h.state()).mapping.is_some(), "{theme:?}: the offer is still open");
+    }
+}
+
+/// What UML draws over the canvas goes at its own layers (AR-789): a template binding's draft at
+/// the drafts, a member typed in place on its card at the rows, the menu of generalization lines at
+/// the menus, each at that layer alone, and nothing at the offers; ER, with nothing of its own open,
+/// draws nothing at any layer. In light and dark.
+#[test]
+fn umls_overlays_go_at_their_layers() {
+    use archforge_shell_api::notation_ui::Layer;
+    let all = [Layer::Drafts, Layer::Rows, Layer::Menus, Layer::Offers];
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        // A binding drawn and not applied: its draft's dashed line, which records no control.
+        let (mut h, _, (from, to)) = binding_sample(theme);
+        uml_of_mut(h.state_mut()).relation = uml_relate::Relate::TemplateBinding;
+        let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
+        archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_relate::connect(cx, d, from, to));
+        h.run();
+        for layer in all {
+            let (shapes, ids) = overlaid(&mut h, &uml_ui::UmlUi, layer);
+            assert_eq!(shapes > 0, layer == Layer::Drafts, "{theme:?}: the draft is drawn at {layer:?} alone");
+            assert!(ids.is_empty(), "{theme:?}: {layer:?} {ids:?}");
+            assert_eq!(overlaid(&mut h, &er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
+        }
+        // A member typed on Catalog's card, and the menu of three selected generalization lines.
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::put_payment_kinds).unwrap();
+        let class = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let node = st.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
+            st.uuid(st.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap()
+        };
+        assert!(
+            archforge_ui_egui::snapshot::cx(h.state_mut(), |cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)),
+            "{theme:?}: the row opens"
+        );
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
+        h.run();
+        uml_of_mut(h.state_mut()).line_menu = Some(rect_of(&h, "workspace.canvas").center());
+        for layer in all {
+            let (_, ids) = overlaid(&mut h, &uml_ui::UmlUi, layer);
+            let row = ids.iter().any(|i| i.starts_with("workspace.canvas.member."));
+            let menu = ids.iter().any(|i| i.starts_with("workspace.canvas.contextMenu"));
+            assert_eq!((row, menu), (layer == Layer::Rows, layer == Layer::Menus), "{theme:?}: at {layer:?}, {ids:?}");
+            assert_eq!(overlaid(&mut h, &er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
+        }
+    }
+}
+
+/// The canvas starts each line where the diagram's kind says (AR-788): drawn with UML's kind, an
+/// n-ary association's legs that leave the diamond's node away from a corner reach on to its outline, so each leg's drawn
+/// extent holds the one drawn with ER's kind, which starts lines at the node's border, and at least
+/// one leg reaches further. In light and dark.
+#[test]
+fn the_canvas_starts_n_ary_legs_where_umls_kind_says() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    let mut session = h.state_mut().session.take().unwrap();
+    drop(h);
+    // Customer moves under the diamond beside Catalog: their two legs share the diamond's lower
+    // side, spread along it, so they leave its node away from the diamond's corner.
+    session.execute("diagram.move", &serde_json::json!({ "nodes": [ids["customer"]], "dx": 0.0, "dy": 480.0 })).unwrap();
+    let legs: Vec<String> = {
+        let st = session.doc();
+        let diamond = st.by_uuid(archforge_mof::Uuid::parse(&ids["diamond"]).unwrap()).unwrap();
+        let d = st.by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
+        st.list(d, archforge_diagram::diagram::EDGE)
+            .unwrap()
+            .into_iter()
+            .filter_map(|v| v.as_ref())
+            .filter(|e| st.get(*e, archforge_diagram::edge::SOURCE).ok().and_then(|v| v.as_ref()) == Some(diamond))
+            .map(|e| format!("workspace.canvas.edge.{}", st.uuid(e).unwrap()))
+            .collect()
+    };
+    assert_eq!(legs.len(), 3, "three legs");
+    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
+    for dark in [false, true] {
+        let leg_rects = |kind: &'static dyn archforge_shell_api::kinds::DiagramKind| {
+            let (_, at, _) =
+                archforge_ui_egui::testing::drawn_alone_at(&session, &ids["diagram"], (Some(kind), SCREENS.kinds()), dark, 1000.0, &none, &clean);
+            legs.iter().map(|l| at.iter().find(|(id, _)| id == l).map(|(_, r)| *r).unwrap()).collect::<Vec<_>>()
+        };
+        let (uml, er) = (leg_rects(&uml_ui::UmlKind), leg_rects(&er_kind::ErKind));
+        assert!(uml.iter().zip(&er).all(|(u, e)| u.contains_rect(*e)), "{dark}: {uml:?} hold {er:?}");
+        assert!(uml.iter().zip(&er).any(|(u, e)| u != e), "{dark}: a leg reaches on to the diamond: {uml:?} {er:?}");
+    }
+}
+
+/// The n-ary hint bar is its diagram's kind's (AR-788): with an n-ary association being drawn, UML's
+/// kind draws it at the canvas's top; ER's kind, which keeps the default, draws none in the same
+/// state. In light and dark.
+#[test]
+fn the_n_ary_hint_bar_is_umls_kinds_and_ers_draws_none() {
+    use archforge_shell_api::kinds::DiagramKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, false);
+        arm_nary(&mut h);
+        let at = card(&h, &ids["customer"]);
+        click(&mut h, at);
+        let hinted = |kind: &dyn DiagramKind, shell: &mut Shell| {
+            let p = archforge_ui_egui::ux::palette(theme == ThemeKind::Dark);
+            let ids = archforge_ui_egui::testing::recorded_alone(shell, |shell, ui| {
+                archforge_ui_egui::snapshot::cx(shell, |cx| kind.hint_bar(cx, ui, p, CANVAS, 0.0))
+            });
+            ids.iter().any(|i| i == "workspace.canvas.gestureHint")
+        };
+        assert!(hinted(&uml_ui::UmlKind, h.state_mut()), "{theme:?}: UML's kind draws the hint");
+        assert!(!hinted(&er_kind::ErKind, h.state_mut()), "{theme:?}: the default draws none");
+    }
+}
+
+/// What goes with a removal and what keeps one from happening name an element without a name by its
+/// kind as the notations the shell registered name it, not the app's own list: deleting a class
+/// says that «Trace» on its unnamed association goes with it, and removing the stereotype Trace is
+/// refused for that use, each asked of the class's or the stereotype's notation as the delete
+/// dialog and Models ask, in the worded notation's word when it is registered first and in UML's
+/// otherwise.
+#[test]
+fn what_goes_with_a_removal_is_worded_by_the_notations_the_shell_registered() {
+    use serde_json::json;
+    archforge_ui_egui::i18n::set_language("en");
+    let mut s = archforge_notations::NOTATIONS
+        .new_project_session(
+            "Shop",
+            Box::new({
+                let ids = test_ids();
+                move || ids()
+            }),
+        )
+        .unwrap();
+    let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
+    let commerce = run("uml.package.add", json!({ "name": "Commerce" }));
+    let order = run("uml.class.add", json!({ "package": commerce, "name": "Order" }));
+    let customer = run("uml.class.add", json!({ "package": commerce, "name": "Customer" }));
+    let audit = run("uml.profile.add", json!({ "name": "Audit" }));
+    let trace = run("uml.stereotype.add", json!({ "profile": audit, "name": "Trace", "extends": ["Association"] }));
+    run("uml.profile.apply", json!({ "package": commerce, "profile": audit }));
+    let link = run("uml.association.add", json!({ "from": order, "to": customer }));
+    s.execute("uml.stereotype.apply", &json!({ "element": link, "stereotype": trace })).unwrap();
+    let st = s.doc();
+    let at = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+    let (order, trace) = (at(&order), at(&trace));
+    let mut shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
+    let worded = |shell: &Shell| {
+        let uis = archforge_ui_egui::testing::notation_uis(shell);
+        let along = archforge_shell_api::notation_ui::of(uis, st, order).map(|ui| ui.consequences(uis, st, order)).unwrap_or_default();
+        let refused = archforge_shell_api::notation_ui::of(uis, st, trace).and_then(|ui| ui.remove_refusal(uis, st, trace));
+        (along, refused)
+    };
+    let said = |what: &str| {
+        let along = vec!["1 relationship goes with it.".to_string(), format!("1 stereotype application goes with it: «Trace» on {what}.")];
+        (along, Some(format!("Trace is in use: «Trace» on {what}. Remove those first.")))
+    };
+    assert_eq!(worded(&shell), said("an association"), "the app's notations");
+    archforge_ui_egui::testing::set_notation_uis(&mut shell, WORDS_UIS);
+    assert_eq!(worded(&shell), said(WORDED_ASSOCIATION), "the worded notation first");
+}
+
+/// A diagram's kind draws its own figures beyond what the notations describe (AR-788): UML's kind
+/// draws an association class's tie to its card, its name at its line's middle on a diagram without
+/// the card, and a generalization set's line and label across its member's line; ER's kind, which
+/// keeps the defaults, draws none of them on the same diagram, while the lines and cards stay. In
+/// light and dark.
+#[test]
+fn a_diagrams_kind_draws_its_own_figures_and_ers_draws_none() {
+    use archforge_er_ui::snapshot::er_kind::ErKind;
+    use uml_ui::UmlKind;
+    let mut r = reviews(ThemeKind::Light);
+    let (_, edge, card) = r.review();
+    let (d, customer, package) = (r.diagram.clone(), r.ids["Customer"].clone(), r.package.clone());
+    let s = r.h.state_mut().session.as_mut().unwrap();
+    let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+    let member = run("uml.class.add", serde_json::json!({ "package": package, "name": "Member" }));
+    run("diagram.place", serde_json::json!({ "diagram": d, "element": member, "x": 80, "y": 160, "width": 240, "height": 136 }));
+    let g = run("uml.generalization.add", serde_json::json!({ "specific": member, "general": customer }));
+    run("diagram.connect-all", serde_json::json!({ "diagram": d }));
+    let set = run("uml.generalization-set.add", serde_json::json!({ "generalizations": [g], "name": "Kinds" }));
+    let mut session = r.h.state_mut().session.take().unwrap();
+    drop(r);
+    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
+    let (tie, name) = (format!("workspace.canvas.edge.{edge}.tie"), format!("workspace.canvas.edge.{edge}.name"));
+    let sets = [format!("workspace.canvas.generalizationSet.{set}"), format!("workspace.canvas.generalizationSet.{set}.line")];
+    for dark in [false, true] {
+        let (texts, uml, _) = drawn_alone(&session, &d, Some(&UmlKind), dark, 1000.0, &none, &clean);
+        assert!(uml.contains(&tie) && !uml.contains(&name), "{dark}: UML ties the line to its card: {uml:?}");
+        assert!(sets.iter().all(|i| uml.contains(i)) && texts.iter().any(|t| t == "Kinds"), "{dark}: UML draws the set: {uml:?}");
+        let (texts, er, _) = drawn_alone(&session, &d, Some(&ErKind), dark, 1000.0, &none, &clean);
+        assert!(!er.contains(&tie) && !er.contains(&name) && sets.iter().all(|i| !er.contains(i)), "{dark}: the default draws none: {er:?}");
+        assert!(!texts.iter().any(|t| t == "Kinds"), "{dark}: no set label: {texts:?}");
+        assert!(er.contains(&format!("workspace.canvas.edge.{edge}")) && texts.iter().any(|t| t == "Review"), "{dark}: the line and card stay");
+    }
+    // Without its card the line goes too, and comes back alone.
+    session.execute("diagram.unplace", &serde_json::json!({ "nodes": [card] })).unwrap();
+    session.execute("diagram.connect-all", &serde_json::json!({ "diagram": d })).unwrap();
+    let (tie, name) = {
+        let st = session.doc();
+        let ac = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION_CLASS)).unwrap();
+        let edge = st.uuid(archforge_diagram::views_of(st, ac).1[0]).unwrap();
+        (format!("workspace.canvas.edge.{edge}.tie"), format!("workspace.canvas.edge.{edge}.name"))
+    };
+    for dark in [false, true] {
+        let (_, uml, _) = drawn_alone(&session, &d, Some(&UmlKind), dark, 1000.0, &none, &clean);
+        assert!(uml.contains(&name) && !uml.contains(&tie), "{dark}: UML names the line without its card: {uml:?}");
+        let (texts, er, _) = drawn_alone(&session, &d, Some(&ErKind), dark, 1000.0, &none, &clean);
+        assert!(!er.contains(&name) && !texts.iter().any(|t| t == "Review"), "{dark}: the default names nothing: {texts:?}");
+    }
+}
+
+/// Each refusal belongs to one notation (AR-786): no typed reason, no reason a command is not
+/// available, in a project without a model root or in a new one, and no rename command that may
+/// leave its element unnamed is claimed by two of the registered notations. Some notation claims at
+/// least one of each of the three, so the samples reach the hooks.
+#[test]
+fn no_two_notations_claim_the_same_refusal() {
+    use archforge_shell_api::notation_ui::NotationUi;
+    let uis = SCREENS.notation_uis();
+    archforge_ui_egui::i18n::set_language("en");
+    let claimants = |claims: &dyn Fn(&dyn NotationUi) -> bool| uis.iter().filter(|ui| claims(**ui)).map(|ui| ui.metamodel()).collect::<Vec<_>>();
+    let mut claimed = [0; 3];
+    for reason in every_reason() {
+        let by = claimants(&|ui| ui.said(uis, &reason).is_some());
+        assert!(by.len() <= 1, "{reason:?} is said by the notations of the metamodels {by:?}");
+        claimed[0] += by.len();
+    }
+    let ids = || {
+        let mut n: u128 = 0;
+        Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        })
+    };
+    let rootless = archforge_notations::NOTATIONS.store(ids()).unwrap();
+    let options = archforge_engine::Options::default();
+    let rootless = archforge_engine::Session::with_view(
+        archforge_notations::NOTATIONS.registry().unwrap(),
+        rootless,
+        1,
+        options,
+        archforge_notations::NOTATIONS.view(),
+    );
+    let new = archforge_notations::NOTATIONS.new_project_session("Shop", ids()).unwrap();
+    for info in [&rootless, &new].into_iter().flat_map(|session| session.registry().infos(&session.facts())) {
+        if let Some(reason) = info.disabled_reason {
+            let by = claimants(&|ui| ui.disabled(reason).is_some());
+            assert!(by.len() <= 1, "{reason:?} is said by the notations of the metamodels {by:?}");
+            claimed[1] += by.len();
+        }
+        let by = claimants(&|ui| ui.may_be_unnamed(info.id));
+        assert!(by.len() <= 1, "{} may leave its element unnamed for the notations of the metamodels {by:?}", info.id);
+        claimed[2] += by.len();
+    }
+    assert!(claimed.iter().all(|n| *n > 0), "claims of typed reasons, reasons not available and renames: {claimed:?}");
+}
+
+/// In a narrow window, New diagram's kind cards stand one above the other.
+#[test]
+fn in_a_narrow_window_the_kinds_cards_stand_one_above_the_other() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(520.0, 900.0));
+    h.state_mut().state.explorer_collapsed = true;
+    h.run();
+    archforge_ui_egui::diagrams::open_new(h.state_mut());
+    h.run();
+    let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.structure"));
+    assert!(er.bottom() < class.top() && (er.left() - class.left()).abs() < 0.5, "{er:?} {class:?}");
+    let window = h.ctx.content_rect();
+    assert!(window.contains_rect(er) && window.contains_rect(class), "both fit");
+}
+
+/// New diagram's two steps, in light and dark: the cards, their names and the title read out
+/// (AR-554), the arrow keys, Back, Cancel, a refused name and a group's `+`.
+#[test]
+fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_typed() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let elements = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().alive().count();
+        let before = elements(&h);
+        let step = |h: &Harness<'static, Shell>| h.state().diagrams.new.as_ref().map(|n| n.step);
+        // Step 1: a card for each kind, side by side, the first chosen.
+        let at = rect_of(&h, "workspace.tabs.add").center();
+        click(&mut h, at);
+        assert_eq!(step(&h), Some(archforge_ui_egui::diagrams::Step::Kind));
+        let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.structure"));
+        assert!(er.right() < class.left() && (er.top() - class.top()).abs() < 0.5, "{theme:?}: side by side");
+        assert!(er.width() >= 240.0, "{theme:?}: room for the card to read");
+        assert!(painted(&h).iter().any(|t| t == "Step 1 of 2 · Choose what the diagram shows"));
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
+        // The UML structure diagram's card: its name and what it shows painted, its name read out
+        // as the choice's; the dialog's title read out as its heading (AR-554).
+        let found = painted(&h);
+        let said = "Classes, packages and the relationships between them.";
+        assert!(found.iter().any(|t| t == "UML structure diagram") && found.iter().any(|t| t == said), "{theme:?}: {found:?}");
+        assert_eq!(h.get_by_label("UML structure diagram").accesskit_node().role(), egui::accesskit::Role::RadioButton, "{theme:?}");
+        assert_eq!(headings(&h), ["New diagram"], "{theme:?}");
+        // Found where it is painted: over the painted title, above the cards, from their left edge.
+        let title = h.get_by_role_and_label(egui::accesskit::Role::Heading, "New diagram").accesskit_node().bounding_box().expect("bounds");
+        let shown = painted_at(&h, "New diagram").expect("the title painted").center();
+        assert!(title.contains(egui::accesskit::Point::new(shown.x.into(), shown.y.into())), "{theme:?}: {title:?} over {shown:?}");
+        assert!((title.x0 as f32 - er.left()).abs() < 0.5 && title.y1 as f32 <= er.top(), "{theme:?}: {title:?}");
+        // The arrow keys move the choice; the name the dialog gave follows the kind.
+        key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
+        key(&mut h, egui::Key::ArrowLeft, egui::Modifiers::NONE);
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
+        // Cancel makes nothing.
+        let at = rect_of(&h, "workspace.new-diagram.cancel").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.is_none());
+        assert_eq!(elements(&h), before, "{theme:?}: nothing made");
+        // The class card, then Enter: its details, the root package named after the project.
+        let at = rect_of(&h, "workspace.tabs.add").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(step(&h), Some(archforge_ui_egui::diagrams::Step::Details));
+        let found = painted(&h);
+        assert!(found.iter().any(|t| t == "New UML structure diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
+        assert_eq!(headings(&h), ["New UML structure diagram"], "{theme:?}: the title read out");
+        // A name typed survives Back and another kind; an empty name is refused, and Back clears it.
+        h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
+        h.run();
+        let at = rect_of(&h, "workspace.new-diagram.back").center();
+        click(&mut h, at);
+        assert_eq!(step(&h), Some(archforge_ui_egui::diagrams::Step::Kind));
+        let at = rect_of(&h, "workspace.new-diagram.type.er").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.new-diagram.continue").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.kind, n.name.as_str())), Some((archforge_er::DIAGRAM_KIND, "Domain")));
+        h.state_mut().diagrams.new.as_mut().unwrap().name = "  ".into();
+        let at = rect_of(&h, "workspace.new-diagram.create").center();
+        click(&mut h, at);
+        let refused = h.state().diagrams.new.as_ref().and_then(|n| n.refused.clone()).expect("the empty name is refused");
+        read_out(&h, &refused, "workspace.new-diagram.notice");
+        assert_eq!(elements(&h), before, "{theme:?}: a refusal makes nothing, no schema either");
+        let at = rect_of(&h, "workspace.new-diagram.back").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_none()));
+        assert!(egui_kittest::kittest::Queryable::query_by_label(&h, &refused).is_none(), "{theme:?}: no longer read out");
+        // A double click on a card goes straight on; Create opens the diagram in its group.
+        let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
+        // Past egui's double-click window, so the clicks before don't count with these two.
+        for _ in 0..40 {
+            h.step();
+        }
+        double_click(&mut h, at);
+        assert_eq!(step(&h), Some(archforge_ui_egui::diagrams::Step::Details));
+        h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
+        let at = rect_of(&h, "workspace.new-diagram.create").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.is_none());
+        let at = rect_of(&h, "workspace.explorers.diagrams").center();
+        click(&mut h, at);
+        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+        assert_eq!(diagram_rows(&h), [row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 1), row(1, "Domain", 0)]);
+        assert!(h.state().canvas.active.is_some(), "it opens at once");
+        // A group's + has chosen the kind: the dialog opens on the details, Back before them.
+        let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
+        click(&mut h, at);
+        assert_eq!(
+            h.state().diagrams.new.as_ref().map(|n| (n.step, n.kind)),
+            Some((archforge_ui_egui::diagrams::Step::Details, archforge_er::DIAGRAM_KIND))
+        );
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().diagrams.new.is_none());
+    }
+}
+
+/// A diagram a binding keeps as its element's default is said by the notation whose diagrams take
+/// one, among the notations the shell is handed: UML's, of a package and its class diagrams. The
+/// shell has no words of its own for it, so among notations whose diagrams take none, or none at
+/// all, nothing says it.
+#[test]
+fn a_kept_default_diagram_is_said_by_the_notations_handed() {
+    use archforge_engine::{BindingFault, Reason};
+    archforge_ui_egui::i18n::set_language("en");
+    let kept = |fault| Reason::DefaultDiagramOf { package: "Sales".into(), fault };
+    let own = "This diagram is the default diagram of Sales. Choose another class diagram as the default of Sales first.";
+    assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &kept(None)).as_deref(), Some(own));
+    let foreign = "Sales has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.";
+    assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &kept(Some(BindingFault::WrongOwner))).as_deref(), Some(foreign));
+    for fault in [None, Some(BindingFault::WrongOwner)] {
+        assert_eq!(archforge_shell_api::panels::said(ER_ALONE, &kept(fault)), None, "{fault:?}: ER and the sketch take no default diagram");
+        assert_eq!(archforge_shell_api::panels::said(&[], &kept(fault)), None, "{fault:?}: the shell alone has no words for it");
+    }
+}
+
+/// What a skill aims at is said by the notation the shell registered for its kind, not the app's
+/// own list: over the app's notations each of ER's and UML's kinds in its notation's words, a
+/// column's type pattern in place of its word and a skill that names no kind with nothing; over ER
+/// alone, for every kind of UML's, which it has no words for, the shell's: nothing, as the skill
+/// has no type pattern. ER, which both lists hold, still says its own. The Skills panel's row says
+/// the same. In light and dark.
+#[test]
+fn a_skills_target_is_said_by_the_notation_the_shell_registered() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        skill_targets_ask_the_notation(theme);
+    }
+}
+
+/// [`a_skills_target_is_said_by_the_notation_the_shell_registered`] in one appearance: skills of
+/// the whole model, one for each kind, and one on the sample class diagram's package.
+fn skill_targets_ask_the_notation(theme: ThemeKind) {
+    let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let add = |h: &mut Harness<'static, Shell>, subject: &str, name: &str, applies: &str, pattern: &str| {
+        let params = serde_json::json!({ "subject": subject, "name": name, "applies_to": applies, "type_pattern": pattern });
+        let out = h.state_mut().session.as_mut().unwrap().execute("skill.add", &params).unwrap();
+        archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+    };
+    let cases = [
+        ("table", "", "every table"),
+        ("relationship", "", "every relationship"),
+        ("column", "", "every column"),
+        ("column", "VARCHAR", "VARCHAR"),
+        ("class", "", "every class"),
+        ("interface", "", "every interface"),
+        ("enumeration", "", "every enumeration"),
+        ("data type", "", "every data type"),
+        ("primitive type", "", "every primitive type"),
+        ("association class", "", "every association class"),
+        ("attribute", "", "every attribute"),
+        ("operation", "", "every operation"),
+        ("association", "", "every association"),
+        ("", "", ""),
+    ];
+    let skills: Vec<_> =
+        cases.iter().enumerate().map(|(i, (applies, pattern, _))| add(&mut h, "", &format!("Skill {i}"), applies, pattern)).collect();
+    let said = |h: &Harness<'static, Shell>, uis: &[&'static dyn archforge_shell_api::notation_ui::NotationUi]| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        skills
+            .iter()
+            .map(|s| archforge_ui_egui::testing::skill_target_word(h.state().session.as_ref().unwrap().view(), uis, st, st.by_uuid(*s).unwrap()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(said(&h, archforge_ui_egui::testing::notation_uis(h.state())), cases.map(|(_, _, w)| w), "{theme:?}: the app's notations");
+    let sketched = said(&h, ER_ALONE);
+    let want = ["every table", "every relationship", "every column", "VARCHAR", "", "", "", "", "", "", "", "", "", ""];
+    assert_eq!(sketched, want, "{theme:?}: ER alone");
+    // The panel's row, on the package of the sample's classes.
+    let pkg = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let order = st.by_uuid(named(&h, archforge_uml::CLASS, "Order")).unwrap();
+        st.uuid(st.container(order).unwrap().unwrap().0).unwrap()
+    };
+    add(&mut h, &pkg.to_string(), "Classes", "class", "");
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [pkg.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(archforge_ui_egui::state::Panel::Skills);
+    h.run();
+    assert!(painted(&h).iter().any(|t| t == "every class"), "{theme:?}: {:?}", painted(&h));
+    archforge_ui_egui::testing::set_notation_uis(h.state_mut(), ER_ALONE);
+    h.run();
+    let texts = painted(&h);
+    assert!(!texts.iter().any(|t| t == "every class"), "{theme:?}: {texts:?}");
+}
+
+/// A badge whose figure offers a way out shows the plus only where its element's notation says
+/// one (AR-789): an ER relationship's does, with no "!"; a UML class's, which UML offers none for,
+/// stays a plain badge with its "!". In light and dark.
+#[test]
+fn a_badge_shows_a_way_out_only_where_its_notation_offers_one() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = diagram_harness_in(theme);
+        let rel = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
+        };
+        assert!(!badge_texts(h.state_mut(), rel, true).contains(&"!".to_string()), "{theme:?}: ER's plus");
+        assert!(badge_texts(h.state_mut(), rel, false).contains(&"!".to_string()), "{theme:?}: a plain badge");
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let class = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS)).unwrap()).unwrap()
+        };
+        assert!(badge_texts(h.state_mut(), class, true).contains(&"!".to_string()), "{theme:?}: UML offers no way out");
+    }
+}
+
+/// The Diagrams explorer groups the diagrams by kind, each group named, with its `+`, and opens each
+/// diagram with its package.
+#[test]
+fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_package() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        let at = rect_of(&h, "workspace.explorers.diagrams").center();
+        click(&mut h, at);
+        // Every kind the shell knows has its group, by name, empty or not, with its +: UML
+        // structure diagrams after ER diagrams (AR-554).
+        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 0)]);
+        let found = painted(&h);
+        assert_eq!(found.iter().filter(|t| *t == "UML structure diagrams").count(), 1, "{theme:?}: {found:?}");
+        let (er, structure) =
+            (rect_of(&h, "workspace.diagrams.group.er"), rect_of(&h, &format!("workspace.diagrams.group.{}", archforge_uml::STRUCTURE_DIAGRAM)));
+        assert!(er.bottom() <= structure.top(), "{theme:?}: ER diagrams above");
+        // By their names, not by the order the shell lists the kinds in.
+        {
+            let reversed: Vec<&dyn archforge_shell_api::kinds::DiagramKind> =
+                archforge_ui_egui::testing::kinds(h.state()).iter().rev().copied().collect();
+            let labels: Vec<String> = archforge_ui_egui::testing::diagram_rows(h.state(), &reversed, None).0.into_iter().map(|r| r.1).collect();
+            assert_eq!(labels, ["ER diagrams", "UML structure diagrams"], "{theme:?}");
+        }
+        // The groups are every kind a project can hold, so no diagram is left without one.
+        let mut shown: Vec<&str> = archforge_ui_egui::testing::kinds(h.state()).iter().map(|k| k.kind()).collect();
+        let mut held = archforge_notations::NOTATIONS.kinds();
+        shown.sort_unstable();
+        held.sort_unstable();
+        assert_eq!(shown, held);
+        let found = ids(&h);
+        for id in [
+            "workspace.diagrams.group.uml.structure",
+            "workspace.diagrams.group.uml.structure.add",
+            "workspace.diagrams.group.er",
+            "workspace.diagrams.group.er.add",
+        ] {
+            assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
+        }
+        // A group's + opens the New diagram dialog on its kind.
+        let at = rect_of(&h, "workspace.diagrams.group.uml.structure.add").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_uml::STRUCTURE_DIAGRAM));
+        h.state_mut().diagrams.new = None;
+        let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_er::DIAGRAM_KIND));
+        h.state_mut().diagrams.new = None;
+        // A diagram of a nested package and one of a schema land in their groups at once.
+        let (orders_package, orders) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+            let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let orders_package = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales })).unwrap().value);
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap();
+            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" })).unwrap();
+            let orders = id(s
+                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": orders_package, "name": "Orders" }))
+                .unwrap()
+                .value);
+            (orders_package, orders)
+        };
+        h.run();
+        assert_eq!(
+            diagram_rows(&h),
+            vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]
+        );
+        // Grouping is the explorer's alone: the model keeps each diagram once, where it was.
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let model = archforge_core::skills::model_of(st).unwrap();
+            let held = st
+                .list(model, archforge_core::model::MEMBER)
+                .unwrap()
+                .iter()
+                .filter_map(archforge_mof::Value::as_ref)
+                .filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM))
+                .count();
+            assert_eq!(held, 3);
+        }
+        // The count and the walk each have a budget of visits: past it the tree says it stopped short.
+        {
+            assert!(!archforge_ui_egui::testing::diagram_rows(h.state(), archforge_ui_egui::testing::kinds(h.state()), None).1);
+            let short = archforge_ui_egui::testing::diagram_rows(h.state(), archforge_ui_egui::testing::kinds(h.state()), Some(2));
+            assert!(short.1, "{short:?}");
+        }
+        // The row opens the diagram; it says where its package sits, as the footer does.
+        let at = rect_of(&h, &format!("workspace.diagrams.row.{orders}")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active.map(|a| a.to_string()), Some(orders.clone()));
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let package = st.by_uuid(archforge_mof::Uuid::parse(&orders_package).unwrap()).unwrap();
+            // The project, then the packages holding Orders; a root package named like the project
+            // is said once.
+            assert_eq!(archforge_ui_egui::diagrams::trail(st, "Commerce platform", package), "Commerce platform / Sales / Orders");
+        }
+        // A group folds and opens with a click.
+        let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
+        click(&mut h, at);
+        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2)]);
+        assert!(!ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{orders}")));
+        let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
+        click(&mut h, at);
+        assert_eq!(diagram_rows(&h).len(), 5);
+        // The filter narrows the diagrams, or shows a whole group named by it; groups with no match go.
+        h.state_mut().diagrams.filter = "ord".into();
+        h.run();
+        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Orders", 0)]);
+        h.state_mut().diagrams.filter = "structure".into();
+        h.run();
+        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
+        h.state_mut().diagrams.filter = "zzz".into();
+        h.run();
+        assert!(diagram_rows(&h).is_empty());
+    }
+}
+
+/// Typing a group's name in the Diagrams explorer's filter opens the folded folders its diagrams sit
+/// in.
+#[test]
+fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
+    // A model with a folder holding a class diagram, as a project may keep one.
+    let minted = |at: u64| -> Box<dyn FnMut() -> archforge_mof::Uuid + Send> {
+        let mut n: u64 = 0;
+        Box::new(move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            archforge_mof::Uuid::v7(at, r)
+        })
+    };
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
+    let fresh = archforge_notations::NOTATIONS.new_project_session("Commerce platform", minted(1_761_670_800_000)).unwrap();
+    let rows = archforge_mof::rows::snapshot(fresh.doc(), &tables, &junctions).unwrap();
+    let foldered = archforge_notations::NOTATIONS
+        .session_from_rows_repaired(&rows, minted(1_761_670_810_000), |st| {
+            use archforge_mof::Value;
+            let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+            let package = st.create(archforge_uml::PACKAGE).unwrap();
+            st.set(package, archforge_uml::named_element::NAME, Value::str("Sales")).unwrap();
+            st.push(model, archforge_core::model::MEMBER, Value::Ref(package)).unwrap();
+            let folder = st.create(archforge_core::FOLDER).unwrap();
+            st.set(folder, archforge_core::named_element::NAME, Value::str("Views")).unwrap();
+            st.push(model, archforge_core::model::MEMBER, Value::Ref(folder)).unwrap();
+            let d = st.create(archforge_diagram::DIAGRAM).unwrap();
+            st.set(d, archforge_diagram::diagram::KIND, Value::str(archforge_uml::STRUCTURE_DIAGRAM)).unwrap();
+            st.set(d, archforge_diagram::diagram::NAME, Value::str("Sales")).unwrap();
+            st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(package)).unwrap();
+            st.push(folder, archforge_core::folder::MEMBER, Value::Ref(d)).unwrap();
+            // And an ER diagram beside it, so the folder shows in both groups.
+            let schema = st.create(archforge_er::SCHEMA).unwrap();
+            st.set(schema, archforge_er::named_element::NAME, Value::str("Shop")).unwrap();
+            st.push(model, archforge_core::model::MEMBER, Value::Ref(schema)).unwrap();
+            let e = st.create(archforge_diagram::DIAGRAM).unwrap();
+            st.set(e, archforge_diagram::diagram::KIND, Value::str(archforge_er::DIAGRAM_KIND)).unwrap();
+            st.set(e, archforge_diagram::diagram::NAME, Value::str("Shop")).unwrap();
+            st.set(e, archforge_diagram::diagram::ELEMENT, Value::Ref(schema)).unwrap();
+            st.push(folder, archforge_core::folder::MEMBER, Value::Ref(e)).unwrap();
+        })
+        .unwrap();
+    let rows = archforge_mof::rows::snapshot(foldered.doc(), &tables, &junctions).unwrap();
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    h.state_mut().open_project(archforge_ui_egui::Opened {
+        name: "Commerce platform".into(),
+        path: "/Users/robin/Documents/Archforge/Foldered.archforge".into(),
+        model: Some(std::sync::Arc::new(rows)),
+        ..Default::default()
+    });
+    h.run();
+    let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+    assert_eq!(
+        diagram_rows(&h),
+        vec![
+            row(0, "ER diagrams", 1),
+            row(1, "Views", 1),
+            row(2, "Shop", 0),
+            row(0, "UML structure diagrams", 1),
+            row(1, "Views", 1),
+            row(2, "Sales", 0)
+        ]
+    );
+    // The folder's row in each group is a control of its own.
+    let folder = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::FOLDER)).and_then(|f| st.uuid(f).ok()).unwrap()
+    };
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    let found = ids(&h);
+    for id in [format!("workspace.diagrams.group.uml.structure.folder.{folder}"), format!("workspace.diagrams.group.er.folder.{folder}")] {
+        assert_eq!(found.iter().filter(|i| **i == id).count(), 1, "{id} once in {found:?}");
+    }
+    // Folded shut, the folder hides its diagrams; typing a group's name opens it again.
+    h.state_mut().diagrams.collapsed.insert(folder);
+    assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Views", 1), row(0, "UML structure diagrams", 1), row(1, "Views", 1)]);
+    h.state_mut().diagrams.filter = "structure".into();
+    assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
+}
+
+/// A diagram row's menu deletes a diagram that is no package's default at once, as one undo step:
+/// the class it showed stays, its tab goes to the one before, and the toast's Undo brings it back
+/// with its boxes. A package's default stays: its row is off (AR-644).
+#[test]
+fn a_diagram_rows_menu_deletes_the_diagram_at_once_and_undo_brings_it_back() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, [order, default, details, _]) = deletable_diagrams(theme);
+        assert_eq!((h.state().canvas.active, boxes_of(&h, details)), (Some(details), 1), "{theme:?}");
+        // While the menu is open the canvas takes none of its keys: Delete would take Order off.
+        let node = ids(&h).into_iter().find(|i| i.starts_with("workspace.canvas.node.") && i.matches('.').count() == 3).unwrap();
+        let (node, at) = (rect_of(&h, &node).center(), rect_of(&h, &format!("workspace.diagrams.row.{details}")).center());
+        click(&mut h, node);
+        right_click(&mut h, at);
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert_eq!(boxes_of(&h, details), 1, "{theme:?}: the box stays");
+        // The menu goes with the explorer, and so does its hold on the keys.
+        h.state_mut().state.show_explorer(archforge_ui_egui::state::Explorer::Models);
+        h.run();
+        click(&mut h, node);
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert_eq!(boxes_of(&h, details), 0, "{theme:?}: once the menu is gone, it does");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.state_mut().state.show_explorer(archforge_ui_egui::state::Explorer::Diagrams);
+        h.run();
+        right_click(&mut h, at);
+        let item = rect_of(&h, "workspace.diagrams.contextMenu.delete").center();
+        click(&mut h, item);
+        assert!(!alive_in(&h, details), "{theme:?}: deleted at once, with no question");
+        assert!(alive_in(&h, order), "{theme:?}: the class stays in the model");
+        assert_eq!((h.state().canvas.tabs.clone(), h.state().canvas.active), (vec![default], Some(default)), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Remove diagram"), "{theme:?}: one undo step");
+        assert_eq!(painted_times(&h, "Sales details deleted"), 1, "{theme:?}: {:?}", painted(&h));
+        let undo = rect_of(&h, "workspace.toast.undo").center();
+        click(&mut h, undo);
+        assert!(alive_in(&h, details) && boxes_of(&h, details) == 1, "{theme:?}: back with its box");
+        // A package's default: the row is there, off, and a click on it deletes nothing.
+        let undo_label = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        let before = undo_label(&h);
+        let at = rect_of(&h, &format!("workspace.diagrams.row.{default}")).center();
+        right_click(&mut h, at);
+        let item = rect_of(&h, "workspace.diagrams.contextMenu.delete").center();
+        click(&mut h, item);
+        assert!(alive_in(&h, default), "{theme:?}: the default stays");
+        assert_eq!(undo_label(&h), before, "{theme:?}: nothing new to undo");
+        assert_eq!(h.state().diagrams.menu.as_ref().map(|m| m.diagram), Some(default), "{theme:?}: still open");
+        // It says why, to a screen reader too: the engine's reason for keeping a default.
+        let why = archforge_shell_api::panels::said(
+            SCREENS.notation_uis(),
+            &archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None },
+        );
+        let off = {
+            use egui_kittest::kittest::{NodeT, Queryable};
+            h.get_by_label("Delete diagram").accesskit_node().data().clone()
+        };
+        assert!(off.is_disabled() && off.description() == why.as_deref(), "{theme:?}");
+    }
+}
+
+/// On a focused diagram row Delete or Backspace deletes the diagram, an ER one alike, and ⇧F10
+/// opens the menu with its row reached for Enter; Escape gives the row the keyboard back. A
+/// package's default stays and the notice says why, as the engine does (AR-644).
+#[test]
+fn a_focused_diagram_row_deletes_its_diagram_by_key_and_says_why_a_default_stays() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, [order, default, details, shop]) = deletable_diagrams(theme);
+        let row = |d: archforge_mof::Uuid| archforge_ui_egui::widgets::egui_id(&format!("workspace.diagrams.row.{d}"));
+        // Only Shop open: once it goes no diagram shows, and the toast shows over the empty centre.
+        archforge_ui_egui::canvas::close_tab(h.state_mut(), default);
+        archforge_ui_egui::canvas::close_tab(h.state_mut(), details);
+        archforge_ui_egui::canvas::open(h.state_mut(), shop);
+        h.run();
+        h.ctx.memory_mut(|m| m.request_focus(row(shop)));
+        h.run();
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert!(!alive_in(&h, shop), "{theme:?}: the ER diagram is deleted alike");
+        assert_eq!(h.state().canvas.active, None, "{theme:?}");
+        assert_eq!(painted_times(&h, "Shop deleted"), 1, "{theme:?}: {:?}", painted(&h));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert!(alive_in(&h, shop), "{theme:?}");
+        // ⇧F10 opens the menu, its row reached: Enter deletes.
+        h.ctx.memory_mut(|m| m.request_focus(row(details)));
+        h.run();
+        key(&mut h, egui::Key::F10, egui::Modifiers::SHIFT);
+        assert_eq!(h.state().diagrams.menu.as_ref().map(|m| (m.diagram, m.reached)), Some((details, true)), "{theme:?}");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(!alive_in(&h, details) && alive_in(&h, order), "{theme:?}");
+        // Escape closes the menu and hands the row the keyboard back.
+        h.ctx.memory_mut(|m| m.request_focus(row(default)));
+        h.run();
+        key(&mut h, egui::Key::F10, egui::Modifiers::SHIFT);
+        assert!(h.state().diagrams.menu.is_some(), "{theme:?}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().diagrams.menu.is_none(), "{theme:?}");
+        assert_eq!(h.ctx.memory(|m| m.focused()), Some(row(default)), "{theme:?}");
+        // Backspace on a package's default deletes nothing and says why.
+        let undo = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        assert!(alive_in(&h, default), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo, "{theme:?}");
+        let why = archforge_shell_api::panels::said(
+            SCREENS.notation_uis(),
+            &archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None },
+        );
+        assert_eq!(h.state().diagrams.notice, why, "{theme:?}");
+        let why = why.unwrap();
+        let whole = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Text(t) if t.galley.text() == why && !t.galley.elided));
+        assert!(whole, "{theme:?}: the reason reads whole, not cut");
+    }
+}
+
+/// What a notation says inside its own refusals, a reason it holds or a kind it names, is said by
+/// the notations the shell registered, not the app's own list: with the worded notation registered
+/// before ER and UML, ER's sentences say why a key, a foreign key, a column, a table or a literal
+/// would break in its words, and UML's name an association, which no name names, by its word, each
+/// through an engine's refusal as the shell says it; over the app's notations, ER's and UML's own
+/// words.
+#[test]
+fn a_notations_refusals_say_their_parts_by_the_notations_the_shell_registered() {
+    use archforge_engine::{AppliedTo, CommandError, EngineError, InUse, LiteralValued, Named, Reason, Used};
+    archforge_ui_egui::i18n::set_language("en");
+    let mut shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
+    archforge_ui_egui::testing::set_notation_uis(&mut shell, WORDS_UIS);
+    let no_literal = || Box::new(Reason::TooFew { kind: "enum literal", min: 1 });
+    let unnamed = || Named::Unnamed { kind: "association" };
+    let types = archforge_uml::members::TYPES;
+    let reasons = || {
+        [
+            Reason::WouldBreak { kind: "primary key", name: "pk".into(), why: no_literal() },
+            Reason::WouldBreak { kind: "foreign key", name: "fk".into(), why: no_literal() },
+            Reason::WouldBreak { kind: "column", name: "id".into(), why: no_literal() },
+            Reason::WouldBreak { kind: "table", name: "Order".into(), why: no_literal() },
+            Reason::LiteralName { name: "x".into(), why: no_literal() },
+            Reason::DependsOnItself { kind: "association" },
+            Reason::HoldsBuiltInName { kind: "association", name: "String".into() },
+            Reason::BuiltInTaken { kind: "association", name: "String".into() },
+            Reason::InUse(Box::new(InUse { what: Used::Element("Trace".into()), uses: vec![("Trace".into(), vec![unnamed()], 1)] })),
+            Reason::LiteralValued(Box::new(LiteralValued {
+                literal: "lazy".into(),
+                property: "fetch".into(),
+                stereotype: "Entity".into(),
+                element: AppliedTo::Element(unnamed()),
+            })),
+        ]
+    };
+    let failed = |reason| EngineError::Failed { id: "element.add".into(), error: CommandError::new("refused in English").because(reason) };
+    let sentences = |what: &str, why: &str| {
+        [
+            format!("The key pk would break: {why}"),
+            format!("The foreign key fk would break: {why}"),
+            format!("The column id would break: {why}"),
+            format!("The table Order would break: {why}"),
+            format!("The literal \"x\" is not a valid name. {why}"),
+            format!("{}{} cannot depend on itself.", what[..1].to_uppercase(), &what[1..]),
+            format!("The package holds {what} named String, a built-in type's name, which in {types} would mean that type. Rename String first."),
+            format!("The package {types} holds {what} named String, where that built-in type is kept: rename it to use the built-in type."),
+            format!("Trace is in use: «Trace» on {what}. Remove those first."),
+            format!("The literal lazy is the value of fetch in «Entity» on {what}. Set another value there first."),
+        ]
+    };
+    let said = archforge_ui_egui::snapshot::cx(&mut shell, |cx| reasons().map(|r| archforge_shell_api::panels::refusal(cx.notation_uis, &failed(r))));
+    assert_eq!(said, sentences(WORDED_ASSOCIATION, WORDED_LITERALS));
+    let app = reasons().map(|r| archforge_shell_api::panels::refusal(SCREENS.notation_uis(), &failed(r)));
+    assert_eq!(app, sentences("an association", "An enum type needs at least one literal."));
+}
+
+/// The problems the shell shows are said by the notations it registered, not the app's own list:
+/// an enum type without literals is ER's problem, said in the worded notation's words when it is
+/// registered before ER, in ER's over the app's notations.
+#[test]
+fn a_notations_problems_are_said_by_the_notations_the_shell_registered() {
+    archforge_ui_egui::i18n::set_language("en");
+    let mut st = archforge_notations::NOTATIONS
+        .store(Box::new({
+            let ids = test_ids();
+            move || ids()
+        }))
+        .unwrap();
+    let schema = st.create(archforge_er::SCHEMA).unwrap();
+    st.set(schema, archforge_er::named_element::NAME, archforge_mof::Value::str("shop")).unwrap();
+    let status = st.create(archforge_er::ENUM_TYPE).unwrap();
+    st.set(status, archforge_er::named_element::NAME, archforge_mof::Value::str("Status")).unwrap();
+    st.push(schema, archforge_er::schema::ENUM_TYPE, archforge_mof::Value::Ref(status)).unwrap();
+    let mut shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
+    let said = |shell: &Shell| {
+        problems_all(archforge_ui_egui::testing::notation_uis(shell), &st).into_iter().map(|p| (p.element, p.text)).collect::<Vec<_>>()
+    };
+    assert_eq!(said(&shell), [(status, "Status: An enum type needs at least one literal.".to_string())], "the app's notations");
+    archforge_ui_egui::testing::set_notation_uis(&mut shell, WORDS_UIS);
+    assert_eq!(said(&shell), [(status, format!("Status: {WORDED_LITERALS}"))], "the worded notation first");
+}
+
+/// A model's kind words ask the notations the shell registered, not the app's own list: over the
+/// app's notations UML's attribute is an Attribute, its interface an Interface and its class a
+/// Class; over ER alone, which does not know UML's classes, each is an Element.
+#[test]
+fn a_models_kind_words_ask_the_notations_the_shell_registered() {
+    archforge_ui_egui::i18n::set_language("en");
+    let universe = archforge_notations::NOTATIONS.universe().unwrap();
+    let mut shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
+    let classes = [archforge_uml::PROPERTY, archforge_uml::INTERFACE, archforge_uml::CLASS];
+    let words =
+        |shell: &Shell| classes.map(|c| archforge_ui_egui::model_words::kind_label(archforge_ui_egui::testing::notation_uis(shell), &universe, c));
+    assert_eq!(words(&shell), ["Attribute", "Interface", "Class"], "the app's notations");
+    archforge_ui_egui::testing::set_notation_uis(&mut shell, ER_ALONE);
+    assert_eq!(words(&shell), ["Element", "Element", "Element"], "ER alone");
 }

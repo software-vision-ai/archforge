@@ -93,10 +93,11 @@ pub(crate) fn about(shell: &Shell) -> Option<(PathBuf, u64)> {
     shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()))
 }
 
-/// Compares the two versions' models off the interface thread once both have been read, each
-/// repaired by `repair` as an opening repairs it. Answers why when either could not be read or
+/// Compares the two versions' models, of the notations `notations`, off the interface thread once
+/// both have been read, each repaired by `repair` as an opening repairs it. Answers why when either could not be read or
 /// compared; a dropped answer ends with nobody listening.
 fn compare(
+    notations: &'static archforge_notations::Notations,
     before: Receiver<VersionRead>,
     after: Receiver<VersionRead>,
     repair: impl Fn(&mut archforge_mof::Store) + Send + 'static,
@@ -111,7 +112,7 @@ fn compare(
         let found = old
             .and_then(|old| Ok((old, new?)))
             .map_err(|e| e.to_string())
-            .and_then(|(old, new)| classified(&old, &new, repair).map_err(|e| e.to_string()));
+            .and_then(|(old, new)| classified(notations, &old, &new, repair).map_err(|e| e.to_string()));
         // The model's root is no change of its own; model elements come first, then diagrams, then skills.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);
@@ -194,6 +195,7 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     let about = about(shell);
     let host = shell.services.projects.clone();
     let repair = shell.open_repair();
+    let notations = shell.notations;
     let v = &mut shell.versions;
     let answered = v.details_comparing.as_ref().and_then(|c| c.answered(not_compared));
     if answered.is_some() {
@@ -223,7 +225,7 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     if let (true, None, Some(host), Some(about)) = (idle, &v.details_reading, host, about) {
         if c.found.is_none() {
             let (old, new) = (host.read_version(&about.0, pair.0.clone()), host.read_version(&about.0, pair.1.clone()));
-            v.details_comparing = Some(Running { about, pair, answer: compare(old, new, repair) });
+            v.details_comparing = Some(Running { about, pair, answer: compare(notations, old, new, repair) });
         } else if c.earlier.is_none() {
             let answer = host.versions(&about.0, Some(pair.1.clone()), 1);
             v.details_reading = Some(Running { about, pair, answer });

@@ -1104,7 +1104,7 @@ mod tests {
             n += 1;
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        let mut s = archforge_notations::new_project_session("Shop", ids).unwrap();
+        let mut s = archforge_notations::NOTATIONS.new_project_session("Shop", ids).unwrap();
         let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
         let commerce = run("uml.package.add", json!({ "name": "Commerce" }));
         let order = run("uml.class.add", json!({ "package": commerce, "name": "Order" }));

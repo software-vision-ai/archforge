@@ -340,3 +340,6 @@ str		{name} is in the index twice. Give each column once.	{name} figure deux foi
 str		Give each index column as a column's id, or as an object with an attribute or an expression.	Indiquez chaque colonne d’index par l’identifiant d’une colonne ou par un objet avec un attribut ou une expression.
 str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} est indiquée avec une expression. Une colonne d’index trie selon une colonne ou selon une expression.
 str		An index column needs a column or an expression to sort by.	Une colonne d’index a besoin d’une colonne ou d’une expression selon laquelle trier.
+# Access letters of the menu bar in the window (Windows and Linux): one letter A to Z per title (menu.*) and row (its action), different within a menu, the titles different across the bar; best one of the label's own letters, else it shows in brackets after the label.
+str	access	model.entity	E
+str	access	model.relationship	R

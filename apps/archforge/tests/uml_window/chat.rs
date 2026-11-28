@@ -541,7 +541,7 @@ fn a_turns_change_that_clears_the_history_still_counts() {
     let (mut h, rig) = chat_harness(ThemeKind::Light, true);
     // The project's model again, under a history capped small enough for one long description to
     // clear it.
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let old = h.state_mut().session.take().unwrap();
     let rows = archforge_mof::rows::snapshot(old.doc(), &tables, &junctions).unwrap();
     // Ids at a later time than the sample's, so none is given twice.
@@ -552,11 +552,16 @@ fn a_turns_change_that_clears_the_history_still_counts() {
         r[2..].copy_from_slice(&n.to_be_bytes());
         archforge_mof::Uuid::v7(1_761_670_900_000, r)
     };
-    let st = archforge_notations::store(Box::new(mint)).unwrap();
+    let st = archforge_notations::NOTATIONS.store(Box::new(mint)).unwrap();
     let st = archforge_mof::rows::restore_into_empty(st, &rows, &tables, &junctions).unwrap();
     let options = archforge_engine::Options { max_weight: 4_096, ..archforge_engine::Options::default() };
-    h.state_mut().session =
-        Some(archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), st, old.counter(), options, archforge_notations::view()));
+    h.state_mut().session = Some(archforge_engine::Session::with_view(
+        archforge_notations::NOTATIONS.registry().unwrap(),
+        st,
+        old.counter(),
+        options,
+        archforge_notations::NOTATIONS.view(),
+    ));
     h.run();
     let at = rect_of(&h, "workspace.chat.allow-changes").center();
     click(&mut h, at);
@@ -575,4 +580,67 @@ fn a_turns_change_that_clears_the_history_still_counts() {
         "the model did not change after the turn: its history went: {:?}",
         painted(&h)
     );
+}
+
+/// The app's notations count each of their kinds in its own words, every relationship of
+/// either as a line, a primitive type as a data type, and leave out the parts of a diagram and
+/// a description's comment; the shell counts diagrams, skills and the rest as elements.
+#[test]
+fn the_app_notations_count_their_kinds_in_their_words() {
+    use archforge_ui_egui::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
+    use archforge_ui_egui::chat_words::tool_words;
+    let at = |n: u8, role: AnchorRole, metaclass: &str, name: &str| Anchor {
+        element: archforge_mof::Uuid([n; 16]),
+        role,
+        metaclass: metaclass.into(),
+        name: Some(name.into()),
+    };
+    let uis = SCREENS.notation_uis();
+    archforge_ui_egui::i18n::set_language("en");
+    let read = |metaclasses: &[&str]| ToolFacts {
+        tool: "engine.execute".into(),
+        command: Some("model.find".into()),
+        detail: None,
+        status: ToolStatus::Done,
+        changed_model: false,
+        element_count: None,
+        anchors: metaclasses.iter().zip(1u8..).map(|(m, n)| at(n, AnchorRole::Read, m, "")).collect(),
+    };
+    for (table, two) in [
+        ("uml_class", "2 classes"),
+        ("uml_interface", "2 interfaces"),
+        ("uml_enumeration", "2 enumerations"),
+        ("uml_data_type", "2 data types"),
+        ("uml_primitive_type", "2 data types"),
+        ("uml_package", "2 packages"),
+        ("uml_property", "2 attributes"),
+        ("uml_operation", "2 operations"),
+        ("uml_enumeration_literal", "2 literals"),
+        ("er_entity", "2 tables"),
+        ("er_attribute", "2 columns"),
+        ("er_schema", "2 schemas"),
+        ("diagram_diagram", "2 diagrams"),
+        ("core_skill", "2 skills"),
+        ("uml_constraint", "2 elements"),
+    ] {
+        assert_eq!(tool_words(uis, &read(&[table, table])).0, format!("Read {two}"), "{table}");
+    }
+    let lines = [
+        "uml_association",
+        "uml_association_class",
+        "uml_generalization",
+        "uml_dependency",
+        "uml_realization",
+        "uml_abstraction",
+        "uml_usage",
+        "uml_interface_realization",
+        "er_relationship",
+        "er_generalization",
+    ];
+    assert_eq!(tool_words(uis, &read(&lines)).0, "Read 10 lines", "every relationship of either notation");
+    assert_eq!(tool_words(uis, &read(&["uml_data_type", "uml_primitive_type", "er_entity"])).0, "Read 2 data types, 1 table");
+    let parts = ["diagram_node", "diagram_edge", "core_comment", "uml_comment", "er_entity"];
+    assert_eq!(tool_words(uis, &read(&parts)).0, "Read 1 table", "a diagram's parts and a description's comment are not counted");
+    // Elements of tables no one counts are told apart by their table.
+    assert_eq!(tool_words(uis, &read(&["core_folder", "core_folder", "core_model"])).0, "Read 2 elements, 1 element");
 }

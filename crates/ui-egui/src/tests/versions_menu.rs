@@ -84,9 +84,9 @@ fn card_on_a_diagram(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::A
     h.state_mut().state.theme = theme;
     let s = h.state_mut().session.as_mut().unwrap();
     let mut made = |command: &str, with: serde_json::Value| s.execute(command, &with).unwrap().value["id"].as_str().unwrap().to_string();
-    let schema = made("er.schema.add", serde_json::json!({ "name": "Shop" }));
-    let customer = made("er.entity.add", serde_json::json!({ "schema": schema, "name": "Customer" }));
-    let diagram = made("diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }));
+    let schema = made("sketch.package.add", serde_json::json!({ "name": "Shop" }));
+    let customer = made("sketch.class.add", serde_json::json!({ "package": schema, "name": "Customer" }));
+    let diagram = made("diagram.add", serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop schema" }));
     let placed = serde_json::json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 });
     let card = format!("workspace.canvas.node.{}", made("diagram.place", placed));
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&diagram).unwrap());
@@ -166,9 +166,10 @@ fn a_version_chord_in_a_field_steps_or_moves_the_caret() {
             let (mut h, host, _, card) = card_on_a_diagram(theme);
             let at = rect_of(&h, &card).center();
             click(&mut h, at);
-            click_id(&mut h, "workspace.properties.columns.add");
-            click_id(&mut h, "workspace.properties.column.name");
-            let name = |h: &Harness<'static, Shell>| er_of(h.state()).column.as_ref().map(|c| c.name.clone()).unwrap_or_default();
+            h.state_mut().state.show_panel(crate::state::Panel::Properties);
+            h.run();
+            click_id(&mut h, "workspace.properties.name");
+            let name = |h: &Harness<'static, Shell>| h.state().panels.name.as_ref().map(|n| n.text.clone()).unwrap_or_default();
             let typed = |h: &mut Harness<'static, Shell>, text: &str| {
                 h.event(egui::Event::Text(text.into()));
                 h.run();
@@ -176,10 +177,10 @@ fn a_version_chord_in_a_field_steps_or_moves_the_caret() {
             };
             key(&mut h, Key::Home, Modifiers::NONE);
             key(&mut h, Key::ArrowRight, shape | Modifiers::ALT);
-            assert_eq!(typed(&mut h, "x"), "column_1x", "{theme:?} {shape:?}: Newer version is off, and the field moved a word on");
+            assert_eq!(typed(&mut h, "x"), "Customerx", "{theme:?} {shape:?}: Newer version is off, and the field moved a word on");
             key(&mut h, Key::ArrowLeft, shape | Modifiers::ALT);
             assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?} {shape:?}: Older version asks for the versions");
-            assert_eq!(typed(&mut h, "y"), "column_1xy", "{theme:?} {shape:?}: and the caret stayed at the end");
+            assert_eq!(typed(&mut h, "y"), "Customerxy", "{theme:?} {shape:?}: and the caret stayed at the end");
         }
     });
 }

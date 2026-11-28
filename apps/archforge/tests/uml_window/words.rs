@@ -168,7 +168,7 @@ fn a_use_that_refuses_is_said_in_the_chosen_language() {
 fn an_unnamed_element_in_use_is_said_by_its_kind() {
     use archforge_engine::{InUse, Named, Reason, Used};
     // The app's shell registers its catalogues and its notations', whose rows this says.
-    let _shell = archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
+    let _shell = archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     let unnamed = |kind| Named::Unnamed { kind };
     let said = |names: Vec<Named>| {
         let n = names.len();
@@ -203,7 +203,7 @@ fn an_unnamed_element_in_use_is_said_by_its_kind() {
 fn a_literal_valued_names_its_element_by_its_kind_or_none() {
     use archforge_engine::{AppliedTo, LiteralValued, Named, Reason};
     // The app's shell registers its catalogues and its notations', whose rows this says.
-    let _shell = archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
+    let _shell = archforge_ui_egui::Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
     let said = |element| {
         let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Entity".into(), element };
         archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::LiteralValued(Box::new(valued)))

@@ -271,7 +271,7 @@ fn view_waits_for_a_change_under_way() {
 fn view_says_why_an_edit_keeps_it_off() {
     in_both(|h, host| {
         opened(h, "c2");
-        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
         h.run_steps(2);
         let asked = host.reads.lock().unwrap().len();
         tap(h, VIEW);
@@ -332,9 +332,9 @@ fn details_list_what_changed_since_the_version_before() {
         let without = rows_now(h);
         let s = h.state_mut().session.as_mut().unwrap();
         s.execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
-        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();
-        s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" })).unwrap();
+        s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop schema" })).unwrap();
         add_schema(h, "shop");
         let with = rows_now(h);
         list_still(h);
@@ -899,7 +899,7 @@ fn sided(id: Uuid, before: Option<ElementCard>, after: Option<ElementCard>, fiel
 
 /// The sides of an element called `name` on both sides of the comparison.
 fn both_sides(id: Uuid, name: &str) -> Result<Option<ElementSides>, String> {
-    let card = ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()), made: false };
+    let card = ElementCard { class: archforge_mof::toy::PACKAGE, name: Some(name.into()), made: false };
     Ok(Some(sided(id, Some(card.clone()), Some(card), Vec::new())))
 }
 
@@ -931,7 +931,7 @@ fn the_frame_builds_no_rows_for_writes_working_changes_or_their_sides() {
     in_both(|h, host| {
         let written = host.written.lock().unwrap().len();
         let built = archforge_mof::rows::built_here();
-        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("sketch.package.add", &serde_json::json!({ "name": "shop" })).unwrap();
         list_still(h);
         open_change(h, "shop");
         assert!(has_id(h, AFTER) && !has_id(h, ELEMENT_FAILED), "{:?}", painted(h));
@@ -951,11 +951,12 @@ fn unbuildable(h: &mut Harness<'static, Shell>) {
         r[2..].copy_from_slice(&n.to_be_bytes());
         Uuid::v7(1_761_670_950_000, r)
     });
-    let s = archforge_notations::session_from_rows_repaired(&rows_now(h), ids, |st| {
-        let o = st.create(archforge_uml::LITERAL_UNLIMITED_NATURAL).unwrap();
-        st.set(o, archforge_uml::literal_unlimited_natural::VALUE, Value::Unlimited(Some(u64::MAX))).unwrap();
-    })
-    .unwrap();
+    let s = NOTATIONS
+        .session_from_rows_repaired(&rows_now(h), ids, |st| {
+            let o = st.create(archforge_mof::toy::LITERAL_UNLIMITED_NATURAL).unwrap();
+            st.set(o, archforge_mof::toy::LITERAL_UNLIMITED_VALUE, Value::Unlimited(Some(u64::MAX))).unwrap();
+        })
+        .unwrap();
     h.state_mut().written = Some(s.revision());
     h.state_mut().session = Some(s);
 }
@@ -1129,8 +1130,9 @@ fn two_rows_of_one_element_open_it_once() {
         before_and_after(h, host);
         let (mut row, key) = (h.state().versions.changes[0].clone(), h.state().versions.compared.clone().unwrap());
         let mut gone = row.clone();
-        (gone.class, gone.kind, gone.name, row.name) = (archforge_er::ENTITY, ChangeKind::Removed, Some("old".into()), Some("new".into()));
-        let sheet = Difference { id: Uuid([9; 16]), area: Area::Diagram, class: archforge_er::ATTRIBUTE, name: Some("sheet".into()), ..gone.clone() };
+        (gone.class, gone.kind, gone.name, row.name) = (archforge_mof::toy::CLASS, ChangeKind::Removed, Some("old".into()), Some("new".into()));
+        let sheet =
+            Difference { id: Uuid([9; 16]), area: Area::Diagram, class: archforge_mof::toy::PROPERTY, name: Some("sheet".into()), ..gone.clone() };
         crate::versions::settle_changes(h.state_mut(), key, Ok(vec![row, gone, sheet]));
         h.run_steps(2);
         open_change(h, "sheet");
@@ -1149,7 +1151,7 @@ fn related_link(id: Uuid) -> String {
 /// Lands the sides of the open shop as connected to `related`.
 fn land_related(h: &mut Harness<'static, Shell>, key: Compared, related: Vec<Uuid>) {
     let id = h.state().versions.element.as_ref().unwrap().row.id;
-    let card = ElementCard { class: archforge_er::SCHEMA, name: Some("shop".into()), made: false };
+    let card = ElementCard { class: archforge_mof::toy::PACKAGE, name: Some("shop".into()), made: false };
     let lists = Arc::new(CardLists { related, ..Default::default() });
     landed(h, id, key, Ok(Some(ElementSides { lists, ..sided(id, Some(card.clone()), Some(card), Vec::new()) })));
     h.run_steps(1);
@@ -1204,7 +1206,7 @@ fn only_a_listed_model_change_is_linked() {
         let (row, key) = shop_and_warehouse(h, host);
         let other = Uuid([9; 16]);
         land_related(h, key.clone(), vec![row.id, other]);
-        let gone = Difference { kind: ChangeKind::Removed, class: archforge_er::ENTITY, name: Some("old".into()), ..row.clone() };
+        let gone = Difference { kind: ChangeKind::Removed, class: archforge_mof::toy::CLASS, name: Some("old".into()), ..row.clone() };
         let sheet = Difference { id: other, area: Area::Diagram, ..row.clone() };
         let held = h.state().versions.changes.clone();
         for rows in [[held.clone(), vec![gone.clone(), sheet.clone()]].concat(), [vec![gone.clone(), sheet.clone()], held.clone()].concat()] {
@@ -1487,10 +1489,10 @@ fn edit(h: &mut Harness<'static, Shell>, cmd: &str, args: serde_json::Value) -> 
 fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
     in_both_appearances(|theme| {
         let (mut h, host) = versions_panel(theme);
-        let shop = edit(&mut h, "er.schema.add", serde_json::json!({ "name": "shop" }));
-        let entity = |h: &mut _, name: &str| edit(h, "er.entity.add", serde_json::json!({ "schema": shop, "name": name }));
+        let shop = edit(&mut h, "sketch.package.add", serde_json::json!({ "name": "shop" }));
+        let entity = |h: &mut _, name: &str| edit(h, "sketch.class.add", serde_json::json!({ "package": shop, "name": name }));
         let (a, b, c, d) = (entity(&mut h, "kept"), entity(&mut h, "renamed"), entity(&mut h, "gone"), entity(&mut h, "fresh"));
-        let diagram = edit(&mut h, "diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Billing" }));
+        let diagram = edit(&mut h, "diagram.add", serde_json::json!({ "kind": SKETCH, "element": shop, "name": "Billing" }));
         let place = |h: &mut _, e: &str, x: i32, y: i32| {
             edit(h, "diagram.place", serde_json::json!({ "diagram": diagram, "element": e, "x": x, "y": y, "width": 200, "height": 120 }))
         };
@@ -1501,13 +1503,14 @@ fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
         let rows = rows_now(&h);
         answer_read(&mut h, &host, Ok(rows));
         super::compared(&mut h);
-        edit(&mut h, "er.entity.rename", serde_json::json!({ "entity": b, "name": "client" }));
+        edit(&mut h, "sketch.class.rename", serde_json::json!({ "class": b, "name": "client" }));
         edit(&mut h, "diagram.unplace", serde_json::json!({ "nodes": [gone] }));
         let fresh = place(&mut h, &d, 560, 200);
         // Far above every top-level box: it fits only if it is counted itself, and only below the
         // canvas's least zoom.
         let nested = edit(&mut h, "diagram.note", serde_json::json!({ "diagram": diagram, "text": "check", "parent": kept, "x": 300, "y": -60000 }));
-        let joins = edit(&mut h, "er.relationship.add", serde_json::json!({ "from": a, "to": d, "name": "joins", "create_foreign_key": false }));
+        let joins =
+            edit(&mut h, "sketch.association.add", serde_json::json!({ "from": a, "to": d, "name": "joins", "from_role": "1", "to_role": "0..*" }));
         let line = edit(&mut h, "diagram.connect", serde_json::json!({ "diagram": diagram, "element": joins, "source": kept, "target": fresh }));
         list_still(&mut h);
         host.reads.lock().unwrap().clear();
@@ -1750,7 +1753,7 @@ fn a_diagrams_model_and_layout_changes_are_said_apart() {
 #[test]
 fn a_side_the_diagram_is_not_on_says_so() {
     diagram_compared(|h, [shop, diagram, ..]| {
-        edit(h, "diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Extra" }));
+        edit(h, "diagram.add", serde_json::json!({ "kind": SKETCH, "element": shop, "name": "Extra" }));
         list_still(h);
         open_change(h, "Extra");
         assert_eq!(h.query_all_by_label("Before, Nothing here yet").count(), 1);
@@ -2240,9 +2243,9 @@ fn what_is_found_is_grouped_by_area() {
             let s = h.state_mut().session.as_mut().unwrap();
             Uuid::parse(s.execute(id, &params).unwrap().value["id"].as_str().unwrap()).unwrap()
         };
-        let alpha = made("er.schema.add", serde_json::json!({ "name": "alpha" }));
-        let diagram = made("diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": alpha.to_string(), "name": "Billing" }));
-        let omega = made("er.schema.add", serde_json::json!({ "name": "omega" }));
+        let alpha = made("sketch.package.add", serde_json::json!({ "name": "alpha" }));
+        let diagram = made("diagram.add", serde_json::json!({ "kind": SKETCH, "element": alpha.to_string(), "name": "Billing" }));
+        let omega = made("sketch.package.add", serde_json::json!({ "name": "omega" }));
         assert!(alpha < diagram && diagram < omega, "the diagram's id lies between the schemas'");
         answer(host, "c3", Ok(before));
         found_many(h, 5);
@@ -2727,7 +2730,7 @@ fn compare_takes_current_work_while_a_version_shows() {
 fn an_edit_under_way_holds_the_comparison() {
     in_both(|h, host| {
         let before = page_reading(h, host);
-        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
         answer(host, "c3", Ok(before));
         frames_until(h, |h| !h.state().versions.compare_results.held.is_empty());
         h.run_steps(2);
@@ -2848,7 +2851,7 @@ fn rows_that_cannot_be_built_are_said_on_the_page() {
         h.run_steps(4);
         assert!(painted(h).iter().any(|t| t.contains("too large to store")), "{:?}", painted(h));
         // An edit under way holds the comparison Retry asks for, so the bars show until it ends.
-        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
         tap(h, "workspace.version-compare.retry");
         h.run_steps(1);
         assert!(has_id(h, COMPARE_LOADING) && !has_id(h, FAILED));
@@ -2913,12 +2916,12 @@ fn an_empty_result_and_two_versions_alike_are_said() {
 
 /// A side of `name`, a schema.
 fn schema(name: &str) -> Option<ElementCard> {
-    Some(ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()), made: false })
+    Some(ElementCard { class: archforge_mof::toy::PACKAGE, name: Some(name.into()), made: false })
 }
 
-/// A field of the enumeration-typed Visibility with these values.
+/// A field of the enumeration-typed Aggregation with these values.
 fn field(before: Option<Value>, after: Option<Value>, changed: bool) -> CardField {
-    CardField { prop: archforge_uml::named_element::VISIBILITY, before, after, changed }
+    CardField { prop: archforge_mof::toy::PROPERTY_AGGREGATION, before, after, changed }
 }
 
 /// How many controls are named exactly `name`.
@@ -2954,7 +2957,7 @@ fn values_are_worded_per_type_without_a_read() {
             (Value::str("words"), "words"),
             (Value::Unlimited(None), "*"),
             (Value::Unlimited(Some(3)), "3"),
-            (Value::Enum(1), "Private"),
+            (Value::Enum(1), "Shared"),
             (Value::Enum(99), "Unknown"),
             (Value::Ref(shop), "Unknown"),
         ];
@@ -2963,7 +2966,7 @@ fn values_are_worded_per_type_without_a_read() {
         landed(h, id, key, Ok(Some(sided(id, schema("a"), None, fields))));
         for (_, want) in &cases {
             let times = cases.iter().filter(|(_, w)| w == want).count();
-            assert_eq!(named(h, &format!("Visibility, {want}")), times, "{want}: {:?}", painted(h));
+            assert_eq!(named(h, &format!("Aggregation, {want}")), times, "{want}: {:?}", painted(h));
         }
         assert_eq!(named(h, "Unknown, odd"), 1, "a label the metamodel doesn't give");
         assert!(asked(host).is_empty(), "drawing reads nothing");
@@ -2979,18 +2982,18 @@ fn what_differs_is_marked_with_a_sign_and_a_tint() {
         let fields =
             vec![field(Some(Value::str("old")), Some(Value::str("new")), true), field(Some(Value::str("same")), Some(Value::str("same")), false)];
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
-        assert_eq!((named(h, "Visibility, old, Changed"), named(h, "Visibility, new, Changed"), named(h, "Visibility, same")), (1, 1, 2));
+        assert_eq!((named(h, "Aggregation, old, Changed"), named(h, "Aggregation, new, Changed"), named(h, "Aggregation, same")), (1, 1, 2));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1), "{:?}", painted(h));
         assert!(filled(h, &format!("{BEFORE}.field.0"), p.danger_tint) && filled(h, &format!("{AFTER}.field.0"), p.green_tint));
         assert!(!filled(h, &format!("{BEFORE}.field.1"), p.danger_tint), "a same row is plain");
-        assert_eq!(named(h, "Schema, kept"), 2, "the same name is not marked");
+        assert_eq!(named(h, "Package, kept"), 2, "the same name is not marked");
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("was"), schema("is"), Vec::new()))));
-        assert_eq!((named(h, "Schema, was, Changed"), named(h, "Schema, is, Changed")), (1, 1), "a rename: {:?}", painted(h));
+        assert_eq!((named(h, "Package, was, Changed"), named(h, "Package, is, Changed")), (1, 1), "a rename: {:?}", painted(h));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1));
         assert!(filled(h, &format!("{BEFORE}.name"), p.danger_tint) && filled(h, &format!("{AFTER}.name"), p.green_tint));
-        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: Some("kept".into()), made: false });
+        let entity = Some(ElementCard { class: archforge_mof::toy::CLASS, name: Some("kept".into()), made: false });
         landed(h, id, key, Ok(Some(sided(id, schema("kept"), entity, Vec::new()))));
-        assert_eq!((named(h, "Schema, kept, Changed"), named(h, "Table, kept, Changed")), (1, 1), "a new kind");
+        assert_eq!((named(h, "Package, kept, Changed"), named(h, "Class, kept, Changed")), (1, 1), "a new kind");
     });
 }
 
@@ -3033,14 +3036,14 @@ fn the_summary_says_added_or_removed() {
 fn the_summary_counts_and_says_each_difference() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        let visibility = field(Some(Value::Null), Some(Value::Enum(1)), true);
+        let aggregation = field(Some(Value::Null), Some(Value::Enum(1)), true);
         let same = field(Some(Value::str("same")), Some(Value::str("same")), false);
-        let fields = vec![visibility.clone(), same];
+        let fields = vec![aggregation.clone(), same];
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
-        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: None, made: false });
-        landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![visibility]))));
-        let said = "The name changed from was to Unnamed. The kind changed from Schema to Table. Visibility changed from Not set to Private.";
+        says(h, "1 value changed", &format!("Aggregation changed from Not set to Shared. {MARKED}"));
+        let entity = Some(ElementCard { class: archforge_mof::toy::CLASS, name: None, made: false });
+        landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![aggregation]))));
+        let said = "The name changed from was to Unnamed. The kind changed from Package to Class. Aggregation changed from Not set to Shared.";
         says(h, "3 values changed", &format!("{said} {MARKED}"));
     });
 }
@@ -3050,7 +3053,7 @@ fn the_summary_counts_and_says_each_difference() {
 fn the_summary_counts_what_it_does_not_write_out() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        let line = "Visibility changed from a to b.";
+        let line = "Aggregation changed from a to b.";
         let three = format!("{line} {line} {line}");
         for (n, more) in [(3, String::new()), (4, " 1 more value changed.".to_owned()), (5, " 2 more values changed.".to_owned())] {
             let fields = vec![field(Some(Value::str("a")), Some(Value::str("b")), true); n];
@@ -3067,7 +3070,7 @@ fn the_summary_says_a_property_is_on_one_side_alone() {
         let (id, key) = element_open(h, host);
         let fields = vec![field(Some(Value::str("a")), None, true), field(None, Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        let said = "Visibility is only on the Before side. Visibility is only on the After side.";
+        let said = "Aggregation is only on the Before side. Aggregation is only on the After side.";
         says(h, "2 values changed", &format!("{said} {MARKED}"));
     });
 }
@@ -3095,8 +3098,8 @@ fn the_summary_cuts_a_long_value() {
         let long = "x".repeat(60);
         let fields = vec![field(Some(Value::str(&long)), Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from {}… to b. {MARKED}", "x".repeat(40)));
-        assert_eq!(named(h, &format!("Visibility, {long}, Changed")), 1, "the card holds it whole");
+        says(h, "1 value changed", &format!("Aggregation changed from {}… to b. {MARKED}", "x".repeat(40)));
+        assert_eq!(named(h, &format!("Aggregation, {long}, Changed")), 1, "the card holds it whole");
     });
 }
 
@@ -3121,7 +3124,7 @@ fn listed(id: Uuid, name: &str, lists: CardLists) -> Result<Option<ElementSides>
 
 /// A list of `kind` holding rows that say each `(words, change)`.
 fn list(kind: ListKind, rows: Vec<(Named, Option<ChangeKind>)>) -> CardList {
-    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_er::ATTRIBUTE, name, to: None, note: String::new(), change };
+    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_mof::toy::CLASS, name, to: None, note: String::new(), change };
     CardList { kind, rows: rows.into_iter().map(row).collect() }
 }
 
@@ -3133,30 +3136,30 @@ fn lists_are_headed_and_their_changes_marked() {
         let p = colours(h);
         let before = vec![
             list(
-                ListKind::Features(archforge_uml::PROPERTY),
+                ListKind::Features(archforge_mof::toy::PROPERTY),
                 vec![(Named::Said("id".into()), None), (Named::Said("status : String".into()), Some(ChangeKind::Changed))],
             ),
-            list(ListKind::Features(archforge_uml::OPERATION), vec![(Named::Said("old()".into()), Some(ChangeKind::Removed))]),
-            list(ListKind::Features(archforge_uml::ENUMERATION_LITERAL), vec![(Named::Said("open".into()), None)]),
+            list(ListKind::Features(archforge_mof::toy::OPERATION), vec![(Named::Said("old()".into()), Some(ChangeKind::Removed))]),
+            list(ListKind::Features(archforge_mof::toy::ENUMERATION_LITERAL), vec![(Named::Said("open".into()), None)]),
         ];
         let after = vec![
             list(
-                ListKind::Features(archforge_uml::PROPERTY),
+                ListKind::Features(archforge_mof::toy::PROPERTY),
                 vec![(Named::Said("id".into()), None), (Named::Said("status : Kind".into()), Some(ChangeKind::Changed))],
             ),
-            list(ListKind::Features(archforge_uml::OPERATION), vec![(Named::Said("new()".into()), Some(ChangeKind::Added))]),
-            list(ListKind::Features(archforge_uml::ENUMERATION_LITERAL), vec![(Named::Said("open".into()), None)]),
+            list(ListKind::Features(archforge_mof::toy::OPERATION), vec![(Named::Said("new()".into()), Some(ChangeKind::Added))]),
+            list(ListKind::Features(archforge_mof::toy::ENUMERATION_LITERAL), vec![(Named::Said("open".into()), None)]),
         ];
         let lists = CardLists { before, after, ..CardLists::default() };
         landed(h, id, key, listed(id, "kept", lists));
-        assert_eq!(named(h, "Attributes, id"), 2);
-        assert_eq!(named(h, "Attributes, status : String, Changed"), 1, "{:?}", painted(h));
-        assert_eq!(named(h, "Attributes, status : Kind, Changed"), 1);
-        assert_eq!(named(h, "Operations, old(), Removed"), 1);
-        assert_eq!(named(h, "Operations, new(), Added"), 1);
-        assert_eq!(named(h, "Literals, open"), 2);
+        assert_eq!(named(h, "Fields of the sketch, id"), 2);
+        assert_eq!(named(h, "Fields of the sketch, status : String, Changed"), 1, "{:?}", painted(h));
+        assert_eq!(named(h, "Fields of the sketch, status : Kind, Changed"), 1);
+        assert_eq!(named(h, "Members, old(), Removed"), 1);
+        assert_eq!(named(h, "Members, new(), Added"), 1);
+        assert_eq!(named(h, "Members, open"), 2);
         assert!(!painted_has(h, "The owner changed."), "a member is not the owner");
-        assert_eq!((painted_times(h, "ATTRIBUTES"), painted_times(h, "OPERATIONS")), (2, 2));
+        assert_eq!((painted_times(h, "FIELDS OF THE SKETCH"), painted_times(h, "MEMBERS")), (2, 4));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (2, 2), "text marks as well as colour: {:?}", painted(h));
         assert!(filled(h, &format!("{BEFORE}.list.0.1"), p.danger_tint) && filled(h, &format!("{AFTER}.list.0.1"), p.green_tint));
         assert!(!filled(h, &format!("{BEFORE}.list.0.0"), p.danger_tint), "a same row is plain");
@@ -3178,7 +3181,7 @@ fn a_missing_name_is_said_in_words() {
         assert_eq!(named(h, "Ownership, None"), 1);
         let lists = CardLists { before: owner(Named::Unnamed), after: owner(Named::Said(String::new())), ..CardLists::default() };
         landed(h, id, key, listed(id, "a", lists));
-        assert_eq!(named(h, "Ownership, Column"), 2, "a nameless row goes by its kind");
+        assert_eq!(named(h, "Ownership, Class"), 2, "a nameless row goes by its kind");
     });
 }
 
@@ -3194,9 +3197,9 @@ fn a_relationship_reads_as_what_it_joins_to() {
         };
         let side = |far: Named| {
             let rows = vec![
-                row(archforge_uml::ASSOCIATION, "lines", Named::Said("OrderLine".into()), None),
-                row(archforge_uml::GENERALIZATION, "", Named::Said("Shape".into()), None),
-                row(archforge_er::RELATIONSHIP, "", far, Some(ChangeKind::Changed)),
+                row(archforge_mof::toy::ASSOCIATION, "lines", Named::Said("OrderLine".into()), None),
+                row(archforge_mof::toy::GENERALIZATION, "", Named::Said("Shape".into()), None),
+                row(archforge_mof::toy::GENERALIZATION, "", far, Some(ChangeKind::Changed)),
             ];
             vec![CardList { kind: ListKind::Relationships, rows }]
         };
@@ -3204,32 +3207,32 @@ fn a_relationship_reads_as_what_it_joins_to() {
         landed(h, id, key, listed(id, "a", lists));
         assert_eq!(named(h, "Relationships, lines \u{2192} OrderLine [1..*]"), 2, "{:?}", painted(h));
         assert_eq!(named(h, "Relationships, Generalization \u{2192} Shape"), 2, "no role: its kind");
-        assert_eq!(named(h, "Relationships, Relationship \u{2192} Not available on this side, Changed"), 1);
-        assert_eq!(named(h, "Relationships, Relationship \u{2192} order, Changed"), 1);
+        assert_eq!(named(h, "Relationships, Generalization \u{2192} Not available on this side, Changed"), 1);
+        assert_eq!(named(h, "Relationships, Generalization \u{2192} order, Changed"), 1);
         assert_eq!(painted_times(h, "RELATIONSHIPS"), 2);
     });
 }
 
-/// A table reads in its notation's words: its kind, its columns, and a nameless line by what it joins,
-/// whose words differing is no renaming.
+/// An element reads in its notation's words: its kind, its features, and a nameless line by what it
+/// joins, whose words differing is no renaming.
 #[test]
-fn an_er_element_reads_in_its_notations_words() {
+fn an_element_reads_in_its_notations_words() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        let line = |name: &str| Some(ElementCard { class: archforge_er::ENTITY, name: Some(name.into()), made: true });
-        let rows = |words: &str| vec![list(ListKind::Features(archforge_er::ATTRIBUTE), vec![(Named::Made(words.into()), None)])];
+        let line = |name: &str| Some(ElementCard { class: archforge_mof::toy::CLASS, name: Some(name.into()), made: true });
+        let rows = |words: &str| vec![list(ListKind::Features(archforge_mof::toy::PROPERTY), vec![(Named::Made(words.into()), None)])];
         let lists = CardLists { before: rows("a → b"), after: rows("c → b"), ..CardLists::default() };
         landed(h, id, key, Ok(Some(ElementSides { lists: Arc::new(lists), ..sided(id, line("a → b"), line("c → b"), Vec::new()) })));
-        assert_eq!((named(h, "Table, a → b"), named(h, "Table, c → b")), (1, 1), "unmarked: {:?}", painted(h));
-        assert_eq!((named(h, "Columns, a → b"), named(h, "Columns, c → b")), (1, 1));
+        assert_eq!((named(h, "Class, a → b"), named(h, "Class, c → b")), (1, 1), "unmarked: {:?}", painted(h));
+        assert_eq!((named(h, "Fields of the sketch, a → b"), named(h, "Fields of the sketch, c → b")), (1, 1));
         assert!(!painted_has(h, "The name changed"), "{:?}", painted(h));
     });
 }
 
-/// A list of features is headed as the notation the shell registered names it, not the app's own
-/// list: the sketch, which answers for UML here, heads UML's attributes its own way, ER still heads
-/// its columns and an enum type's literals, and a list of a class no notation of the shell's holds
-/// is headed Members.
+/// A list of features is headed as the notation the shell registered names it, not as a fixed
+/// list: the sketch, registered after another notation, heads its attributes its own way, a list of a kind it has no heading for and
+/// one of a class no notation of the shell's holds are headed Members; a shell given no notation
+/// heads the attributes Members too.
 #[test]
 fn a_list_of_features_is_headed_by_its_notation() {
     in_both(|h, host| {
@@ -3237,18 +3240,21 @@ fn a_list_of_features_is_headed_by_its_notation() {
         h.state_mut().notation_uis = SKETCH_UIS;
         let side = || {
             vec![
-                list(ListKind::Features(archforge_uml::PROPERTY), vec![(Named::Said("id".into()), None)]),
-                list(ListKind::Features(archforge_er::ATTRIBUTE), vec![(Named::Said("code".into()), None)]),
-                list(ListKind::Features(archforge_er::ENUM_TYPE), vec![(Named::Said("open".into()), None)]),
+                list(ListKind::Features(archforge_mof::toy::PROPERTY), vec![(Named::Said("id".into()), None)]),
+                list(ListKind::Features(archforge_mof::toy::PROPERTY), vec![(Named::Said("code".into()), None)]),
+                list(ListKind::Features(archforge_mof::toy::OPERATION), vec![(Named::Said("open".into()), None)]),
                 list(ListKind::Features(archforge_core::MODEL), vec![(Named::Said("odd".into()), None)]),
             ]
         };
         let lists = CardLists { before: side(), after: side(), ..CardLists::default() };
+        landed(h, id, key.clone(), listed(id, "kept", lists.clone()));
+        assert_eq!((named(h, "Fields of the sketch, id"), named(h, "Fields of the sketch, code")), (2, 2), "{:?}", painted(h));
+        assert_eq!(painted_times(h, "FIELDS OF THE SKETCH"), 4, "each list its heading, on each side");
+        assert_eq!((named(h, "Members, open"), named(h, "Members, odd")), (2, 2));
+        h.state_mut().notation_uis = &[];
         landed(h, id, key, listed(id, "kept", lists));
-        assert_eq!(named(h, "Fields of the sketch, id"), 2, "{:?}", painted(h));
-        assert_eq!((painted_times(h, "FIELDS OF THE SKETCH"), painted_times(h, "ATTRIBUTES")), (2, 0));
-        assert_eq!((named(h, "Columns, code"), named(h, "Literals, open")), (2, 2));
-        assert_eq!(named(h, "Members, odd"), 2);
+        assert_eq!((named(h, "Members, id"), painted_times(h, "FIELDS OF THE SKETCH")), (2, 0), "{:?}", painted(h));
+        only_what_every_notation_is_asked();
     });
 }
 
@@ -3295,11 +3301,11 @@ fn the_summary_counts_members_and_says_the_owner() {
         says(
             h,
             "1 value changed \u{b7} 1 member changed \u{b7} 2 relationships changed",
-            &format!("Visibility changed from Not set to Private. {MARKED}"),
+            &format!("Aggregation changed from Not set to Shared. {MARKED}"),
         );
         let fields = vec![field(Some(Value::Null), Some(Value::Enum(1)), true)];
         landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(some(1)), ..sided(id, schema("a"), schema("a"), fields) })));
-        says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
+        says(h, "1 value changed \u{b7} 1 member changed", &format!("Aggregation changed from Not set to Shared. {MARKED}"));
         let moved = || vec![list(ListKind::Ownership, vec![(Named::Said("p".into()), Some(ChangeKind::Changed))])];
         let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n, ..Default::default() };
         landed(h, id, key.clone(), listed(id, "a", owned(0)));
@@ -3307,9 +3313,9 @@ fn the_summary_counts_members_and_says_the_owner() {
         let changed = field(Some(Value::Null), Some(Value::Enum(1)), true);
         let with_owner = |fields: Vec<CardField>| Ok(Some(ElementSides { lists: Arc::new(owned(0)), ..sided(id, schema("a"), schema("a"), fields) }));
         landed(h, id, key.clone(), with_owner(vec![changed.clone()]));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {MARKED}"));
+        says(h, "1 value changed", &format!("Aggregation changed from Not set to Shared. The owner changed. {MARKED}"));
         landed(h, id, key, with_owner(vec![changed; 4]));
-        let one = "Visibility changed from Not set to Private.";
+        let one = "Aggregation changed from Not set to Shared.";
         says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {MARKED}"));
     });
 }

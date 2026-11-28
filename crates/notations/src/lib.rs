@@ -1,10 +1,15 @@
-//! The notations a project holds, composed: each metamodel brings its slabs and the tables its
-//! objects are stored in ([`PARTS`]), each notation its diagrams, skills and element hooks
-//! ([`NOTATIONS`]), and a project is made from the lists, so one store, one database, one view and
-//! one command table hold ER and UML side by side. The shell, the host and the agent's tools make
-//! projects here and name no notation for it. Pure: builds for the portable target.
+//! The notations a project holds, composed ([`Notations`]): each metamodel brings its slabs and the
+//! tables its objects are stored in ([`Part`]), each notation its diagrams, skills and element hooks
+//! and its own commands, and a project is made from the composition, so one store, one database, one
+//! view and one command table hold its notations side by side. The composition is a value: the app
+//! and the command-line tool hand [`NOTATIONS`], ER's and UML's, to what makes projects (the shell,
+//! the host, the agent's tools), which name no notation for it, and the shell's tests hand it one of
+//! their own. Pure: builds for the portable target.
 
 pub mod differences;
+// A fake notation for the tests of what holds notations without naming one (ADR 0005); never shipped.
+#[cfg(feature = "testing")]
+pub mod fake;
 mod labels;
 
 use std::collections::HashSet;
@@ -29,7 +34,7 @@ pub struct Part {
     pub tables: &'static [Table],
     pub junctions: &'static [Junction],
     /// The kind each of its classes is told apart within by name, among its owner's elements, for
-    /// the check a project gets as it opens ([`name_kind`]); none for names that never clash
+    /// the check a project gets as it opens ([`Notations::name_kind`]); none for names that never clash
     /// there.
     pub name_kind: fn(ClassId) -> Option<NameKind>,
 }
@@ -37,9 +42,10 @@ pub struct Part {
 /// One kind for every named element of a notation: two named alike in one owner always clash.
 const ONE_KIND: Option<NameKind> = Some(NameKind::Group(""));
 
-/// What a project holds: the shared core and the diagrams first, then the notations. Their tables
-/// are stored in this order, so a metamodel joins at the end.
-pub const PARTS: &[Part] = &[
+/// What every project holds before its notations: the shared core and the diagrams. Their tables
+/// are stored first, then the notations' in the order of [`Notations::new`]'s parts, so a metamodel
+/// joins at the end.
+const SHARED: &[Part] = &[
     Part {
         name: "core",
         metamodel: archforge_core::metamodel,
@@ -62,6 +68,10 @@ pub const PARTS: &[Part] = &[
         // and a package's own diagram, named like its package, let them be (AR-208).
         name_kind: |c| if c == archforge_diagram::DIAGRAM { None } else { ONE_KIND },
     },
+];
+
+/// What ER's and UML's metamodels bring to a project's store, in the order their tables are stored.
+const ER_AND_UML: &[Part] = &[
     Part {
         // not a diagram kind: the part's name, which is its metamodel's
         name: "er",
@@ -85,76 +95,46 @@ pub const PARTS: &[Part] = &[
     },
 ];
 
-/// The notations a project's view asks about their diagrams and elements.
-pub static NOTATIONS: &[&dyn Notation] = &[&archforge_er::ErNotation, &archforge_uml::UmlNotation];
+/// The notations a project's view asks about their diagrams and elements, ER's and UML's.
+static ER_AND_UML_VIEWS: &[&dyn Notation] = &[&archforge_er::ErNotation, &archforge_uml::UmlNotation];
+
+/// The notations the product ships, ER and UML: the composition the app and the command-line tool
+/// hand to what makes projects.
+pub static NOTATIONS: Notations = Notations::new(ER_AND_UML, ER_AND_UML_VIEWS, er_and_uml_commands);
+
+/// ER's and UML's own commands, in the order the command table lists them.
+fn er_and_uml_commands() -> Vec<archforge_engine::CommandSpec<Store, ProjectView>> {
+    let mut specs = archforge_er::commands::specs();
+    specs.extend(archforge_uml::commands::specs());
+    specs.extend(archforge_uml::members::specs());
+    specs.extend(archforge_uml::relations::specs());
+    specs.extend(archforge_uml::constraints::specs());
+    specs.extend(archforge_uml::generalization_sets::specs());
+    specs.extend(archforge_uml::qualifiers::specs());
+    specs.extend(archforge_uml::nary::specs());
+    specs.extend(archforge_uml::nesting::specs());
+    specs.extend(archforge_uml::templates::specs());
+    specs.extend(archforge_uml::profiles::specs());
+    specs.extend(archforge_uml::bindings::specs());
+    specs.extend(archforge_uml::applications::specs());
+    specs
+}
+
+/// The notations a project holds, composed: what their metamodels bring to its store and tables
+/// (after the shared core's and the diagrams'), the notations its view asks about their diagrams
+/// and elements, and their own commands. Every project is made from one, so one store, one
+/// database, one view and one command table hold them side by side.
+pub struct Notations {
+    /// What each notation's metamodel brings, in the order its tables are stored.
+    parts: &'static [Part],
+    /// The notations the view asks, in the order their kinds are listed.
+    notations: &'static [&'static dyn Notation],
+    /// The notations' own commands, listed between the shared element commands and the diagrams'.
+    commands: fn() -> Vec<archforge_engine::CommandSpec<Store, ProjectView>>,
+}
 
 /// A project's session: its store, the view and the commands.
 pub type Session = archforge_engine::Session<Store, ProjectView>;
-
-/// The kind an element of `class` is told apart within by its name among its owner's elements, by
-/// the rule of the notation the class is of ([`Part::name_kind`]): the check a project gets as it
-/// opens refuses only two elements of one kind named alike, whatever the case, in one owner.
-pub fn name_kind(class: ClassId) -> Option<NameKind> {
-    PARTS.iter().find(|p| p.index == class.metamodel()).map_or(ONE_KIND, |p| (p.name_kind)(class))
-}
-
-/// What every notation of [`NOTATIONS`] reports wrong in `store` as a project opens
-/// ([`Notation::open_problems`]): each notation's in its own order, the notations in theirs.
-pub fn open_problems(store: &Store) -> Vec<OpenProblem> {
-    NOTATIONS.iter().flat_map(|n| n.open_problems(store)).collect()
-}
-
-/// Takes, on `session`, its project's model just opened, the step each notation of [`NOTATIONS`]
-/// makes to bring a shape an earlier version saved up to date ([`Notation::open_step`]), in the
-/// order of the notations, each asked of the model the steps before it left: each one step that is
-/// written with the next change and can be undone. What a refused step could not do, in English
-/// with the reason, one line each; a refused step changes nothing and the others are still taken.
-pub fn open_steps(session: &mut Session) -> Vec<String> {
-    let mut failed = Vec::new();
-    for notation in NOTATIONS {
-        let Some(step) = notation.open_step(session.doc()) else { continue };
-        if let Err(e) = session.execute(step.command, &step.params) {
-            failed.push(format!("{}: {e}", step.failed));
-        }
-    }
-    failed
-}
-
-/// A view of a project holding every notation.
-pub fn view() -> ProjectView {
-    ProjectView::new(NOTATIONS)
-}
-
-/// The diagram kinds the project's notations know, in the order of [`NOTATIONS`]: what a host
-/// checks a project's diagrams against before it opens it.
-pub fn kinds() -> Vec<&'static str> {
-    view().kinds()
-}
-
-/// The universe of every notation a project holds.
-pub fn universe() -> Result<Arc<Universe>, MetaError> {
-    let metamodels = PARTS.iter().map(|n| (n.metamodel)()).collect::<Result<Vec<_>, _>>()?;
-    Ok(Arc::new(Universe::new(metamodels)?))
-}
-
-/// The slabs of every notation, for a store over [`universe`].
-fn slabs() -> Result<CompositeSlabs, String> {
-    PARTS.iter().try_fold(CompositeSlabs::new(), |all, n| all.with(n.index, (n.slabs)()))
-}
-
-/// An empty store over every notation, with the host's ids.
-pub fn store(ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Store, String> {
-    let universe = universe().map_err(|e| e.to_string())?;
-    Ok(Store::new(universe, Box::new(slabs()?), ids))
-}
-
-/// The tables a project stores its model in, every metamodel's in the order of [`PARTS`]. The
-/// shell writes rows for them and the host stores them, so both take them from here.
-pub fn storage() -> (Vec<Table>, Vec<Junction>) {
-    let tables = PARTS.iter().flat_map(|n| n.tables).copied().collect();
-    let junctions = PARTS.iter().flat_map(|n| n.junctions).copied().collect();
-    (tables, junctions)
-}
 
 /// A diagram of a kind no notation of the project knows, such as one an earlier version stored.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,7 +153,7 @@ pub struct UnknownDiagram {
 pub struct UnknownKinds {
     /// Every such diagram, in the order read; never empty.
     pub diagrams: Vec<UnknownDiagram>,
-    /// The kinds the project's notations know, in the order of [`NOTATIONS`].
+    /// The kinds the project's notations know, in their order.
     pub accepted: Vec<&'static str>,
 }
 
@@ -244,49 +224,6 @@ impl From<OpenError> for String {
 /// The table a project stores its diagrams in, under this name in every shape its tables have had.
 const DIAGRAMS: &str = "diagram_diagram";
 
-/// Refused when any of `diagrams` is of a kind none of [`NOTATIONS`] knows, naming them all.
-fn known_kinds(diagrams: impl Iterator<Item = UnknownDiagram>) -> Result<(), UnknownKinds> {
-    let accepted = kinds();
-    let diagrams: Vec<UnknownDiagram> = diagrams.filter(|d| !accepted.contains(&d.kind.as_str())).collect();
-    if diagrams.is_empty() {
-        return Ok(());
-    }
-    Err(UnknownKinds { diagrams, accepted })
-}
-
-/// Refuses a store holding diagrams whose kinds none of [`NOTATIONS`] knows.
-pub fn check_kinds(store: &Store) -> Result<(), UnknownKinds> {
-    let text = |d, prop| store.get(d, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
-    known_kinds(store.alive().filter(|o| store.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).map(|d| UnknownDiagram {
-        id: store.uuid(d).unwrap_or(Uuid([0; 16])),
-        name: text(d, archforge_diagram::diagram::NAME),
-        kind: text(d, archforge_diagram::diagram::KIND),
-    }))
-}
-
-/// [`check_kinds`] over rows read in the shape `tables`, before anything is built from them:
-/// only the diagram table's `id`, `kind` and, when the shape has it, `name` columns are read, found
-/// by name, so the rows of an earlier shape, or of the diagram table alone, are checked before the
-/// project's tables are brought up to date. A shape without the diagram table holds no diagram; a
-/// diagram whose kind column is missing or holds no text is of no kind any notation knows.
-pub fn check_kinds_in_rows(rows: &Rows, tables: &[Table]) -> Result<(), UnknownKinds> {
-    let Some((at, table)) = tables.iter().enumerate().find(|(_, t)| t.name == DIAGRAMS) else { return Ok(()) };
-    let column = |name: &str| table.columns.iter().position(|c| c.name == name);
-    let (id, name, kind) = (column("id"), column("name"), column("kind"));
-    let text = |row: &[Cell], at: Option<usize>| match at.and_then(|i| row.get(i)) {
-        Some(Cell::Text(t)) => t.to_string(),
-        _ => String::new(),
-    };
-    known_kinds(rows.tables.get(at).into_iter().flatten().map(|row| UnknownDiagram {
-        id: match id.and_then(|i| row.get(i)) {
-            Some(Cell::Id(u)) => *u,
-            _ => Uuid([0; 16]),
-        },
-        name: text(row, name),
-        kind: text(row, kind),
-    }))
-}
-
 /// The end of a default-diagram binding that names nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BindingEnd {
@@ -355,127 +292,250 @@ pub fn check_bindings_in_rows(rows: &Rows, tables: &[Table]) -> Result<(), Vec<B
     if broken.is_empty() { Ok(()) } else { Err(broken) }
 }
 
-/// The commands: the edit area, the shared element commands, every notation's own, the diagrams'
-/// and the skills'.
-pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>, String> {
-    archforge_engine::Registry::new(specs())
-}
-
-/// The commands of [`registry`], with `check` run on every change as it is about to be kept: a
-/// refusal takes the whole change back (AR-641).
-pub fn registry_checked(check: archforge_engine::CommitCheck<Store>) -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>, String> {
-    archforge_engine::Registry::with_commit_check(specs(), check)
-}
-
-/// The one list of commands [`registry`] and [`registry_checked`] hold.
-fn specs() -> Vec<archforge_engine::CommandSpec<Store, ProjectView>> {
-    let mut specs = archforge_engine::cmd::edit::specs();
-    specs.extend(archforge_diagram::project::specs());
-    specs.extend(archforge_er::commands::specs());
-    specs.extend(archforge_uml::commands::specs());
-    specs.extend(archforge_uml::members::specs());
-    specs.extend(archforge_uml::relations::specs());
-    specs.extend(archforge_uml::constraints::specs());
-    specs.extend(archforge_uml::generalization_sets::specs());
-    specs.extend(archforge_uml::qualifiers::specs());
-    specs.extend(archforge_uml::nary::specs());
-    specs.extend(archforge_uml::nesting::specs());
-    specs.extend(archforge_uml::templates::specs());
-    specs.extend(archforge_uml::profiles::specs());
-    specs.extend(archforge_uml::bindings::specs());
-    specs.extend(archforge_uml::applications::specs());
-    specs.extend(archforge_diagram::commands::specs::<ProjectView>());
-    specs.extend(archforge_core::skills::specs::<ProjectView>());
-    specs
-}
-
 /// The id counter a new project's session starts at: ids below it are the store's own.
 const FIRST_COUNTER: u64 = 1;
-
-/// The session of a project that has nothing yet: the project's Model root named `name`. `ids`
-/// mints the elements' ids; the host supplies it, since only the host may read the clock.
-pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String> {
-    let registry = registry()?;
-    let mut st = store(ids)?;
-    let model = st.create(archforge_core::MODEL).map_err(|e| e.to_string())?;
-    st.set(model, archforge_core::named_element::NAME, archforge_mof::Value::str(name)).map_err(|e| e.to_string())?;
-    Ok(Session::with_view(registry, st, FIRST_COUNTER, archforge_engine::Options::default(), view()))
-}
-
-/// The session of a project read back from its rows: the store rebuilt from them and checked,
-/// saved as it is; refused, with nothing built, when a diagram is of a kind no notation knows
-/// ([`check_kinds_in_rows`]) or a binding names nothing ([`check_bindings_in_rows`]). `ids` mints
-/// the ids of the elements made from now on.
-pub fn session_from_rows(rows: &archforge_mof::rows::Rows, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, OpenError> {
-    session_from_rows_repaired(rows, ids, |_| {})
-}
-
-/// [`session_from_rows`] with `repair` run on the model read before the session starts: for a
-/// layout the reader puts right (a box too small for what it shows) without an undo step; it is
-/// written with the next change.
-pub fn session_from_rows_repaired(
-    rows: &archforge_mof::rows::Rows,
-    ids: Box<dyn FnMut() -> Uuid + Send>,
-    repair: impl FnOnce(&mut Store),
-) -> Result<Session, OpenError> {
-    session_from_rows_diagnosed(rows, ids, repair).map(|opened| opened.session)
-}
 
 /// A project's session as it opens, with what its notations report wrong in its model.
 pub struct Opened {
     pub session: Session,
-    /// The problems of the session's store, after any repair, as [`open_problems`] gives them:
+    /// The problems of the session's store, after any repair, as [`Notations::open_problems`] gives them:
     /// reported, never repaired, so the model opens as it was stored.
     pub problems: Vec<OpenProblem>,
 }
 
-/// [`session_from_rows_repaired`], with the problems its notations report in the model opened. A
-/// version opened to be looked at reports those of its own revision. No repair changes a binding,
-/// its ids compared whatever store the repair leaves: one that would is refused.
-pub fn session_from_rows_diagnosed(
-    rows: &archforge_mof::rows::Rows,
-    ids: Box<dyn FnMut() -> Uuid + Send>,
-    repair: impl FnOnce(&mut Store),
-) -> Result<Opened, OpenError> {
-    let registry = registry()?;
-    let (tables, junctions) = storage();
-    // A diagram no notation knows refuses the model before anything is built from it.
-    check_kinds_in_rows(rows, &tables).map_err(OpenError::UnknownKinds)?;
-    // So does a binding that names nothing; one that names the wrong thing is reported.
-    check_bindings_in_rows(rows, &tables).map_err(OpenError::BrokenBindings)?;
-    // Built without an undo log, so a model of any size the read budgets let through opens.
-    let mut st = archforge_mof::rows::restore_into_empty(store(ids)?, rows, &tables, &junctions).map_err(|e| e.to_string())?;
-    // Every binding and its ends by their ids, in id order: a repair may hand back another store,
-    // whose handles name other objects.
-    let bound = |st: &Store| {
-        let end = |b, prop| st.get(b, prop).ok().and_then(|v| v.as_ref()).and_then(|o| st.uuid(o).ok());
-        let mut all: Vec<_> = archforge_diagram::defaults::bindings(st)
-            .into_iter()
-            .map(|b| (st.uuid(b).ok(), end(b, OWNER_ELEMENT), end(b, DEFAULT_DIAGRAM)))
-            .collect();
-        all.sort();
-        all
-    };
-    let stored = bound(&st);
-    repair(&mut st);
-    // The repair changes layout alone; a kind or a binding it would change is refused all the same.
-    check_kinds(&st).map_err(OpenError::UnknownKinds)?;
-    if bound(&st) != stored {
-        return Err(OpenError::Unreadable("the repair as the project opened changed a default-diagram binding".into()));
+impl Notations {
+    /// The composition of the notations whose metamodels bring `parts`, whose view asks
+    /// `notations` and whose own commands `commands` lists, after the shared core and diagrams.
+    pub const fn new(
+        parts: &'static [Part],
+        notations: &'static [&'static dyn Notation],
+        commands: fn() -> Vec<archforge_engine::CommandSpec<Store, ProjectView>>,
+    ) -> Notations {
+        Notations { parts, notations, commands }
     }
-    // Only elements of one kind clash by name in one owner (AR-208); skills by their own rule.
-    if let Some(problem) = st.first_problem_by(name_kind) {
-        return Err(format!("the model does not hold together: {problem:?}").into());
+
+    /// The notations a project's view asks about their diagrams and elements.
+    pub fn notations(&self) -> &'static [&'static dyn Notation] {
+        self.notations
     }
-    if let Some(problem) = archforge_core::skills::first_duplicate(&st) {
-        return Err(format!("the model does not hold together: {problem:?}").into());
+
+    /// What a project's store holds: the shared core's and the diagrams' parts, then the notations'.
+    pub fn parts(&self) -> impl Iterator<Item = &'static Part> {
+        SHARED.iter().chain(self.parts)
     }
-    if !st.alive().any(|o| st.class_of(o).ok() == Some(archforge_core::MODEL)) {
-        return Err(OpenError::Unreadable("the project has no model root".into()));
+
+    /// The kind an element of `class` is told apart within by its name among its owner's elements, by
+    /// the rule of the part the class is of ([`Part::name_kind`]): the check a project gets as it
+    /// opens refuses only two elements of one kind named alike, whatever the case, in one owner.
+    pub fn name_kind(&self, class: ClassId) -> Option<NameKind> {
+        self.parts().find(|p| p.index == class.metamodel()).map_or(ONE_KIND, |p| (p.name_kind)(class))
     }
-    // Read from the store the session gets, so they hold whatever the repair changed around a binding.
-    let problems = open_problems(&st);
-    let mut session = Session::with_view(registry, st, FIRST_COUNTER, archforge_engine::Options::default(), view());
-    session.mark_saved().map_err(|e| e.to_string())?;
-    Ok(Opened { session, problems })
+
+    /// What every notation reports wrong in `store` as a project opens
+    /// ([`Notation::open_problems`]): each notation's in its own order, the notations in theirs.
+    pub fn open_problems(&self, store: &Store) -> Vec<OpenProblem> {
+        self.notations.iter().flat_map(|n| n.open_problems(store)).collect()
+    }
+
+    /// Takes, on `session`, its project's model just opened, the step each notation makes to bring a
+    /// shape an earlier version saved up to date ([`Notation::open_step`]), in the order of the
+    /// notations, each asked of the model the steps before it left: each one step that is written
+    /// with the next change and can be undone. What a refused step could not do, in English with the
+    /// reason, one line each; a refused step changes nothing and the others are still taken.
+    pub fn open_steps(&self, session: &mut Session) -> Vec<String> {
+        let mut failed = Vec::new();
+        for notation in self.notations {
+            let Some(step) = notation.open_step(session.doc()) else { continue };
+            if let Err(e) = session.execute(step.command, &step.params) {
+                failed.push(format!("{}: {e}", step.failed));
+            }
+        }
+        failed
+    }
+
+    /// A view of a project holding these notations.
+    pub fn view(&self) -> ProjectView {
+        ProjectView::new(self.notations)
+    }
+
+    /// The diagram kinds the notations know, in their order: what a host checks a project's diagrams
+    /// against before it opens it.
+    pub fn kinds(&self) -> Vec<&'static str> {
+        self.view().kinds()
+    }
+
+    /// The universe of every metamodel a project holds.
+    pub fn universe(&self) -> Result<Arc<Universe>, MetaError> {
+        let metamodels = self.parts().map(|n| (n.metamodel)()).collect::<Result<Vec<_>, _>>()?;
+        Ok(Arc::new(Universe::new(metamodels)?))
+    }
+
+    /// The slabs of every metamodel, for a store over [`Notations::universe`].
+    fn slabs(&self) -> Result<CompositeSlabs, String> {
+        self.parts().try_fold(CompositeSlabs::new(), |all, n| all.with(n.index, (n.slabs)()))
+    }
+
+    /// An empty store over every metamodel, with the host's ids.
+    pub fn store(&self, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Store, String> {
+        let universe = self.universe().map_err(|e| e.to_string())?;
+        Ok(Store::new(universe, Box::new(self.slabs()?), ids))
+    }
+
+    /// The tables a project stores its model in, every metamodel's in the order of its parts. The
+    /// shell writes rows for them and the host stores them, so both take them from here.
+    pub fn storage(&self) -> (Vec<Table>, Vec<Junction>) {
+        let tables = self.parts().flat_map(|n| n.tables).copied().collect();
+        let junctions = self.parts().flat_map(|n| n.junctions).copied().collect();
+        (tables, junctions)
+    }
+
+    /// Refused when any of `diagrams` is of a kind none of the notations knows, naming them all.
+    fn known_kinds(&self, diagrams: impl Iterator<Item = UnknownDiagram>) -> Result<(), UnknownKinds> {
+        let accepted = self.kinds();
+        let diagrams: Vec<UnknownDiagram> = diagrams.filter(|d| !accepted.contains(&d.kind.as_str())).collect();
+        if diagrams.is_empty() {
+            return Ok(());
+        }
+        Err(UnknownKinds { diagrams, accepted })
+    }
+
+    /// Refuses a store holding diagrams whose kinds none of the notations knows.
+    pub fn check_kinds(&self, store: &Store) -> Result<(), UnknownKinds> {
+        let text = |d, prop| store.get(d, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+        self.known_kinds(store.alive().filter(|o| store.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).map(|d| UnknownDiagram {
+            id: store.uuid(d).unwrap_or(Uuid([0; 16])),
+            name: text(d, archforge_diagram::diagram::NAME),
+            kind: text(d, archforge_diagram::diagram::KIND),
+        }))
+    }
+
+    /// [`Notations::check_kinds`] over rows read in the shape `tables`, before anything is built from them:
+    /// only the diagram table's `id`, `kind` and, when the shape has it, `name` columns are read, found
+    /// by name, so the rows of an earlier shape, or of the diagram table alone, are checked before the
+    /// project's tables are brought up to date. A shape without the diagram table holds no diagram; a
+    /// diagram whose kind column is missing or holds no text is of no kind any notation knows.
+    pub fn check_kinds_in_rows(&self, rows: &Rows, tables: &[Table]) -> Result<(), UnknownKinds> {
+        let Some((at, table)) = tables.iter().enumerate().find(|(_, t)| t.name == DIAGRAMS) else { return Ok(()) };
+        let column = |name: &str| table.columns.iter().position(|c| c.name == name);
+        let (id, name, kind) = (column("id"), column("name"), column("kind"));
+        let text = |row: &[Cell], at: Option<usize>| match at.and_then(|i| row.get(i)) {
+            Some(Cell::Text(t)) => t.to_string(),
+            _ => String::new(),
+        };
+        self.known_kinds(rows.tables.get(at).into_iter().flatten().map(|row| UnknownDiagram {
+            id: match id.and_then(|i| row.get(i)) {
+                Some(Cell::Id(u)) => *u,
+                _ => Uuid([0; 16]),
+            },
+            name: text(row, name),
+            kind: text(row, kind),
+        }))
+    }
+
+    /// The commands: the edit area, the shared element commands, every notation's own, the diagrams'
+    /// and the skills'.
+    pub fn registry(&self) -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>, String> {
+        archforge_engine::Registry::new(self.specs())
+    }
+
+    /// The commands of [`Notations::registry`], with `check` run on every change as it is about to be kept: a
+    /// refusal takes the whole change back (AR-641).
+    pub fn registry_checked(
+        &self,
+        check: archforge_engine::CommitCheck<Store>,
+    ) -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>, String> {
+        archforge_engine::Registry::with_commit_check(self.specs(), check)
+    }
+
+    /// The one list of commands [`Notations::registry`] and [`Notations::registry_checked`] hold.
+    fn specs(&self) -> Vec<archforge_engine::CommandSpec<Store, ProjectView>> {
+        let mut specs = archforge_engine::cmd::edit::specs();
+        specs.extend(archforge_diagram::project::specs());
+        specs.extend((self.commands)());
+        specs.extend(archforge_diagram::commands::specs::<ProjectView>());
+        specs.extend(archforge_core::skills::specs::<ProjectView>());
+        specs
+    }
+
+    /// The session of a project that has nothing yet: the project's Model root named `name`. `ids`
+    /// mints the elements' ids; the host supplies it, since only the host may read the clock.
+    pub fn new_project_session(&self, name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String> {
+        let registry = self.registry()?;
+        let mut st = self.store(ids)?;
+        let model = st.create(archforge_core::MODEL).map_err(|e| e.to_string())?;
+        st.set(model, archforge_core::named_element::NAME, archforge_mof::Value::str(name)).map_err(|e| e.to_string())?;
+        Ok(Session::with_view(registry, st, FIRST_COUNTER, archforge_engine::Options::default(), self.view()))
+    }
+
+    /// The session of a project read back from its rows: the store rebuilt from them and checked,
+    /// saved as it is; refused, with nothing built, when a diagram is of a kind no notation knows
+    /// ([`Notations::check_kinds_in_rows`]) or a binding names nothing ([`check_bindings_in_rows`]). `ids` mints
+    /// the ids of the elements made from now on.
+    pub fn session_from_rows(&self, rows: &archforge_mof::rows::Rows, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, OpenError> {
+        self.session_from_rows_repaired(rows, ids, |_| {})
+    }
+
+    /// [`Notations::session_from_rows`] with `repair` run on the model read before the session starts: for a
+    /// layout the reader puts right (a box too small for what it shows) without an undo step; it is
+    /// written with the next change.
+    pub fn session_from_rows_repaired(
+        &self,
+        rows: &archforge_mof::rows::Rows,
+        ids: Box<dyn FnMut() -> Uuid + Send>,
+        repair: impl FnOnce(&mut Store),
+    ) -> Result<Session, OpenError> {
+        self.session_from_rows_diagnosed(rows, ids, repair).map(|opened| opened.session)
+    }
+
+    /// [`Notations::session_from_rows_repaired`], with the problems its notations report in the model opened. A
+    /// version opened to be looked at reports those of its own revision. No repair changes a binding,
+    /// its ids compared whatever store the repair leaves: one that would is refused.
+    pub fn session_from_rows_diagnosed(
+        &self,
+        rows: &archforge_mof::rows::Rows,
+        ids: Box<dyn FnMut() -> Uuid + Send>,
+        repair: impl FnOnce(&mut Store),
+    ) -> Result<Opened, OpenError> {
+        let registry = self.registry()?;
+        let (tables, junctions) = self.storage();
+        // A diagram no notation knows refuses the model before anything is built from it.
+        self.check_kinds_in_rows(rows, &tables).map_err(OpenError::UnknownKinds)?;
+        // So does a binding that names nothing; one that names the wrong thing is reported.
+        check_bindings_in_rows(rows, &tables).map_err(OpenError::BrokenBindings)?;
+        // Built without an undo log, so a model of any size the read budgets let through opens.
+        let mut st = archforge_mof::rows::restore_into_empty(self.store(ids)?, rows, &tables, &junctions).map_err(|e| e.to_string())?;
+        // Every binding and its ends by their ids, in id order: a repair may hand back another store,
+        // whose handles name other objects.
+        let bound = |st: &Store| {
+            let end = |b, prop| st.get(b, prop).ok().and_then(|v| v.as_ref()).and_then(|o| st.uuid(o).ok());
+            let mut all: Vec<_> = archforge_diagram::defaults::bindings(st)
+                .into_iter()
+                .map(|b| (st.uuid(b).ok(), end(b, OWNER_ELEMENT), end(b, DEFAULT_DIAGRAM)))
+                .collect();
+            all.sort();
+            all
+        };
+        let stored = bound(&st);
+        repair(&mut st);
+        // The repair changes layout alone; a kind or a binding it would change is refused all the same.
+        self.check_kinds(&st).map_err(OpenError::UnknownKinds)?;
+        if bound(&st) != stored {
+            return Err(OpenError::Unreadable("the repair as the project opened changed a default-diagram binding".into()));
+        }
+        // Only elements of one kind clash by name in one owner (AR-208); skills by their own rule.
+        if let Some(problem) = st.first_problem_by(|class| self.name_kind(class)) {
+            return Err(format!("the model does not hold together: {problem:?}").into());
+        }
+        if let Some(problem) = archforge_core::skills::first_duplicate(&st) {
+            return Err(format!("the model does not hold together: {problem:?}").into());
+        }
+        if !st.alive().any(|o| st.class_of(o).ok() == Some(archforge_core::MODEL)) {
+            return Err(OpenError::Unreadable("the project has no model root".into()));
+        }
+        // Read from the store the session gets, so they hold whatever the repair changed around a binding.
+        let problems = self.open_problems(&st);
+        let mut session = Session::with_view(registry, st, FIRST_COUNTER, archforge_engine::Options::default(), self.view());
+        session.mark_saved().map_err(|e| e.to_string())?;
+        Ok(Opened { session, problems })
+    }
 }

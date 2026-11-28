@@ -446,31 +446,34 @@ mod tests {
             element_count: None,
             anchors,
         };
-        let classes: Vec<Anchor> = (1..=8).map(|n| at(n, AnchorRole::Read, "uml_class", "C")).collect();
+        let classes: Vec<Anchor> = (1..=8).map(|n| at(n, AnchorRole::Read, "sketch_class", "C")).collect();
         let mut diagram = classes.clone();
         diagram.push(at(20, AnchorRole::Target, "diagram_diagram", "Commerce"));
         diagram.push(at(21, AnchorRole::Read, "diagram_node", ""));
         assert_eq!(
             tool_words(uis, &facts("engine.execute", Some("diagram.get"), false, diagram)),
-            ("Read diagram Commerce".into(), Some("8 classes".into()))
+            ("Read diagram Commerce".into(), Some("8 drawn in the sketch".into()))
         );
-        let mut listed = facts("engine.execute", Some("uml.class.list"), false, classes);
+        let mut listed = facts("engine.execute", Some("sketch.class.list"), false, classes);
         listed.detail = Some("descriptions".into());
-        assert_eq!(tool_words(uis, &listed), ("Read 8 classes".into(), Some("descriptions".into())));
+        assert_eq!(tool_words(uis, &listed), ("Read 8 drawn in the sketch".into(), Some("descriptions".into())));
         let payment = vec![
-            at(1, AnchorRole::Target, "uml_class", "Payment"),
-            at(2, AnchorRole::Read, "uml_property", "amount"),
-            at(3, AnchorRole::Read, "uml_property", "id"),
-            at(4, AnchorRole::Read, "uml_association", ""),
-            at(5, AnchorRole::Read, "uml_generalization", ""),
+            at(1, AnchorRole::Target, "sketch_class", "Payment"),
+            at(2, AnchorRole::Read, "sketch_class", "Card"),
+            at(3, AnchorRole::Read, "sketch_class", "Cash"),
+            at(4, AnchorRole::Read, "sketch_property", ""),
+            at(5, AnchorRole::Read, "sketch_property", ""),
         ];
-        assert_eq!(tool_words(uis, &facts("engine.execute", Some("uml.class.get"), false, payment)).1.as_deref(), Some("2 attributes, 2 lines"));
-        let mut changed = facts("engine.execute", Some("uml.class.set"), true, vec![at(1, AnchorRole::Target, "uml_class", "Customer")]);
+        assert_eq!(
+            tool_words(uis, &facts("engine.execute", Some("sketch.class.list"), false, payment)).1.as_deref(),
+            Some("2 drawn in the sketch, 2 lines")
+        );
+        let mut changed = facts("engine.execute", Some("sketch.class.rename"), true, vec![at(1, AnchorRole::Target, "sketch_class", "Customer")]);
         changed.detail = Some("description".into());
         assert_eq!(tool_words(uis, &changed), ("Changed Customer".into(), Some("description".into())));
-        let added = facts("engine.execute", Some("uml.class.add"), true, vec![at(1, AnchorRole::Target, "uml_class", "Invoice")]);
+        let added = facts("engine.execute", Some("sketch.class.add"), true, vec![at(1, AnchorRole::Target, "sketch_class", "Invoice")]);
         assert_eq!(tool_words(uis, &added).0, "Added Invoice");
-        let removed = facts("engine.execute", Some("er.entity.remove"), true, vec![at(1, AnchorRole::Target, "er_entity", "Tag")]);
+        let removed = facts("engine.execute", Some("sketch.class.remove"), true, vec![at(1, AnchorRole::Target, "sketch_class", "Tag")]);
         assert_eq!(tool_words(uis, &removed).0, "Removed Tag");
         let mut refused = removed.clone();
         refused.status = ToolStatus::Refused;
@@ -480,63 +483,8 @@ mod tests {
         assert_eq!(tool_words(uis, &failed).1.as_deref(), Some("failed"));
         assert_eq!(tool_words(uis, &facts("engine.undo", None, true, Vec::new())).0, "Undid a step");
         // More named than kept: the count in all.
-        let mut many = facts("engine.execute", Some("uml.class.list"), false, vec![at(1, AnchorRole::Read, "uml_class", "A")]);
+        let mut many = facts("engine.execute", Some("sketch.class.list"), false, vec![at(1, AnchorRole::Read, "sketch_class", "A")]);
         many.element_count = Some(700);
         assert_eq!(tool_words(uis, &many).0, "Read 700 elements");
-    }
-
-    /// The app's notations count each of their kinds in its own words, every relationship of
-    /// either as a line, a primitive type as a data type, and leave out the parts of a diagram and
-    /// a description's comment; the shell counts diagrams, skills and the rest as elements.
-    #[test]
-    fn the_app_notations_count_their_kinds_in_their_words() {
-        let uis = SCREENS.notation_uis();
-        crate::i18n::set_language("en");
-        let read = |metaclasses: &[&str]| ToolFacts {
-            tool: "engine.execute".into(),
-            command: Some("model.find".into()),
-            detail: None,
-            status: ToolStatus::Done,
-            changed_model: false,
-            element_count: None,
-            anchors: metaclasses.iter().zip(1u8..).map(|(m, n)| at(n, AnchorRole::Read, m, "")).collect(),
-        };
-        for (table, two) in [
-            ("uml_class", "2 classes"),
-            ("uml_interface", "2 interfaces"),
-            ("uml_enumeration", "2 enumerations"),
-            ("uml_data_type", "2 data types"),
-            ("uml_primitive_type", "2 data types"),
-            ("uml_package", "2 packages"),
-            ("uml_property", "2 attributes"),
-            ("uml_operation", "2 operations"),
-            ("uml_enumeration_literal", "2 literals"),
-            ("er_entity", "2 tables"),
-            ("er_attribute", "2 columns"),
-            ("er_schema", "2 schemas"),
-            ("diagram_diagram", "2 diagrams"),
-            ("core_skill", "2 skills"),
-            ("uml_constraint", "2 elements"),
-        ] {
-            assert_eq!(tool_words(uis, &read(&[table, table])).0, format!("Read {two}"), "{table}");
-        }
-        let lines = [
-            "uml_association",
-            "uml_association_class",
-            "uml_generalization",
-            "uml_dependency",
-            "uml_realization",
-            "uml_abstraction",
-            "uml_usage",
-            "uml_interface_realization",
-            "er_relationship",
-            "er_generalization",
-        ];
-        assert_eq!(tool_words(uis, &read(&lines)).0, "Read 10 lines", "every relationship of either notation");
-        assert_eq!(tool_words(uis, &read(&["uml_data_type", "uml_primitive_type", "er_entity"])).0, "Read 2 data types, 1 table");
-        let parts = ["diagram_node", "diagram_edge", "core_comment", "uml_comment", "er_entity"];
-        assert_eq!(tool_words(uis, &read(&parts)).0, "Read 1 table", "a diagram's parts and a description's comment are not counted");
-        // Elements of tables no one counts are told apart by their table.
-        assert_eq!(tool_words(uis, &read(&["core_folder", "core_folder", "core_model"])).0, "Read 2 elements, 1 element");
     }
 }

@@ -5,15 +5,18 @@
 //! built outside the crate. Here too are the words the shell hands its lookups through a table
 //! rather than as a literal, which the app's tests across every catalogue read.
 //!
-//! Each item hands over to the shell's own code unchanged: none draws, reads or decides anything
-//! of its own. What a notation's screens reach is not here.
+//! Each item hands over to the shell's own code unchanged and decides nothing of its own. Where an
+//! item draws, the shell's own drawing paints: `harness` and `click` run the window's frames, and
+//! the four that draw alone (`drawn_alone_at`, `recorded_alone`, `overlaid_alone`, `badge_alone`)
+//! make a frame of their own with the window's fonts, let the shell's code paint one part into it
+//! and give back what it painted and recorded. What a notation's screens reach is not here.
 
 use archforge_mof::rows::Rows;
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_notations::Session;
 use archforge_notations::differences::Difference;
 use archforge_shell_api::cx::CtxRef;
-use archforge_shell_api::kinds::DiagramKind;
+use archforge_shell_api::kinds::{DiagramKind, ModelRow};
 use archforge_shell_api::notation_ui::{NotationStates, NotationUi, Row};
 use archforge_shell_api::screens::ScreensRegistry;
 use egui_kittest::Harness;
@@ -27,10 +30,11 @@ use crate::theme::ThemeKind;
 use crate::{BranchEntry, Services, Shell, widgets};
 
 /// The whole window in a harness at the design's frame size, in English and the appearance
-/// `theme`, its shell given the notations' screens `screens` and no host services, drawn once.
-pub fn harness(screens: &'static ScreensRegistry, theme: ThemeKind) -> Harness<'static, Shell> {
+/// `theme`, its shell given the notations `notations` and their screens `screens` and no host
+/// services, drawn once.
+pub fn harness(notations: &'static archforge_notations::Notations, screens: &'static ScreensRegistry, theme: ThemeKind) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ..Services::default() }, screens);
+    let mut shell = Shell::new(Services { ..Services::default() }, notations, screens);
     shell.state.theme = theme;
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -86,6 +90,44 @@ pub fn registry(shell: &Shell) -> &widgets::Registry {
 /// The menu of the bar open in `shell`, if any.
 pub fn open_menu(shell: &Shell) -> Option<&'static str> {
     shell.menu_bar.open
+}
+
+/// The row of the bar's open menu the keys are on, if any.
+pub fn menu_row(shell: &Shell) -> Option<&'static str> {
+    shell.menu_bar.row
+}
+
+/// Every Model menu row of the kinds `kinds`, each with the kind it is of, then the shared ones, as
+/// the table of actions finds them.
+pub fn model_rows(kinds: &[&'static dyn DiagramKind]) -> Vec<(Option<&'static str>, &'static ModelRow)> {
+    crate::model_menu::rows(kinds).collect()
+}
+
+/// The rows the Model menu can show at once, one list per kind of `kinds`.
+pub fn model_menus(kinds: &[&'static dyn DiagramKind]) -> Vec<Vec<&'static str>> {
+    crate::model_menu::every_menu(kinds)
+}
+
+/// The classes that get a kind word of their own among the notations `uis`: those each creates.
+pub fn kind_classes(uis: &[&'static dyn NotationUi]) -> Vec<archforge_mof::ClassId> {
+    crate::model_words::kinds(uis)
+}
+
+/// Gives `shell` the notations `uis` in place of its screens parts', for the tests of what the
+/// shell asks the notations it holds.
+pub fn set_notation_uis(shell: &mut Shell, uis: &'static [&'static dyn NotationUi]) {
+    shell.notation_uis = uis;
+}
+
+/// The Diagrams explorer's rows of `shell` with its groups made of `kinds`, within `visits` visits
+/// when given: each row's depth, name and count, and whether the walk stopped short.
+pub fn diagram_rows(shell: &Shell, kinds: &[&'static dyn DiagramKind], visits: Option<usize>) -> (Vec<(u8, String, usize)>, bool) {
+    let Some(session) = shell.session.as_ref() else { return (Vec::new(), false) };
+    let tree = match visits {
+        Some(visits) => crate::diagrams::rows_within(session.doc(), &shell.diagrams, kinds, visits),
+        None => crate::diagrams::rows(session.doc(), &shell.diagrams, kinds),
+    };
+    (tree.rows.into_iter().map(|r| (r.depth, r.label, r.count)).collect(), tree.cut)
 }
 
 /// The inline editor the bar holds the keyboard for, if any.
@@ -166,9 +208,10 @@ pub fn description_now(shell: &Shell, obj: Obj) -> String {
     crate::panels::description_now(shell, obj)
 }
 
-/// What the skill `s` aims at, as the Skills panel says it, by the notations `uis`.
-pub fn skill_target_word(uis: &[&'static dyn NotationUi], store: &Store, s: Obj) -> String {
-    crate::panels::target_word(uis, store, s)
+/// What the skill `s` aims at in a project seen through `view`, as the Skills panel says it, by the
+/// notations `uis`.
+pub fn skill_target_word(view: &archforge_diagram::ProjectView, uis: &[&'static dyn NotationUi], store: &Store, s: Obj) -> String {
+    crate::panels::target_word(view, uis, store, s)
 }
 
 /// The search's index of the diagrams and elements of `store`, by the kinds `kinds` and the
@@ -230,14 +273,183 @@ pub fn word_lists() -> Vec<(&'static str, Vec<&'static str>)> {
     all
 }
 
-/// Every key the labels for what the metamodel names look up for the notations `uis`, each with
-/// the index of the metamodel that names it.
-pub fn model_words(uis: &[&'static dyn NotationUi]) -> Vec<(u16, String)> {
-    crate::model_words::texts(uis)
+/// Every key the labels for what the metamodel names look up for the notations `uis` among the
+/// composition `notations`, each with the index of the metamodel that names it.
+pub fn model_words(notations: &archforge_notations::Notations, uis: &[&'static dyn NotationUi]) -> Vec<(u16, String)> {
+    crate::model_words::texts(notations, uis)
 }
 
 /// The keys of the in-window menu bar's access letters, with the diagram kinds `kinds`: each
 /// title's and each row's, once.
 pub fn access_keys(kinds: &[&'static dyn DiagramKind]) -> Vec<String> {
     crate::menu_bar::access_keys(kinds)
+}
+
+/// The texts the last frame of `h` painted, in order.
+fn painted_texts<S>(h: &Harness<'_, S>) -> Vec<String> {
+    /// Collects the texts of `s` and of the shapes it holds into `out`.
+    fn walk(s: &egui::Shape, out: &mut Vec<String>) {
+        match s {
+            egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut out));
+    out
+}
+
+/// What the canvas's own drawing paints and records of the diagram `d` of `session`, with no shell
+/// anywhere, as `kind` draws its own figures and `kinds` are asked after it for a card they draw
+/// themselves, over an area `width` wide, `overrides` as a drag's preview and `problems` badged:
+/// the texts, each id recorded with its rectangle, and how many badges it gave back.
+pub fn drawn_alone_at(
+    session: &Session,
+    d: &str,
+    (kind, kinds): (Option<&'static dyn DiagramKind>, &'static [&'static dyn DiagramKind]),
+    dark: bool,
+    width: f32,
+    overrides: &std::collections::BTreeMap<Uuid, egui::Rect>,
+    problems: &std::collections::BTreeMap<Obj, Vec<String>>,
+) -> (Vec<String>, Vec<(String, egui::Rect)>, usize) {
+    let store = session.doc();
+    let Some(diagram) = Uuid::parse(d).and_then(|id| store.by_uuid(id)) else { return (Vec::new(), Vec::new(), 0) };
+    let grid = archforge_diagram::Grid::build(store, diagram);
+    let area = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 700.0));
+    let view = crate::canvas::View { origin: area.min, pan: egui::Vec2::ZERO, zoom: 1.0 };
+    let badges = std::cell::Cell::new(0);
+    let recorded = std::cell::RefCell::new(widgets::Registry::default());
+    let mut h = Harness::builder().with_size(egui::vec2(1000.0, 700.0)).build_ui(|ui| {
+        // The window's fonts are the context's, in place a pass later; nothing else is shared.
+        if !ui.ctx().fonts(|f| f.definitions().families.contains_key(&egui::FontFamily::Name("ux-regular".into()))) {
+            ui.ctx().set_fonts(crate::fonts::definitions());
+            return;
+        }
+        let scene = crate::canvas::Scene {
+            p: crate::ux::palette(dark),
+            store,
+            notations: session.view(),
+            kind,
+            kinds,
+            diagram,
+            view: &view,
+            grid: &grid,
+            area,
+        };
+        let live = crate::canvas::Live {
+            selection: &[],
+            overrides,
+            key_status: false,
+            looking_only: false,
+            renaming: None,
+            problems,
+            hovered: None,
+            end_drag: None,
+            segment_drag: None,
+            draft: None,
+            rename_text: None,
+            label_drag: None,
+        };
+        recorded.borrow_mut().begin_frame();
+        let drawn = crate::canvas::draw_scene(ui, &ui.painter().with_clip_rect(area), &scene, live, &mut recorded.borrow_mut());
+        badges.set(drawn.badges.len());
+    });
+    h.run();
+    let texts = painted_texts(&h);
+    drop(h);
+    let at = |r: [f32; 4]| egui::Rect::from_min_max(egui::pos2(r[0], r[1]), egui::pos2(r[2], r[3]));
+    let ids = recorded.borrow().entries().iter().map(|e| (e.id.clone(), at(e.rect))).collect();
+    (texts, ids, badges.get())
+}
+
+/// What `draw` records in `shell`'s registry when it draws once with the window's fonts in a context
+/// of its own, away from any window: the ids, in order. The window's own registry is set aside
+/// meanwhile and put back.
+pub fn recorded_alone(shell: &mut Shell, mut draw: impl FnMut(&mut Shell, &egui::Ui)) -> Vec<String> {
+    let ctx = egui::Context::default();
+    let mut ids = Vec::new();
+    for _ in 0..2 {
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            // The window's fonts are the context's, in place a pass later.
+            if !ui.ctx().fonts(|f| f.definitions().families.contains_key(&egui::FontFamily::Name("ux-regular".into()))) {
+                ui.ctx().set_fonts(crate::fonts::definitions());
+                return;
+            }
+            let kept = std::mem::take(&mut shell.registry);
+            draw(shell, ui);
+            ids = std::mem::replace(&mut shell.registry, kept).entries().iter().map(|e| e.id.clone()).collect();
+        });
+        // Nothing is shown: the fonts' textures go unused.
+        out.textures_delta.clear();
+    }
+    ids
+}
+
+/// What `notation` draws over the canvas at `r` of `shell`'s open diagram at `layer`, alone in a
+/// frame of its own, in the appearance `dark`: how many shapes it painted and the ids it recorded.
+pub fn overlaid_alone(
+    shell: &mut Shell,
+    notation: &dyn NotationUi,
+    layer: archforge_shell_api::notation_ui::Layer,
+    r: egui::Rect,
+    dark: bool,
+) -> (usize, Vec<String>) {
+    let view = crate::canvas::View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
+    let Some(d) = shell.session.as_ref().zip(shell.canvas.active).and_then(|(s, id)| s.doc().by_uuid(id)) else { return (0, Vec::new()) };
+    let overrides = std::collections::BTreeMap::new();
+    let ctx = egui::Context::default();
+    ctx.set_fonts(crate::fonts::definitions());
+    // The fonts are in place a pass later; that pass draws nothing.
+    let mut warm = ctx.run_ui(egui::RawInput::default(), |_| {});
+    warm.textures_delta.clear();
+    // Both of the registry's frames emptied, so only what this one records is read.
+    shell.registry.begin_frame();
+    shell.registry.begin_frame();
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0));
+    let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ui| {
+        let on = archforge_shell_api::notation_ui::Overlaid { p: crate::ux::palette(dark), r, view, d, overrides: &overrides };
+        shell.cx(|cx| notation.canvas_overlay(cx, ui, layer, &on));
+    });
+    out.textures_delta.clear();
+    (out.shapes.len(), shell.widgets().iter().map(|w| w.id.clone()).collect())
+}
+
+/// The texts the canvas's problem badge of `element` paints, drawn alone in a frame of its own in
+/// `shell`'s appearance, offering a way out or not as `resolvable` says.
+pub fn badge_alone(shell: &mut Shell, element: Uuid, resolvable: bool) -> Vec<String> {
+    /// Collects the texts of `s` and of the shapes it holds into `out`.
+    fn walk(s: &egui::Shape, out: &mut Vec<String>) {
+        match s {
+            egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let ctx = egui::Context::default();
+    ctx.set_fonts(crate::fonts::definitions());
+    // The fonts are in place a pass later; that pass draws nothing.
+    let mut warm = ctx.run_ui(egui::RawInput::default(), |_| {});
+    warm.textures_delta.clear();
+    let p = crate::ux::palette(shell.state.theme == ThemeKind::Dark);
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        crate::canvas::badge(shell, ui, p, egui::pos2(100.0, 100.0), element, element, &["A problem".to_string()], resolvable);
+    });
+    out.textures_delta.clear();
+    let mut texts = Vec::new();
+    out.shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
+    texts
+}
+
+/// The menus of the shell's own in its one menu slot: Home's sort, recent and pinned menus and the
+/// branch menu of the versions.
+pub fn shell_menus() -> [archforge_shell_api::notation_ui::MenuId; 4] {
+    [crate::home::RECENT_SORT, crate::home::RECENT, crate::home::PINNED, crate::versions::BRANCH_MENU]
+}
+
+/// Lets `shell`'s notations drop what their store no longer has, as the shell asks them each frame.
+pub fn retain_valid(shell: &mut Shell) {
+    if let Some(session) = shell.session.as_ref() {
+        shell.notation_states.retain_valid(session.doc(), &shell.canvas);
+    }
 }

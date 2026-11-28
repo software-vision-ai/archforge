@@ -7,7 +7,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
 
 ## Placement
 - A test goes into the existing test file of its area, never a new file named after the bug:
-  - the shell and its screens: `crates/ui-egui/src/tests.rs`
+  - the shell and its screens: `crates/ui-egui/src/tests.rs`, on the fake notation
+    (`archforge_notations::fake` and the sketch's screens part there), never ER or UML (ADR 0005)
   - UML's screens without the shell, what UML's own code draws or decides (its refusal words, its
     hooks, its Properties bodies and editors), against the shell's interfaces' test context:
     `crates/uml-ui/src/tests.rs`
@@ -58,6 +59,11 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     window lets a read-only token do: the `tests` module in `crates/ui-egui/src/control.rs`
   - the process and network scan of the interface's crates (the shell, its interfaces and the
     notations' screens): the `tests` modules in `xtask/src/shell_io.rs` and `xtask/src/layers.rs`
+  - the notation rules (who links a model or screens crate, a notation of both parts, no notation
+    command in the shared crates): the `tests` module in `xtask/src/notation_rules.rs`
+  - the project store on disk: `crates/project/tests/`, on the fake notation; ER's and UML's own
+    models saved and opened again: the app's `apps/archforge/tests/saved_model.rs`; the agent's
+    tools over the real command table: the app's `apps/archforge/tests/agent_tools.rs`
   - the diagram-kind scan: the `tests` module in `xtask/src/kind_literals.rs`; its table of kinds
     against what the notations register: `crates/notations/tests/notations.rs`
   - name rules: the case table in `crates/names/src/lib.rs`

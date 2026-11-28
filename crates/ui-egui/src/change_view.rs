@@ -131,8 +131,9 @@ fn start_read(shell: &mut Shell) {
     let v = &shell.versions;
     let Some(o) = v.element.as_ref().filter(|o| v.element_reading.is_none() && o.read_of.as_ref() != Some(&key)) else { return };
     let (id, area) = (o.row.id, o.row.area);
-    let (Some(before), Some(session)) = (base_held(v, &key.0), shell.session.as_ref()) else { return };
-    let (tables, junctions) = archforge_notations::storage();
+    let (Some(before), Some(session)) = (base_held(shell.notations, v, &key.0), shell.session.as_ref()) else { return };
+    let notations = shell.notations;
+    let (tables, junctions) = notations.storage();
     let about = about(shell);
     let repair = shell.open_repair();
     let v = &mut shell.versions;
@@ -142,8 +143,8 @@ fn start_read(shell: &mut Shell) {
     let read = move || {
         let sides = frozen.rows(&tables, &junctions).map_err(|e| e.to_string()).and_then(|after| {
             match area {
-                Area::Model | Area::Skill => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),
-                Area::Diagram => diagram_sides(&before, &after, id, repair).map(|s| s.map(|s| Sides::Diagram(Arc::new(Mutex::new(s))))),
+                Area::Model | Area::Skill => element_sides(notations, &before, &after, id, repair).map(|s| s.map(Sides::Element)),
+                Area::Diagram => diagram_sides(notations, &before, &after, id, repair).map(|s| s.map(|s| Sides::Diagram(Arc::new(Mutex::new(s))))),
             }
             .map_err(|e| e.to_string())
         });

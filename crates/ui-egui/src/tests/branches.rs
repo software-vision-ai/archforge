@@ -412,7 +412,7 @@ fn the_chip_s_list_switches_branch() {
         let other = |h: &Harness<'static, Shell>| format!("Try cancellations, {}", when(h, "2026-11-09T15:30:00Z"));
         assert!(h.query_by_label("main, Current").is_some() && h.query_by_label(&other(&h)).is_some(), "{theme:?}: the branches");
         assert!(painted_has(&h, "Filter branches…") && !has_id(&h, "workspace.header.version.row.2"), "{theme:?}: and no version");
-        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         h.run_steps(4);
@@ -665,7 +665,7 @@ fn new_branch_keeps_the_keys_and_its_answer_to_itself() {
     in_both_appearances(|theme| {
         let (mut h, host) = saving_harness(Some(commerce()), None);
         (h.state_mut().state.theme, *host.branch_now.lock().unwrap()) = (theme, Some("main".into()));
-        crate::explorer::add(h.state_mut(), "schema");
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
@@ -1043,7 +1043,7 @@ fn delete_branch_keeps_the_keys_to_itself() {
         for up in [true, false] {
             let (mut h, host) = saving_harness(Some(commerce()), None);
             (h.state_mut().state.theme, *host.branch_now.lock().unwrap()) = (theme, Some("main".into()));
-            crate::explorer::add(h.state_mut(), "schema");
+            crate::explorer::add(h.state_mut(), "package");
             h.run();
             key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
             let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);

@@ -620,7 +620,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         r[2..].copy_from_slice(&i.to_be_bytes());
         archforge_mof::Uuid::v7(1_761_670_800_000, r)
     });
-    let mut shell = Shell::new(Services { ids: Some(ids), ..Services::default() }, &crate::SCREENS);
+    let mut shell = Shell::new(Services { ids: Some(ids), ..Services::default() }, &archforge_notations::NOTATIONS, &crate::SCREENS);
     shell.state.theme = theme;
     if matches!(screen, Screen::HomeGallery | Screen::HomeSearch) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });

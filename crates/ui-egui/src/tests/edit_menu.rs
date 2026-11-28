@@ -24,6 +24,11 @@ fn project(theme: ThemeKind) -> Harness<'static, Shell> {
     h
 }
 
+/// What the Properties name field holds: its draft once typed in, the selection's name before.
+fn field_name(h: &Harness<'static, Shell>) -> String {
+    h.state().panels.name.as_ref().map(|n| n.text.clone()).unwrap_or_else(|| selected_name(h))
+}
+
 /// Every state the rows can be asked in: which are on, and what running each takes it to.
 #[test]
 fn undo_and_redo_go_to_their_target_in_every_state() {
@@ -120,12 +125,10 @@ fn the_pointer_on_the_in_window_menu_reaches_the_field_it_was_opened_on() {
         let mut h = project(theme);
         h.state_mut().in_window_menu = true;
         h.run();
-        let at = rect_of(&h, "workspace.properties.columns.add").center();
-        click(&mut h, at);
-        let at = rect_of(&h, "workspace.properties.column.name").center();
+        let at = rect_of(&h, "workspace.explorer.filter").center();
         click(&mut h, at);
         assert!(h.ctx.text_edit_focused());
-        let name = |h: &Harness<'static, Shell>| er_of(h.state()).column.as_ref().unwrap().name.clone();
+        let name = |h: &Harness<'static, Shell>| h.state().explorer.filter.clone();
         let first = name(&h);
         h.event(egui::Event::Text("x".into()));
         h.run();
@@ -140,7 +143,7 @@ fn the_pointer_on_the_in_window_menu_reaches_the_field_it_was_opened_on() {
         assert!(h.ctx.text_edit_focused(), "the field keeps the keyboard");
         assert_eq!((name(&h), revision(&h)), (first, before), "the row undid the field, not the model");
         // A row of another menu leaves the focus where the click put it.
-        let field = crate::widgets::egui_id("workspace.properties.column.name");
+        let field = crate::widgets::egui_id("workspace.explorer.filter");
         h.ctx.memory_mut(|m| m.surrender_focus(field));
         (h.state_mut().menu_bar.back, h.state_mut().menu_bar.chosen) = (Some(field), Some(actions::SAVE));
         h.step();
@@ -197,24 +200,20 @@ fn drawn(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let (mut h, customer) = table_harness();
     h.state_mut().state.theme = theme;
     let s = h.state_mut().session.as_mut().unwrap();
-    let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+    let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
     let schema = s.doc().uuid(schema).unwrap().to_string();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-    s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap();
-    let d =
-        id(s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap().value);
+    s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Order" })).unwrap();
+    let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop" })).unwrap().value);
     let table = id(s
         .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": customer, "x": 0, "y": 0, "width": 240, "height": 72 }))
         .unwrap()
         .value);
     let note = id(s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "Why", "x": 900, "y": 40 })).unwrap().value);
     let inner = id(s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "How", "parent": table, "x": 8, "y": 8 })).unwrap().value);
-    let address = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Address" })).unwrap().value);
+    let address = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Address" })).unwrap().value);
     let at = id(s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": address, "x": 400, "y": 0 })).unwrap().value);
-    let lives = id(s
-        .execute("er.relationship.add", &serde_json::json!({ "from": customer, "to": address, "name": "lives at", "create_foreign_key": false }))
-        .unwrap()
-        .value);
+    let lives = id(s.execute("sketch.association.add", &serde_json::json!({ "from": customer, "to": address, "name": "lives at" })).unwrap().value);
     s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": lives, "source": table, "target": at })).unwrap();
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&d).unwrap());
     let s = h.state_mut().session.as_mut().unwrap();
@@ -241,7 +240,7 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
     }
     /// Shows a version of the model as it is now, its canvas with the keyboard.
     fn viewing(s: &mut Shell) {
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = NOTATIONS.storage();
         let rows = archforge_mof::rows::snapshot(s.session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
         let preview = s.build(&rows).unwrap();
         s.show_version(preview, "v".into());
@@ -270,8 +269,8 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
         ("a gesture", |s| (canvas(s), s.canvas.gesture = Some(crate::editing::Gesture::Marquee { from: egui::Pos2::ZERO })).1, &[]),
         ("no project shown", |s| (canvas(s), s.active = None).1, &[]),
         ("no diagram on the canvas, the model's view still on one", |s| (canvas(s), s.canvas.active = None).1, &[]),
-        ("a line's menu open on the canvas", |s| (canvas(s), uml_of_mut(s).line_menu = Some(egui::Pos2::ZERO)).1, &[]),
-        ("the classifier's menu of kinds open", |s| (canvas(s), s.canvas.popover = Some(uml_classifier::KINDS)).1, &[]),
+        ("a notation's menu open on the canvas", |s| (canvas(s), s.notation_states.own_mut::<SketchState>().unwrap().menu = true).1, &[]),
+        ("the kind's menu of kinds open", |s| (canvas(s), s.canvas.popover = Some(SKETCH_POPOVER)).1, &[]),
     ];
     let select_all = Event::Key { key: Key::A, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND };
     for ((name, setup, on), theme) in states.into_iter().zip([ThemeKind::Light, ThemeKind::Dark].into_iter().cycle()) {
@@ -378,12 +377,9 @@ fn command_a_on_the_canvas_selects_what_the_diagram_draws() {
         key(&mut h, Key::A, Modifiers::COMMAND);
         assert_eq!(selection(&h), all, "every box and the line, never Order");
         let s = h.state_mut().session.as_mut().unwrap();
-        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();
-        let empty = s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Empty" }))
-            .unwrap()
-            .value["id"]
+        let empty = s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Empty" })).unwrap().value["id"]
             .as_str()
             .unwrap()
             .to_string();
@@ -400,7 +396,7 @@ fn command_a_on_the_canvas_selects_what_the_diagram_draws() {
 fn copy_takes_text_selected_on_a_label() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services::default(), &crate::tests::SCREENS);
+        let mut shell = Shell::new(Services::default(), crate::tests::NOTATIONS, &crate::tests::SCREENS);
         (shell.state.theme, shell.in_window_menu) = (theme, true);
         // The label lies where the Edit menu's Copy row opens, so the row's press is over its words.
         let words = "Selected words";
@@ -528,11 +524,9 @@ fn rows_chosen_by_the_pointer_act_on_the_fields_selection() {
         let mut h = project(theme);
         h.state_mut().in_window_menu = true;
         h.run();
-        for id in ["workspace.properties.columns.add", "workspace.properties.column.name"] {
-            let at = rect_of(&h, id).center();
-            click(&mut h, at);
-        }
-        let name = |h: &Harness<'static, Shell>| er_of(h.state()).column.as_ref().unwrap().name.clone();
+        let at = rect_of(&h, "workspace.properties.name").center();
+        click(&mut h, at);
+        let name = field_name;
         // Selects all of the field's text by its keys, then chooses the Edit row `row` by the pointer;
         // whether the frames after it copied "Shop", and asked for the clipboard.
         let choose = |h: &mut Harness<'static, Shell>, row: &str| {
@@ -597,7 +591,7 @@ fn the_inline_name_stays_open_through_the_in_window_edit_menu() {
         h.event(Event::Text("Item".into()));
         h.run();
         assert_eq!(name(&h).as_deref(), Some("Item"), "{on_canvas}: pasted, and the menu closed by its title left the name selected");
-        menu(&mut h, "workspace.properties.kind");
+        menu(&mut h, "workspace.properties.description");
         let st = h.state().session.as_ref().unwrap().doc();
         assert!(name(&h).is_none() && st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{on_canvas}: the press elsewhere committed it");
         h.state_mut().menu_bar.held = Some(crate::widgets::egui_id("gone"));
@@ -640,11 +634,10 @@ fn stays_open(h: &mut Harness<'static, Shell>, typed: fn(&Shell) -> Option<Strin
     key(h, Key::Escape, Modifiers::NONE);
 }
 
-/// A note's text typed on the canvas, and a class's member typed in place, in its name field and
-/// in its type field, stay open through the in-window Edit menu, whose press is a click away from
-/// the member's row; another menu commits them.
+/// A note's text typed on the canvas stays open through the in-window Edit menu, by the pointer and
+/// by the keys; another menu commits it.
 #[test]
-fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
+fn the_note_editor_stays_open_through_the_in_window_edit_menu() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = drawn(theme);
         h.state_mut().in_window_menu = true;
@@ -685,32 +678,6 @@ fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
             (true, Some("Later!".into())),
             "{theme:?}: committed"
         );
-
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        h.state_mut().cx(uml_ui::open_sample).unwrap();
-        h.state_mut().in_window_menu = true;
-        let st = h.state().session.as_ref().unwrap().doc();
-        let catalog = st
-            .uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Catalog").unwrap())
-            .unwrap();
-        for ty in [false, true] {
-            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
-            h.run();
-            let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
-            click(&mut h, at);
-            h.event(Event::Text(if ty { "rating" } else { "Draft" }.into()));
-            h.run();
-            if ty {
-                key(&mut h, Key::Tab, Modifiers::NONE);
-                h.event(Event::Text("Draft".into()));
-                h.run();
-                stays_open(&mut h, |s| uml_of(s).inline.as_ref().map(|i| i.ty.clone()), "Real", theme);
-            } else {
-                stays_open(&mut h, |s| uml_of(s).inline.as_ref().map(|i| i.edit.name.clone()), "Later", theme);
-            }
-        }
-        let rows = member_rows(&h, catalog, false);
-        assert!(rows.iter().any(|r| r == "+ Later") && rows.iter().any(|r| r == "+ rating : Real"), "{theme:?}: {rows:?}");
     }
 }
 
@@ -957,13 +924,9 @@ fn open_finds_the_name_typed_in_place_committed() {
 }
 
 /// Delete after Select all takes the boxes off the diagram and deletes nothing from the model,
-/// though the selection holds a relationship or a generalization set beside the boxes.
+/// though the selection holds a relationship beside the boxes.
 #[test]
-fn delete_after_select_all_deletes_no_line_or_set_from_the_model() {
-    let alive = |h: &Harness<'static, Shell>, id: &str| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).is_some_and(|o| st.is_alive(o))
-    };
+fn delete_after_select_all_deletes_no_line_from_the_model() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, all) = drawn(theme);
         h.state_mut().canvas.focused = true;
@@ -972,21 +935,9 @@ fn delete_after_select_all_deletes_no_line_or_set_from_the_model() {
         key(&mut h, Key::Delete, Modifiers::NONE);
         let s = h.state().session.as_ref().unwrap();
         let count = |class| s.doc().alive().filter(|o| s.doc().class_of(*o).ok() == Some(class)).count();
-        assert_eq!((count(archforge_er::ENTITY), count(archforge_er::RELATIONSHIP)), (3, 1), "nothing left the model");
+        assert_eq!((count(archforge_mof::toy::CLASS), count(archforge_mof::toy::ASSOCIATION)), (3, 1), "nothing left the model");
         let d = s.view().open_diagram.unwrap();
         assert!(s.doc().list(d, archforge_diagram::diagram::NODE).unwrap().is_empty(), "the boxes are off the diagram");
-        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, payment) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
-        let s = h.state_mut().session.as_mut().unwrap();
-        let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method" })).unwrap().value["id"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        s.execute("view.select", &serde_json::json!({ "ids": [payment, set] })).unwrap();
-        h.state_mut().canvas.focused = true;
-        h.run();
-        key(&mut h, Key::Delete, Modifiers::NONE);
-        assert!(alive(&h, &set), "the set stays in the model");
     }
 }
 
@@ -1028,7 +979,7 @@ fn the_window_losing_the_focus_closes_the_menu_as_esc_does() {
         let mut h = project(theme);
         h.state_mut().in_window_menu = true;
         h.run();
-        for id in ["workspace.properties.columns.add", "workspace.properties.column.name", "strip.menu.view"] {
+        for id in ["workspace.properties.name", "strip.menu.view"] {
             let at = rect_of(&h, id).center();
             click(&mut h, at);
         }
@@ -1140,7 +1091,7 @@ fn a_press_on_the_strip_beside_the_bar_only_closes_the_menu() {
 fn a_press_on_a_control_across_the_bars_row_only_closes_the_menu() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services::default(), &crate::tests::SCREENS);
+        let mut shell = Shell::new(Services::default(), crate::tests::NOTATIONS, &crate::tests::SCREENS);
         (shell.state.theme, shell.in_window_menu) = (theme, true);
         let clicks = std::rc::Rc::new(std::cell::Cell::new(0));
         let counted = clicks.clone();

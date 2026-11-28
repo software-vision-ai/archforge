@@ -362,13 +362,13 @@ mod tests {
             })),
             ..Default::default()
         };
-        let mut shell = Shell::new(services, &crate::SCREENS);
+        let mut shell = Shell::new(services, &archforge_notations::NOTATIONS, &crate::SCREENS);
         let mut n: u128 = 0;
         let ids = Box::new(move || {
             n += 1;
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        shell.session = Some(archforge_notations::new_project_session("Shop", ids).unwrap());
+        shell.session = Some(archforge_notations::NOTATIONS.new_project_session("Shop", ids).unwrap());
         shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false, notice: None });
         (shell, host, picks)
     }
@@ -553,7 +553,7 @@ mod tests {
     /// With nothing unsaved, Quit closes the window in the frame that runs it.
     #[test]
     fn quit_closes_the_window_on_the_next_frame() {
-        let mut shell = Shell::new(Services::default(), &crate::SCREENS);
+        let mut shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &crate::SCREENS);
         choose(QUIT, &mut shell);
         let ctx = egui::Context::default();
         let mut output = ctx.run_ui(egui::RawInput::default(), |ui| shell.logic(ui.ctx()));

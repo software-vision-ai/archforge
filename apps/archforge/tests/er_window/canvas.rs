@@ -1096,3 +1096,168 @@ fn a_many_to_many_badge_opens_the_mapping_offer_and_another_badge_nothing() {
         assert_eq!(er_of(h.state()).mapping.as_ref().map(|m| m.name.as_str()), Some("CustomerOrder"), "{theme:?}: the offer opens");
     }
 }
+
+/// The Entity tool places a table where the canvas is clicked, its name typed in place, as one undo
+/// step.
+#[test]
+fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let at = rect_of(&h, "workspace.tools.entity").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.tool, archforge_ui_egui::canvas::Tool::Place("entity"));
+    let canvas = rect_of(&h, "workspace.canvas");
+    let before = node_ids(&h).len();
+    click(&mut h, canvas.left_top() + egui::vec2(120.0, 320.0));
+    let nodes = node_ids(&h);
+    assert_eq!(nodes.len(), before + 1, "a node was placed: {nodes:?}");
+    assert_eq!(h.state().canvas.tool, archforge_ui_egui::canvas::Tool::Select, "placing hands back to Select");
+    let rename = h.state().canvas.rename.clone().expect("the name is open for typing");
+    assert_eq!(rename.text, "Entity");
+    assert_eq!(selected_name(&h), "Entity");
+    assert!(ids(&h).iter().any(|i| i == "workspace.canvas.rename"));
+    // Typing replaces the selected default; Enter commits the rename.
+    h.event(egui::Event::Text("Payment".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().canvas.rename.is_none(), "{:?}", h.state().canvas.rename);
+    assert_eq!(selected_name(&h), "Payment");
+    // Add and place were one step: one undo removes the node and the table together.
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+    h.run();
+    assert_eq!(node_ids(&h).len(), before);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(!st.alive().any(|o| archforge_core::name_of(st, o) == "Entity"), "the table went with the node");
+    // Escape returns to Select.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!(h.state().canvas.tool, archforge_ui_egui::canvas::Tool::Select);
+}
+
+/// A selected note's handle, dragged onto a table or onto a relationship's line, links the note to
+/// it, and Delete on a selected link removes the link alone.
+#[test]
+fn a_selected_notes_handle_links_it_to_a_table_or_a_relationships_line_and_delete_removes_a_link() {
+    let (mut h, _customer, _order) = two_tables_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
+    // A relationship between the two, and a note below them.
+    let at = rect_of(&h, "workspace.tools.relationship").center();
+    click(&mut h, at);
+    let (from, to) = (rect_of(&h, &customer_node).center(), rect_of(&h, &order_node).center());
+    drag(&mut h, from, to);
+    let note = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let d = s.view().open_diagram.unwrap();
+        let d = s.doc().uuid(d).unwrap().to_string();
+        let out = s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "Why", "x": 380, "y": 400 })).unwrap();
+        let id = out.value["id"].as_str().unwrap().to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+        id
+    };
+    h.run_steps(2);
+    let links = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive()
+            .filter(|o| {
+                st.class_of(*o).ok() == Some(archforge_diagram::EDGE)
+                    && st.get(*o, archforge_diagram::edge::ELEMENT).unwrap().as_ref().is_none()
+                    && st.get(*o, archforge_diagram::edge::SOURCE).unwrap().as_ref() == st.by_uuid(archforge_mof::Uuid::parse(&note).unwrap())
+            })
+            .map(|o| st.class_of(st.get(o, archforge_diagram::edge::TARGET).unwrap().as_ref().unwrap()).unwrap())
+            .collect::<Vec<_>>()
+    };
+    // Its handle dragged onto Order links it to the table.
+    let handle = rect_of(&h, "workspace.canvas.adorn.link").center();
+    let onto = rect_of(&h, &order_node).center();
+    drag(&mut h, handle, onto);
+    assert_eq!(links(&h), [archforge_diagram::NODE], "{:?}", h.state().canvas.notice);
+    // Selected again, dragged onto the middle of the relationship's line: linked to the line.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [note] })).unwrap();
+    }
+    h.run_steps(2);
+    let middle = rect_of(&h, &customer_node).center().lerp(rect_of(&h, &order_node).center(), 0.5);
+    let handle = rect_of(&h, "workspace.canvas.adorn.link").center();
+    drag(&mut h, handle, middle);
+    let kinds = links(&h);
+    assert_eq!(kinds.len(), 2, "{:?}", h.state().canvas.notice);
+    assert!(kinds.contains(&archforge_diagram::EDGE), "one link ends on the relationship's line");
+    // The link is selected after drawing; Delete removes it alone.
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert_eq!(links(&h), [archforge_diagram::NODE]);
+    assert_eq!(relationships(&h).len(), 1, "the relationship stays");
+}
+
+/// A relationship's cardinality text dragged aside keeps its new place as a label of the line, and
+/// a double click on it puts it back where the line places it.
+#[test]
+fn a_cardinality_text_is_dragged_aside_and_a_double_click_puts_it_back() {
+    let (mut h, _d, e, ..) = related_tables((500.0, 100.0));
+    let labels = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().list(e, archforge_diagram::edge::LABEL).unwrap().len();
+    let first = h.state().canvas.ends.iter().find(|t| t.end == 1).cloned().expect("the line's texts are drawn");
+    // Between the tables, clear of both.
+    let to = first.rect.center() + egui::vec2(-40.0, 60.0);
+    drag(&mut h, first.rect.center(), to);
+    assert_eq!(labels(&h), 1, "the place is kept");
+    h.run();
+    let moved = h.state().canvas.ends.iter().find(|t| t.end == 1).cloned().unwrap();
+    assert!((moved.rect.center() - to).length() < 2.0, "drawn where it was let go: {:?} {to:?}", moved.rect.center());
+    click(&mut h, moved.rect.center());
+    click(&mut h, moved.rect.center());
+    h.run();
+    assert_eq!(labels(&h), 0, "back beside the line");
+}
+
+/// With a schema selected, Models' `+` offers a table first and adds one; Delete asks before the
+/// schema goes with what it holds.
+#[test]
+fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    archforge_ui_egui::explorer::add(h.state_mut(), "schema");
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().explorer.rename.is_none());
+    // The new schema is selected: + offers a table first.
+    archforge_ui_egui::explorer::add(h.state_mut(), "table");
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let rows = archforge_ui_egui::testing::models_rows(
+        archforge_ui_egui::testing::notation_uis(h.state()),
+        h.state().session.as_ref().unwrap().doc(),
+        &h.state().explorer,
+    );
+    assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1"]);
+    assert_eq!(rows[1].depth, 1);
+    // A column under the table.
+    archforge_ui_egui::explorer::add(h.state_mut(), "column");
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let rows = archforge_ui_egui::testing::models_rows(
+        archforge_ui_egui::testing::notation_uis(h.state()),
+        h.state().session.as_ref().unwrap().doc(),
+        &h.state().explorer,
+    );
+    assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1", "column_1"]);
+    assert_eq!(rows[2].detail.as_deref(), Some("TEXT"));
+    // Select the schema by its row and press Delete: it holds a table, so the dialog asks.
+    let schema_row = format!("workspace.explorer.row.{}", rows[0].id);
+    let at = rect_of(&h, &schema_row).center();
+    click(&mut h, at);
+    h.state_mut().explorer.focused = true;
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert!(h.state().explorer.delete.is_some(), "the dialog asks");
+    let at = rect_of(&h, "workspace.explorer.delete.cancel").center();
+    click(&mut h, at);
+    assert!(h.state().explorer.delete.is_none());
+    assert_eq!(schema_names(&h), ["Schema 1"]);
+    h.state_mut().explorer.focused = true;
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+    click(&mut h, at);
+    assert!(schema_names(&h).is_empty(), "the schema and its table are gone");
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(schema_names(&h), ["Schema 1"], "undo brings them back");
+}

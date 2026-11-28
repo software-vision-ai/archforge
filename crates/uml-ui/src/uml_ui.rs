@@ -2125,7 +2125,7 @@ pub fn open_sample(cx: &mut Ctx) -> Result<Uuid, String> {
     use archforge_mof::rows;
     let fail = |e: &dyn std::fmt::Display| e.to_string();
     let session = cx.session.as_ref().ok_or("the sample needs a session")?;
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let counter = |start: u64| {
         let n = std::sync::atomic::AtomicU64::new(start);
         Box::new(move || {
@@ -2135,13 +2135,13 @@ pub fn open_sample(cx: &mut Ctx) -> Result<Uuid, String> {
             archforge_mof::Uuid::v7(1_761_670_800_000, r)
         })
     };
-    let mut st = archforge_notations::store(counter(1 << 31)).map_err(|e| fail(&e))?;
+    let mut st = archforge_notations::NOTATIONS.store(counter(1 << 31)).map_err(|e| fail(&e))?;
     rows::restore(&mut st, &rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| fail(&e))?, &tables, &junctions).map_err(|e| fail(&e))?;
     let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).ok_or("the project has no model root")?;
     let pkg = sample_model(&mut st, model).map_err(|e| fail(&e))?;
     let pkg_uuid = st.uuid(pkg).map_err(|e| fail(&e))?;
     let back = rows::snapshot(&st, &tables, &junctions).map_err(|e| fail(&e))?;
-    let mut session = archforge_notations::session_from_rows(&back, counter(1 << 32))?;
+    let mut session = archforge_notations::NOTATIONS.session_from_rows(&back, counter(1 << 32))?;
     let id = |v: serde_json::Value| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
     let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         session.execute(command, &params).map(|o| id(o.value)).map_err(|e| format!("{command}: {e}"))

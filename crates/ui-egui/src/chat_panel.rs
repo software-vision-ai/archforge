@@ -387,22 +387,22 @@ fn fresh(shell: &Shell) -> Option<Uuid> {
 
 // The model's elements, as rows and chips name them.
 
-/// The generated table of each class, as the project stores elements.
-fn tables() -> &'static Vec<(archforge_mof::ClassId, &'static str)> {
-    static TABLES: std::sync::OnceLock<Vec<(archforge_mof::ClassId, &'static str)>> = std::sync::OnceLock::new();
-    TABLES.get_or_init(|| archforge_notations::storage().0.iter().map(|t| (t.class, t.name)).collect())
+/// The metaclass of `obj`: the generated table its class is stored in, among the tables of the
+/// notations `notations` a project holds.
+pub fn metaclass(notations: &archforge_notations::Notations, store: &Store, obj: Obj) -> Option<&'static str> {
+    metaclass_in(&notations.storage().0, store, obj)
 }
 
-/// The metaclass (generated table) of `obj`.
-pub fn metaclass(store: &Store, obj: Obj) -> Option<&'static str> {
+/// The metaclass of `obj`: the table among `tables` its class is stored in.
+fn metaclass_in(tables: &[archforge_mof::schema::Table], store: &Store, obj: Obj) -> Option<&'static str> {
     let class = store.class_of(obj).ok()?;
-    tables().iter().find(|(c, _)| *c == class).map(|(_, n)| *n)
+    tables.iter().find(|t| t.class == class).map(|t| t.name)
 }
 
 /// An anchor to the live element `id` in `role`, with its name as a person reads it.
 fn anchor(shell: &Shell, store: &Store, id: Uuid, role: AnchorRole) -> Option<Anchor> {
     let obj = store.by_uuid(id).filter(|o| store.is_alive(*o))?;
-    let metaclass = metaclass(store, obj)?.to_string();
+    let metaclass = metaclass(shell.notations, store, obj)?.to_string();
     let name = if store.class_of(obj).ok() == Some(archforge_diagram::DIAGRAM) {
         crate::diagrams::diagram_name(store, obj)
     } else {
@@ -556,12 +556,22 @@ pub(crate) struct Out {
     draft_empty: bool,
     /// The shell's notations, which say which changed elements a person reads about.
     uis: &'static [&'static dyn crate::notation_ui::NotationUi],
+    /// The notations the project holds, composed, whose tables name its elements' metaclasses.
+    notations: &'static archforge_notations::Notations,
 }
 
 impl Out {
     /// The writes of the project at `project`, as the shell's services give them.
     pub(crate) fn of(shell: &Shell, project: PathBuf, draft_empty: bool) -> Out {
-        Out { store: store_of(shell), project, clock: clock(shell), ids: shell.services.ids.clone(), draft_empty, uis: shell.notation_uis }
+        Out {
+            store: store_of(shell),
+            project,
+            clock: clock(shell),
+            ids: shell.services.ids.clone(),
+            draft_empty,
+            uis: shell.notation_uis,
+            notations: shell.notations,
+        }
     }
 
     /// The writes of the project shown.
@@ -924,7 +934,7 @@ pub(crate) fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::
     if let Some(s) = session
         && let Some(group) = s.end_group(&origin)
     {
-        let (elements, changed) = group.deltas.as_deref().map(|d| changed_elements(out.uis, s.doc(), d)).unwrap_or((0, Vec::new()));
+        let (elements, changed) = group.deltas.as_deref().map(|d| changed_elements(out.notations, out.uis, s.doc(), d)).unwrap_or((0, Vec::new()));
         changes = Some(Changes { changes: group.changes, elements, changed });
         turn.change = Some(Change {
             changes: group.changes,
@@ -972,15 +982,17 @@ fn stored_kind(kind: FailureKind) -> FailureKind {
 
 /// The elements a turn's changes touched over the turn's undo steps (`deltas`, each step's own, so
 /// nothing of another's change between them), those a person reads about only, as the notations
-/// `uis` count them: how many in all, and each with what happened to it. An element added and
+/// `uis` count them among the tables of the composition `notations`: how many in all, and each with what happened to it. An element added and
 /// removed within the turn is left out; one changed and changed back is still changed, as values
 /// are not compared.
 pub fn changed_elements(
+    notations: &archforge_notations::Notations,
     uis: &[&'static dyn crate::notation_ui::NotationUi],
     store: &Store,
     deltas: &[archforge_mof::Delta],
 ) -> (u32, Vec<ChangedElement>) {
     use archforge_mof::Op;
+    let (tables, _) = notations.storage();
     let mut seen: BTreeMap<Uuid, (bool, bool, Obj)> = BTreeMap::new();
     for op in deltas.iter().flat_map(|d| d.0.iter()) {
         let (obj, created, destroyed) = match op {
@@ -1003,7 +1015,7 @@ pub fn changed_elements(
             (false, true) => ChangeKind::Removed,
             (false, false) => ChangeKind::Changed,
         };
-        let Some(metaclass) = metaclass(store, obj).filter(|m| crate::chat_words::counted(uis, m)) else { continue };
+        let Some(metaclass) = metaclass_in(&tables, store, obj).filter(|m| crate::chat_words::counted(uis, m)) else { continue };
         let name = Some(archforge_core::name_of(store, obj)).filter(|n| !n.is_empty());
         out.push(ChangedElement { element: id, kind, metaclass: metaclass.to_string(), name });
     }

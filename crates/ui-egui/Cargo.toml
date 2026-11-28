@@ -42,12 +42,9 @@ craft-i18n.workspace = true
 
 [dev-dependencies]
 archforge-mof = { workspace = true, features = ["testing"] }
-# The shell's tests build the shell with ER's and UML's models and screens, as the app registers
-# them, until they are given the fake notation.
-archforge-er.workspace = true
-archforge-er-ui = { workspace = true, features = ["snapshot"] }
-archforge-uml.workspace = true
-archforge-uml-ui = { workspace = true, features = ["snapshot"] }
+# The shell's tests build the shell with the fake notation's model (ADR 0005), whose screens part
+# they hold themselves; they name no real notation.
+archforge-notations = { workspace = true, features = ["testing"] }
 egui_kittest = { workspace = true, features = ["wgpu"] }
 serde_json.workspace = true
 

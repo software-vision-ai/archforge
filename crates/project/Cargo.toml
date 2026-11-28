@@ -21,13 +21,10 @@ log.workspace = true
 mysql.workspace = true
 
 [dev-dependencies]
-# A real model to write and read back.
-archforge-core.workspace = true
-archforge-diagram.workspace = true
-archforge-er.workspace = true
-archforge-notations.workspace = true
+# A model to write and read back: the fake notation's, which names no real notation (ADR 0005).
+# ER's and UML's own saved models are tested in the app (`apps/archforge/tests/saved_model.rs`).
+archforge-notations = { workspace = true, features = ["testing"] }
 archforge-secrets = { workspace = true, features = ["testing"] }
-archforge-uml.workspace = true
 serde_json.workspace = true
 
 [lints]

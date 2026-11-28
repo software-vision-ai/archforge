@@ -352,7 +352,7 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // Saved and opened again, the package leads to the same diagram.
         let rows = {
-            let (tables, junctions) = archforge_notations::storage();
+            let (tables, junctions) = archforge_notations::NOTATIONS.storage();
             archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap()
         };
         let mut again = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
@@ -436,7 +436,7 @@ fn entry_reaches_the_bound_default_never_the_first_found_and_makes_nothing_witho
         h.state_mut().state.language = "de".into();
         back_on_top(&mut h, billing);
         let rows = |h: &Harness<'static, Shell>| {
-            let (tables, junctions) = archforge_notations::storage();
+            let (tables, junctions) = archforge_notations::NOTATIONS.storage();
             let s = h.state().session.as_ref().unwrap();
             (archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap(), s.undo_label().map(str::to_string))
         };
@@ -2153,9 +2153,9 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     );
     assert!(archforge_ui_egui::testing::search_hits(&index, "ord").1.iter().any(|e| e.label == "Order"));
     // Saved and opened again, as the project's rows: the class diagram comes back.
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
-    let back = archforge_notations::session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
+    let back = archforge_notations::NOTATIONS.session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
     let st = back.doc();
     let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
     assert_eq!(st.get(d, archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::STRUCTURE_DIAGRAM));
@@ -2526,9 +2526,9 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         assert_eq!(height(&h), grown);
         assert!(on_card(&h, "+ approveAll()"), "{:?}", painted(&h));
         // Saved and opened again from the project's rows, the card keeps its size.
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
-        let back = archforge_notations::session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
+        let back = archforge_notations::NOTATIONS.session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
         let st = back.doc();
         assert_eq!(archforge_diagram::grid::bounds_of(st, st.by_uuid(node).unwrap()).height, grown);
         assert_eq!(archforge_uml::members::operations(st, st.by_uuid(class).unwrap()).len(), 2);
@@ -4881,7 +4881,7 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         let s = h.state_mut().session.as_mut().unwrap();
         let twin = s.execute("uml.dependency.add", &serde_json::json!({ "client": line.to_string(), "supplier": order.to_string() })).unwrap();
         let twin = archforge_mof::Uuid::parse(twin.value["id"].as_str().unwrap()).unwrap();
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = archforge_notations::NOTATIONS.storage();
         let old = h.state_mut().session.take().unwrap();
         let rows = archforge_mof::rows::snapshot(old.doc(), &tables, &junctions).unwrap();
         let mut n = 0u64;
@@ -4892,7 +4892,8 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
             archforge_mof::Uuid::v7(1_761_670_900_000, r)
         };
         let mut st =
-            archforge_mof::rows::restore_into_empty(archforge_notations::store(Box::new(mint)).unwrap(), &rows, &tables, &junctions).unwrap();
+            archforge_mof::rows::restore_into_empty(archforge_notations::NOTATIONS.store(Box::new(mint)).unwrap(), &rows, &tables, &junctions)
+                .unwrap();
         let (d, was, now) = (st.by_uuid(twin).unwrap(), st.by_uuid(order).unwrap(), st.by_uuid(order_status).unwrap());
         st.remove_value(d, archforge_uml::dependency::SUPPLIER, &archforge_mof::Value::Ref(was)).unwrap();
         st.push(d, archforge_uml::dependency::SUPPLIER, archforge_mof::Value::Ref(now)).unwrap();
@@ -4900,7 +4901,7 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         assert_eq!(parallel.len(), 2, "{theme:?}: two parallel dependencies loaded");
         let view = old.view().clone();
         h.state_mut().session = Some(archforge_engine::Session::with_view(
-            archforge_notations::registry().unwrap(),
+            archforge_notations::NOTATIONS.registry().unwrap(),
             st,
             old.counter(),
             archforge_engine::Options::default(),
@@ -5504,7 +5505,12 @@ fn primitive_types_are_listed_added_with_the_plus_found_and_dragged_while_the_bu
         };
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(
-            archforge_ui_egui::testing::skill_target_word(archforge_ui_egui::testing::notation_uis(h.state()), st, st.by_uuid(skill).unwrap()),
+            archforge_ui_egui::testing::skill_target_word(
+                h.state().session.as_ref().unwrap().view(),
+                archforge_ui_egui::testing::notation_uis(h.state()),
+                st,
+                st.by_uuid(skill).unwrap()
+            ),
             "every primitive type"
         );
         // A built-in type, selected, carries none: the panel says so in place of +.
@@ -8028,4 +8034,68 @@ fn a_return_landing_at_the_least_zoom_goes_back_on_the_next_zoom_out() {
         rest(&mut h);
         assert_eq!(zoom_out_gesture(&mut h, 1, true), vec![sales_d, top], "{theme:?}: one fresh zoom-out back to Top");
     }
+}
+
+/// A line, a note's link or a label a diagram command refuses by its rules is said in the chosen
+/// language: a line between two classes with no relationship, of a class, of an attribute, which
+/// lacks an end, between boxes that do not show its ends, and one shown already; a note's link from
+/// a class's box, to itself, to another note and twice, and one onto another diagram said from the
+/// reason alone; and a label on a note's link or shown already. In light and dark (AR-515).
+#[test]
+fn a_line_link_or_label_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| archforge_ui_egui::snapshot::run(h.state_mut(), cmd, p);
+        let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).err().unwrap_or_default();
+        let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let d = h.state().canvas.active.unwrap().to_string();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let g = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::GENERALIZATION)).unwrap();
+        let (specific, general) = archforge_uml::figures::ends(st, g).unwrap();
+        let (specific, general) = (&nodes[&archforge_core::name_of(st, specific)], &nodes[&archforge_core::name_of(st, general)]);
+        let g = st.uuid(g).unwrap().to_string();
+        let edges = st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap();
+        let shows = |e: &archforge_mof::Obj| st.get(*e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref());
+        let is_association = |e: &archforge_mof::Obj| shows(e).and_then(|el| st.class_of(el).ok()) == Some(archforge_uml::ASSOCIATION);
+        let association = st.uuid(edges.iter().filter_map(archforge_mof::Value::as_ref).find(is_association).unwrap()).unwrap().to_string();
+        let connect = |element: &str, source: &str, target: &str| json!({ "diagram": d, "element": element, "source": source, "target": target });
+        let between = connect("", &nodes["Order"], &nodes["Customer"]);
+        let unnamed = "Eine Linie zwischen zwei Elementen zeigt eine Beziehung. Geben Sie die Beziehung an.";
+        assert_eq!(refused(&mut h, "diagram.connect", between), unnamed, "{theme:?}: the language is German");
+        let of_class = connect(&order, &nodes["Order"], &nodes["Customer"]);
+        assert_eq!(refused(&mut h, "diagram.connect", of_class), "Ein Diagramm dieser Art zeigt Order nicht.", "{theme:?}");
+        let status = id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "status" }));
+        let lacks = "Diesem Element fehlt ein Ende, daher zeigt keine Linie es.";
+        assert_eq!(refused(&mut h, "diagram.connect", connect(&status, &nodes["Order"], &nodes["Customer"])), lacks, "{theme:?}");
+        let first = "Der erste Kasten zeigt nicht das erste Ende der Beziehung.";
+        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, general, general)), first, "{theme:?}");
+        let second = "Der zweite Kasten zeigt nicht das zweite Ende der Beziehung.";
+        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, specific, specific)), second, "{theme:?}");
+        let shown = format!("Dieses Diagramm zeigt {g} bereits.");
+        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, specific, general)), shown, "{theme:?}");
+        // A note's links.
+        let note = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Hinweis", "x": 0, "y": 0 }));
+        let other = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Zweiter", "x": 0, "y": 200 }));
+        let link = |note: &str, target: &str| json!({ "diagram": d, "note": note, "target": target });
+        let not_note = "Dieser Kasten zeigt Order. Nur eine Notiz wird mit einem Kasten oder einer Linie verbunden.";
+        assert_eq!(refused(&mut h, "diagram.link-note", link(&nodes["Order"], &note)), not_note, "{theme:?}");
+        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &note)), "Eine Notiz wird nicht mit sich selbst verbunden.", "{theme:?}");
+        let unlinkable = "Eine Notiz wird mit einem Kasten verbunden, der ein Element zeigt, oder mit der Linie einer Beziehung.";
+        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &other)), unlinkable, "{theme:?}");
+        let anchor = id(&mut h, "diagram.link-note", link(&note, &nodes["Order"]));
+        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &nodes["Order"])), "Die Notiz ist bereits damit verbunden.", "{theme:?}");
+        let elsewhere = archforge_shell_api::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::TargetOtherDiagram);
+        assert_eq!(elsewhere.as_deref(), Some("Womit die Notiz verbunden wird, liegt in einem anderen Diagramm."), "{theme:?}");
+        // Labels.
+        let label = |edge: &str| json!({ "edge": edge, "kind": "from_end" });
+        let unlabelled = "Die Verbindung einer Notiz zeigt kein Element und erhält daher keine Beschriftung.";
+        assert_eq!(refused(&mut h, "diagram.label", label(&anchor)), unlabelled, "{theme:?}");
+        id(&mut h, "diagram.label", label(&association));
+        assert_eq!(refused(&mut h, "diagram.label", label(&association)), "Diese Linie hat den Beschriftungstext from_end bereits.", "{theme:?}");
+    }
+    archforge_ui_egui::i18n::set_language("en");
 }

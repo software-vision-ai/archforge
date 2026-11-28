@@ -6,15 +6,16 @@ use egui_kittest::Harness;
 use crate::testing::{click, ids};
 use crate::theme::ThemeKind;
 use crate::{Picked, Services, Shell, UiState};
-// ER's screens' modules, as their crate's `snapshot` lists them for the tests outside it.
-use archforge_er_ui::snapshot::{er_checks, er_connect, er_indexes, er_keys, er_kind, er_objects, er_relation, er_state, er_table, er_types, er_ui};
-// UML's screens' modules, as their crate's `snapshot` lists them for the tests outside it.
-use archforge_uml_ui::snapshot::{uml_classifier, uml_inline, uml_nary, uml_package_nav, uml_panel, uml_profiles, uml_relate, uml_state, uml_ui};
-
-/// The app's screens parts, ER's then UML's, as the app registers them: the shells the tests make
-/// are given them, and the tests that ask the app's notations without a shell ask them.
+/// The fake notation's screens part, the one the shells the tests make are given (ADR 0005): the
+/// sketch notation with its one diagram kind, over the fake notation's model ([`NOTATIONS`]).
 pub(crate) static SCREENS: archforge_shell_api::screens::ScreensRegistry =
-    archforge_shell_api::screens::ScreensRegistry::new(&[archforge_er_ui::ER, archforge_uml_ui::UML]);
+    archforge_shell_api::screens::ScreensRegistry::new(&[archforge_shell_api::screens::ScreensPart {
+        ui: &SketchUi("sketch"),
+        kinds: &[&SketchKind(SKETCH)],
+    }]);
+
+/// The notations the shells the tests make hold their projects of, composed: the fake notation alone.
+pub(crate) static NOTATIONS: &archforge_notations::Notations = &archforge_notations::fake::NOTATIONS;
 
 mod branches;
 mod edit_menu;
@@ -29,29 +30,9 @@ mod versions_keys;
 mod versions_menu;
 mod view_menu;
 
-/// ER's own state in `shell`, whose notations hold ER.
-fn er_of(shell: &Shell) -> &er_state::ErState {
-    er_state::er(&shell.notation_states).expect("the shell's notations hold ER")
-}
-
-/// ER's own state in `shell`, to change.
-fn er_of_mut(shell: &mut Shell) -> &mut er_state::ErState {
-    er_state::er_mut(&mut shell.notation_states).expect("the shell's notations hold ER")
-}
-
-/// UML's own state in `shell`, whose notations hold UML.
-fn uml_of(shell: &Shell) -> &uml_state::UmlState {
-    uml_state::uml(&shell.notation_states).expect("the shell's notations hold UML")
-}
-
-/// UML's own state in `shell`, to change.
-fn uml_of_mut(shell: &mut Shell) -> &mut uml_state::UmlState {
-    uml_state::uml_mut(&mut shell.notation_states).expect("the shell's notations hold UML")
-}
-
 /// The real shell in the harness at the design's frame size, given the app's screens parts.
 fn harness(theme: ThemeKind) -> Harness<'static, Shell> {
-    crate::testing::harness(&SCREENS, theme)
+    crate::testing::harness(NOTATIONS, &SCREENS, theme)
 }
 
 #[test]
@@ -75,7 +56,7 @@ fn home_draws_in_both_appearances_with_every_control_registered() {
 fn home_lists_its_pinned_folders_and_recent_projects_in_both_appearances() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services::default(), &SCREENS);
+        let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
         shell.state.theme = theme;
         shell.state.pin(std::path::Path::new("/Users/robin/Documents/Models"));
         shell.state.remember("Library system", std::path::Path::new("/Users/robin/Documents/Archforge/Library system.archforge"), 1_761_670_800);
@@ -135,14 +116,15 @@ fn the_new_project_dialog_opens_from_home_in_both_appearances_with_its_controls(
     }
 }
 
-/// The kinds a New project dialog lists: the sketch alone, then the sketch between ER and UML.
+/// The kinds a New project dialog lists: the sketch alone, the sketch and a second, then the sketch
+/// between a second and a third.
 static SKETCH_ALONE: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH)];
-static SKETCH_BETWEEN: &[&dyn crate::kinds::DiagramKind] = &[&er_kind::ErKind, &SketchKind(SKETCH), &uml_ui::UmlKind];
+static SKETCH_PAIR: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH), &SketchKind("test.second")];
+static SKETCH_BETWEEN: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind("test.second"), &SketchKind(SKETCH), &SketchKind("test.third")];
 
 /// The New project dialog's line on diagrams lists the kinds the shell was given, each by the name
-/// of its group in the Diagrams explorer, as a sentence lists them: the two kinds the app registers
-/// joined by "and"; the sketch alone, which the shell never names, with neither ER's nor UML's;
-/// three with a comma before "and". In light and dark.
+/// of its group in the Diagrams explorer, as a sentence lists them: the one kind the shell is given
+/// alone, naming no other; two joined by "and"; three with a comma before "and". In light and dark.
 #[test]
 fn the_new_project_line_lists_the_kinds_the_shell_was_given() {
     let line = |kinds: &'static [&'static dyn crate::kinds::DiagramKind], theme| {
@@ -152,12 +134,13 @@ fn the_new_project_line_lists_the_kinds_the_shell_was_given() {
         painted(&h).into_iter().filter(|t| t.ends_with("Every diagram shows the same model.")).collect::<Vec<_>>()
     };
     in_both_appearances(|theme| {
-        let two = "Add ER diagrams and UML structure diagrams as you go. Every diagram shows the same model.";
-        assert_eq!(line(SCREENS.kinds(), theme), [two], "{theme:?}");
         let alone = line(SKETCH_ALONE, theme);
+        assert_eq!(line(SCREENS.kinds(), theme), alone, "{theme:?}");
         assert_eq!(alone, ["Add Sketches as you go. Every diagram shows the same model."], "{theme:?}");
-        assert!(!alone.iter().any(|t| t.contains("ER diagrams") || t.contains("UML structure diagrams")), "{theme:?}: {alone:?}");
-        let three = "Add ER diagrams, Sketches and UML structure diagrams as you go. Every diagram shows the same model.";
+        assert!(!alone.iter().any(|t| t.contains("Second sketches") || t.contains("Third sketches")), "{theme:?}: {alone:?}");
+        let two = "Add Sketches and Second sketches as you go. Every diagram shows the same model.";
+        assert_eq!(line(SKETCH_PAIR, theme), [two], "{theme:?}");
+        let three = "Add Second sketches, Sketches and Third sketches as you go. Every diagram shows the same model.";
         assert_eq!(line(SKETCH_BETWEEN, theme), [three], "{theme:?}");
     });
 }
@@ -172,7 +155,7 @@ static SKETCH_DOZEN: [&dyn crate::kinds::DiagramKind; 12] = [&SketchKind(SKETCH)
 fn a_long_new_project_line_is_drawn_whole_and_moves_the_strip_below_it() {
     in_both_appearances(|theme| {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services::default(), &SCREENS);
+        let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
         shell.state.theme = theme;
         shell.kinds = &SKETCH_DOZEN;
         let mut h = Harness::builder().with_size(egui::vec2(640.0, 1100.0)).build_ui_state(
@@ -251,7 +234,7 @@ fn create_project_waits_for_creating_projects_and_home_takes_no_click_behind_the
 #[test]
 fn in_the_smallest_window_the_dialog_keeps_its_buttons_and_field_inside_it() {
     crate::i18n::set_language("en");
-    let shell = Shell::new(Services::default(), &SCREENS);
+    let shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
     let mut h = Harness::builder().with_size(egui::vec2(640.0, 400.0)).build_ui_state(
         |ui, shell: &mut Shell| {
             shell.logic(ui.ctx());
@@ -306,7 +289,7 @@ fn creating_harness() -> (Harness<'static, Shell>, std::sync::Arc<FakeHost>) {
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services, &SCREENS),
+        Shell::new(services, NOTATIONS, &SCREENS),
     );
     h.run();
     open_new_project(&mut h);
@@ -691,8 +674,8 @@ impl crate::ProjectHost for SavingHost {
     }
 
     /// Builds the rows on a thread of its own, as the app's writer does, then records them.
-    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
-        let (tables, junctions) = archforge_notations::storage();
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen, notations: &'static archforge_notations::Notations) {
+        let (tables, junctions) = notations.storage();
         let rows = std::thread::spawn(move || model.rows(&tables, &junctions)).join().unwrap().unwrap();
         self.write(project, rows);
     }
@@ -751,7 +734,7 @@ fn saving_harness(opened: Option<crate::Opened>, picked: Option<&str>) -> (Harne
         pick_project: Some(std::sync::Arc::new(move |_| Picked::at_once(picked.clone()))),
         ..Services::default()
     };
-    let mut shell = Shell::new(services, &SCREENS);
+    let mut shell = Shell::new(services, NOTATIONS, &SCREENS);
     if let Some(opened) = opened {
         shell.open_project(opened);
     }
@@ -770,8 +753,10 @@ fn commerce() -> crate::Opened {
     crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() }
 }
 
+/// Adds a package named `name` to the open project through the fake notation's command, and lets
+/// the window settle for two frames.
 fn add_schema(h: &mut Harness<'static, Shell>, name: &str) {
-    h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap();
+    h.state_mut().session.as_mut().unwrap().execute("sketch.package.add", &serde_json::json!({ "name": name })).unwrap();
     h.run_steps(2);
 }
 
@@ -827,10 +812,10 @@ fn described_project(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::A
     let (class, table) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-        let pkg = id(s.execute("uml.package.add", &serde_json::json!({ "name": "sales" })).unwrap().value);
-        let class = id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg.to_string(), "name": "Order" })).unwrap().value);
-        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
-        let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "customer" })).unwrap().value);
+        let pkg = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "sales" })).unwrap().value);
+        let class = id(s.execute("sketch.class.add", &serde_json::json!({ "package": pkg.to_string(), "name": "Order" })).unwrap().value);
+        let schema = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
+        let table = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema.to_string(), "name": "customer" })).unwrap().value);
         (class, table)
     };
     h.run_steps(2);
@@ -885,7 +870,7 @@ fn a_description_being_typed_is_saved_by_cmd_s() {
         }
         // A save already running: Cmd+S waits for it and leaves the draft being typed, which still
         // shows as unsaved, also once that save is done; Enter then writes it.
-        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "crm" })).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("sketch.package.add", &serde_json::json!({ "name": "crm" })).unwrap();
         h.run_steps(2);
         h.state_mut().save();
         assert!(h.state().is_saving());
@@ -1019,8 +1004,8 @@ fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
         assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
         assert!(h.query_by_label("A name can't be empty.").is_none(), "{theme:?}: and no longer read out");
         let s = h.state_mut().session.as_mut().unwrap();
-        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).and_then(|o| s.doc().uuid(o).ok()).unwrap();
-        s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "order" })).unwrap();
+        let schema = s.doc().uuid(s.doc().container(s.doc().by_uuid(table).unwrap()).unwrap().unwrap().0).unwrap();
+        s.execute("sketch.class.add", &serde_json::json!({ "package": schema.to_string(), "name": "order" })).unwrap();
         retype_on(&mut h, table, "workspace.properties.name", "order");
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         let notice = h.state().panels.notice.clone().unwrap_or_default();
@@ -1106,7 +1091,7 @@ fn a_hold_runs_alone_on_a_model_outside_a_gesture() {
     assert_eq!(saving_harness(None, None).0.state_mut().begin_hold(), Err(HoldRefused::NoProject));
     let (mut h, _) = saving_harness(Some(commerce()), None);
     let read_only = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().read_only();
-    h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+    h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
     assert_eq!(h.state_mut().begin_hold(), Err(HoldRefused::Gesture));
     assert!(!h.state().is_held() && !read_only(&h));
     h.state_mut().session.as_mut().unwrap().cancel().unwrap();
@@ -1130,7 +1115,7 @@ fn while_held_edits_undo_and_save_are_refused() {
     add_schema(&mut h, "shop");
     h.state_mut().begin_hold().unwrap();
     let session = h.state_mut().session.as_mut().unwrap();
-    assert!(matches!(session.execute("er.schema.add", &serde_json::json!({ "name": "billing" })), Err(EngineError::ReadOnly)));
+    assert!(matches!(session.execute("sketch.package.add", &serde_json::json!({ "name": "billing" })), Err(EngineError::ReadOnly)));
     assert!(matches!(session.undo(), Err(EngineError::ReadOnly)));
     assert!(!h.state().can_save());
     h.state_mut().save();
@@ -1151,7 +1136,7 @@ fn the_save_key_is_left_alone_and_saves_nothing_while_held() {
     use std::sync::atomic::{AtomicBool, Ordering};
     crate::i18n::set_language("en");
     let host = std::sync::Arc::new(SavingHost::default());
-    let mut shell = Shell::new(Services { projects: Some(host.clone()), ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { projects: Some(host.clone()), ids: Some(test_ids()), ..Services::default() }, NOTATIONS, &SCREENS);
     shell.open_project(commerce());
     // Whether the key is still there once the shell's logic has run: taken, it is gone.
     let left = std::sync::Arc::new(AtomicBool::new(false));
@@ -1208,7 +1193,7 @@ fn a_hold_hands_the_latest_rows_over_once_and_then_stops_writing() {
     let (mut h, host) = saving_harness(Some(commerce()), None);
     let written = || host.written.lock().unwrap().len();
     let edit = |h: &mut Harness<'static, Shell>, name: &str| {
-        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("sketch.package.add", &serde_json::json!({ "name": name })).unwrap();
     };
     assert!(!h.state_mut().hand_over_held(), "there is no hold to hand over for");
     edit(&mut h, "first");
@@ -1450,7 +1435,7 @@ fn a_quit_that_waited_for_a_failed_hold_asks_first() {
 
 /// The rows of the model shown, as a host reads them.
 fn rows_now(h: &Harness<'static, Shell>) -> std::sync::Arc<archforge_mof::rows::Rows> {
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = NOTATIONS.storage();
     std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap())
 }
 
@@ -1553,8 +1538,8 @@ fn a_version_shows_read_only_and_going_back_restores_the_work() {
     let (mut h, host, earlier) = work_and_earlier();
     let (diagram, shop) = {
         let s = h.state_mut().session.as_mut().unwrap();
-        let shop = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
-        let d = s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Till" })).unwrap().value;
+        let shop = s.execute("sketch.package.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
+        let d = s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": shop, "name": "Till" })).unwrap().value;
         (archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap(), shop)
     };
     crate::canvas::open(h.state_mut(), diagram);
@@ -1682,7 +1667,7 @@ fn a_read_that_fails_leaves_the_work_and_says_why() {
         the_work_shows(&h);
         let said = h.state().save_error.clone().unwrap();
         assert_eq!(said.contains("Too many"), refused, "{said}");
-        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "after" })).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("sketch.package.add", &serde_json::json!({ "name": "after" })).unwrap();
     }
 }
 
@@ -1861,11 +1846,11 @@ fn closing_a_parked_tab_hands_its_last_edit_over_off_the_frame() {
     h.state_mut().open_project(crate::Opened { name: "Other".into(), path: "/tmp/Other.archforge".into(), ..Default::default() });
     h.run_steps(2);
     let parked = h.state_mut().tabs[0].parked.as_mut().and_then(|p| p.session.as_mut()).unwrap();
-    parked.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+    parked.execute("sketch.package.add", &serde_json::json!({ "name": "shop" })).unwrap();
     let built = archforge_mof::rows::built_here();
     h.state_mut().close_tab_now(0);
     assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
-    let (tables, junctions) = archforge_notations::storage();
+    let (tables, junctions) = NOTATIONS.storage();
     let session = h.state().tabs[0].parked.as_ref().and_then(|p| p.session.as_ref()).unwrap();
     let edit = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions).unwrap();
     assert_eq!(host.written.lock().unwrap().last(), Some(&(std::path::PathBuf::from(COMMERCE), edit)), "the edit was handed over");
@@ -1904,8 +1889,8 @@ fn accepted(h: &Harness<'static, Shell>, method: &str, params: serde_json::Value
 
 /// Every request that may change something; a view command counts, as it does for a read-only token.
 fn changing_requests() -> Vec<(&'static str, serde_json::Value)> {
-    let add = serde_json::json!({ "command": "er.schema.add", "params": { "name": "x" } });
-    let mixed = serde_json::json!({ "steps": [{ "command": "er.schema.list" }, add] });
+    let add = serde_json::json!({ "command": "sketch.package.add", "params": { "name": "x" } });
+    let mixed = serde_json::json!({ "steps": [{ "command": "sketch.package.list" }, add] });
     vec![
         ("engine.execute", add.clone()),
         ("engine.execute", serde_json::json!({ "command": "view.select", "params": { "ids": [] } })),
@@ -1949,11 +1934,11 @@ fn an_agent_can_read_a_version_and_change_nothing_until_it_goes_back() {
     every_change_is_refused(&mut h);
     assert_eq!(host.saved_by.lock().unwrap().len(), saves, "no save started");
 
-    let listing = serde_json::json!({ "command": "er.schema.list" });
+    let listing = serde_json::json!({ "command": "sketch.package.list" });
     let batch = serde_json::json!({ "steps": [listing.clone(), listing.clone()] });
     for (method, params) in [
         ("engine.commands", serde_json::json!({})),
-        ("engine.describe", serde_json::json!({ "command": "er.schema.add" })),
+        ("engine.describe", serde_json::json!({ "command": "sketch.package.add" })),
         ("ui.inspect", serde_json::json!({})),
     ] {
         let request = accepted(&h, method, params, false);
@@ -1975,7 +1960,7 @@ fn an_agent_can_read_a_version_and_change_nothing_until_it_goes_back() {
     assert!(h.state_mut().back_to_current_work());
     h.run_steps(3);
     assert_eq!(inspected(&mut h)["viewing"], serde_json::Value::Null);
-    let add = accepted(&h, "engine.execute", serde_json::json!({ "command": "er.schema.add", "params": { "name": "after" } }), false);
+    let add = accepted(&h, "engine.execute", serde_json::json!({ "command": "sketch.package.add", "params": { "name": "after" } }), false);
     assert!(crate::control::answer_request(h.state_mut(), &add).is_ok());
     assert!(schema_names(&h).contains(&"after".to_string()));
     let save = accepted(&h, "app.save", serde_json::json!({}), false);
@@ -2000,7 +1985,7 @@ fn a_version_still_being_read_counts_as_viewing() {
 #[test]
 fn a_request_accepted_before_a_change_of_session_runs_on_neither() {
     let from_another_session = |answer: Result<serde_json::Value, String>| answer.is_err_and(|why| why.contains("after this request was sent"));
-    let add = serde_json::json!({ "command": "er.schema.add", "params": { "name": "x" } });
+    let add = serde_json::json!({ "command": "sketch.package.add", "params": { "name": "x" } });
     let (mut h, host, earlier) = work_and_earlier();
     let before_viewing = accepted(&h, "engine.execute", add.clone(), false);
     let reading_before = accepted(&h, "document.inspect", serde_json::json!({}), false);
@@ -2157,7 +2142,7 @@ fn a_refused_change_shows_as_refused_on_the_turns_rows() {
     let chat = h.state_mut().chat_panel.chat.as_mut().unwrap();
     chat.allow_changes = true;
     chat.turns.last_mut().unwrap().state = crate::chat_panel::TurnState::Running;
-    let add = serde_json::json!({ "command": "er.schema.add", "params": { "name": "x" } });
+    let add = serde_json::json!({ "command": "sketch.package.add", "params": { "name": "x" } });
     refused_for_viewing(crate::chat_fixture::call(h.state_mut(), "engine.execute", add), "the turn's change");
     let rows = chat_turns(&h).last().unwrap().items.iter();
     let rows: Vec<_> = rows.filter_map(|i| if let crate::chat_panel::Item::Tool(t) = i { Some(t.status) } else { None }).collect();
@@ -2206,7 +2191,7 @@ fn a_refused_restore_starts_nothing_and_keeps_the_version_in_view() {
     assert_eq!(h.state_mut().restore_version("c1", "d"), Err(NoProject));
     assert!(host.reads.lock().unwrap().is_empty() && host.restores.lock().unwrap().is_empty());
     let (mut h, host, _) = work_and_earlier();
-    h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+    h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
     assert_eq!(h.state_mut().restore_version("c1", "d"), Err(Gesture));
     assert!(host.reads.lock().unwrap().is_empty() && host.restores.lock().unwrap().is_empty(), "a gesture under way stops it before the read");
     let (mut h, host, earlier) = work_and_earlier();
@@ -2226,7 +2211,7 @@ fn a_failed_restore_from_a_version_in_view_leaves_the_work_as_it_was() {
         let (mut h, host, earlier) = work_and_earlier();
         h.state_mut().state.theme = theme;
         let s = h.state_mut().session.as_mut().unwrap();
-        let shop = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].clone();
+        let shop = s.execute("sketch.package.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].clone();
         s.execute("view.select", &serde_json::json!({ "ids": [shop] })).unwrap();
         let selection = s.view().selection.clone();
         start_viewing(&mut h, "c1");
@@ -2547,7 +2532,7 @@ fn a_move_with_no_clear_answer_is_read_back() {
 #[test]
 fn a_switch_from_every_starting_point() {
     use crate::hold::HoldRefused::{Another, NoProject};
-    assert_eq!(Shell::new(Services::default(), &SCREENS).switch_branch("x".to_string()), Err(NoProject), "this part draws nothing");
+    assert_eq!(Shell::new(Services::default(), NOTATIONS, &SCREENS).switch_branch("x".to_string()), Err(NoProject), "this part draws nothing");
     in_both(work_and_earlier, |mut h, host, earlier| {
         start_viewing(&mut h, "c1");
         answer_read(&mut h, &host, Ok(earlier));
@@ -2660,15 +2645,12 @@ fn a_repair_made_while_building_is_unsaved_and_written_but_row_order_is_not_one(
         let (mut h, host, _) = work_and_earlier();
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let shop = id(s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value);
-        let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": shop, "name": "customer" })).unwrap().value);
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT", "primary_key": true })).unwrap();
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "code", "type": "BIGINT" })).unwrap();
+        let shop = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "till" })).unwrap().value);
+        let table = id(s.execute("sketch.class.add", &serde_json::json!({ "package": shop, "name": "customer" })).unwrap().value);
+        s.execute("sketch.attribute.add", &serde_json::json!({ "class": table, "name": "id" })).unwrap();
+        s.execute("sketch.attribute.add", &serde_json::json!({ "class": table, "name": "code" })).unwrap();
         if !reordered {
-            let diagram = id(s
-                .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" }))
-                .unwrap()
-                .value);
+            let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": shop, "name": "Shop" })).unwrap().value);
             s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 }))
                 .unwrap();
         }
@@ -2873,7 +2855,7 @@ fn a_replacement_stops_when_the_latest_rows_cannot_be_handed_over() {
     let (mut h, _) = saving_harness(Some(commerce()), None);
     add_schema(&mut h, "shop");
     h.state_mut().services.projects = None;
-    h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "billing" })).unwrap();
+    h.state_mut().session.as_mut().unwrap().execute("sketch.package.add", &serde_json::json!({ "name": "billing" })).unwrap();
     let (job, started, ..) = test_job();
     let _read = start_replacing(&mut h, Some(job));
     assert!(!h.state().is_held() && !started.load(std::sync::atomic::Ordering::SeqCst));
@@ -3292,13 +3274,13 @@ fn an_opening_refused_for_unsupported_diagram_kinds_says_so_and_keeps_the_projec
         h.state_mut().open_from_picker();
         h.run_steps(2);
         let (_, tx) = host.opens.lock().unwrap().pop().expect("the host was asked to open");
-        let kinds = ["uml.class", "", "uml.class", "legacy.kind"].map(String::from).to_vec();
+        let kinds = ["old.class", "", "old.class", "legacy.kind"].map(String::from).to_vec();
         tx.send(Err(crate::CreateError::UnsupportedKinds { kinds })).unwrap();
         h.run_steps(4);
-        let (said, line) = refused_in_german(&["uml.class", "legacy.kind"], "The project could not be opened: {why}");
+        let (said, line) = refused_in_german(&["old.class", "legacy.kind"], "The project could not be opened: {why}");
         let shell = h.state();
         assert_eq!(shell.open_error.as_deref(), Some(said.as_str()), "{theme:?}");
-        assert_eq!(said.matches("uml.class").count(), 1, "{theme:?}: each kind once");
+        assert_eq!(said.matches("old.class").count(), 1, "{theme:?}: each kind once");
         assert!(!shell.is_opening() && shell.tabs.len() == 2 && shell.active == Some(1), "{theme:?}: no tab opened");
         let shown = shell.project.as_ref().map(|o| o.path.clone());
         assert!(shell.tabs[0].parked.is_some() && shown == Some("/tmp/Library.archforge".into()), "{theme:?}");
@@ -3318,7 +3300,7 @@ fn an_opening_refused_for_unsupported_diagram_kinds_says_so_and_keeps_the_projec
 fn the_unsupported_kinds_sentence_names_a_few_kinds_each_once() {
     crate::i18n::set_language("en");
     let said = |kinds: &[&str]| crate::unsupported_kinds(&kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>());
-    assert_eq!(said(&["uml.class"]), "It holds diagrams whose kind Archforge does not support (uml.class); create a new project to carry on.");
+    assert_eq!(said(&["old.class"]), "It holds diagrams whose kind Archforge does not support (old.class); create a new project to carry on.");
     assert_eq!(said(&["", ""]), "It holds diagrams whose kind Archforge does not support; create a new project to carry on.");
     let long = "k".repeat(200);
     assert!(said(&["a", "b", "a", "c", "d", "e", &long]).contains("(a, b, c, …);"), "the first three, each once, and that more were found");
@@ -3331,11 +3313,11 @@ fn the_unsupported_kinds_sentence_names_a_few_kinds_each_once() {
 fn work_and_unsupported() -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>, std::sync::Arc<archforge_mof::rows::Rows>) {
     let (mut h, host) = saving_harness(Some(commerce()), None);
     let s = h.state_mut().session.as_mut().unwrap();
-    let till = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
-    s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": till, "name": "Till" })).unwrap();
+    let till = s.execute("sketch.package.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
+    s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": till, "name": "Till" })).unwrap();
     h.run_steps(2);
     let mut rows = (*rows_now(&h)).clone();
-    let (tables, _) = archforge_notations::storage();
+    let (tables, _) = NOTATIONS.storage();
     let at = tables.iter().position(|t| t.name == "diagram_diagram").unwrap();
     let kind = tables[at].columns.iter().position(|c| c.name == "kind").unwrap();
     rows.tables[at].iter_mut().for_each(|row| row[kind] = archforge_mof::rows::Cell::Text("legacy.kind".into()));
@@ -3501,7 +3483,7 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
 fn eight_tabs_stay_left_of_help_at_every_width_down_to_the_smallest_window() {
     for w in [640.0, 900.0, 1600.0] {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, NOTATIONS, &SCREENS);
         for i in 0..crate::MAX_TABS {
             shell.open_project(crate::Opened {
                 name: format!("A project with a rather long name {i}"),
@@ -4082,7 +4064,7 @@ fn a_pinned_folder_is_pinned_from_the_picker_opens_the_project_picker_in_it_and_
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services, &SCREENS),
+        Shell::new(services, NOTATIONS, &SCREENS),
     );
     h.run_steps(2);
     let at = rect_of(&h, "home.pin-folder").center();
@@ -4213,7 +4195,7 @@ fn homes_search_finds_the_projects_in_the_pinned_folders_one_search_at_a_time_an
         })),
         ..Services::default()
     };
-    let mut shell = Shell::new(services, &SCREENS);
+    let mut shell = Shell::new(services, NOTATIONS, &SCREENS);
     shell.state.pin(std::path::Path::new("/Users/robin/Work"));
     shell.state.remember("Shop", std::path::Path::new("/tmp/Shop.archforge"), 1);
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
@@ -4385,7 +4367,7 @@ mod installed_fonts {
     /// A font scan that panics leaves no fallback order and nothing in flight to wait for.
     #[test]
     fn a_scan_that_panics_leaves_nothing_to_wait_for() {
-        let mut s = Shell::new(Services::default(), &SCREENS);
+        let mut s = Shell::new(Services::default(), NOTATIONS, &SCREENS);
         s.services.fonts = Some(Arc::new(Panicking));
         let ctx = framed_context();
         frame(&mut s, &ctx);
@@ -4423,7 +4405,7 @@ mod installed_fonts {
     /// A shell whose installed fonts come from `source`, framed until its scan has finished, with
     /// the context it was framed in.
     fn scripted(source: Scripts) -> (Shell, egui::Context) {
-        let mut s = Shell::new(Services::default(), &SCREENS);
+        let mut s = Shell::new(Services::default(), NOTATIONS, &SCREENS);
         s.services.fonts = Some(Arc::new(source));
         let ctx = framed_context();
         frame(&mut s, &ctx);
@@ -4520,7 +4502,7 @@ mod installed_fonts {
         until(&mut s, &ctx, |s| s.fonts.in_flight() == 0 && s.fonts.unserved("zh-Hans").is_some());
         assert_eq!(s.fonts.unserved("zh-Hans"), Some(Unserved::Refused));
         // A host with no fonts at all (the web) knows at once.
-        let mut web = Shell::new(Services::default(), &SCREENS);
+        let mut web = Shell::new(Services::default(), NOTATIONS, &SCREENS);
         let ctx = framed_context();
         frame(&mut web, &ctx);
         assert_eq!(web.fonts.unserved("ja"), Some(Unserved::NoSource));
@@ -4595,16 +4577,24 @@ fn the_bundled_faces_draw_every_character_of_the_latin_script_catalogues() {
 
 /// The shell with a project open, in the harness at the design's frame size or another.
 fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
+    workspace_harness_checking(theme, size, only_what_every_kind_and_notation_is_asked)
+}
+
+/// [`workspace_harness`], with `check` run after every frame. Every workspace harness checks that
+/// the other kind and the worded notation, in a test that registers them, were asked only what
+/// every kind and every notation are.
+fn workspace_harness_checking(theme: ThemeKind, size: egui::Vec2, check: fn()) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     // Frames a sixtieth of a second apart, as on screen, so two clicks in a row read as a double click;
     // enough of them to settle a package switch's fade (AR-95).
     let mut h = Harness::builder().with_size(size).with_step_dt(1.0 / 60.0).with_max_steps(32).build_ui_state(
-        |ui, shell: &mut Shell| {
+        move |ui, shell: &mut Shell| {
             shell.logic(ui.ctx());
             shell.ui(ui);
+            check();
         },
         shell,
     );
@@ -5186,15 +5176,14 @@ fn a_menu_closed_by_its_title_gives_the_keyboard_back() {
         let (mut h, _) = table_harness();
         (h.state_mut().state.theme, h.state_mut().in_window_menu) = (theme, true);
         h.run();
-        click_id(&mut h, "workspace.properties.columns.add");
-        click_id(&mut h, "workspace.properties.column.name");
+        click_id(&mut h, "workspace.properties.name");
         let field = h.ctx.memory(egui::Memory::focused);
         assert!(field.is_some() && h.ctx.text_edit_focused(), "{theme:?}");
         click_menu(&mut h, "strip.menu.view");
         assert_eq!(h.state().menu_bar.open, Some("view"), "{theme:?}");
         click_menu(&mut h, "strip.menu.view");
         assert_eq!((h.state().menu_bar.open, h.ctx.memory(egui::Memory::focused)), (None, field), "{theme:?}");
-        assert!(er_of(h.state()).column.is_some(), "{theme:?}: the editor it was in is still open");
+        assert!(h.ctx.text_edit_focused(), "{theme:?}: the field it was in is still being typed in");
         let mut h = menu_harness(theme, true);
         click_menu(&mut h, "strip.menu.view");
         click_menu(&mut h, "strip.menu.view");
@@ -5504,7 +5493,7 @@ fn the_saved_state_names_each_explorer_and_panel_by_its_own_name() {
 #[test]
 fn without_an_id_source_the_status_bar_says_the_model_could_not_open_once() {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default(), &SCREENS);
+    let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -5519,12 +5508,14 @@ fn without_an_id_source_the_status_bar_says_the_model_could_not_open_once() {
     assert_eq!(h.state().session_error, Some(crate::SessionError::NoIdSource));
 }
 
+/// A long project name keeps the project chip left of the bar's controls, at every window size and
+/// in every language.
 #[test]
 fn a_long_project_name_keeps_the_chip_left_of_the_bar_controls_at_every_size_and_language() {
     for lang in crate::i18n::LANGUAGES {
         for (w, h_) in [(1600.0, 1120.0), (900.0, 700.0), (480.0, 600.0), (80.0, 80.0)] {
             crate::i18n::set_language(lang.code);
-            let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+            let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, NOTATIONS, &SCREENS);
             shell.open_project(crate::Opened {
                 name: "A project with a very long name that goes on and on".into(),
                 path: "/tmp/long.archforge".into(),
@@ -5567,22 +5558,24 @@ const NOT_ALONE: [egui::Modifiers; 5] = [
     egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND),
 ];
 
+/// The names of the open project's packages of the fake notation.
 fn schema_names(h: &Harness<'static, Shell>) -> Vec<String> {
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
-    st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).map(|o| archforge_core::name_of(st, o)).collect()
+    st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).map(|o| archforge_core::name_of(st, o)).collect()
 }
 
+/// The Models tree's + adds a package, named in place, and Enter renames it.
 #[test]
 fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
     let at = rect_of(&h, "workspace.explorer.add").center();
     click(&mut h, at);
     assert!(h.state().explorer.menu_open);
-    let at = rect_of(&h, "workspace.explorer.add.schema").center();
+    let at = rect_of(&h, "workspace.explorer.add.package").center();
     click(&mut h, at);
     h.run();
-    assert_eq!(schema_names(&h), ["Schema 1"]);
+    assert_eq!(schema_names(&h), ["Package 1"]);
     assert!(h.state().explorer.rename.is_some(), "the new schema's name is open for typing");
     assert!(ids(&h).iter().any(|i| i == "workspace.explorer.rename"));
     assert!(h.state().session.as_ref().unwrap().is_dirty());
@@ -5596,7 +5589,7 @@ fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
     assert!(ids(&h).iter().any(|i| i.starts_with("workspace.explorer.row.")), "the schema has a row");
     // Undo takes the rename back, redo the other way.
     key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
-    assert_eq!(schema_names(&h), ["Schema 1"]);
+    assert_eq!(schema_names(&h), ["Package 1"]);
     key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
     assert_eq!(schema_names(&h), ["Shop"]);
 }
@@ -5611,7 +5604,9 @@ fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         for then in ["escape", "correct", "click"] {
             let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-            crate::explorer::add(h.state_mut(), "schema");
+            // The worded notation before the sketch's: Models asks the element's own.
+            h.state_mut().notation_uis = SKETCH_UIS;
+            crate::explorer::add(h.state_mut(), "package");
             h.run();
             // The default name is selected whole: Backspace empties it, and Enter is refused.
             key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
@@ -5636,10 +5631,10 @@ fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
             } else {
                 key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
                 assert!(h.state().explorer.rename.is_none(), "{theme:?}: Escape closes it: {:?}", h.state().explorer.rename);
-                assert_eq!(schema_names(&h), ["Schema 1"], "{theme:?}: the old name stays");
+                assert_eq!(schema_names(&h), ["Package 1"], "{theme:?}: the old name stays");
                 // The tree has its keys again: F2 opens the selected schema's name.
                 key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
-                assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Schema 1"), "{theme:?}: F2 reaches the tree");
+                assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Package 1"), "{theme:?}: F2 reaches the tree");
             }
         }
     }
@@ -5653,7 +5648,7 @@ fn a_name_refused_in_place_is_said_in_the_chosen_language() {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
         h.state_mut().state.language = "de".into();
         h.run();
-        crate::explorer::add(h.state_mut(), "schema");
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -5689,9 +5684,9 @@ fn a_kind_word_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "diagram.add", json!({ "kind": "toy" })), unknown, "{theme:?}");
         let d = h.state().canvas.active.unwrap().to_string();
         let st = h.state().session.as_ref().unwrap().doc();
-        let commerce = st.container(st.by_uuid(named(&h, archforge_uml::CLASS, "Order")).unwrap()).unwrap().unwrap().0;
+        let commerce = st.container(st.by_uuid(named(&h, archforge_mof::toy::CLASS, "Order")).unwrap()).unwrap().unwrap().0;
         let p = json!({ "package": st.uuid(commerce).unwrap().to_string(), "name": "Shop" });
-        let shop = crate::panels::run(h.state_mut(), "uml.class.add", p).unwrap()["id"].as_str().unwrap().to_string();
+        let shop = crate::panels::run(h.state_mut(), "sketch.class.add", p).unwrap()["id"].as_str().unwrap().to_string();
         let role = json!({ "diagram": d, "element": shop, "x": 0, "y": 0, "kind": "Box" });
         assert_eq!(refused(&mut h, "diagram.place", role), plain, "{theme:?}");
         // A line of each kind: an association's, with label texts, and a generalization's, without.
@@ -5703,14 +5698,14 @@ fn a_kind_word_refused_is_said_in_the_chosen_language() {
             };
             st.uuid(lines.iter().filter_map(Value::as_ref).find(|e| shows(e) == Some(class)).unwrap()).unwrap().to_string()
         };
-        let (association, generalization) = (line_of(archforge_uml::ASSOCIATION), line_of(archforge_uml::GENERALIZATION));
-        let slots = archforge_uml::figures::text_slots(archforge_uml::ASSOCIATION).join(", ");
+        let (association, generalization) = (line_of(archforge_mof::toy::ASSOCIATION), line_of(archforge_mof::toy::GENERALIZATION));
+        let slots = archforge_diagram::Notation::text_slots(&archforge_notations::fake::Sketch, archforge_mof::toy::ASSOCIATION).join(", ");
         let lacks = format!("Diese Linie hat keinen Beschriftungstext kind. Sie hat {slots}.");
         assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": association, "kind": "kind" })), lacks, "{theme:?}");
         let none = "Diese Linie hat keinen Beschriftungstext name. Sie hat keinen.";
         assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": generalization, "kind": "name" })), none, "{theme:?}");
         assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [nodes["Order"]], "name": "Akzent" })), plain, "{theme:?}");
-        let bare = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "uml.class".into(), known: Vec::new() };
+        let bare = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "old.class".into(), known: Vec::new() };
         let no_notation = crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::NotOneOf(Box::new(bare)));
         let no_kind = "Dieses Projekt enthält keine Notation und kennt daher keine Diagrammart.";
         assert_eq!(no_notation.as_deref(), Some(no_kind), "{theme:?}");
@@ -5728,78 +5723,14 @@ fn a_new_diagrams_element_refused_is_said_in_the_chosen_language() {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         h.state_mut().state.language = "de".into();
         h.run();
-        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let order = named(&h, archforge_mof::toy::CLASS, "Order").to_string();
         let mut refused = |element: &str| {
-            let p = json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": element, "name": "Neu" });
+            let p = json!({ "kind": SKETCH, "element": element, "name": "Neu" });
             crate::panels::run(h.state_mut(), "diagram.add", p).err().unwrap_or_default()
         };
         assert_eq!(refused(""), "Es ist kein Element angegeben. Geben Sie seine ID an.", "{theme:?}");
         assert_eq!(refused("nope"), "Es gibt kein Element mit der ID nope.", "{theme:?}");
         assert_eq!(refused(&order), "Order kann kein Diagramm dieser Art haben.", "{theme:?}");
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A line, a note's link or a label a diagram command refuses by its rules is said in the chosen
-/// language: a line between two classes with no relationship, of a class, of an attribute, which
-/// lacks an end, between boxes that do not show its ends, and one shown already; a note's link from
-/// a class's box, to itself, to another note and twice, and one onto another diagram said from the
-/// reason alone; and a label on a note's link or shown already. In light and dark (AR-515).
-#[test]
-fn a_line_link_or_label_refused_is_said_in_the_chosen_language() {
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p);
-        let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).err().unwrap_or_default();
-        let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let d = h.state().canvas.active.unwrap().to_string();
-        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
-        let st = h.state().session.as_ref().unwrap().doc();
-        let g = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::GENERALIZATION)).unwrap();
-        let (specific, general) = archforge_uml::figures::ends(st, g).unwrap();
-        let (specific, general) = (&nodes[&archforge_core::name_of(st, specific)], &nodes[&archforge_core::name_of(st, general)]);
-        let g = st.uuid(g).unwrap().to_string();
-        let edges = st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap();
-        let shows = |e: &archforge_mof::Obj| st.get(*e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref());
-        let is_association = |e: &archforge_mof::Obj| shows(e).and_then(|el| st.class_of(el).ok()) == Some(archforge_uml::ASSOCIATION);
-        let association = st.uuid(edges.iter().filter_map(archforge_mof::Value::as_ref).find(is_association).unwrap()).unwrap().to_string();
-        let connect = |element: &str, source: &str, target: &str| json!({ "diagram": d, "element": element, "source": source, "target": target });
-        let between = connect("", &nodes["Order"], &nodes["Customer"]);
-        let unnamed = "Eine Linie zwischen zwei Elementen zeigt eine Beziehung. Geben Sie die Beziehung an.";
-        assert_eq!(refused(&mut h, "diagram.connect", between), unnamed, "{theme:?}: the language is German");
-        let of_class = connect(&order, &nodes["Order"], &nodes["Customer"]);
-        assert_eq!(refused(&mut h, "diagram.connect", of_class), "Ein Diagramm dieser Art zeigt Order nicht.", "{theme:?}");
-        let status = id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "status" }));
-        let lacks = "Diesem Element fehlt ein Ende, daher zeigt keine Linie es.";
-        assert_eq!(refused(&mut h, "diagram.connect", connect(&status, &nodes["Order"], &nodes["Customer"])), lacks, "{theme:?}");
-        let first = "Der erste Kasten zeigt nicht das erste Ende der Beziehung.";
-        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, general, general)), first, "{theme:?}");
-        let second = "Der zweite Kasten zeigt nicht das zweite Ende der Beziehung.";
-        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, specific, specific)), second, "{theme:?}");
-        let shown = format!("Dieses Diagramm zeigt {g} bereits.");
-        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, specific, general)), shown, "{theme:?}");
-        // A note's links.
-        let note = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Hinweis", "x": 0, "y": 0 }));
-        let other = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Zweiter", "x": 0, "y": 200 }));
-        let link = |note: &str, target: &str| json!({ "diagram": d, "note": note, "target": target });
-        let not_note = "Dieser Kasten zeigt Order. Nur eine Notiz wird mit einem Kasten oder einer Linie verbunden.";
-        assert_eq!(refused(&mut h, "diagram.link-note", link(&nodes["Order"], &note)), not_note, "{theme:?}");
-        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &note)), "Eine Notiz wird nicht mit sich selbst verbunden.", "{theme:?}");
-        let unlinkable = "Eine Notiz wird mit einem Kasten verbunden, der ein Element zeigt, oder mit der Linie einer Beziehung.";
-        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &other)), unlinkable, "{theme:?}");
-        let anchor = id(&mut h, "diagram.link-note", link(&note, &nodes["Order"]));
-        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &nodes["Order"])), "Die Notiz ist bereits damit verbunden.", "{theme:?}");
-        let elsewhere = crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::TargetOtherDiagram);
-        assert_eq!(elsewhere.as_deref(), Some("Womit die Notiz verbunden wird, liegt in einem anderen Diagramm."), "{theme:?}");
-        // Labels.
-        let label = |edge: &str| json!({ "edge": edge, "kind": "from_end" });
-        let unlabelled = "Die Verbindung einer Notiz zeigt kein Element und erhält daher keine Beschriftung.";
-        assert_eq!(refused(&mut h, "diagram.label", label(&anchor)), unlabelled, "{theme:?}");
-        id(&mut h, "diagram.label", label(&association));
-        assert_eq!(refused(&mut h, "diagram.label", label(&association)), "Diese Linie hat den Beschriftungstext from_end bereits.", "{theme:?}");
     }
     crate::i18n::set_language("en");
 }
@@ -5814,7 +5745,7 @@ fn a_node_list_refused_is_said_in_the_chosen_language() {
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         h.state_mut().state.language = "de".into();
         h.run();
-        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let order = named(&h, archforge_mof::toy::CLASS, "Order").to_string();
         let card = nodes["Order"].clone();
         let mut refused = |cmd: &str, list: serde_json::Value| {
             let p = match cmd {
@@ -5857,10 +5788,10 @@ fn a_style_colour_or_an_arrangement_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "diagram.style", colour("stroke")), stroke, "{theme:?}");
         assert_eq!(refused(&mut h, "diagram.style", colour("text")), "Geben Sie die Textfarbe als #rrggbb an, etwa #3366cc.", "{theme:?}");
         // A new diagram of the classes' package: empty, then two classes at the edge of the reach.
-        let (order, customer) = (named(&h, archforge_uml::CLASS, "Order"), named(&h, archforge_uml::CLASS, "Customer"));
+        let (order, customer) = (named(&h, archforge_mof::toy::CLASS, "Order"), named(&h, archforge_mof::toy::CLASS, "Customer"));
         let st = h.state().session.as_ref().unwrap().doc();
         let package = st.uuid(st.container(st.by_uuid(order).unwrap()).unwrap().unwrap().0).unwrap().to_string();
-        let added = run(&mut h, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package })).unwrap();
+        let added = run(&mut h, "diagram.add", json!({ "kind": SKETCH, "element": package })).unwrap();
         let d = added["id"].as_str().unwrap().to_string();
         let none = "Dieses Diagramm zeigt keinen Kasten, der sich anordnen ließe.";
         assert_eq!(refused(&mut h, "diagram.arrange", json!({ "diagram": d })), none, "{theme:?}");
@@ -5874,873 +5805,27 @@ fn a_style_colour_or_an_arrangement_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
-/// An association's end, which UML does not remove yet, removed with the selection is said in the
-/// chosen language, named by its role or, without one, its id. In light and dark (AR-530).
+/// An association's end, which the notation does not remove yet, removed with the selection is said
+/// in the chosen language, named by its role or, without one, its id. In light and dark (AR-530).
 #[test]
-fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
+fn an_element_not_removed_yet_is_said_in_the_chosen_language() {
     use serde_json::json;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         h.state_mut().state.language = "de".into();
         h.run();
-        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let order = named(&h, archforge_mof::toy::CLASS, "Order").to_string();
         let st = h.state().session.as_ref().unwrap().doc();
-        let commerce = st.container(st.by_uuid(named(&h, archforge_uml::CLASS, "Order")).unwrap()).unwrap().unwrap().0;
+        let commerce = st.container(st.by_uuid(named(&h, archforge_mof::toy::CLASS, "Order")).unwrap()).unwrap().unwrap().0;
         let p = json!({ "package": st.uuid(commerce).unwrap().to_string(), "name": "Shop" });
         let mut run = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p);
-        let shop = run("uml.class.add", p).unwrap()["id"].as_str().unwrap().to_string();
-        let sells = run("uml.association.add", json!({ "from": shop, "to": order })).unwrap()["id"].as_str().unwrap().to_string();
-        let seller = run("uml.association.set-end", json!({ "association": sells, "end": 0, "role": "seller" })).unwrap();
-        let unnamed = run("uml.association.set-end", json!({ "association": sells, "end": 1, "multiplicity": "*" })).unwrap();
-        let unnamed = unnamed["id"].as_str().unwrap();
-        let refused = run("element.remove", json!({ "ids": [seller["id"]] })).unwrap_err();
+        let shop = run("sketch.class.add", p).unwrap()["id"].as_str().unwrap().to_string();
+        let sells = run("sketch.association.add", json!({ "from": shop, "to": order, "from_role": "seller" })).unwrap();
+        let (seller, unnamed) = (sells["ends"][0].as_str().unwrap().to_string(), sells["ends"][1].as_str().unwrap().to_string());
+        let refused = run("element.remove", json!({ "ids": [seller] })).unwrap_err();
         assert_eq!(refused, "seller lässt sich noch nicht entfernen.", "{theme:?}");
         let refused = run("element.remove", json!({ "ids": [unnamed] })).unwrap_err();
         assert_eq!(refused, format!("{unnamed} lässt sich noch nicht entfernen."), "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A key a step would break is said in the chosen language with why in the same words, and keys built
-/// on each other too deep too; a reason inside it this can't say leaves the whole to the engine's
-/// English. In light and dark (AR-493).
-#[test]
-fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let breaks =
-            |kind, why| crate::panels::said(SCREENS.notation_uis(), &Reason::WouldBreak { kind, name: "pk_kunde".into(), why: Box::new(why) });
-        let nullable = || Reason::NullableKeyColumn { name: "notiz".into() };
-        let said = "Der Schlüssel pk_kunde wäre danach ungültig: notiz darf leer sein, was eine Primärschlüsselspalte nie darf.";
-        assert_eq!(breaks("primary key", nullable()).as_deref(), Some(said), "{theme:?}");
-        let other = "Der Schlüssel pk_kunde wäre danach ungültig: nummer ist keine Spalte von Bestellung.";
-        let not_column = Reason::NotColumnOf { column: "nummer".into(), table: "Bestellung".into() };
-        assert_eq!(breaks("unique constraint", not_column).as_deref(), Some(other), "{theme:?}");
-        assert_eq!(breaks("check", nullable()), None, "{theme:?}");
-        assert_eq!(breaks("primary key", Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
-        let deep = crate::panels::said(SCREENS.notation_uis(), &Reason::TooDeep { kind: "key", max: 32 });
-        assert_eq!(
-            deep.as_deref(),
-            Some("Aufeinander aufbauende Schlüssel reichen hier tiefer als 32 Ebenen oder bilden eine Schleife."),
-            "{theme:?}"
-        );
-        assert_eq!(crate::panels::said(SCREENS.notation_uis(), &Reason::TooDeep { kind: "untyped kind", max: 32 }), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// The selection's removal refused is said in the chosen language: an element removed where it is
-/// edited, and a part of a subtype's key without its subtype. In light and dark (AR-508).
-#[test]
-fn an_er_removal_refused_is_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        for (reason, said) in [
-            (Reason::RemovedWhereEdited, "Dieses Element wird dort entfernt, wo es bearbeitet wird."),
-            (Reason::SubtypeKeyPart, "Dies ist Teil des Schlüssels eines Untertyps und wird nur mit diesem Untertyp entfernt."),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
-        }
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A relationship that does not resolve into a mapping table, a table that does not collapse into
-/// a relationship and one that cannot be associative are said in the chosen language by the rule
-/// they break, a table with no foreign key within its primary key apart from one with one, and a
-/// mapping table a step would break with why in the same words. In light and dark (AR-505).
-#[test]
-fn an_er_mapping_table_refused_is_said_in_the_chosen_language() {
-    use archforge_engine::{MappingRule as M, Reason};
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let keys = |keys| M::KeysInPrimaryKey { table: "Posten".into(), keys };
-        for (rule, said) in [
-            (M::NotManyToMany, "Nur aus einer Viele-zu-viele-Beziehung wird eine Zuordnungstabelle."),
-            (M::LacksEnd, "Der Beziehung fehlt eine ihrer beiden Tabellen."),
-            (M::TwoForeignKeys, "Eine Zuordnungstabelle hat genau zwei Fremdschlüssel."),
-            (M::NoRelationship { foreign_key: "fk_kunde".into() }, "Der Fremdschlüssel fk_kunde steht für keine Beziehung."),
-            (M::NoKey { foreign_key: "fk_ware".into() }, "Der Fremdschlüssel fk_ware verweist auf keinen Schlüssel."),
-            (M::OwnRelationship, "Die Tabelle hat eine eigene Beziehung und lässt sich daher nicht in eine Beziehung zusammenfassen."),
-            (M::OwnColumns, "Die Tabelle hat eigene Spalten und lässt sich daher nicht in eine Beziehung zusammenfassen."),
-            (
-                M::ColumnsOutsideKey,
-                "Nicht alle Spalten der Tabelle gehören zu ihrem Primärschlüssel, daher lässt sie sich nicht in eine Beziehung zusammenfassen.",
-            ),
-            (M::UniqueConstraint, "Die Tabelle hat eine Eindeutigkeitsbedingung und lässt sich daher nicht in eine Beziehung zusammenfassen."),
-            (M::Check, "Die Tabelle hat eine Prüfbedingung und lässt sich daher nicht in eine Beziehung zusammenfassen."),
-            (M::Index, "Die Tabelle hat einen Index und lässt sich daher nicht in eine Beziehung zusammenfassen."),
-            (keys(0), "Posten hat keinen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei."),
-            (keys(1), "Posten hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei."),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &Reason::Mapping(rule.clone())).as_deref(), Some(said), "{rule:?} {theme:?}");
-        }
-        let breaks = Reason::WouldBreak { kind: "table", name: "Verknüpfung".into(), why: Box::new(Reason::Mapping(keys(1))) };
-        let said = "Die Tabelle Verknüpfung wäre danach ungültig: Posten hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. \
-                    Eine Zuordnungstabelle braucht zwei.";
-        assert_eq!(crate::panels::said(SCREENS.notation_uis(), &breaks).as_deref(), Some(said), "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A column's generation refused is said in the chosen language by the rule it breaks, a column on
-/// a domain that would break with why in the same words, and a key or identity column asked to be
-/// nullable; a reason inside it this can't say leaves the whole to the engine's English. In light
-/// and dark (AR-494).
-#[test]
-fn an_er_columns_generation_refused_is_said_in_the_chosen_language() {
-    use archforge_engine::{GenerationRule as G, Reason};
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        for (rule, said) in [
-            (G::ExpressionNeedsComputed, "Nur eine berechnete Spalte hat einen Ausdruck."),
-            (G::ComputedNeedsExpression, "Eine berechnete Spalte braucht einen Ausdruck."),
-            (G::ComputedTakesNoDefault, "Eine berechnete Spalte hat keinen Standardwert."),
-            (G::IdentityNeedsInteger, "Eine Identitätsspalte braucht einen Ganzzahltyp."),
-            (G::IdentityNotNullable, "Eine Identitätsspalte darf nie leer sein."),
-            (G::IdentityTakesNoDefault, "Eine Identitätsspalte hat keinen Standardwert."),
-            (G::IdentityTakesNoExpression, "Eine Identitätsspalte hat keinen Ausdruck."),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &Reason::Generation(rule)).as_deref(), Some(said), "{rule:?} {theme:?}");
-        }
-        let breaks =
-            |why| crate::panels::said(SCREENS.notation_uis(), &Reason::WouldBreak { kind: "column", name: "nummer".into(), why: Box::new(why) });
-        let said = "Die Spalte nummer wäre danach ungültig: Eine Identitätsspalte braucht einen Ganzzahltyp.";
-        assert_eq!(breaks(Reason::Generation(G::IdentityNeedsInteger)).as_deref(), Some(said), "{theme:?}");
-        assert_eq!(breaks(Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
-        let null = crate::panels::said(SCREENS.notation_uis(), &Reason::NotNullable);
-        assert_eq!(null.as_deref(), Some("Eine Schlüssel- oder Identitätsspalte darf nie leer sein."), "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A column's or a domain's size that does not fit its type is said in the chosen language by the
-/// rule it breaks, with the type and the size; a column without a type name of its own as taking no
-/// size, whichever part was given. In light and dark (AR-496).
-#[test]
-fn an_er_size_refused_is_said_in_the_chosen_language() {
-    use archforge_engine::{Reason, SizeRule as R};
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let none = "Eine Spalte ohne eigenen Typnamen hat keine Größe.";
-        for (rule, ty, value, said) in [
-            (R::OutOfRange, "VARCHAR", 0, "Die Größe 0 liegt nicht zwischen 1 und 65535."),
-            (R::TakesNoLength, "", 4, none),
-            (R::TakesNoPrecision, "", 4, none),
-            (R::TakesNoScale, "", 2, none),
-            (R::TakesNoLength, "INT", 4, "INT hat keine Länge."),
-            (R::TakesNoPrecision, "VARCHAR", 3, "VARCHAR hat keine Genauigkeit."),
-            (R::TakesNoScale, "TIMESTAMP", 2, "TIMESTAMP hat keine Nachkommastellen."),
-            (R::BinaryTooLong, "binary", 256, "Ein BINARY fasst höchstens 255 Bytes, nicht 256."),
-            (R::ScaleOverPrecision, "NUMERIC", 5, "Die Nachkommastellen (5) übersteigen die Genauigkeit."),
-            (R::ScaleWithoutPrecision, "NUMERIC", 2, "Nachkommastellen brauchen eine Genauigkeit."),
-        ] {
-            let reason = Reason::SizeMisfit { rule, ty: ty.into(), value };
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
-        }
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A column's own default, collation, place and link refused are said in the chosen language: a
-/// default none of its enum type's literals in the words UML says it in, also for a column that
-/// would break; a default or collation its domain gives; a place past the table's last, singular
-/// and plural; and an unlink of a column that follows none. In light and dark (AR-495).
-#[test]
-fn an_er_columns_default_collation_place_and_link_refused_are_said_in_the_chosen_language() {
-    use archforge_engine::{DefaultKind, Reason};
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let unread = Reason::DefaultUnread { value: "'zu'".into(), kind: DefaultKind::Literal("status".into()) };
-        let breaks = Reason::WouldBreak { kind: "column", name: "zustand".into(), why: Box::new(unread.clone()) };
-        for (reason, said) in [
-            (unread, "'zu' ist kein Literal von status."),
-            (breaks, "Die Spalte zustand wäre danach ungültig: 'zu' ist kein Literal von status."),
-            (Reason::DomainGives { what: "default" }, "Eine Spalte auf einer Domäne übernimmt den Standardwert der Domäne."),
-            (Reason::DomainGives { what: "collation" }, "Eine Spalte auf einer Domäne übernimmt die Sortierung der Domäne."),
-            (Reason::PastLastColumn { columns: 1 }, "Die Tabelle hat 1 Spalte."),
-            (Reason::PastLastColumn { columns: 3 }, "Die Tabelle hat 3 Spalten."),
-            (Reason::FollowsNoColumn { name: "kunde_id".into() }, "kunde_id folgt keiner Spalte."),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
-        }
-        assert_eq!(crate::panels::said(SCREENS.notation_uis(), &Reason::DomainGives { what: "check" }), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// What a column is typed by, refused, is said in the chosen language: a type name that holds its
-/// own size, a domain and an enum type together, and a type name or a size beside a domain or an
-/// enum type; a part neither knows is left to the engine's English. In light and dark (AR-497).
-#[test]
-fn what_an_er_column_is_typed_by_refused_is_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        for (reason, said) in [
-            (Reason::SizeInTypeName, "Ein Typname enthält keine Größe; geben Sie stattdessen Länge, Genauigkeit oder Nachkommastellen an."),
-            (Reason::DomainAndEnum, "Eine Spalte hat eine Domäne oder einen Aufzählungstyp, nicht beides."),
-            (Reason::DomainGives { what: "type" }, "Eine Spalte auf einer Domäne übernimmt den Typ der Domäne."),
-            (Reason::DomainGives { what: "size" }, "Eine Spalte auf einer Domäne übernimmt die Größe der Domäne."),
-            (Reason::EnumTypeTakesNo { what: "type" }, "Eine Spalte eines Aufzählungstyps hat keinen eigenen Typnamen."),
-            (Reason::EnumTypeTakesNo { what: "size" }, "Eine Spalte eines Aufzählungstyps hat keine Größe."),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
-        }
-        assert_eq!(crate::panels::said(SCREENS.notation_uis(), &Reason::EnumTypeTakesNo { what: "default" }), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A check's expression and a domain's checks refused are said in the chosen language: no
-/// expression in a constraint's words, too many checks, one named twice, an item of another shape,
-/// and an item's key the list does not take, also one without a name. In light and dark (AR-499).
-#[test]
-fn an_er_checks_refused_are_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let takes = &["expression", "name"];
-        for (reason, said) in [
-            (Reason::NoExpression, "Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest."),
-            (Reason::TooMany { kind: "check", max: 32 }, "Geben Sie höchstens 32 Prüfbedingungen an."),
-            (
-                Reason::NamedTwice { kind: "check", name: "pos".into() },
-                "Zwei Prüfbedingungen heißen pos. Geben Sie jeder Prüfbedingung einen eigenen Namen.",
-            ),
-            (Reason::ItemsExpected { kind: "check" }, "Geben Sie jede Prüfbedingung als Text an oder als Objekt mit einem Ausdruck und einem Namen."),
-            (Reason::UnknownKey { key: "expresion".into(), takes }, "Ein Eintrag kennt keinen Schlüssel expresion. Er kennt expression, name."),
-            (Reason::UnknownKey { key: String::new(), takes }, "Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt expression, name."),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
-        }
-        assert_eq!(crate::panels::said(SCREENS.notation_uis(), &Reason::ItemsExpected { kind: "gadget" }), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// Every kind of typed refusal, as samples for the test that no two notations claim one: each
-/// reason that names a kind, a relationship or another word of the notations', with every such
-/// word, and one or more of each other reason.
-fn every_reason() -> Vec<archforge_engine::Reason> {
-    use archforge_diagram::commands::{ARRANGED, DIAGRAM_ELEMENT, NOTE, NOTE_LINK, STYLED};
-    use archforge_diagram::project::{ELEMENT, NOTATION_ELEMENT};
-    use archforge_engine::{
-        Accepted, BindingFault, DefaultKind, End, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty, NotOneOf, Parameter, Reason,
-        Revision, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
-    };
-    // UML's kinds and relationships, ER's, the diagrams', and the words of a side, a part, an axis
-    // or a notation.
-    let named = [
-        "class|association class|interface|enumeration|data type|primitive type|built-in type|package|profile|stereotype|applied stereotype",
-        "metaclass|element|attribute|operation|literal|qualifier|property|subsetted property|redefined property|template parameter",
-        "generalization|generalization set|realization|binding|association|association end|dependency|constraint|constrained element",
-        "class diagram|schema|table|column|relationship|domain|enum type|enum literal|sequence|view|key|primary key|unique constraint",
-        "foreign key|foreign key column|check|index|index column|subtype|key column|skill|diagram|node|edge|label|waypoint|nesting level",
-        "type|size|default|collation|width|height|fill|stroke|text|x|y|ER|UML",
-    ];
-    let constants = [NOTE, NOTE_LINK, DIAGRAM_ELEMENT, STYLED, ARRANGED, ELEMENT, NOTATION_ELEMENT];
-    let words: Vec<&'static str> = named.into_iter().flat_map(|line| line.split('|')).chain(constants).collect();
-    let name = || String::from("Order");
-    let param = |kind: &'static str| {
-        Box::new(Parameter { name: "T".into(), kind, constraint: None, template: "List".into(), bound: "Orders".into(), argument: "Order".into() })
-    };
-    let revision = Revision { history: 1, revision: 2 };
-    let mut out = Vec::new();
-    for &w in &words {
-        out.extend([
-            Reason::NameTaken { kind: w, name: name() },
-            Reason::DependsOnItself { kind: w },
-            Reason::HoldsBuiltInName { kind: w, name: name() },
-            Reason::SpecializesOnlyItsKind { kind: w },
-            Reason::OnlyItsKindSpecializes { kind: w },
-            Reason::SpecializesNothing { kind: w },
-            Reason::NothingSpecializes { kind: w },
-            Reason::Again { relationship: w },
-            Reason::Cycle { relationship: w },
-            Reason::KindsDiffer { relationship: w },
-            Reason::KindNotSupported { kind: w },
-            Reason::BuiltInTaken { kind: w, name: name() },
-            Reason::NamedTwice { kind: w, name: name() },
-            Reason::NamesExpected { kind: w },
-            Reason::ItemsExpected { kind: w },
-            Reason::NotA { kind: w, name: name() },
-            Reason::IdEmpty { kind: w },
-            Reason::NoPlace { kind: w, at: 9, last: 2 },
-            Reason::CoordinateNotANumber { axis: w },
-            Reason::CoordinateTooFar { axis: w },
-            Reason::IdsExpected { kind: w },
-            Reason::SizeOutOfRange { side: w },
-            Reason::Labelled { slot: w },
-            Reason::NotAColour { part: w },
-            Reason::NotRemovable { notation: w },
-            Reason::NotDescribable { notation: w },
-            Reason::SchemasDiffer { relationship: w },
-            Reason::WouldBreak { kind: w, name: "pk".into(), why: Box::new(Reason::NameEmpty) },
-            Reason::TooDeep { kind: w, max: 32 },
-            Reason::DomainGives { what: w },
-            Reason::EnumTypeTakesNo { what: w },
-            Reason::Unextended(Box::new(Unextended { stereotype: "Entity".into(), metaclass: w, extends: vec!["Class".into()] })),
-            Reason::NeedsArgument(Box::new([*param(w)])),
-            Reason::Misfit(param(w)),
-            Reason::DefaultMisfit(param(w)),
-            Reason::NeedsDefault(param(w)),
-            Reason::WouldNotFit(param(w)),
-            Reason::ParameterInUse(param(w)),
-            Reason::LastParameter(param(w)),
-        ]);
-        for min in 1..=3 {
-            out.push(Reason::TooFew { kind: w, min });
-        }
-        out.push(Reason::TooMany { kind: w, max: 32 });
-        for &other in &words {
-            out.push(Reason::CannotSpecialize { kind: w, general: other });
-            out.push(Reason::Itself { relationship: w, kind: other });
-            for end in [End::Source, End::Target, End::Any] {
-                out.push(Reason::WrongEnd { relationship: w, end, kind: other });
-            }
-        }
-    }
-    let faults = [BindingFault::Missing, BindingFault::Duplicate, BindingFault::DeadTarget, BindingFault::WrongKind, BindingFault::WrongOwner];
-    for fault in faults.into_iter().map(Some).chain([None]) {
-        out.push(Reason::ParentDefaultUnsound { parent: "Sales".into(), fault });
-        out.push(Reason::DefaultDiagramOf { package: "Sales".into(), fault });
-        out.extend(fault.map(Reason::InvalidBinding));
-    }
-    for kind in [
-        DefaultKind::Integer,
-        DefaultKind::Real,
-        DefaultKind::Boolean,
-        DefaultKind::UnlimitedNatural,
-        DefaultKind::Literal("Colour".into()),
-        DefaultKind::Text,
-    ] {
-        out.push(Reason::DefaultUnread { value: "x".into(), kind });
-    }
-    for what in [WordPlace::DiagramKind, WordPlace::TextSlot, WordPlace::IndexDirection, WordPlace::IndexNulls] {
-        for known in [Vec::new(), vec!["asc".to_string()]] {
-            out.push(Reason::NotOneOf(Box::new(NotOneOf { what, word: "sideways".into(), known })));
-        }
-    }
-    let rules = [TargetRule::NotAProperty, TargetRule::Unnamed, TargetRule::SameName, TargetRule::Leaf];
-    out.extend(rules.into_iter().flat_map(|rule| [false, true].map(|redefining| Reason::TargetBreaks { name: "n".into(), rule, redefining })));
-    let misfits = [
-        ValueMisfit::TooMany { max: 256 },
-        ValueMisfit::Empty,
-        ValueMisfit::TooLong { max: 64 },
-        ValueMisfit::Unread { value: "x".into(), accepted: Accepted::Integer },
-        ValueMisfit::Count { given: 3, lower: 1, upper: Some(2) },
-        ValueMisfit::Twice { value: "x".into() },
-    ];
-    out.extend(misfits.into_iter().map(|misfit| Reason::Values(Box::new(Values { property: "tags".into(), misfit }))));
-    let used = [Used::Element("Order".into()), Used::Moved("Order".into()), Used::AppliedProfiles { package: "Sales".into() }];
-    out.extend(used.into_iter().map(|what| Reason::InUse(Box::new(InUse { what, uses: vec![("Entity".into(), vec!["Order".into()], 1)] }))));
-    out.extend([
-        Reason::PackageIntoItself,
-        Reason::RootPackageStays,
-        Reason::TypesPackageKept,
-        Reason::TypesPackageExists,
-        Reason::NameEmpty,
-        Reason::NameNotText,
-        Reason::TextEmpty,
-        Reason::TooLong { max: 64 },
-        Reason::ControlCharacter,
-        Reason::EdgeSpace,
-        Reason::Final { name: name() },
-        Reason::ParentsDiffer(Box::new([("Car".into(), "Vehicle".into()), ("Boat".into(), "Thing".into())])),
-        Reason::OtherEndAggregates,
-        Reason::WholeAllowsMany,
-        Reason::WholeAllowsOne,
-        Reason::WholeNavigable,
-        Reason::NaryAggregates,
-        Reason::TypeInUse(Box::new(TypeInUse { name: "money".into(), columns: vec!["price".into()], count: 1 })),
-        Reason::UmlOwn { metaclass: None },
-        Reason::UmlOwn { metaclass: Some("Class".into()) },
-        Reason::ProfileApplied { package: "Sales".into(), profile: "Persistence".into() },
-        Reason::ProfileNotApplied { package: "Sales".into(), profile: "Persistence".into() },
-        Reason::MetaclassNotDrawn { name: "Actor".into() },
-        Reason::NotAMetaclass { name: "Thing".into() },
-        Reason::ExtensionEnd { name: "base_Class".into() },
-        Reason::ValuesSet { name: "table".into(), elements: 2 },
-        Reason::InNoProfile,
-        Reason::LiteralName { name: "".into(), why: Box::new(Reason::NameEmpty) },
-        Reason::LiteralName { name: " a".into(), why: Box::new(Reason::EdgeSpace) },
-        Reason::IsApplication,
-        Reason::NotInModel,
-        Reason::InProfile { name: name() },
-        Reason::TakesNoStereotype { name: name() },
-        Reason::StereotypeApplied { stereotype: "Entity".into(), element: "Order".into() },
-        Reason::ProfileOutOfScope { profile: "Persistence".into(), package: "Sales".into() },
-        Reason::NotApplied { stereotype: "Entity".into(), element: "Order".into() },
-        Reason::NoProperty(Box::new(NoProperty { stereotype: "Entity".into(), name: "table".into(), has: vec!["schema".into()] })),
-        Reason::NoProperties { stereotype: "Entity".into(), name: "table".into() },
-        Reason::ValuesExpected,
-        Reason::Gone,
-        Reason::ParameterElement { name: "T".into(), template: "List".into() },
-        Reason::NoExpression,
-        Reason::NotAContext,
-        Reason::NotConstrainable,
-        Reason::BracesNoElement,
-        Reason::NoContext,
-        Reason::OneCoordinate,
-        Reason::TakesNoDescription,
-        Reason::TooManyComments { max: 64 },
-        Reason::NotAnItemKey { key: "colour".into() },
-        Reason::UnknownKey { key: "expresion".into(), takes: &["expression", "name"] },
-        Reason::UnknownKey { key: String::new(), takes: &["expression", "name"] },
-        Reason::NoElement { id: "1234".into() },
-        Reason::BuiltInNotLeaf { name: "Integer".into() },
-        Reason::Redefined(Box::new(["size".into()])),
-        Reason::ValuesMisfit { name: "tags".into(), elements: 2, bounds: "1..2".into() },
-        Reason::LiteralValued(Box::new(LiteralValued {
-            literal: "Red".into(),
-            property: "colour".into(),
-            stereotype: "Painted".into(),
-            element: "Car".into(),
-        })),
-        Reason::DefaultTooLong { max: 256 },
-        Reason::DefaultUnfit { value: "x".into(), ty: None },
-        Reason::DefaultUnfit { value: "x".into(), ty: Some("Integer".into()) },
-        Reason::NotShown { name: name() },
-        Reason::OutsideDiagram { name: name() },
-        Reason::ShownAlready { name: name() },
-        Reason::OtherDiagram,
-        Reason::ShowsElement,
-        Reason::StraightLink,
-        Reason::NoRelationship,
-        Reason::LacksEnd,
-        Reason::NotAtEnd { end: End::Source },
-        Reason::NotAtEnd { end: End::Target },
-        Reason::NotLinkable,
-        Reason::TargetOtherDiagram,
-        Reason::LinkUnlabelled,
-        Reason::ArrangedTooFar,
-        Reason::ElementNotRemovable { name: name() },
-        Reason::RemovedWhereEdited,
-        Reason::SubtypeKeyPart,
-        Reason::NotAPlainWord,
-        Reason::NotColumnOf { column: "c".into(), table: "t".into() },
-        Reason::NullableKeyColumn { name: "c".into() },
-        Reason::ColumnCount { columns: 1, table: "t".into(), key: 2 },
-        Reason::TypesDiffer { column: "a".into(), target: "b".into(), types: Box::new([Some("TEXT".into()), None]) },
-        Reason::KeyInUse { foreign_key: "fk".into(), table: "t".into() },
-        Reason::NoPrimaryKey { table: "t".into() },
-        Reason::KeyNotOf { table: "t".into() },
-        Reason::NoKeyColumns { table: "t".into() },
-        Reason::IdentifyingCycle { child: "a".into(), parent: "b".into() },
-        Reason::SetNullNotNullable { column: "c".into() },
-        Reason::RelationshipNotJoining { table: "a".into(), references: "b".into() },
-        Reason::IdentifyingOutsideKey { column: "c".into() },
-        Reason::HasSupertype { table: "t".into() },
-        Reason::InSubtypeKey,
-        Reason::IdentifyingWithoutForeignKey,
-        Reason::KeyWithoutForeignKey,
-        Reason::ManyToManyForeignKey,
-        Reason::RoleNeeded,
-        Reason::RoleWithoutLetter,
-        Reason::Mapping(MappingRule::NotManyToMany),
-        Reason::Mapping(MappingRule::KeysInPrimaryKey { table: "t".into(), keys: 1 }),
-        Reason::Sequence(SequenceRule::IncrementZero),
-        Reason::Sequence(SequenceRule::StartBelow { start: 0, minimum: 1 }),
-        Reason::ColumnOfOtherSchema { column: "c".into() },
-        Reason::InNoTable { column: "c".into() },
-        Reason::NotIntegerType { column: "c".into(), ty: "".into() },
-        Reason::NotIntegerType { column: "c".into(), ty: "TEXT".into() },
-        Reason::Generation(GenerationRule::ComputedNeedsExpression),
-        Reason::NotNullable,
-        Reason::AttributeAndExpression { column: "c".into() },
-        Reason::NoAttributeNorExpression,
-        Reason::SizeMisfit { rule: SizeRule::OutOfRange, ty: "VARCHAR".into(), value: 0 },
-        Reason::SizeInTypeName,
-        Reason::DomainAndEnum,
-        Reason::FollowsNoColumn { name: "n".into() },
-        Reason::PastLastColumn { columns: 3 },
-        Reason::StaleRevision { expected: Some(revision), current: revision },
-        Reason::StaleRevision { expected: None, current: revision },
-        Reason::ConnectionExists { dependency: "uses".into() },
-        Reason::StaleChoice { candidates: Box::new([]) },
-        Reason::StaleChoice { candidates: Box::new(["uses".into()]) },
-        Reason::NotOwnDiagram { diagram: "Main".into(), package: "Sales".into() },
-        Reason::NoDiagramYet { package: "Sales".into() },
-        Reason::ReplacementIsRemoved,
-        Reason::ReplacementNotNeeded { diagram: "Main".into() },
-        Reason::OneReplacement,
-        Reason::NotReplacement { diagram: "Main".into(), package: "Sales".into() },
-    ]);
-    out
-}
-
-/// Each refusal belongs to one notation (AR-786): no typed reason, no reason a command is not
-/// available, in a project without a model root or in a new one, and no rename command that may
-/// leave its element unnamed is claimed by two of the registered notations. Some notation claims at
-/// least one of each of the three, so the samples reach the hooks.
-#[test]
-fn no_two_notations_claim_the_same_refusal() {
-    use crate::notation_ui::NotationUi;
-    let uis = SCREENS.notation_uis();
-    crate::i18n::set_language("en");
-    let claimants = |claims: &dyn Fn(&dyn NotationUi) -> bool| uis.iter().filter(|ui| claims(**ui)).map(|ui| ui.metamodel()).collect::<Vec<_>>();
-    let mut claimed = [0; 3];
-    for reason in every_reason() {
-        let by = claimants(&|ui| ui.said(uis, &reason).is_some());
-        assert!(by.len() <= 1, "{reason:?} is said by the notations of the metamodels {by:?}");
-        claimed[0] += by.len();
-    }
-    let ids = || {
-        let mut n: u128 = 0;
-        Box::new(move || {
-            n += 1;
-            archforge_mof::Uuid(n.to_le_bytes())
-        })
-    };
-    let rootless = archforge_notations::store(ids()).unwrap();
-    let options = archforge_engine::Options::default();
-    let rootless = archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), rootless, 1, options, archforge_notations::view());
-    let new = archforge_notations::new_project_session("Shop", ids()).unwrap();
-    for info in [&rootless, &new].into_iter().flat_map(|session| session.registry().infos(&session.facts())) {
-        if let Some(reason) = info.disabled_reason {
-            let by = claimants(&|ui| ui.disabled(reason).is_some());
-            assert!(by.len() <= 1, "{reason:?} is said by the notations of the metamodels {by:?}");
-            claimed[1] += by.len();
-        }
-        let by = claimants(&|ui| ui.may_be_unnamed(info.id));
-        assert!(by.len() <= 1, "{} may leave its element unnamed for the notations of the metamodels {by:?}", info.id);
-        claimed[2] += by.len();
-    }
-    assert!(claimed.iter().all(|n| *n > 0), "claims of typed reasons, reasons not available and renames: {claimed:?}");
-}
-
-/// Each notation answers for its own elements alone (AR-785): every class it creates is of its
-/// metamodel, so the kind words find it; a schema, a table and a class are what Generate can be
-/// about, a column and a package are not; and its limits are its commands'.
-#[test]
-fn each_notation_answers_the_words_and_limits_of_its_own_elements() {
-    use crate::notation_ui::NotationUi;
-    let uis = SCREENS.notation_uis();
-    crate::i18n::set_language("en");
-    for ui in uis {
-        assert!(!ui.created_classes().is_empty());
-        for class in ui.created_classes() {
-            assert_eq!(class.metamodel(), ui.metamodel(), "{class:?} is not of the metamodel {}", ui.metamodel());
-        }
-    }
-    let (h, customer) = table_harness();
-    let st = h.state().session.as_ref().unwrap().doc();
-    let customer = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
-    let schema = archforge_er::rules::schema_of(st, customer).unwrap();
-    let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
-    let er = er_ui::ErUi;
-    assert_eq!(er.scope_word(st, schema).as_deref(), Some("Schema"));
-    assert_eq!(er.scope_word(st, customer).as_deref(), Some("Table"));
-    assert_eq!(er.scope_word(st, email), None, "a column is no scope");
-    assert_eq!((er.name_limit(), er.description_limit()), (archforge_er::rules::MAX_NAME, archforge_er::rules::MAX_TEXT));
-    let (h, ..) = sketch_harness();
-    let st = h.state().session.as_ref().unwrap().doc();
-    let o = |name: &str| st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap();
-    let uml = uml_ui::UmlUi;
-    assert_eq!(uml.scope_word(st, o("Party")).as_deref(), Some("Class"));
-    assert_eq!(uml.scope_word(st, o("sales")), None, "a package is no scope");
-    assert_eq!((uml.name_limit(), uml.description_limit()), (archforge_uml::commands::MAX_NAME, archforge_uml::descriptions::MAX_DESCRIPTION));
-}
-
-/// The notations the shell knows are never none (AR-785): a description field for an element no
-/// notation owns takes the most any of them takes, which is the 4096 characters every description
-/// field took before the notations said their own, never a fallback over an empty list.
-#[test]
-fn the_shell_knows_notations_and_their_longest_description_is_the_old_limit() {
-    let uis = SCREENS.notation_uis();
-    assert!(!uis.is_empty());
-    assert_eq!(uis.iter().map(|ui| ui.description_limit()).max(), Some(archforge_er::rules::MAX_TEXT));
-    assert_eq!(archforge_er::rules::MAX_TEXT, 4096);
-}
-
-/// Each notation the shell knows starts with a state of its own that nothing is open in, reached
-/// only as that notation's own type; a notation the shell does not know has none there. Every
-/// Properties editor card is named by its notation and its own name, so no two cards meet (AR-787).
-#[test]
-fn each_notation_starts_with_a_state_of_its_own_and_its_cards_are_its_own() {
-    use crate::notation_ui::NotationStates;
-    let uis = SCREENS.notation_uis();
-    let states = NotationStates::new(uis);
-    assert!(er_state::er(&states).is_some(), "ER keeps its own state");
-    assert!(uml_state::uml(&states).is_some(), "UML keeps its own state");
-    assert!(!states.editing() && !states.holds_keys(), "nothing is open in a fresh state");
-    let open = states.open_editors();
-    assert!(open.iter().all(|(_, editor)| editor.is_none()), "no editor is open in a fresh state");
-    let cards: Vec<_> = open.iter().map(|(card, _)| *card).collect();
-    let er_cards: Vec<_> = cards.iter().filter(|c| c.notation == archforge_er::INDEX).map(|c| c.card).collect();
-    let uml_cards: Vec<_> = cards.iter().filter(|c| c.notation == archforge_uml::INDEX).map(|c| c.card).collect();
-    assert_eq!(er_cards, ["column", "key", "check", "index", "type", "object"]);
-    assert_eq!(uml_cards, ["member", "constraint", "qualifier", "template", "profile", "nary-end"]);
-    assert_eq!(cards.len(), er_cards.len() + uml_cards.len(), "every card is ER's or UML's");
-    let sketch = NotationStates::new(SKETCH_UIS);
-    assert!(er_state::er(&sketch).is_some(), "the sketch shell knows ER");
-    assert!(uml_state::uml(&sketch).is_none(), "a notation the shell does not know keeps no state there");
-}
-
-/// A menu of the shell's one slot is its owner's alone: one of a kind shown per row is recognised
-/// whatever its row, and a menu of the same key under another owner, the shell or another
-/// notation, is never taken for it (AR-787).
-#[test]
-fn a_menu_is_recognised_only_by_its_owner_and_key() {
-    use crate::panels::MenuId;
-    let (er, uml) = (archforge_er::INDEX, archforge_uml::INDEX);
-    let pair = er_state::menus::PAIR;
-    assert_eq!(pair.at(3).index_in(pair), Some(3), "a key pair's menu is ER's pair menu, by its row");
-    assert_eq!(pair.at(3), MenuId::of(er, "pair").at(3), "the row changes the index alone");
-    assert_eq!(MenuId::of(er, "points").index_in(pair), None, "another key of the same notation is another menu");
-    assert_eq!(MenuId::of(uml, "pair").at(3).index_in(pair), None, "the same key of another notation is another menu");
-    assert_eq!(MenuId::shell("pair").at(3).index_in(pair), None, "the same key of the shell is another menu");
-    assert_ne!(pair.at(1), pair.at(2), "two rows' menus are two menus");
-
-    let er_menus = {
-        use archforge_er_ui::snapshot::er_state::menus::*;
-        [
-            KIND,
-            POINTS,
-            PAIR,
-            ON_DELETE,
-            ON_UPDATE,
-            DEFERRABLE,
-            MATCH,
-            KEY_COLUMN,
-            GENERATION,
-            INDEX_COLUMN,
-            INDEX_NULLS,
-            TYPE_KIND,
-            COLUMN_TYPE,
-            SUBTYPE_ADD,
-            DISCRIMINATOR,
-            MAPPING,
-            OWNED_BY,
-        ]
-    };
-    let uml_menus = {
-        use uml_state::menus::*;
-        [
-            MEMBER_VISIBILITY,
-            MEMBER_TYPE,
-            PARAM_TYPE,
-            MEMBER_DEFAULT,
-            MEMBER_SUBSETS,
-            MEMBER_REDEFINES,
-            INLINE_TYPE,
-            END_AGGREGATION,
-            END_MULTIPLICITY,
-            END_DEFAULT,
-            END_SUBSETS,
-            END_REDEFINES,
-            QUALIFIER_TYPE,
-            TEMPLATE_KIND,
-            TEMPLATE_CONSTRAINT,
-            TEMPLATE_DEFAULT,
-            BINDING_BOUND,
-            BINDING_TEMPLATE,
-            BINDING_ARGUMENT,
-            NARY_END_TYPE,
-            NARY_END_MULTIPLICITY,
-            CLASS_OWNER,
-            NESTED_KIND,
-            PACKAGE_PARENT,
-            SET_MEMBER,
-            SET_JOIN,
-            CONSTRAINT_LANGUAGE,
-            CONSTRAINT_ELEMENT,
-            STEREOTYPE_PROFILE,
-            STEREOTYPE_EXTENDS,
-            EXTENSION_METACLASS,
-            APPLIED_PROFILE,
-            STEREOTYPE_PICK,
-            STEREOTYPE_VALUE,
-        ]
-    };
-    let shell_menus = [crate::home::RECENT_SORT, crate::home::RECENT, crate::home::PINNED, crate::versions::BRANCH_MENU];
-    for (owner, scope, menus) in [
-        ("ER", MenuId::of(er, "").scope, &er_menus[..]),
-        ("UML", MenuId::of(uml, "").scope, &uml_menus[..]),
-        ("the shell", MenuId::shell("").scope, &shell_menus[..]),
-    ] {
-        for (i, m) in menus.iter().enumerate() {
-            assert_eq!((m.scope, m.index), (scope, 0), "{owner}'s {} is {owner}'s, the first of its kind", m.key);
-            let twins: Vec<&str> = menus[..i].iter().filter(|o| o.index_in(*m).is_some()).map(|o| o.key).collect();
-            assert!(twins.is_empty(), "{owner}'s menu key {} names one menu, not {twins:?} too", m.key);
-        }
-    }
-}
-
-/// A notation's state belongs to its project, as the panels and the canvas do: a project opened
-/// beside another starts fresh, the one parked keeps its tools' kinds when shown again while its
-/// drawing under way ends, and a project opened after the last one closed starts fresh too (AR-787).
-#[test]
-fn a_notation_s_state_goes_with_its_project() {
-    use uml_classifier::Classifier;
-    let opened = |name: &str| crate::Opened { name: name.into(), path: format!("/tmp/{name}.archforge").into(), ..Default::default() };
-    let mut shell = Shell::new(Services::default(), &SCREENS);
-    shell.open_project(opened("First"));
-    uml_of_mut(&mut shell).classifier = Classifier::Interface;
-    uml_of_mut(&mut shell).nary = Some(uml_nary::Nary::AddEnd { diagram: archforge_mof::Uuid([7; 16]), association: archforge_mof::Uuid([7; 16]) });
-    shell.open_project(opened("Second"));
-    assert_eq!(uml_of(&shell).classifier, Classifier::Class, "a project opened beside another starts fresh");
-    uml_of_mut(&mut shell).classifier = Classifier::DataType;
-    shell.activate(0);
-    assert_eq!(uml_of(&shell).classifier, Classifier::Interface, "the parked project keeps its own");
-    assert!(uml_of(&shell).nary.is_none(), "a drawing under way ended as its project was set aside");
-    shell.activate(1);
-    assert_eq!(uml_of(&shell).classifier, Classifier::DataType);
-    shell.close_project();
-    shell.close_project();
-    assert!(shell.tabs.is_empty(), "both closed");
-    shell.open_project(opened("Third"));
-    assert_eq!(uml_of(&shell).classifier, Classifier::Class, "a project opened after the last closed starts fresh");
-}
-
-/// What a notation keeps about an element goes when the element does, and stays while it is there:
-/// ER's editors, a role, the key card and the mapping offer once their table or schema is gone, and
-/// UML's row typed in place, profile editor, its refusal and an association's ends once their
-/// element is. A row typed in place is being edited and holds the canvas's keys (AR-787).
-#[test]
-fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
-    use archforge_er_ui::snapshot::er_objects::ObjectKind;
-    use archforge_er_ui::snapshot::er_types::TypeKind;
-    let (mut h, nodes) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    let s = h.state_mut();
-    let session = s.session.as_mut().unwrap();
-    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-    let schema = id(session.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-    let table = id(session.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Customer" })).unwrap().value);
-    let store = session.doc();
-    let node = store.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
-    let class = store.uuid(store.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap();
-    assert!(s.cx(|cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)), "Catalog's card takes a row");
-    assert!(s.notation_states.editing() && s.notation_states.holds_keys(), "a row typed in place is edited and holds the keys");
-    s.cx(|cx| er_table::open_column(cx, table, None));
-    s.cx(|cx| er_keys::open(cx, table, None));
-    s.cx(|cx| er_checks::open(cx, table, None));
-    s.cx(|cx| er_indexes::open(cx, table, None));
-    s.cx(|cx| er_types::open(cx, schema, TypeKind::Domain, None));
-    s.cx(|cx| er_objects::open(cx, schema, ObjectKind::Sequence, None));
-    let er = er_of_mut(s);
-    er.role = Some(er_relation::RoleEdit { target: table, end: 0, text: "buyer".into() });
-    er.no_key_card = Some(table);
-    er.mapping = Some(er_connect::MappingOffer { relationship: table, name: "CustomerCustomer".into(), refused: None });
-    let modifiers = uml_relate::EndModifiers {
-        is_static: false,
-        default: String::new(),
-        derived: false,
-        read_only: false,
-        ordered: false,
-        unique: true,
-        subsets: Vec::new(),
-        redefines: Vec::new(),
-    };
-    let uml = uml_of_mut(s);
-    uml.profile_edit = Some(uml_profiles::ProfileEdit { owner: class, target: None, choice: String::new(), opened: true });
-    uml.profile_refused = Some(uml_profiles::ProfileRefusal { owner: class, why: "in use".into(), uses: Vec::new() });
-    uml.ends = Some(uml_relate::EndsEdit {
-        association: class,
-        role: Default::default(),
-        multiplicity: Default::default(),
-        written_role: Default::default(),
-        written: Default::default(),
-        refused: Default::default(),
-        role_tried: Default::default(),
-        modifiers: [modifiers.clone(), modifiers.clone()],
-        written_modifiers: [modifiers.clone(), modifiers],
-        modifier_refused: Default::default(),
-        modifiers_open: Default::default(),
-        modifiers_last: None,
-    });
-    let kept = |s: &Shell| {
-        let (er, uml) = (er_of(s), uml_of(s));
-        [
-            er.column.is_some(),
-            er.key.is_some(),
-            er.check.is_some(),
-            er.index.is_some(),
-            er.type_edit.is_some(),
-            er.object_edit.is_some(),
-            er.role.is_some(),
-            er.no_key_card.is_some(),
-            er.mapping.is_some(),
-            uml.inline.is_some(),
-            uml.profile_edit.is_some(),
-            uml.profile_refused.is_some(),
-            uml.ends.is_some(),
-        ]
-    };
-    let retain = |s: &mut Shell| s.notation_states.retain_valid(s.session.as_ref().unwrap().doc(), &s.canvas);
-    retain(s);
-    assert_eq!(kept(s), [true; 13], "everything stays while its element is there");
-    let session = s.session.as_mut().unwrap();
-    session.execute("er.schema.remove", &serde_json::json!({ "schema": schema.to_string() })).unwrap();
-    session.execute("element.remove", &serde_json::json!({ "ids": [class.to_string()] })).unwrap();
-    retain(s);
-    assert_eq!(kept(s), [false; 13], "everything goes with its element");
-}
-
-/// A sequence's numbers and owner and a view's query refused are said in the chosen language: each
-/// rule the numbers break, an owner of another schema, of no table, of no type and of a type that is
-/// no whole number, and a query by the text rules' rows. In light and dark (AR-507).
-#[test]
-fn an_er_sequences_numbers_owner_and_views_query_refused_are_said_in_the_chosen_language() {
-    use archforge_engine::{Reason, SequenceRule as Rule};
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let between = "keine ganze Zahl zwischen -9223372036854775808 und 9223372036854775807.";
-        for (reason, said) in [
-            (Rule::IncrementZero, "Die Schrittweite darf nicht 0 sein. Eine Sequenz bewegt sich um mindestens 1.".to_string()),
-            (Rule::MinimumUnread { value: "eins".into() }, format!("Das Minimum „eins“ ist {between}")),
-            (Rule::MaximumUnread { value: "zwei".into() }, format!("Das Maximum „zwei“ ist {between}")),
-            (Rule::MaximumNotAbove { maximum: 5, minimum: 10 }, "Das Maximum 5 ist nicht größer als das Minimum 10.".into()),
-            (Rule::StartBelow { start: 1, minimum: 10 }, "Der Startwert 1 liegt unter dem Minimum 10.".into()),
-            (Rule::StartAbove { start: 50, maximum: 10 }, "Der Startwert 50 liegt über dem Maximum 10.".into()),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &Reason::Sequence(reason.clone())), Some(said), "{reason:?} {theme:?}");
-        }
-        let owner = "Eine Sequenz gehört zu einer Spalte";
-        for (reason, said) in [
-            (
-                Reason::ColumnOfOtherSchema { column: "Kontakt.id".into() },
-                format!("Kontakt.id ist eine Spalte eines anderen Schemas. {owner} ihres Schemas."),
-            ),
-            (Reason::InNoTable { column: "lose".into() }, "Die Spalte lose gehört zu keiner Tabelle.".into()),
-            (Reason::NotIntegerType { column: "bar".into(), ty: "".into() }, format!("bar hat keinen Typ. {owner} mit ganzzahligem Typ.")),
-            (Reason::NotIntegerType { column: "notiz".into(), ty: "TEXT".into() }, format!("notiz hat den Typ TEXT. {owner} mit ganzzahligem Typ.")),
-            (Reason::NotA { kind: "column", name: "Kunde".into() }, "Kunde passt hier nicht: erwartet wird eine Spalte.".into()),
-            (Reason::TextEmpty, "Der Text darf nicht leer sein.".into()),
-            (Reason::ControlCharacter, "Steuerzeichen und unsichtbare Zeichen sind nicht erlaubt.".into()),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said.as_str()), "{reason:?} {theme:?}");
-        }
         h.run();
     }
     crate::i18n::set_language("en");
@@ -6756,23 +5841,23 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
         h.state_mut().state.language = "de".into();
         h.run();
         let id = |v: Result<serde_json::Value, String>| v.unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id(crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Shop" })));
-        let diagram = id(crate::panels::run(
-            h.state_mut(),
-            "diagram.add",
-            serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" }),
-        ));
+        let schema = id(crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": "Shop" })));
+        let diagram = id(crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop" })));
         h.run();
-        let max = archforge_er::rules::MAX_NAME;
+        let max = archforge_notations::fake::MAX_NAME;
         let too_long = crate::i18n::fmt(&crate::i18n::tr("It can't be longer than {max} characters."), &[("max", &max.to_string())]);
         for (cmd, params, said) in [
-            ("er.entity.add", serde_json::json!({ "schema": schema, "name": "n".repeat(max + 1) }), too_long),
+            ("sketch.class.add", serde_json::json!({ "package": schema, "name": "n".repeat(max + 1) }), too_long),
             (
-                "er.entity.add",
-                serde_json::json!({ "schema": schema, "name": "Auf\u{7}trag" }),
+                "sketch.class.add",
+                serde_json::json!({ "package": schema, "name": "Auf\u{7}trag" }),
                 crate::i18n::tr("It can't hold a control or hidden character."),
             ),
-            ("er.entity.add", serde_json::json!({ "schema": schema, "name": "Auftrag " }), crate::i18n::tr("It can't start or end with a space.")),
+            (
+                "sketch.class.add",
+                serde_json::json!({ "package": schema, "name": "Auftrag " }),
+                crate::i18n::tr("It can't start or end with a space."),
+            ),
             ("diagram.note", serde_json::json!({ "diagram": diagram, "text": "", "x": 0, "y": 0 }), crate::i18n::tr("The text can't be empty.")),
         ] {
             assert!(
@@ -6786,77 +5871,34 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
-/// With a schema selected, Models' `+` offers a table first and adds one; Delete asks before the
-/// schema goes with what it holds.
-#[test]
-fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
-    crate::explorer::add(h.state_mut(), "schema");
-    h.run();
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().explorer.rename.is_none());
-    // The new schema is selected: + offers a table first.
-    crate::explorer::add(h.state_mut(), "table");
-    h.run();
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
-    assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1"]);
-    assert_eq!(rows[1].depth, 1);
-    // A column under the table.
-    crate::explorer::add(h.state_mut(), "column");
-    h.run();
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
-    assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1", "column_1"]);
-    assert_eq!(rows[2].detail.as_deref(), Some("TEXT"));
-    // Select the schema by its row and press Delete: it holds a table, so the dialog asks.
-    let schema_row = format!("workspace.explorer.row.{}", rows[0].id);
-    let at = rect_of(&h, &schema_row).center();
-    click(&mut h, at);
-    h.state_mut().explorer.focused = true;
-    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
-    assert!(h.state().explorer.delete.is_some(), "the dialog asks");
-    let at = rect_of(&h, "workspace.explorer.delete.cancel").center();
-    click(&mut h, at);
-    assert!(h.state().explorer.delete.is_none());
-    assert_eq!(schema_names(&h), ["Schema 1"]);
-    h.state_mut().explorer.focused = true;
-    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
-    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
-    click(&mut h, at);
-    assert!(schema_names(&h).is_empty(), "the schema and its table are gone");
-    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
-    assert_eq!(schema_names(&h), ["Schema 1"], "undo brings them back");
-}
-
 /// The Models filter narrows the tree to the names that hold what is typed, and the arrow keys walk
 /// the rows it leaves.
 #[test]
 fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
     for _ in 0..2 {
-        crate::explorer::add(h.state_mut(), "schema");
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
     }
-    crate::explorer::add(h.state_mut(), "schema");
+    crate::explorer::add(h.state_mut(), "package");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert_eq!(schema_names(&h).len(), 3);
-    h.state_mut().explorer.filter = "schema 2".into();
+    h.state_mut().explorer.filter = "package 2".into();
     h.run();
     let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
-    assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 2"]);
+    assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Package 2"]);
     h.state_mut().explorer.filter.clear();
     h.run();
     // Down from the selected third schema stays on it; up goes to the second.
     h.state_mut().explorer.focused = true;
     key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
     let selected = h.state().session.as_ref().unwrap().view().selection[0];
-    assert_eq!(archforge_core::name_of(h.state().session.as_ref().unwrap().doc(), selected), "Schema 2");
+    assert_eq!(archforge_core::name_of(h.state().session.as_ref().unwrap().doc(), selected), "Package 2");
     key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
-    assert!(h.state().explorer.rename.as_ref().is_some_and(|r| r.text == "Schema 2"));
+    assert!(h.state().explorer.rename.as_ref().is_some_and(|r| r.text == "Package 2"));
 }
 
 /// The Models and Diagrams filters ignore capitals, accents and `ß`, and drop the names that
@@ -6867,8 +5909,8 @@ fn the_explorers_filters_ignore_capitals_and_accents() {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
         for name in ["Bestellungen prüfen", "Straße"] {
             let s = h.state_mut().session.as_mut().unwrap();
-            let schema = s.execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap().value["id"].as_str().unwrap().to_string();
-            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": name })).unwrap();
+            let schema = s.execute("sketch.package.add", &serde_json::json!({ "name": name })).unwrap().value["id"].as_str().unwrap().to_string();
+            s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": name })).unwrap();
         }
         let models = |h: &Harness<'static, Shell>| {
             let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
@@ -6903,10 +5945,10 @@ fn the_models_tree_scrolls_and_follows_the_selection() {
     let (first, last) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap()).unwrap().to_string();
         let mut ids = Vec::new();
         for n in 0..60 {
-            let out = s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": format!("table_{n:02}") })).unwrap();
+            let out = s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": format!("table_{n:02}") })).unwrap();
             ids.push(out.value["id"].as_str().unwrap().to_string());
         }
         s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
@@ -7060,8 +6102,9 @@ fn pages(h: &mut Harness<'static, Shell>, rows: &[String], bounds: (f32, f32), o
 fn many_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
     for n in 0..60 {
-        let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": format!("s{n:02}") })).unwrap()["id"].clone();
-        let made = serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": format!("d{n:02}") });
+        let schema =
+            crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": format!("s{n:02}") })).unwrap()["id"].clone();
+        let made = serde_json::json!({ "kind": SKETCH, "element": schema, "name": format!("d{n:02}") });
         crate::panels::run(h.state_mut(), "diagram.add", made).unwrap();
     }
     h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
@@ -7132,9 +6175,9 @@ fn diagrams_follows_the_keyboard() {
 /// the rows' ids in the tree's order.
 fn many_tables(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-    let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Shop" })).unwrap()["id"].clone();
+    let schema = crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": "Shop" })).unwrap()["id"].clone();
     for n in 0..60 {
-        crate::panels::run(h.state_mut(), "er.entity.add", serde_json::json!({ "schema": schema, "name": format!("t{n:02}") })).unwrap();
+        crate::panels::run(h.state_mut(), "sketch.class.add", serde_json::json!({ "package": schema, "name": format!("t{n:02}") })).unwrap();
     }
     h.state_mut().explorer.expanded.insert(schema.as_str().and_then(archforge_mof::Uuid::parse).unwrap());
     // The last table added is selected, and the tree followed it: nothing selected, at the top.
@@ -7217,11 +6260,10 @@ fn table_harness_in(theme: ThemeKind) -> (Harness<'static, Shell>, String) {
     let (schema, customer) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-        let customer = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true }))
-            .unwrap();
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": customer, "name": "email", "type": "TEXT" })).unwrap();
+        let schema = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+        let customer = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Customer" })).unwrap().value);
+        s.execute("sketch.attribute.add", &serde_json::json!({ "class": customer, "name": "customer_id" })).unwrap();
+        s.execute("sketch.attribute.add", &serde_json::json!({ "class": customer, "name": "email" })).unwrap();
         s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
         (schema, customer)
     };
@@ -7243,9 +6285,9 @@ fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     {
         let s = h.state_mut().session.as_mut().unwrap();
         let st = s.doc();
-        let schema = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+        let schema = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
         let schema_id = st.uuid(schema).unwrap().to_string();
-        s.execute("skill.add", &serde_json::json!({ "subject": schema_id, "name": "Table naming", "applies_to": "table", "triggers": ["naming"] }))
+        s.execute("skill.add", &serde_json::json!({ "subject": schema_id, "name": "Class naming", "applies_to": "class", "triggers": ["naming"] }))
             .unwrap();
         // Adding selected the skill; the panel shows the table again.
         s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
@@ -7433,17 +6475,11 @@ fn diagram_harness_in(theme: ThemeKind) -> (Harness<'static, Shell>, String, Str
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
         let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap().value);
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
-        let places = id(s
-            .execute("er.relationship.add", &serde_json::json!({ "from": customer, "to": order, "name": "places", "create_foreign_key": true }))
-            .unwrap()
-            .value);
-        let diagram = id(s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }))
-            .unwrap()
-            .value);
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap()).unwrap().to_string();
+        let order = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Order" })).unwrap().value);
+        s.execute("sketch.attribute.add", &serde_json::json!({ "class": order, "name": "order_id" })).unwrap();
+        let places = id(s.execute("sketch.association.add", &serde_json::json!({ "from": customer, "to": order, "name": "places" })).unwrap().value);
+        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop schema" })).unwrap().value);
         let c = id(s
             .execute(
                 "diagram.place",
@@ -7647,36 +6683,36 @@ fn the_control_channel_runs_commands_through_the_open_session() {
     let (mut h, _) = table_harness();
     let schema = {
         let st = h.state().session.as_ref().unwrap().doc();
-        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string()
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap()).unwrap().to_string()
     };
     let count = |h: &Harness<'static, Shell>| {
         let st = h.state().session.as_ref().unwrap().doc();
-        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).count()
+        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS)).count()
     };
     let before = count(&h);
     // Listing and describing.
-    let listed = answer(h.state_mut(), "engine.commands", &json!({ "filter": "entity" })).unwrap();
-    assert!(listed["commands"].as_array().unwrap().iter().any(|c| c["id"] == "er.entity.add"));
-    let described = answer(h.state_mut(), "engine.describe", &json!({ "command": "er.entity.add" })).unwrap();
+    let listed = answer(h.state_mut(), "engine.commands", &json!({ "filter": "class" })).unwrap();
+    assert!(listed["commands"].as_array().unwrap().iter().any(|c| c["id"] == "sketch.class.add"));
+    let described = answer(h.state_mut(), "engine.describe", &json!({ "command": "sketch.class.add" })).unwrap();
     assert!(described["params"].as_array().unwrap().iter().any(|p| p["key"] == "name"));
     // A command runs in the session the window draws, and undo takes it back.
-    let out =
-        answer(h.state_mut(), "engine.execute", &json!({ "command": "er.entity.add", "params": { "schema": schema, "name": "Invoice" } })).unwrap();
+    let out = answer(h.state_mut(), "engine.execute", &json!({ "command": "sketch.class.add", "params": { "package": schema, "name": "Invoice" } }))
+        .unwrap();
     assert!(out["result"]["id"].is_string());
     assert_eq!(count(&h), before + 1);
     answer(h.state_mut(), "engine.undo", &json!({})).unwrap();
     assert_eq!(count(&h), before);
     // A batch refers to an earlier step's result; a failing step rolls the whole batch back.
     let steps = json!([
-        { "command": "er.entity.add", "params": { "schema": schema, "name": "Payment" } },
-        { "command": "er.attribute.add", "params": { "entity": "$0.id", "name": "payment_id", "type": "BIGINT" } },
+        { "command": "sketch.class.add", "params": { "package": schema, "name": "Payment" } },
+        { "command": "sketch.attribute.add", "params": { "class": "$0.id", "name": "payment_id" } },
     ]);
     let out = answer(h.state_mut(), "engine.batch", &json!({ "label": "Add payment", "steps": steps })).unwrap();
     assert_eq!(out["results"].as_array().unwrap().len(), 2);
     assert_eq!(count(&h), before + 1);
     let bad = json!([
-        { "command": "er.entity.add", "params": { "schema": schema, "name": "Refund" } },
-        { "command": "er.attribute.add", "params": { "entity": "$5.id", "name": "x" } },
+        { "command": "sketch.class.add", "params": { "package": schema, "name": "Refund" } },
+        { "command": "sketch.attribute.add", "params": { "class": "$5.id", "name": "x" } },
     ]);
     let why = answer(h.state_mut(), "engine.batch", &json!({ "steps": bad })).unwrap_err();
     assert!(why.contains("rolled back") && why.contains("step 1"), "{why}");
@@ -7748,568 +6784,6 @@ fn selected_name(h: &Harness<'static, Shell>) -> String {
     if st.class_of(o).ok() == Some(archforge_diagram::DIAGRAM) { crate::diagrams::diagram_name(st, o) } else { archforge_core::name_of(st, o) }
 }
 
-/// Where the first text painted as `words` stands on the screen.
-fn painted_at(h: &Harness<'static, Shell>, words: &str) -> Option<egui::Rect> {
-    /// Where `s`, or the first shape it holds, paints `words`.
-    fn walk(s: &egui::Shape, words: &str) -> Option<egui::Rect> {
-        match s {
-            egui::Shape::Text(t) if t.galley.text() == words => Some(egui::Rect::from_min_size(t.pos, t.galley.size())),
-            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, words)),
-            _ => None,
-        }
-    }
-    h.output().shapes.iter().find_map(|c| walk(&c.shape, words))
-}
-
-/// The names of the headings a screen reader finds on the screen, in tree order.
-fn headings(h: &Harness<'static, Shell>) -> Vec<String> {
-    use egui_kittest::kittest::{NodeT, Queryable};
-    h.query_all_by_role(egui::accesskit::Role::Heading).filter_map(|n| n.accesskit_node().label()).collect()
-}
-
-/// The Diagrams explorer's rows: each one's depth, name and count.
-fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
-    let st = h.state().session.as_ref().unwrap().doc();
-    crate::diagrams::rows(st, &h.state().diagrams, h.state().kinds).rows.into_iter().map(|r| (r.depth, r.label, r.count)).collect()
-}
-
-/// The Diagrams explorer groups the diagrams by kind, each group named, with its `+`, and opens each
-/// diagram with its package.
-#[test]
-fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_package() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        let at = rect_of(&h, "workspace.explorers.diagrams").center();
-        click(&mut h, at);
-        // Every kind the shell knows has its group, by name, empty or not, with its +: UML
-        // structure diagrams after ER diagrams (AR-554).
-        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
-        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 0)]);
-        let found = painted(&h);
-        assert_eq!(found.iter().filter(|t| *t == "UML structure diagrams").count(), 1, "{theme:?}: {found:?}");
-        let (er, structure) =
-            (rect_of(&h, "workspace.diagrams.group.er"), rect_of(&h, &format!("workspace.diagrams.group.{}", archforge_uml::STRUCTURE_DIAGRAM)));
-        assert!(er.bottom() <= structure.top(), "{theme:?}: ER diagrams above");
-        // By their names, not by the order the shell lists the kinds in.
-        {
-            let reversed: Vec<&dyn crate::kinds::DiagramKind> = h.state().kinds.iter().rev().copied().collect();
-            let st = h.state().session.as_ref().unwrap().doc();
-            let labels: Vec<String> = crate::diagrams::rows(st, &h.state().diagrams, &reversed).rows.into_iter().map(|r| r.label).collect();
-            assert_eq!(labels, ["ER diagrams", "UML structure diagrams"], "{theme:?}");
-        }
-        // The groups are every kind a project can hold, so no diagram is left without one.
-        let mut shown: Vec<&str> = h.state().kinds.iter().map(|k| k.kind()).collect();
-        let mut held = archforge_notations::kinds();
-        shown.sort_unstable();
-        held.sort_unstable();
-        assert_eq!(shown, held);
-        let found = ids(&h);
-        for id in [
-            "workspace.diagrams.group.uml.structure",
-            "workspace.diagrams.group.uml.structure.add",
-            "workspace.diagrams.group.er",
-            "workspace.diagrams.group.er.add",
-        ] {
-            assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
-        }
-        // A group's + opens the New diagram dialog on its kind.
-        let at = rect_of(&h, "workspace.diagrams.group.uml.structure.add").center();
-        click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_uml::STRUCTURE_DIAGRAM));
-        h.state_mut().diagrams.new = None;
-        let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
-        click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_er::DIAGRAM_KIND));
-        h.state_mut().diagrams.new = None;
-        // A diagram of a nested package and one of a schema land in their groups at once.
-        let (orders_package, orders) = {
-            let s = h.state_mut().session.as_mut().unwrap();
-            let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-            let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
-            let orders_package = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales })).unwrap().value);
-            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap();
-            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" })).unwrap();
-            let orders = id(s
-                .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": orders_package, "name": "Orders" }))
-                .unwrap()
-                .value);
-            (orders_package, orders)
-        };
-        h.run();
-        assert_eq!(
-            diagram_rows(&h),
-            vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]
-        );
-        // Grouping is the explorer's alone: the model keeps each diagram once, where it was.
-        {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let model = archforge_core::skills::model_of(st).unwrap();
-            let held = st
-                .list(model, archforge_core::model::MEMBER)
-                .unwrap()
-                .iter()
-                .filter_map(archforge_mof::Value::as_ref)
-                .filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM))
-                .count();
-            assert_eq!(held, 3);
-        }
-        // The count and the walk each have a budget of visits: past it the tree says it stopped short.
-        {
-            let st = h.state().session.as_ref().unwrap().doc();
-            assert!(!crate::diagrams::rows(st, &h.state().diagrams, h.state().kinds).cut);
-            let short = crate::diagrams::rows_within(st, &h.state().diagrams, h.state().kinds, 2);
-            assert!(short.cut, "{short:?}");
-        }
-        // The row opens the diagram; it says where its package sits, as the footer does.
-        let at = rect_of(&h, &format!("workspace.diagrams.row.{orders}")).center();
-        click(&mut h, at);
-        assert_eq!(h.state().canvas.active.map(|a| a.to_string()), Some(orders.clone()));
-        {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let package = st.by_uuid(archforge_mof::Uuid::parse(&orders_package).unwrap()).unwrap();
-            // The project, then the packages holding Orders; a root package named like the project
-            // is said once.
-            assert_eq!(crate::diagrams::trail(st, "Commerce platform", package), "Commerce platform / Sales / Orders");
-        }
-        // A group folds and opens with a click.
-        let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
-        click(&mut h, at);
-        assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Shop", 0), row(0, "UML structure diagrams", 2)]);
-        assert!(!ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{orders}")));
-        let at = rect_of(&h, "workspace.diagrams.group.uml.structure").center();
-        click(&mut h, at);
-        assert_eq!(diagram_rows(&h).len(), 5);
-        // The filter narrows the diagrams, or shows a whole group named by it; groups with no match go.
-        h.state_mut().diagrams.filter = "ord".into();
-        h.run();
-        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Orders", 0)]);
-        h.state_mut().diagrams.filter = "structure".into();
-        h.run();
-        assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
-        h.state_mut().diagrams.filter = "zzz".into();
-        h.run();
-        assert!(diagram_rows(&h).is_empty());
-    }
-}
-
-/// A project to delete diagrams in (AR-644): the package Sales with its own default diagram and a
-/// second one, Sales details, showing the class Order, and the schema Shop's ER diagram; Sales and
-/// then Sales details open in tabs, the Diagrams explorer showing. Gives Order and the diagrams.
-fn deletable_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, [archforge_mof::Uuid; 4]) {
-    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-    let made = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
-        let default = own_diagram(s, sales);
-        let order = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Order" })).unwrap().value);
-        let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales details" });
-        let details = id(s.execute("diagram.add", &p).unwrap().value);
-        let place = serde_json::json!({ "diagram": details.to_string(), "element": order.to_string(), "x": 0, "y": 0, "width": 240, "height": 72 });
-        s.execute("diagram.place", &place).unwrap();
-        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-        let shop = id(s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema.to_string(), "name": "Shop" }))
-            .unwrap()
-            .value);
-        [order, default, details, shop]
-    };
-    crate::canvas::open(h.state_mut(), made[1]);
-    crate::canvas::open(h.state_mut(), made[2]);
-    let at = rect_of(&h, "workspace.explorers.diagrams").center();
-    click(&mut h, at);
-    (h, made)
-}
-
-/// Whether the element `id` is in the open project's model.
-fn alive_in(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> bool {
-    let st = h.state().session.as_ref().unwrap().doc();
-    st.by_uuid(id).is_some_and(|o| st.is_alive(o))
-}
-
-/// The boxes the diagram `d` shows.
-fn boxes_of(h: &Harness<'static, Shell>, d: archforge_mof::Uuid) -> usize {
-    let st = h.state().session.as_ref().unwrap().doc();
-    crate::canvas::refs(st, st.by_uuid(d).unwrap(), archforge_diagram::diagram::NODE).len()
-}
-
-/// A diagram row's menu deletes a diagram that is no package's default at once, as one undo step:
-/// the class it showed stays, its tab goes to the one before, and the toast's Undo brings it back
-/// with its boxes. A package's default stays: its row is off (AR-644).
-#[test]
-fn a_diagram_rows_menu_deletes_the_diagram_at_once_and_undo_brings_it_back() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, [order, default, details, _]) = deletable_diagrams(theme);
-        assert_eq!((h.state().canvas.active, boxes_of(&h, details)), (Some(details), 1), "{theme:?}");
-        // While the menu is open the canvas takes none of its keys: Delete would take Order off.
-        let node = ids(&h).into_iter().find(|i| i.starts_with("workspace.canvas.node.") && i.matches('.').count() == 3).unwrap();
-        let (node, at) = (rect_of(&h, &node).center(), rect_of(&h, &format!("workspace.diagrams.row.{details}")).center());
-        click(&mut h, node);
-        right_click(&mut h, at);
-        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
-        assert_eq!(boxes_of(&h, details), 1, "{theme:?}: the box stays");
-        // The menu goes with the explorer, and so does its hold on the keys.
-        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
-        h.run();
-        click(&mut h, node);
-        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
-        assert_eq!(boxes_of(&h, details), 0, "{theme:?}: once the menu is gone, it does");
-        h.state_mut().session.as_mut().unwrap().undo().unwrap();
-        h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
-        h.run();
-        right_click(&mut h, at);
-        let item = rect_of(&h, "workspace.diagrams.contextMenu.delete").center();
-        click(&mut h, item);
-        assert!(!alive_in(&h, details), "{theme:?}: deleted at once, with no question");
-        assert!(alive_in(&h, order), "{theme:?}: the class stays in the model");
-        assert_eq!((h.state().canvas.tabs.clone(), h.state().canvas.active), (vec![default], Some(default)), "{theme:?}");
-        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Remove diagram"), "{theme:?}: one undo step");
-        assert_eq!(painted_times(&h, "Sales details deleted"), 1, "{theme:?}: {:?}", painted(&h));
-        let undo = rect_of(&h, "workspace.toast.undo").center();
-        click(&mut h, undo);
-        assert!(alive_in(&h, details) && boxes_of(&h, details) == 1, "{theme:?}: back with its box");
-        // A package's default: the row is there, off, and a click on it deletes nothing.
-        let undo_label = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
-        let before = undo_label(&h);
-        let at = rect_of(&h, &format!("workspace.diagrams.row.{default}")).center();
-        right_click(&mut h, at);
-        let item = rect_of(&h, "workspace.diagrams.contextMenu.delete").center();
-        click(&mut h, item);
-        assert!(alive_in(&h, default), "{theme:?}: the default stays");
-        assert_eq!(undo_label(&h), before, "{theme:?}: nothing new to undo");
-        assert_eq!(h.state().diagrams.menu.as_ref().map(|m| m.diagram), Some(default), "{theme:?}: still open");
-        // It says why, to a screen reader too: the engine's reason for keeping a default.
-        let why = crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
-        let off = {
-            use egui_kittest::kittest::{NodeT, Queryable};
-            h.get_by_label("Delete diagram").accesskit_node().data().clone()
-        };
-        assert!(off.is_disabled() && off.description() == why.as_deref(), "{theme:?}");
-    }
-}
-
-/// On a focused diagram row Delete or Backspace deletes the diagram, an ER one alike, and ⇧F10
-/// opens the menu with its row reached for Enter; Escape gives the row the keyboard back. A
-/// package's default stays and the notice says why, as the engine does (AR-644).
-#[test]
-fn a_focused_diagram_row_deletes_its_diagram_by_key_and_says_why_a_default_stays() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, [order, default, details, shop]) = deletable_diagrams(theme);
-        let row = |d: archforge_mof::Uuid| crate::widgets::egui_id(&format!("workspace.diagrams.row.{d}"));
-        // Only Shop open: once it goes no diagram shows, and the toast shows over the empty centre.
-        crate::canvas::close_tab(h.state_mut(), default);
-        crate::canvas::close_tab(h.state_mut(), details);
-        crate::canvas::open(h.state_mut(), shop);
-        h.run();
-        h.ctx.memory_mut(|m| m.request_focus(row(shop)));
-        h.run();
-        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
-        assert!(!alive_in(&h, shop), "{theme:?}: the ER diagram is deleted alike");
-        assert_eq!(h.state().canvas.active, None, "{theme:?}");
-        assert_eq!(painted_times(&h, "Shop deleted"), 1, "{theme:?}: {:?}", painted(&h));
-        h.state_mut().session.as_mut().unwrap().undo().unwrap();
-        h.run();
-        assert!(alive_in(&h, shop), "{theme:?}");
-        // ⇧F10 opens the menu, its row reached: Enter deletes.
-        h.ctx.memory_mut(|m| m.request_focus(row(details)));
-        h.run();
-        key(&mut h, egui::Key::F10, egui::Modifiers::SHIFT);
-        assert_eq!(h.state().diagrams.menu.as_ref().map(|m| (m.diagram, m.reached)), Some((details, true)), "{theme:?}");
-        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert!(!alive_in(&h, details) && alive_in(&h, order), "{theme:?}");
-        // Escape closes the menu and hands the row the keyboard back.
-        h.ctx.memory_mut(|m| m.request_focus(row(default)));
-        h.run();
-        key(&mut h, egui::Key::F10, egui::Modifiers::SHIFT);
-        assert!(h.state().diagrams.menu.is_some(), "{theme:?}");
-        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert!(h.state().diagrams.menu.is_none(), "{theme:?}");
-        assert_eq!(h.ctx.memory(|m| m.focused()), Some(row(default)), "{theme:?}");
-        // Backspace on a package's default deletes nothing and says why.
-        let undo = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
-        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
-        assert!(alive_in(&h, default), "{theme:?}");
-        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo, "{theme:?}");
-        let why = crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::DefaultDiagramOf { package: "Sales".into(), fault: None });
-        assert_eq!(h.state().diagrams.notice, why, "{theme:?}");
-        let why = why.unwrap();
-        let whole = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Text(t) if t.galley.text() == why && !t.galley.elided));
-        assert!(whole, "{theme:?}: the reason reads whole, not cut");
-    }
-}
-
-/// Typing a group's name in the Diagrams explorer's filter opens the folded folders its diagrams sit
-/// in.
-#[test]
-fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
-    // A model with a folder holding a class diagram, as a project may keep one.
-    let minted = |at: u64| -> Box<dyn FnMut() -> archforge_mof::Uuid + Send> {
-        let mut n: u64 = 0;
-        Box::new(move || {
-            n += 1;
-            let mut r = [0u8; 10];
-            r[2..].copy_from_slice(&n.to_be_bytes());
-            archforge_mof::Uuid::v7(at, r)
-        })
-    };
-    let (tables, junctions) = archforge_notations::storage();
-    let fresh = archforge_notations::new_project_session("Commerce platform", minted(1_761_670_800_000)).unwrap();
-    let rows = archforge_mof::rows::snapshot(fresh.doc(), &tables, &junctions).unwrap();
-    let foldered = archforge_notations::session_from_rows_repaired(&rows, minted(1_761_670_810_000), |st| {
-        use archforge_mof::Value;
-        let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
-        let package = st.create(archforge_uml::PACKAGE).unwrap();
-        st.set(package, archforge_uml::named_element::NAME, Value::str("Sales")).unwrap();
-        st.push(model, archforge_core::model::MEMBER, Value::Ref(package)).unwrap();
-        let folder = st.create(archforge_core::FOLDER).unwrap();
-        st.set(folder, archforge_core::named_element::NAME, Value::str("Views")).unwrap();
-        st.push(model, archforge_core::model::MEMBER, Value::Ref(folder)).unwrap();
-        let d = st.create(archforge_diagram::DIAGRAM).unwrap();
-        st.set(d, archforge_diagram::diagram::KIND, Value::str(archforge_uml::STRUCTURE_DIAGRAM)).unwrap();
-        st.set(d, archforge_diagram::diagram::NAME, Value::str("Sales")).unwrap();
-        st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(package)).unwrap();
-        st.push(folder, archforge_core::folder::MEMBER, Value::Ref(d)).unwrap();
-        // And an ER diagram beside it, so the folder shows in both groups.
-        let schema = st.create(archforge_er::SCHEMA).unwrap();
-        st.set(schema, archforge_er::named_element::NAME, Value::str("Shop")).unwrap();
-        st.push(model, archforge_core::model::MEMBER, Value::Ref(schema)).unwrap();
-        let e = st.create(archforge_diagram::DIAGRAM).unwrap();
-        st.set(e, archforge_diagram::diagram::KIND, Value::str(archforge_er::DIAGRAM_KIND)).unwrap();
-        st.set(e, archforge_diagram::diagram::NAME, Value::str("Shop")).unwrap();
-        st.set(e, archforge_diagram::diagram::ELEMENT, Value::Ref(schema)).unwrap();
-        st.push(folder, archforge_core::folder::MEMBER, Value::Ref(e)).unwrap();
-    })
-    .unwrap();
-    let rows = archforge_mof::rows::snapshot(foldered.doc(), &tables, &junctions).unwrap();
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    h.state_mut().open_project(crate::Opened {
-        name: "Commerce platform".into(),
-        path: "/Users/robin/Documents/Archforge/Foldered.archforge".into(),
-        model: Some(std::sync::Arc::new(rows)),
-        ..Default::default()
-    });
-    h.run();
-    let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
-    assert_eq!(
-        diagram_rows(&h),
-        vec![
-            row(0, "ER diagrams", 1),
-            row(1, "Views", 1),
-            row(2, "Shop", 0),
-            row(0, "UML structure diagrams", 1),
-            row(1, "Views", 1),
-            row(2, "Sales", 0)
-        ]
-    );
-    // The folder's row in each group is a control of its own.
-    let folder = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::FOLDER)).and_then(|f| st.uuid(f).ok()).unwrap()
-    };
-    let at = rect_of(&h, "workspace.explorers.diagrams").center();
-    click(&mut h, at);
-    let found = ids(&h);
-    for id in [format!("workspace.diagrams.group.uml.structure.folder.{folder}"), format!("workspace.diagrams.group.er.folder.{folder}")] {
-        assert_eq!(found.iter().filter(|i| **i == id).count(), 1, "{id} once in {found:?}");
-    }
-    // Folded shut, the folder hides its diagrams; typing a group's name opens it again.
-    h.state_mut().diagrams.collapsed.insert(folder);
-    assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 1), row(1, "Views", 1), row(0, "UML structure diagrams", 1), row(1, "Views", 1)]);
-    h.state_mut().diagrams.filter = "structure".into();
-    assert_eq!(diagram_rows(&h), vec![row(0, "UML structure diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
-}
-
-/// New diagram's two steps, in light and dark: the cards, their names and the title read out
-/// (AR-554), the arrow keys, Back, Cancel, a refused name and a group's `+`.
-#[test]
-fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_typed() {
-    use egui_kittest::kittest::{NodeT, Queryable};
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        let elements = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().alive().count();
-        let before = elements(&h);
-        let step = |h: &Harness<'static, Shell>| h.state().diagrams.new.as_ref().map(|n| n.step);
-        // Step 1: a card for each kind, side by side, the first chosen.
-        let at = rect_of(&h, "workspace.tabs.add").center();
-        click(&mut h, at);
-        assert_eq!(step(&h), Some(crate::diagrams::Step::Kind));
-        let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.structure"));
-        assert!(er.right() < class.left() && (er.top() - class.top()).abs() < 0.5, "{theme:?}: side by side");
-        assert!(er.width() >= 240.0, "{theme:?}: room for the card to read");
-        assert!(painted(&h).iter().any(|t| t == "Step 1 of 2 · Choose what the diagram shows"));
-        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
-        // The UML structure diagram's card: its name and what it shows painted, its name read out
-        // as the choice's; the dialog's title read out as its heading (AR-554).
-        let found = painted(&h);
-        let said = "Classes, packages and the relationships between them.";
-        assert!(found.iter().any(|t| t == "UML structure diagram") && found.iter().any(|t| t == said), "{theme:?}: {found:?}");
-        assert_eq!(h.get_by_label("UML structure diagram").accesskit_node().role(), egui::accesskit::Role::RadioButton, "{theme:?}");
-        assert_eq!(headings(&h), ["New diagram"], "{theme:?}");
-        // Found where it is painted: over the painted title, above the cards, from their left edge.
-        let title = h.get_by_role_and_label(egui::accesskit::Role::Heading, "New diagram").accesskit_node().bounding_box().expect("bounds");
-        let shown = painted_at(&h, "New diagram").expect("the title painted").center();
-        assert!(title.contains(egui::accesskit::Point::new(shown.x.into(), shown.y.into())), "{theme:?}: {title:?} over {shown:?}");
-        assert!((title.x0 as f32 - er.left()).abs() < 0.5 && title.y1 as f32 <= er.top(), "{theme:?}: {title:?}");
-        // The arrow keys move the choice; the name the dialog gave follows the kind.
-        key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
-        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
-        key(&mut h, egui::Key::ArrowLeft, egui::Modifiers::NONE);
-        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
-        // Cancel makes nothing.
-        let at = rect_of(&h, "workspace.new-diagram.cancel").center();
-        click(&mut h, at);
-        assert!(h.state().diagrams.new.is_none());
-        assert_eq!(elements(&h), before, "{theme:?}: nothing made");
-        // The class card, then Enter: its details, the root package named after the project.
-        let at = rect_of(&h, "workspace.tabs.add").center();
-        click(&mut h, at);
-        let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
-        click(&mut h, at);
-        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert_eq!(step(&h), Some(crate::diagrams::Step::Details));
-        let found = painted(&h);
-        assert!(found.iter().any(|t| t == "New UML structure diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
-        assert_eq!(headings(&h), ["New UML structure diagram"], "{theme:?}: the title read out");
-        // A name typed survives Back and another kind; an empty name is refused, and Back clears it.
-        h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
-        h.run();
-        let at = rect_of(&h, "workspace.new-diagram.back").center();
-        click(&mut h, at);
-        assert_eq!(step(&h), Some(crate::diagrams::Step::Kind));
-        let at = rect_of(&h, "workspace.new-diagram.type.er").center();
-        click(&mut h, at);
-        let at = rect_of(&h, "workspace.new-diagram.continue").center();
-        click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.kind, n.name.as_str())), Some((archforge_er::DIAGRAM_KIND, "Domain")));
-        h.state_mut().diagrams.new.as_mut().unwrap().name = "  ".into();
-        let at = rect_of(&h, "workspace.new-diagram.create").center();
-        click(&mut h, at);
-        let refused = h.state().diagrams.new.as_ref().and_then(|n| n.refused.clone()).expect("the empty name is refused");
-        read_out(&h, &refused, "workspace.new-diagram.notice");
-        assert_eq!(elements(&h), before, "{theme:?}: a refusal makes nothing, no schema either");
-        let at = rect_of(&h, "workspace.new-diagram.back").center();
-        click(&mut h, at);
-        assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_none()));
-        assert!(egui_kittest::kittest::Queryable::query_by_label(&h, &refused).is_none(), "{theme:?}: no longer read out");
-        // A double click on a card goes straight on; Create opens the diagram in its group.
-        let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
-        // Past egui's double-click window, so the clicks before don't count with these two.
-        for _ in 0..40 {
-            h.step();
-        }
-        double_click(&mut h, at);
-        assert_eq!(step(&h), Some(crate::diagrams::Step::Details));
-        h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
-        let at = rect_of(&h, "workspace.new-diagram.create").center();
-        click(&mut h, at);
-        assert!(h.state().diagrams.new.is_none());
-        let at = rect_of(&h, "workspace.explorers.diagrams").center();
-        click(&mut h, at);
-        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
-        assert_eq!(diagram_rows(&h), [row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 1), row(1, "Domain", 0)]);
-        assert!(h.state().canvas.active.is_some(), "it opens at once");
-        // A group's + has chosen the kind: the dialog opens on the details, Back before them.
-        let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
-        click(&mut h, at);
-        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.step, n.kind)), Some((crate::diagrams::Step::Details, archforge_er::DIAGRAM_KIND)));
-        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert!(h.state().diagrams.new.is_none());
-    }
-}
-
-/// In a narrow window, New diagram's kind cards stand one above the other.
-#[test]
-fn in_a_narrow_window_the_kinds_cards_stand_one_above_the_other() {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(520.0, 900.0));
-    h.state_mut().state.explorer_collapsed = true;
-    h.run();
-    crate::diagrams::open_new(h.state_mut());
-    h.run();
-    let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.structure"));
-    assert!(er.bottom() < class.top() && (er.left() - class.left()).abs() < 0.5, "{er:?} {class:?}");
-    let window = h.ctx.content_rect();
-    assert!(window.contains_rect(er) && window.contains_rect(class), "both fit");
-}
-
-/// A package's own class diagram, made as a workflow makes one (AR-581): by `diagram.add`, named
-/// like the package and its default from the start, the selection left as it was.
-fn own_diagram(s: &mut archforge_notations::Session, package: archforge_mof::Uuid) -> archforge_mof::Uuid {
-    let st = s.doc();
-    let name = archforge_core::name_of(st, st.by_uuid(package).unwrap());
-    let kept: Vec<String> = s.view().selection.iter().map(|o| st.uuid(*o).unwrap().to_string()).collect();
-    let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package.to_string(), "name": name });
-    let d = archforge_mof::Uuid::parse(s.execute("diagram.add", &p).unwrap().value["id"].as_str().unwrap()).unwrap();
-    s.execute("view.select", &serde_json::json!({ "ids": kept })).unwrap();
-    d
-}
-
-/// The root's diagram Top with the package Sales on it (240 × 148 at 200, 160), and Sales's own
-/// diagram with Order and OrderLine side by side, joined by an association: the harness, Top,
-/// Sales, its card's node, its own diagram and the two classes' nodes there (AR-113).
-fn package_preview_harness(
-    theme: ThemeKind,
-) -> (Harness<'static, Shell>, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid, [archforge_mof::Uuid; 2]) {
-    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-    let ids = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let mut run = |c: &str, p: serde_json::Value| id(s.execute(c, &p).unwrap().value);
-        let root = run("uml.model.root", serde_json::json!({}));
-        let top = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }));
-        let sales = run("uml.package.add", serde_json::json!({ "name": "Sales" }));
-        let card = run(
-            "diagram.place",
-            serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
-        );
-        let own = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales" }));
-        let order = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "Order" }));
-        let line = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "OrderLine" }));
-        run("uml.association.add", serde_json::json!({ "from": order.to_string(), "to": line.to_string() }));
-        let a = run("diagram.place", serde_json::json!({ "diagram": own.to_string(), "element": order.to_string(), "x": 0, "y": 0 }));
-        let b = run("diagram.place", serde_json::json!({ "diagram": own.to_string(), "element": line.to_string(), "x": 400, "y": 0 }));
-        (top, sales, card, own, [a, b])
-    };
-    let (top, sales, card, own, classes) = ids;
-    // The association shows on Sales's diagram, whether placing drew it or not.
-    if let Some(s) = h.state_mut().session.as_mut() {
-        let _ = s.execute("diagram.connect-all", &serde_json::json!({ "diagram": own.to_string() }));
-    }
-    crate::canvas::open(h.state_mut(), top);
-    h.state_mut().canvas.fit_pending = false;
-    h.state_mut().canvas.zoom = 1.0;
-    h.state_mut().canvas.pan = egui::Vec2::ZERO;
-    h.run();
-    (h, top, sales, card, own, classes)
-}
-
-/// A package's card is drawn by the kind that draws packages whatever the scene's own kind: on a
-/// scene of UML's kind, of a kind that leaves the card to the canvas (ER's) and of no kind, its tab
-/// and thumbnail are drawn alike, as a stored project may put the card anywhere it opens; with no
-/// kind asked at all, the canvas's own card is all there is. In light and dark.
-#[test]
-fn a_package_card_is_drawn_by_the_kind_that_draws_packages_whatever_the_scenes_kind() {
-    let (mut h, top, _, card, _, _) = package_preview_harness(ThemeKind::Light);
-    let session = h.state_mut().session.take().unwrap();
-    drop(h);
-    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
-    let (tab, preview) = (format!("workspace.canvas.node.{card}.tab"), format!("workspace.canvas.node.{card}.preview"));
-    let uml: &'static dyn crate::kinds::DiagramKind = &uml_ui::UmlKind;
-    let er: &'static dyn crate::kinds::DiagramKind = &er_kind::ErKind;
-    for dark in [false, true] {
-        for scene in [Some(uml), Some(er), None] {
-            let (texts, at, _) = drawn_alone_at(&session, &top.to_string(), (scene, SCREENS.kinds()), dark, 1000.0, &none, &clean);
-            let ids: Vec<&String> = at.iter().map(|(i, _)| i).collect();
-            let named = scene.map(|k| k.kind());
-            assert!(ids.contains(&&tab) && ids.contains(&&preview), "{dark} {named:?}: the package's card: {ids:?}");
-            assert!(texts.iter().any(|t| t == "Sales"), "{dark} {named:?}: its name in its tab");
-        }
-        let (_, at, _) = drawn_alone_at(&session, &top.to_string(), (None, &[]), dark, 1000.0, &none, &clean);
-        assert!(at.iter().all(|(i, _)| *i != tab && *i != preview), "{dark}: the canvas's own card, no tab: {at:?}");
-        assert!(at.iter().any(|(i, _)| *i == format!("workspace.canvas.node.{card}")), "{dark}: the card still drawn");
-    }
-}
-
 /// Enter on New diagram's focused Cancel cancels and makes nothing; on a kind's card it goes on to
 /// the details.
 #[test]
@@ -8331,53 +6805,6 @@ fn enter_on_new_diagrams_focused_cancel_cancels_and_on_a_card_goes_on() {
     assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.step), Some(crate::diagrams::Step::Details));
 }
 
-/// Package navigation is UML's kind's (AR-788): before UML's kind draws a package's diagram it
-/// lands the entry still pending, at 100 % with the content centred, and after drawing it shows the
-/// path bar and gives the room it takes; ER's kind, which keeps the defaults, leaves the landing
-/// pending and the view as it is, draws no path bar and takes no room. In light and dark.
-#[test]
-fn package_navigation_is_umls_kinds_and_ers_does_none() {
-    use crate::kinds::DiagramKind;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        let (_, first, sales, sales_d) = first_and_sales(&mut h);
-        crate::canvas::open(h.state_mut(), first);
-        h.run();
-        h.state_mut().cx(|cx| uml_package_nav::enter(cx, sales, 0.0));
-        (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.5, egui::vec2(33.0, 44.0));
-        let shell = h.state_mut();
-        let d = shell.session.as_ref().unwrap().doc().by_uuid(sales_d).unwrap();
-        let p = crate::ux::palette(theme == ThemeKind::Dark);
-        let view = |shell: &Shell| (shell.canvas.zoom, shell.canvas.pan, uml_of(shell).nav.centre);
-        recorded_alone(shell, |shell, ui| shell.cx(|cx| er_kind::ErKind.before_draw(cx, ui, CANVAS, d)));
-        assert_eq!(view(shell), (0.5, egui::vec2(33.0, 44.0), true), "{theme:?}: the default lands nothing");
-        recorded_alone(shell, |shell, ui| shell.cx(|cx| uml_ui::UmlKind.before_draw(cx, ui, CANVAS, d)));
-        assert_eq!(view(shell), (uml_package_nav::LANDING, egui::Vec2::ZERO, false), "{theme:?}: UML lands the entry");
-        let mut room = (0.0, 0.0);
-        let er = recorded_alone(shell, |shell, ui| room.0 = shell.cx(|cx| er_kind::ErKind.after_draw(cx, ui, p, CANVAS, d)));
-        let uml = recorded_alone(shell, |shell, ui| room.1 = shell.cx(|cx| uml_ui::UmlKind.after_draw(cx, ui, p, CANVAS, d)));
-        assert!(er.is_empty() && room.0 == 0.0, "{theme:?}: the default draws nothing: {er:?}");
-        assert!(uml.iter().any(|i| i == "workspace.canvas.path") && room.1 > 0.0, "{theme:?}: UML's path bar: {uml:?} {room:?}");
-    }
-}
-
-/// The root's class diagram First with the card of the package Sales, and Sales' own diagram:
-/// `(root, first, sales, sales_d)`.
-fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid) {
-    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-    let s = h.state_mut().session.as_mut().unwrap();
-    let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-    let first = id(s
-        .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "First" }))
-        .unwrap()
-        .value);
-    let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
-    let p = serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
-    s.execute("diagram.place", &p).unwrap();
-    let sales_d = own_diagram(s, sales);
-    (root, first, sales, sales_d)
-}
-
 /// The automation ids of the canvas's nodes the last frame drew.
 fn node_ids(h: &Harness<'static, Shell>) -> Vec<String> {
     ids(h).iter().filter(|i| i.starts_with("workspace.canvas.node.")).cloned().collect()
@@ -8388,43 +6815,6 @@ fn node_bounds(h: &Harness<'static, Shell>, node: &str) -> archforge_diagram::Re
     let st = h.state().session.as_ref().unwrap().doc();
     let n = st.by_uuid(archforge_mof::Uuid::parse(node).unwrap()).unwrap();
     archforge_diagram::grid::bounds_of(st, n)
-}
-
-/// The Entity tool places a table where the canvas is clicked, its name typed in place, as one undo
-/// step.
-#[test]
-fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
-    let (mut h, _customer, _diagram) = diagram_harness();
-    let at = rect_of(&h, "workspace.tools.entity").center();
-    click(&mut h, at);
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place("entity"));
-    let canvas = rect_of(&h, "workspace.canvas");
-    let before = node_ids(&h).len();
-    click(&mut h, canvas.left_top() + egui::vec2(120.0, 320.0));
-    let nodes = node_ids(&h);
-    assert_eq!(nodes.len(), before + 1, "a node was placed: {nodes:?}");
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "placing hands back to Select");
-    let rename = h.state().canvas.rename.clone().expect("the name is open for typing");
-    assert_eq!(rename.text, "Entity");
-    assert_eq!(selected_name(&h), "Entity");
-    assert!(ids(&h).iter().any(|i| i == "workspace.canvas.rename"));
-    // Typing replaces the selected default; Enter commits the rename.
-    h.event(egui::Event::Text("Payment".into()));
-    h.run();
-    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-    assert!(h.state().canvas.rename.is_none(), "{:?}", h.state().canvas.rename);
-    assert_eq!(selected_name(&h), "Payment");
-    // Add and place were one step: one undo removes the node and the table together.
-    let s = h.state_mut().session.as_mut().unwrap();
-    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
-    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
-    h.run();
-    assert_eq!(node_ids(&h).len(), before);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(!st.alive().any(|o| archforge_core::name_of(st, o) == "Entity"), "the table went with the node");
-    // Escape returns to Select.
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select);
 }
 
 /// A drag moves a node by the drag in diagram units and a corner handle resizes it, each one undo
@@ -8575,13 +6965,10 @@ fn two_tables_harness() -> (Harness<'static, Shell>, String, String) {
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
         let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap().value);
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
-        let diagram = id(s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop schema" }))
-            .unwrap()
-            .value);
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap()).unwrap().to_string();
+        let order = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Order" })).unwrap().value);
+        s.execute("sketch.attribute.add", &serde_json::json!({ "class": order, "name": "order_id" })).unwrap();
+        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop schema" })).unwrap().value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 }))
             .unwrap();
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 166 }))
@@ -8591,12 +6978,6 @@ fn two_tables_harness() -> (Harness<'static, Shell>, String, String) {
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&diagram).unwrap());
     h.run();
     (h, customer, order)
-}
-
-/// The live relationships of the open model.
-fn relationships(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
-    let st = h.state().session.as_ref().unwrap().doc();
-    st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).collect()
 }
 
 /// A note's text typed in place commits on ⌘↩ (Ctrl Enter) alone, in both key shapes: with Shift,
@@ -8629,19 +7010,19 @@ fn a_note_commits_on_its_own_chord_alone() {
     });
 }
 
-/// A table's description typed and left by clicking another table's row in Models is kept on the
-/// table it was typed on, and the other table is left as it was. In light and dark.
+/// An element's description typed and left by clicking another element's row in Models is kept on
+/// the element it was typed on, and the other element is left as it was. In light and dark.
 #[test]
-fn a_table_description_draft_left_by_clicking_another_table_stays_on_its_own() {
+fn a_description_draft_left_by_clicking_another_row_stays_on_its_own() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, customer) = table_harness();
         h.state_mut().state.theme = theme;
         let (order, schema) = {
             let s = h.state_mut().session.as_mut().unwrap();
             let st = s.doc();
-            let schema = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+            let schema = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
             let schema = st.uuid(schema).unwrap();
-            let out = s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Order" })).unwrap();
+            let out = s.execute("sketch.class.add", &serde_json::json!({ "package": schema.to_string(), "name": "Order" })).unwrap();
             (archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap(), schema)
         };
         h.state_mut().explorer.expanded.insert(schema);
@@ -8659,65 +7040,11 @@ fn a_table_description_draft_left_by_clicking_another_table_stays_on_its_own() {
         let st = s.doc();
         let (customer, order) = (st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap(), st.by_uuid(order).unwrap());
         assert_eq!(s.view().selection, vec![order], "the row selected Order");
-        assert_eq!(archforge_er::rules::text_of(st, customer, archforge_er::element::DESCRIPTION), "People who buy.");
-        assert_eq!(archforge_er::rules::text_of(st, order, archforge_er::element::DESCRIPTION), "", "Order is unchanged");
+        let described = |o| s.view().of_element(st, o).map(|n| n.description(st, o)).unwrap_or_default();
+        assert_eq!(described(customer), "People who buy.");
+        assert_eq!(described(order), "", "Order is unchanged");
         assert!(h.state().panels.description.is_none(), "the draft is spent");
     }
-}
-
-#[test]
-fn a_selected_notes_handle_links_it_to_a_table_or_a_relationships_line_and_delete_removes_a_link() {
-    let (mut h, _customer, _order) = two_tables_harness();
-    let nodes = node_ids(&h);
-    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
-    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
-    // A relationship between the two, and a note below them.
-    let at = rect_of(&h, "workspace.tools.relationship").center();
-    click(&mut h, at);
-    let (from, to) = (rect_of(&h, &customer_node).center(), rect_of(&h, &order_node).center());
-    drag(&mut h, from, to);
-    let note = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let d = s.view().open_diagram.unwrap();
-        let d = s.doc().uuid(d).unwrap().to_string();
-        let out = s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "Why", "x": 380, "y": 400 })).unwrap();
-        let id = out.value["id"].as_str().unwrap().to_string();
-        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
-        id
-    };
-    h.run_steps(2);
-    let links = |h: &Harness<'static, Shell>| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        st.alive()
-            .filter(|o| {
-                st.class_of(*o).ok() == Some(archforge_diagram::EDGE)
-                    && st.get(*o, archforge_diagram::edge::ELEMENT).unwrap().as_ref().is_none()
-                    && st.get(*o, archforge_diagram::edge::SOURCE).unwrap().as_ref() == st.by_uuid(archforge_mof::Uuid::parse(&note).unwrap())
-            })
-            .map(|o| st.class_of(st.get(o, archforge_diagram::edge::TARGET).unwrap().as_ref().unwrap()).unwrap())
-            .collect::<Vec<_>>()
-    };
-    // Its handle dragged onto Order links it to the table.
-    let handle = rect_of(&h, "workspace.canvas.adorn.link").center();
-    let onto = rect_of(&h, &order_node).center();
-    drag(&mut h, handle, onto);
-    assert_eq!(links(&h), [archforge_diagram::NODE], "{:?}", h.state().canvas.notice);
-    // Selected again, dragged onto the middle of the relationship's line: linked to the line.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [note] })).unwrap();
-    }
-    h.run_steps(2);
-    let middle = rect_of(&h, &customer_node).center().lerp(rect_of(&h, &order_node).center(), 0.5);
-    let handle = rect_of(&h, "workspace.canvas.adorn.link").center();
-    drag(&mut h, handle, middle);
-    let kinds = links(&h);
-    assert_eq!(kinds.len(), 2, "{:?}", h.state().canvas.notice);
-    assert!(kinds.contains(&archforge_diagram::EDGE), "one link ends on the relationship's line");
-    // The link is selected after drawing; Delete removes it alone.
-    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
-    assert_eq!(links(&h), [archforge_diagram::NODE]);
-    assert_eq!(relationships(&h).len(), 1, "the relationship stays");
 }
 
 #[test]
@@ -8754,15 +7081,17 @@ fn the_link_note_tool_drags_a_link_from_a_note_to_a_table_and_hands_back_to_sele
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
 }
 
+/// The Models tree starts folded, Expand all opens every row and folds them again, and an element
+/// selected elsewhere opens the rows above it once.
 #[test]
 fn the_models_tree_starts_folded_and_opens_all_at_once() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     let (schema, entity, column) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
-        let entity = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
-        let column = id(s.execute("er.attribute.add", &serde_json::json!({ "entity": entity, "name": "email" })).unwrap().value);
+        let schema = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
+        let entity = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Customer" })).unwrap().value);
+        let column = id(s.execute("sketch.attribute.add", &serde_json::json!({ "class": entity, "name": "email" })).unwrap().value);
         s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
         (schema, entity, column)
     };
@@ -8825,11 +7154,7 @@ fn related_tables(order_at: (f64, f64)) -> (Harness<'static, Shell>, archforge_m
     let (mut h, customer, order) = two_tables_harness();
     {
         let s = h.state_mut().session.as_mut().unwrap();
-        s.execute(
-            "er.relationship.add",
-            &serde_json::json!({ "from": customer, "to": order, "name": "places", "from_end": "exactly-one", "to_end": "zero-or-more" }),
-        )
-        .unwrap();
+        s.execute("sketch.association.add", &serde_json::json!({ "from": customer, "to": order, "name": "places" })).unwrap();
         let st = s.doc();
         let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
         let did = st.uuid(d).unwrap().to_string();
@@ -8867,24 +7192,6 @@ fn arrange_diagram_lays_the_tables_out_along_their_line_as_one_step() {
 }
 
 #[test]
-fn a_cardinality_text_is_dragged_aside_and_a_double_click_puts_it_back() {
-    let (mut h, _d, e, ..) = related_tables((500.0, 100.0));
-    let labels = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().list(e, archforge_diagram::edge::LABEL).unwrap().len();
-    let first = h.state().canvas.ends.iter().find(|t| t.end == 1).cloned().expect("the line's texts are drawn");
-    // Between the tables, clear of both.
-    let to = first.rect.center() + egui::vec2(-40.0, 60.0);
-    drag(&mut h, first.rect.center(), to);
-    assert_eq!(labels(&h), 1, "the place is kept");
-    h.run();
-    let moved = h.state().canvas.ends.iter().find(|t| t.end == 1).cloned().unwrap();
-    assert!((moved.rect.center() - to).length() < 2.0, "drawn where it was let go: {:?} {to:?}", moved.rect.center());
-    click(&mut h, moved.rect.center());
-    click(&mut h, moved.rect.center());
-    h.run();
-    assert_eq!(labels(&h), 0, "back beside the line");
-}
-
-#[test]
 fn a_right_angled_lines_segment_slides_and_a_double_click_routes_it_anew() {
     // Order below and right of Customer: around nothing, at right angles.
     let (mut h, d, e, ..) = related_tables((600.0, 500.0));
@@ -8912,6 +7219,8 @@ fn a_right_angled_lines_segment_slides_and_a_double_click_routes_it_anew() {
 #[test]
 fn the_top_bars_search_finds_a_projects_tables_and_diagrams() {
     let (mut h, _d, _e, _customer, order_node) = related_tables((900.0, 700.0));
+    // The worded notation before the sketch's: a result shows what its own notation says.
+    h.state_mut().notation_uis = SKETCH_UIS;
     let results = |h: &Harness<'static, Shell>| ids(h).into_iter().filter(|i| i.starts_with("workspace.header.search.result.")).collect::<Vec<_>>();
     // The command key with K opens it; typing narrows it to the table Order.
     h.event(egui::Event::Key { key: egui::Key::K, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
@@ -8977,81 +7286,8 @@ fn the_avatar_shows_the_initials_of_the_name_entered_in_settings() {
     assert_eq!(state.user_name, "Grace Hopper");
 }
 
-/// A second notation, for the canvas test alone: diagrams of a UML package showing its classes as
-/// cards (their attributes, then their operations) and their generalizations as lines with a
-/// triangle and a text at the specific end.
-struct Sketch;
-
-const SKETCH: &str = "test.sketch";
-
-impl archforge_diagram::Notation for Sketch {
-    fn name(&self) -> &'static str {
-        "Sketch"
-    }
-    fn metamodel(&self) -> u16 {
-        archforge_uml::INDEX
-    }
-    fn kinds(&self) -> &'static [&'static str] {
-        &[SKETCH]
-    }
-    fn is_of(&self, _: &str, class: archforge_mof::ClassId) -> bool {
-        class == archforge_uml::PACKAGE
-    }
-    fn shows(&self, _: &str, class: archforge_mof::ClassId) -> bool {
-        class == archforge_uml::CLASS
-    }
-    fn connects(&self, _: &str, class: archforge_mof::ClassId) -> bool {
-        class == archforge_uml::GENERALIZATION
-    }
-    fn ends(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<(archforge_mof::Obj, archforge_mof::Obj)> {
-        let specific = store.container(element).ok()??.0;
-        let general = store.get(element, archforge_uml::generalization::GENERAL).ok()?.as_ref()?;
-        Some((specific, general))
-    }
-    fn card(&self, store: &archforge_mof::Store, element: archforge_mof::Obj, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Card> {
-        use archforge_diagram::figure::{Card, Row, Text};
-        let rows = |prop| {
-            store
-                .list(element, prop)
-                .unwrap_or_default()
-                .iter()
-                .filter_map(archforge_mof::Value::as_ref)
-                .map(|o| Row { mark: None, text: archforge_core::name_of(store, o), linked: false, slanted: false, underlined: false })
-                .collect::<Vec<_>>()
-        };
-        Some(Card {
-            eyebrow: Text::Plain("Class".into()),
-            name: archforge_core::name_of(store, element),
-            compartments: vec![rows(archforge_uml::class::OWNED_ATTRIBUTE), rows(archforge_uml::class::OWNED_OPERATION)],
-            more: ("+ {n} more column", "+ {n} more columns"),
-            hidden: 0,
-            elsewhere: false,
-            tone: archforge_diagram::figure::Tone::Tinted,
-            slanted: false,
-            braces: None,
-            template: Vec::new(),
-            owner_path: Vec::new(),
-        })
-    }
-    fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
-        use archforge_diagram::figure::{End, EndMark, Line};
-        Some(Line {
-            ends: [
-                End { mark: EndMark::None, text: Some("specific".into()), slot: "sketch.specific", role: None, qualifiers: Vec::new() },
-                End::marked(EndMark::Triangle),
-            ],
-            styled: true,
-            dashed: false,
-            status: None,
-            note: None,
-            badge: true,
-            resolvable: false,
-            keyword: None,
-        })
-    }
-}
-
-static SKETCHED: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotation, &Sketch];
+/// The fake notation's diagram kind, the one the sketch kind serves in the shell.
+pub(crate) const SKETCH: &str = archforge_notations::fake::KIND;
 
 /// Every text the last frame painted.
 /// The colours the text `label` is laid out in, where it is painted inside `within`.
@@ -9101,69 +7337,37 @@ fn painted<S>(h: &Harness<'_, S>) -> Vec<String> {
     out
 }
 
-/// A workspace whose session holds the sketch notation beside ER, with a sketch diagram of a
-/// package: Party at the left, Customer at the right, Customer a kind of Party. Gives the diagram,
-/// Party's node, Customer's node and the line's edge.
+/// A workspace with a sketch diagram of a package: Party (`partyId`, `rename()`) at the left,
+/// Customer (`since`) at the right, Customer a kind of Party. The shell knows another kind before
+/// the sketch's ([`SKETCH_KINDS`]) and another notation before the sketch's ([`SKETCH_UIS`]), so
+/// what the diagram's own kind and an element's own notation are asked is told apart from what the
+/// first would answer: after every frame, the test fails if the other kind was asked anything only
+/// the open diagram's kind is asked, or the worded notation anything only an element's own
+/// notation is asked. Gives the diagram, Party's node, Customer's node and the
+/// line's edge.
 fn sketch_harness() -> (Harness<'static, Shell>, String, String, String, String) {
-    use archforge_mof::Value;
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    // A package with Party and Customer, Customer a kind of Party, in a session that holds the
-    // sketch notation beside ER.
-    let mut st = archforge_notations::store(Box::new({
-        let ids = test_ids();
-        move || ids()
-    }))
-    .unwrap();
-    let model = st.create(archforge_core::MODEL).unwrap();
-    let pkg = st.create(archforge_uml::PACKAGE).unwrap();
-    archforge_uml::PackageObj::set_name(&mut st, pkg, Some("sales")).unwrap();
-    archforge_core::ModelObj::push_member(&mut st, model, Value::Ref(pkg)).unwrap();
-    let class = |st: &mut archforge_mof::Store, name: &str, parts: &[(&str, archforge_mof::ClassId, archforge_mof::PropId)]| {
-        let c = st.create(archforge_uml::CLASS).unwrap();
-        archforge_uml::ClassObj::set_name(st, c, Some(name)).unwrap();
-        st.push(pkg, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(c)).unwrap();
-        for (part, kind, prop) in parts {
-            let o = st.create(*kind).unwrap();
-            st.set(o, archforge_uml::named_element::NAME, Value::str(part)).unwrap();
-            st.push(c, *prop, Value::Ref(o)).unwrap();
-        }
-        c
-    };
-    let party = class(
-        &mut st,
-        "Party",
-        &[
-            ("partyId", archforge_uml::PROPERTY, archforge_uml::class::OWNED_ATTRIBUTE),
-            ("rename", archforge_uml::OPERATION, archforge_uml::class::OWNED_OPERATION),
-        ],
-    );
-    let customer = class(&mut st, "Customer", &[("since", archforge_uml::PROPERTY, archforge_uml::class::OWNED_ATTRIBUTE)]);
-    let g = st.create(archforge_uml::GENERALIZATION).unwrap();
-    st.set(g, archforge_uml::generalization::GENERAL, Value::Ref(party)).unwrap();
-    st.push(customer, archforge_uml::classifier::GENERALIZATION, Value::Ref(g)).unwrap();
-    let uuid = |st: &archforge_mof::Store, o| st.uuid(o).unwrap().to_string();
-    let (pkg_id, party_id, customer_id, g_id) = (uuid(&st, pkg), uuid(&st, party), uuid(&st, customer), uuid(&st, g));
-    let mut s = archforge_engine::Session::with_view(
-        archforge_notations::registry().unwrap(),
-        st,
-        1,
-        archforge_engine::Options::default(),
-        archforge_diagram::ProjectView::new(SKETCHED),
-    );
-    let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-    let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": pkg_id })).unwrap().value);
-    let a = id(s
-        .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": party_id, "x": 100, "y": 100, "width": 240, "height": 166 }))
-        .unwrap()
-        .value);
-    let b = id(s
-        .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": customer_id, "x": 600, "y": 100, "width": 240, "height": 166 }))
-        .unwrap()
-        .value);
-    let e = id(s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": g_id, "source": b, "target": a })).unwrap().value);
-    h.state_mut().session = Some(s);
+    OTHER_ASKED.with_borrow_mut(std::collections::BTreeSet::clear);
+    WORDS_ASKED.with_borrow_mut(std::collections::BTreeSet::clear);
+    let mut h = workspace_harness_checking(ThemeKind::Light, egui::vec2(1600.0, 1000.0), only_what_every_kind_and_notation_is_asked);
     h.state_mut().kinds = SKETCH_KINDS;
     h.state_mut().notation_uis = SKETCH_UIS;
+    let (d, a, b, e) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let pkg = run("sketch.package.add", serde_json::json!({ "name": "sales" }));
+        let party = run("sketch.class.add", serde_json::json!({ "package": pkg, "name": "Party" }));
+        run("sketch.attribute.add", serde_json::json!({ "class": party, "name": "partyId" }));
+        run("sketch.operation.add", serde_json::json!({ "class": party, "name": "rename" }));
+        let customer = run("sketch.class.add", serde_json::json!({ "package": pkg, "name": "Customer" }));
+        run("sketch.attribute.add", serde_json::json!({ "class": customer, "name": "since" }));
+        let g = run("sketch.inherit.add", serde_json::json!({ "specific": customer, "general": party }));
+        let d = run("diagram.add", serde_json::json!({ "kind": SKETCH, "element": pkg }));
+        let a = run("diagram.place", serde_json::json!({ "diagram": d, "element": party, "x": 100, "y": 100, "width": 240, "height": 166 }));
+        let b = run("diagram.place", serde_json::json!({ "diagram": d, "element": customer, "x": 600, "y": 100, "width": 240, "height": 166 }));
+        let e = run("diagram.connect", serde_json::json!({ "diagram": d, "element": g, "source": b, "target": a }));
+        run("view.select", serde_json::json!({ "ids": [] }));
+        (d, a, b, e)
+    };
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&d).unwrap());
     h.run();
     (h, d, a, b, e)
@@ -9278,56 +7482,6 @@ fn a_stores_diagram_draws_with_no_shell() {
         let dragged = [(archforge_mof::Uuid::parse(&b).unwrap(), egui::Rect::from_min_size(egui::pos2(20.0, 300.0), egui::vec2(240.0, 166.0)))];
         let (texts, ..) = drawn_alone(&session, &d, Some(&SketchKind(SKETCH)), dark, 400.0, &dragged.into_iter().collect(), &clean);
         assert!(texts.iter().any(|x| x == "Customer"), "a drag brought it into view: {texts:?}");
-    }
-}
-
-/// A diagram's kind draws its own figures beyond what the notations describe (AR-788): UML's kind
-/// draws an association class's tie to its card, its name at its line's middle on a diagram without
-/// the card, and a generalization set's line and label across its member's line; ER's kind, which
-/// keeps the defaults, draws none of them on the same diagram, while the lines and cards stay. In
-/// light and dark.
-#[test]
-fn a_diagrams_kind_draws_its_own_figures_and_ers_draws_none() {
-    use archforge_er_ui::snapshot::er_kind::ErKind;
-    use uml_ui::UmlKind;
-    let mut r = reviews(ThemeKind::Light);
-    let (_, edge, card) = r.review();
-    let (d, customer, package) = (r.diagram.clone(), r.ids["Customer"].clone(), r.package.clone());
-    let s = r.h.state_mut().session.as_mut().unwrap();
-    let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-    let member = run("uml.class.add", serde_json::json!({ "package": package, "name": "Member" }));
-    run("diagram.place", serde_json::json!({ "diagram": d, "element": member, "x": 80, "y": 160, "width": 240, "height": 136 }));
-    let g = run("uml.generalization.add", serde_json::json!({ "specific": member, "general": customer }));
-    run("diagram.connect-all", serde_json::json!({ "diagram": d }));
-    let set = run("uml.generalization-set.add", serde_json::json!({ "generalizations": [g], "name": "Kinds" }));
-    let mut session = r.h.state_mut().session.take().unwrap();
-    drop(r);
-    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
-    let (tie, name) = (format!("workspace.canvas.edge.{edge}.tie"), format!("workspace.canvas.edge.{edge}.name"));
-    let sets = [format!("workspace.canvas.generalizationSet.{set}"), format!("workspace.canvas.generalizationSet.{set}.line")];
-    for dark in [false, true] {
-        let (texts, uml, _) = drawn_alone(&session, &d, Some(&UmlKind), dark, 1000.0, &none, &clean);
-        assert!(uml.contains(&tie) && !uml.contains(&name), "{dark}: UML ties the line to its card: {uml:?}");
-        assert!(sets.iter().all(|i| uml.contains(i)) && texts.iter().any(|t| t == "Kinds"), "{dark}: UML draws the set: {uml:?}");
-        let (texts, er, _) = drawn_alone(&session, &d, Some(&ErKind), dark, 1000.0, &none, &clean);
-        assert!(!er.contains(&tie) && !er.contains(&name) && sets.iter().all(|i| !er.contains(i)), "{dark}: the default draws none: {er:?}");
-        assert!(!texts.iter().any(|t| t == "Kinds"), "{dark}: no set label: {texts:?}");
-        assert!(er.contains(&format!("workspace.canvas.edge.{edge}")) && texts.iter().any(|t| t == "Review"), "{dark}: the line and card stay");
-    }
-    // Without its card the line goes too, and comes back alone.
-    session.execute("diagram.unplace", &serde_json::json!({ "nodes": [card] })).unwrap();
-    session.execute("diagram.connect-all", &serde_json::json!({ "diagram": d })).unwrap();
-    let (tie, name) = {
-        let st = session.doc();
-        let ac = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION_CLASS)).unwrap();
-        let edge = st.uuid(archforge_diagram::views_of(st, ac).1[0]).unwrap();
-        (format!("workspace.canvas.edge.{edge}.tie"), format!("workspace.canvas.edge.{edge}.name"))
-    };
-    for dark in [false, true] {
-        let (_, uml, _) = drawn_alone(&session, &d, Some(&UmlKind), dark, 1000.0, &none, &clean);
-        assert!(uml.contains(&name) && !uml.contains(&tie), "{dark}: UML names the line without its card: {uml:?}");
-        let (texts, er, _) = drawn_alone(&session, &d, Some(&ErKind), dark, 1000.0, &none, &clean);
-        assert!(!er.contains(&name) && !texts.iter().any(|t| t == "Review"), "{dark}: the default names nothing: {texts:?}");
     }
 }
 
@@ -9744,7 +7898,7 @@ fn two_rows_of_one_element_have_ids_of_their_own() {
         add_schema(&mut h, "crm");
         compared(&mut h);
         let (row, key) = (h.state().versions.changes[0].clone(), h.state().versions.compared.clone().unwrap());
-        let moved = archforge_notations::differences::Difference { class: archforge_er::ENTITY, ..row.clone() };
+        let moved = archforge_notations::differences::Difference { class: archforge_mof::toy::CLASS, ..row.clone() };
         let id = |d: &archforge_notations::differences::Difference| format!("workspace.versions.change.{}.{}", d.id, d.class.0);
         let wanted = [id(&row), id(&moved)];
         crate::versions::settle_changes(h.state_mut(), key, Ok(vec![row, moved]));
@@ -10064,7 +8218,7 @@ fn working_changes_belong_to_the_rows_compared() {
         compared(&mut h);
         let (tx, rx) = std::sync::mpsc::channel();
         h.state_mut().versions.comparing = Some(((Some("c1".to_string()), revision), rx));
-        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "more" })).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("sketch.package.add", &serde_json::json!({ "name": "more" })).unwrap();
         h.run_steps(2);
         assert_eq!(h.state().versions.comparing.as_ref().map(|(key, _)| key.1), Some(revision), "{theme:?}: one at a time");
         tx.send(Ok(Vec::new())).unwrap();
@@ -10072,7 +8226,7 @@ fn working_changes_belong_to_the_rows_compared() {
         assert_eq!(h.state().versions.working, 0, "{theme:?}: what that answer read, shown until the newest rows are compared");
         compared(&mut h);
         assert_eq!(h.state().versions.working, 2, "{theme:?}: the newest rows compared");
-        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
         h.state_mut().versions.compared = Some((Some("older".to_string()), 0));
         h.run_steps(2);
         assert!(h.state().versions.comparing.is_none() && !crate::versions::settled(h.state()), "{theme:?}: not during a gesture");
@@ -10097,7 +8251,7 @@ fn working_changes_belong_to_the_rows_compared() {
 
 /// An agent's edit, through the road the control channel takes: answered in the window's own frame.
 fn agent_adds(h: &mut Harness<'static, Shell>, name: &str) {
-    let add = accepted(h, "engine.execute", serde_json::json!({ "command": "er.schema.add", "params": { "name": name } }), false);
+    let add = accepted(h, "engine.execute", serde_json::json!({ "command": "sketch.package.add", "params": { "name": name } }), false);
     assert!(crate::control::answer_request(h.state_mut(), &add).is_ok(), "{name}");
 }
 
@@ -10728,15 +8882,32 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
     assert!(filled, "the card is filled in its own colour");
 }
 
-/// What the sketch kind's hooks were asked, in order.
-static SKETCH_CALLS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+thread_local! {
+    /// What the sketch kind's hooks were asked on this thread, in order. Every shell test is given
+    /// the sketch kind and each test runs on a thread of its own, so a test reads only what its own
+    /// shell asked: another test's place, connect or rename, run in parallel, never lands here.
+    static SKETCH_CALLS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 
-/// The rows the sketch kind was asked to open a class named [`SKETCH_OPENS`] at, in order.
-static SKETCH_OPENED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    /// The rows the sketch kind was asked on this thread to open a class named [`SKETCH_OPENS`] at,
+    /// in order.
+    static SKETCH_OPENED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Writes down what a sketch kind's hook was asked, in this test's own log.
+fn sketch_call(call: String) {
+    SKETCH_CALLS.with_borrow_mut(|calls| calls.push(call));
+}
+
+/// What the sketch kind's hooks were asked in this test so far, in order.
+fn sketch_calls() -> Vec<String> {
+    SKETCH_CALLS.with_borrow(Clone::clone)
+}
 
 /// The sketch diagram kind in the shell, for the tests alone: a Class tool that places and an
 /// Inherit tool that connects, each hook writing down what it was asked. It serves the diagram kind
-/// it is given ([`SKETCH`] for the canvas's tests), so two of them are told apart.
+/// it is given ([`SKETCH`] for the canvas's tests), so two of them are told apart: a kind other than
+/// [`SKETCH`] writes its name before what it was asked, gives no element menu and draws nothing on
+/// the cards and lines, as one notation's kind draws nothing on another's.
 struct SketchKind(&'static str);
 
 /// What the sketch kind's status marks toggle says on hover.
@@ -10748,7 +8919,7 @@ const SKETCH_ENDS: &str = "Drag onto another sketch card";
 static SKETCH_TOOLS: &[archforge_shell_api::kinds::KindTool] = &[
     archforge_shell_api::kinds::KindTool {
         key: "class",
-        icon: &archforge_er_ui::snapshot::icons::TOOL_ENTITY,
+        icon: &crate::ux::icons::TABLE,
         hint: "Entity",
         use_: crate::kinds::ToolUse::Place,
         chevron: None,
@@ -10770,6 +8941,23 @@ static SKETCH_ROWS: &[&[crate::kinds::ModelRow]] = &[
     &[crate::kinds::ModelRow { key: "model.sketch-inherit", word: || "Inherit".into(), tool: crate::canvas::Tool::Connect("inherit"), choice: None }],
 ];
 
+/// The second sketch's kinds' one row of the Model menu, so a row of another kind is told apart
+/// from the sketch kind's.
+static SECOND_SKETCH_MENU: &[&[crate::kinds::ModelRow]] = &[&[crate::kinds::ModelRow {
+    key: "model.second-sketch-class",
+    word: || "Second class".into(),
+    tool: crate::canvas::Tool::Place("class"),
+    choice: None,
+}]];
+
+impl SketchKind {
+    /// Writes down what this kind's hook was asked: as asked for the canvas's tests' own kind
+    /// ([`SKETCH`]), after its own kind for any other, so a test sees which kind was asked.
+    fn asked(&self, call: String) {
+        sketch_call(if self.0 == SKETCH { call } else { format!("{}: {call}", self.0) });
+    }
+}
+
 impl crate::kinds::DiagramKind for SketchKind {
     /// The kind it was given, which no notation of the shell knows.
     fn kind(&self) -> &'static str {
@@ -10779,17 +8967,27 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn tools(&self) -> &'static [archforge_shell_api::kinds::KindTool] {
         SKETCH_TOOLS
     }
-    /// A row for each of its tools, each in a section of its own.
+    /// The sketch kind's: a row for each of its tools, each in a section of its own; another kind's
+    /// (the second sketch's), one row of its own.
     fn menu_rows(&self) -> &'static [&'static [crate::kinds::ModelRow]] {
-        SKETCH_ROWS
+        if self.0 == SKETCH { SKETCH_ROWS } else { SECOND_SKETCH_MENU }
     }
     /// Its name in the New diagram dialog.
     fn word(&self) -> String {
         "Sketch".into()
     }
-    /// Its group in the Diagrams explorer.
+    /// A table: neither the other kind's icon nor the one the shell draws for a diagram of no kind
+    /// it knows, so a test sees which was drawn.
+    fn icon(&self) -> &'static crate::ux::Icon {
+        &crate::ux::icons::TABLE
+    }
+    /// Its group in the Diagrams explorer: "Sketches" for the fake notation's kind, and for another
+    /// its own, after its name ("Second sketches" for `test.second`), so kinds are told apart.
     fn group_word(&self) -> String {
-        "Sketches".into()
+        match self.0.strip_prefix("test.") {
+            Some(own) if self.0 != SKETCH => format!("{}{} sketches", own[..1].to_uppercase(), &own[1..]),
+            _ => "Sketches".into(),
+        }
     }
     /// Its card's sentence in the New diagram dialog.
     fn description(&self) -> String {
@@ -10809,7 +9007,7 @@ impl crate::kinds::DiagramKind for SketchKind {
     }
     /// The model's packages.
     fn owners(&self, store: &archforge_mof::Store) -> Vec<archforge_mof::Obj> {
-        archforge_uml::commands::packages(store)
+        sketch_packages(store)
     }
     /// No owner from the selection: the sketch's diagrams are of a package chosen in the dialog.
     fn owner_of(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
@@ -10819,17 +9017,18 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn add_owner(&self, _: &mut crate::cx::Ctx, _: &str) -> Result<String, String> {
         Err("the sketch makes no package".into())
     }
-    /// Its status marks toggle, in its own words, so a test sees it asked.
+    /// Its status marks toggle, in its own words, so a test sees it asked: another kind's after its
+    /// name.
     fn status_marks(&self) -> Option<String> {
-        Some(SKETCH_MARKS.into())
+        Some(if self.0 == SKETCH { SKETCH_MARKS.into() } else { format!("{} marks", self.0) })
     }
     /// A UML class takes part in the sketch's gestures.
     fn takes_part(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
-        store.class_of(element).ok() == Some(archforge_uml::CLASS)
+        store.class_of(element).ok() == Some(archforge_mof::toy::CLASS)
     }
     /// Writes down the tool it was asked to place with.
     fn place(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: f64, _: f64) {
-        SKETCH_CALLS.lock().unwrap().push(format!("place {tool}"));
+        self.asked(format!("place {tool}"));
     }
     /// Writes down the tool and the names of the two nodes' elements it was asked to connect.
     fn connect(&self, cx: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, from: archforge_mof::Uuid, to: archforge_mof::Uuid) {
@@ -10840,31 +9039,50 @@ impl crate::kinds::DiagramKind for SketchKind {
                 Some(archforge_core::name_of(st, e))
             })
         };
-        SKETCH_CALLS.lock().unwrap().push(format!("connect {tool} {} {}", name(from).unwrap_or_default(), name(to).unwrap_or_default()));
+        self.asked(format!("connect {tool} {} {}", name(from).unwrap_or_default(), name(to).unwrap_or_default()));
     }
     /// Writes down the tool of a line dropped on empty canvas.
     fn connect_to_new(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
-        SKETCH_CALLS.lock().unwrap().push(format!("connect to new {tool}"));
+        self.asked(format!("connect to new {tool}"));
     }
-    /// Writes down the name typed in place, and takes it.
-    fn rename(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, name: &str) -> Result<(), String> {
-        SKETCH_CALLS.lock().unwrap().push(format!("rename {name}"));
-        Ok(())
+    /// Its own popover of kinds, which the arrow keys walk, so a test sees whose kind is asked; no
+    /// other.
+    fn popover_takes_keys(&self, key: &str) -> bool {
+        (self.0 == SKETCH && key == SKETCH_POPOVER) || (self.0 == "test.second" && key == SECOND_KINDS)
+    }
+    /// Writes down the name typed in place, and gives it to a class through the fake notation's
+    /// rename.
+    fn rename(&self, cx: &mut crate::cx::Ctx, element: archforge_mof::Uuid, name: &str) -> Result<(), String> {
+        self.asked(format!("rename {name}"));
+        let class = cx
+            .session
+            .as_ref()
+            .and_then(|s| s.doc().by_uuid(element))
+            .is_some_and(|o| cx.session.as_ref().is_some_and(|s| s.doc().class_of(o).ok() == Some(archforge_mof::toy::CLASS)));
+        if !class {
+            return Ok(());
+        }
+        archforge_shell_api::panels::run_cx(cx, "sketch.class.rename", serde_json::json!({ "class": element.to_string(), "name": name })).map(|_| ())
     }
     /// Writes down the row it was asked to open at: for a class named [`SKETCH_OPENS`] apart, so
     /// the tests that read what the other hooks were asked never see it.
     fn open(&self, cx: &mut crate::cx::Ctx, element: archforge_mof::Uuid, row: Option<usize>) {
         let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(element).map(|e| archforge_core::name_of(s.doc(), e)));
-        let calls = if name.as_deref() == Some(SKETCH_OPENS) { &SKETCH_OPENED } else { &SKETCH_CALLS };
-        calls.lock().unwrap().push(format!("open {row:?}"));
+        if name.as_deref() == Some(SKETCH_OPENS) {
+            let call = format!("open {row:?}");
+            SKETCH_OPENED.with_borrow_mut(|calls| calls.push(if self.0 == SKETCH { call } else { format!("{}: {call}", self.0) }));
+        } else {
+            self.asked(format!("open {row:?}"));
+        }
     }
     /// Its lines' ends take handles, which move nothing and say its own words on hover, so a test
     /// sees it asked.
     fn reconnects(&self) -> Option<String> {
-        Some(SKETCH_ENDS.into())
+        Some(if self.0 == SKETCH { SKETCH_ENDS.into() } else { format!("Drag onto another {} card", self.0) })
     }
-    /// Party's menu: a first row that is off, then one after Open in Models that writes down what
-    /// it was picked on; Customer takes none.
+    /// Party's menu, from the canvas's tests' own kind ([`SKETCH`]) alone, so a menu built from
+    /// another kind shows: a first row that is off, then one after Open in Models that writes down
+    /// what it was picked on; Customer takes none.
     fn menu(&self, store: &archforge_mof::Store, element: archforge_mof::Obj, mac: bool) -> Option<Vec<crate::kinds::MenuRow>> {
         let first = crate::kinds::MenuRow {
             key: "sketch-first",
@@ -10872,7 +9090,7 @@ impl crate::kinds::DiagramKind for SketchKind {
             keys: "F",
             live: false,
             first: true,
-            run: |_, _| SKETCH_CALLS.lock().unwrap().push("menu first".into()),
+            run: |_, _| sketch_call("menu first".into()),
         };
         let own = crate::kinds::MenuRow {
             key: "sketch-own",
@@ -10882,16 +9100,15 @@ impl crate::kinds::DiagramKind for SketchKind {
             first: false,
             run: |cx, menu| {
                 let name = cx.session.as_ref().and_then(|s| s.doc().by_uuid(menu.element).map(|e| archforge_core::name_of(s.doc(), e)));
-                SKETCH_CALLS.lock().unwrap().push(format!("menu own {}", name.unwrap_or_default()));
+                sketch_call(format!("menu own {}", name.unwrap_or_default()));
             },
         };
-        (archforge_core::name_of(store, element) == "Party").then(|| vec![first, own])
+        (self.0 == SKETCH && archforge_core::name_of(store, element) == "Party").then(|| vec![first, own])
     }
-    /// A class named [`SKETCH_OPENS`] opens whole with a double click, as a sketch kind other than
-    /// the canvas's tests' own ([`SKETCH`]) answers, so a test sees the kinds asked beside the
-    /// diagram's own.
+    /// A class named [`SKETCH_OPENS`] opens whole with a double click, as the opening kind
+    /// ([`SKETCH_OPENER`]) alone answers, so a test sees the kinds asked beside the diagram's own.
     fn opens_on_double_click(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
-        self.0 != SKETCH && archforge_core::name_of(store, element) == SKETCH_OPENS
+        self.0 == SKETCH_OPENER && archforge_core::name_of(store, element) == SKETCH_OPENS
     }
     /// The name typed on a card the sketch draws itself goes in the card's part over its top left,
     /// in the small style; any other card's in its header.
@@ -10905,7 +9122,8 @@ impl crate::kinds::DiagramKind for SketchKind {
         z: f32,
     ) -> Option<(egui::Rect, crate::ux::Type)> {
         let element = crate::canvas::element_of(store, node, archforge_diagram::node::ELEMENT)?;
-        (archforge_core::name_of(store, element) == SKETCH_DRAWN).then(|| (sketch_part(rect, z), crate::ux::types::SMALL.scaled(z)))
+        (self.0 == SKETCH && archforge_core::name_of(store, element) == SKETCH_DRAWN)
+            .then(|| (sketch_part(rect, z), crate::ux::types::SMALL.scaled(z)))
     }
     /// Draws the card of a class named [`SKETCH_DRAWN`] itself: a plain box with its own word, a
     /// part over its top left that takes a press and says [`SKETCH_PART_SAYS`] on hover, and a
@@ -10918,7 +9136,7 @@ impl crate::kinds::DiagramKind for SketchKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) -> bool {
-        if archforge_core::name_of(d.store, card.element) != SKETCH_DRAWN {
+        if self.0 != SKETCH || archforge_core::name_of(d.store, card.element) != SKETCH_DRAWN {
             return false;
         }
         let z = d.view.zoom;
@@ -10958,6 +9176,9 @@ impl crate::kinds::DiagramKind for SketchKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) {
+        if self.0 != SKETCH {
+            return;
+        }
         let at = card.rect.right_top() - egui::vec2(90.0, 8.0);
         let rect = crate::ux::text(paint, at, SKETCH_OVER, crate::ux::types::SMALL, d.p.text, None);
         if let Ok(id) = d.store.uuid(card.node) {
@@ -10975,6 +9196,9 @@ impl crate::kinds::DiagramKind for SketchKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) -> Vec<egui::Shape> {
+        if self.0 != SKETCH {
+            return Vec::new();
+        }
         let (Some(start), Some(next)) = (points.first().copied(), points.get(1).copied()) else { return Vec::new() };
         let moved = start + (next - start).normalized() * SKETCH_END_SHIFT;
         d.moved_ends.borrow_mut().push((start, moved));
@@ -10994,7 +9218,8 @@ impl crate::kinds::DiagramKind for SketchKind {
         _: &mut crate::widgets::Registry,
         _: &egui::Ui,
     ) -> Option<egui::Rect> {
-        Some(egui::Rect::from_center_size(crate::canvas::along(line.points, 0.5) - egui::vec2(0.0, 30.0), egui::vec2(60.0, 14.0)))
+        (self.0 == SKETCH)
+            .then(|| egui::Rect::from_center_size(crate::canvas::along(line.points, 0.5) - egui::vec2(0.0, 30.0), egui::vec2(60.0, 14.0)))
     }
     /// Draws [`SKETCH_CAPTION`] above where its line's name sits, recorded; nothing for a line
     /// without a name.
@@ -11007,11 +9232,496 @@ impl crate::kinds::DiagramKind for SketchKind {
         registry: &mut crate::widgets::Registry,
         ui: &egui::Ui,
     ) {
-        let Some(name) = name else { return };
+        let Some(name) = name.filter(|_| self.0 == SKETCH) else { return };
         let rect = crate::ux::text(paint, name.left_top() - egui::vec2(0.0, 20.0), SKETCH_CAPTION, crate::ux::types::SMALL, d.p.text, None);
         if let Ok(id) = d.store.uuid(line.line) {
             crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.sketch-caption.{id}"), "label", rect);
         }
+    }
+}
+
+thread_local! {
+    /// The methods the other kind ([`OtherKind`]) was asked on this thread, so a test sees which.
+    static OTHER_ASKED: std::cell::RefCell<std::collections::BTreeSet<&'static str>> =
+        const { std::cell::RefCell::new(std::collections::BTreeSet::new()) };
+}
+
+/// Writes down that the other kind was asked `method`.
+fn other_asked(method: &'static str) {
+    eprintln!("OTHERPROBE {} {method}", std::thread::current().name().unwrap_or("?"));
+    OTHER_ASKED.with_borrow_mut(|asked| asked.insert(method));
+}
+
+/// What the other kind was asked on this thread so far, by method.
+fn other_asked_so_far() -> std::collections::BTreeSet<&'static str> {
+    OTHER_ASKED.with_borrow(Clone::clone)
+}
+
+/// What the shell asks every kind it knows, whatever kind the diagram shown is of: the Model menu's
+/// rows of every kind (for the table of actions), whether a popover takes the keys and whether a
+/// card opens whole with a double click, what each kind draws of a card, a line and the links
+/// between nodes, each kind's card in the New diagram dialog (its word, picture and sentence) and
+/// its group in the Diagrams explorer (its word and icon), and, with no kind chosen, whether it is
+/// of the element selected. The other kind is asked nothing else while the sketch's diagram is
+/// open; what the shell asks of one kind among these (an owner for the kind chosen, a diagram's
+/// icon) the tests check by what it answers.
+const EVERY_KIND_ASKS: &[&str] = &[
+    "card_extras",
+    "description",
+    "draw_card",
+    "draw_links",
+    "group_word",
+    "icon",
+    "line_caption",
+    "line_ends",
+    "menu_rows",
+    "opens_on_double_click",
+    "owner_of",
+    "popover_takes_keys",
+    "sketch",
+    "word",
+];
+
+/// Fails the test when the other kind was asked anything the shell asks only the kind of the
+/// diagram shown ([`EVERY_KIND_ASKS`] apart): the sketch harness's frames check it after each frame.
+fn only_what_every_kind_is_asked() {
+    let wrong: Vec<&str> = other_asked_so_far().into_iter().filter(|m| !EVERY_KIND_ASKS.contains(m)).collect();
+    assert!(wrong.is_empty(), "the other kind was asked what only the open diagram's kind is asked: {wrong:?}");
+}
+
+/// The other kind's key, which no notation of the shell knows.
+const OTHER_KIND: &str = "test.other";
+
+/// The name of an element the other kind draws, opens, owns and menus itself; no sketch test names
+/// one so, so on the sketch's elements it answers as no kind of theirs.
+const OTHER_OWN: &str = "Other's own";
+
+/// The other kind's popover key.
+const OTHER_POPOVER: &str = "other.kinds";
+
+/// The other kind's tools, none of them the sketch's: a box it places and a line it connects.
+static OTHER_TOOLS: &[archforge_shell_api::kinds::KindTool] = &[
+    archforge_shell_api::kinds::KindTool {
+        key: "other-box",
+        icon: &crate::ux::icons::CUBE,
+        hint: "Other box",
+        use_: crate::kinds::ToolUse::Place,
+        chevron: Some((OTHER_POPOVER, "Other kinds")),
+        wide: true,
+    },
+    archforge_shell_api::kinds::KindTool {
+        key: "other-line",
+        icon: &crate::ux::icons::LINK,
+        hint: "Other line",
+        use_: crate::kinds::ToolUse::Connect,
+        chevron: None,
+        wide: false,
+    },
+];
+
+/// The other kind's rows of the Model menu, one section of its own.
+static OTHER_ROWS: &[&[crate::kinds::ModelRow]] =
+    &[&[crate::kinds::ModelRow { key: "model.other-box", word: || "Other box".into(), tool: crate::canvas::Tool::Place("other-box"), choice: None }]];
+
+/// A kind registered before the sketch's in the sketch's canvas tests ([`SKETCH_KINDS`]), whose
+/// every answer differs from the sketch kind's: its own tools, rows, words, icon, owners, marks,
+/// handles, menu, presses, keys, drawings and fields, and hooks that write down `other: …`. Each
+/// method writes down that it was asked ([`OTHER_ASKED`]), so a test sees what the shell asked it;
+/// what the shell asks every kind it answers only for an element named [`OTHER_OWN`], which no
+/// sketch test makes, so the sketch's diagram is drawn and opened as the sketch kind says.
+struct OtherKind;
+
+impl crate::kinds::DiagramKind for OtherKind {
+    /// Its own key, [`OTHER_KIND`].
+    fn kind(&self) -> &'static str {
+        OTHER_KIND
+    }
+    /// A box with a chevron and a line, none of the sketch's.
+    fn tools(&self) -> &'static [archforge_shell_api::kinds::KindTool] {
+        other_asked("tools");
+        OTHER_TOOLS
+    }
+    /// Its own row ([`OTHER_ROWS`]).
+    fn menu_rows(&self) -> &'static [&'static [crate::kinds::ModelRow]] {
+        other_asked("menu_rows");
+        OTHER_ROWS
+    }
+    /// "Other".
+    fn word(&self) -> String {
+        other_asked("word");
+        "Other".into()
+    }
+    /// "Others".
+    fn group_word(&self) -> String {
+        other_asked("group_word");
+        "Others".into()
+    }
+    /// A sentence of its own.
+    fn description(&self) -> String {
+        other_asked("description");
+        "A diagram of others".into()
+    }
+    /// "New other".
+    fn new_word(&self) -> String {
+        other_asked("new_word");
+        "New other".into()
+    }
+    /// Its picture: the word "Other".
+    fn sketch(&self, paint: &egui::Painter, p: &crate::ux::Palette, r: egui::Rect) {
+        other_asked("sketch");
+        crate::ux::text(paint, r.min, "Other", crate::ux::types::SMALL, p.text, None);
+    }
+    /// A cube, no diagram icon.
+    fn icon(&self) -> &'static crate::ux::Icon {
+        other_asked("icon");
+        &crate::ux::icons::CUBE
+    }
+    /// "Other owner".
+    fn owner_word(&self) -> String {
+        other_asked("owner_word");
+        "Other owner".into()
+    }
+    /// "New other owner".
+    fn new_owner(&self) -> String {
+        other_asked("new_owner");
+        "New other owner".into()
+    }
+    /// "New other owner here", whatever the model holds.
+    fn new_owner_in(&self, _: &archforge_mof::Store) -> String {
+        other_asked("new_owner_in");
+        "New other owner here".into()
+    }
+    /// None: its diagrams are of nothing the sketch holds.
+    fn owners(&self, _: &archforge_mof::Store) -> Vec<archforge_mof::Obj> {
+        other_asked("owners");
+        Vec::new()
+    }
+    /// An element named [`OTHER_OWN`] itself; nothing else.
+    fn owner_of(&self, store: &archforge_mof::Store, selected: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+        other_asked("owner_of");
+        (archforge_core::name_of(store, selected) == OTHER_OWN).then_some(selected)
+    }
+    /// Refuses in its own words.
+    fn add_owner(&self, _: &mut crate::cx::Ctx, _: &str) -> Result<String, String> {
+        other_asked("add_owner");
+        Err("the other makes no owner".into())
+    }
+    /// "Other marks".
+    fn status_marks(&self) -> Option<String> {
+        other_asked("status_marks");
+        Some("Other marks".into())
+    }
+    /// Draws every face itself, as the word "O".
+    fn tool_face(
+        &self,
+        _: &crate::cx::CtxRef,
+        paint: &egui::Painter,
+        p: &crate::ux::Palette,
+        _: &str,
+        b: egui::Rect,
+        _: crate::ux::Colour,
+        _: bool,
+    ) -> bool {
+        other_asked("tool_face");
+        crate::ux::text(paint, b.min, "O", crate::ux::types::SMALL, p.text, None);
+        true
+    }
+    /// "Other tool" for every tool.
+    fn tool_hint(&self, _: &crate::cx::CtxRef, _: &str) -> Option<String> {
+        other_asked("tool_hint");
+        Some("Other tool".into())
+    }
+    /// Writes down that it opened.
+    fn popover(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: egui::Rect, key: &str) {
+        other_asked("popover");
+        sketch_call(format!("other: popover {key}"));
+    }
+    /// Nothing takes part in its gestures.
+    fn takes_part(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        other_asked("takes_part");
+        false
+    }
+    /// Refuses every line in its own words.
+    fn line_start_problem(&self, _: &crate::cx::CtxRef, _: &archforge_mof::Store, _: &'static str, _: archforge_mof::Obj) -> Option<String> {
+        other_asked("line_start_problem");
+        Some("The other starts no line here".into())
+    }
+    /// Writes down `other: place`.
+    fn place(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: f64, _: f64) {
+        other_asked("place");
+        sketch_call(format!("other: place {tool}"));
+    }
+    /// Writes down `other: connect`.
+    fn connect(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: archforge_mof::Uuid) {
+        other_asked("connect");
+        sketch_call(format!("other: connect {tool}"));
+    }
+    /// Writes down `other: connect to new`.
+    fn connect_to_new(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
+        other_asked("connect_to_new");
+        sketch_call(format!("other: connect to new {tool}"));
+    }
+    /// Deletes nothing from the canvas.
+    fn deletes(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        other_asked("deletes");
+        false
+    }
+    /// Renames every card in place.
+    fn renames_in_place(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        other_asked("renames_in_place");
+        true
+    }
+    /// Writes down `other: rename`, and renames nothing.
+    fn rename(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, name: &str) -> Result<(), String> {
+        other_asked("rename");
+        sketch_call(format!("other: rename {name}"));
+        Ok(())
+    }
+    /// An element named [`OTHER_OWN`] opens whole; nothing else.
+    fn opens_on_double_click(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
+        other_asked("opens_on_double_click");
+        archforge_core::name_of(store, element) == OTHER_OWN
+    }
+    /// Every name goes in a field of its own at the card's foot, in the caption style.
+    fn name_field(
+        &self,
+        _: &egui::Painter,
+        _: &archforge_mof::Store,
+        _: archforge_mof::Obj,
+        rect: egui::Rect,
+        _: &str,
+        z: f32,
+    ) -> Option<(egui::Rect, crate::ux::Type)> {
+        other_asked("name_field");
+        Some((egui::Rect::from_min_size(rect.left_bottom(), egui::vec2(rect.width(), 12.0 * z)), crate::ux::types::CAPTION.scaled(z)))
+    }
+    /// Writes down `other: open`.
+    fn open(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, row: Option<usize>) {
+        other_asked("open");
+        sketch_call(format!("other: open {row:?}"));
+    }
+    /// "Other ends".
+    fn reconnects(&self) -> Option<String> {
+        other_asked("reconnects");
+        Some("Other ends".into())
+    }
+    /// Writes down `other: reconnect`.
+    fn reconnect(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid, source: bool, _: archforge_mof::Uuid, _: archforge_engine::Revision) {
+        other_asked("reconnect");
+        sketch_call(format!("other: reconnect {source}"));
+    }
+    /// Writes down `other: drop`.
+    fn drop(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: (f64, f64)) {
+        other_asked("drop");
+        sketch_call("other: drop".into());
+    }
+    /// An adornment of its own on every element.
+    fn adorner(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
+        other_asked("adorner");
+        Some(("other.adorn", "Other adornment"))
+    }
+    /// Writes down `other: open second`.
+    fn open_second(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid) {
+        other_asked("open_second");
+        sketch_call("other: open second".into());
+    }
+    /// Writes down `other: card controls`.
+    fn card_controls(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: egui::Rect, _: archforge_mof::Uuid) {
+        other_asked("card_controls");
+        sketch_call("other: card controls".into());
+    }
+    /// A menu of its own on every element.
+    fn menu(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: bool) -> Option<Vec<crate::kinds::MenuRow>> {
+        other_asked("menu");
+        Some(vec![crate::kinds::MenuRow {
+            key: "other-row",
+            label: "Other row",
+            keys: "",
+            live: true,
+            first: true,
+            run: |_, _| sketch_call("other: menu".into()),
+        }])
+    }
+    /// Takes every press, doing nothing with it.
+    fn pointer(&self, _: &crate::cx::CtxRef, _: &crate::kinds::Press<'_>) -> Option<archforge_shell_api::editing::Action> {
+        other_asked("pointer");
+        Some(archforge_shell_api::editing::Action::Nothing)
+    }
+    /// Takes every right click, doing nothing with it.
+    fn secondary_click(&self, _: &crate::cx::CtxRef, _: &crate::kinds::Press<'_>) -> Option<archforge_shell_api::editing::Action> {
+        other_asked("secondary_click");
+        Some(archforge_shell_api::editing::Action::Nothing)
+    }
+    /// Takes every key.
+    fn keys(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: archforge_mof::Obj) -> bool {
+        other_asked("keys");
+        true
+    }
+    /// Its own popover alone ([`OTHER_POPOVER`]).
+    fn popover_takes_keys(&self, key: &str) -> bool {
+        other_asked("popover_takes_keys");
+        key == OTHER_POPOVER
+    }
+    /// Every line selected selects itself again.
+    fn also_selects(&self, _: &archforge_mof::Store, lines: &[archforge_mof::Obj]) -> Vec<archforge_mof::Obj> {
+        other_asked("also_selects");
+        lines.to_vec()
+    }
+    /// Draws nothing before the diagram, only writing down that it was asked.
+    fn before_draw(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: egui::Rect, _: archforge_mof::Obj) {
+        other_asked("before_draw");
+    }
+    /// Takes a band of its own under the path.
+    fn after_draw(&self, _: &mut crate::cx::Ctx, _: &egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: archforge_mof::Obj) -> f32 {
+        other_asked("after_draw");
+        24.0
+    }
+    /// Every line starts at its tip.
+    fn line_start(&self, _: &crate::canvas::Drawing<'_>, _: archforge_mof::Obj, tip: egui::Pos2, _: egui::Pos2) -> Option<egui::Pos2> {
+        other_asked("line_start");
+        Some(tip)
+    }
+    /// Its own mark at the source end of a line named [`OTHER_OWN`]; nothing on any other.
+    fn line_ends(
+        &self,
+        _: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineEnds<'_>,
+        points: &mut [egui::Pos2],
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> Vec<egui::Shape> {
+        other_asked("line_ends");
+        if archforge_core::name_of(d.store, line.element) != OTHER_OWN {
+            return Vec::new();
+        }
+        let (Some(start), Ok(id)) = (points.first().copied(), d.store.uuid(line.line)) else { return Vec::new() };
+        crate::widgets::record_visible(
+            ui,
+            registry,
+            &format!("workspace.canvas.other-end.{id}"),
+            "label",
+            egui::Rect::from_center_size(start, egui::Vec2::splat(6.0)),
+        );
+        Vec::new()
+    }
+    /// A name of its own over every line's start.
+    fn line_extras(
+        &self,
+        _: &egui::Painter,
+        _: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineDrawn<'_>,
+        _: &mut crate::widgets::Registry,
+        _: &egui::Ui,
+    ) -> Option<egui::Rect> {
+        other_asked("line_extras");
+        line.points.first().map(|at| egui::Rect::from_min_size(*at, egui::vec2(20.0, 10.0)))
+    }
+    /// Its own caption by a line named [`OTHER_OWN`]; nothing by any other.
+    fn line_caption(
+        &self,
+        _: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        line: &crate::canvas::LineDrawn<'_>,
+        name: Option<egui::Rect>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) {
+        other_asked("line_caption");
+        if archforge_core::name_of(d.store, line.element) != OTHER_OWN {
+            return;
+        }
+        if let (Some(name), Ok(id)) = (name, d.store.uuid(line.line)) {
+            crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.other-caption.{id}"), "label", name);
+        }
+    }
+    /// Records that it was asked under its own id, drawing nothing.
+    fn draw_links(&self, _: &egui::Painter, d: &crate::canvas::Drawing<'_>, registry: &mut crate::widgets::Registry, ui: &egui::Ui) {
+        other_asked("draw_links");
+        let Some((n, _)) = d.boxes.first() else { return };
+        let at = d.node_rect(*n).left_top();
+        crate::widgets::record_visible(
+            ui,
+            registry,
+            &format!("workspace.canvas.other-links.{OTHER_KIND}"),
+            "label",
+            egui::Rect::from_min_size(at, egui::Vec2::ZERO),
+        );
+    }
+    /// A label of its own on an element no model holds.
+    fn draw_extras(
+        &self,
+        _: &egui::Painter,
+        _: &crate::canvas::Drawing<'_>,
+        _: &mut crate::widgets::Registry,
+        _: &egui::Ui,
+    ) -> Vec<archforge_shell_api::kinds::ExtraLabel> {
+        other_asked("draw_extras");
+        vec![archforge_shell_api::kinds::ExtraLabel {
+            element: archforge_mof::Uuid([0xee; 16]),
+            rect: egui::Rect::NOTHING,
+            node: None,
+            hover: "Other extra".into(),
+        }]
+    }
+    /// Draws the card of an element named [`OTHER_OWN`] itself, and would draw one the sketch draws
+    /// itself ([`SKETCH_DRAWN`]) too, so a test sees the diagram's own kind asked first; no other.
+    fn draw_card(
+        &self,
+        _: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) -> bool {
+        other_asked("draw_card");
+        if ![OTHER_OWN, SKETCH_DRAWN].contains(&archforge_core::name_of(d.store, card.element).as_str()) {
+            return false;
+        }
+        if let Ok(id) = d.store.uuid(card.node) {
+            crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.other-card"), "label", card.rect);
+        }
+        true
+    }
+    /// Its own mark over the card of an element named [`OTHER_OWN`]; nothing over any other.
+    fn card_extras(
+        &self,
+        _: &egui::Painter,
+        d: &crate::canvas::Drawing<'_>,
+        card: &crate::canvas::CardDrawn<'_>,
+        registry: &mut crate::widgets::Registry,
+        ui: &egui::Ui,
+    ) {
+        other_asked("card_extras");
+        if archforge_core::name_of(d.store, card.element) != OTHER_OWN {
+            return;
+        }
+        if let Ok(id) = d.store.uuid(card.node) {
+            crate::widgets::record_visible(ui, registry, &format!("workspace.canvas.other-over.{id}"), "label", card.rect);
+        }
+    }
+    /// Writes down `other: place label`.
+    fn place_label(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
+        other_asked("place_label");
+        sketch_call("other: place label".into());
+    }
+    /// Its own hint over the canvas's foot.
+    fn hint_bar(&self, _: &mut crate::cx::Ctx, ui: &egui::Ui, p: &crate::ux::Palette, r: egui::Rect, _: f32) {
+        other_asked("hint_bar");
+        crate::ux::text(ui.painter(), r.left_bottom() - egui::vec2(-8.0, 24.0), "Other hint", crate::ux::types::SMALL, p.text, None);
+    }
+    /// Draws no live line.
+    fn live_line(
+        &self,
+        _: &crate::cx::CtxRef,
+        _: &egui::Painter,
+        _: &crate::ux::Palette,
+        _: crate::canvas::View,
+        _: archforge_mof::Uuid,
+        _: egui::Pos2,
+        _: Option<egui::Rect>,
+    ) {
+        other_asked("live_line");
     }
 }
 
@@ -11070,7 +9780,7 @@ fn the_element_menu_builds_from_the_kinds_answer() {
         let (mut h, _d, a, b, _e) = sketch_harness();
         h.state_mut().state.theme = theme;
         h.run();
-        SKETCH_CALLS.lock().unwrap().clear();
+        SKETCH_CALLS.with_borrow_mut(Vec::clear);
         let (party, customer) = (rect_of(&h, &format!("workspace.canvas.node.{a}")), rect_of(&h, &format!("workspace.canvas.node.{b}")));
         right_click(&mut h, customer.center());
         assert!(h.state().canvas.menu.is_none(), "{theme:?}: Customer takes no menu");
@@ -11083,32 +9793,41 @@ fn the_element_menu_builds_from_the_kinds_answer() {
         assert!(["Sketch first", "F", "Sketch own", "Alt S"].iter().all(|t| texts.iter().any(|p| p == t)), "{theme:?}: {texts:?}");
         let at = rect_of(&h, "workspace.canvas.menu.sketch-first").center();
         click(&mut h, at);
-        assert!(h.state().canvas.menu.is_none() && SKETCH_CALLS.lock().unwrap().is_empty(), "{theme:?}: a row that is off runs nothing");
+        assert!(h.state().canvas.menu.is_none() && sketch_calls().is_empty(), "{theme:?}: a row that is off runs nothing");
         right_click(&mut h, party.center());
         let at = rect_of(&h, "workspace.canvas.menu.sketch-own").center();
         click(&mut h, at);
         assert!(h.state().canvas.menu.is_none(), "{theme:?}: the menu closed");
-        assert_eq!(*SKETCH_CALLS.lock().unwrap(), ["menu own Party"], "{theme:?}");
+        assert_eq!(sketch_calls(), ["menu own Party"], "{theme:?}");
     }
 }
 
-static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&er_kind::ErKind, &SketchKind(SKETCH)];
+/// The kinds the sketch's canvas tests give the shell: the other kind first, then the sketch's,
+/// whose diagram is open, so whatever the shell asks the first kind instead of the diagram's own
+/// shows ([`OtherKind`]).
+static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&OtherKind, &SketchKind(SKETCH)];
 
 #[test]
 fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_hooks_run() {
     let (mut h, _d, a, b, _e) = sketch_harness();
-    SKETCH_CALLS.lock().unwrap().clear();
-    // ER's tool, left on from an ER diagram, is not the sketch's: the toolbar hands back to Select.
-    h.state_mut().canvas.tool = crate::canvas::Tool::Place("entity");
+    SKETCH_CALLS.with_borrow_mut(Vec::clear);
+    // The other kind's tool, left on from a diagram of its own, is not the sketch's: the toolbar
+    // hands back to Select.
+    h.state_mut().canvas.tool = crate::canvas::Tool::Place("other-box");
     h.run();
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select);
     let found = ids(&h);
     for shared in ["select", "pan", "class", "inherit", "note", "link", "key-status", "grid", "arrange"] {
         assert!(found.iter().any(|i| *i == format!("workspace.tools.{shared}")), "{shared} is on the toolbar: {found:?}");
     }
-    for er in ["entity", "relationship", "relationship-types"] {
-        assert!(!found.iter().any(|i| *i == format!("workspace.tools.{er}")), "ER's {er} is not");
+    // The other kind, registered first, gives the toolbar none of its tools, its chevron, its
+    // faces or its hints, and the Model menu none of its rows.
+    for other in ["other-box", "other-line", OTHER_POPOVER] {
+        assert!(!found.iter().any(|i| i.contains(other)), "the other kind's {other} is not on the toolbar: {found:?}");
     }
+    assert_eq!(crate::model_menu::sections(h.state()), [vec!["model.sketch-class"], vec!["model.sketch-inherit"], vec!["model.note", "model.link"]]);
+    assert!(crate::model_menu::available(h.state(), "model.sketch-class"), "the sketch's row arms its tool");
+    assert!(!crate::model_menu::available(h.state(), "model.other-box"), "the other kind's row does not, on the sketch's diagram");
     // The toolbar keeps its order: Select, Pan, the kind's tools, Note, Link note, the kind's
     // status marks, Grid, Arrange.
     let left = |key: &str| rect_of(&h, &format!("workspace.tools.{key}")).left();
@@ -11143,10 +9862,180 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
         h.step();
     }
     double_click(&mut h, party.left_top() + egui::vec2(100.0, 77.0 + 6.0));
-    assert_eq!(
-        *SKETCH_CALLS.lock().unwrap(),
-        ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]
-    );
+    assert_eq!(sketch_calls(), ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]);
+}
+
+/// The canvas's Delete and chords on the selection are asked of every notation the shell knows,
+/// the sketch's after the worded notation's: on an element the sketch holds, selected alone, Delete
+/// and K are the sketch's, and nothing is removed; on Party, Delete goes on to the shared removals.
+#[test]
+fn the_canvas_keys_on_the_selection_are_asked_of_every_notation() {
+    let (mut h, ..) = sketch_harness();
+    SKETCH_CALLS.with_borrow_mut(Vec::clear);
+    let held = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let pkg = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
+        let pkg = s.doc().uuid(pkg).unwrap().to_string();
+        let held = s.execute("sketch.class.add", &serde_json::json!({ "package": pkg, "name": SKETCH_HELD })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [held] })).unwrap();
+        held
+    };
+    h.run();
+    let at = rect_of(&h, "workspace.canvas").center();
+    h.event(egui::Event::PointerMoved(at));
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::K, egui::Modifiers::NONE);
+    assert_eq!(sketch_calls(), ["sketch delete false", "sketch key"]);
+    let alive = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.by_uuid(archforge_mof::Uuid::parse(&held).unwrap()).is_some_and(|o| st.is_alive(o))
+    };
+    assert!(alive(&h), "the sketch removed nothing");
+}
+
+/// The New diagram dialog asks the kind it is on: from a group's `+`, only that kind is asked
+/// whether it is of the element selected, so the sketch's group keeps the sketch though the other
+/// kind, registered first, is of it; the dialog's details are the sketch's words. With no kind
+/// chosen, every kind is asked, and the other kind, which is of it, is chosen with it, though it
+/// is registered second.
+#[test]
+fn the_new_diagram_dialog_asks_the_kind_it_is_on() {
+    let (mut h, ..) = sketch_harness();
+    let own = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let pkg = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
+        let pkg = s.doc().uuid(pkg).unwrap().to_string();
+        s.execute("sketch.class.add", &serde_json::json!({ "package": pkg, "name": OTHER_OWN })).unwrap().value["id"].as_str().unwrap().to_string()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [own] })).unwrap();
+    h.run();
+    crate::diagrams::open_new_of(h.state_mut(), Some(SKETCH_KINDS[1]));
+    h.run();
+    assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(SKETCH), "the sketch's group keeps the sketch");
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "New sketch") && texts.iter().any(|t| t == "Package"), "the sketch's words: {texts:?}");
+    assert!(!texts.iter().any(|t| t.contains("other")), "none of the other kind's: {texts:?}");
+    // With no kind chosen, every kind is asked, and the one that is of the selection is chosen:
+    // the other kind, registered after the sketch's here, so the first kind, which the dialog
+    // falls back to, is not it.
+    h.state_mut().diagrams.new = None;
+    h.state_mut().kinds = SKETCH_THEN_OTHER;
+    crate::diagrams::open_new(h.state_mut());
+    h.run();
+    let new = h.state().diagrams.new.as_ref().map(|n| (n.kind, n.owner));
+    assert_eq!(new, Some((OTHER_KIND, archforge_mof::Uuid::parse(&own))), "with no kind chosen, the kind that is of it, of it");
+}
+
+/// The sketch's kind first, then the other kind, for a test whose answer the first kind must not
+/// give.
+static SKETCH_THEN_OTHER: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH), &OtherKind];
+
+/// The Diagrams explorer draws each kind's group with the icon that kind gives, the sketch's group
+/// not with the other kind's, registered first, nor with the folder the shell draws for a kind it
+/// does not know, and the other kind's group with its own.
+#[test]
+fn each_kinds_group_has_its_own_icon() {
+    let (mut h, ..) = sketch_harness();
+    h.state_mut().state.explorer = crate::state::Explorer::Diagrams;
+    h.run();
+    // The sizes of what is drawn within `area`, sorted.
+    let sizes = |shapes: &[egui::epaint::ClippedShape], area: egui::Rect| {
+        let mut sizes: Vec<(i32, i32)> = shapes
+            .iter()
+            .map(|c| c.shape.visual_bounding_rect())
+            .filter(|b| b.is_positive() && area.contains_rect(*b))
+            .map(|b| ((b.width() * 4.0) as i32, (b.height() * 4.0) as i32))
+            .collect();
+        sizes.sort_unstable();
+        sizes
+    };
+    // What a group row draws where its icon goes.
+    let drawn = |h: &Harness<'static, Shell>, kind: &str| {
+        let row = rect_of(h, &format!("workspace.diagrams.group.{kind}"));
+        sizes(&h.output().shapes, egui::Rect::from_x_y_ranges(row.left() + 18.0..=row.left() + 44.0, row.y_range()))
+    };
+    // What `icon` draws alone, as a row draws an icon.
+    let alone = |icon: &'static crate::ux::Icon| {
+        let mut h = Harness::new_ui(move |ui| crate::ux::icon_mid(ui.painter(), egui::pos2(100.0, 100.0), icon, crate::ux::palette(false).text));
+        h.run();
+        sizes(&h.output().shapes, egui::Rect::from_center_size(egui::pos2(100.0, 100.0), egui::Vec2::splat(40.0)))
+    };
+    for kind in SKETCH_KINDS {
+        assert_eq!(drawn(&h, kind.kind()), alone(kind.icon()), "{}'s group draws its own icon", kind.kind());
+    }
+    assert_ne!(alone(&crate::ux::icons::TABLE), alone(&crate::ux::icons::CUBE), "the two kinds' icons are told apart");
+    assert_ne!(alone(&crate::ux::icons::TABLE), alone(&crate::ux::icons::FOLDER), "and from the folder");
+    assert_ne!(alone(&crate::ux::icons::CUBE), alone(&crate::ux::icons::FOLDER), "both");
+}
+
+/// A class held over a Models row is ringed as the row's own notation answers, not the notation
+/// registered before it: in the amber over the package it is in already, which refuses it, in the
+/// accent over another.
+#[test]
+fn a_row_held_over_in_models_is_ringed_as_its_notation_says() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ..) = sketch_harness();
+        h.state_mut().state.theme = theme;
+        let (party, sales, other) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let party =
+                st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(st, *o) == "Party").unwrap();
+            let sales = st.container(party).unwrap().unwrap().0;
+            let (party, sales) = (st.uuid(party).unwrap(), st.uuid(sales).unwrap());
+            let other = s.execute("sketch.package.add", &serde_json::json!({ "name": "billing" })).unwrap().value["id"].as_str().unwrap().to_string();
+            (party, sales, archforge_mof::Uuid::parse(&other).unwrap())
+        };
+        h.state_mut().state.explorer = crate::state::Explorer::Models;
+        h.state_mut().explorer.expanded.insert(sales);
+        h.run();
+        let p = crate::ux::palette(theme == ThemeKind::Dark);
+        // Party's row pressed and held over the row `row`: the ink of the ring the frame drew round it.
+        let from = rect_of(&h, &format!("workspace.explorer.row.{party}")).center();
+        h.event(egui::Event::PointerMoved(from));
+        h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run();
+        let ring = |h: &mut Harness<'static, Shell>, row: archforge_mof::Uuid| {
+            let at = rect_of(h, &format!("workspace.explorer.row.{row}"));
+            h.event(egui::Event::PointerMoved(at.center()));
+            h.run();
+            let inks: Vec<egui::Color32> = h
+                .output()
+                .shapes
+                .iter()
+                .filter_map(|c| match &c.shape {
+                    egui::Shape::Rect(r) if r.stroke.width == 1.5 && r.rect.contains(at.center()) => Some(r.stroke.color),
+                    _ => None,
+                })
+                .collect();
+            inks
+        };
+        assert_eq!(ring(&mut h, sales), [egui::Color32::from(p.amber)], "{theme:?}: the package Party is in refuses it");
+        assert_eq!(ring(&mut h, other), [egui::Color32::from(p.accent)], "{theme:?}: another package takes it");
+        // Let go over the canvas, which the sketch's kind places nothing for.
+        let away = rect_of(&h, "workspace.canvas").center();
+        h.event(egui::Event::PointerMoved(away));
+        h.event(egui::Event::PointerButton { pos: away, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+    }
+}
+
+/// The problems Properties shows on an element are those its own notation says hold them, not the
+/// notation registered before it: an attribute's are its class's, as the sketch says.
+#[test]
+fn the_problems_shown_on_an_element_are_held_where_its_notation_says() {
+    let (h, ..) = sketch_harness();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let party = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(st, *o) == "Party").unwrap();
+    let party_id = st.alive().find(|o| archforge_core::name_of(st, *o) == "partyId").unwrap();
+    let map = std::collections::BTreeMap::from([(party, vec!["Party wants a key".to_string()])]);
+    let shown = archforge_shell_api::problems::of(SKETCH_UIS, st, &map, party_id);
+    assert_eq!(shown, [archforge_shell_api::notation_ui::Problem { element: party, text: "Party wants a key".into() }]);
+    only_what_every_notation_is_asked();
 }
 
 /// A diagram kind's own words on the shared canvas, a kind the shell never names included: its
@@ -11172,7 +10061,7 @@ fn a_kinds_status_toggle_and_line_ends_say_its_own_words() {
         // Customer's generalization selected, its line shows the two end handles, in the sketch's words.
         let g = {
             let st = h.state().session.as_ref().unwrap().doc();
-            let g = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::GENERALIZATION)).unwrap();
+            let g = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::GENERALIZATION)).unwrap();
             st.uuid(g).unwrap().to_string()
         };
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [g] })).unwrap();
@@ -11182,25 +10071,6 @@ fn a_kinds_status_toggle_and_line_ends_say_its_own_words() {
             assert!(said.iter().any(|t| t == SKETCH_ENDS), "{theme:?}: the {end} handle says the sketch's words: {said:?}");
             assert!(!said.iter().any(|t| t == "Drag onto another class to move this end"), "{theme:?}: not UML's");
         }
-    }
-}
-
-/// A diagram a binding keeps as its element's default is said by the notation whose diagrams take
-/// one, among the notations the shell is handed: UML's, of a package and its class diagrams. The
-/// shell has no words of its own for it, so among notations whose diagrams take none, or none at
-/// all, nothing says it.
-#[test]
-fn a_kept_default_diagram_is_said_by_the_notations_handed() {
-    use archforge_engine::{BindingFault, Reason};
-    crate::i18n::set_language("en");
-    let kept = |fault| Reason::DefaultDiagramOf { package: "Sales".into(), fault };
-    let own = "This diagram is the default diagram of Sales. Choose another class diagram as the default of Sales first.";
-    assert_eq!(crate::panels::said(SCREENS.notation_uis(), &kept(None)).as_deref(), Some(own));
-    let foreign = "Sales has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.";
-    assert_eq!(crate::panels::said(SCREENS.notation_uis(), &kept(Some(BindingFault::WrongOwner))).as_deref(), Some(foreign));
-    for fault in [None, Some(BindingFault::WrongOwner)] {
-        assert_eq!(crate::panels::said(SKETCH_UIS, &kept(fault)), None, "{fault:?}: ER and the sketch take no default diagram");
-        assert_eq!(crate::panels::said(&[], &kept(fault)), None, "{fault:?}: the shell alone has no words for it");
     }
 }
 
@@ -11214,7 +10084,7 @@ fn sketch_drawn_harness(theme: ThemeKind) -> (Harness<'static, Shell>, String, S
     let customer = st
         .uuid(crate::canvas::element_of(st, st.by_uuid(archforge_mof::Uuid::parse(&b).unwrap()).unwrap(), archforge_diagram::node::ELEMENT).unwrap())
         .unwrap();
-    s.execute("uml.class.rename", &serde_json::json!({ "class": customer.to_string(), "name": SKETCH_DRAWN })).unwrap();
+    s.execute("sketch.class.rename", &serde_json::json!({ "class": customer.to_string(), "name": SKETCH_DRAWN })).unwrap();
     h.run();
     (h, d, a, b)
 }
@@ -11427,8 +10297,12 @@ fn what_the_kinds_draw_among_the_links_goes_over_the_lines_and_under_the_cards()
     });
 }
 
-/// The sketch kind that opens [`SKETCH_OPENS`] whole, beside the diagram's own kind, which does not.
-static OPENING_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH), &SketchKind("test.opening")];
+/// The sketch kind that opens [`SKETCH_OPENS`] whole, last, after another kind and the diagram's own,
+/// neither of which does: what opens is asked of every kind, and the editor of the diagram's own.
+static OPENING_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&OtherKind, &SketchKind(SKETCH), &SketchKind(SKETCH_OPENER)];
+
+/// The sketch kind that opens a class named [`SKETCH_OPENS`] whole.
+const SKETCH_OPENER: &str = "test.opening";
 
 /// A double click on a card a kind of the shell opens whole opens its element's editor with no row,
 /// though the diagram's own kind does not say so; with no kind saying so, a double click on the
@@ -11446,7 +10320,7 @@ fn a_double_click_on_a_card_a_kind_opens_whole_opens_its_editor() {
                     .unwrap(),
             )
             .unwrap();
-        s.execute("uml.class.rename", &serde_json::json!({ "class": customer.to_string(), "name": SKETCH_OPENS })).unwrap();
+        s.execute("sketch.class.rename", &serde_json::json!({ "class": customer.to_string(), "name": SKETCH_OPENS })).unwrap();
         h.run();
         let header = rect_of(&h, &format!("workspace.canvas.node.{b}")).left_top() + egui::vec2(60.0, 30.0);
         // No kind of the shell opens it whole: its header names it in place.
@@ -11458,17 +10332,17 @@ fn a_double_click_on_a_card_a_kind_opens_whole_opens_its_editor() {
         for _ in 0..45 {
             h.step();
         }
-        SKETCH_OPENED.lock().unwrap().clear();
+        SKETCH_OPENED.with_borrow_mut(Vec::clear);
         double_click(&mut h, header);
         assert!(h.state().canvas.rename.is_none(), "{theme:?}: {:?}", h.state().canvas.rename);
-        assert_eq!(*SKETCH_OPENED.lock().unwrap(), ["open None"], "{theme:?}");
+        assert_eq!(SKETCH_OPENED.with_borrow(Clone::clone), ["open None"], "{theme:?}");
     });
 }
 
 /// The kinds are asked what they draw of a card and a line, and the links between nodes, whatever
 /// kind the diagram is of, each once: drawn with no kind of its own, the sketch still draws its
 /// links, draws over the cards and moves the line's end; drawn as a sketch, it does each once, its
-/// line's name included.
+/// line's name included; the other kind registered before it draws its own links once too.
 #[test]
 fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
     let (mut h, d, a, b, e) = sketch_harness();
@@ -11482,6 +10356,7 @@ fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
             (format!("workspace.canvas.sketch-end.{e}"), 1),
             (format!("workspace.canvas.sketch-caption.{e}"), caption),
             (format!("workspace.canvas.sketch-links.{SKETCH}"), 1),
+            (format!("workspace.canvas.other-links.{OTHER_KIND}"), 1),
         ]
     };
     let none = std::collections::BTreeMap::new();
@@ -11491,10 +10366,16 @@ fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
             assert_eq!(count(&recorded, &id), times, "{id} as {:?}", kind.map(|k| k.kind()));
         }
     }
+    let asked: Vec<&str> = other_asked_so_far().into_iter().collect();
+    assert_eq!(
+        asked,
+        ["card_extras", "draw_card", "draw_links", "line_caption", "line_ends"],
+        "the other kind is asked what it draws, and nothing else"
+    );
 }
 
-/// ER's screens alone: the sketch's package then has no notation in the shell to word it.
-static ER_UI_ONLY: &[&dyn crate::notation_ui::NotationUi] = &[&er_ui::ErUi];
+/// No notation's screens: the sketch's package then has no notation in the shell to word it.
+static NO_UIS: &[&dyn crate::notation_ui::NotationUi] = &[];
 
 /// The word over a diagram's Properties field for what it is of: the word that element's notation
 /// gives it, and when no notation of the shell words it, the word of the diagram's own kind for
@@ -11516,7 +10397,7 @@ fn a_diagrams_properties_word_what_it_is_of_by_its_notation_else_by_its_kind() {
         assert_eq!(word_over(&h), ["Class"], "{theme:?}");
         assert!(painted(&h).iter().any(|t| t == "Diagram · of sales"), "{theme:?}: {:?}", painted(&h));
         // With no notation to word the package, the sketch kind's word for what its diagrams are of.
-        h.state_mut().notation_uis = ER_UI_ONLY;
+        h.state_mut().notation_uis = NO_UIS;
         h.run();
         assert_eq!(word_over(&h), ["Package"], "{theme:?}");
     });
@@ -11528,86 +10409,222 @@ fn a_diagrams_properties_word_what_it_is_of_by_its_notation_else_by_its_kind() {
 /// is the one it signs what it says of a removal with, so two of them are told apart.
 struct SketchUi(&'static str);
 
+/// The fake notation's packages in `store`.
+fn sketch_packages(store: &archforge_mof::Store) -> Vec<archforge_mof::Obj> {
+    store.alive().filter(|o| store.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).collect()
+}
+
+/// The package `selection` is, or the one the class `selection` sits in.
+fn sketch_package_of(store: &archforge_mof::Store, selection: Option<archforge_mof::Obj>) -> Option<archforge_mof::Obj> {
+    let o = selection?;
+    match store.class_of(o).ok()? {
+        c if c == archforge_mof::toy::PACKAGE => Some(o),
+        c if c == archforge_mof::toy::CLASS => store.container(o).ok().flatten().map(|(p, _)| p),
+        _ => None,
+    }
+}
+
+/// The classes of the fake notation's package `pkg`.
 fn sketch_classes(store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
     store
-        .list(pkg, archforge_uml::package::PACKAGED_ELEMENT)
+        .list(pkg, archforge_mof::toy::PACKAGE_PACKAGED_ELEMENT)
         .unwrap_or_default()
         .iter()
         .filter_map(archforge_mof::Value::as_ref)
-        .filter(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS))
+        .filter(|o| store.class_of(*o).ok() == Some(archforge_mof::toy::CLASS))
         .collect()
 }
 
-/// The sketch notation's state: none of its own for the trait's answers, only the selection it
-/// was last told of ([`NotationUi::selection_moved`](crate::notation_ui::NotationUi::selection_moved)),
-/// so a test sees it asked.
+/// The name of an element whose Delete and K the sketch takes on the canvas itself.
+const SKETCH_HELD: &str = "Held by the sketch";
+
+/// Whether the selection is one element named [`SKETCH_HELD`].
+fn sketch_holds_selection(cx: &crate::cx::Ctx) -> bool {
+    cx.session.as_ref().is_some_and(|s| matches!(s.view().selection.as_slice(), [o] if archforge_core::name_of(s.doc(), *o) == SKETCH_HELD))
+}
+
+/// The sketch notation's state: the selection it was last told of
+/// ([`NotationUi::selection_moved`](crate::notation_ui::NotationUi::selection_moved)), so a test
+/// sees it asked, and whether an editor card of its own is open or a drawing of its own is under
+/// way, which a test sets to see the shell ask whether the notation is editing, whether a menu of
+/// its own is open on the canvas, which holds the keys, and a mark a test leaves to see whose state
+/// it is reading.
 #[derive(Default)]
 struct SketchState {
     told: Option<Option<archforge_mof::Uuid>>,
+    card: bool,
+    drawing: bool,
+    menu: bool,
+    mark: u8,
 }
 
-impl archforge_shell_api::notation_ui::NotationState for SketchState {}
+impl archforge_shell_api::notation_ui::NotationState for SketchState {
+    /// While its card is open or its drawing under way.
+    fn editing(&self) -> bool {
+        self.card || self.drawing
+    }
+    /// While its menu is open on the canvas.
+    fn holds_keys(&self) -> bool {
+        self.menu
+    }
+}
 
 impl crate::notation_ui::NotationUi for SketchUi {
+    /// The toy metamodel's, the fake notation's model.
     fn metamodel(&self) -> u16 {
-        archforge_uml::INDEX
+        archforge_mof::toy::INDEX
     }
+    /// A package is a top row of the Models tree.
     fn is_top(&self, store: &archforge_mof::Store, member: archforge_mof::Obj) -> bool {
-        store.class_of(member).ok() == Some(archforge_uml::PACKAGE)
+        store.class_of(member).ok() == Some(archforge_mof::toy::PACKAGE)
     }
+    /// The package, its classes under it and each class's attributes under the class; a filter
+    /// keeps the rows whose names hold it and the rows they sit under.
     fn tree(&self, store: &archforge_mof::Store, pkg: archforge_mof::Obj, t: &crate::explorer::Tree<'_>) -> Vec<crate::explorer::Row> {
-        let classes = sketch_classes(store, pkg);
-        let under: Vec<crate::explorer::Row> = classes
-            .iter()
-            .filter_map(|c| {
-                let label = archforge_core::name_of(store, *c);
-                if t.matches(&label) { t.row(*c, 1, "class", &crate::ux::icons::TABLE, label) } else { None }
-            })
-            .collect();
-        let expandable = !under.is_empty();
-        let expanded = expandable && t.open(pkg);
-        let mut out: Vec<crate::explorer::Row> = t
-            .row(pkg, 0, "package", &crate::ux::icons::SCHEMA, archforge_core::name_of(store, pkg))
-            .map(|r| crate::explorer::Row { expandable, expanded, ..r })
-            .into_iter()
-            .collect();
-        if expanded {
-            out.extend(under);
+        let mut under = Vec::new();
+        for c in sketch_classes(store, pkg) {
+            let label = archforge_core::name_of(store, c);
+            let attributes: Vec<archforge_mof::Obj> = store
+                .list(c, archforge_mof::toy::CLASS_OWNED_ATTRIBUTE)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(archforge_mof::Value::as_ref)
+                .collect();
+            let rows: Vec<crate::explorer::Row> = attributes
+                .iter()
+                .filter_map(|a| {
+                    let name = archforge_core::name_of(store, *a);
+                    if t.matches(&name) {
+                        t.row(*a, 2, "attribute", &crate::ux::icons::LIST, name).map(|r| crate::explorer::Row { muted: true, ..r })
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let expandable = if t.filtering() { !rows.is_empty() } else { !attributes.is_empty() };
+            if t.matches(&label) || !rows.is_empty() {
+                let expanded = expandable && t.open(c);
+                under.extend(t.row(c, 1, "class", &crate::ux::icons::TABLE, label).map(|r| crate::explorer::Row {
+                    expandable,
+                    expanded,
+                    draggable: true,
+                    ..r
+                }));
+                if expanded {
+                    under.extend(rows);
+                }
+            }
+        }
+        let label = archforge_core::name_of(store, pkg);
+        let expandable = if t.filtering() { !under.is_empty() } else { !sketch_classes(store, pkg).is_empty() };
+        let mut out = Vec::new();
+        if t.matches(&label) || !under.is_empty() {
+            let expanded = expandable && t.open(pkg);
+            out.extend(t.row(pkg, 0, "package", &crate::ux::icons::SCHEMA, label).map(|r| crate::explorer::Row { expandable, expanded, ..r }));
+            if expanded {
+                out.extend(under);
+            }
         }
         out
     }
-    /// Nothing for Models' `+`.
-    fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
-        Vec::new()
+    /// A package for Models' `+`, and a class beside it once a package or a class is selected.
+    fn offers(&self, store: &archforge_mof::Store, selection: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
+        let offer = |key, word: &str| crate::notation_ui::Offer { key, word: word.into() };
+        match sketch_package_of(store, selection) {
+            Some(_) => vec![offer("class", "Class"), offer("package", "Package")],
+            None => vec![offer("package", "Package")],
+        }
     }
-    /// Adds nothing, as it offers nothing.
-    fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
-        None
+    /// A package named `Package 1` or the next free number, or a class of the selection's package
+    /// named so, through the fake notation's commands.
+    fn add(&self, cx: &mut crate::cx::Ctx, key: &str, sel: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
+        let store = cx.session.as_ref()?.doc();
+        let names = |list: Vec<archforge_mof::Obj>| list.into_iter().map(|o| archforge_core::name_of(store, o)).collect::<Vec<_>>();
+        let (out, parents) = match key {
+            "package" => {
+                let name = archforge_shell_api::explorer::fresh_name("Package", names(sketch_packages(store)).into_iter(), false)?;
+                (archforge_shell_api::panels::run_cx(cx, "sketch.package.add", serde_json::json!({ "name": name })), Vec::new())
+            }
+            "class" => {
+                let package = sketch_package_of(store, sel)?;
+                let name = archforge_shell_api::explorer::fresh_name("Class", names(sketch_classes(store, package)).into_iter(), false)?;
+                let id = store.uuid(package).ok()?;
+                (
+                    archforge_shell_api::panels::run_cx(cx, "sketch.class.add", serde_json::json!({ "package": id.to_string(), "name": name })),
+                    vec![id],
+                )
+            }
+            _ => return None,
+        };
+        Some(
+            out.and_then(|v| archforge_mof::Uuid::parse(v["id"].as_str().unwrap_or_default()).ok_or_else(|| "no id".to_string()))
+                .map(|id| crate::notation_ui::Added { id, parents }),
+        )
     }
-    /// None: the sketch renames nothing in place.
-    fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
-        None
+    /// Grows a class's box an earlier version left shorter than a row for its name and one for each
+    /// attribute, as a notation whose boxes show their rows does.
+    fn open_repair(&self, store: &mut archforge_mof::Store) {
+        let mut grow = Vec::new();
+        for c in store.alive().filter(|o| store.class_of(*o).ok() == Some(archforge_mof::toy::CLASS)).collect::<Vec<_>>() {
+            let rows = store.list(c, archforge_mof::toy::CLASS_OWNED_ATTRIBUTE).unwrap_or_default().len();
+            let needed = 24.0 * (1 + rows) as f64;
+            for n in archforge_diagram::views_of(store, c).2 {
+                let height = match store.get(n, archforge_diagram::node::HEIGHT) {
+                    Ok(archforge_mof::Value::Real(h)) => h,
+                    _ => needed,
+                };
+                if height < needed {
+                    grow.push((n, needed));
+                }
+            }
+        }
+        for (n, height) in grow {
+            store.set(n, archforge_diagram::node::HEIGHT, archforge_mof::Value::Real(height)).unwrap();
+        }
+    }
+    /// A package and a class are what File → Generate… can be about.
+    fn scope_word(&self, store: &archforge_mof::Store, obj: archforge_mof::Obj) -> Option<String> {
+        match store.class_of(obj).ok()? {
+            c if c == archforge_mof::toy::PACKAGE => Some("Package".into()),
+            c if c == archforge_mof::toy::CLASS => Some("Class".into()),
+            _ => None,
+        }
+    }
+    /// A package's or a class's name, through its own rename command.
+    fn rename(&self, store: &archforge_mof::Store, obj: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
+        match store.class_of(obj).ok()? {
+            c if c == archforge_mof::toy::PACKAGE => Some(("sketch.package.rename", "package")),
+            c if c == archforge_mof::toy::CLASS => Some(("sketch.class.rename", "class")),
+            _ => None,
+        }
     }
     /// Its one rename that may empty a name, which no other notation knows, so a test sees it asked.
     fn may_be_unnamed(&self, cmd: &str) -> bool {
         cmd == SKETCH_UNNAMED
     }
-    /// The package, the one row that opens.
-    fn foldable(&self, _: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
-        vec![pkg]
+    /// The package and its classes, the rows that open.
+    fn foldable(&self, store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        std::iter::once(pkg).chain(sketch_classes(store, pkg)).collect()
     }
-    /// The package a class sits in.
+    /// What an element sits in: an attribute's class and its package, a class's package.
     fn parents(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
-        store.container(o).ok().flatten().map(|(c, _)| c).into_iter().collect()
+        std::iter::successors(store.container(o).ok().flatten().map(|(c, _)| c), |c| store.container(*c).ok().flatten().map(|(p, _)| p))
+            .filter(|c| store.class_of(*c).ok() != Some(archforge_core::MODEL))
+            .collect()
     }
     /// None, but for the sketch named `second`: a row of its own, so a test tells two sketches'
     /// tables apart. Only a shell given the sketches' screens parts registers it.
     fn catalogues(&self) -> &'static [crate::i18n::Rows] {
-        if self.0 == "second" { SECOND_SKETCH_ROWS } else { &[] }
+        match self.0 {
+            "sketch" => SKETCH_CATALOGUE,
+            "second" => SECOND_SKETCH_ROWS,
+            _ => &[],
+        }
     }
-    /// The class, the one kind it makes.
+    /// The package and the class, which its Models `+` makes, and the generalization and the
+    /// association, which its commands make.
     fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
-        &[archforge_uml::CLASS]
+        &[archforge_mof::toy::PACKAGE, archforge_mof::toy::CLASS, archforge_mof::toy::GENERALIZATION, archforge_mof::toy::ASSOCIATION]
     }
     /// Its one refusal of its own, something that is no sketch, signed with its name, so a test
     /// sees it asked.
@@ -11621,27 +10638,32 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn disabled(&self, reason: &str) -> Option<String> {
         (reason == SKETCH_UNAVAILABLE).then(|| format!("The {} has nothing to draw yet.", self.0))
     }
-    /// Its one kind with its article, by its name, so a test sees it asked.
+    /// Its kinds with their article, the sketch by its name, so a test sees it asked.
     fn a_kind(&self, kind: &str) -> Option<String> {
-        (kind == "sketch").then(|| format!("a {}", self.0))
+        Some(match kind {
+            "sketch" => format!("a {}", self.0),
+            "package" | "class" => format!("a {kind}"),
+            "attribute" | "operation" => format!("an {kind}"),
+            _ => return None,
+        })
     }
     /// A class's attributes as its fields, by its name, so a test sees it asked.
     fn list_heading(&self, class: archforge_mof::ClassId) -> Option<String> {
-        (class == archforge_uml::PROPERTY).then(|| format!("Fields of the {}", self.0))
+        (class == archforge_mof::toy::PROPERTY).then(|| format!("Fields of the {}", self.0))
     }
     /// A skill for every class, signed with its name, so a test sees it asked; none for the other
     /// kinds of its metamodel, which leaves the shell's words.
     fn skill_target(&self, kind: archforge_mof::ClassId, _: &str) -> Option<String> {
-        (kind == archforge_uml::CLASS).then(|| format!("every class of the {}", self.0))
+        (kind == archforge_mof::toy::CLASS).then(|| format!("every class of the {}", self.0))
     }
     /// Chat counts its class as a kind of its own, its attribute as a line and its operation as a
     /// part of its class, unlike UML, so a test sees each asked; a description's comment it leaves
     /// to be counted as an element.
     fn chat_kind(&self, table: &str) -> Option<crate::notation_ui::ChatKind> {
         Some(match table {
-            "uml_class" => crate::notation_ui::ChatKind::Own("sketched"),
-            "uml_property" => crate::notation_ui::ChatKind::Line,
-            "uml_operation" => crate::notation_ui::ChatKind::Part,
+            "sketch_class" => crate::notation_ui::ChatKind::Own("sketched"),
+            "sketch_property" => crate::notation_ui::ChatKind::Line,
+            "sketch_operation" => crate::notation_ui::ChatKind::Part,
             _ => return None,
         })
     }
@@ -11661,15 +10683,52 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
         Box::new(SketchState::default())
     }
-    /// The sketch removes nothing its own way: Delete goes on to the shared removals.
-    fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
-        false
+    /// A class held over a package in Models would go into it (the drop itself is not run by the
+    /// tests that ask); nothing else is dropped.
+    fn drop_on(
+        &self,
+        store: &archforge_mof::Store,
+        dragged: archforge_mof::Obj,
+        target: archforge_mof::Obj,
+    ) -> Option<(&'static str, serde_json::Value)> {
+        let class = store.class_of(dragged).ok() == Some(archforge_mof::toy::CLASS);
+        let package = store.class_of(target).ok() == Some(archforge_mof::toy::PACKAGE);
+        (class && package).then(|| ("sketch.class.move", serde_json::json!({})))
+    }
+    /// A class held over the package it is in already: a drop there is refused.
+    fn drop_refused(&self, store: &archforge_mof::Store, dragged: archforge_mof::Obj, target: archforge_mof::Obj) -> bool {
+        store.container(dragged).ok().flatten().is_some_and(|(owner, _)| owner == target)
+    }
+    /// An attribute's problems are held by its class, so Properties on the attribute shows them.
+    fn problem_holder(&self, store: &archforge_mof::Store, obj: archforge_mof::Obj) -> archforge_mof::Obj {
+        match store.class_of(obj).ok() {
+            Some(c) if c == archforge_mof::toy::PROPERTY => store.container(obj).ok().flatten().map_or(obj, |(owner, _)| owner),
+            _ => obj,
+        }
+    }
+    /// Delete on an element named [`SKETCH_HELD`], selected alone, is the sketch's, which writes it
+    /// down and removes nothing; on anything else Delete goes on to the shared removals.
+    fn canvas_delete(&self, cx: &mut crate::cx::Ctx, shift: bool) -> bool {
+        let held = sketch_holds_selection(cx);
+        if held {
+            sketch_call(format!("sketch delete {shift}"));
+        }
+        held
+    }
+    /// K on an element named [`SKETCH_HELD`], selected alone, is the sketch's chord, which it writes
+    /// down; no other key, and no key on anything else.
+    fn canvas_keys(&self, cx: &mut crate::cx::Ctx, ui: &egui::Ui) -> bool {
+        let held = sketch_holds_selection(cx) && ui.input(|i| i.key_pressed(egui::Key::K));
+        if held {
+            sketch_call("sketch key".into());
+        }
+        held
     }
     /// A class's attributes go with it, counted in its own words and signed with its name, so a
     /// test sees it asked and the dialog say it; nothing goes with anything else.
     fn consequences(&self, _: &[&'static dyn crate::notation_ui::NotationUi], store: &archforge_mof::Store, obj: archforge_mof::Obj) -> Vec<String> {
-        let attributes = store.list(obj, archforge_uml::class::OWNED_ATTRIBUTE).map(|l| l.len()).unwrap_or_default();
-        let class = store.class_of(obj).ok() == Some(archforge_uml::CLASS);
+        let attributes = store.list(obj, archforge_mof::toy::CLASS_OWNED_ATTRIBUTE).map(|l| l.len()).unwrap_or_default();
+        let class = store.class_of(obj).ok() == Some(archforge_mof::toy::CLASS);
         (class && attributes > 0).then(|| format!("{attributes} attributes go with it in the {}.", self.0)).into_iter().collect()
     }
     /// Names each element it is asked about and counts them, signed with its name, so a test sees
@@ -11686,17 +10745,15 @@ impl crate::notation_ui::NotationUi for SketchUi {
     }
     /// The sketch draws nothing over the canvas.
     fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
-    /// The sketch notation's search entry: a class, under its package.
+    /// The sketch notation's search entries: a class, under its package, and an attribute, under its class.
     fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Entry> {
-        (store.class_of(o).ok()? == archforge_uml::CLASS).then(|| {
-            let pkg = store.container(o).ok().flatten().map(|(c, _)| archforge_core::name_of(store, c)).unwrap_or_default();
-            archforge_shell_api::notation_ui::Entry {
-                icon: &crate::ux::icons::TABLE,
-                order: 2,
-                label: archforge_core::name_of(store, o),
-                detail: format!("Class · {pkg}"),
-            }
-        })
+        let owner = store.container(o).ok().flatten().map(|(c, _)| archforge_core::name_of(store, c)).unwrap_or_default();
+        let (icon, order, kind) = match store.class_of(o).ok()? {
+            c if c == archforge_mof::toy::CLASS => (&crate::ux::icons::TABLE, 2, "Class"),
+            c if c == archforge_mof::toy::PROPERTY => (&crate::ux::icons::LIST, 3, "Attribute"),
+            _ => return None,
+        };
+        Some(archforge_shell_api::notation_ui::Entry { icon, order, label: archforge_core::name_of(store, o), detail: format!("{kind} · {owner}") })
     }
     /// A class's words, as Properties names it.
     fn words(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Words> {
@@ -11719,7 +10776,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn properties_in_place(&self, cx: &mut crate::cx::Ctx, ui: &mut egui::Ui, p: &crate::ux::Palette, r: egui::Rect, y: f32) -> bool {
         let Some(session) = cx.session.as_ref() else { return false };
         let (store, selection) = (session.doc(), &session.view().selection);
-        if selection.len() < 2 || !selection.iter().all(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS)) {
+        if selection.len() < 2 || !selection.iter().all(|o| store.class_of(*o).ok() == Some(archforge_mof::toy::CLASS)) {
             return false;
         }
         let row = egui::Rect::from_min_size(egui::pos2(r.left() + 16.0, r.top() + y), egui::vec2(r.width() - 32.0, 24.0));
@@ -11738,7 +10795,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
                 let store = s.doc();
                 Some(
                     store
-                        .list(subject.obj?, archforge_uml::class::OWNED_ATTRIBUTE)
+                        .list(subject.obj?, archforge_mof::toy::CLASS_OWNED_ATTRIBUTE)
                         .ok()?
                         .iter()
                         .filter_map(archforge_mof::Value::as_ref)
@@ -11755,146 +10812,73 @@ impl crate::notation_ui::NotationUi for SketchUi {
         }
         // The shared name field, under the attributes.
         let at = egui::pos2(r.left() + 16.0, y + attributes.len() as f32 * 28.0 + 8.0);
-        crate::panels::name_field_cx(cx, ui, p, at, r.width() - 32.0, subject, "uml.class.rename", "class");
+        crate::panels::name_field_cx(cx, ui, p, at, r.width() - 32.0, subject, "sketch.class.rename", "class");
     }
 }
 
-static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&er_ui::ErUi, &SketchUi("sketch")];
+/// The notations the sketch's tests give the shell: the worded notation, which answers for none of
+/// the sketch's elements, first, then the sketch's, so what is asked of an element's own notation
+/// is told apart from what the first notation would answer.
+static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &SketchUi("sketch")];
 
 /// Two sketch notations told apart by name, both answering for UML's metamodel, so a test sees
 /// which of them answers and in what order.
 static FIRST_SKETCH: SketchUi = SketchUi("first");
 static SECOND_SKETCH: SketchUi = SketchUi("second");
-static TWO_SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&er_ui::ErUi, &FIRST_SKETCH, &SECOND_SKETCH];
+static TWO_SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&FIRST_SKETCH, &SECOND_SKETCH];
 
-/// A notation that answers for no element, as no class is of its metamodel, and only says words of
-/// its own: an association with its article, a sentence for an enum type without literals, a row
-/// of its own catalogue, and a repair that leaves a tag in the model. Registered before ER and UML,
-/// it is asked before them, so a test sees that the words a notation says inside its own sentences,
-/// a model's kind words, the catalogues and an opening's repair ask the notations the shell
-/// registered, not the app's own list.
-struct WordsUi;
-
-/// The worded notation's word for an association with its article.
-const WORDED_ASSOCIATION: &str = "a worded association";
-
-/// The worded notation's sentence for an enum type without literals.
-const WORDED_LITERALS: &str = "The words want a literal.";
-
-/// The worded notation's own catalogue row, the same in every language but German.
-const WORDED_ROW: &str = "A worded row";
-
-/// The worded notation's catalogues: its one row in every language, German's own text.
-static WORDED_CATALOGUES: &[crate::i18n::Rows] = &[
-    crate::i18n::Rows { code: "en", catalogue: "words/en.tsv", text: "str\t\tA worded row\tA worded row\n" },
-    crate::i18n::Rows { code: "de", catalogue: "words/de.tsv", text: "str\t\tA worded row\tEine Wortzeile\n" },
-    crate::i18n::Rows { code: "es", catalogue: "words/es.tsv", text: "str\t\tA worded row\tA worded row\n" },
-    crate::i18n::Rows { code: "fr", catalogue: "words/fr.tsv", text: "str\t\tA worded row\tA worded row\n" },
-    crate::i18n::Rows { code: "pt-PT", catalogue: "words/pt-PT.tsv", text: "str\t\tA worded row\tA worded row\n" },
-    crate::i18n::Rows { code: "ja", catalogue: "words/ja.tsv", text: "str\t\tA worded row\tA worded row\n" },
-    crate::i18n::Rows { code: "zh-Hans", catalogue: "words/zh-Hans.tsv", text: "str\t\tA worded row\tA worded row\n" },
+/// The sketch notation's catalogue table, one catalogue for each language in the languages' order
+/// with its word and the access letters of its kind's Model menu rows, so the shell's tests see a
+/// notation's table registered and looked up beside the shell's own.
+static SKETCH_CATALOGUE: &[crate::i18n::Rows] = &[
+    crate::i18n::Rows {
+        code: "en",
+        catalogue: "sketch.tsv",
+        text: "# The sketch notation's catalogue, for the shell's tests.\nstr\t\tSketch\tSketch\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n",
+    },
+    crate::i18n::Rows {
+        code: "de",
+        catalogue: "sketch-de.tsv",
+        text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tSkizze\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n",
+    },
+    crate::i18n::Rows {
+        code: "es",
+        catalogue: "sketch-es.tsv",
+        text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tBoceto\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n",
+    },
+    crate::i18n::Rows {
+        code: "fr",
+        catalogue: "sketch-fr.tsv",
+        text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tCroquis\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n",
+    },
+    crate::i18n::Rows {
+        code: "pt-PT",
+        catalogue: "sketch-pt-PT.tsv",
+        text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tEsboço\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n",
+    },
+    crate::i18n::Rows {
+        code: "ja",
+        catalogue: "sketch-ja.tsv",
+        text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tスケッチ\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n",
+    },
+    crate::i18n::Rows {
+        code: "zh-Hans",
+        catalogue: "sketch-zh-Hans.tsv",
+        text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\t草图\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n",
+    },
 ];
-
-impl crate::notation_ui::NotationUi for WordsUi {
-    /// A metamodel no class is of, so it answers for no element.
-    fn metamodel(&self) -> u16 {
-        u16::MAX
-    }
-    /// No element, so no top of Models.
-    fn is_top(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
-        false
-    }
-    /// No rows in Models.
-    fn tree(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: &crate::explorer::Tree<'_>) -> Vec<crate::explorer::Row> {
-        Vec::new()
-    }
-    /// Nothing for Models' `+`.
-    fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
-        Vec::new()
-    }
-    /// Adds nothing, as it offers nothing.
-    fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
-        None
-    }
-    /// Renames nothing.
-    fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
-        None
-    }
-    /// Nothing worked out, as none of its elements is removed.
-    fn before_removal(&self, _: &archforge_mof::Store, _: &[archforge_mof::Obj]) -> crate::notation_ui::Removal {
-        crate::notation_ui::Removal::default()
-    }
-    /// The word alone, as none of its elements is removed.
-    fn removed_text(&self, what: &str, _: &crate::notation_ui::Removal) -> String {
-        what.to_string()
-    }
-    /// No row opens.
-    fn foldable(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
-        Vec::new()
-    }
-    /// No rows to open.
-    fn parents(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
-        Vec::new()
-    }
-    /// No search entry.
-    fn entry(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Entry> {
-        None
-    }
-    /// No words for Properties.
-    fn words(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<crate::notation_ui::Words> {
-        None
-    }
-    /// Draws nothing, as Properties shows none of its elements.
-    fn body(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: f32, _: &crate::panels::Subject) {}
-    /// Its one row ([`WORDED_CATALOGUES`]).
-    fn catalogues(&self) -> &'static [crate::i18n::Rows] {
-        WORDED_CATALOGUES
-    }
-    /// Creates nothing.
-    fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
-        &[]
-    }
-    /// None of its own, so the longest of the shell's is another notation's.
-    fn name_limit(&self) -> usize {
-        0
-    }
-    /// None of its own, so the longest of the shell's is another notation's.
-    fn description_limit(&self) -> usize {
-        0
-    }
-    /// Deletes nothing on the canvas.
-    fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
-        false
-    }
-    /// Draws nothing over the canvas.
-    fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
-    /// The sketch's state, unused.
-    fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
-        Box::new(SketchState::default())
-    }
-    /// Its sentence for an enum type without literals ([`WORDED_LITERALS`]), so a test sees it asked
-    /// before ER.
-    fn said(&self, _: &[&'static dyn crate::notation_ui::NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
-        matches!(reason, archforge_engine::Reason::TooFew { kind: "enum literal", min: 1 }).then(|| WORDED_LITERALS.to_string())
-    }
-    /// Its word for an association ([`WORDED_ASSOCIATION`]), so a test sees it asked before UML.
-    fn a_kind(&self, kind: &str) -> Option<String> {
-        (kind == "association").then(|| WORDED_ASSOCIATION.to_string())
-    }
-    /// Leaves a tag in the model, so a test sees an opening's repair ask it.
-    fn open_repair(&self, store: &mut archforge_mof::Store) {
-        let _ = store.create(archforge_core::TAG);
-    }
-}
-
-/// The worded notation before the app's two.
-static WORDS_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &er_ui::ErUi, &uml_ui::UmlUi];
 
 /// The second sketch's catalogue, a row only it says, in English and in German.
 static SECOND_SKETCH_ROWS: &[crate::i18n::Rows] = &[
     crate::i18n::Rows { code: "en", catalogue: "second-sketch.tsv", text: "str\t\tSecond sketch\tSecond sketch\n" },
     crate::i18n::Rows { code: "de", catalogue: "second-sketch-de.tsv", text: "str\t\tSecond sketch\tZweite Skizze\n" },
 ];
+
+/// The popover of kinds the second sketch's kind walks with the keys.
+const SECOND_KINDS: &str = "second.kinds";
+
+/// The popover of kinds the sketch kind walks with the keys.
+const SKETCH_POPOVER: &str = "sketch.kinds";
 
 /// Two more sketch kinds, both of the second sketch's part, so a part with more than one kind
 /// lists them in its order.
@@ -11930,18 +10914,16 @@ fn a_screens_registry_lists_its_parts_notations_kinds_and_catalogues_in_order() 
 }
 
 /// A shell takes its notations, its diagram kinds, its notations' states and its catalogues from
-/// the screens parts it is given, not from the app's: given the sketches' parts, it knows the two
-/// sketches and their three kinds, keeps the sketch's state and none of ER's or UML's, and finds
-/// the second sketch's row in German, which no other shell registers.
+/// the screens parts it is given, not from any fixed list: given the sketches' parts, it knows the
+/// two sketches and their three kinds, keeps the sketch's state, and finds the second sketch's row
+/// in German, which no other shell registers.
 #[test]
 fn a_shell_takes_its_notations_kinds_states_and_catalogues_from_the_screens_parts_it_is_given() {
-    let shell = Shell::new(Services::default(), &SKETCH_SCREENS);
+    let shell = Shell::new(Services::default(), NOTATIONS, &SKETCH_SCREENS);
     assert!(std::ptr::eq(shell.notation_uis, SKETCH_SCREENS.notation_uis()), "the parts' notations");
     let kinds: Vec<&str> = shell.kinds.iter().map(|k| k.kind()).collect();
     assert_eq!(kinds, [SKETCH, "test.second", "test.third"], "the parts' kinds");
     assert!(shell.notation_states.own::<SketchState>().is_some(), "the sketch keeps its state");
-    assert!(er_state::er(&shell.notation_states).is_none(), "ER is not among the parts");
-    assert!(uml_state::uml(&shell.notation_states).is_none(), "nor is UML");
     let row = "Second sketch";
     crate::i18n::set_language("de");
     let said = crate::i18n::tr(row);
@@ -11963,12 +10945,13 @@ const SKETCH_UNNAMED: &str = "sketch.link.rename";
 /// The refusal words ask the notations the shell registered, not the app's own list: the sketch,
 /// which the shell knows here and the app does not, says its own refusal, names its own kind in the
 /// shell's sentence and says why its command is not available, each through an engine's refusal as
-/// the shell says it; the app's notations, which do not know the sketch, leave the engine's English.
+/// the shell says it; a shell given no notation, which does not know the sketch, leaves the
+/// engine's English.
 #[test]
 fn the_refusal_words_ask_the_notations_the_shell_registered() {
     use archforge_engine::{CommandError, EngineError, Reason};
     let (mut h, ..) = sketch_harness();
-    let failed = |reason| EngineError::Failed { id: "uml.class.add".into(), error: CommandError::new("refused in English").because(reason) };
+    let failed = |reason| EngineError::Failed { id: "sketch.class.add".into(), error: CommandError::new("refused in English").because(reason) };
     let refusals = || {
         [
             failed(Reason::NotA { kind: "sketch", name: "Party".into() }),
@@ -11978,101 +10961,35 @@ fn the_refusal_words_ask_the_notations_the_shell_registered() {
     };
     let said = h.state_mut().cx(|cx| refusals().map(|e| crate::panels::refusal(cx.notation_uis, &e)));
     assert_eq!(said, ["Party is not drawn in the sketch.", "There is a sketch named Party already.", "The sketch has nothing to draw yet."]);
-    let app = refusals().map(|e| crate::panels::refusal(SCREENS.notation_uis(), &e));
-    assert_eq!(app, ["Refused in English.", "Refused in English.", "Nothing to draw."]);
+    let none: &[&'static dyn crate::notation_ui::NotationUi] = &[];
+    let alone = refusals().map(|e| crate::panels::refusal(none, &e));
+    assert_eq!(alone, ["Refused in English.", "Refused in English.", "Nothing to draw."]);
 }
 
 /// Whether a name of nothing but spaces is refused is asked of the notations the shell registered,
-/// not the app's own list: the sketch, which the shell knows here and the app does not, may leave
-/// its element unnamed, and UML's relationship, which the app's list lets go unnamed, is refused,
-/// as UML is not the shell's here. ER, which both hold, still lets its relationship go unnamed.
+/// not of a fixed list: the sketch, registered after another notation, may leave its element unnamed, and its classes, which it never
+/// lets go unnamed, are refused; a shell given no notation refuses the sketch's rename too, as the
+/// sketch is not its own.
 #[test]
 fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default(), &SCREENS);
+    let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
     shell.notation_uis = SKETCH_UIS;
     assert!(!shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, SKETCH_UNNAMED, "  ")), "the sketch may leave its element unnamed");
     assert_eq!(shell.panels.notice, None);
-    assert!(
-        !shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, "er.relationship.rename", "  ")),
-        "ER may leave its relationship unnamed"
-    );
-    assert_eq!(shell.panels.notice, None);
-    assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, "uml.relationship.rename", "  ")), "UML is not the shell's here");
+    assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, "sketch.class.rename", "  ")), "a class is never unnamed");
+    assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
+    assert!(!shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, WORDED_UNNAMED, "  ")), "the worded notation's own may go unnamed");
+    only_what_every_notation_is_asked();
+    shell.notation_uis = &[];
+    assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, SKETCH_UNNAMED, "  ")), "the sketch is not this shell's");
     assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
 }
 
-/// What a skill aims at is said by the notation the shell registered for its kind, not the app's
-/// own list: over the app's notations each of ER's and UML's kinds in its notation's words, a
-/// column's type pattern in place of its word and a skill that names no kind with nothing; with
-/// the sketch answering for UML's metamodel, its own words for a skill for every class and, for
-/// every interface, which it has no words for, the shell's: nothing, as the skill has no type
-/// pattern. ER, which both lists hold, still says its own. The Skills panel's row says the same.
-/// In light and dark.
-#[test]
-fn a_skills_target_is_said_by_the_notation_the_shell_registered() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        skill_targets_ask_the_notation(theme);
-    }
-}
-
-/// [`a_skills_target_is_said_by_the_notation_the_shell_registered`] in one appearance: skills of
-/// the whole model, one for each kind, and one on the sample class diagram's package.
-fn skill_targets_ask_the_notation(theme: ThemeKind) {
-    let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-    let add = |h: &mut Harness<'static, Shell>, subject: &str, name: &str, applies: &str, pattern: &str| {
-        let params = serde_json::json!({ "subject": subject, "name": name, "applies_to": applies, "type_pattern": pattern });
-        let out = h.state_mut().session.as_mut().unwrap().execute("skill.add", &params).unwrap();
-        archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
-    };
-    let cases = [
-        ("table", "", "every table"),
-        ("relationship", "", "every relationship"),
-        ("column", "", "every column"),
-        ("column", "VARCHAR", "VARCHAR"),
-        ("class", "", "every class"),
-        ("interface", "", "every interface"),
-        ("enumeration", "", "every enumeration"),
-        ("data type", "", "every data type"),
-        ("primitive type", "", "every primitive type"),
-        ("association class", "", "every association class"),
-        ("attribute", "", "every attribute"),
-        ("operation", "", "every operation"),
-        ("association", "", "every association"),
-        ("", "", ""),
-    ];
-    let skills: Vec<_> =
-        cases.iter().enumerate().map(|(i, (applies, pattern, _))| add(&mut h, "", &format!("Skill {i}"), applies, pattern)).collect();
-    let said = |h: &Harness<'static, Shell>, uis: &[&'static dyn crate::notation_ui::NotationUi]| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        skills.iter().map(|s| crate::panels::target_word(uis, st, st.by_uuid(*s).unwrap())).collect::<Vec<_>>()
-    };
-    assert_eq!(said(&h, h.state().notation_uis), cases.map(|(_, _, w)| w), "{theme:?}: the app's notations");
-    let sketched = said(&h, SKETCH_UIS);
-    let want = ["every table", "every relationship", "every column", "VARCHAR", "every class of the sketch", "", "", "", "", "", "", "", "", ""];
-    assert_eq!(sketched, want, "{theme:?}: the sketch for UML's metamodel");
-    // The panel's row, on the package of the sample's classes.
-    let pkg = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let order = st.by_uuid(named(&h, archforge_uml::CLASS, "Order")).unwrap();
-        st.uuid(st.container(order).unwrap().unwrap().0).unwrap()
-    };
-    add(&mut h, &pkg.to_string(), "Classes", "class", "");
-    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [pkg.to_string()] })).unwrap();
-    h.state_mut().state.show_panel(crate::state::Panel::Skills);
-    h.run();
-    assert!(painted(&h).iter().any(|t| t == "every class"), "{theme:?}: {:?}", painted(&h));
-    h.state_mut().notation_uis = SKETCH_UIS;
-    h.run();
-    let texts = painted(&h);
-    assert!(texts.iter().any(|t| t == "every class of the sketch") && !texts.iter().any(|t| t == "every class"), "{theme:?}: {texts:?}");
-}
-
-/// Chat counts what a tool row names as the notations the shell registered say, not the app's own
-/// list: the sketch, which the shell knows here and the app does not, counts a class as a kind of
-/// its own in its words, an attribute as a line and an operation as a part of its class, which is
-/// not counted, where UML counts classes, attributes and operations; a kind it does not know is an
-/// element. The tool rows the window draws and the changes a turn keeps ask the shell's notations.
+/// Chat counts what a tool row names as the notations the shell registered say, not as a fixed
+/// list: the sketch counts a class as a kind of its own in its words, an attribute as a line and an
+/// operation as a part of its class, which is not counted, where a shell given no notation counts
+/// each as an element; a kind it does not know is an element. The tool rows the window draws and the changes a turn keeps ask the shell's notations.
 #[test]
 fn chats_counts_ask_the_notations_the_shell_registered() {
     use crate::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
@@ -12082,28 +10999,29 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
         |n: u8, role: AnchorRole, metaclass: &str| Anchor { element: archforge_mof::Uuid([n; 16]), role, metaclass: metaclass.into(), name: None };
     let read = |anchors: Vec<Anchor>| ToolFacts {
         tool: "engine.execute".into(),
-        command: Some("uml.class.list".into()),
+        command: Some("sketch.class.list".into()),
         detail: None,
         status: ToolStatus::Done,
         changed_model: false,
         element_count: None,
         anchors,
     };
-    let mut named: Vec<Anchor> = (1..=3).map(|n| at(n, AnchorRole::Read, "uml_class")).collect();
-    named.extend((4..=5).map(|n| at(n, AnchorRole::Read, "uml_property")));
-    named.extend((6..=9).map(|n| at(n, AnchorRole::Read, "uml_operation")));
+    let none: &[&'static dyn crate::notation_ui::NotationUi] = &[];
+    let mut named: Vec<Anchor> = (1..=3).map(|n| at(n, AnchorRole::Read, "sketch_class")).collect();
+    named.extend((4..=5).map(|n| at(n, AnchorRole::Read, "sketch_property")));
+    named.extend((6..=9).map(|n| at(n, AnchorRole::Read, "sketch_operation")));
     assert_eq!(tool_words(SKETCH_UIS, &read(named.clone())).0, "Read 3 drawn in the sketch, 2 lines");
-    assert_eq!(tool_words(SCREENS.notation_uis(), &read(named)).0, "Read 4 operations, 3 classes");
-    assert!(!counted(SKETCH_UIS, "uml_operation") && counted(SCREENS.notation_uis(), "uml_operation"));
+    assert_eq!(tool_words(none, &read(named)).0, "Read 4 elements, 3 elements");
+    assert!(!counted(SKETCH_UIS, "sketch_operation") && counted(none, "sketch_operation"));
     // What a row is about, unnamed: one of its kind, several of one kind, or elements of several.
-    let mut added = read(vec![at(1, AnchorRole::Target, "uml_class")]);
-    (added.command, added.changed_model) = (Some("uml.class.add".into()), true);
+    let mut added = read(vec![at(1, AnchorRole::Target, "sketch_class")]);
+    (added.command, added.changed_model) = (Some("sketch.class.add".into()), true);
     assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 1 drawn in the sketch");
-    added.anchors.push(at(2, AnchorRole::Target, "uml_class"));
+    added.anchors.push(at(2, AnchorRole::Target, "sketch_class"));
     assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 2 drawn in the sketch");
-    added.anchors.push(at(3, AnchorRole::Target, "uml_property"));
+    added.anchors.push(at(3, AnchorRole::Target, "sketch_property"));
     assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 3 elements");
-    // The window's tool row asks the shell's notations.
+    // The window's tool row asks the shell's notations, the worded notation's before the sketch's.
     let (mut h, rig) = chat_harness(ThemeKind::Light, true);
     h.state_mut().notation_uis = SKETCH_UIS;
     ask_in_chat(&mut h, "What is on the diagram?");
@@ -12116,15 +11034,18 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
     .unwrap();
     h.run();
     assert!(painted(&h).iter().any(|t| t.contains("drawn in the sketch")), "{:?}", painted(&h));
-    // What a read's answer named is kept as the sketch counts it: Customer's operation, a part of
-    // its class to the sketch, is neither kept nor in the row's count.
-    let customer = crate::chat_fixture::element(h.state(), archforge_uml::CLASS, "Customer").unwrap();
-    crate::chat_fixture::call(
+    // What a read's answer named is kept as the sketch counts it: Order's operation `total`, which
+    // the answer names, is a part of its class to the sketch, so it is neither kept nor in the
+    // row's count, while Order's attributes are.
+    let order = crate::chat_fixture::element(h.state(), archforge_mof::toy::CLASS, "Order").unwrap();
+    let total = crate::chat_fixture::element(h.state(), archforge_mof::toy::OPERATION, "total").unwrap();
+    let answer = crate::chat_fixture::call(
         h.state_mut(),
         "engine.execute",
-        serde_json::json!({ "command": "uml.class.get", "params": { "class": customer.to_string() } }),
+        serde_json::json!({ "command": "sketch.class.get", "params": { "class": order.to_string() } }),
     )
     .unwrap();
+    assert!(answer.to_string().contains(&total.to_string()), "the answer names Order's operation: {answer}");
     h.run();
     let facts = kept_chat(&h, &rig)
         .messages
@@ -12133,14 +11054,15 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
         .find_map(|m| if let crate::chat_store::StoredBody::Tool(f) = &m.body { Some(f.clone()) } else { None })
         .unwrap();
     let kept = facts.anchors.iter().filter(|a| a.role == AnchorRole::Read).count();
-    assert!(kept > 0 && facts.anchors.iter().all(|a| a.metaclass != "uml_operation"), "{facts:?}");
+    assert!(kept > 0 && facts.anchors.iter().all(|a| a.element != total && a.metaclass != "sketch_operation"), "{facts:?}");
     assert_eq!(facts.element_count, Some(u32::try_from(kept).unwrap()), "{facts:?}");
     chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
-    // A turn's changes keep what the sketch counts: a description's comment, which UML leaves out
-    // as a part of its element, is listed beside the class described.
+    // A turn's changes keep what the sketch counts: a description's comment is listed beside the
+    // class described.
     let at = rect_of(&h, "workspace.chat.allow-changes").center();
     click(&mut h, at);
     ask_in_chat(&mut h, "Describe Customer");
+    let customer = crate::chat_fixture::element(h.state(), archforge_mof::toy::CLASS, "Customer").unwrap();
     crate::chat_fixture::call(
         h.state_mut(),
         "engine.execute",
@@ -12152,147 +11074,381 @@ fn chats_counts_ask_the_notations_the_shell_registered() {
     let changes = kept_chat(&h, &rig).ends.last().unwrap().1.clone().unwrap();
     let mut listed: Vec<String> = changes.changed.iter().map(|e| e.metaclass.clone()).collect();
     listed.sort();
-    assert_eq!(listed, ["uml_class", "uml_comment"]);
+    assert_eq!(listed, ["sketch_class", "sketch_comment"]);
+    only_what_every_notation_is_asked();
 }
 
-/// What a notation says inside its own refusals, a reason it holds or a kind it names, is said by
-/// the notations the shell registered, not the app's own list: with the worded notation registered
-/// before ER and UML, ER's sentences say why a key, a foreign key, a column, a table or a literal
-/// would break in its words, and UML's name an association, which no name names, by its word, each
-/// through an engine's refusal as the shell says it; over the app's notations, ER's and UML's own
-/// words.
-#[test]
-fn a_notations_refusals_say_their_parts_by_the_notations_the_shell_registered() {
-    use archforge_engine::{AppliedTo, CommandError, EngineError, InUse, LiteralValued, Named, Reason, Used};
-    crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default(), &SCREENS);
-    shell.notation_uis = WORDS_UIS;
-    let no_literal = || Box::new(Reason::TooFew { kind: "enum literal", min: 1 });
-    let unnamed = || Named::Unnamed { kind: "association" };
-    let types = archforge_uml::members::TYPES;
-    let reasons = || {
-        [
-            Reason::WouldBreak { kind: "primary key", name: "pk".into(), why: no_literal() },
-            Reason::WouldBreak { kind: "foreign key", name: "fk".into(), why: no_literal() },
-            Reason::WouldBreak { kind: "column", name: "id".into(), why: no_literal() },
-            Reason::WouldBreak { kind: "table", name: "Order".into(), why: no_literal() },
-            Reason::LiteralName { name: "x".into(), why: no_literal() },
-            Reason::DependsOnItself { kind: "association" },
-            Reason::HoldsBuiltInName { kind: "association", name: "String".into() },
-            Reason::BuiltInTaken { kind: "association", name: "String".into() },
-            Reason::InUse(Box::new(InUse { what: Used::Element("Trace".into()), uses: vec![("Trace".into(), vec![unnamed()], 1)] })),
-            Reason::LiteralValued(Box::new(LiteralValued {
-                literal: "lazy".into(),
-                property: "fetch".into(),
-                stereotype: "Entity".into(),
-                element: AppliedTo::Element(unnamed()),
-            })),
-        ]
-    };
-    let failed = |reason| EngineError::Failed { id: "element.add".into(), error: CommandError::new("refused in English").because(reason) };
-    let sentences = |what: &str, why: &str| {
-        [
-            format!("The key pk would break: {why}"),
-            format!("The foreign key fk would break: {why}"),
-            format!("The column id would break: {why}"),
-            format!("The table Order would break: {why}"),
-            format!("The literal \"x\" is not a valid name. {why}"),
-            format!("{}{} cannot depend on itself.", what[..1].to_uppercase(), &what[1..]),
-            format!("The package holds {what} named String, a built-in type's name, which in {types} would mean that type. Rename String first."),
-            format!("The package {types} holds {what} named String, where that built-in type is kept: rename it to use the built-in type."),
-            format!("Trace is in use: «Trace» on {what}. Remove those first."),
-            format!("The literal lazy is the value of fetch in «Entity» on {what}. Set another value there first."),
-        ]
-    };
-    let said = shell.cx(|cx| reasons().map(|r| crate::panels::refusal(cx.notation_uis, &failed(r))));
-    assert_eq!(said, sentences(WORDED_ASSOCIATION, WORDED_LITERALS));
-    let app = reasons().map(|r| crate::panels::refusal(SCREENS.notation_uis(), &failed(r)));
-    assert_eq!(app, sentences("an association", "An enum type needs at least one literal."));
+/// A notation that answers for no element, as no class is of its metamodel, and only says words of
+/// its own: an association with its article, a sentence for an enum type without literals, a row
+/// of its own catalogue, and a repair that leaves a tag in the model. Registered before the sketch
+/// ([`SKETCH_UIS`]), it is asked before it, so a test sees that the words a notation says inside its
+/// own sentences, a model's kind words, the catalogues and an opening's repair ask the notations the
+/// shell registered, not the app's own list, and that an element's own notation answers for it.
+struct WordsUi;
+
+/// The worded notation's word for an association with its article.
+const WORDED_ASSOCIATION: &str = "a worded association";
+
+/// The worded notation's sentence for an enum type without literals.
+const WORDED_LITERALS: &str = "The words want a literal.";
+
+/// The worded notation's own catalogue row, the same in every language but German.
+const WORDED_ROW: &str = "A worded row";
+
+/// The worded notation's catalogues: its one row in every language, German's own text.
+static WORDED_CATALOGUES: &[crate::i18n::Rows] = &[
+    crate::i18n::Rows { code: "en", catalogue: "words/en.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "de", catalogue: "words/de.tsv", text: "str\t\tA worded row\tEine Wortzeile\n" },
+    crate::i18n::Rows { code: "es", catalogue: "words/es.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "fr", catalogue: "words/fr.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "pt-PT", catalogue: "words/pt-PT.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "ja", catalogue: "words/ja.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    crate::i18n::Rows { code: "zh-Hans", catalogue: "words/zh-Hans.tsv", text: "str\t\tA worded row\tA worded row\n" },
+];
+
+thread_local! {
+    /// The methods the worded notation ([`WordsUi`]) was asked on this thread, so a test sees which.
+    static WORDS_ASKED: std::cell::RefCell<std::collections::BTreeSet<&'static str>> =
+        const { std::cell::RefCell::new(std::collections::BTreeSet::new()) };
 }
 
-/// The problems the shell shows are said by the notations it registered, not the app's own list:
-/// an enum type without literals is ER's problem, said in the worded notation's words when it is
-/// registered before ER, in ER's over the app's notations.
-#[test]
-fn a_notations_problems_are_said_by_the_notations_the_shell_registered() {
-    crate::i18n::set_language("en");
-    let mut st = archforge_notations::store(Box::new({
-        let ids = test_ids();
-        move || ids()
-    }))
-    .unwrap();
-    let schema = st.create(archforge_er::SCHEMA).unwrap();
-    st.set(schema, archforge_er::named_element::NAME, archforge_mof::Value::str("shop")).unwrap();
-    let status = st.create(archforge_er::ENUM_TYPE).unwrap();
-    st.set(status, archforge_er::named_element::NAME, archforge_mof::Value::str("Status")).unwrap();
-    st.push(schema, archforge_er::schema::ENUM_TYPE, archforge_mof::Value::Ref(status)).unwrap();
-    let mut shell = Shell::new(Services::default(), &SCREENS);
-    let said = |shell: &Shell| crate::problems::all(shell.notation_uis, &st).into_iter().map(|p| (p.element, p.text)).collect::<Vec<_>>();
-    assert_eq!(said(&shell), [(status, "Status: An enum type needs at least one literal.".to_string())], "the app's notations");
-    shell.notation_uis = WORDS_UIS;
-    assert_eq!(said(&shell), [(status, format!("Status: {WORDED_LITERALS}"))], "the worded notation first");
+/// Writes down that the worded notation was asked `method`.
+fn words_asked(method: &'static str) {
+    WORDS_ASKED.with_borrow_mut(|asked| asked.insert(method));
 }
 
-/// What goes with a removal and what keeps one from happening name an element without a name by its
-/// kind as the notations the shell registered name it, not the app's own list: deleting a class
-/// says that «Trace» on its unnamed association goes with it, and removing the stereotype Trace is
-/// refused for that use, each asked of the class's or the stereotype's notation as the delete
-/// dialog and Models ask, in the worded notation's word when it is registered first and in UML's
-/// otherwise.
-#[test]
-fn what_goes_with_a_removal_is_worded_by_the_notations_the_shell_registered() {
-    use serde_json::json;
-    crate::i18n::set_language("en");
-    let mut s = archforge_notations::new_project_session(
-        "Shop",
-        Box::new({
-            let ids = test_ids();
-            move || ids()
-        }),
-    )
-    .unwrap();
-    let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
-    let commerce = run("uml.package.add", json!({ "name": "Commerce" }));
-    let order = run("uml.class.add", json!({ "package": commerce, "name": "Order" }));
-    let customer = run("uml.class.add", json!({ "package": commerce, "name": "Customer" }));
-    let audit = run("uml.profile.add", json!({ "name": "Audit" }));
-    let trace = run("uml.stereotype.add", json!({ "profile": audit, "name": "Trace", "extends": ["Association"] }));
-    run("uml.profile.apply", json!({ "package": commerce, "profile": audit }));
-    let link = run("uml.association.add", json!({ "from": order, "to": customer }));
-    s.execute("uml.stereotype.apply", &json!({ "element": link, "stereotype": trace })).unwrap();
-    let st = s.doc();
-    let at = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
-    let (order, trace) = (at(&order), at(&trace));
-    let mut shell = Shell::new(Services::default(), &SCREENS);
-    let worded = |shell: &Shell| {
-        let uis = shell.notation_uis;
-        let along = crate::notation_ui::of(uis, st, order).map(|ui| ui.consequences(uis, st, order)).unwrap_or_default();
-        let refused = crate::notation_ui::of(uis, st, trace).and_then(|ui| ui.remove_refusal(uis, st, trace));
-        (along, refused)
-    };
-    let said = |what: &str| {
-        let along = vec!["1 relationship goes with it.".to_string(), format!("1 stereotype application goes with it: «Trace» on {what}.")];
-        (along, Some(format!("Trace is in use: «Trace» on {what}. Remove those first.")))
-    };
-    assert_eq!(worded(&shell), said("an association"), "the app's notations");
-    shell.notation_uis = WORDS_UIS;
-    assert_eq!(worded(&shell), said(WORDED_ASSOCIATION), "the worded notation first");
+/// What the shell asks every notation it knows, whatever element it is about: whether a member is
+/// a top of Models, what every notation offers at the root, what it says of a refusal, of a
+/// command that is off and of a kind, how Chat counts a table, whether a command may leave its
+/// element unnamed, whether it takes Properties in place or the canvas's keys, its catalogues and
+/// the classes it makes, what it draws over the canvas, its repair as a project opens, its own
+/// state, its problems, and that the selection moved. The worded notation is asked nothing else
+/// while the sketch's elements are shown: the rest is asked of an element's own notation.
+const EVERY_NOTATION_ASKS: &[&str] = &[
+    "a_kind",
+    "canvas_delete",
+    "canvas_keys",
+    "canvas_overlay",
+    "catalogues",
+    "chat_kind",
+    "created_classes",
+    "disabled",
+    "is_top",
+    "may_be_unnamed",
+    "new_state",
+    "offers at the root",
+    "open_repair",
+    "problems",
+    "properties_in_place",
+    "said",
+    "selection_moved",
+];
+
+/// Fails the test when the worded notation was asked anything the shell asks only an element's
+/// own notation ([`EVERY_NOTATION_ASKS`] apart).
+fn only_what_every_notation_is_asked() {
+    let asked = WORDS_ASKED.with_borrow(Clone::clone);
+    let wrong: Vec<&str> = asked.into_iter().filter(|m| !EVERY_NOTATION_ASKS.contains(m)).collect();
+    assert!(wrong.is_empty(), "the worded notation was asked what only an element's own notation is asked: {wrong:?}");
 }
 
-/// A model's kind words ask the notations the shell registered, not the app's own list: over the
-/// app's notations UML's attribute is an Attribute and its interface an Interface; with the sketch
-/// answering for UML's metamodel, which has no word of its own and creates only classes, the
-/// attribute and the interface are Elements and the class keeps its name.
-#[test]
-fn a_models_kind_words_ask_the_notations_the_shell_registered() {
-    crate::i18n::set_language("en");
-    let universe = archforge_notations::universe().unwrap();
-    let mut shell = Shell::new(Services::default(), &SCREENS);
-    let classes = [archforge_uml::PROPERTY, archforge_uml::INTERFACE, archforge_uml::CLASS];
-    let words = |shell: &Shell| classes.map(|c| crate::model_words::kind_label(shell.notation_uis, &universe, c));
-    assert_eq!(words(&shell), ["Attribute", "Interface", "Class"], "the app's notations");
-    shell.notation_uis = SKETCH_UIS;
-    assert_eq!(words(&shell), ["Element", "Element", "Class"], "the sketch for UML's metamodel");
+/// What the sketch harness checks after every frame: the other kind and the worded notation were
+/// asked only what every kind and every notation are.
+fn only_what_every_kind_and_notation_is_asked() {
+    only_what_every_kind_is_asked();
+    only_what_every_notation_is_asked();
+}
+
+/// The worded notation's own command, the one it lets leave its element unnamed.
+const WORDED_UNNAMED: &str = "words.thing.rename";
+
+impl crate::notation_ui::NotationUi for WordsUi {
+    /// A metamodel no class is of, so it answers for no element.
+    fn metamodel(&self) -> u16 {
+        u16::MAX
+    }
+    /// No element, so no top of Models.
+    fn is_top(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        words_asked("is_top");
+        false
+    }
+    /// No rows in Models.
+    fn tree(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: &crate::explorer::Tree<'_>) -> Vec<crate::explorer::Row> {
+        words_asked("tree");
+        Vec::new()
+    }
+    /// Nothing at the model's root; at an element, a word of its own.
+    fn offers(&self, _: &archforge_mof::Store, selection: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
+        match selection {
+            None => {
+                words_asked("offers at the root");
+                Vec::new()
+            }
+            Some(_) => {
+                words_asked("offers");
+                vec![crate::notation_ui::Offer { key: "words.thing", word: "Worded thing".into() }]
+            }
+        }
+    }
+    /// Refuses in its own words.
+    fn add(&self, _: &mut crate::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
+        words_asked("add");
+        Some(Err("The words add nothing.".into()))
+    }
+    /// Its own command and field.
+    fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
+        words_asked("rename");
+        Some((WORDED_UNNAMED, "words"))
+    }
+    /// Refuses every name in its own words.
+    fn rename_refusal(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: &str) -> Option<String> {
+        words_asked("rename_refusal");
+        Some("The words keep their name.".into())
+    }
+    /// One thing goes with anything, in its own words.
+    fn consequences(&self, _: &[&'static dyn crate::notation_ui::NotationUi], _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<String> {
+        words_asked("consequences");
+        vec!["A worded thing goes with it.".into()]
+    }
+    /// New inside ▸ in its own words, making nothing.
+    fn inside(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Inside> {
+        words_asked("inside");
+        Some(archforge_shell_api::notation_ui::Inside {
+            word: "Worded inside".into(),
+            heading: "Words".into(),
+            kinds: Vec::new(),
+            refused: Vec::new(),
+            why_not: Some("The words hold nothing.".into()),
+            split: None,
+        })
+    }
+    /// Refuses in its own words.
+    fn add_inside(&self, _: &mut crate::cx::Ctx, _: &str, _: archforge_mof::Obj) -> Option<Result<archforge_mof::Uuid, String>> {
+        words_asked("add_inside");
+        Some(Err("The words make nothing inside.".into()))
+    }
+    /// Keeps everything, in its own words.
+    fn remove_refusal(&self, _: &[&'static dyn crate::notation_ui::NotationUi], _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("remove_refusal");
+        Some("The words keep it.".into())
+    }
+    /// Hands every element up to itself.
+    fn hands_up(&self, _: &archforge_mof::Store, obj: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+        words_asked("hands_up");
+        Some(obj)
+    }
+    /// Its own word for what goes.
+    fn before_removal(&self, _: &archforge_mof::Store, _: &[archforge_mof::Obj]) -> crate::notation_ui::Removal {
+        words_asked("before_removal");
+        crate::notation_ui::Removal { went: vec!["a worded thing".into()], after: Some("the words saw it go".into()) }
+    }
+    /// The word in its own sentence.
+    fn removed_text(&self, what: &str, _: &crate::notation_ui::Removal) -> String {
+        words_asked("removed_text");
+        format!("{what} gone from the words")
+    }
+    /// Refuses every drop.
+    fn drop_refused(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: archforge_mof::Obj) -> bool {
+        words_asked("drop_refused");
+        true
+    }
+    /// A command of its own for every drop.
+    fn drop_on(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: archforge_mof::Obj) -> Option<(&'static str, serde_json::Value)> {
+        words_asked("drop_on");
+        Some(("words.thing.move", serde_json::Value::Null))
+    }
+    /// Refuses in its own words.
+    fn run_drop(&self, _: &mut crate::cx::Ctx, _: &'static str, _: serde_json::Value) -> Result<(), String> {
+        words_asked("run_drop");
+        Err("The words move nothing.".into())
+    }
+    /// Takes no skills, in its own words.
+    fn no_skills(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("no_skills");
+        Some("The words take no skills.".into())
+    }
+    /// Its own words for every target.
+    fn skill_target(&self, _: archforge_mof::ClassId, _: &str) -> Option<String> {
+        words_asked("skill_target");
+        Some("every worded thing".into())
+    }
+    /// Everything holds something.
+    fn has_children(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        words_asked("has_children");
+        true
+    }
+    /// No row opens.
+    fn foldable(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        words_asked("foldable");
+        Vec::new()
+    }
+    /// No rows to open.
+    fn parents(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        words_asked("parents");
+        Vec::new()
+    }
+    /// A search entry of its own.
+    fn entry(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Entry> {
+        words_asked("entry");
+        Some(archforge_shell_api::notation_ui::Entry { icon: &crate::ux::icons::BUBBLE, order: 9, label: "Worded".into(), detail: "Words".into() })
+    }
+    /// Shows nothing on the canvas.
+    fn shown(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+        words_asked("shown");
+        None
+    }
+    /// Finds no problem, as it holds no element.
+    fn problems(
+        &self,
+        _: &[&'static dyn crate::notation_ui::NotationUi],
+        _: &archforge_mof::Store,
+        _: &mut Vec<archforge_shell_api::notation_ui::Problem>,
+    ) {
+        words_asked("problems");
+    }
+    /// The model's root holds every problem.
+    fn problem_holder(&self, store: &archforge_mof::Store, obj: archforge_mof::Obj) -> archforge_mof::Obj {
+        words_asked("problem_holder");
+        archforge_core::skills::model_of(store).unwrap_or(obj)
+    }
+    /// Words of its own for Properties.
+    fn words(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<crate::notation_ui::Words> {
+        words_asked("words");
+        Some(crate::notation_ui::Words {
+            kind: "Worded".into(),
+            word: "Worded".into(),
+            this: "This worded thing".into(),
+            on_this: "On this worded thing · {n}".into(),
+            name: "Worded".into(),
+        })
+    }
+    /// Its own word for an element without a name.
+    fn unnamed(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("unnamed");
+        Some("Unworded".into())
+    }
+    /// A heading of its own.
+    fn heading(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("heading");
+        Some("Worded heading".into())
+    }
+    /// No page of its own.
+    fn page(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+        words_asked("page");
+        None
+    }
+    /// Keeps nothing typed, only writing down that it was asked.
+    fn selection_moved(&self, _: &mut crate::cx::Ctx, _: Option<archforge_mof::Uuid>) {
+        words_asked("selection_moved");
+    }
+    /// Takes Properties in place only with an element of its own selected, which no test makes.
+    fn properties_in_place(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: &crate::ux::Palette, _: egui::Rect, _: f32) -> bool {
+        words_asked("properties_in_place");
+        false
+    }
+    /// Draws its own word, as Properties shows none of its elements.
+    fn body(&self, _: &mut crate::cx::Ctx, ui: &mut egui::Ui, p: &crate::ux::Palette, r: egui::Rect, y: f32, _: &crate::panels::Subject) {
+        words_asked("body");
+        crate::ux::text(ui.painter(), egui::pos2(r.left() + 16.0, r.top() + y), "Worded body", crate::ux::types::UI, p.text, None);
+    }
+    /// Its sentence for an enum type without literals ([`WORDED_LITERALS`]), so a test sees it asked
+    /// before the sketch.
+    fn said(&self, _: &[&'static dyn crate::notation_ui::NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        words_asked("said");
+        matches!(reason, archforge_engine::Reason::TooFew { kind: "enum literal", min: 1 }).then(|| WORDED_LITERALS.to_string())
+    }
+    /// Its own command's reason alone.
+    fn disabled(&self, reason: &str) -> Option<String> {
+        words_asked("disabled");
+        (reason == "words.nothing").then(|| "The words have nothing yet.".into())
+    }
+    /// Its own command alone may leave its element unnamed ([`WORDED_UNNAMED`]).
+    fn may_be_unnamed(&self, cmd: &str) -> bool {
+        words_asked("may_be_unnamed");
+        cmd == WORDED_UNNAMED
+    }
+    /// Its one row ([`WORDED_CATALOGUES`]).
+    fn catalogues(&self) -> &'static [crate::i18n::Rows] {
+        words_asked("catalogues");
+        WORDED_CATALOGUES
+    }
+    /// Creates nothing.
+    fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
+        words_asked("created_classes");
+        &[]
+    }
+    /// Its own word for every class.
+    fn kind_word(&self, _: archforge_mof::ClassId) -> Option<String> {
+        words_asked("kind_word");
+        Some("worded".into())
+    }
+    /// Its own heading for every list.
+    fn list_heading(&self, _: archforge_mof::ClassId) -> Option<String> {
+        words_asked("list_heading");
+        Some("Worded list".into())
+    }
+    /// Its word for an association ([`WORDED_ASSOCIATION`]), so a test sees it asked before the
+    /// sketch.
+    fn a_kind(&self, kind: &str) -> Option<String> {
+        words_asked("a_kind");
+        (kind == "association").then(|| WORDED_ASSOCIATION.to_string())
+    }
+    /// Its own word for every scope.
+    fn scope_word(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<String> {
+        words_asked("scope_word");
+        Some("the words".into())
+    }
+    /// Its own table alone, as a kind of its own.
+    fn chat_kind(&self, table: &str) -> Option<crate::notation_ui::ChatKind> {
+        words_asked("chat_kind");
+        (table == "words_thing").then_some(crate::notation_ui::ChatKind::Own("worded"))
+    }
+    /// Its own count for every kind.
+    fn chat_count(&self, _: &str, n: u64) -> Option<String> {
+        words_asked("chat_count");
+        Some(format!("{n} worded"))
+    }
+    /// None of its own, so the longest of the shell's is another notation's.
+    fn name_limit(&self) -> usize {
+        0
+    }
+    /// None of its own, so the longest of the shell's is another notation's.
+    fn description_limit(&self) -> usize {
+        0
+    }
+    /// Deletes nothing on the canvas, holding no element.
+    fn canvas_delete(&self, _: &mut crate::cx::Ctx, _: bool) -> bool {
+        words_asked("canvas_delete");
+        false
+    }
+    /// Takes no key on the canvas, holding no element.
+    fn canvas_keys(&self, _: &mut crate::cx::Ctx, _: &egui::Ui) -> bool {
+        words_asked("canvas_keys");
+        false
+    }
+    /// Draws nothing over the canvas.
+    fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {
+        words_asked("canvas_overlay");
+    }
+    /// A way out of its own.
+    fn resolve_hint(&self) -> Option<String> {
+        words_asked("resolve_hint");
+        Some("The words would fix it".into())
+    }
+    /// Writes down that it was asked.
+    fn resolve(&self, _: &mut crate::cx::Ctx, _: archforge_mof::Uuid) {
+        words_asked("resolve");
+    }
+    /// Leaves a tag in the model, so a test sees an opening's repair ask it.
+    fn open_repair(&self, store: &mut archforge_mof::Store) {
+        words_asked("open_repair");
+        let _ = store.create(archforge_core::TAG);
+    }
+    /// The sketch's state, unused.
+    fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
+        words_asked("new_state");
+        Box::new(SketchState::default())
+    }
 }
 
 /// The catalogues registered are those of the notations a shell is given: the worded notation's
@@ -12300,7 +11456,7 @@ fn a_models_kind_words_ask_the_notations_the_shell_registered() {
 /// with the notations it comes with, as a shell registers its own.
 #[test]
 fn the_catalogues_of_the_notations_a_shell_is_given_are_registered() {
-    crate::i18n::register_notations(WORDS_UIS.iter().map(|ui| ui.catalogues()));
+    crate::i18n::register_notations(SKETCH_UIS.iter().map(|ui| ui.catalogues()));
     crate::i18n::set_language("de");
     let row = WORDED_ROW;
     assert_eq!(crate::i18n::tr(row), "Eine Wortzeile");
@@ -12312,19 +11468,20 @@ fn the_catalogues_of_the_notations_a_shell_is_given_are_registered() {
 /// registered, its repair runs too and leaves its tag.
 #[test]
 fn an_opening_repairs_a_model_with_the_notations_the_shell_registered() {
-    let mut shell = Shell::new(Services::default(), &SCREENS);
+    let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
     let repaired = |shell: &Shell| {
-        let mut st = archforge_notations::store(Box::new({
-            let ids = test_ids();
-            move || ids()
-        }))
-        .unwrap();
+        let mut st = NOTATIONS
+            .store(Box::new({
+                let ids = test_ids();
+                move || ids()
+            }))
+            .unwrap();
         st.create(archforge_core::MODEL).unwrap();
         (shell.open_repair())(&mut st);
         st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_core::TAG)).count()
     };
     assert_eq!(repaired(&shell), 0, "the app's notations");
-    shell.notation_uis = WORDS_UIS;
+    shell.notation_uis = SKETCH_UIS;
     assert_eq!(repaired(&shell), 1, "the worded notation's repair runs too");
 }
 
@@ -12443,7 +11600,7 @@ fn names_typed_in_place(theme: ThemeKind) {
         let o = |name: &str| st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap()).unwrap();
         (o("sales"), o("Party"))
     };
-    let longest = archforge_er::rules::MAX_NAME.max(archforge_diagram::rules::MAX_NAME);
+    let longest = archforge_diagram::rules::MAX_NAME.max(SKETCH_NAME_LIMIT);
     assert!(SKETCH_NAME_LIMIT < longest, "the sketch's limit is told apart from the others'");
     assert_eq!(name_limit_of(h.state(), party), SKETCH_NAME_LIMIT);
     // A diagram's name takes the diagrams' own limit, never another notation's, so its field takes
@@ -12528,7 +11685,7 @@ fn the_narrow_context_reaches_the_shells_own_parts() {
         canvas.notice = Some("said on the canvas".into());
         registry.record("cx.part", "button", egui::Rect::from_min_size(egui::pos2(1.0, 2.0), egui::vec2(3.0, 4.0)));
         *cx.menu_bar.held = Some(held);
-        let made = crate::panels::run_cx(cx, "uml.package.add", serde_json::json!({ "name": "sales" })).unwrap();
+        let made = crate::panels::run_cx(cx, "sketch.package.add", serde_json::json!({ "name": "sales" })).unwrap();
         let twin = cx.cx_ref();
         assert!(std::ptr::eq(twin.session, session) && std::ptr::eq(twin.notation_uis, uis) && !twin.looking_only, "the twin over the context");
         assert_eq!(twin.canvas.notice.as_deref(), Some("said on the canvas"), "the twin reads the context's canvas");
@@ -12553,8 +11710,8 @@ fn the_narrow_contexts_requests_run_in_order_once_after_the_call() {
     let (pkg, class) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-        let pkg = id(s.execute("uml.package.add", &serde_json::json!({ "name": "sales" })).unwrap().value);
-        (pkg, id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg.to_string(), "name": "Order" })).unwrap().value))
+        let pkg = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "sales" })).unwrap().value);
+        (pkg, id(s.execute("sketch.class.add", &serde_json::json!({ "package": pkg.to_string(), "name": "Order" })).unwrap().value))
     };
     let other = archforge_mof::Uuid([7; 16]);
     let shell = h.state_mut();
@@ -12589,13 +11746,13 @@ fn the_narrow_context_reaches_each_notations_own_state() {
     let shell = h.state_mut();
     let states: *const _ = &shell.notation_states;
     assert!(std::ptr::eq(shell.cx_ref().notation_states, states), "the twin over the shell");
-    assert!(!er_of(shell).more_open);
+    assert_eq!(shell.notation_states.own::<SketchState>().unwrap().mark, 0);
     shell.cx(|cx| {
         assert!(std::ptr::eq(&*cx.notation_states, states), "the context's states are the shell's");
-        er_state::er_mut(cx.notation_states).expect("the shell's notations hold ER").more_open = true;
+        cx.notation_states.own_mut::<SketchState>().expect("the shell's notations hold the sketch").mark = 1;
         assert!(std::ptr::eq(cx.cx_ref().notation_states, states), "the twin over the context");
     });
-    assert!(er_of(shell).more_open, "changed through the context, changed on the shell");
+    assert_eq!(shell.notation_states.own::<SketchState>().unwrap().mark, 1, "changed through the context, changed on the shell");
 }
 
 /// A panel the narrow context asks for shows, unfolded, once the call returns; of two asked in one
@@ -12703,7 +11860,7 @@ fn shared_removals_ask_the_notation(theme: ThemeKind) {
     {
         let st = h.state().session.as_ref().unwrap().doc();
         let o = |id: archforge_mof::Uuid| st.by_uuid(id).unwrap();
-        let (order, payment) = (o(named(&h, archforge_uml::CLASS, "Order")), o(named(&h, archforge_uml::CLASS, "Payment")));
+        let (order, payment) = (o(named(&h, archforge_mof::toy::CLASS, "Order")), o(named(&h, archforge_mof::toy::CLASS, "Payment")));
         let diagram = o(h.state().canvas.active.unwrap());
         let said = crate::notation_ui::before_removal(SKETCH_UIS, st, &[diagram, order, payment]);
         let want = crate::notation_ui::Removal {
@@ -12721,7 +11878,7 @@ fn shared_removals_ask_the_notation(theme: ThemeKind) {
     let g = {
         let st = h.state().session.as_ref().unwrap().doc();
         let drawn = |o: &archforge_mof::Obj| !archforge_diagram::views_of(st, *o).1.is_empty();
-        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::GENERALIZATION) && drawn(o)).unwrap()).unwrap()
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::GENERALIZATION) && drawn(o)).unwrap()).unwrap()
     };
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [g.to_string()] })).unwrap();
     h.run();
@@ -12747,7 +11904,7 @@ fn shared_removals_ask_the_notation(theme: ThemeKind) {
     h.state_mut().notation_uis = SKETCH_UIS;
     h.run();
     // Order removed in the Models tree, through its dialog: the lead, then what the sketch saw.
-    let order = named(&h, archforge_uml::CLASS, "Order");
+    let order = named(&h, archforge_mof::toy::CLASS, "Order");
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [order.to_string()] })).unwrap();
     h.run();
     crate::explorer::remove_selection(h.state_mut());
@@ -12759,8 +11916,8 @@ fn shared_removals_ask_the_notation(theme: ThemeKind) {
     assert_eq!(toast.as_deref(), Some("Order deleted · the sketch saw 1 go"), "{theme:?}");
 }
 
-/// The delete dialog says what goes with an element as the element's notation says it, in its own
-/// words, and asks only when something goes: a sketch class shown on no diagram goes at once from
+/// The delete dialog says what goes with an element as the element's notation says it, not the
+/// notation registered before it, in its own words, and asks only when something goes: a sketch class shown on no diagram goes at once from
 /// Models when the sketch says nothing goes with it, and asks with the sketch's sentence when it
 /// has an attribute; the canvas's Delete from the model says the same. In light and dark.
 #[test]
@@ -12769,17 +11926,17 @@ fn the_delete_dialog_says_what_the_notation_says_goes_with_it() {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         h.state_mut().notation_uis = SKETCH_UIS;
         h.run();
-        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let order = named(&h, archforge_mof::toy::CLASS, "Order").to_string();
         let pkg = {
             let st = h.state().session.as_ref().unwrap().doc();
-            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap()).unwrap();
+            let p = st.container(st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap()).unwrap().unwrap().0;
             st.uuid(p).unwrap().to_string()
         };
         let s = h.state_mut().session.as_mut().unwrap();
         let mut id = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
-        let lone = id("uml.class.add", serde_json::json!({ "package": pkg, "name": "Lone" }));
-        let held = id("uml.class.add", serde_json::json!({ "package": pkg, "name": "Held" }));
-        id("uml.attribute.add", serde_json::json!({ "class": held, "name": "kept" }));
+        let lone = id("sketch.class.add", serde_json::json!({ "package": pkg, "name": "Lone" }));
+        let held = id("sketch.class.add", serde_json::json!({ "package": pkg, "name": "Held" }));
+        id("sketch.attribute.add", serde_json::json!({ "class": held, "name": "kept" }));
         let remove = |h: &mut Harness<'static, Shell>, id: &str| {
             h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
             h.run();
@@ -12804,19 +11961,19 @@ fn the_delete_dialog_says_what_the_notation_says_goes_with_it() {
             let st = h.state().session.as_ref().unwrap().doc();
             let o = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
             let node = archforge_diagram::views_of(st, o).2[0];
-            (st.list(o, archforge_uml::class::OWNED_ATTRIBUTE).unwrap().len(), st.uuid(o).unwrap(), st.uuid(node).unwrap())
+            (st.list(o, archforge_mof::toy::CLASS_OWNED_ATTRIBUTE).unwrap().len(), st.uuid(o).unwrap(), st.uuid(node).unwrap())
         };
         crate::editing::ask_delete(h.state_mut(), node, order);
         h.run();
         let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: Delete from the model asks"));
         assert_eq!(asked.consequences, [format!("{attributes} attributes go with it in the sketch.")], "{theme:?}");
+        only_what_every_notation_is_asked();
     }
 }
 
 /// A row Properties selects opens the rows its element sits under in Models, as its notation names
-/// them (AR-785): in ER exactly the rows its table and schema were before (a column's and a key's
-/// table and schema, a relationship's and a view's schema), and a class's package in the sketch
-/// notation.
+/// them (AR-785): exactly the rows of what holds it (an attribute's and a generalization's class
+/// and package, an association's package), and a class's package.
 #[test]
 fn a_row_properties_selects_opens_the_rows_its_notation_names() {
     use std::collections::BTreeSet;
@@ -12826,26 +11983,23 @@ fn a_row_properties_selects_opens_the_rows_its_notation_names() {
     };
     let (mut h, customer) = table_harness();
     let (customer, email) = (archforge_mof::Uuid::parse(&customer).unwrap(), find(&h, "email"));
-    let (schema, key) = {
+    let schema = {
         let st = h.state().session.as_ref().unwrap().doc();
-        let schema = st.uuid(archforge_er::rules::schema_of(st, st.by_uuid(customer).unwrap()).unwrap()).unwrap();
-        let key = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::PRIMARY_KEY)).unwrap();
-        (schema, st.uuid(key).unwrap())
+        st.uuid(st.container(st.by_uuid(customer).unwrap()).unwrap().unwrap().0).unwrap()
     };
-    let (relationship, view) = {
+    let (association, generalization) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-        let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Order" })).unwrap().value);
-        let r = serde_json::json!({ "from": customer.to_string(), "to": order.to_string(), "name": "places" });
-        let relationship = id(s.execute("er.relationship.add", &r).unwrap().value);
-        let v = serde_json::json!({ "schema": schema.to_string(), "name": "open_orders", "query": "select * from orders" });
-        (relationship, id(s.execute("er.view.add", &v).unwrap().value))
+        let order = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema.to_string(), "name": "Order" })).unwrap().value);
+        let a = serde_json::json!({ "from": customer.to_string(), "to": order.to_string(), "name": "places" });
+        let association = id(s.execute("sketch.association.add", &a).unwrap().value);
+        let g = serde_json::json!({ "specific": customer.to_string(), "general": order.to_string() });
+        (association, id(s.execute("sketch.inherit.add", &g).unwrap().value))
     };
     for (what, element, rows) in [
-        ("a column", email, BTreeSet::from([customer, schema])),
-        ("a key", key, BTreeSet::from([customer, schema])),
-        ("a relationship", relationship, BTreeSet::from([schema])),
-        ("a view", view, BTreeSet::from([schema])),
+        ("an attribute", email, BTreeSet::from([customer, schema])),
+        ("a generalization", generalization, BTreeSet::from([customer, schema])),
+        ("an association", association, BTreeSet::from([schema])),
     ] {
         h.state_mut().explorer.expanded.clear();
         h.state_mut().cx(|cx| archforge_shell_api::panels::select_element_cx(cx, element));
@@ -12857,17 +12011,6 @@ fn a_row_properties_selects_opens_the_rows_its_notation_names() {
     h.state_mut().cx(|cx| archforge_shell_api::panels::select_element_cx(cx, party));
     assert_eq!(h.state().explorer.expanded.iter().copied().collect::<Vec<_>>(), [sales], "the class's package");
     assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 1, "and it is selected");
-}
-
-/// A class's attributes or operations as its card lists them.
-fn member_rows(h: &Harness<'static, Shell>, class: archforge_mof::Uuid, operations: bool) -> Vec<String> {
-    let st = h.state().session.as_ref().unwrap().doc();
-    let c = st.by_uuid(class).unwrap();
-    if operations {
-        archforge_uml::members::operations(st, c).into_iter().map(|o| archforge_uml::figures::operation_text(st, o)).collect()
-    } else {
-        archforge_uml::members::attributes(st, c).into_iter().map(|a| archforge_uml::figures::attribute_text(st, a)).collect()
-    }
 }
 
 /// Clicks the field `id` and types `text` into it.
@@ -12929,11 +12072,10 @@ fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, egui::Co
 /// kept in memory (`crate::chat_fixture`), Claude set up when `ready`.
 fn chat_harness(theme: ThemeKind, ready: bool) -> (Harness<'static, Shell>, crate::chat_fixture::Rig) {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
-    let rig =
-        crate::chat_fixture::sample(&mut shell, ready, archforge_uml_ui::snapshot::uml_ui::open_sample, (archforge_uml::CLASS, "Order")).unwrap();
+    let rig = crate::chat_fixture::sample(&mut shell, ready, open_sample, (archforge_mof::toy::CLASS, "Order")).unwrap();
     let h = harness_over(shell);
     (h, rig)
 }
@@ -15077,7 +14219,7 @@ fn a_tool_row_is_worded_from_the_channels_answer_and_only_a_running_turn_of_the_
         (facts.tool.as_str(), facts.command.as_deref(), facts.status),
         ("engine.execute", Some("diagram.get"), crate::chat_store::ToolStatus::Done)
     );
-    assert!(facts.anchors.iter().any(|a| a.role == crate::chat_store::AnchorRole::Read && a.metaclass == "uml_class"), "{facts:?}");
+    assert!(facts.anchors.iter().any(|a| a.role == crate::chat_store::AnchorRole::Read && a.metaclass == "sketch_class"), "{facts:?}");
     // The window's own controls and the command list make no row.
     fx::call(h.state_mut(), "engine.commands", serde_json::json!({})).unwrap();
     assert_eq!(kept_chat(&h, &rig).messages.len(), kept.messages.len());
@@ -15163,7 +14305,7 @@ fn a_cards_undo_goes_by_the_history_its_turn_was_made_in() {
     };
     let state = |h: &Harness<'static, Shell>| h.state().chat_panel.chat.as_ref().unwrap().turns.last().unwrap().change.clone().unwrap();
     let another = |h: &mut Harness<'static, Shell>| {
-        let (tables, junctions) = archforge_notations::storage();
+        let (tables, junctions) = NOTATIONS.storage();
         let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
         let mut n = 0u64;
         let mint = move || {
@@ -15172,7 +14314,7 @@ fn a_cards_undo_goes_by_the_history_its_turn_was_made_in() {
             r[2..].copy_from_slice(&n.to_be_bytes());
             archforge_mof::Uuid::v7(1_761_670_900_000, r)
         };
-        archforge_notations::session_from_rows_repaired(&rows, Box::new(mint), |_| {}).unwrap()
+        NOTATIONS.session_from_rows_repaired(&rows, Box::new(mint), |_| {}).unwrap()
     };
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, rig) = chat_harness(theme, true);
@@ -15180,7 +14322,7 @@ fn a_cards_undo_goes_by_the_history_its_turn_was_made_in() {
         let at = rect_of(&h, "workspace.chat.allow-changes").center();
         click(&mut h, at);
         ask_in_chat(&mut h, "Describe Customer.");
-        let id = fx::element(h.state(), archforge_uml::CLASS, "Customer").unwrap();
+        let id = fx::element(h.state(), archforge_mof::toy::CLASS, "Customer").unwrap();
         let params = serde_json::json!({ "command": "element.describe", "params": { "element": id.to_string(), "text": "A buyer" } });
         fx::call(h.state_mut(), "engine.execute", params).unwrap();
         h.run();
@@ -15209,7 +14351,7 @@ fn a_cards_undo_goes_by_the_history_its_turn_was_made_in() {
         let span = state(&h).span.unwrap();
         while h.state().session.as_ref().unwrap().revision() < span.before {
             let name = format!("later{}", h.state().session.as_ref().unwrap().revision());
-            h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap();
+            h.state_mut().session.as_mut().unwrap().execute("sketch.package.add", &serde_json::json!({ "name": name })).unwrap();
         }
         assert_eq!(h.state().session.as_ref().unwrap().revision(), span.before, "the same number, in another history");
         h.run();
@@ -15371,7 +14513,7 @@ fn generate_with_the_queue(
     let (mut h, f) = chat_workspace(theme);
     {
         let s = h.state_mut().session.as_mut().unwrap();
-        let schema = s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value["id"].as_str().unwrap().to_string();
+        let schema = s.execute("sketch.package.add", &serde_json::json!({ "name": "Shop" })).unwrap().value["id"].as_str().unwrap().to_string();
         s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
     }
     let (queue, requests) = std::sync::mpsc::channel();
@@ -15403,6 +14545,8 @@ fn generate_says_agent_access_is_off_with_the_queue_attached_and_no_control_port
 fn generate_says_agent_access_is_on_when_the_person_turned_it_on_for_this_start() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, f, _queue) = generate_with_the_queue(theme);
+        // The worded notation before the sketch's: the scope is worded by the element's own.
+        h.state_mut().notation_uis = SKETCH_UIS;
         h.state_mut().set_own_agent_access(true);
         h.run();
         assert!(painted_has(&h, "Agent access is on: a connected agent reads this context through MCP."), "{theme:?}: {:?}", painted(&h));
@@ -15420,6 +14564,7 @@ fn generate_says_agent_access_is_on_when_the_person_turned_it_on_for_this_start(
         h.run();
         assert!(painted_has(&h, "Agent access is on: a connected agent"), "{theme:?}: {:?}", painted(&h));
         assert!(!painted_has(&h, "Agent access is off"), "{theme:?}: {:?}", painted(&h));
+        only_what_every_notation_is_asked();
     }
 }
 
@@ -15436,10 +14581,95 @@ fn harness_over(shell: Shell) -> Harness<'static, Shell> {
     h
 }
 
+/// Opens the fake notation's sample model on a sketch diagram in the context's project, as the app's
+/// notations open theirs: the package Commerce with Customer, Order, PricingService, Product,
+/// OrderLine, Payment, Catalog and CardPayment laid out in three rows, their attributes and
+/// operations, the associations places (Customer to Order), holds (Order to OrderLine), and the
+/// unnamed ones between OrderLine and Product, Catalog and Product and Order and Payment, and
+/// CardPayment a kind of Payment, every line drawn and the named ones labelled; saved, with nothing
+/// to undo. Gives the diagram's id.
+fn open_sample(cx: &mut crate::cx::Ctx) -> Result<archforge_mof::Uuid, String> {
+    let session = cx.session.as_mut().ok_or("the sample needs a session")?;
+    let mut run = |cmd: &str, p: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(cmd, &p).map_err(|e| format!("{cmd}: {e}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let pkg = run("sketch.package.add", serde_json::json!({ "name": "Commerce" }))?;
+    let classes: [(&str, &[&str], &[&str], i32, i32); 8] = [
+        ("Customer", &["customerId", "email"], &[], 80, 80),
+        ("Order", &["orderId", "placedOn"], &["total"], 560, 80),
+        ("PricingService", &[], &["priceOf"], 1040, 80),
+        ("Product", &["sku", "price"], &[], 80, 400),
+        ("OrderLine", &["quantity"], &[], 560, 400),
+        ("Payment", &["amount"], &[], 1040, 400),
+        ("Catalog", &["title"], &[], 80, 700),
+        ("CardPayment", &["cardNumber"], &[], 1040, 700),
+    ];
+    let mut ids = std::collections::BTreeMap::new();
+    for (name, attributes, operations, ..) in &classes {
+        let c = run("sketch.class.add", serde_json::json!({ "package": pkg, "name": name }))?;
+        for a in *attributes {
+            run("sketch.attribute.add", serde_json::json!({ "class": c, "name": a }))?;
+        }
+        for o in *operations {
+            run("sketch.operation.add", serde_json::json!({ "class": c, "name": o }))?;
+        }
+        ids.insert(*name, c);
+    }
+    let mut named = Vec::new();
+    for (from, to, name) in [
+        ("Customer", "Order", "places"),
+        ("Order", "OrderLine", "holds"),
+        ("OrderLine", "Product", ""),
+        ("Catalog", "Product", ""),
+        ("Order", "Payment", ""),
+    ] {
+        let a = run("sketch.association.add", serde_json::json!({ "from": ids[from], "to": ids[to], "name": name }))?;
+        if !name.is_empty() {
+            named.push(a);
+        }
+    }
+    run("sketch.inherit.add", serde_json::json!({ "specific": ids["CardPayment"], "general": ids["Payment"] }))?;
+    let d = run("diagram.add", serde_json::json!({ "kind": SKETCH, "element": pkg, "name": "Commerce" }))?;
+    for (name, attributes, operations, x, y) in &classes {
+        let height = 72 + 24 * (attributes.len() + operations.len()).max(1);
+        run("diagram.place", serde_json::json!({ "diagram": d, "element": ids[name], "x": x, "y": y, "width": 290, "height": height }))?;
+    }
+    run("diagram.connect-all", serde_json::json!({ "diagram": d }))?;
+    let mut edges = Vec::new();
+    for line in named {
+        let store = session.doc();
+        let edge = store
+            .by_uuid(archforge_mof::Uuid::parse(&line).ok_or("a line's id")?)
+            .and_then(|l| archforge_diagram::views_of(store, l).1.first().copied());
+        edges.push(edge.and_then(|e| store.uuid(e).ok()).ok_or("a named line's edge")?);
+    }
+    let mut run = |cmd: &str, p: serde_json::Value| session.execute(cmd, &p).map(|_| ()).map_err(|e| format!("{cmd}: {e}"));
+    for edge in edges {
+        run("diagram.label", serde_json::json!({ "edge": edge.to_string(), "kind": "name", "at": "middle" }))?;
+    }
+    run("view.select", serde_json::json!({ "ids": [] }))?;
+    // Read back from its rows, as an opening reads a project: saved, with nothing to undo.
+    let (tables, junctions) = NOTATIONS.storage();
+    let rows = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| e.to_string())?;
+    let n = std::sync::atomic::AtomicU64::new(1 << 32);
+    let ids = Box::new(move || {
+        let i = n.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut r = [0u8; 10];
+        r[2..].copy_from_slice(&i.to_be_bytes());
+        archforge_mof::Uuid::v7(1_761_670_800_000, r)
+    });
+    *cx.session = Some(NOTATIONS.session_from_rows(&rows, ids)?);
+    let d = archforge_mof::Uuid::parse(&d).ok_or("the diagram's id")?;
+    cx.requests.push(archforge_shell_api::cx::Request::ExpandRows(archforge_mof::Uuid::parse(&pkg).into_iter().collect()));
+    archforge_shell_api::canvas::open_cx(cx, d);
+    Ok(d)
+}
+
 /// [`related_sample`] in `theme` in a window of `size`.
 fn related_sample_in(theme: ThemeKind, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>) {
     let mut h = workspace_harness(theme, size);
-    h.state_mut().cx(uml_ui::open_sample).unwrap();
+    h.state_mut().cx(open_sample).unwrap();
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
@@ -15485,61 +14715,6 @@ fn node_of(h: &Harness<'static, Shell>, element: archforge_mof::Uuid) -> String 
     let st = h.state().session.as_ref().unwrap().doc();
     let n = archforge_diagram::views_of(st, st.by_uuid(element).unwrap()).2[0];
     st.uuid(n).unwrap().to_string()
-}
-
-/// A package Reviews on its own class diagram, open in `theme`: the classes Customer and Product
-/// side by side, Store under Customer and the interface Rated under Product, each card a class's
-/// size. What the association class tests read.
-struct Reviews {
-    h: Harness<'static, Shell>,
-    package: String,
-    diagram: String,
-    /// The classifiers' ids by name, and their nodes by name.
-    ids: std::collections::BTreeMap<&'static str, String>,
-    nodes: std::collections::BTreeMap<&'static str, String>,
-}
-
-/// [`Reviews`] in `theme`, the whole diagram in view.
-fn reviews(theme: ThemeKind) -> Reviews {
-    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-    let s = h.state_mut().session.as_mut().unwrap();
-    let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-    let package = run("uml.package.add", serde_json::json!({ "name": "Reviews" }));
-    let diagram = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Reviews" }));
-    let (mut ids, mut nodes) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
-    for (name, cmd, x, y) in [
-        ("Customer", "uml.class.add", 80, 520),
-        ("Product", "uml.class.add", 760, 520),
-        ("Store", "uml.class.add", 80, 860),
-        ("Rated", "uml.interface.add", 760, 860),
-    ] {
-        let id = run(cmd, serde_json::json!({ "package": package, "name": name }));
-        let node = run("diagram.place", serde_json::json!({ "diagram": diagram, "element": id, "x": x, "y": y, "width": 240, "height": 136 }));
-        ids.insert(name, id);
-        nodes.insert(name, node);
-    }
-    let d = archforge_mof::Uuid::parse(&diagram).unwrap();
-    crate::canvas::open(h.state_mut(), d);
-    h.state_mut().canvas.fit_pending = true;
-    h.run();
-    Reviews { h, package, diagram, ids, nodes }
-}
-
-impl Reviews {
-    /// Makes the association class Review from Customer to Product through the commands, its line
-    /// and its card above the line's middle: its id, its line's id and its card's id.
-    fn review(&mut self) -> (String, String, String) {
-        let (customer, product) = (self.ids["Customer"].clone(), self.ids["Product"].clone());
-        let (from, to, d) = (self.nodes["Customer"].clone(), self.nodes["Product"].clone(), self.diagram.clone());
-        let s = self.h.state_mut().session.as_mut().unwrap();
-        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-        let ac = run("uml.association-class.add", serde_json::json!({ "from": customer, "to": product, "name": "Review" }));
-        run("uml.attribute.add", serde_json::json!({ "class": ac, "name": "stars", "type": "Integer" }));
-        let edge = run("diagram.connect", serde_json::json!({ "diagram": d, "element": ac, "source": from, "target": to }));
-        let card = run("diagram.place", serde_json::json!({ "diagram": d, "element": ac, "x": 420, "y": 200, "width": 240, "height": 136 }));
-        self.h.run();
-        (ac, edge, card)
-    }
 }
 
 /// Clicks the field `id`, selects what it holds and types `text` over it.
@@ -15840,7 +15015,7 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
             shell.logic(ui.ctx());
             shell.ui(ui);
         },
-        Shell::new(services, &SCREENS),
+        Shell::new(services, NOTATIONS, &SCREENS),
     );
     h.run();
     // A cancel, taken on the next frame: nothing to say.
@@ -15918,6 +15093,7 @@ fn a_folder_pick_is_answered_on_a_later_frame_and_one_at_a_time() {
                 picker_unavailable: Some(std::sync::Arc::new(|| Some("this system has no desktop portal".into()))),
                 ..Services::default()
             },
+            NOTATIONS,
             &SCREENS,
         );
         shell.state.theme = theme;
@@ -16027,6 +15203,7 @@ fn pick_waits_harness(
             })),
             ..Services::default()
         },
+        NOTATIONS,
         &SCREENS,
     );
     shell.state.theme = theme;
@@ -16188,7 +15365,7 @@ fn a_menus_rows_of_one_text_are_told_apart() {
         let picks = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let swapped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (picked, swap) = (picks.clone(), swapped.clone());
-        let mut shell = Shell::new(Services::default(), &SCREENS);
+        let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
         shell.state.theme = theme;
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
             move |ui, shell: &mut Shell| {
@@ -16211,7 +15388,7 @@ fn a_menus_rows_of_one_text_are_told_apart() {
         click(&mut h, at);
         assert_eq!(picks.lock().unwrap().as_slice(), [(0, "Sales".to_string())], "{theme:?}: the first row, alone, not its twin");
         // Billing reached, then the two change places: Enter picks Billing where it went.
-        h.state_mut().panels.menu = Some(er_state::menus::KIND);
+        h.state_mut().panels.menu = Some(crate::panels::MenuId::shell("rows"));
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         swapped.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -16235,7 +15412,7 @@ fn a_menus_twin_rows_keep_their_ids_when_it_scrolls() {
         const TWINS: [&[usize]; 5] = [&[0, 3], &[0, 1, 4], &[2], &[0, 1], &[0]];
         let mode = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let (picked, now) = (picks.clone(), mode.clone());
-        let mut shell = Shell::new(Services::default(), &SCREENS);
+        let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
         shell.state.theme = theme;
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).with_step_dt(0.1).build_ui_state(
             move |ui, shell: &mut Shell| {
@@ -16323,7 +15500,7 @@ type MenuRowsSet = std::sync::Arc<std::sync::Mutex<(Vec<String>, Vec<String>)>>;
 fn rows_menu(theme: ThemeKind, rows: &MenuRowsSet, picks: &std::sync::Arc<std::sync::Mutex<Vec<usize>>>) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
     let (shown, picked) = (rows.clone(), picks.clone());
-    let mut shell = Shell::new(Services::default(), &SCREENS);
+    let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).with_step_dt(0.1).build_ui_state(
         move |ui, shell: &mut Shell| {
@@ -16339,7 +15516,7 @@ fn rows_menu(theme: ThemeKind, rows: &MenuRowsSet, picks: &std::sync::Arc<std::s
         },
         shell,
     );
-    h.state_mut().panels.menu = Some(er_state::menus::KIND);
+    h.state_mut().panels.menu = Some(crate::panels::MenuId::shell("rows"));
     h.run();
     h
 }
@@ -16602,13 +15779,14 @@ fn an_opening_waiting_for_the_hold_turns_the_strips_open_project_off() {
     }
 }
 
+/// A diagram takes a skill from the Skills panel, and shows its package's skill as inherited.
 #[test]
 fn a_diagram_takes_a_skill_from_the_skills_panel_and_shows_its_schemas_as_inherited() {
     let (mut h, _, diagram) = diagram_harness();
     let schema_skill = {
         let s = h.state_mut().session.as_mut().unwrap();
         let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap()).unwrap().to_string();
         let out = s.execute("skill.add", &serde_json::json!({ "subject": schema, "name": "Layout" })).unwrap();
         s.execute("view.select", &serde_json::json!({ "ids": [diagram] })).unwrap();
         out.value["id"].as_str().unwrap().to_string()
@@ -16703,7 +15881,7 @@ fn about_scrolls_its_body_in_a_short_window_and_keeps_done_clear() {
 fn new_project_over_the_workspace_keeps_the_keys_from_it() {
     in_both_appearances(|theme| {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        crate::explorer::add(h.state_mut(), "schema");
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
@@ -16726,13 +15904,14 @@ fn new_project_over_the_workspace_keeps_the_keys_from_it() {
     });
 }
 
+/// While About is open, no key reaches the Models explorer or the workspace behind it.
 #[test]
 fn while_about_is_open_no_key_reaches_the_models_explorer_or_the_workspace_behind_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
-    crate::explorer::add(h.state_mut(), "schema");
+    crate::explorer::add(h.state_mut(), "package");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    crate::explorer::add(h.state_mut(), "table");
+    crate::explorer::add(h.state_mut(), "class");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     // The table, childless, selected in Models with the explorer holding the keys.
@@ -16744,7 +15923,7 @@ fn while_about_is_open_no_key_reaches_the_models_explorer_or_the_workspace_behin
     let revision = h.state().session.as_ref().unwrap().revision();
     let tables = |h: &Harness<'static, Shell>| {
         let st = h.state().session.as_ref().unwrap().doc();
-        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).count()
+        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS)).count()
     };
     assert_eq!(tables(&h), 1);
     // About opens as the native menu opens it: nothing in the dialog has the keyboard yet.
@@ -16787,7 +15966,9 @@ fn shift_f10_opens_the_models_row_menu_only_with_shift_alone() {
     use egui::Modifiers as M;
     in_both_appearances(|theme| {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        crate::explorer::add(h.state_mut(), "schema");
+        // The worded notation before the sketch's: the row's menu asks the element's own.
+        h.state_mut().notation_uis = SKETCH_UIS;
+        crate::explorer::add(h.state_mut(), "package");
         h.run();
         key(&mut h, egui::Key::Escape, M::NONE);
         // The new schema stays selected; a click on it would name it in place.
@@ -16845,6 +16026,7 @@ impl crate::ProjectHost for DoltHost {
         std::sync::mpsc::channel().1
     }
 
+    /// Counts the look, and answers at once whether dolt is installed, as the host is told.
     fn find_dolt(&self) -> std::sync::mpsc::Receiver<Result<(), String>> {
         self.looks.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -16858,7 +16040,7 @@ fn dolt_harness(theme: ThemeKind, installed: bool) -> (Harness<'static, Shell>, 
     crate::i18n::set_language("en");
     let host = std::sync::Arc::new(DoltHost::default());
     host.installed.store(installed, std::sync::atomic::Ordering::SeqCst);
-    let mut shell = Shell::new(Services { projects: Some(host.clone()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { projects: Some(host.clone()), ..Services::default() }, NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     let mut h = harness_over(shell);
     h.run_steps(4);
@@ -16974,7 +16156,7 @@ fn agents_harness(
     };
     setup(&mut f);
     let f = std::sync::Arc::new(f);
-    let mut shell = Shell::new(Services { agents: Some(f.clone()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { agents: Some(f.clone()), ..Services::default() }, NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1400.0)).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -17718,7 +16900,7 @@ fn chat_workspace(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<
     let f = fake::Fake::default();
     *f.look.lock().unwrap() = Look { claude: fake::found(Provider::Claude), codex: fake::found(Provider::Codex), ..Look::default() };
     let f = std::sync::Arc::new(f);
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), agents: Some(f.clone()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), agents: Some(f.clone()), ..Services::default() }, NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
@@ -17910,151 +17092,16 @@ fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_some(), "given back");
 }
 
-/// Repository, Order and Entity (Order specializes it) in the package Shop, on two class diagrams,
-/// the first open and Repository selected with Properties shown (AR-130). Gives the ids by name:
-/// Repository, Order, Entity, diagram, second.
-fn templates_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
-    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
-    let mut made = std::collections::BTreeMap::new();
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-        let pkg = run("uml.package.add", serde_json::json!({ "name": "Shop" }));
-        let repo = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Repository" }));
-        let order = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Order" }));
-        let entity = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Entity" }));
-        run("uml.generalization.add", serde_json::json!({ "specific": order, "general": entity }));
-        let mut diagrams = Vec::new();
-        for (name, x) in [("Shop", 200), ("Overview", 500)] {
-            let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": name }));
-            run("diagram.place", serde_json::json!({ "diagram": d, "element": repo, "x": x, "y": 200 }));
-            diagrams.push(d);
-        }
-        for (k, v) in [("Repository", repo), ("Order", order), ("Entity", entity), ("diagram", diagrams[0].clone()), ("second", diagrams[1].clone())]
-        {
-            made.insert(k, v);
-        }
-    }
-    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&made["diagram"]).unwrap());
-    h.run();
-    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["Repository"]] })).unwrap();
-    h.state_mut().state.show_panel(crate::state::Panel::Properties);
-    h.run();
-    (h, made)
-}
-
-/// The id of `element`'s card on diagram `d`.
-fn node_on(h: &Harness<'static, Shell>, element: &str, d: &str) -> String {
-    let st = h.state().session.as_ref().unwrap().doc();
-    let d = st.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap();
-    let n = archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap())
-        .2
-        .into_iter()
-        .find(|n| archforge_diagram::diagram_of(st, *n) == Some(d))
-        .unwrap();
-    st.uuid(n).unwrap().to_string()
-}
-
-/// The template sample with T (no default) and Key (a data type, Integer by default) on
-/// Repository, and the class OrderRepository placed on the diagram beside it: gives the harness,
-/// the sample's ids, and the cards of OrderRepository and Repository.
-fn binding_sample(
-    theme: ThemeKind,
-) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>, (archforge_mof::Uuid, archforge_mof::Uuid)) {
-    let (mut h, mut made) = templates_sample(theme);
-    let repo = made["Repository"].clone();
-    let s = h.state_mut().session.as_mut().unwrap();
-    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "T" })).unwrap();
-    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer" }))
-        .unwrap();
-    let st = s.doc();
-    let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&repo).unwrap()).unwrap()).unwrap();
-    let pkg = st.uuid(pkg).unwrap().to_string();
-    let bound = s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "OrderRepository" })).unwrap().value["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    s.execute("diagram.place", &serde_json::json!({ "diagram": made["diagram"], "element": bound, "x": 200, "y": 600 })).unwrap();
-    s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
-    made.insert("OrderRepository", bound.clone());
-    h.run();
-    let nodes = (
-        archforge_mof::Uuid::parse(&node_on(&h, &bound, &made["diagram"])).unwrap(),
-        archforge_mof::Uuid::parse(&node_on(&h, &repo, &made["diagram"])).unwrap(),
-    );
-    (h, made, nodes)
-}
-
-/// The sample class model's Recommendations diagram (AR-128): Customer and Product side by side,
-/// Catalog under them; `drawn`, the n-ary association recommends between them. In `theme`, in a
-/// window tall enough for an end's editor. Gives the ids by name, as `put_recommends` does.
-fn nary_sample(theme: ThemeKind, drawn: bool) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
-    nary_sample_in(theme, drawn, egui::vec2(1600.0, 1200.0))
-}
-
-/// [`nary_sample`] in a window of `size`.
-fn nary_sample_in(theme: ThemeKind, drawn: bool, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
-    let mut h = workspace_harness(theme, size);
-    h.state_mut().cx(uml_ui::open_sample).unwrap();
-    h.run();
-    let ids = h.state_mut().cx(|cx| uml_nary::put_recommends(cx, drawn)).unwrap();
-    h.state_mut().canvas.fit_pending = false;
-    h.state_mut().canvas.zoom = 1.0;
-    h.state_mut().canvas.pan = egui::vec2(20.0, 30.0);
-    h.state_mut().state.show_panel(crate::state::Panel::Properties);
-    h.run();
-    (h, ids)
-}
-
-/// The centre of the card `node` on the canvas.
-fn card(h: &Harness<'static, Shell>, node: &str) -> egui::Pos2 {
-    rect_of(h, &format!("workspace.canvas.node.{node}")).center()
-}
-
-/// Arms the Relationship tool with N-ary association, from its chevron's menu.
-fn arm_nary(h: &mut Harness<'static, Shell>) {
-    let at = rect_of(h, "workspace.tools.relationship-kinds").center();
-    click(h, at);
-    let at = rect_of(h, "workspace.relate.n-ary").center();
-    click(h, at);
-}
-
+/// What the open project has selected.
 fn selection(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
     h.state().session.as_ref().unwrap().view().selection.clone()
 }
 
-/// A canvas's area for a hook to draw in, away from any window.
-const CANVAS: egui::Rect = egui::Rect { min: egui::pos2(0.0, 0.0), max: egui::pos2(1200.0, 800.0) };
-
-/// What `draw` records in `shell`'s registry when it draws once with the window's fonts in a context
-/// of its own, away from any window: the ids, in order. The window's own registry is set aside
-/// meanwhile and put back.
-fn recorded_alone(shell: &mut Shell, mut draw: impl FnMut(&mut Shell, &egui::Ui)) -> Vec<String> {
-    let ctx = egui::Context::default();
-    let mut ids = Vec::new();
-    for _ in 0..2 {
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
-            // The window's fonts are the context's, in place a pass later.
-            if !ui.ctx().fonts(|f| f.definitions().families.contains_key(&egui::FontFamily::Name("ux-regular".into()))) {
-                ui.ctx().set_fonts(crate::fonts::definitions());
-                return;
-            }
-            let kept = std::mem::take(&mut shell.registry);
-            draw(shell, ui);
-            ids = std::mem::replace(&mut shell.registry, kept).entries().iter().map(|e| e.id.clone()).collect();
-        });
-        // Nothing is shown: the fonts' textures go unused.
-        out.textures_delta.clear();
-    }
-    ids
-}
-
 /// The kind of a diagram, the kind of the diagram shown and whether the open popover takes the
-/// keys are asked of the kinds the shell registered, and the kind shown is the active tab's. In the
-/// sketch shell, whose kinds are ER's and the sketch's, the sketch diagram is the sketch kind's,
-/// which the app's parts' kinds (`SCREENS`) do not know; UML's classifier kinds, which the app's
-/// UML kind walks with the keys, hold none there, as UML is not the shell's. With no tab active,
-/// or no project open, no kind shows.
+/// keys are asked of the kinds the shell registered, and the kind shown is the active tab's: the
+/// sketch diagram is the sketch kind's, which kinds without it do not know; the second sketch's
+/// popover, which the second sketch's kind walks with the keys, holds none in the shell, as that
+/// kind is not the shell's. With no tab active, or no project open, no kind shows.
 #[test]
 fn the_kinds_asked_are_the_shells_and_the_kind_shown_is_the_active_tabs() {
     let (mut h, d, ..) = sketch_harness();
@@ -18063,12 +17110,24 @@ fn the_kinds_asked_are_the_shells_and_the_kind_shown_is_the_active_tabs() {
     let store = shell.session.as_ref().unwrap().doc();
     let diagram = store.by_uuid(id).unwrap();
     assert_eq!(crate::kinds::kind_of(shell, store, diagram).map(|k| k.kind()), Some(SKETCH));
-    assert!(archforge_shell_api::kinds::kind_of(SCREENS.kinds(), store, diagram).is_none(), "the app's kinds know no sketch");
+    let others: &[&'static dyn crate::kinds::DiagramKind] = &[&SECOND_SKETCH_KINDS[0], &SECOND_SKETCH_KINDS[1]];
+    assert!(archforge_shell_api::kinds::kind_of(others, store, diagram).is_none(), "kinds without the sketch's know no sketch");
     assert_eq!(crate::kinds::active_kind(shell).map(|k| k.kind()), Some(SKETCH));
-    assert!(archforge_shell_api::kinds::active_kind(SCREENS.kinds(), &shell.canvas, shell.session.as_ref()).is_none());
-    shell.canvas.popover = Some(uml_classifier::KINDS);
-    assert!(!crate::kinds::popover_takes_keys(shell), "UML is not the sketch shell's");
-    assert!(archforge_shell_api::kinds::popover_takes_keys(SCREENS.kinds(), &shell.canvas), "the app's UML walks them");
+    assert!(archforge_shell_api::kinds::active_kind(others, &shell.canvas, shell.session.as_ref()).is_none());
+    // Every kind is asked whether the open popover takes the keys: the sketch's, after the other
+    // kind, and the other kind's own.
+    for (popover, kind) in [(SKETCH_POPOVER, "the sketch"), (OTHER_POPOVER, "the other kind")] {
+        shell.canvas.popover = Some(popover);
+        assert!(crate::kinds::popover_takes_keys(shell), "{kind}'s popover takes the keys");
+    }
+    assert_eq!(
+        crate::kinds::diagram_icon(shell.kinds, store, diagram),
+        &crate::ux::icons::TABLE,
+        "the sketch's icon, neither the other kind's nor the shell's for a kind it does not know"
+    );
+    shell.canvas.popover = Some(SECOND_KINDS);
+    assert!(!crate::kinds::popover_takes_keys(shell), "the second sketch is not the shell's");
+    assert!(archforge_shell_api::kinds::popover_takes_keys(others, &shell.canvas), "the second sketch's kind walks them");
     shell.canvas.popover = None;
     assert_eq!(shell.canvas.tabs, vec![id]);
     shell.canvas.active = None;
@@ -18076,190 +17135,6 @@ fn the_kinds_asked_are_the_shells_and_the_kind_shown_is_the_active_tabs() {
     shell.canvas.active = Some(id);
     shell.session = None;
     assert!(crate::kinds::active_kind(shell).is_none(), "no project open");
-}
-
-/// What `notation` draws over the canvas of `h`'s open diagram at `layer`, alone in a frame of its
-/// own, the canvas where the harness's last frame drew it: how many shapes it painted and the ids it
-/// recorded. The harness draws a frame after, so its controls are found again.
-fn overlaid(
-    h: &mut Harness<'static, Shell>,
-    notation: &dyn crate::notation_ui::NotationUi,
-    layer: crate::notation_ui::Layer,
-) -> (usize, Vec<String>) {
-    let r = rect_of(h, "workspace.canvas");
-    let dark = h.state().state.theme == ThemeKind::Dark;
-    let shell = h.state_mut();
-    let view = crate::canvas::View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
-    let d = shell.session.as_ref().unwrap().doc().by_uuid(shell.canvas.active.unwrap()).unwrap();
-    let overrides = std::collections::BTreeMap::new();
-    let ctx = egui::Context::default();
-    ctx.set_fonts(crate::fonts::definitions());
-    // The fonts are in place a pass later; that pass draws nothing.
-    let mut warm = ctx.run_ui(egui::RawInput::default(), |_| {});
-    warm.textures_delta.clear();
-    // Both of the registry's frames emptied, so only what this one records is read.
-    shell.registry.begin_frame();
-    shell.registry.begin_frame();
-    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0));
-    let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ui| {
-        let on = crate::notation_ui::Overlaid { p: crate::ux::palette(dark), r, view, d, overrides: &overrides };
-        shell.cx(|cx| notation.canvas_overlay(cx, ui, layer, &on));
-    });
-    out.textures_delta.clear();
-    let drawn = (out.shapes.len(), shell.widgets().iter().map(|w| w.id.clone()).collect());
-    h.run();
-    drawn
-}
-
-/// What each notation draws over the canvas goes at its own layer (AR-789): ER's mapping table
-/// offer over the fade, under the toast, and nothing at the drafts, rows and menus; UML, with
-/// nothing of its own open, draws nothing at any layer. In light and dark.
-#[test]
-fn ers_overlay_is_its_mapping_offer_at_the_offers_layer() {
-    use crate::notation_ui::Layer;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _, _) = diagram_harness_in(theme);
-        let rel = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
-        };
-        h.state_mut().cx(|cx| er_connect::offer_mapping(cx, rel));
-        let (shapes, ids) = overlaid(&mut h, &er_ui::ErUi, Layer::Offers);
-        assert!(shapes > 0 && ids.iter().any(|i| i == "workspace.mapping.name"), "{theme:?}: the offer, {ids:?}");
-        for layer in [Layer::Drafts, Layer::Rows, Layer::Menus] {
-            assert_eq!(overlaid(&mut h, &er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
-        }
-        for layer in [Layer::Drafts, Layer::Rows, Layer::Menus, Layer::Offers] {
-            assert_eq!(overlaid(&mut h, &uml_ui::UmlUi, layer), (0, Vec::new()), "{theme:?}: UML draws nothing at {layer:?}");
-        }
-        assert!(er_of(h.state()).mapping.is_some(), "{theme:?}: the offer is still open");
-    }
-}
-
-/// What UML draws over the canvas goes at its own layers (AR-789): a template binding's draft at
-/// the drafts, a member typed in place on its card at the rows, the menu of generalization lines at
-/// the menus, each at that layer alone, and nothing at the offers; ER, with nothing of its own open,
-/// draws nothing at any layer. In light and dark.
-#[test]
-fn umls_overlays_go_at_their_layers() {
-    use crate::notation_ui::Layer;
-    let all = [Layer::Drafts, Layer::Rows, Layer::Menus, Layer::Offers];
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        // A binding drawn and not applied: its draft's dashed line, which records no control.
-        let (mut h, _, (from, to)) = binding_sample(theme);
-        uml_of_mut(h.state_mut()).relation = uml_relate::Relate::TemplateBinding;
-        let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
-        h.state_mut().cx(|cx| uml_relate::connect(cx, d, from, to));
-        h.run();
-        for layer in all {
-            let (shapes, ids) = overlaid(&mut h, &uml_ui::UmlUi, layer);
-            assert_eq!(shapes > 0, layer == Layer::Drafts, "{theme:?}: the draft is drawn at {layer:?} alone");
-            assert!(ids.is_empty(), "{theme:?}: {layer:?} {ids:?}");
-            assert_eq!(overlaid(&mut h, &er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
-        }
-        // A member typed on Catalog's card, and the menu of three selected generalization lines.
-        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
-        let class = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let node = st.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
-            st.uuid(st.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap()
-        };
-        assert!(h.state_mut().cx(|cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)), "{theme:?}: the row opens");
-        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        h.run();
-        uml_of_mut(h.state_mut()).line_menu = Some(rect_of(&h, "workspace.canvas").center());
-        for layer in all {
-            let (_, ids) = overlaid(&mut h, &uml_ui::UmlUi, layer);
-            let row = ids.iter().any(|i| i.starts_with("workspace.canvas.member."));
-            let menu = ids.iter().any(|i| i.starts_with("workspace.canvas.contextMenu"));
-            assert_eq!((row, menu), (layer == Layer::Rows, layer == Layer::Menus), "{theme:?}: at {layer:?}, {ids:?}");
-            assert_eq!(overlaid(&mut h, &er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
-        }
-    }
-}
-
-/// The texts the problem badge of `element` paints, drawn alone in a frame of its own, offering a
-/// way out or not as `resolvable` says.
-fn badge_texts(shell: &mut Shell, element: archforge_mof::Uuid, resolvable: bool) -> Vec<String> {
-    /// Collects the texts of `s` and of the shapes it holds into `out`.
-    fn walk(s: &egui::Shape, out: &mut Vec<String>) {
-        match s {
-            egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
-            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
-            _ => {}
-        }
-    }
-    let ctx = egui::Context::default();
-    ctx.set_fonts(crate::fonts::definitions());
-    // The fonts are in place a pass later; that pass draws nothing.
-    let mut warm = ctx.run_ui(egui::RawInput::default(), |_| {});
-    warm.textures_delta.clear();
-    let p = crate::ux::palette(shell.state.theme == ThemeKind::Dark);
-    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
-        crate::canvas::badge(shell, ui, p, egui::pos2(100.0, 100.0), element, element, &["A problem".to_string()], resolvable);
-    });
-    out.textures_delta.clear();
-    let mut texts = Vec::new();
-    out.shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
-    texts
-}
-
-/// A badge whose figure offers a way out shows the plus only where its element's notation says
-/// one (AR-789): an ER relationship's does, with no "!"; a UML class's, which UML offers none for,
-/// stays a plain badge with its "!". In light and dark.
-#[test]
-fn a_badge_shows_a_way_out_only_where_its_notation_offers_one() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _, _) = diagram_harness_in(theme);
-        let rel = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
-        };
-        assert!(!badge_texts(h.state_mut(), rel, true).contains(&"!".to_string()), "{theme:?}: ER's plus");
-        assert!(badge_texts(h.state_mut(), rel, false).contains(&"!".to_string()), "{theme:?}: a plain badge");
-        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let class = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS)).unwrap()).unwrap()
-        };
-        assert!(badge_texts(h.state_mut(), class, true).contains(&"!".to_string()), "{theme:?}: UML offers no way out");
-    }
-}
-
-/// The canvas starts each line where the diagram's kind says (AR-788): drawn with UML's kind, an
-/// n-ary association's legs that leave the diamond's node away from a corner reach on to its outline, so each leg's drawn
-/// extent holds the one drawn with ER's kind, which starts lines at the node's border, and at least
-/// one leg reaches further. In light and dark.
-#[test]
-fn the_canvas_starts_n_ary_legs_where_umls_kind_says() {
-    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
-    let mut session = h.state_mut().session.take().unwrap();
-    drop(h);
-    // Customer moves under the diamond beside Catalog: their two legs share the diamond's lower
-    // side, spread along it, so they leave its node away from the diamond's corner.
-    session.execute("diagram.move", &serde_json::json!({ "nodes": [ids["customer"]], "dx": 0.0, "dy": 480.0 })).unwrap();
-    let legs: Vec<String> = {
-        let st = session.doc();
-        let diamond = st.by_uuid(archforge_mof::Uuid::parse(&ids["diamond"]).unwrap()).unwrap();
-        let d = st.by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
-        crate::canvas::refs(st, d, archforge_diagram::diagram::EDGE)
-            .into_iter()
-            .filter(|e| crate::canvas::element_of(st, *e, archforge_diagram::edge::SOURCE) == Some(diamond))
-            .map(|e| format!("workspace.canvas.edge.{}", st.uuid(e).unwrap()))
-            .collect()
-    };
-    assert_eq!(legs.len(), 3, "three legs");
-    let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
-    for dark in [false, true] {
-        let leg_rects = |kind: &'static dyn crate::kinds::DiagramKind| {
-            let (_, at, _) = drawn_alone_at(&session, &ids["diagram"], (Some(kind), SCREENS.kinds()), dark, 1000.0, &none, &clean);
-            legs.iter().map(|l| at.iter().find(|(id, _)| id == l).map(|(_, r)| *r).unwrap()).collect::<Vec<_>>()
-        };
-        let (uml, er) = (leg_rects(&uml_ui::UmlKind), leg_rects(&er_kind::ErKind));
-        assert!(uml.iter().zip(&er).all(|(u, e)| u.contains_rect(*e)), "{dark}: {uml:?} hold {er:?}");
-        assert!(uml.iter().zip(&er).any(|(u, e)| u != e), "{dark}: a leg reaches on to the diamond: {uml:?} {er:?}");
-    }
 }
 
 /// The zoom the user makes is the diagram's kind's to follow once (AR-788): zooms made before a
@@ -18284,102 +17159,82 @@ fn a_zoom_made_is_the_kinds_to_follow_once() {
     }
 }
 
-/// The n-ary hint bar is its diagram's kind's (AR-788): with an n-ary association being drawn, UML's
-/// kind draws it at the canvas's top; ER's kind, which keeps the default, draws none in the same
-/// state. In light and dark.
-#[test]
-fn the_n_ary_hint_bar_is_umls_kinds_and_ers_draws_none() {
-    use crate::kinds::DiagramKind;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, ids) = nary_sample(theme, false);
-        arm_nary(&mut h);
-        let at = card(&h, &ids["customer"]);
-        click(&mut h, at);
-        let hinted = |kind: &dyn DiagramKind, shell: &mut Shell| {
-            let p = crate::ux::palette(theme == ThemeKind::Dark);
-            let ids = recorded_alone(shell, |shell, ui| shell.cx(|cx| kind.hint_bar(cx, ui, p, CANVAS, 0.0)));
-            ids.iter().any(|i| i == "workspace.canvas.gestureHint")
-        };
-        assert!(hinted(&uml_ui::UmlKind, h.state_mut()), "{theme:?}: UML's kind draws the hint");
-        assert!(!hinted(&er_kind::ErKind, h.state_mut()), "{theme:?}: the default draws none");
-    }
-}
-
-/// A test-only notation over UML's metamodel that draws and places as UML does, but a click on
-/// Order's figure selects Order's package. ER and UML each select what was clicked, so only a
-/// notation like this one shows that the canvas asks a node's notation what a click on it
+/// A test-only notation over the fake notation's model that draws and places as the fake notation
+/// does, but a click on Order's figure selects Order's package. The fake notation selects what was
+/// clicked, so only a notation like this one shows that the canvas asks a node's notation what a click on it
 /// selects, and draws a card selected with it (AR-784, ADR 0005).
 struct PackageClicks;
 
 impl archforge_diagram::Notation for PackageClicks {
-    /// UML's name, as the notation it stands in for.
+    /// The fake notation's name, as the notation it stands in for.
     fn name(&self) -> &'static str {
-        "UML"
+        "Sketch"
     }
-    /// UML's metamodel.
+    /// The fake notation's metamodel.
     fn metamodel(&self) -> u16 {
-        archforge_uml::INDEX
+        archforge_mof::toy::INDEX
     }
-    /// UML's diagram kinds.
+    /// The fake notation's diagram kinds.
     fn kinds(&self) -> &'static [&'static str] {
-        archforge_uml::UmlNotation.kinds()
+        archforge_notations::fake::Sketch.kinds()
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn needs_element(&self, kind: &str) -> bool {
-        archforge_uml::UmlNotation.needs_element(kind)
+        archforge_notations::fake::Sketch.needs_element(kind)
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn is_of(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
-        archforge_uml::UmlNotation.is_of(kind, class)
+        archforge_notations::fake::Sketch.is_of(kind, class)
     }
-    /// As UML answers.
+    /// As the fake notation answers, and a package too, so its own card can stand beside its
+    /// classes'.
     fn shows(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
-        archforge_uml::UmlNotation.shows(kind, class)
+        archforge_notations::fake::Sketch.shows(kind, class) || (kind == SKETCH && class == archforge_mof::toy::PACKAGE)
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn may_show(&self, store: &archforge_mof::Store, diagram: archforge_mof::Obj, element: archforge_mof::Obj) -> bool {
-        archforge_uml::UmlNotation.may_show(store, diagram, element)
+        archforge_notations::fake::Sketch.may_show(store, diagram, element)
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn connects(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
-        archforge_uml::UmlNotation.connects(kind, class)
+        archforge_notations::fake::Sketch.connects(kind, class)
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn ends(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<(archforge_mof::Obj, archforge_mof::Obj)> {
-        archforge_uml::UmlNotation.ends(store, element)
+        archforge_notations::fake::Sketch.ends(store, element)
     }
-    /// UML's card, so the diagram draws as it does.
+    /// The fake notation's card, so the diagram draws as it does.
     fn card(
         &self,
         store: &archforge_mof::Store,
         element: archforge_mof::Obj,
         diagram: archforge_mof::Obj,
     ) -> Option<archforge_diagram::figure::Card> {
-        archforge_uml::UmlNotation.card(store, element, diagram)
+        archforge_notations::fake::Sketch.card(store, element, diagram)
     }
-    /// UML's line, so the diagram draws as it does.
+    /// The fake notation's line, so the diagram draws as it does.
     fn line(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
-        archforge_uml::UmlNotation.line(store, element)
+        archforge_notations::fake::Sketch.line(store, element)
     }
     /// A click on Order's figure selects Order's package; anything else selects itself.
     fn selects_as(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> archforge_mof::Obj {
-        if store.class_of(element).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(store, element) == "Order" {
-            archforge_uml::nesting::home_package(store, element).unwrap_or(element)
+        if store.class_of(element).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(store, element) == "Order" {
+            store.container(element).ok().flatten().map_or(element, |(package, _)| package)
         } else {
             element
         }
     }
 }
 
-/// A project of ER and [`PackageClicks`].
-static PACKAGE_CLICKS: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotation, &PackageClicks];
+/// A project of [`PackageClicks`] alone.
+static PACKAGE_CLICKS: &[&dyn archforge_diagram::Notation] = &[&PackageClicks];
 
 /// The sample class diagram open in `theme`, its session over a view of [`PackageClicks`]: Order's
 /// card's node, Order's package, and Customer with its card's node.
 fn package_clicks_sample(theme: ThemeKind) -> (Harness<'static, Shell>, String, archforge_mof::Obj, archforge_mof::Obj, archforge_mof::Obj) {
     let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-    let d = h.state_mut().cx(uml_ui::open_sample).unwrap();
-    let (tables, junctions) = archforge_notations::storage();
+    let d = h.state_mut().cx(open_sample).unwrap();
+    let (tables, junctions) = NOTATIONS.storage();
     let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
     let next = std::sync::atomic::AtomicU64::new(1 << 40);
     let ids = Box::new(move || {
@@ -18387,21 +17242,26 @@ fn package_clicks_sample(theme: ThemeKind) -> (Harness<'static, Shell>, String, 
         r[2..].copy_from_slice(&next.fetch_add(1, std::sync::atomic::Ordering::Relaxed).to_be_bytes());
         archforge_mof::Uuid::v7(1_761_670_800_000, r)
     });
-    let mut st = archforge_notations::store(ids).unwrap();
+    let mut st = NOTATIONS.store(ids).unwrap();
     archforge_mof::rows::restore(&mut st, &rows, &tables, &junctions).unwrap();
     let view = archforge_diagram::ProjectView::new(PACKAGE_CLICKS);
-    let session = archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), st, 1, archforge_engine::Options::default(), view);
+    let session = archforge_engine::Session::with_view(NOTATIONS.registry().unwrap(), st, 1, archforge_engine::Options::default(), view);
     h.state_mut().session = Some(session);
     crate::canvas::open(h.state_mut(), d);
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     let class =
-        |name: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
+        |name: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
     let (order, customer) = (class("Order"), class("Customer"));
     let node = st.uuid(archforge_diagram::views_of(st, order).2[0]).unwrap().to_string();
-    let package = archforge_uml::nesting::home_package(st, order).unwrap();
+    let package = st.container(order).unwrap().unwrap().0;
     let customer_node = archforge_diagram::views_of(st, customer).2[0];
     (h, node, package, customer, customer_node)
+}
+
+/// The centre of the card `node` on the canvas.
+fn card(h: &Harness<'static, Shell>, node: &str) -> egui::Pos2 {
+    rect_of(h, &format!("workspace.canvas.node.{node}")).center()
 }
 
 /// Whether the last frame stroked a rectangle in the accent colour of `theme` round the centre of
@@ -18413,7 +17273,7 @@ fn card_ringed(h: &Harness<'static, Shell>, theme: ThemeKind, card: egui::Rect) 
 
 /// What a click on a node selects is its notation's answer, on every way a node is selected (a
 /// click with Select, a drag that starts a move, Select all, a marquee, and a click with the
-/// Note, Link, classifier and Relationship tools); while that answer is selected the card draws
+/// Note, Link, Class and Inherit tools); while that answer is selected the card draws
 /// selected, shows its resize handles and moves with the rest of the selection, the first drag
 /// that makes the selection included: through a notation whose click on Order selects its package.
 /// In light and dark.
@@ -18421,6 +17281,8 @@ fn card_ringed(h: &Harness<'static, Shell>, theme: ThemeKind, card: egui::Rect) 
 fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, node, package, customer, customer_node) = package_clicks_sample(theme);
+        // The other kind and the worded notation first: the diagram's own kind is asked.
+        (h.state_mut().kinds, h.state_mut().notation_uis) = (SKETCH_KINDS, SKETCH_UIS);
         let clear = |h: &mut Harness<'static, Shell>| {
             h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
             h.state_mut().canvas.tool = crate::canvas::Tool::Select;
@@ -18466,12 +17328,9 @@ fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
         let r = rect_of(&h, &format!("workspace.canvas.node.{node}"));
         drag(&mut h, r.left_top() - egui::vec2(20.0, 20.0), r.center());
         assert_eq!(selection(&h), vec![package], "{theme:?}: a marquee over the card");
-        for tool in [
-            crate::canvas::Tool::Note,
-            crate::canvas::Tool::Link,
-            crate::canvas::Tool::Place(uml_classifier::TOOL),
-            crate::canvas::Tool::Connect("relationship"),
-        ] {
+        for tool in
+            [crate::canvas::Tool::Note, crate::canvas::Tool::Link, crate::canvas::Tool::Place("class"), crate::canvas::Tool::Connect("inherit")]
+        {
             clear(&mut h);
             h.state_mut().canvas.tool = tool;
             let at = card(&h, &node);

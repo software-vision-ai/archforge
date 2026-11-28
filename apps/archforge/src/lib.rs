@@ -257,7 +257,8 @@ fn run() -> i32 {
                 let agents = std::sync::Arc::new(agents::Agents::new(&settings, window.clone()));
                 let ctx = cc.egui_ctx.clone();
                 let pickers = services::Pickers::new(std::sync::Arc::new(move || ctx.request_repaint()));
-                let mut shell = Shell::new(services::native(projects.clone(), agents.clone(), pickers.asks()), &SCREENS);
+                let mut shell =
+                    Shell::new(services::native(projects.clone(), agents.clone(), pickers.asks()), &archforge_notations::NOTATIONS, &SCREENS);
                 prefs::apply(&stored, &mut shell);
                 if let Some(rx) = requests.borrow_mut().take() {
                     shell.attach_control(rx, window.generation());
@@ -401,8 +402,8 @@ mod tests {
     #[test]
     fn the_model_and_screens_registries_hold_the_same_notations() {
         let parts: Vec<&ScreensPart> = SCREENS.parts().iter().collect();
-        assert!(!archforge_notations::NOTATIONS.is_empty(), "the model registry lists no notation");
-        assert_eq!(registry_differences(archforge_notations::NOTATIONS, &parts), Vec::<String>::new());
+        assert!(!archforge_notations::NOTATIONS.notations().is_empty(), "the model registry lists no notation");
+        assert_eq!(registry_differences(archforge_notations::NOTATIONS.notations(), &parts), Vec::<String>::new());
     }
 
     /// A notation in one registry and not the other, twice in one, or with a diagram kind its
@@ -410,7 +411,7 @@ mod tests {
     /// app's by one such change, and the comparison names it.
     #[test]
     fn a_notation_or_kind_in_one_registry_and_not_the_other_is_a_difference() {
-        let notations = archforge_notations::NOTATIONS;
+        let notations = archforge_notations::NOTATIONS.notations();
         let parts: Vec<&ScreensPart> = SCREENS.parts().iter().collect();
         let last = notations[notations.len() - 1];
         let (name, metamodel) = (last.name(), last.metamodel());
@@ -443,7 +444,7 @@ mod tests {
     /// The window draws its own menu bar only where the system has none.
     #[test]
     fn the_in_window_menu_bar_is_drawn_only_without_a_native_one() {
-        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
         choose_menu_bar(&mut shell);
         assert_eq!(shell.in_window_menu, !cfg!(target_os = "macos"));
     }
@@ -491,10 +492,10 @@ mod tests {
             n += 1;
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        let session = archforge_notations::new_project_session("Shop", ids).unwrap();
+        let session = archforge_notations::NOTATIONS.new_project_session("Shop", ids).unwrap();
         let infos: Vec<Value> = session.registry().infos(&session.facts()).into_iter().map(|i| serde_json::to_value(i).unwrap()).collect();
         let catalog = archforge_mcp::Catalog::new(&infos, false);
-        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
         shell.session = Some(session);
         let agent = Direct(std::cell::RefCell::new(shell));
         let revision = || agent.0.borrow().session.as_ref().unwrap().revision();
@@ -546,7 +547,7 @@ mod tests {
     /// does not take.
     #[test]
     fn save_needs_an_open_project() {
-        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
         let refused = archforge_ui_egui::control::answer(&mut shell, "app.save", &serde_json::json!({})).unwrap_err();
         assert!(refused.contains("no project is open"), "{refused}");
         assert!(archforge_ui_egui::control::answer(&mut shell, "app.save", &serde_json::json!({ "path": "x" })).is_err(), "it takes no such key");
@@ -561,10 +562,10 @@ mod tests {
             n += 1;
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        let session = archforge_notations::new_project_session("Shop", ids).unwrap();
+        let session = archforge_notations::NOTATIONS.new_project_session("Shop", ids).unwrap();
         let infos: Vec<Value> = session.registry().infos(&session.facts()).into_iter().map(|i| serde_json::to_value(i).unwrap()).collect();
         let catalog = archforge_mcp::Catalog::new(&infos, false);
-        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
         shell.session = Some(session);
         let agent = Direct(std::cell::RefCell::new(shell));
         let rpc = |method: &str, params: Value| {
@@ -663,8 +664,8 @@ mod tests {
             n += 1;
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
-        shell.session = Some(archforge_notations::new_project_session("Shop", ids).unwrap());
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
+        shell.session = Some(archforge_notations::NOTATIONS.new_project_session("Shop", ids).unwrap());
         shell
     }
 
@@ -804,7 +805,7 @@ mod tests {
                 ..archforge_ui_egui::UiState::default()
             },
         };
-        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &SCREENS);
+        let mut shell = Shell::new(archforge_ui_egui::Services::default(), &archforge_notations::NOTATIONS, &SCREENS);
         prefs::apply(&stored, &mut shell);
         assert_eq!(prefs::capture(&shell), stored);
         // A recent entry the window does not take (here a relative folder) is dropped on applying.

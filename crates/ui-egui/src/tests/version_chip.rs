@@ -566,7 +566,7 @@ const EDITING: &str = "Finish or cancel your edit first.";
 
 /// Asks for ⌥⌘← with an edit under way, which refuses it; the edit is then called off.
 fn refused_step(h: &mut Harness<'static, Shell>, host: &SavingHost) {
-    h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+    h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
     press(h, egui::Key::ArrowLeft);
     answer_versions(host);
     h.run_steps(3);
@@ -597,7 +597,7 @@ fn a_refused_step_says_why_with_no_diagram_open() {
 fn a_refused_step_says_why_over_a_skill_and_once_over_a_diagram() {
     in_both(|mut h, host| {
         let diagram = add_diagram(&mut h, "Alpha");
-        let root = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Sales" })).unwrap()["id"].clone();
+        let root = crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": "Sales" })).unwrap()["id"].clone();
         let skill = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "subject": root, "name": "Naming", "body": "text" })).unwrap();
         show_diagram(&mut h, skill["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap());
         refused_step(&mut h, &host);
@@ -656,9 +656,9 @@ fn nothing_began(h: &Harness<'static, Shell>, host: &SavingHost, what: &str) {
 
 const ID: archforge_mof::Uuid = archforge_mof::Uuid([7; 16]);
 
-/// An edit left open between frames: an n-ary end armed on the canvas.
+/// An edit left open between frames: a drawing of the sketch notation's under way on the canvas.
 fn draw(s: &mut Shell) {
-    uml_of_mut(s).nary = Some(uml_nary::Nary::AddEnd { diagram: ID, association: ID });
+    s.notation_states.own_mut::<SketchState>().unwrap().drawing = true;
 }
 
 /// Every way of leaving is refused for an open editor, drawing, drag or dialog, with nothing begun.
@@ -670,12 +670,9 @@ fn an_open_editor_stops_every_way_of_leaving() {
         hold::HoldRefused::Editing,
         panels::NameEdit,
     };
-    use archforge_er_ui::snapshot::er_checks::CheckEdit;
     let open: [(&str, &dyn Fn(&mut Shell)); 8] = [
         ("panel name", &|s| s.panels.name = Some(NameEdit { target: ID, text: "x".into() })),
-        ("panel card", &|s| {
-            er_of_mut(s).check = Some(CheckEdit { target: None, entity: ID, name: "x".into(), expression: "1".into(), refused: None, opened: false })
-        }),
+        ("panel card", &|s| s.notation_states.own_mut::<SketchState>().unwrap().card = true),
         ("canvas name", &|s| s.canvas.rename = Some(NodeRename { node: ID, element: ID, text: "x".into(), opened: false, refused: None })),
         ("drag", &|s| s.canvas.gesture = Some(Gesture::Marquee { from: egui::Pos2::ZERO })),
         ("drawing", &draw),
@@ -737,7 +734,7 @@ fn a_refusal_keeps_the_version_and_the_list_and_says_why() {
         assert!(h.state_mut().back_to_current_work());
         opened_list(&mut h, &host);
         let before = host.reads.lock().unwrap().len();
-        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
         let at = rect_of(&h, "workspace.header.version.row.1").center();
         click(&mut h, at);
         assert!(list_shows(&h) && h.state().canvas.notice.as_deref() == words, "the list stays");
@@ -753,10 +750,10 @@ fn a_refused_description_stops_leaving_and_a_good_one_goes_first() {
     use crate::{hold::HoldRefused::Description, panels::DescriptionDraft};
     for (way, go) in ways() {
         in_both(|mut h, host| {
-            let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "shop" })).unwrap()["id"].clone();
-            let table =
-                crate::panels::run(h.state_mut(), "er.entity.add", serde_json::json!({ "schema": schema, "name": "customer" })).unwrap()["id"]
-                    .clone();
+            let schema = crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": "shop" })).unwrap()["id"].clone();
+            let table = crate::panels::run(h.state_mut(), "sketch.class.add", serde_json::json!({ "package": schema, "name": "customer" })).unwrap()
+                ["id"]
+                .clone();
             let target = archforge_mof::Uuid::parse(table.as_str().unwrap()).unwrap();
             h.state_mut().panels.description = Some(DescriptionDraft { target, text: "a\u{7}b".into(), refused: false });
             assert_eq!(go(h.state_mut()), Err(Description), "{way}");
@@ -973,7 +970,7 @@ fn the_toast_stands_at_one_place_whatever_the_centre_holds() {
     in_both(|mut h, host| {
         refused_step(&mut h, &host);
         let empty = rect_of(&h, NOTICE);
-        let root = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Sales" })).unwrap()["id"].clone();
+        let root = crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": "Sales" })).unwrap()["id"].clone();
         let skill = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "subject": root, "name": "Naming", "body": "text" })).unwrap();
         show_diagram(&mut h, skill["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap());
         refused_step(&mut h, &host);
@@ -1062,7 +1059,7 @@ fn the_toast_stands_above_a_toast_with_undo() {
 #[test]
 fn a_way_out_refused_after_the_question_is_the_toast() {
     in_both(|mut h, _| {
-        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
         h.state_mut().go_on_leaving(crate::leaving::Leaving::View { commit: "c1".into(), label: None });
         h.run_steps(2);
         assert_eq!((rect_of(&h, NOTICE).width(), painted_times(&h, EDITING)), (440.0, 1));
@@ -1090,10 +1087,8 @@ fn what_is_said_after_a_refused_step_stays_the_caption() {
 
 /// Adds a diagram named `name` of a schema of its own, and gives its id.
 fn add_diagram(h: &mut Harness<'static, Shell>, name: &str) -> archforge_mof::Uuid {
-    let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": name })).unwrap()["id"].clone();
-    let made =
-        crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": name }))
-            .unwrap();
+    let schema = crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": name })).unwrap()["id"].clone();
+    let made = crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": SKETCH, "element": schema, "name": name })).unwrap();
     made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap()
 }
 
@@ -1172,7 +1167,7 @@ fn a_version_without_what_shows_opens_its_first_diagram_or_nothing() {
         assert_eq!(centre(&h), (vec![], None), "the empty state");
         assert_eq!(h.state().canvas.notice, None);
         h.state_mut().back_to_current_work();
-        let root = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Sales" })).unwrap()["id"].clone();
+        let root = crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": "Sales" })).unwrap()["id"].clone();
         let skill = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "subject": root, "name": "Naming", "body": "text" })).unwrap();
         show_diagram(&mut h, skill["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap());
         let with_skill = rows_now(&h);
@@ -1274,16 +1269,16 @@ fn dated_as_before(h: &Harness<'static, Shell>) {
 /// the notations' own state among it.
 #[test]
 fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
-    use uml_classifier::Classifier;
+    let mark = |h: &Harness<'static, Shell>| h.state().notation_states.own::<SketchState>().unwrap().mark;
+    let set = |h: &mut Harness<'static, Shell>, m: u8| h.state_mut().notation_states.own_mut::<SketchState>().unwrap().mark = m;
     in_both(|mut h, host| {
-        uml_of_mut(h.state_mut()).classifier = Classifier::Interface;
+        set(&mut h, 1);
         let [b, _] = stepping(&mut h, &host);
-        assert_eq!(uml_of(h.state()).classifier, Classifier::Class, "a version shows with the notations' state of its own");
+        assert_eq!(mark(&h), 0, "a version shows with the notations' state of its own");
         answer_versions(&host);
         h.run_steps(3);
         // What a notation kept for the version in view is that session's: the next starts fresh.
-        uml_of_mut(h.state_mut()).classifier = Classifier::DataType;
-        uml_of_mut(h.state_mut()).type_choices = Some(uml_panel::TypeChoices::default());
+        set(&mut h, 2);
         step_to(&mut h, "b");
         assert!(!h.state().is_held(), "no hold");
         assert!(h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay.as_secs() < 1, "it wakes while waiting");
@@ -1291,11 +1286,10 @@ fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
         dated_as_before(&h);
         answer_read(&mut h, &host, Ok(b));
         showing(&h, "b", (true, false));
-        assert_eq!(uml_of(h.state()).classifier, Classifier::Class, "the next version shows with the notations' state fresh");
-        assert_eq!(uml_of(h.state()).type_choices, None, "and nothing the last version's session kept");
+        assert_eq!(mark(&h), 0, "the next version shows with the notations' state fresh, nothing the last version's session kept");
         assert!(!h.state().is_held() && h.query_by_label("Viewing the version of 9 Nov b").is_some(), "the date comes with it");
         assert!(h.state_mut().back_to_current_work() && schema_names(&h).contains(&"c".to_string()), "the work comes back");
-        assert_eq!(uml_of(h.state()).classifier, Classifier::Interface, "the notations' state set aside comes back with it");
+        assert_eq!(mark(&h), 1, "the notations' state set aside comes back with it");
     });
 }
 
@@ -2138,7 +2132,7 @@ fn a_retry_ends_a_step_waiting_for_a_read() {
 fn a_refused_retry_leaves_the_banner() {
     in_both_appearances(|theme| {
         let (mut h, host) = load_failed(theme, false);
-        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().session.as_mut().unwrap().begin_interaction("sketch.package.add").unwrap();
         click_id(&mut h, LOAD_RETRY);
         assert!(has_id(&h, LOAD_FAILED) && host.reads.lock().unwrap().is_empty(), "{theme:?}: refused");
         assert_eq!(h.state().canvas.notice.as_deref(), Some(EDITING), "{theme:?}: says why");

@@ -8,7 +8,7 @@ use archforge_notations::differences::{
     Apart, Area, CardField, CardList, ChangeKind, ClassifyError, DiagramSide, DiagramSides, Difference, ElementCard, ElementSides, ListKind, Named,
     Placing, classified, diagram_sides, element_sides,
 };
-use archforge_notations::{Session, new_project_session, session_from_rows, storage, universe};
+use archforge_notations::{NOTATIONS, Session};
 use archforge_uml::defaults::{DefaultDiagram, resolve};
 use serde_json::{Value as Json, json};
 
@@ -31,13 +31,13 @@ fn run(s: &mut Session, command: &str, params: Json) -> String {
 
 /// The rows of the session now.
 fn state(s: &Session) -> Rows {
-    let (tables, junctions) = storage();
+    let (tables, junctions) = NOTATIONS.storage();
     rows::snapshot(s.doc(), &tables, &junctions).unwrap()
 }
 
 /// A project named Commerce holding a schema shop with a table customer and its column id.
 fn project() -> (Session, String, String, String) {
-    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let mut s = NOTATIONS.new_project_session("Commerce", ids()).unwrap();
     let shop = run(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let customer = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "customer" }));
     let id = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "id", "type": "BIGINT", "primary_key": true }));
@@ -46,7 +46,7 @@ fn project() -> (Session, String, String, String) {
 
 /// What differs, with no repair.
 fn differences(before: &Rows, after: &Rows) -> Vec<Difference> {
-    classified(before, after, |_| {}).unwrap()
+    classified(&archforge_notations::NOTATIONS, before, after, |_| {}).unwrap()
 }
 
 /// The one difference about the item `id`.
@@ -160,8 +160,8 @@ fn the_same_repair_on_both_sides_shows_no_false_layout_change() {
     };
     let without = differences(&before, &after);
     assert_eq!((without.len(), about(&without, &node).kind, about(&without, &node).area), (1, ChangeKind::Changed, Area::Diagram));
-    assert_eq!(classified(&before, &after, fit).unwrap(), []);
-    assert_eq!(classified(&after, &before, fit).unwrap(), [], "the repair is on the after side too");
+    assert_eq!(classified(&archforge_notations::NOTATIONS, &before, &after, fit).unwrap(), []);
+    assert_eq!(classified(&archforge_notations::NOTATIONS, &after, &before, fit).unwrap(), [], "the repair is on the after side too");
     assert_eq!(before, stored, "nothing was written to the rows given");
 }
 
@@ -169,14 +169,18 @@ fn the_same_repair_on_both_sides_shows_no_false_layout_change() {
 #[test]
 fn a_side_that_cannot_be_read_is_named() {
     let good = state(&project().0);
-    let refused: Result<Vec<Difference>, Box<dyn std::error::Error>> = (|| Ok(classified(&Rows::default(), &good, |_| {})?))();
+    let refused: Result<Vec<Difference>, Box<dyn std::error::Error>> =
+        (|| Ok(classified(&archforge_notations::NOTATIONS, &Rows::default(), &good, |_| {})?))();
     assert_eq!(refused.unwrap_err().to_string(), "the before side cannot be read: the rows do not match the project's tables");
-    assert!(matches!(classified(&good, &Rows::default(), |_| {}), Err(ClassifyError::Unreadable { side: "after", .. })));
+    assert!(matches!(
+        classified(&archforge_notations::NOTATIONS, &good, &Rows::default(), |_| {}),
+        Err(ClassifyError::Unreadable { side: "after", .. })
+    ));
 }
 
 /// The two sides of the element `id`, with no repair.
 fn sides(before: &Rows, after: &Rows, id: &str) -> ElementSides {
-    element_sides(before, after, Uuid::parse(id).unwrap(), |_| {}).unwrap().unwrap()
+    element_sides(&archforge_notations::NOTATIONS, before, after, Uuid::parse(id).unwrap(), |_| {}).unwrap().unwrap()
 }
 
 /// The field of `prop` on the two cards.
@@ -191,7 +195,7 @@ fn card(class: ClassId, name: &str) -> Option<ElementCard> {
 
 /// The name of an enumeration value of `prop`, through the metamodel the view will word it from.
 fn literal(prop: PropId, value: &Option<Value>) -> String {
-    let all = universe().unwrap();
+    let all = NOTATIONS.universe().unwrap();
     let (Some(TypeRef::Data(data)), Some(Value::Enum(at))) = (all.prop(prop).map(|p| p.ty), value) else { panic!("{value:?} is no literal") };
     let DataKind::Enumeration(literals) = &all.data_type(data).unwrap().kind else { panic!("{data:?} is no enumeration") };
     literals[*at as usize].to_string()
@@ -199,7 +203,7 @@ fn literal(prop: PropId, value: &Option<Value>) -> String {
 
 /// A project with a UML package shop holding a class Order and its private attribute total.
 fn uml_project() -> (Session, String, String, String) {
-    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let mut s = NOTATIONS.new_project_session("Commerce", ids()).unwrap();
     let shop = run(&mut s, "uml.package.add", json!({ "name": "shop" }));
     let order = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Order" }));
     let total = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "total", "visibility": "private" }));
@@ -246,7 +250,7 @@ fn a_uml_element_is_read_from_its_own_metamodel() {
     assert_eq!(attribute.fields.iter().filter(|f| f.changed).count(), 1, "{attribute:?}");
     let owner = sides(&before, &after, &order);
     assert_eq!(field(&owner, class::IS_ABSTRACT).after, Some(Value::Bool(true)));
-    let all = universe().unwrap();
+    let all = NOTATIONS.universe().unwrap();
     for f in owner.fields.iter().chain(&attribute.fields) {
         let p = all.prop(f.prop).unwrap();
         assert!(matches!(p.ty, TypeRef::Data(_)) && !p.is_many() && !p.is_name && p.is_stored(), "{}", all.prop_name(f.prop));
@@ -598,8 +602,8 @@ fn uml_elements_without_a_name_go_by_what_they_join_or_state() {
 
 /// `rows` with `edit` made straight in a store of their own, for a state no command makes.
 fn edited(rows: &Rows, edit: impl FnOnce(&mut Store)) -> Rows {
-    let (tables, junctions) = storage();
-    let mut st = rows::restore_into_empty(archforge_notations::store(ids()).unwrap(), rows, &tables, &junctions).unwrap();
+    let (tables, junctions) = NOTATIONS.storage();
+    let mut st = rows::restore_into_empty(archforge_notations::NOTATIONS.store(ids()).unwrap(), rows, &tables, &junctions).unwrap();
     edit(&mut st);
     rows::snapshot(&st, &tables, &junctions).unwrap()
 }
@@ -708,7 +712,7 @@ fn a_card_shows_each_side_as_an_opening_repairs_it() {
     };
     let id = Uuid::parse(&node).unwrap();
     for (one, other) in [(&before, &after), (&after, &before)] {
-        let seen = element_sides(one, other, id, fit).unwrap().unwrap();
+        let seen = element_sides(&archforge_notations::NOTATIONS, one, other, id, fit).unwrap().unwrap();
         assert_eq!((field(&seen, HEIGHT).before.clone(), field(&seen, HEIGHT).changed), (Some(Value::Real(200.0)), false));
     }
 }
@@ -745,9 +749,15 @@ fn an_unknown_element_is_none_and_an_unreadable_side_is_named() {
     let (s, _, customer, _) = project();
     let good = state(&s);
     let id = Uuid::parse(&customer).unwrap();
-    assert_eq!(element_sides(&good, &good, Uuid([7; 16]), |_| {}), Ok(None));
-    assert!(matches!(element_sides(&Rows::default(), &good, id, |_| {}), Err(ClassifyError::Unreadable { side: "before", .. })));
-    assert!(matches!(element_sides(&good, &Rows::default(), id, |_| {}), Err(ClassifyError::Unreadable { side: "after", .. })));
+    assert_eq!(element_sides(&archforge_notations::NOTATIONS, &good, &good, Uuid([7; 16]), |_| {}), Ok(None));
+    assert!(matches!(
+        element_sides(&archforge_notations::NOTATIONS, &Rows::default(), &good, id, |_| {}),
+        Err(ClassifyError::Unreadable { side: "before", .. })
+    ));
+    assert!(matches!(
+        element_sides(&archforge_notations::NOTATIONS, &good, &Rows::default(), id, |_| {}),
+        Err(ClassifyError::Unreadable { side: "after", .. })
+    ));
 }
 
 /// The id a test gives a package's default-diagram binding in place of the one its session made.
@@ -757,7 +767,7 @@ const BINDING: Uuid = Uuid([0xb1; 16]);
 /// the rows before and after a binding under [`BINDING`] names the overview the package's default:
 /// (rows without, rows with, the package, the overview, the detail).
 fn bound_project() -> (Rows, Rows, String, String, String) {
-    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let mut s = NOTATIONS.new_project_session("Commerce", ids()).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let overview = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales overview" }));
     let detail = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales detail" }));
@@ -796,7 +806,7 @@ fn retargeted(rows: &Rows, diagram: &str) -> Rows {
 /// package → diagram (AR-579).
 #[test]
 fn a_first_diagram_comes_with_its_binding_added() {
-    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let mut s = NOTATIONS.new_project_session("Commerce", ids()).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let before = state(&s);
     let overview = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales overview" }));
@@ -837,7 +847,7 @@ fn a_default_diagram_set_or_cleared_is_added_or_removed() {
 /// package → diagram, and nothing else (AR-580).
 #[test]
 fn a_default_diagram_chosen_again_is_one_changed_binding() {
-    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let mut s = NOTATIONS.new_project_session("Commerce", ids()).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let overview = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales overview" }));
     let detail = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales detail" }));
@@ -871,7 +881,7 @@ fn a_default_diagram_binding_has_element_sides() {
 /// The default the package `package` opens to in the project `rows` hold, read back as a session
 /// whose rows are those: (its binding's id, its diagram's).
 fn default_in(rows: &Rows, package: &str) -> (String, String) {
-    let back = session_from_rows(rows, ids()).unwrap();
+    let back = NOTATIONS.session_from_rows(rows, ids()).unwrap();
     assert!(state(&back) == *rows, "the rows read back as they were");
     let (st, package) = (back.doc(), back.doc().by_uuid(uuid(package)).unwrap());
     let id = |o| st.uuid(o).unwrap().to_string();
@@ -888,7 +898,7 @@ fn default_in(rows: &Rows, package: &str) -> (String, String) {
 #[test]
 fn a_replaced_default_reads_back_compares_and_stays_in_an_earlier_version() {
     for create in [false, true] {
-        let mut s = new_project_session("Commerce", ids()).unwrap();
+        let mut s = NOTATIONS.new_project_session("Commerce", ids()).unwrap();
         let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
         let mut diagram =
             |name: &str| run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": name }));
@@ -916,7 +926,7 @@ fn a_replaced_default_reads_back_compares_and_stays_in_an_earlier_version() {
         assert_eq!(default_in(&undone, &sales), (binding.clone(), overview.clone()), "{form}");
         s.redo().unwrap();
         assert!(state(&s) == after, "{form}: redo makes the same ids again");
-        let mut earlier = session_from_rows(&before, ids()).unwrap();
+        let mut earlier = NOTATIONS.session_from_rows(&before, ids()).unwrap();
         earlier.set_read_only(true).unwrap();
         let get = earlier.execute("uml.package.default.get", &json!({ "package": sales })).unwrap().value;
         assert_eq!((&get["binding"], &get["diagram"]), (&json!(binding), &json!(overview)), "{form}: the old binding");
@@ -951,7 +961,7 @@ fn placed() -> Placed {
 
 /// The two sides of the diagram holding `id`, with no repair.
 fn drawn(before: &Rows, after: &Rows, id: &str) -> DiagramSides {
-    diagram_sides(before, after, Uuid::parse(id).unwrap(), |_| {}).unwrap().unwrap()
+    diagram_sides(&archforge_notations::NOTATIONS, before, after, Uuid::parse(id).unwrap(), |_| {}).unwrap().unwrap()
 }
 
 /// What `seen` marks the item `id` with.
@@ -978,8 +988,11 @@ fn each_side_of_a_diagram_is_its_own_state() {
         assert_eq!((name_on(seen.before.as_ref().unwrap()), name_on(seen.after.as_ref().unwrap())), ("customer".into(), "client".into()));
         assert_eq!(seen.after.as_ref().unwrap().grid.len().0, 2, "both boxes");
     }
-    assert!(diagram_sides(&before, &after, Uuid::parse(&customer).unwrap(), |_| {}).unwrap().is_none(), "a model element");
-    assert!(diagram_sides(&before, &after, Uuid([7; 16]), |_| {}).unwrap().is_none(), "an unknown id");
+    assert!(
+        diagram_sides(&archforge_notations::NOTATIONS, &before, &after, Uuid::parse(&customer).unwrap(), |_| {}).unwrap().is_none(),
+        "a model element"
+    );
+    assert!(diagram_sides(&archforge_notations::NOTATIONS, &before, &after, Uuid([7; 16]), |_| {}).unwrap().is_none(), "an unknown id");
 }
 
 /// A package's card is drawn, and hit, under a class placed over it on both sides, as the canvas
@@ -1157,7 +1170,7 @@ fn a_repair_marks_nothing() {
         }
     };
     assert_eq!(mark(&drawn(&before, &after, &diagram), &first), Some(ChangeKind::Changed), "without the repair it differs");
-    let seen = diagram_sides(&before, &after, Uuid::parse(&diagram).unwrap(), fit).unwrap().unwrap();
+    let seen = diagram_sides(&archforge_notations::NOTATIONS, &before, &after, Uuid::parse(&diagram).unwrap(), fit).unwrap().unwrap();
     assert_eq!(seen.marks, Default::default());
 }
 
@@ -1213,7 +1226,7 @@ struct Owned {
 
 /// The project every comparison of a package move starts from.
 fn owned() -> Owned {
-    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let mut s = NOTATIONS.new_project_session("Commerce", ids()).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
     let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
@@ -1299,7 +1312,7 @@ struct Mixed {
 
 /// The model of [`Mixed`] and its rows, then the diagram drawn on it.
 fn mixed() -> (Rows, Mixed) {
-    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let mut s = NOTATIONS.new_project_session("Commerce", ids()).unwrap();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
     let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
@@ -1351,7 +1364,7 @@ fn a_mixed_structure_diagram_is_compared_in_the_diagram_area() {
 fn a_historical_revision_of_a_mixed_diagram_stays_isolated_from_the_project() {
     let (_, Mixed { mut s, orders, order, dependency, diagram, package_box, class_box, line }) = mixed();
     let then = state(&s);
-    let mut revision = archforge_notations::session_from_rows(&then, ids()).unwrap();
+    let mut revision = archforge_notations::NOTATIONS.session_from_rows(&then, ids()).unwrap();
     assert_eq!(state(&revision), then, "the revision as it was saved");
     run(&mut s, "uml.class.rename", json!({ "class": order, "name": "Purchase" }));
     run(&mut s, "diagram.unplace", json!({ "nodes": [package_box] }));
@@ -1362,7 +1375,7 @@ fn a_historical_revision_of_a_mixed_diagram_stays_isolated_from_the_project() {
     run(&mut s, "diagram.move", json!({ "nodes": [class_box], "dx": 40, "dy": 0 }));
     let now = state(&s);
     assert_eq!(state(&revision), then, "the project's changes changed nothing in the revision");
-    let reopened = archforge_notations::session_from_rows(&then, ids()).unwrap();
+    let reopened = archforge_notations::NOTATIONS.session_from_rows(&then, ids()).unwrap();
     assert_eq!(state(&reopened), then, "opened again, the revision as it was saved");
     assert_eq!(state(&s), now, "opening it changed nothing in the project");
     run(&mut revision, "diagram.move", json!({ "nodes": [class_box], "dx": 0, "dy": 80 }));

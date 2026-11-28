@@ -1,5 +1,7 @@
 //! A measurement, not a check: how a project of every notation's tables (ER's and all of UML's)
-//! is created, written, read and saved. Run with `cargo test -p archforge-project --test scale -- --ignored --nocapture`.
+//! is created, written, read and saved. It measures the real notations' tables, so it lives in the
+//! app, the one crate that holds them all (ADR 0005). Run with
+//! `cargo test -p archforge --test scale -- --ignored --nocapture`.
 #![cfg(unix)]
 
 use std::time::{Duration, Instant};
@@ -33,8 +35,8 @@ fn a_project_with_er_and_uml_tables() {
     let dolt = Dolt::find(&home).unwrap();
     let opts = ServerOptions { run_root: Some(run_root.clone()), ready_budget: Duration::from_secs(30), ..ServerOptions::new(base.join("records")) };
     // Every notation's tables: the core's, the diagrams', ER's and all of UML's.
-    let universe = archforge_notations::universe().unwrap();
-    let (tables, junctions) = archforge_notations::storage();
+    let universe = archforge_notations::NOTATIONS.universe().unwrap();
+    let (tables, junctions) = archforge_notations::NOTATIONS.storage();
     let schema = ModelSchema::new(&universe, tables, junctions).unwrap();
     println!("tables {} lists {}", schema.tables().len(), schema.junctions().len());
     let t = Instant::now();
@@ -44,7 +46,7 @@ fn a_project_with_er_and_uml_tables() {
     project.prepare_model(&schema).unwrap();
     println!("prepare {:?}", t.elapsed());
     // An ER model of 60 tables written as the shell writes it; UML's tables stay empty.
-    let mut s = archforge_notations::new_project_session("Scale", ids(0)).unwrap();
+    let mut s = archforge_notations::NOTATIONS.new_project_session("Scale", ids(0)).unwrap();
     let schema_id = s.execute("er.schema.add", &json!({ "name": "shop" })).unwrap().value["id"].as_str().unwrap().to_string();
     for i in 0..60 {
         let e =

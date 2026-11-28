@@ -14,6 +14,7 @@ mod kind_literals;
 mod layers;
 mod lints;
 mod manual;
+mod notation_rules;
 mod resize;
 mod screens;
 mod shell_io;

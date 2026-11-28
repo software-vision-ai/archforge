@@ -67,18 +67,19 @@ fn metamodel_names_become_words() {
 #[test]
 fn the_labels_cover_what_a_card_shows_and_nothing_else() {
     use archforge_mof::TypeRef;
-    let universe = archforge_notations::universe().unwrap();
-    let texts: Vec<String> = crate::model_words::texts(crate::tests::SCREENS.notation_uis()).into_iter().map(|(_, word)| word).collect();
-    for wanted in ["Is abstract", "On delete", "Package", "Exactly one", "Interface realization", "Enum type"] {
+    let universe = crate::tests::NOTATIONS.universe().unwrap();
+    let texts: Vec<String> =
+        crate::model_words::texts(crate::tests::NOTATIONS, crate::tests::SCREENS.notation_uis()).into_iter().map(|(_, word)| word).collect();
+    for wanted in ["Is abstract", "Is ordered", "Aggregation", "Composite", "Inout", "Body"] {
         assert!(texts.iter().any(|t| t == wanted), "{wanted} is missing");
     }
     // Each is a word nothing that belongs on a card also makes, with the property it stands for
     // checked to really be of the kind the walk must drop.
     let dropped = [
-        ("Language", archforge_uml::opaque_expression::LANGUAGE, "many-valued data"),
-        ("Lower", archforge_uml::multiplicity_element::LOWER, "derived"),
-        ("Bound element", archforge_uml::template_binding::BOUND_ELEMENT, "typed by a class"),
-        ("Name", archforge_uml::named_element::NAME, "the name"),
+        ("Trigger", archforge_core::skill::TRIGGER, "many-valued data"),
+        ("Lower", archforge_mof::toy::MULTIPLICITY_LOWER, "derived"),
+        ("Type", archforge_mof::toy::TYPED_ELEMENT_TYPE, "typed by a class"),
+        ("Name", archforge_mof::toy::NAMED_ELEMENT_NAME, "the name"),
         ("Fill", archforge_diagram::style::FILL, "a diagram's own"),
     ];
     for (word, prop, why) in dropped {
@@ -96,79 +97,6 @@ fn the_labels_cover_what_a_card_shows_and_nothing_else() {
     assert!(!texts.iter().any(|t| t == "As diagram"), "a diagram's literals are not model words");
 }
 
-/// Every class a notation creates by constant name is one of the kinds, each of them concrete and
-/// of the model area.
-#[test]
-fn every_class_the_notations_create_has_a_kind_word() {
-    let universe = archforge_notations::universe().unwrap();
-    let word = |constant: &str| {
-        let mut parts = constant.split('_').map(|p| p.to_lowercase());
-        let first = parts.next().unwrap_or_default();
-        std::iter::once(first[..1].to_uppercase() + &first[1..]).chain(parts).collect::<Vec<_>>().join(" ")
-    };
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut files = Vec::new();
-    for dir in ["crates/uml/src", "crates/er/src", "crates/core/src"] {
-        sources(&root.join(dir), &mut files);
-    }
-    let mut created = std::collections::BTreeSet::new();
-    for file in &files {
-        let text = std::fs::read_to_string(file).unwrap();
-        for (at, _) in text.match_indices(".create(") {
-            let argument: String = text[at + ".create(".len()..].chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':').collect();
-            let constant = argument.rsplit("::").next().unwrap_or_default();
-            if !constant.is_empty() && constant.chars().all(|c| c.is_ascii_uppercase() || c == '_') {
-                created.insert(word(constant));
-            }
-        }
-    }
-    assert!(created.contains("Interface realization"), "the scan found {created:?}; the scanner is broken");
-    let kinds: Vec<String> = crate::model_words::kinds(crate::tests::SCREENS.notation_uis())
-        .iter()
-        .map(|c| crate::model_words::words(&universe.class(*c).unwrap().name))
-        .collect();
-    // What a notation draws is the diagram metamodel's: boxes, lines and their labels. A package's
-    // default-diagram binding is the diagram metamodel's too, worded Default diagram on its own (AR-553).
-    for class in created.iter().filter(|c| !["Node", "Edge", "Label", "Default diagram binding"].contains(&c.as_str())) {
-        assert!(kinds.contains(class), "the notations create {class}, which has no kind word; add it to its notation's created_classes");
-    }
-    for class in &crate::model_words::kinds(crate::tests::SCREENS.notation_uis()) {
-        let known = universe.class(*class).unwrap();
-        assert!(!known.is_abstract && class.metamodel() != archforge_diagram::INDEX, "{} cannot be an element's kind", known.name);
-    }
-}
-
-/// Every reason a command gives for not being available, in a project without a model root and in
-/// a new project that holds only its root, has a catalogue row keyed by that reason: said in
-/// English, it is the reason itself (AR-440).
-#[test]
-fn every_reason_a_command_is_not_available_has_its_row() {
-    let ids = || {
-        let mut n: u128 = 0;
-        Box::new(move || {
-            n += 1;
-            archforge_mof::Uuid(n.to_le_bytes())
-        })
-    };
-    let options = archforge_engine::Options::default();
-    let rootless = archforge_notations::store(ids()).unwrap();
-    let rootless = archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), rootless, 1, options, archforge_notations::view());
-    let new = archforge_notations::new_project_session("Shop", ids()).unwrap();
-    set_language("en");
-    let mut reasons = std::collections::BTreeSet::new();
-    for session in [&rootless, &new] {
-        reasons.extend(session.registry().infos(&session.facts()).into_iter().filter_map(|i| i.disabled_reason));
-    }
-    for reason in &reasons {
-        assert_eq!(
-            archforge_shell_api::engine_said::disabled(crate::tests::SCREENS.notation_uis(), reason).as_deref(),
-            Some(*reason),
-            "no row keyed by {reason:?}"
-        );
-    }
-    assert_eq!(reasons.len(), 26, "the reasons found: {reasons:?}");
-}
-
 /// The counts each language's plural rule is tested at: zero, one, two, a few, the teens,
 /// a compound one, a hundred and a thousand (as the machinery's plural rule test has them).
 const EDGES: [u64; 8] = [0, 1, 2, 5, 11, 21, 100, 1000];
@@ -178,7 +106,7 @@ const EDGES: [u64; 8] = [0, 1, 2, 5, 11, 21, 100, 1000];
 #[test]
 fn every_languages_plural_rows_give_their_form_at_the_edge_numbers() {
     // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
+    let _shell = crate::Shell::new(crate::Services::default(), crate::tests::NOTATIONS, &crate::tests::SCREENS);
     // Spelled out for one row in every language.
     let days = |code: &str, n: u64| {
         set_language(code);
@@ -676,7 +604,7 @@ fn every_catalogue_in_the_folder_is_registered() {
 /// notation it is given as it is made, and that the interfaces' lookups register their own.
 #[test]
 fn every_row_finds_its_text_in_every_language() {
-    let _shell = crate::Shell::new(crate::Services::default(), &crate::tests::SCREENS);
+    let _shell = crate::Shell::new(crate::Services::default(), crate::tests::NOTATIONS, &crate::tests::SCREENS);
     for table in every_table() {
         let english = rows(table.first().expect("a table has its English catalogue").text);
         for (lang, catalogue) in LANGUAGES.iter().zip(table) {

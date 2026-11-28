@@ -17,11 +17,12 @@ use archforge_ui_egui::theme::ThemeKind;
 use archforge_ui_egui::{Picked, Services, Shell};
 // ER's screens' modules, as their crate's `snapshot` lists them for the tests outside it.
 use archforge_er_ui::snapshot::{
-    er_checks, er_connect, er_keys, er_kind, er_objects, er_place, er_relation, er_said, er_state, er_table, er_types, er_ui,
+    er_checks, er_connect, er_indexes, er_keys, er_kind, er_objects, er_place, er_relation, er_said, er_state, er_table, er_types, er_ui,
 };
 // UML's screens' modules, as their crate's `snapshot` lists them for the tests outside it.
 use archforge_uml_ui::snapshot::{
-    uml_classifier, uml_inline, uml_nary, uml_panel, uml_relate, uml_sets, uml_state, uml_stereotypes, uml_templates, uml_ui,
+    uml_classifier, uml_inline, uml_nary, uml_package_nav, uml_panel, uml_profiles, uml_relate, uml_sets, uml_state, uml_stereotypes, uml_templates,
+    uml_ui,
 };
 
 /// The app's screens parts, ER's then UML's, as the app registers them: every shell the tests make
@@ -89,7 +90,7 @@ fn uml_of_mut(shell: &mut Shell) -> &mut uml_state::UmlState {
 
 /// The real shell in the harness at the design's frame size, given the app's screens parts.
 fn harness(theme: ThemeKind) -> Harness<'static, Shell> {
-    archforge_ui_egui::testing::harness(&SCREENS, theme)
+    archforge_ui_egui::testing::harness(&archforge_notations::NOTATIONS, &SCREENS, theme)
 }
 
 /// Where a test answers a save.
@@ -343,8 +344,8 @@ impl archforge_ui_egui::ProjectHost for SavingHost {
     }
 
     /// Builds the rows on a thread of its own, as the app's writer does, then records them.
-    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
-        let (tables, junctions) = archforge_notations::storage();
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen, notations: &'static archforge_notations::Notations) {
+        let (tables, junctions) = notations.storage();
         let rows = std::thread::spawn(move || model.rows(&tables, &junctions)).join().unwrap().unwrap();
         self.write(project, rows);
     }
@@ -406,7 +407,7 @@ fn saving_harness(opened: Option<archforge_ui_egui::Opened>, picked: Option<&str
         pick_project: Some(std::sync::Arc::new(move |_| Picked::at_once(picked.clone()))),
         ..Services::default()
     };
-    let mut shell = Shell::new(services, &SCREENS);
+    let mut shell = Shell::new(services, &archforge_notations::NOTATIONS, &SCREENS);
     if let Some(opened) = opened {
         shell.open_project(opened);
     }
@@ -457,7 +458,7 @@ fn described_project(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::A
 /// The shell with a project open, in the harness at the design's frame size or another.
 fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
     archforge_ui_egui::i18n::set_language("en");
-    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &archforge_notations::NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(archforge_ui_egui::Opened {
         name: "Commerce platform".into(),
@@ -1136,4 +1137,761 @@ fn keyed_alone(shell: &mut Shell, keys: &[egui::Key], modifiers: egui::Modifiers
     // Nothing is shown: the fonts' textures go unused.
     out.textures_delta.clear();
     took
+}
+
+/// The Diagrams explorer's rows: each one's depth, name and count.
+fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
+    archforge_ui_egui::testing::diagram_rows(h.state(), archforge_ui_egui::testing::kinds(h.state()), None).0
+}
+
+/// A project to delete diagrams in (AR-644): the package Sales with its own default diagram and a
+/// second one, Sales details, showing the class Order, and the schema Shop's ER diagram; Sales and
+/// then Sales details open in tabs, the Diagrams explorer showing. Gives Order and the diagrams.
+fn deletable_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, [archforge_mof::Uuid; 4]) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let made = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        let default = own_diagram(s, sales);
+        let order = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Order" })).unwrap().value);
+        let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales details" });
+        let details = id(s.execute("diagram.add", &p).unwrap().value);
+        let place = serde_json::json!({ "diagram": details.to_string(), "element": order.to_string(), "x": 0, "y": 0, "width": 240, "height": 72 });
+        s.execute("diagram.place", &place).unwrap();
+        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+        let shop = id(s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema.to_string(), "name": "Shop" }))
+            .unwrap()
+            .value);
+        [order, default, details, shop]
+    };
+    archforge_ui_egui::canvas::open(h.state_mut(), made[1]);
+    archforge_ui_egui::canvas::open(h.state_mut(), made[2]);
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    (h, made)
+}
+
+/// A notation that answers for no element, as no class is of its metamodel, and only says words of
+/// its own: an association with its article, a sentence for an enum type without literals, a row
+/// of its own catalogue, and a repair that leaves a tag in the model. Registered before ER and UML,
+/// it is asked before them, so a test sees that the words a notation says inside its own sentences,
+/// a model's kind words, the catalogues and an opening's repair ask the notations the shell
+/// registered, not the app's own list.
+struct WordsUi;
+
+/// The worded notation's word for an association with its article.
+const WORDED_ASSOCIATION: &str = "a worded association";
+
+/// The worded notation's sentence for an enum type without literals.
+const WORDED_LITERALS: &str = "The words want a literal.";
+
+/// The worded notation's catalogues: its one row in every language, German's own text.
+static WORDED_CATALOGUES: &[archforge_ui_egui::i18n::Rows] = &[
+    archforge_ui_egui::i18n::Rows { code: "en", catalogue: "words/en.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "de", catalogue: "words/de.tsv", text: "str\t\tA worded row\tEine Wortzeile\n" },
+    archforge_ui_egui::i18n::Rows { code: "es", catalogue: "words/es.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "fr", catalogue: "words/fr.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "pt-PT", catalogue: "words/pt-PT.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "ja", catalogue: "words/ja.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "zh-Hans", catalogue: "words/zh-Hans.tsv", text: "str\t\tA worded row\tA worded row\n" },
+];
+
+impl archforge_shell_api::notation_ui::NotationUi for WordsUi {
+    /// A metamodel no class is of, so it answers for no element.
+    fn metamodel(&self) -> u16 {
+        u16::MAX
+    }
+    /// No element, so no top of Models.
+    fn is_top(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        false
+    }
+    /// No rows in Models.
+    fn tree(
+        &self,
+        _: &archforge_mof::Store,
+        _: archforge_mof::Obj,
+        _: &archforge_shell_api::notation_ui::Tree<'_>,
+    ) -> Vec<archforge_ui_egui::explorer::Row> {
+        Vec::new()
+    }
+    /// Nothing for Models' `+`.
+    fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<archforge_shell_api::notation_ui::Offer> {
+        Vec::new()
+    }
+    /// Adds nothing, as it offers nothing.
+    fn add(
+        &self,
+        _: &mut archforge_shell_api::cx::Ctx,
+        _: &str,
+        _: Option<archforge_mof::Obj>,
+    ) -> Option<Result<archforge_shell_api::notation_ui::Added, String>> {
+        None
+    }
+    /// Renames nothing.
+    fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
+        None
+    }
+    /// Nothing worked out, as none of its elements is removed.
+    fn before_removal(&self, _: &archforge_mof::Store, _: &[archforge_mof::Obj]) -> archforge_shell_api::notation_ui::Removal {
+        archforge_shell_api::notation_ui::Removal::default()
+    }
+    /// The word alone, as none of its elements is removed.
+    fn removed_text(&self, what: &str, _: &archforge_shell_api::notation_ui::Removal) -> String {
+        what.to_string()
+    }
+    /// No row opens.
+    fn foldable(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        Vec::new()
+    }
+    /// No rows to open.
+    fn parents(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        Vec::new()
+    }
+    /// No search entry.
+    fn entry(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Entry> {
+        None
+    }
+    /// No words for Properties.
+    fn words(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Words> {
+        None
+    }
+    /// Draws nothing, as Properties shows none of its elements.
+    fn body(
+        &self,
+        _: &mut archforge_shell_api::cx::Ctx,
+        _: &mut egui::Ui,
+        _: &archforge_ui_egui::ux::Palette,
+        _: egui::Rect,
+        _: f32,
+        _: &archforge_shell_api::notation_ui::Subject,
+    ) {
+    }
+    /// Its one row ([`WORDED_CATALOGUES`]).
+    fn catalogues(&self) -> &'static [archforge_ui_egui::i18n::Rows] {
+        WORDED_CATALOGUES
+    }
+    /// Creates nothing.
+    fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
+        &[]
+    }
+    /// None of its own, so the longest of the shell's is another notation's.
+    fn name_limit(&self) -> usize {
+        0
+    }
+    /// None of its own, so the longest of the shell's is another notation's.
+    fn description_limit(&self) -> usize {
+        0
+    }
+    /// Deletes nothing on the canvas.
+    fn canvas_delete(&self, _: &mut archforge_shell_api::cx::Ctx, _: bool) -> bool {
+        false
+    }
+    /// Draws nothing over the canvas.
+    fn canvas_overlay(
+        &self,
+        _: &mut archforge_shell_api::cx::Ctx,
+        _: &mut egui::Ui,
+        _: archforge_shell_api::notation_ui::Layer,
+        _: &archforge_shell_api::notation_ui::Overlaid<'_>,
+    ) {
+    }
+    /// The sketch's state, unused.
+    fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
+        Box::new(WordsState)
+    }
+    /// Its sentence for an enum type without literals ([`WORDED_LITERALS`]), so a test sees it asked
+    /// before ER.
+    fn said(&self, _: &[&'static dyn archforge_shell_api::notation_ui::NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        matches!(reason, archforge_engine::Reason::TooFew { kind: "enum literal", min: 1 }).then(|| WORDED_LITERALS.to_string())
+    }
+    /// Its word for an association ([`WORDED_ASSOCIATION`]), so a test sees it asked before UML.
+    fn a_kind(&self, kind: &str) -> Option<String> {
+        (kind == "association").then(|| WORDED_ASSOCIATION.to_string())
+    }
+    /// Leaves a tag in the model, so a test sees an opening's repair ask it.
+    fn open_repair(&self, store: &mut archforge_mof::Store) {
+        let _ = store.create(archforge_core::TAG);
+    }
+}
+
+/// The worded notation before the app's two.
+static WORDS_UIS: &[&dyn archforge_shell_api::notation_ui::NotationUi] = &[&WordsUi, &er_ui::ErUi, &uml_ui::UmlUi];
+
+/// Two tables with the relationship Customer places Order drawn between them, Order moved to
+/// `order_at`; the diagram, its edge and the two nodes.
+fn related_tables(order_at: (f64, f64)) -> (Harness<'static, Shell>, archforge_mof::Obj, archforge_mof::Obj, archforge_mof::Obj, archforge_mof::Obj) {
+    let (mut h, customer, order) = two_tables_harness();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute(
+            "er.relationship.add",
+            &serde_json::json!({ "from": customer, "to": order, "name": "places", "from_end": "exactly-one", "to_end": "zero-or-more" }),
+        )
+        .unwrap();
+        let st = s.doc();
+        let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
+        let did = st.uuid(d).unwrap().to_string();
+        s.execute("diagram.connect-all", &serde_json::json!({ "diagram": did })).unwrap();
+        let st = s.doc();
+        let order_obj = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
+        let order_node = archforge_diagram::views_of(st, order_obj).2[0];
+        let (x, y) = (archforge_diagram::grid::bounds_of(st, order_node).x, archforge_diagram::grid::bounds_of(st, order_node).y);
+        let node_id = st.uuid(order_node).unwrap().to_string();
+        s.execute("diagram.move", &serde_json::json!({ "nodes": [node_id], "dx": order_at.0 - x, "dy": order_at.1 - y })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+    }
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
+    let e = st.list(d, archforge_diagram::diagram::EDGE).unwrap()[0].as_ref().unwrap();
+    let nodes: Vec<archforge_mof::Obj> = st.list(d, archforge_diagram::diagram::NODE).unwrap().iter().filter_map(|v| v.as_ref()).collect();
+    (h, d, e, nodes[0], nodes[1])
+}
+
+/// A package's own class diagram, made as a workflow makes one (AR-581): by `diagram.add`, named
+/// like the package and its default from the start, the selection left as it was.
+fn own_diagram(s: &mut archforge_notations::Session, package: archforge_mof::Uuid) -> archforge_mof::Uuid {
+    let st = s.doc();
+    let name = archforge_core::name_of(st, st.by_uuid(package).unwrap());
+    let kept: Vec<String> = s.view().selection.iter().map(|o| st.uuid(*o).unwrap().to_string()).collect();
+    let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package.to_string(), "name": name });
+    let d = archforge_mof::Uuid::parse(s.execute("diagram.add", &p).unwrap().value["id"].as_str().unwrap()).unwrap();
+    s.execute("view.select", &serde_json::json!({ "ids": kept })).unwrap();
+    d
+}
+
+/// Every kind of typed refusal, as samples for the test that no two notations claim one: each
+/// reason that names a kind, a relationship or another word of the notations', with every such
+/// word, and one or more of each other reason.
+fn every_reason() -> Vec<archforge_engine::Reason> {
+    use archforge_diagram::commands::{ARRANGED, DIAGRAM_ELEMENT, NOTE, NOTE_LINK, STYLED};
+    use archforge_diagram::project::{ELEMENT, NOTATION_ELEMENT};
+    use archforge_engine::{
+        Accepted, BindingFault, DefaultKind, End, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty, NotOneOf, Parameter, Reason,
+        Revision, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
+    };
+    // UML's kinds and relationships, ER's, the diagrams', and the words of a side, a part, an axis
+    // or a notation.
+    let named = [
+        "class|association class|interface|enumeration|data type|primitive type|built-in type|package|profile|stereotype|applied stereotype",
+        "metaclass|element|attribute|operation|literal|qualifier|property|subsetted property|redefined property|template parameter",
+        "generalization|generalization set|realization|binding|association|association end|dependency|constraint|constrained element",
+        "class diagram|schema|table|column|relationship|domain|enum type|enum literal|sequence|view|key|primary key|unique constraint",
+        "foreign key|foreign key column|check|index|index column|subtype|key column|skill|diagram|node|edge|label|waypoint|nesting level",
+        "type|size|default|collation|width|height|fill|stroke|text|x|y|ER|UML",
+    ];
+    let constants = [NOTE, NOTE_LINK, DIAGRAM_ELEMENT, STYLED, ARRANGED, ELEMENT, NOTATION_ELEMENT];
+    let words: Vec<&'static str> = named.into_iter().flat_map(|line| line.split('|')).chain(constants).collect();
+    let name = || String::from("Order");
+    let param = |kind: &'static str| {
+        Box::new(Parameter { name: "T".into(), kind, constraint: None, template: "List".into(), bound: "Orders".into(), argument: "Order".into() })
+    };
+    let revision = Revision { history: 1, revision: 2 };
+    let mut out = Vec::new();
+    for &w in &words {
+        out.extend([
+            Reason::NameTaken { kind: w, name: name() },
+            Reason::DependsOnItself { kind: w },
+            Reason::HoldsBuiltInName { kind: w, name: name() },
+            Reason::SpecializesOnlyItsKind { kind: w },
+            Reason::OnlyItsKindSpecializes { kind: w },
+            Reason::SpecializesNothing { kind: w },
+            Reason::NothingSpecializes { kind: w },
+            Reason::Again { relationship: w },
+            Reason::Cycle { relationship: w },
+            Reason::KindsDiffer { relationship: w },
+            Reason::KindNotSupported { kind: w },
+            Reason::BuiltInTaken { kind: w, name: name() },
+            Reason::NamedTwice { kind: w, name: name() },
+            Reason::NamesExpected { kind: w },
+            Reason::ItemsExpected { kind: w },
+            Reason::NotA { kind: w, name: name() },
+            Reason::IdEmpty { kind: w },
+            Reason::NoPlace { kind: w, at: 9, last: 2 },
+            Reason::CoordinateNotANumber { axis: w },
+            Reason::CoordinateTooFar { axis: w },
+            Reason::IdsExpected { kind: w },
+            Reason::SizeOutOfRange { side: w },
+            Reason::Labelled { slot: w },
+            Reason::NotAColour { part: w },
+            Reason::NotRemovable { notation: w },
+            Reason::NotDescribable { notation: w },
+            Reason::SchemasDiffer { relationship: w },
+            Reason::WouldBreak { kind: w, name: "pk".into(), why: Box::new(Reason::NameEmpty) },
+            Reason::TooDeep { kind: w, max: 32 },
+            Reason::DomainGives { what: w },
+            Reason::EnumTypeTakesNo { what: w },
+            Reason::Unextended(Box::new(Unextended { stereotype: "Entity".into(), metaclass: w, extends: vec!["Class".into()] })),
+            Reason::NeedsArgument(Box::new([*param(w)])),
+            Reason::Misfit(param(w)),
+            Reason::DefaultMisfit(param(w)),
+            Reason::NeedsDefault(param(w)),
+            Reason::WouldNotFit(param(w)),
+            Reason::ParameterInUse(param(w)),
+            Reason::LastParameter(param(w)),
+        ]);
+        for min in 1..=3 {
+            out.push(Reason::TooFew { kind: w, min });
+        }
+        out.push(Reason::TooMany { kind: w, max: 32 });
+        for &other in &words {
+            out.push(Reason::CannotSpecialize { kind: w, general: other });
+            out.push(Reason::Itself { relationship: w, kind: other });
+            for end in [End::Source, End::Target, End::Any] {
+                out.push(Reason::WrongEnd { relationship: w, end, kind: other });
+            }
+        }
+    }
+    let faults = [BindingFault::Missing, BindingFault::Duplicate, BindingFault::DeadTarget, BindingFault::WrongKind, BindingFault::WrongOwner];
+    for fault in faults.into_iter().map(Some).chain([None]) {
+        out.push(Reason::ParentDefaultUnsound { parent: "Sales".into(), fault });
+        out.push(Reason::DefaultDiagramOf { package: "Sales".into(), fault });
+        out.extend(fault.map(Reason::InvalidBinding));
+    }
+    for kind in [
+        DefaultKind::Integer,
+        DefaultKind::Real,
+        DefaultKind::Boolean,
+        DefaultKind::UnlimitedNatural,
+        DefaultKind::Literal("Colour".into()),
+        DefaultKind::Text,
+    ] {
+        out.push(Reason::DefaultUnread { value: "x".into(), kind });
+    }
+    for what in [WordPlace::DiagramKind, WordPlace::TextSlot, WordPlace::IndexDirection, WordPlace::IndexNulls] {
+        for known in [Vec::new(), vec!["asc".to_string()]] {
+            out.push(Reason::NotOneOf(Box::new(NotOneOf { what, word: "sideways".into(), known })));
+        }
+    }
+    let rules = [TargetRule::NotAProperty, TargetRule::Unnamed, TargetRule::SameName, TargetRule::Leaf];
+    out.extend(rules.into_iter().flat_map(|rule| [false, true].map(|redefining| Reason::TargetBreaks { name: "n".into(), rule, redefining })));
+    let misfits = [
+        ValueMisfit::TooMany { max: 256 },
+        ValueMisfit::Empty,
+        ValueMisfit::TooLong { max: 64 },
+        ValueMisfit::Unread { value: "x".into(), accepted: Accepted::Integer },
+        ValueMisfit::Count { given: 3, lower: 1, upper: Some(2) },
+        ValueMisfit::Twice { value: "x".into() },
+    ];
+    out.extend(misfits.into_iter().map(|misfit| Reason::Values(Box::new(Values { property: "tags".into(), misfit }))));
+    let used = [Used::Element("Order".into()), Used::Moved("Order".into()), Used::AppliedProfiles { package: "Sales".into() }];
+    out.extend(used.into_iter().map(|what| Reason::InUse(Box::new(InUse { what, uses: vec![("Entity".into(), vec!["Order".into()], 1)] }))));
+    out.extend([
+        Reason::PackageIntoItself,
+        Reason::RootPackageStays,
+        Reason::TypesPackageKept,
+        Reason::TypesPackageExists,
+        Reason::NameEmpty,
+        Reason::NameNotText,
+        Reason::TextEmpty,
+        Reason::TooLong { max: 64 },
+        Reason::ControlCharacter,
+        Reason::EdgeSpace,
+        Reason::Final { name: name() },
+        Reason::ParentsDiffer(Box::new([("Car".into(), "Vehicle".into()), ("Boat".into(), "Thing".into())])),
+        Reason::OtherEndAggregates,
+        Reason::WholeAllowsMany,
+        Reason::WholeAllowsOne,
+        Reason::WholeNavigable,
+        Reason::NaryAggregates,
+        Reason::TypeInUse(Box::new(TypeInUse { name: "money".into(), columns: vec!["price".into()], count: 1 })),
+        Reason::UmlOwn { metaclass: None },
+        Reason::UmlOwn { metaclass: Some("Class".into()) },
+        Reason::ProfileApplied { package: "Sales".into(), profile: "Persistence".into() },
+        Reason::ProfileNotApplied { package: "Sales".into(), profile: "Persistence".into() },
+        Reason::MetaclassNotDrawn { name: "Actor".into() },
+        Reason::NotAMetaclass { name: "Thing".into() },
+        Reason::ExtensionEnd { name: "base_Class".into() },
+        Reason::ValuesSet { name: "table".into(), elements: 2 },
+        Reason::InNoProfile,
+        Reason::LiteralName { name: "".into(), why: Box::new(Reason::NameEmpty) },
+        Reason::LiteralName { name: " a".into(), why: Box::new(Reason::EdgeSpace) },
+        Reason::IsApplication,
+        Reason::NotInModel,
+        Reason::InProfile { name: name() },
+        Reason::TakesNoStereotype { name: name() },
+        Reason::StereotypeApplied { stereotype: "Entity".into(), element: "Order".into() },
+        Reason::ProfileOutOfScope { profile: "Persistence".into(), package: "Sales".into() },
+        Reason::NotApplied { stereotype: "Entity".into(), element: "Order".into() },
+        Reason::NoProperty(Box::new(NoProperty { stereotype: "Entity".into(), name: "table".into(), has: vec!["schema".into()] })),
+        Reason::NoProperties { stereotype: "Entity".into(), name: "table".into() },
+        Reason::ValuesExpected,
+        Reason::Gone,
+        Reason::ParameterElement { name: "T".into(), template: "List".into() },
+        Reason::NoExpression,
+        Reason::NotAContext,
+        Reason::NotConstrainable,
+        Reason::BracesNoElement,
+        Reason::NoContext,
+        Reason::OneCoordinate,
+        Reason::TakesNoDescription,
+        Reason::TooManyComments { max: 64 },
+        Reason::NotAnItemKey { key: "colour".into() },
+        Reason::UnknownKey { key: "expresion".into(), takes: &["expression", "name"] },
+        Reason::UnknownKey { key: String::new(), takes: &["expression", "name"] },
+        Reason::NoElement { id: "1234".into() },
+        Reason::BuiltInNotLeaf { name: "Integer".into() },
+        Reason::Redefined(Box::new(["size".into()])),
+        Reason::ValuesMisfit { name: "tags".into(), elements: 2, bounds: "1..2".into() },
+        Reason::LiteralValued(Box::new(LiteralValued {
+            literal: "Red".into(),
+            property: "colour".into(),
+            stereotype: "Painted".into(),
+            element: "Car".into(),
+        })),
+        Reason::DefaultTooLong { max: 256 },
+        Reason::DefaultUnfit { value: "x".into(), ty: None },
+        Reason::DefaultUnfit { value: "x".into(), ty: Some("Integer".into()) },
+        Reason::NotShown { name: name() },
+        Reason::OutsideDiagram { name: name() },
+        Reason::ShownAlready { name: name() },
+        Reason::OtherDiagram,
+        Reason::ShowsElement,
+        Reason::StraightLink,
+        Reason::NoRelationship,
+        Reason::LacksEnd,
+        Reason::NotAtEnd { end: End::Source },
+        Reason::NotAtEnd { end: End::Target },
+        Reason::NotLinkable,
+        Reason::TargetOtherDiagram,
+        Reason::LinkUnlabelled,
+        Reason::ArrangedTooFar,
+        Reason::ElementNotRemovable { name: name() },
+        Reason::RemovedWhereEdited,
+        Reason::SubtypeKeyPart,
+        Reason::NotAPlainWord,
+        Reason::NotColumnOf { column: "c".into(), table: "t".into() },
+        Reason::NullableKeyColumn { name: "c".into() },
+        Reason::ColumnCount { columns: 1, table: "t".into(), key: 2 },
+        Reason::TypesDiffer { column: "a".into(), target: "b".into(), types: Box::new([Some("TEXT".into()), None]) },
+        Reason::KeyInUse { foreign_key: "fk".into(), table: "t".into() },
+        Reason::NoPrimaryKey { table: "t".into() },
+        Reason::KeyNotOf { table: "t".into() },
+        Reason::NoKeyColumns { table: "t".into() },
+        Reason::IdentifyingCycle { child: "a".into(), parent: "b".into() },
+        Reason::SetNullNotNullable { column: "c".into() },
+        Reason::RelationshipNotJoining { table: "a".into(), references: "b".into() },
+        Reason::IdentifyingOutsideKey { column: "c".into() },
+        Reason::HasSupertype { table: "t".into() },
+        Reason::InSubtypeKey,
+        Reason::IdentifyingWithoutForeignKey,
+        Reason::KeyWithoutForeignKey,
+        Reason::ManyToManyForeignKey,
+        Reason::RoleNeeded,
+        Reason::RoleWithoutLetter,
+        Reason::Mapping(MappingRule::NotManyToMany),
+        Reason::Mapping(MappingRule::KeysInPrimaryKey { table: "t".into(), keys: 1 }),
+        Reason::Sequence(SequenceRule::IncrementZero),
+        Reason::Sequence(SequenceRule::StartBelow { start: 0, minimum: 1 }),
+        Reason::ColumnOfOtherSchema { column: "c".into() },
+        Reason::InNoTable { column: "c".into() },
+        Reason::NotIntegerType { column: "c".into(), ty: "".into() },
+        Reason::NotIntegerType { column: "c".into(), ty: "TEXT".into() },
+        Reason::Generation(GenerationRule::ComputedNeedsExpression),
+        Reason::NotNullable,
+        Reason::AttributeAndExpression { column: "c".into() },
+        Reason::NoAttributeNorExpression,
+        Reason::SizeMisfit { rule: SizeRule::OutOfRange, ty: "VARCHAR".into(), value: 0 },
+        Reason::SizeInTypeName,
+        Reason::DomainAndEnum,
+        Reason::FollowsNoColumn { name: "n".into() },
+        Reason::PastLastColumn { columns: 3 },
+        Reason::StaleRevision { expected: Some(revision), current: revision },
+        Reason::StaleRevision { expected: None, current: revision },
+        Reason::ConnectionExists { dependency: "uses".into() },
+        Reason::StaleChoice { candidates: Box::new([]) },
+        Reason::StaleChoice { candidates: Box::new(["uses".into()]) },
+        Reason::NotOwnDiagram { diagram: "Main".into(), package: "Sales".into() },
+        Reason::NoDiagramYet { package: "Sales".into() },
+        Reason::ReplacementIsRemoved,
+        Reason::ReplacementNotNeeded { diagram: "Main".into() },
+        Reason::OneReplacement,
+        Reason::NotReplacement { diagram: "Main".into(), package: "Sales".into() },
+    ]);
+    out
+}
+
+/// The names of the headings a screen reader finds on the screen, in tree order.
+fn headings(h: &Harness<'static, Shell>) -> Vec<String> {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    h.query_all_by_role(egui::accesskit::Role::Heading).filter_map(|n| n.accesskit_node().label()).collect()
+}
+
+/// Where the first text painted as `words` stands on the screen.
+fn painted_at(h: &Harness<'static, Shell>, words: &str) -> Option<egui::Rect> {
+    /// Where `s`, or the first shape it holds, paints `words`.
+    fn walk(s: &egui::Shape, words: &str) -> Option<egui::Rect> {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == words => Some(egui::Rect::from_min_size(t.pos, t.galley.size())),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, words)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, words))
+}
+
+/// What drawing the diagram `d` of `session` paints and records, with no shell anywhere, as `kind`
+/// draws its own figures, over the area `width` wide and with `overrides` as a drag's preview: the
+/// texts, the ids recorded and the badges given back.
+fn drawn_alone(
+    session: &archforge_notations::Session,
+    d: &str,
+    kind: Option<&'static dyn archforge_shell_api::kinds::DiagramKind>,
+    dark: bool,
+    width: f32,
+    overrides: &std::collections::BTreeMap<archforge_mof::Uuid, egui::Rect>,
+    problems: &std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
+) -> (Vec<String>, Vec<String>, usize) {
+    let (texts, recorded, badges) = archforge_ui_egui::testing::drawn_alone_at(session, d, (kind, SCREENS.kinds()), dark, width, overrides, problems);
+    (texts, recorded.into_iter().map(|(id, _)| id).collect(), badges)
+}
+
+/// A canvas's area for a hook to draw in, away from any window.
+const CANVAS: egui::Rect = egui::Rect { min: egui::pos2(0.0, 0.0), max: egui::pos2(1200.0, 800.0) };
+
+/// [`Reviews`] in `theme`, the whole diagram in view.
+fn reviews(theme: ThemeKind) -> Reviews {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let s = h.state_mut().session.as_mut().unwrap();
+    let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+    let package = run("uml.package.add", serde_json::json!({ "name": "Reviews" }));
+    let diagram = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": "Reviews" }));
+    let (mut ids, mut nodes) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
+    for (name, cmd, x, y) in [
+        ("Customer", "uml.class.add", 80, 520),
+        ("Product", "uml.class.add", 760, 520),
+        ("Store", "uml.class.add", 80, 860),
+        ("Rated", "uml.interface.add", 760, 860),
+    ] {
+        let id = run(cmd, serde_json::json!({ "package": package, "name": name }));
+        let node = run("diagram.place", serde_json::json!({ "diagram": diagram, "element": id, "x": x, "y": y, "width": 240, "height": 136 }));
+        ids.insert(name, id);
+        nodes.insert(name, node);
+    }
+    let d = archforge_mof::Uuid::parse(&diagram).unwrap();
+    archforge_ui_egui::canvas::open(h.state_mut(), d);
+    h.state_mut().canvas.fit_pending = true;
+    h.run();
+    Reviews { h, package, diagram, ids, nodes }
+}
+
+/// A package Reviews on its own class diagram, open in `theme`: the classes Customer and Product
+/// side by side, Store under Customer and the interface Rated under Product, each card a class's
+/// size. What the association class tests read.
+struct Reviews {
+    h: Harness<'static, Shell>,
+    package: String,
+    diagram: String,
+    /// The classifiers' ids by name, and their nodes by name.
+    ids: std::collections::BTreeMap<&'static str, String>,
+    nodes: std::collections::BTreeMap<&'static str, String>,
+}
+
+impl Reviews {
+    /// Makes the association class Review from Customer to Product through the commands, its line
+    /// and its card above the line's middle: its id, its line's id and its card's id.
+    fn review(&mut self) -> (String, String, String) {
+        let (customer, product) = (self.ids["Customer"].clone(), self.ids["Product"].clone());
+        let (from, to, d) = (self.nodes["Customer"].clone(), self.nodes["Product"].clone(), self.diagram.clone());
+        let s = self.h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let ac = run("uml.association-class.add", serde_json::json!({ "from": customer, "to": product, "name": "Review" }));
+        run("uml.attribute.add", serde_json::json!({ "class": ac, "name": "stars", "type": "Integer" }));
+        let edge = run("diagram.connect", serde_json::json!({ "diagram": d, "element": ac, "source": from, "target": to }));
+        let card = run("diagram.place", serde_json::json!({ "diagram": d, "element": ac, "x": 420, "y": 200, "width": 240, "height": 136 }));
+        self.h.run();
+        (ac, edge, card)
+    }
+}
+
+/// Whether the element `id` is in the open project's model.
+fn alive_in(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> bool {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.by_uuid(id).is_some_and(|o| st.is_alive(o))
+}
+
+/// The boxes the diagram `d` shows.
+fn boxes_of(h: &Harness<'static, Shell>, d: archforge_mof::Uuid) -> usize {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.list(st.by_uuid(d).unwrap(), archforge_diagram::diagram::NODE).unwrap().len()
+}
+
+/// The texts the problem badge of `element` paints, drawn alone in a frame of its own, offering a
+/// way out or not as `resolvable` says.
+fn badge_texts(shell: &mut Shell, element: archforge_mof::Uuid, resolvable: bool) -> Vec<String> {
+    archforge_ui_egui::testing::badge_alone(shell, element, resolvable)
+}
+
+/// The root's class diagram First with the card of the package Sales, and Sales' own diagram:
+/// `(root, first, sales, sales_d)`.
+fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid) {
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let s = h.state_mut().session.as_mut().unwrap();
+    let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+    let first = id(s
+        .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root, "name": "First" }))
+        .unwrap()
+        .value);
+    let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+    let p = serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
+    s.execute("diagram.place", &p).unwrap();
+    let sales_d = own_diagram(s, sales);
+    (root, first, sales, sales_d)
+}
+
+/// The root's diagram Top with the package Sales on it (240 × 148 at 200, 160), and Sales's own
+/// diagram with Order and OrderLine side by side, joined by an association: the harness, Top,
+/// Sales, its card's node, its own diagram and the two classes' nodes there (AR-113).
+fn package_preview_harness(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid, [archforge_mof::Uuid; 2]) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let ids = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |c: &str, p: serde_json::Value| id(s.execute(c, &p).unwrap().value);
+        let root = run("uml.model.root", serde_json::json!({}));
+        let top = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": "Top" }));
+        let sales = run("uml.package.add", serde_json::json!({ "name": "Sales" }));
+        let card = run(
+            "diagram.place",
+            serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
+        );
+        let own = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Sales" }));
+        let order = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "Order" }));
+        let line = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "OrderLine" }));
+        run("uml.association.add", serde_json::json!({ "from": order.to_string(), "to": line.to_string() }));
+        let a = run("diagram.place", serde_json::json!({ "diagram": own.to_string(), "element": order.to_string(), "x": 0, "y": 0 }));
+        let b = run("diagram.place", serde_json::json!({ "diagram": own.to_string(), "element": line.to_string(), "x": 400, "y": 0 }));
+        (top, sales, card, own, [a, b])
+    };
+    let (top, sales, card, own, classes) = ids;
+    // The association shows on Sales's diagram, whether placing drew it or not.
+    if let Some(s) = h.state_mut().session.as_mut() {
+        let _ = s.execute("diagram.connect-all", &serde_json::json!({ "diagram": own.to_string() }));
+    }
+    archforge_ui_egui::canvas::open(h.state_mut(), top);
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.pan = egui::Vec2::ZERO;
+    h.run();
+    (h, top, sales, card, own, classes)
+}
+
+/// The template sample with T (no default) and Key (a data type, Integer by default) on
+/// Repository, and the class OrderRepository placed on the diagram beside it: gives the harness,
+/// the sample's ids, and the cards of OrderRepository and Repository.
+fn binding_sample(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>, (archforge_mof::Uuid, archforge_mof::Uuid)) {
+    let (mut h, mut made) = templates_sample(theme);
+    let repo = made["Repository"].clone();
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "T" })).unwrap();
+    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer" }))
+        .unwrap();
+    let st = s.doc();
+    let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&repo).unwrap()).unwrap()).unwrap();
+    let pkg = st.uuid(pkg).unwrap().to_string();
+    let bound = s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "OrderRepository" })).unwrap().value["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.execute("diagram.place", &serde_json::json!({ "diagram": made["diagram"], "element": bound, "x": 200, "y": 600 })).unwrap();
+    s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+    made.insert("OrderRepository", bound.clone());
+    h.run();
+    let nodes = (
+        archforge_mof::Uuid::parse(&node_on(&h, &bound, &made["diagram"])).unwrap(),
+        archforge_mof::Uuid::parse(&node_on(&h, &repo, &made["diagram"])).unwrap(),
+    );
+    (h, made, nodes)
+}
+
+/// Repository, Order and Entity (Order specializes it) in the package Shop, on two class diagrams,
+/// the first open and Repository selected with Properties shown (AR-130). Gives the ids by name:
+/// Repository, Order, Entity, diagram, second.
+fn templates_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
+    let mut made = std::collections::BTreeMap::new();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let pkg = run("uml.package.add", serde_json::json!({ "name": "Shop" }));
+        let repo = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Repository" }));
+        let order = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Order" }));
+        let entity = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Entity" }));
+        run("uml.generalization.add", serde_json::json!({ "specific": order, "general": entity }));
+        let mut diagrams = Vec::new();
+        for (name, x) in [("Shop", 200), ("Overview", 500)] {
+            let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": name }));
+            run("diagram.place", serde_json::json!({ "diagram": d, "element": repo, "x": x, "y": 200 }));
+            diagrams.push(d);
+        }
+        for (k, v) in [("Repository", repo), ("Order", order), ("Entity", entity), ("diagram", diagrams[0].clone()), ("second", diagrams[1].clone())]
+        {
+            made.insert(k, v);
+        }
+    }
+    archforge_ui_egui::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&made["diagram"]).unwrap());
+    h.run();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["Repository"]] })).unwrap();
+    h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
+    h.run();
+    (h, made)
+}
+
+/// The id of `element`'s card on diagram `d`.
+fn node_on(h: &Harness<'static, Shell>, element: &str, d: &str) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap();
+    let n = archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap())
+        .2
+        .into_iter()
+        .find(|n| archforge_diagram::diagram_of(st, *n) == Some(d))
+        .unwrap();
+    st.uuid(n).unwrap().to_string()
+}
+
+/// Arms the Relationship tool with N-ary association, from its chevron's menu.
+fn arm_nary(h: &mut Harness<'static, Shell>) {
+    let at = rect_of(h, "workspace.tools.relationship-kinds").center();
+    click(h, at);
+    let at = rect_of(h, "workspace.relate.n-ary").center();
+    click(h, at);
+}
+
+/// The centre of the card `node` on the canvas.
+fn card(h: &Harness<'static, Shell>, node: &str) -> egui::Pos2 {
+    rect_of(h, &format!("workspace.canvas.node.{node}")).center()
+}
+
+/// The worded notation's state: none of its own for the trait's answers.
+struct WordsState;
+
+impl archforge_shell_api::notation_ui::NotationState for WordsState {}
+
+/// ER's screens part's notation alone: a list of the notations a shell holds without UML.
+static ER_ALONE: &[&dyn archforge_shell_api::notation_ui::NotationUi] = &[archforge_er_ui::ER.ui];
+
+/// What `notation` draws over the canvas of `h`'s open diagram at `layer`, alone in a frame of its
+/// own, the canvas where the harness's last frame drew it: how many shapes it painted and the ids it
+/// recorded. The harness draws a frame after, so its controls are found again.
+fn overlaid(
+    h: &mut Harness<'static, Shell>,
+    notation: &dyn archforge_shell_api::notation_ui::NotationUi,
+    layer: archforge_shell_api::notation_ui::Layer,
+) -> (usize, Vec<String>) {
+    let r = rect_of(h, "workspace.canvas");
+    let dark = h.state().state.theme == ThemeKind::Dark;
+    let drawn = archforge_ui_egui::testing::overlaid_alone(h.state_mut(), notation, layer, r, dark);
+    h.run();
+    drawn
+}
+
+/// How many times `text` is painted whole.
+fn painted_times(h: &Harness<'static, Shell>, text: &str) -> usize {
+    painted(h).iter().filter(|t| t.as_str() == text).count()
 }

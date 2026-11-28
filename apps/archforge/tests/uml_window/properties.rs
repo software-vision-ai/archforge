@@ -806,7 +806,12 @@ fn a_data_type_in_properties_takes_attributes_and_operations_and_is_offered_as_a
         };
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(
-            archforge_ui_egui::testing::skill_target_word(archforge_ui_egui::testing::notation_uis(h.state()), st, st.by_uuid(skill).unwrap()),
+            archforge_ui_egui::testing::skill_target_word(
+                h.state().session.as_ref().unwrap().view(),
+                archforge_ui_egui::testing::notation_uis(h.state()),
+                st,
+                st.by_uuid(skill).unwrap()
+            ),
             "every data type"
         );
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [money.to_string()] })).unwrap();

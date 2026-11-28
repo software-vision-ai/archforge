@@ -8,6 +8,11 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# A fake notation over archforge-mof's toy metamodel (`fake`), for the tests of the shell and the
+# project store, which name no real notation (ADR 0005); never shipped.
+testing = ["archforge-mof/testing", "dep:serde_json"]
+
 [dependencies]
 archforge-core.workspace = true
 archforge-diagram.workspace = true
@@ -15,10 +20,16 @@ archforge-engine.workspace = true
 archforge-er.workspace = true
 archforge-mof.workspace = true
 archforge-uml.workspace = true
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 archforge-engine = { workspace = true, features = ["testing"] }
 serde_json.workspace = true
+
+# The fake notation's own tests: its rows survive a save and a reopening.
+[[test]]
+name = "fake"
+required-features = ["testing"]
 
 [lints]
 workspace = true
