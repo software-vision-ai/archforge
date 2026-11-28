@@ -123,6 +123,115 @@ fn the_package_tool_makes_the_package_its_diagram_and_its_default_as_one_undo_st
     }
 }
 
+/// On one UML structure diagram the Package tool places a package and the Class tool a class: both
+/// show in Models under the model's root, the package's own diagram shows under "UML structure
+/// diagrams" beside the one they are on, and Properties, opened from the rail with each one's row
+/// selected, shows that package's or that class's sections; a Class placement put down with Escape
+/// leaves the model and its history as they were (AR-557). In light and dark.
+#[test]
+fn a_package_and_a_class_placed_on_one_structure_diagram_show_in_models_diagrams_and_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let top = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root =
+                archforge_mof::Uuid::parse(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap()).unwrap();
+            own_diagram(s, root)
+        };
+        archforge_ui_egui::canvas::open(h.state_mut(), top);
+        h.run();
+        let canvas = rect_of(&h, "workspace.canvas");
+        // Each tool armed from the toolbar and clicked on empty canvas, its element named in place.
+        let place = |h: &mut Harness<'static, Shell>, tool: &str, at: egui::Pos2, name: &str| {
+            let armed = rect_of(h, tool).center();
+            click(h, armed);
+            click(h, at);
+            let rename = h.state().canvas.rename.clone().unwrap_or_else(|| panic!("{theme:?}: {tool} names what it placed"));
+            h.state_mut().canvas.rename.as_mut().unwrap().text = name.into();
+            key(h, egui::Key::Enter, egui::Modifiers::NONE);
+            (rename.element, rename.node)
+        };
+        let (sales, sales_card) = place(&mut h, "workspace.tools.package", canvas.center() - egui::vec2(300.0, 0.0), "Sales");
+        let (order, order_card) = place(&mut h, "workspace.tools.classifier", canvas.center() + egui::vec2(200.0, 0.0), "Order");
+        let own = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let (p, c) = (st.by_uuid(sales).unwrap(), st.by_uuid(order).unwrap());
+            assert_eq!((st.class_of(p).ok(), st.class_of(c).ok()), (Some(archforge_uml::PACKAGE), Some(archforge_uml::CLASS)), "{theme:?}");
+            assert_eq!((archforge_core::name_of(st, p), archforge_core::name_of(st, c)), ("Sales".to_string(), "Order".to_string()));
+            st.uuid(default_of(st, p).expect("the package has its own diagram")).unwrap()
+        };
+        let cards = node_ids(&h);
+        for card in [sales_card, order_card] {
+            assert!(cards.contains(&format!("workspace.canvas.node.{card}")), "{theme:?}: {card} drawn on the diagram: {cards:?}");
+        }
+        // Models: both under the root, each with its row drawn.
+        assert_eq!(tree_labels(&h), ["Commerce platform", "  Sales", "  Order"], "{theme:?}");
+        for element in [sales, order] {
+            assert!(has_id(&h, &format!("workspace.explorer.row.{element}")), "{theme:?}: {element}'s row in Models");
+        }
+        // Diagrams: the package's own diagram under UML structure diagrams, beside the one they are on.
+        let at = rect_of(&h, "workspace.explorers.diagrams").center();
+        click(&mut h, at);
+        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+        assert_eq!(
+            diagram_rows(&h),
+            [row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 2), row(1, "Commerce platform", 0), row(1, "Sales", 0)],
+            "{theme:?}"
+        );
+        let group = rect_of(&h, &format!("workspace.diagrams.group.{}", archforge_uml::STRUCTURE_DIAGRAM));
+        for d in [top, own] {
+            assert!(rect_of(&h, &format!("workspace.diagrams.row.{d}")).top() >= group.bottom(), "{theme:?}: {d} drawn under its group");
+        }
+        // Properties, folded first, opened from the rail with each row selected in Models.
+        let at = rect_of(&h, "workspace.explorers.models").center();
+        click(&mut h, at);
+        // The rail's Properties icon, where the last frame drew it.
+        let rail = |h: &mut Harness<'static, Shell>| {
+            let at = rect_of(h, "workspace.panels.properties").center();
+            click(h, at);
+        };
+        if !h.state().state.panel_collapsed {
+            rail(&mut h);
+        }
+        assert!(h.state().state.panel_collapsed, "{theme:?}: Properties folded");
+        for (element, heading, own_section, other_section) in [
+            (sales, "Package", "workspace.properties.package.parent", "workspace.properties.attributes.add"),
+            (order, "Class", "workspace.properties.attributes.add", "workspace.properties.package.parent"),
+        ] {
+            let at = rect_of(&h, &format!("workspace.explorer.row.{element}")).center();
+            click(&mut h, at);
+            rail(&mut h);
+            assert_eq!((h.state().state.panel, h.state().state.panel_collapsed), (archforge_shell_api::state::Panel::Properties, false), "{theme:?}");
+            let selected: Vec<archforge_mof::Uuid> = {
+                let st = h.state().session.as_ref().unwrap().doc();
+                selection(&h).iter().map(|o| st.uuid(*o).unwrap()).collect()
+            };
+            assert_eq!(selected, [element], "{theme:?}: {heading} selected");
+            assert!(painted(&h).iter().any(|t| t == heading), "{theme:?}: the {heading} section: {:?}", painted(&h));
+            assert!(has_id(&h, "workspace.properties.name"), "{theme:?}: {heading}'s name");
+            assert!(has_id(&h, own_section) && !has_id(&h, other_section), "{theme:?}: {heading}'s own sections");
+            rail(&mut h);
+            assert!(h.state().state.panel_collapsed, "{theme:?}: folded again");
+        }
+        // A Class placement put down with Escape: the click after it makes nothing, model and history as they were.
+        let kept = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            ((*rows_now(h)).clone(), s.history(), s.revision(), s.undo_label().map(str::to_string), s.redo_label().map(str::to_string))
+        };
+        let before = kept(&h);
+        let tool = rect_of(&h, "workspace.tools.classifier").center();
+        click(&mut h, tool);
+        assert_eq!(h.state().canvas.tool, archforge_shell_api::canvas::Tool::Place(uml_classifier::TOOL), "{theme:?}: armed");
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(h.state().canvas.tool, archforge_shell_api::canvas::Tool::Select, "{theme:?}: the tool is put down");
+        click(&mut h, canvas.center() + egui::vec2(0.0, 250.0));
+        assert!(kept(&h) == before, "{theme:?}: the model and its history unchanged");
+        assert!(h.state().canvas.rename.is_none(), "{theme:?}: no name opened");
+        assert_eq!(tree_labels(&h), ["Commerce platform", "  Sales", "  Order"], "{theme:?}: no row added");
+    }
+}
+
 /// A package dragged from Models onto a class diagram gets a diagram of its own, bound as its
 /// default in the same step, only when it has no structure diagram yet; one that has one keeps it
 /// and its default (AR-581).
