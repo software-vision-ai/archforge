@@ -9,10 +9,11 @@ repository.workspace = true
 publish = false
 
 [features]
-# What the screenshot tool (the app's `offscreen`) reaches in the shell (`archforge_ui_egui::snapshot`),
-# and the Chat panel's states it builds over UML's sample (`chat_fixture`); never shipped.
-snapshot = ["dep:archforge-uml", "dep:archforge-uml-ui"]
-# What the app's window tests reach in the shell (`archforge_ui_egui::testing`); never shipped.
+# What the screenshot tool (the app's `offscreen`) reaches in the shell (`archforge_ui_egui::snapshot`);
+# never shipped.
+snapshot = []
+# What the app's window tests and the screenshot tool reach in the shell (`archforge_ui_egui::testing`,
+# the Chat panel's states of `chat_fixture` and the fake hosts); never shipped.
 testing = ["dep:egui_kittest"]
 
 [dependencies]
@@ -20,9 +21,6 @@ archforge-core.workspace = true
 archforge-diagram.workspace = true
 archforge-engine.workspace = true
 archforge-notations.workspace = true
-# UML's model and screens, for the Chat panel's states over UML's sample (`chat_fixture`) only.
-archforge-uml = { workspace = true, optional = true }
-archforge-uml-ui = { workspace = true, optional = true, features = ["snapshot"] }
 archforge-mof.workspace = true
 archforge-names.workspace = true
 archforge-shell-api.workspace = true

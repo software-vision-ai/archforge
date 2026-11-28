@@ -474,7 +474,7 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     use archforge_ui_egui::chat::{ChatEvent, ChatFailure, FailureKind, TurnEnd};
     use archforge_ui_egui::chat_fixture as fx;
     use archforge_ui_egui::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
-    let rig = fx::sample(shell, screen != Screen::WorkspaceChatEmpty)?;
+    let rig = fx::sample(shell, screen != Screen::WorkspaceChatEmpty, uml_ui::open_sample, (archforge_uml::CLASS, "Order"))?;
     // A tool row as the channel words it, for the states whose reads are drawn as the design has
     // them; the changes of B4 go through the channel itself.
     let row = |shell: &mut Shell, command: &str, target: Option<(&str, &str)>, read: &[(&str, u32)], detail: Option<&str>| {

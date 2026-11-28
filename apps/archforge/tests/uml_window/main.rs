@@ -1953,7 +1953,9 @@ fn chat_harness(theme: ThemeKind, ready: bool) -> (Harness<'static, Shell>, arch
         path: "/tmp/Commerce platform.archforge".into(),
         ..Default::default()
     });
-    let rig = archforge_ui_egui::chat_fixture::sample(&mut shell, ready).unwrap();
+    let rig =
+        archforge_ui_egui::chat_fixture::sample(&mut shell, ready, archforge_uml_ui::snapshot::uml_ui::open_sample, (archforge_uml::CLASS, "Order"))
+            .unwrap();
     let h = harness_over(shell);
     (h, rig)
 }

@@ -21,6 +21,7 @@ snapshot = [
     "dep:egui_kittest",
     "dep:png",
     "archforge-ui-egui/snapshot",
+    "archforge-ui-egui/testing",
     "archforge-er-ui/snapshot",
     "archforge-uml-ui/snapshot",
 ]

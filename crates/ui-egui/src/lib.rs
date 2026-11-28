@@ -14,7 +14,7 @@ pub mod canvas;
 mod change_view;
 pub mod chat;
 pub mod chat_delete;
-#[cfg(any(test, feature = "snapshot"))]
+#[cfg(any(test, feature = "testing"))]
 pub mod chat_fixture;
 pub mod chat_markdown;
 pub mod chat_panel;

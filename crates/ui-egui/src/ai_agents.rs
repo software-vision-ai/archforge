@@ -1112,7 +1112,7 @@ pub fn approved_browser_page(url: &str) -> Option<&str> {
 
 /// A host for tests and the offscreen screens: answers each call with what it was set up with,
 /// at once, and counts the calls.
-#[cfg(any(test, feature = "snapshot"))]
+#[cfg(any(test, feature = "testing"))]
 pub mod fake {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
