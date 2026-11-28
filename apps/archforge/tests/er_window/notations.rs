@@ -1789,3 +1789,155 @@ fn a_diagrams_kind_draws_its_own_figures_and_ers_draws_none() {
         assert!(!er.contains(&name) && !texts.iter().any(|t| t == "Review"), "{dark}: the default names nothing: {texts:?}");
     }
 }
+
+/// Each refusal belongs to one notation (AR-786): no typed reason, no reason a command is not
+/// available, in a project without a model root or in a new one, and no rename command that may
+/// leave its element unnamed is claimed by two of the registered notations. Some notation claims at
+/// least one of each of the three, so the samples reach the hooks.
+#[test]
+fn no_two_notations_claim_the_same_refusal() {
+    use archforge_ui_egui::notation_ui::NotationUi;
+    let uis = SCREENS.notation_uis();
+    archforge_ui_egui::i18n::set_language("en");
+    let claimants = |claims: &dyn Fn(&dyn NotationUi) -> bool| uis.iter().filter(|ui| claims(**ui)).map(|ui| ui.metamodel()).collect::<Vec<_>>();
+    let mut claimed = [0; 3];
+    for reason in every_reason() {
+        let by = claimants(&|ui| ui.said(uis, &reason).is_some());
+        assert!(by.len() <= 1, "{reason:?} is said by the notations of the metamodels {by:?}");
+        claimed[0] += by.len();
+    }
+    let ids = || {
+        let mut n: u128 = 0;
+        Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        })
+    };
+    let rootless = archforge_notations::store(ids()).unwrap();
+    let options = archforge_engine::Options::default();
+    let rootless = archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), rootless, 1, options, archforge_notations::view());
+    let new = archforge_notations::new_project_session("Shop", ids()).unwrap();
+    for info in [&rootless, &new].into_iter().flat_map(|session| session.registry().infos(&session.facts())) {
+        if let Some(reason) = info.disabled_reason {
+            let by = claimants(&|ui| ui.disabled(reason).is_some());
+            assert!(by.len() <= 1, "{reason:?} is said by the notations of the metamodels {by:?}");
+            claimed[1] += by.len();
+        }
+        let by = claimants(&|ui| ui.may_be_unnamed(info.id));
+        assert!(by.len() <= 1, "{} may leave its element unnamed for the notations of the metamodels {by:?}", info.id);
+        claimed[2] += by.len();
+    }
+    assert!(claimed.iter().all(|n| *n > 0), "claims of typed reasons, reasons not available and renames: {claimed:?}");
+}
+
+/// In a narrow window, New diagram's kind cards stand one above the other.
+#[test]
+fn in_a_narrow_window_the_kinds_cards_stand_one_above_the_other() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(520.0, 900.0));
+    h.state_mut().state.explorer_collapsed = true;
+    h.run();
+    archforge_ui_egui::diagrams::open_new(h.state_mut());
+    h.run();
+    let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.structure"));
+    assert!(er.bottom() < class.top() && (er.left() - class.left()).abs() < 0.5, "{er:?} {class:?}");
+    let window = h.ctx.content_rect();
+    assert!(window.contains_rect(er) && window.contains_rect(class), "both fit");
+}
+
+/// New diagram's two steps, in light and dark: the cards, their names and the title read out
+/// (AR-554), the arrow keys, Back, Cancel, a refused name and a group's `+`.
+#[test]
+fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_typed() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let elements = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().alive().count();
+        let before = elements(&h);
+        let step = |h: &Harness<'static, Shell>| h.state().diagrams.new.as_ref().map(|n| n.step);
+        // Step 1: a card for each kind, side by side, the first chosen.
+        let at = rect_of(&h, "workspace.tabs.add").center();
+        click(&mut h, at);
+        assert_eq!(step(&h), Some(archforge_ui_egui::diagrams::Step::Kind));
+        let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.structure"));
+        assert!(er.right() < class.left() && (er.top() - class.top()).abs() < 0.5, "{theme:?}: side by side");
+        assert!(er.width() >= 240.0, "{theme:?}: room for the card to read");
+        assert!(painted(&h).iter().any(|t| t == "Step 1 of 2 · Choose what the diagram shows"));
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
+        // The UML structure diagram's card: its name and what it shows painted, its name read out
+        // as the choice's; the dialog's title read out as its heading (AR-554).
+        let found = painted(&h);
+        let said = "Classes, packages and the relationships between them.";
+        assert!(found.iter().any(|t| t == "UML structure diagram") && found.iter().any(|t| t == said), "{theme:?}: {found:?}");
+        assert_eq!(h.get_by_label("UML structure diagram").accesskit_node().role(), egui::accesskit::Role::RadioButton, "{theme:?}");
+        assert_eq!(headings(&h), ["New diagram"], "{theme:?}");
+        // Found where it is painted: over the painted title, above the cards, from their left edge.
+        let title = h.get_by_role_and_label(egui::accesskit::Role::Heading, "New diagram").accesskit_node().bounding_box().expect("bounds");
+        let shown = painted_at(&h, "New diagram").expect("the title painted").center();
+        assert!(title.contains(egui::accesskit::Point::new(shown.x.into(), shown.y.into())), "{theme:?}: {title:?} over {shown:?}");
+        assert!((title.x0 as f32 - er.left()).abs() < 0.5 && title.y1 as f32 <= er.top(), "{theme:?}: {title:?}");
+        // The arrow keys move the choice; the name the dialog gave follows the kind.
+        key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::STRUCTURE_DIAGRAM);
+        key(&mut h, egui::Key::ArrowLeft, egui::Modifiers::NONE);
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND);
+        // Cancel makes nothing.
+        let at = rect_of(&h, "workspace.new-diagram.cancel").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.is_none());
+        assert_eq!(elements(&h), before, "{theme:?}: nothing made");
+        // The class card, then Enter: its details, the root package named after the project.
+        let at = rect_of(&h, "workspace.tabs.add").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(step(&h), Some(archforge_ui_egui::diagrams::Step::Details));
+        let found = painted(&h);
+        assert!(found.iter().any(|t| t == "New UML structure diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
+        assert_eq!(headings(&h), ["New UML structure diagram"], "{theme:?}: the title read out");
+        // A name typed survives Back and another kind; an empty name is refused, and Back clears it.
+        h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
+        h.run();
+        let at = rect_of(&h, "workspace.new-diagram.back").center();
+        click(&mut h, at);
+        assert_eq!(step(&h), Some(archforge_ui_egui::diagrams::Step::Kind));
+        let at = rect_of(&h, "workspace.new-diagram.type.er").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.new-diagram.continue").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.kind, n.name.as_str())), Some((archforge_er::DIAGRAM_KIND, "Domain")));
+        h.state_mut().diagrams.new.as_mut().unwrap().name = "  ".into();
+        let at = rect_of(&h, "workspace.new-diagram.create").center();
+        click(&mut h, at);
+        let refused = h.state().diagrams.new.as_ref().and_then(|n| n.refused.clone()).expect("the empty name is refused");
+        read_out(&h, &refused, "workspace.new-diagram.notice");
+        assert_eq!(elements(&h), before, "{theme:?}: a refusal makes nothing, no schema either");
+        let at = rect_of(&h, "workspace.new-diagram.back").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_none()));
+        assert!(egui_kittest::kittest::Queryable::query_by_label(&h, &refused).is_none(), "{theme:?}: no longer read out");
+        // A double click on a card goes straight on; Create opens the diagram in its group.
+        let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
+        // Past egui's double-click window, so the clicks before don't count with these two.
+        for _ in 0..40 {
+            h.step();
+        }
+        double_click(&mut h, at);
+        assert_eq!(step(&h), Some(archforge_ui_egui::diagrams::Step::Details));
+        h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
+        let at = rect_of(&h, "workspace.new-diagram.create").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.is_none());
+        let at = rect_of(&h, "workspace.explorers.diagrams").center();
+        click(&mut h, at);
+        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+        assert_eq!(diagram_rows(&h), [row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 1), row(1, "Domain", 0)]);
+        assert!(h.state().canvas.active.is_some(), "it opens at once");
+        // A group's + has chosen the kind: the dialog opens on the details, Back before them.
+        let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.step, n.kind)), Some((archforge_ui_egui::diagrams::Step::Details, archforge_er::DIAGRAM_KIND)));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().diagrams.new.is_none());
+    }
+}

@@ -593,7 +593,7 @@ fn the_inline_name_stays_open_through_the_in_window_edit_menu() {
         h.event(Event::Text("Item".into()));
         h.run();
         assert_eq!(name(&h).as_deref(), Some("Item"), "{on_canvas}: pasted, and the menu closed by its title left the name selected");
-        menu(&mut h, "workspace.properties.kind");
+        menu(&mut h, "workspace.properties.description");
         let st = h.state().session.as_ref().unwrap().doc();
         assert!(name(&h).is_none() && st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{on_canvas}: the press elsewhere committed it");
         h.state_mut().menu_bar.held = Some(crate::widgets::egui_id("gone"));
@@ -1028,7 +1028,7 @@ fn the_window_losing_the_focus_closes_the_menu_as_esc_does() {
         let mut h = project(theme);
         h.state_mut().in_window_menu = true;
         h.run();
-        for id in ["workspace.properties.columns.add", "workspace.properties.column.name", "strip.menu.view"] {
+        for id in ["workspace.properties.name", "strip.menu.view"] {
             let at = rect_of(&h, id).center();
             click(&mut h, at);
         }

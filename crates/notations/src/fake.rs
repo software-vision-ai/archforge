@@ -344,7 +344,7 @@ fn answer(ctx: &C<'_>, obj: Obj) -> R {
 /// Refuses an empty name under `key`, and one another element of `list` of `owner` has.
 fn named(ctx: &C<'_>, key: &str, name: &str, owner: Obj, list: PropId, except: Option<Obj>) -> Result<(), CommandError> {
     if name.trim().is_empty() {
-        return Err(CommandError::about(key, "a name is needed"));
+        return Err(CommandError::about(key, "a name is needed").because(Reason::NameEmpty));
     }
     let taken = ctx.doc.list(owner, list).map_err(fail)?.iter().filter_map(Value::as_ref).any(|o| {
         Some(o) != except && ctx.doc.get(o, NAMED_ELEMENT_NAME).ok().and_then(|v| v.as_str().map(str::to_lowercase)) == Some(name.to_lowercase())
