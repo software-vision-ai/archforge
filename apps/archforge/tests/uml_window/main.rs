@@ -918,6 +918,11 @@ fn tree_labels(h: &Harness<'static, Shell>) -> Vec<String> {
     .collect()
 }
 
+/// The Diagrams explorer's rows: each one's depth, name and count.
+fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
+    archforge_ui_egui::testing::diagram_rows(h.state(), archforge_ui_egui::testing::kinds(h.state()), None).0
+}
+
 /// Selects the element of `class` named `name` and gives its id.
 fn select_named(h: &mut Harness<'static, Shell>, class: archforge_mof::ClassId, name: &str) -> archforge_mof::Uuid {
     let st = h.state().session.as_ref().unwrap().doc();
