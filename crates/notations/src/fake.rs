@@ -13,10 +13,10 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, al
 use archforge_mof::schema::{Column, Junction, Table};
 use archforge_mof::toy::{
     ASSOCIATION, ASSOCIATION_MEMBER_END, ASSOCIATION_OWNED_END, CLASS, CLASS_FEATURE, CLASS_GENERALIZATION, CLASS_IS_ABSTRACT, CLASS_OWNED_ATTRIBUTE,
-    CLASS_OWNED_OPERATION, COMMENT, COMMENT_ANNOTATED_ELEMENT, COMMENT_BODY, ELEMENT_OWNED_COMMENT, GENERALIZATION, GENERALIZATION_GENERAL, INDEX, LITERAL_INTEGER, LITERAL_INTEGER_VALUE, LITERAL_UNLIMITED_NATURAL, LITERAL_UNLIMITED_VALUE,
-    MULTIPLICITY_IS_ORDERED, MULTIPLICITY_IS_UNIQUE, MULTIPLICITY_LOWER_VALUE, MULTIPLICITY_UPPER_VALUE, NAMED_ELEMENT_NAME, OPERATION,
-    OPERATION_OWNED_PARAMETER, PACKAGE, PACKAGE_PACKAGED_ELEMENT, PROPERTY, PROPERTY_AGGREGATION, PROPERTY_ASSOCIATION, PROPERTY_CLASS,
-    TYPED_ELEMENT_TYPE, ToySlabs,
+    CLASS_OWNED_OPERATION, COMMENT, COMMENT_ANNOTATED_ELEMENT, COMMENT_BODY, ELEMENT_OWNED_COMMENT, GENERALIZATION, GENERALIZATION_GENERAL, INDEX,
+    LITERAL_INTEGER, LITERAL_INTEGER_VALUE, LITERAL_UNLIMITED_NATURAL, LITERAL_UNLIMITED_VALUE, MULTIPLICITY_IS_ORDERED, MULTIPLICITY_IS_UNIQUE,
+    MULTIPLICITY_LOWER_VALUE, MULTIPLICITY_UPPER_VALUE, NAMED_ELEMENT_NAME, OPERATION, OPERATION_OWNED_PARAMETER, PACKAGE, PACKAGE_PACKAGED_ELEMENT,
+    PROPERTY, PROPERTY_AGGREGATION, PROPERTY_ASSOCIATION, PROPERTY_CLASS, TYPED_ELEMENT_TYPE, ToySlabs,
 };
 use archforge_mof::{ClassId, Invalid, NameKind, Obj, PropId, Store, Value};
 use serde_json::{Value as Json, json};
@@ -385,7 +385,11 @@ fn named(ctx: &C<'_>, key: &str, name: &str, owner: Obj, list: PropId, except: O
     let taken = ctx.doc.list(owner, list).map_err(fail)?.iter().filter_map(Value::as_ref).any(|o| {
         Some(o) != except && ctx.doc.get(o, NAMED_ELEMENT_NAME).ok().and_then(|v| v.as_str().map(str::to_lowercase)) == Some(name.to_lowercase())
     });
-    if taken { Err(CommandError::about(key, format!("{name:?} is taken")).because(Reason::NameTaken { kind, name: name.to_string() })) } else { Ok(()) }
+    if taken {
+        Err(CommandError::about(key, format!("{name:?} is taken")).because(Reason::NameTaken { kind, name: name.to_string() }))
+    } else {
+        Ok(())
+    }
 }
 
 /// The project's model root.
@@ -487,7 +491,9 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let class = id_of(ctx, p, "class", CLASS)?;
     let st = &*ctx.doc;
     let named = |o: Obj| json!({ "id": st.uuid(o).map(|u| u.to_string()).unwrap_or_default(), "name": archforge_core::name_of(st, o) });
-    let list = |prop| -> Result<Json, CommandError> { Ok(Json::Array(st.list(class, prop).map_err(fail)?.iter().filter_map(Value::as_ref).map(named).collect())) };
+    let list = |prop| -> Result<Json, CommandError> {
+        Ok(Json::Array(st.list(class, prop).map_err(fail)?.iter().filter_map(Value::as_ref).map(named).collect()))
+    };
     let mut out = named(class);
     out["attributes"] = list(CLASS_OWNED_ATTRIBUTE)?;
     out["operations"] = list(CLASS_OWNED_OPERATION)?;

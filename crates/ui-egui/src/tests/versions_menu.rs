@@ -159,7 +159,6 @@ fn a_version_chord_is_never_a_plain_arrow() {
 /// With the keyboard in a field a step's chord is the window's while its action is on: Older
 /// version asks for the versions and the caret stays. Newer version's, off from current work, is
 /// the field's, which moves its caret by a word and changes no text.
-#[cfg(any())] // AR-796 parked
 #[test]
 fn a_version_chord_in_a_field_steps_or_moves_the_caret() {
     in_both_appearances(|theme| {
@@ -167,9 +166,10 @@ fn a_version_chord_in_a_field_steps_or_moves_the_caret() {
             let (mut h, host, _, card) = card_on_a_diagram(theme);
             let at = rect_of(&h, &card).center();
             click(&mut h, at);
-            click_id(&mut h, "workspace.properties.columns.add");
-            click_id(&mut h, "workspace.properties.column.name");
-            let name = |h: &Harness<'static, Shell>| er_of(h.state()).column.as_ref().map(|c| c.name.clone()).unwrap_or_default();
+            h.state_mut().state.show_panel(crate::state::Panel::Properties);
+            h.run();
+            click_id(&mut h, "workspace.properties.name");
+            let name = |h: &Harness<'static, Shell>| h.state().panels.name.as_ref().map(|n| n.text.clone()).unwrap_or_default();
             let typed = |h: &mut Harness<'static, Shell>, text: &str| {
                 h.event(egui::Event::Text(text.into()));
                 h.run();
@@ -177,10 +177,10 @@ fn a_version_chord_in_a_field_steps_or_moves_the_caret() {
             };
             key(&mut h, Key::Home, Modifiers::NONE);
             key(&mut h, Key::ArrowRight, shape | Modifiers::ALT);
-            assert_eq!(typed(&mut h, "x"), "column_1x", "{theme:?} {shape:?}: Newer version is off, and the field moved a word on");
+            assert_eq!(typed(&mut h, "x"), "Customerx", "{theme:?} {shape:?}: Newer version is off, and the field moved a word on");
             key(&mut h, Key::ArrowLeft, shape | Modifiers::ALT);
             assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?} {shape:?}: Older version asks for the versions");
-            assert_eq!(typed(&mut h, "y"), "column_1xy", "{theme:?} {shape:?}: and the caret stayed at the end");
+            assert_eq!(typed(&mut h, "y"), "Customerxy", "{theme:?} {shape:?}: and the caret stayed at the end");
         }
     });
 }

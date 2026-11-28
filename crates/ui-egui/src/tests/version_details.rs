@@ -1509,7 +1509,8 @@ fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
         // Far above every top-level box: it fits only if it is counted itself, and only below the
         // canvas's least zoom.
         let nested = edit(&mut h, "diagram.note", serde_json::json!({ "diagram": diagram, "text": "check", "parent": kept, "x": 300, "y": -60000 }));
-        let joins = edit(&mut h, "sketch.association.add", serde_json::json!({ "from": a, "to": d, "name": "joins", "from_role": "1", "to_role": "0..*" }));
+        let joins =
+            edit(&mut h, "sketch.association.add", serde_json::json!({ "from": a, "to": d, "name": "joins", "from_role": "1", "to_role": "0..*" }));
         let line = edit(&mut h, "diagram.connect", serde_json::json!({ "diagram": diagram, "element": joins, "source": kept, "target": fresh }));
         list_still(&mut h);
         host.reads.lock().unwrap().clear();
@@ -3228,30 +3229,30 @@ fn an_element_reads_in_its_notations_words() {
     });
 }
 
-/// A list of features is headed as the notation the shell registered names it, not the app's own
-/// list: the sketch, which answers for UML here, heads UML's attributes its own way, ER still heads
-/// its columns and an enum type's literals, and a list of a class no notation of the shell's holds
-/// is headed Members.
-#[cfg(any())] // AR-796 parked
+/// A list of features is headed as the notation the shell registered names it, not as a fixed
+/// list: the sketch heads its attributes its own way, a list of a kind it has no heading for and
+/// one of a class no notation of the shell's holds are headed Members; a shell given no notation
+/// heads the attributes Members too.
 #[test]
 fn a_list_of_features_is_headed_by_its_notation() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        h.state_mut().notation_uis = SKETCH_UIS;
         let side = || {
             vec![
                 list(ListKind::Features(archforge_mof::toy::PROPERTY), vec![(Named::Said("id".into()), None)]),
                 list(ListKind::Features(archforge_mof::toy::PROPERTY), vec![(Named::Said("code".into()), None)]),
-                list(ListKind::Features(archforge_er::ENUM_TYPE), vec![(Named::Said("open".into()), None)]),
+                list(ListKind::Features(archforge_mof::toy::OPERATION), vec![(Named::Said("open".into()), None)]),
                 list(ListKind::Features(archforge_core::MODEL), vec![(Named::Said("odd".into()), None)]),
             ]
         };
         let lists = CardLists { before: side(), after: side(), ..CardLists::default() };
+        landed(h, id, key.clone(), listed(id, "kept", lists.clone()));
+        assert_eq!((named(h, "Fields of the sketch, id"), named(h, "Fields of the sketch, code")), (2, 2), "{:?}", painted(h));
+        assert_eq!(painted_times(h, "FIELDS OF THE SKETCH"), 4, "each list its heading, on each side");
+        assert_eq!((named(h, "Members, open"), named(h, "Members, odd")), (2, 2));
+        h.state_mut().notation_uis = &[];
         landed(h, id, key, listed(id, "kept", lists));
-        assert_eq!(named(h, "Fields of the sketch, id"), 2, "{:?}", painted(h));
-        assert_eq!((painted_times(h, "FIELDS OF THE SKETCH"), painted_times(h, "ATTRIBUTES")), (2, 0));
-        assert_eq!((named(h, "Columns, code"), named(h, "Literals, open")), (2, 2));
-        assert_eq!(named(h, "Members, odd"), 2);
+        assert_eq!((named(h, "Members, id"), painted_times(h, "FIELDS OF THE SKETCH")), (2, 0), "{:?}", painted(h));
     });
 }
 

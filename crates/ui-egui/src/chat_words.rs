@@ -464,7 +464,10 @@ mod tests {
             at(4, AnchorRole::Read, "sketch_property", ""),
             at(5, AnchorRole::Read, "sketch_property", ""),
         ];
-        assert_eq!(tool_words(uis, &facts("engine.execute", Some("sketch.class.list"), false, payment)).1.as_deref(), Some("2 drawn in the sketch, 2 lines"));
+        assert_eq!(
+            tool_words(uis, &facts("engine.execute", Some("sketch.class.list"), false, payment)).1.as_deref(),
+            Some("2 drawn in the sketch, 2 lines")
+        );
         let mut changed = facts("engine.execute", Some("sketch.class.rename"), true, vec![at(1, AnchorRole::Target, "sketch_class", "Customer")]);
         changed.detail = Some("description".into());
         assert_eq!(tool_words(uis, &changed), ("Changed Customer".into(), Some("description".into())));
@@ -484,5 +487,4 @@ mod tests {
         many.element_count = Some(700);
         assert_eq!(tool_words(uis, &many).0, "Read 700 elements");
     }
-
 }
