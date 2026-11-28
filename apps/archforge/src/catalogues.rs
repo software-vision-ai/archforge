@@ -297,8 +297,8 @@ fn test_modules(text: &str) -> Vec<TestModule> {
 }
 
 /// Whether only the tests' builds take `file`: it, or a module around it, is declared for them
-/// alone ([`test_modules`]), as the shell's tests are and the screens its snapshots stage
-/// (`offscreen`).
+/// alone ([`test_modules`]), as the shell's tests are and the screens the app's screenshot tool
+/// stages (`offscreen`).
 fn test_only(file: &Path) -> bool {
     let (Some(dir), Some(stem)) = (file.parent(), file.file_stem().and_then(|s| s.to_str())) else { return false };
     let (dir, name) = match stem {
@@ -629,7 +629,13 @@ fn a_files_code_is_whose_crate_it_names_and_its_tests_are_a_tests() {
     let after = "\n\nfn h() { tr(\"Close\"); }\n";
     let text = format!("{code}{tests}{after}");
     assert_eq!(split(&root.join("canvas.rs"), &text), [(Reader::Shell, format!("{code}{after}")), (Reader::Test, tests.to_string())]);
-    for file in ["tests.rs", "tests/edit_menu.rs", "offscreen.rs", "offscreen/versions.rs", "../../../apps/archforge/src/acceptance.rs"] {
+    for file in [
+        "tests.rs",
+        "tests/edit_menu.rs",
+        "../../../apps/archforge/src/offscreen.rs",
+        "../../../apps/archforge/src/offscreen/versions.rs",
+        "../../../apps/archforge/src/acceptance.rs",
+    ] {
         assert!(test_only(&root.join(file)), "{file} is built for the tests alone");
     }
     for file in

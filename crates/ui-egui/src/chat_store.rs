@@ -303,7 +303,7 @@ pub trait ChatStore: Send + Sync {
 
 /// Conversations kept in memory, by the rules the project keeps them by: for the tests and the
 /// offscreen screens.
-#[cfg(any(test, feature = "snapshot"))]
+#[cfg(any(test, feature = "testing"))]
 pub mod fake {
     use std::sync::Mutex;
 

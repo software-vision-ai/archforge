@@ -1,7 +1,7 @@
 //! `cargo xtask manual`: the user manual with its pictures.
 //!
 //! The manual's text lives in `docs/manual/`. Its pictures are never committed: each is a line
-//! `<!-- picture: <screen> <light|dark> | <what it shows> -->` naming a screen of the shell crate's
+//! `<!-- picture: <screen> <light|dark> | <what it shows> -->` naming a screen of the app's
 //! `snapshot` example, rendered from the real interface when the manual is built. The built manual
 //! goes to the ignored `plan/manual/`: every chapter with its pictures in place, and the pictures
 //! beside them, so it never drifts from the application.
@@ -77,9 +77,11 @@ pub fn build(text: &str) -> Result<(String, Vec<Picture>), String> {
     Ok((out, pictures))
 }
 
+/// Renders the picture `p` names, its screen in its appearance, to the PNG `out`, through the app's
+/// `snapshot` example.
 fn render(p: &Picture, out: &Path) -> Result<(), String> {
     let mut cmd = util::cargo();
-    cmd.args(["run", "-q", "-p", "archforge-ui-egui", "--features", "snapshot", "--example", "snapshot", "--"]).arg(out).args([
+    cmd.args(["run", "-q", "-p", "archforge", "--features", "snapshot", "--example", "snapshot", "--"]).arg(out).args([
         p.theme.to_string(),
         SIZE.0.to_string(),
         SIZE.1.to_string(),

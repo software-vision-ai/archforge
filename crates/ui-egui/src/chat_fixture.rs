@@ -1,9 +1,12 @@
-//! The Chat panel's states as the tests and the offscreen screens build them: the sample class
-//! model open, the fake agents host, conversations kept in memory, and a fixed clock, so a state is
-//! reached through the panel's own steps (a question asked and kept, the agent's events taken)
-//! rather than by setting its fields.
+//! The Chat panel's states as the tests and the offscreen screens build them, behind the `testing`
+//! feature: a sample model open (its caller's notation opens it), the fake agents host,
+//! conversations kept in memory, and a fixed clock, so a state is reached through the panel's own
+//! steps (a question asked and kept, the agent's events taken) rather than by setting its fields.
+//! It names no notation.
 
 use std::sync::Arc;
+
+use archforge_shell_api::cx::Ctx;
 
 use crate::Shell;
 use crate::ai_agents::fake::Fake;
@@ -11,7 +14,6 @@ use crate::ai_agents::{Look, Provider};
 use crate::chat::ChatEvent;
 use crate::chat_store::fake::Memory;
 use crate::chat_words::Clock;
-use crate::snapshot;
 
 /// 2026-11-07 13:26 UTC: 14:26 where the screens are set, an hour east of UTC.
 pub const NOW: u64 = 1_794_057_960;
@@ -62,11 +64,11 @@ pub fn rig(shell: &mut Shell, ready: bool) -> Rig {
 pub fn settle(shell: &mut Shell) {
     let ctx = egui::Context::default();
     for _ in 0..6 {
-        snapshot::start_agents(shell);
-        snapshot::poll_agents(shell, &ctx);
+        crate::ai_agents::start(shell);
+        crate::ai_agents::poll(shell, &ctx);
         crate::chat_panel::showing(shell);
-        snapshot::chat_frame(shell, &ctx);
-        snapshot::chat_panel_frame(shell);
+        crate::chat::frame(shell, &ctx);
+        crate::chat_panel::frame(shell);
     }
 }
 
@@ -148,12 +150,18 @@ pub fn history(shell: &mut Shell, rig: &Rig) -> Result<Vec<archforge_mof::Uuid>,
     Ok(ids)
 }
 
-/// The sample class model open with Order selected and the Chat panel over it, ready or not.
-pub fn sample(shell: &mut Shell, ready: bool) -> Result<Rig, String> {
-    snapshot::adopt_project(shell);
-    snapshot::cx(shell, archforge_uml_ui::snapshot::uml_ui::open_sample)?;
-    if let Some(order) = element(shell, archforge_uml::CLASS, "Order") {
-        snapshot::run(shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
+/// A sample model open, by `open` through the narrow context, with the element `select` names (its
+/// class and its name) selected when the sample has it, and the Chat panel over it, ready or not.
+pub fn sample<T>(
+    shell: &mut Shell,
+    ready: bool,
+    open: impl FnOnce(&mut Ctx<'_>) -> Result<T, String>,
+    select: (archforge_mof::ClassId, &str),
+) -> Result<Rig, String> {
+    shell.adopt_project();
+    shell.cx(open)?;
+    if let Some(chosen) = element(shell, select.0, select.1) {
+        crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [chosen.to_string()] }))?;
     }
     let rig = rig(shell, ready);
     settle(shell);

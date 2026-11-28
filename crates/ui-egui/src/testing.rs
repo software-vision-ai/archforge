@@ -11,6 +11,7 @@
 use archforge_mof::rows::Rows;
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_notations::Session;
+use archforge_notations::differences::Difference;
 use archforge_shell_api::cx::CtxRef;
 use archforge_shell_api::kinds::DiagramKind;
 use archforge_shell_api::notation_ui::{NotationStates, NotationUi, Row};
@@ -23,7 +24,7 @@ use crate::hold::HoldRefused;
 use crate::leaving::Leaving;
 use crate::project_search::Entry;
 use crate::theme::ThemeKind;
-use crate::{Services, Shell, widgets};
+use crate::{BranchEntry, Services, Shell, widgets};
 
 /// The whole window in a harness at the design's frame size, in English and the appearance
 /// `theme`, its shell given the notations' screens `screens` and no host services, drawn once.
@@ -105,6 +106,38 @@ pub fn comparing(shell: &Shell) -> bool {
 /// Whether the read of a changed element's two sides is on its way.
 pub fn reading_element(shell: &Shell) -> bool {
     shell.versions.element_reading.is_some()
+}
+
+/// The change whose element the centre shows, if one is open.
+pub fn opened_change(shell: &Shell) -> Option<&Difference> {
+    shell.versions.element.as_ref().map(|opened| &opened.row)
+}
+
+/// Whether the centre holds a version's details.
+pub fn details_open(shell: &Shell) -> bool {
+    shell.versions.details.is_some()
+}
+
+/// What the Compare page last found: the two sides it compared (each a version's commit, or none
+/// for current work) and their changes, or why they could not be told.
+pub fn compare_found(shell: &Shell) -> Option<(&(Option<String>, Option<String>), Result<&[Difference], &str>)> {
+    let (key, found, _) = shell.versions.compare_results.found.as_ref()?;
+    Some((&key.sides, found.as_ref().map(|changes| changes.as_slice()).map_err(String::as_str)))
+}
+
+/// The branches the Versions explorer has read, if any.
+pub fn branches(shell: &Shell) -> Option<&[BranchEntry]> {
+    shell.versions.branches.as_deref()
+}
+
+/// Whether Start a branch here… is offered for the version `commit`.
+pub fn branch_offered_at(shell: &Shell, commit: &str) -> bool {
+    crate::branch_ask::offered_at(shell, commit)
+}
+
+/// Whether the project shown holds unsaved work.
+pub fn shown_unsaved(shell: &Shell) -> bool {
+    shell.shown_unsaved()
 }
 
 /// Why the Model menu's rows are off, in words: the first thing that keeps them off.

@@ -12932,7 +12932,8 @@ fn chat_harness(theme: ThemeKind, ready: bool) -> (Harness<'static, Shell>, crat
     let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
-    let rig = crate::chat_fixture::sample(&mut shell, ready).unwrap();
+    let rig =
+        crate::chat_fixture::sample(&mut shell, ready, archforge_uml_ui::snapshot::uml_ui::open_sample, (archforge_uml::CLASS, "Order")).unwrap();
     let h = harness_over(shell);
     (h, rig)
 }

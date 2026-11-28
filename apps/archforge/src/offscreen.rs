@@ -1,11 +1,12 @@
-//! Offscreen rendering of the window, behind the `snapshot` feature: a fresh shell in
-//! the headless harness, drawn once settled and rendered to RGBA.
+//! Offscreen rendering of the window, behind the app's `snapshot` feature (and in its tests): a
+//! fresh shell with the screens parts the app registers, in the headless harness, drawn once
+//! settled and rendered to RGBA.
 
 mod versions;
 
-use crate::snapshot;
-use crate::theme::ThemeKind;
-use crate::{Folder, Services, Shell};
+use archforge_ui_egui::snapshot;
+use archforge_ui_egui::theme::ThemeKind;
+use archforge_ui_egui::{Folder, Services, Shell};
 // ER's screens' modules, as their crate's `snapshot` lists them for the tool.
 use archforge_er_ui::snapshot::er_state::er_mut;
 use archforge_er_ui::snapshot::{er_indexes, er_keys, er_place, er_table};
@@ -470,10 +471,10 @@ fn drawn(width: f32, height: f32, scale: f32, theme: ThemeKind, screen: Screen) 
 /// Builds a Chat state of page 07 through the panel's own steps, over the fake host and the
 /// conversations kept in memory.
 fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
-    use crate::chat::{ChatEvent, ChatFailure, FailureKind, TurnEnd};
-    use crate::chat_fixture as fx;
-    use crate::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
-    let rig = fx::sample(shell, screen != Screen::WorkspaceChatEmpty)?;
+    use archforge_ui_egui::chat::{ChatEvent, ChatFailure, FailureKind, TurnEnd};
+    use archforge_ui_egui::chat_fixture as fx;
+    use archforge_ui_egui::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
+    let rig = fx::sample(shell, screen != Screen::WorkspaceChatEmpty, uml_ui::open_sample, (archforge_uml::CLASS, "Order"))?;
     // A tool row as the channel words it, for the states whose reads are drawn as the design has
     // them; the changes of B4 go through the channel itself.
     let row = |shell: &mut Shell, command: &str, target: Option<(&str, &str)>, read: &[(&str, u32)], detail: Option<&str>| {
@@ -503,7 +504,7 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             anchors,
         };
         if let Some(t) = shell.chat_panel.chat.as_mut().and_then(|c| c.turns.last_mut()) {
-            t.items.push(crate::chat_panel::Item::Tool(facts));
+            t.items.push(archforge_ui_egui::chat_panel::Item::Tool(facts));
         }
     };
     let failed = |kind: FailureKind, reset: Option<u64>| ChatEvent::TurnEnded(TurnEnd::Failed(ChatFailure { kind, detail: String::new(), reset }));
@@ -523,7 +524,7 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             fx::settle(shell);
         }
         Screen::WorkspaceChatChanges => {
-            crate::chat_panel::set_allow_changes(shell, true);
+            archforge_ui_egui::chat_panel::set_allow_changes(shell, true);
             fx::ask(shell, "Add a one-line description to each of them.");
             fx::emit(&rig, shell, ChatEvent::Started { model: fx::NAMED.into(), access: true });
             row(shell, "uml.class.list", None, &[("uml_class", 5)], Some("descriptions"));
@@ -564,7 +565,7 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                         .into(),
                 },
             );
-            crate::chat_panel::stop(shell);
+            archforge_ui_egui::chat_panel::stop(shell);
             fx::emit(&rig, shell, ChatEvent::TurnEnded(TurnEnd::Stopped));
             rig.agents.access(true);
             fx::settle(shell);
@@ -593,11 +594,11 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             if screen == Screen::WorkspaceChatDeleteMenu {
                 // Opened at the pointer near the window's right edge, so it opens to its left.
                 let at = egui::pos2(1452.0, 292.0);
-                shell.chat_panel.row_menu = Some(crate::chat_delete::RowMenu { chat: review, row: 2, at, reached: Some(1) });
+                shell.chat_panel.row_menu = Some(archforge_ui_egui::chat_delete::RowMenu { chat: review, row: 2, at, reached: Some(1) });
             } else {
-                crate::chat_delete::ask(shell, review, 2);
+                archforge_ui_egui::chat_delete::ask(shell, review, 2);
                 if screen == Screen::WorkspaceChatDeleted {
-                    crate::chat_delete::confirm(shell);
+                    archforge_ui_egui::chat_delete::confirm(shell);
                     fx::settle(shell);
                     snapshot::chat_delete_frame(shell);
                 }
@@ -608,14 +609,10 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     Ok(())
 }
 
-/// The screens parts the screens' shells are given: ER's, then UML's, as the app registers them.
-static PARTS: archforge_shell_api::screens::ScreensRegistry =
-    archforge_shell_api::screens::ScreensRegistry::new(&[archforge_er_ui::ER, archforge_uml_ui::UML]);
-
 /// The shell of `screen` in `theme`, its project, model and view as the screen shows them, and the
 /// control the pointer rests on, if any.
 fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>), String> {
-    crate::i18n::set_language("en");
+    archforge_ui_egui::i18n::set_language("en");
     let n = std::sync::atomic::AtomicU64::new(0);
     let ids: std::sync::Arc<dyn Fn() -> archforge_mof::Uuid + Send + Sync> = std::sync::Arc::new(move || {
         let i = n.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
@@ -623,7 +620,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         r[2..].copy_from_slice(&i.to_be_bytes());
         archforge_mof::Uuid::v7(1_761_670_800_000, r)
     });
-    let mut shell = Shell::new(Services { ids: Some(ids), ..Services::default() }, &PARTS);
+    let mut shell = Shell::new(Services { ids: Some(ids), ..Services::default() }, &crate::SCREENS);
     shell.state.theme = theme;
     if matches!(screen, Screen::HomeGallery | Screen::HomeSearch) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
@@ -631,24 +628,27 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         for (name, ago) in [("Billing", 9 * 86_400), ("Warehouse", 2 * 86_400), ("Customer care", 3 * 3_600), ("Commerce platform", 600)] {
             shell.state.remember(name, std::path::Path::new(&format!("/Users/robin/Documents/Archforge/{name}.archforge")), now - ago);
         }
-        shell.state.recent_view = crate::state::RecentView::Gallery;
+        shell.state.recent_view = archforge_ui_egui::state::RecentView::Gallery;
         shell.state.pin(std::path::Path::new("/Users/robin/Projects/Architecture"));
         shell.home_search.open = screen == Screen::HomeSearch;
     }
     if screen == Screen::HomeSettings {
         shell.state.user_name = "Ada Lovelace".into();
-        crate::settings::open(&mut shell);
+        archforge_ui_egui::settings::open(&mut shell);
     }
     if screen == Screen::HomeAbout {
-        crate::support::open(&mut shell);
+        archforge_ui_egui::support::open(&mut shell);
     }
     sample_agents(&mut shell, screen);
     // Every screen has the agents host the app has: the programs found, nothing set up, so the
     // status bar shows Chat's agent access as the app does.
     if shell.services.agents.is_none() {
-        use crate::ai_agents::{Look, Provider, fake};
+        use archforge_ui_egui::ai_agents::{Look, Provider, fake};
         let look = Look { claude: fake::found(Provider::Claude), codex: fake::found(Provider::Codex), ..Look::default() };
-        shell.services.agents = Some(std::sync::Arc::new(fake::Fake { look: std::sync::Mutex::new(look), ..fake::Fake::default() }));
+        // Built from the default with its public fields set, since its others are the shell's own.
+        let mut host = fake::Fake::default();
+        host.look = std::sync::Mutex::new(look);
+        shell.services.agents = Some(std::sync::Arc::new(host));
     }
     if screen == Screen::HomeDoltMissing {
         shell.dolt_missing = Some("ARCHFORGE_DOLT is not set and no dolt is on the PATH".into());
@@ -675,7 +675,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
         // The wiki's versions pages make a project of their own, as their reader does.
         let name = if versions::GUIDE.contains(&screen) { "Versions tryout" } else { "Commerce platform" };
-        shell.open_project(crate::Opened {
+        shell.open_project(archforge_ui_egui::Opened {
             name: name.into(),
             path: format!("/Users/robin/Documents/Archforge/{name}.archforge").into(),
             ..Default::default()
@@ -683,13 +683,15 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     }
     if matches!(screen, Screen::NewProject | Screen::NewProjectFailed | Screen::NewProjectFolder) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
-        crate::new_project::open(&mut shell);
+        archforge_ui_egui::new_project::open(&mut shell);
         if let Some(d) = shell.new_project.as_mut() {
             d.name = "Commerce platform".into();
             if screen == Screen::NewProjectFailed {
                 snapshot::show_create_failure(
                     d,
-                    crate::CreateError::DoltMissing { detail: "no dolt found (ARCHFORGE_DOLT is not set and no dolt is on the PATH)".into() },
+                    archforge_ui_egui::CreateError::DoltMissing {
+                        detail: "no dolt found (ARCHFORGE_DOLT is not set and no dolt is on the PATH)".into(),
+                    },
                 );
             }
             if screen == Screen::NewProjectFolder {
@@ -698,13 +700,13 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         }
         // Change… as a host with a folder picker shows it.
         if screen == Screen::NewProjectFolder {
-            shell.services.pick_folder = Some(std::sync::Arc::new(|_| crate::Picked::at_once(None)));
+            shell.services.pick_folder = Some(std::sync::Arc::new(|_| archforge_ui_egui::Picked::at_once(None)));
         }
     }
     if screen == Screen::WorkspaceSchema {
         // The session first, as the first frame would make it, then the schema the + adds.
         snapshot::adopt_project(&mut shell);
-        crate::explorer::add(&mut shell, "schema");
+        archforge_ui_egui::explorer::add(&mut shell, "schema");
     }
     if matches!(
         screen,
@@ -728,7 +730,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         }
         if screen == Screen::WorkspaceSkillNew {
             let customer = shell.session.as_ref().and_then(|s| s.view().selection.first().and_then(|o| s.doc().uuid(*o).ok()));
-            crate::skill_tab::create(&mut shell, customer);
+            archforge_ui_egui::skill_tab::create(&mut shell, customer);
         }
         if screen == Screen::WorkspaceSkillLink
             && let Some(doc) = shell.canvas.skills.first_mut()
@@ -797,13 +799,13 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
     if matches!(screen, Screen::WorkspaceNewDiagramKind | Screen::WorkspaceNewDiagramDetails) {
         snapshot::adopt_project(&mut shell);
         sample_diagram(&mut shell, true)?;
-        crate::diagrams::open_new(&mut shell);
+        archforge_ui_egui::diagrams::open_new(&mut shell);
         if let Some(edit) = shell.diagrams.new.as_mut() {
             edit.kind = archforge_uml::STRUCTURE_DIAGRAM;
             edit.owner = None;
             edit.name = "Domain model".into();
             if screen == Screen::WorkspaceNewDiagramDetails {
-                edit.step = crate::diagrams::Step::Details;
+                edit.step = archforge_ui_egui::diagrams::Step::Details;
             }
         }
     }
@@ -811,7 +813,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         snapshot::adopt_project(&mut shell);
         sample_packages(&mut shell, screen == Screen::WorkspaceInsidePackage)?;
         if screen == Screen::WorkspacePackageParent {
-            shell.state.show_panel(crate::state::Panel::Properties);
+            shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
             shell.panels.menu = Some(menus::PACKAGE_PARENT);
         }
     }
@@ -831,7 +833,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         shell.canvas.fit_pending = false;
         shell.canvas.zoom = snapshot::ZOOM_RANGE.0;
         shell.canvas.pan = egui::vec2(420.0, 380.0);
-        shell.canvas.notice = Some(crate::i18n::tr("This is the top package: zooming out goes no further"));
+        shell.canvas.notice = Some(archforge_ui_egui::i18n::tr("This is the top package: zooming out goes no further"));
     }
     if screen == Screen::WorkspaceDiagrams {
         snapshot::adopt_project(&mut shell);
@@ -887,7 +889,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 store.uuid(a).map_err(|e| e.to_string())?
             };
             snapshot::run(&mut shell, "view.select", serde_json::json!({ "ids": [id.to_string()] }))?;
-            shell.state.show_panel(crate::state::Panel::Properties);
+            shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
             if screen == Screen::WorkspaceMultiplicityPresets {
                 shell.panels.menu = Some(menus::END_MULTIPLICITY.at(1));
             }
@@ -895,7 +897,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
                 snapshot::cx(&mut shell, |cx| uml_relate::refuse_typed(cx, id, 1, "5..2"))?;
             }
         } else {
-            shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+            shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
             if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
                 uml.relation = uml_relate::Relate::Composition;
             }
@@ -909,7 +911,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
                 uml.classifier = uml_classifier::Classifier::Interface;
             }
-            shell.canvas.tool = crate::canvas::Tool::Place(uml_classifier::TOOL);
+            shell.canvas.tool = archforge_ui_egui::canvas::Tool::Place(uml_classifier::TOOL);
             shell.canvas.popover = Some(uml_classifier::KINDS);
         }
     }
@@ -933,7 +935,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         sample_realizations(&mut shell)?;
         // The Relationship tool armed after the line was selected, as a click on it leaves the
         // selection: the toolbar shows Interface realization active beside its Properties.
-        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
         if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
             uml.relation = uml_relate::Relate::Realization;
         }
@@ -942,7 +944,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         snapshot::adopt_project(&mut shell);
         sample_association_class(&mut shell)?;
         // The Relationship tool armed after the element was selected, as the realization's screen.
-        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
         if let Some(uml) = uml_mut(snapshot::notation_states(&mut shell)) {
             uml.relation = uml_relate::Relate::AssociationClass;
         }
@@ -985,8 +987,8 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         snapshot::cx(&mut shell, uml_ui::open_sample)?;
         let order = snapshot::cx(&mut shell, uml_stereotypes::put_values)?;
         snapshot::run(&mut shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
-        shell.state.show_panel(crate::state::Panel::Properties);
-        shell.state.show_explorer(crate::state::Explorer::Models);
+        shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
+        shell.state.show_explorer(archforge_ui_egui::state::Explorer::Models);
         if screen == Screen::WorkspaceStereotypePicker {
             shell.panels.menu = Some(menus::STEREOTYPE_PICK);
         }
@@ -1114,8 +1116,8 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         }
         if screen == Screen::WorkspaceToast {
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-            let text = crate::i18n::fmt(&crate::i18n::tr("{what} removed"), &[("what", "region")]);
-            shell.canvas.toast = Some(crate::canvas::Toast { text, until: u64::MAX, undo_label });
+            let text = archforge_ui_egui::i18n::fmt(&archforge_ui_egui::i18n::tr("{what} removed"), &[("what", "region")]);
+            shell.canvas.toast = Some(archforge_ui_egui::canvas::Toast { text, until: u64::MAX, undo_label });
         }
         if screen == Screen::WorkspaceCrossSchema {
             sample_cross_schema(&mut shell)?;
@@ -1142,7 +1144,7 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             sample_new_entity(&mut shell)?;
         }
         if screen == Screen::WorkspaceCardinality {
-            shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+            shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
             shell.canvas.popover = Some("relationship-types");
         }
     }
@@ -1152,7 +1154,9 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
 /// Settings → AI Agents over Home, in the state `screen` shows, from the fake agents host: what
 /// its look finds, Codex's account, and what Check connection or a sign-in says.
 fn sample_agents(shell: &mut Shell, screen: Screen) {
-    use crate::ai_agents::{AccountError, CodexAccount, CodexSignIn, Key, LoginEvent, LoginWay, Look, Program, Provider, Store, System, fake};
+    use archforge_ui_egui::ai_agents::{
+        AccountError, CodexAccount, CodexSignIn, Key, LoginEvent, LoginWay, Look, Program, Provider, Store, System, fake,
+    };
     if !matches!(
         screen,
         Screen::SettingsAgentsEmpty
@@ -1198,18 +1202,18 @@ fn sample_agents(shell: &mut Shell, screen: Screen) {
         }
         _ => {}
     }
-    let host = std::sync::Arc::new(fake::Fake {
-        system: if screen == Screen::SettingsAgentsNotAvailable { System::NotYet } else { System::Supported },
-        look: std::sync::Mutex::new(look.clone()),
-        account: std::sync::Mutex::new(Ok(account.clone())),
-        login: std::sync::Mutex::new(vec![LoginEvent::DeviceCode {
-            code: "WXYZ-4821".into(),
-            url: "https://auth.openai.com/codex/device".into(),
-            minutes: 15,
-        }]),
-        test: std::sync::Mutex::new(Err(AccountError::KeyRefused { detail: "401, invalid key".into() })),
-        ..fake::Fake::default()
-    });
+    // Built from the default with its public fields set, since its others are the shell's own.
+    let mut host = fake::Fake::default();
+    host.system = if screen == Screen::SettingsAgentsNotAvailable { System::NotYet } else { System::Supported };
+    host.look = std::sync::Mutex::new(look.clone());
+    host.account = std::sync::Mutex::new(Ok(account.clone()));
+    host.login = std::sync::Mutex::new(vec![LoginEvent::DeviceCode {
+        code: "WXYZ-4821".into(),
+        url: "https://auth.openai.com/codex/device".into(),
+        minutes: 15,
+    }]);
+    host.test = std::sync::Mutex::new(Err(AccountError::KeyRefused { detail: "401, invalid key".into() }));
+    let host = std::sync::Arc::new(host);
     shell.services.agents = Some(host.clone());
     // What the look at start found, as its answer leaves it.
     shell.agents.set_look(look);
@@ -1218,12 +1222,12 @@ fn sample_agents(shell: &mut Shell, screen: Screen) {
         shell.agents.refused = [Some("401, invalid key".into()), None];
     }
     if matches!(screen, Screen::SettingsAgentsMissing | Screen::SettingsAgentsReady | Screen::SettingsAgentsRefused | Screen::SettingsAgentsNoStore) {
-        crate::ai_agents::check_connection(shell);
+        archforge_ui_egui::ai_agents::check_connection(shell);
     }
     if screen == Screen::SettingsAgentsDeviceCode {
-        crate::ai_agents::sign_in(shell, LoginWay::DeviceCode);
+        archforge_ui_egui::ai_agents::sign_in(shell, LoginWay::DeviceCode);
     }
-    crate::settings::open_at(shell, crate::settings::Section::Agents);
+    archforge_ui_egui::settings::open_at(shell, archforge_ui_egui::settings::Section::Agents);
 }
 
 /// A schema "Shop" with a table "Customer" of three columns, the table selected; with `skills`,
@@ -1269,7 +1273,7 @@ fn sample_table(shell: &mut Shell, skills: bool) -> Result<(), String> {
     run(session, "view.select", json!({ "ids": [customer] }))?;
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     if skills {
-        shell.state.show_panel(crate::state::Panel::Skills);
+        shell.state.show_panel(archforge_ui_egui::state::Panel::Skills);
     }
     Ok(())
 }
@@ -1288,7 +1292,7 @@ fn sample_skill_tab(shell: &mut Shell, preview: bool) -> Result<(), String> {
         .ok_or_else(|| "the sample has no Customer naming skill".to_string())?;
     session.execute("skill.set-body", &json!({ "skill": skill.to_string(), "body": TEXT })).map_err(|e| format!("skill.set-body: {e:?}"))?;
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
-    crate::canvas::open(shell, skill);
+    archforge_ui_egui::canvas::open(shell, skill);
     if let Some(doc) = shell.canvas.skills.iter_mut().find(|d| d.skill == skill) {
         doc.preview = preview;
     }
@@ -1378,10 +1382,10 @@ fn sample_column_selected(shell: &mut Shell) -> Result<(), String> {
         json!({ "diagram": diagram, "element": company, "x": 160, "y": 180, "width": 240, "height": er_place::content_height(1) }),
     )?;
     let d = archforge_mof::Uuid::parse(&diagram).ok_or_else(|| "the diagram's id does not parse".to_string())?;
-    crate::canvas::open(shell, d);
+    archforge_ui_egui::canvas::open(shell, d);
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
     run(session, "view.select", json!({ "ids": [id] }))?;
-    shell.state.show_explorer(crate::state::Explorer::Diagrams);
+    shell.state.show_explorer(archforge_ui_egui::state::Explorer::Diagrams);
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::Vec2::ZERO;
@@ -1415,10 +1419,10 @@ fn sample_appearance(shell: &mut Shell, screen: Screen) -> Result<(), String> {
         session.execute("view.select", &json!({ "ids": [rel.to_string()] })).map_err(|e| format!("view.select: {e:?}"))?;
     }
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
-    shell.state.show_panel(crate::state::Panel::Appearance);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Appearance);
     if screen == Screen::WorkspaceAppearancePicker {
         let c = snapshot::colour("#C25E0A").ok_or_else(|| "the sample colour is no colour code".to_string())?;
-        shell.panels.picker = Some(crate::appearance::Picker::new(crate::appearance::Group::Fill, c));
+        shell.panels.picker = Some(archforge_ui_egui::appearance::Picker::new(archforge_ui_egui::appearance::Group::Fill, c));
     }
     Ok(())
 }
@@ -1503,7 +1507,7 @@ fn sample_class_members(shell: &mut Shell, editor: bool) -> Result<(), String> {
         (store.uuid(c).map_err(|e| e.to_string())?, op)
     };
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [class.to_string()] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     if editor && let Some(op) = op {
         snapshot::cx(shell, |cx| uml_panel::open(cx, class, uml_panel::MemberKind::Operation, Some(op)));
     }
@@ -1525,7 +1529,7 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
     let payment = id(shell, "Payment")?;
     snapshot::run(shell, "uml.classifier.set", serde_json::json!({ "classifier": pricing.to_string(), "final": true }))?;
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [payment.to_string()] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     shell.panels.editors_for = Some(payment);
     if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
         uml.final_refused = Some(payment);
@@ -1543,13 +1547,13 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
 fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, String> {
     let drawn = screen != Screen::WorkspaceNaryDrawing;
     let ids = snapshot::cx(shell, |cx| uml_nary::put_recommends(cx, drawn))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::vec2(20.0, 30.0);
     let uuid = |k: &str| ids.get(k).and_then(|v| archforge_mof::Uuid::parse(v)).ok_or_else(|| format!("the sample's {k}"));
     if !drawn {
-        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
         if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
             uml.relation = uml_relate::Relate::NAry;
         }
@@ -1581,7 +1585,7 @@ fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, Stri
 fn sample_nested(shell: &mut Shell) -> Result<(), String> {
     let (priority, order) = snapshot::cx(shell, uml_ui::put_nested_priority)?;
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [priority] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     // At 80 %, Priority's card over Order's, the ⊕ line between them in sight.
     let store = shell.session.as_ref().ok_or("no project is open")?.doc();
     let order = store.by_uuid(archforge_mof::Uuid::parse(&order).ok_or("Order's id")?).ok_or("Order")?;
@@ -1599,8 +1603,8 @@ fn sample_nested(shell: &mut Shell) -> Result<(), String> {
 fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
     let (commerce, persistence, entity) = snapshot::cx(shell, |cx| uml_profiles::put_profiles(cx, refused))?;
     let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "an id".to_string());
-    shell.state.show_panel(crate::state::Panel::Properties);
-    shell.state.show_explorer(crate::state::Explorer::Models);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
+    shell.state.show_explorer(archforge_ui_egui::state::Explorer::Models);
     if refused {
         snapshot::run(shell, "view.select", serde_json::json!({ "ids": [commerce] }))?;
         shell.explorer.expanded.insert(id(&commerce)?);
@@ -1643,7 +1647,7 @@ fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
     )?;
     let set = out["id"].as_str().ok_or("the set's id")?.to_string();
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [set] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     if let Some(s) = shell.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;
     }
@@ -1659,7 +1663,7 @@ fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
 fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     let in_use = screen == Screen::WorkspaceTemplateInUse;
     let (repo, [_, key]) = snapshot::cx(shell, |cx| uml_ui::put_repository(cx, in_use))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     snapshot::cx(shell, |cx| uml_templates::open(cx, repo, Some(key)));
     if in_use {
         snapshot::cx(shell, uml_templates::remove_sample);
@@ -1686,7 +1690,7 @@ fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     let b = archforge_uml::templates::bindings_to(store, r).first().copied().ok_or("the sample's binding")?;
     let bound = archforge_uml::templates::bound_element(store, b).ok_or("OrderRepository")?;
     let b_id = store.uuid(b).map_err(|e| e.to_string())?.to_string();
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     if screen == Screen::WorkspaceTemplateBinding {
         session.execute("view.select", &serde_json::json!({ "ids": [b_id] })).map_err(|e| e.to_string())?;
     } else {
@@ -1733,7 +1737,7 @@ fn sample_qualifiers(shell: &mut Shell, refused: bool) -> Result<(), String> {
     let out = snapshot::run(shell, "uml.qualifier.add", json!({ "association": id, "end": 0, "name": "lineNo", "type": "Integer" }))?;
     let q = archforge_mof::Uuid::parse(out["id"].as_str().ok_or("the qualifier's id")?).ok_or("the qualifier's id")?;
     snapshot::run(shell, "view.select", json!({ "ids": [id] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     if let Some(s) = shell.session.as_mut() {
         s.mark_saved().map_err(|e| e.to_string())?;
     }
@@ -1790,7 +1794,7 @@ fn sample_leaf(shell: &mut Shell) -> Result<(), String> {
     }
     snapshot::run(shell, "uml.classifier.set", serde_json::json!({ "classifier": pricing_id.to_string(), "final": true, "leaf": true }))?;
     snapshot::run(shell, "view.select", serde_json::json!({ "ids": [payment_id.to_string()] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     shell.panels.editors_for = Some(payment_id);
     let refused = shell.session.as_ref().and_then(|s| uml_panel::member_leaf_refusal(s.doc(), &amount_edit, true));
     if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
@@ -1832,7 +1836,7 @@ fn sample_class_diagram(shell: &mut Shell) -> Result<(), String> {
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     Ok(())
 }
 
@@ -1881,7 +1885,7 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
     let _ = session.execute("diagram.connect-all", &json!({ "diagram": inner }));
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "the sample's ids".to_string());
-    crate::canvas::open(shell, id(if inside { &inner } else { &top })?);
+    archforge_ui_egui::canvas::open(shell, id(if inside { &inner } else { &top })?);
     if !inside {
         let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
         run(session, "view.select", json!({ "ids": [sales] }))?;
@@ -1956,8 +1960,8 @@ fn sample_diagrams(shell: &mut Shell) -> Result<(), String> {
     }
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     let d = archforge_mof::Uuid::parse(&diagram).ok_or_else(|| "the diagram's id does not parse".to_string())?;
-    crate::canvas::open(shell, d);
-    shell.state.show_explorer(crate::state::Explorer::Diagrams);
+    archforge_ui_egui::canvas::open(shell, d);
+    shell.state.show_explorer(archforge_ui_egui::state::Explorer::Diagrams);
     Ok(())
 }
 
@@ -2003,7 +2007,7 @@ fn sample_class_sizing(shell: &mut Shell) -> Result<(), String> {
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     Ok(())
 }
 
@@ -2058,9 +2062,9 @@ fn sample_interfaces(shell: &mut Shell) -> Result<(), String> {
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     snapshot::run(shell, "view.select", json!({ "ids": [payable] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
 
@@ -2102,9 +2106,9 @@ fn sample_enumerations(shell: &mut Shell) -> Result<(), String> {
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     snapshot::run(shell, "view.select", json!({ "ids": [status.to_string()] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
 
@@ -2156,9 +2160,9 @@ fn sample_data_types(shell: &mut Shell) -> Result<(), String> {
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     snapshot::run(shell, "view.select", json!({ "ids": [money.to_string()] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
 
@@ -2207,9 +2211,9 @@ fn sample_primitive_types(shell: &mut Shell) -> Result<(), String> {
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     snapshot::run(shell, "view.select", json!({ "ids": [sku.to_string()] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
 
@@ -2281,9 +2285,9 @@ fn sample_realizations(shell: &mut Shell) -> Result<(), String> {
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     snapshot::run(shell, "view.select", json!({ "ids": [realized] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
 
@@ -2323,9 +2327,9 @@ fn sample_association_class(shell: &mut Shell) -> Result<(), String> {
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     snapshot::run(shell, "view.select", json!({ "ids": [review] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     Ok(())
 }
 
@@ -2392,9 +2396,9 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
     if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
         shell.explorer.expanded.insert(root);
     }
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     snapshot::run(shell, "view.select", json!({ "ids": [order.to_string()] }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     snapshot::cx(shell, |cx| uml_panel::open(cx, order, uml_panel::MemberKind::Attribute, Some(total)));
     Ok(())
 }
@@ -2593,9 +2597,9 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
         view.push(id(e)?);
     }
     shell.explorer.expanded.insert(root);
-    crate::canvas::open(shell, diagram);
+    archforge_ui_egui::canvas::open(shell, diagram);
     snapshot::run(shell, "view.select", json!({ "ids": selected.into_iter().collect::<Vec<_>>() }))?;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     // The view: Order and the cards the step is about, at a zoom that reads; the finished model
     // whole.
     let zoom = match step {
@@ -2615,14 +2619,14 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
             }
         }
         2 => {
-            shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+            shell.canvas.tool = archforge_ui_egui::canvas::Tool::Connect("relationship");
             if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
                 uml.relation = uml_relate::Relate::Association;
             }
             shell.canvas.popover = Some("relationship-kinds");
         }
         4 => {
-            shell.canvas.tool = crate::canvas::Tool::Place(uml_classifier::TOOL);
+            shell.canvas.tool = archforge_ui_egui::canvas::Tool::Place(uml_classifier::TOOL);
             if let Some(uml) = uml_mut(snapshot::notation_states(shell)) {
                 uml.classifier = uml_classifier::Classifier::Class;
             }
@@ -2673,7 +2677,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     use serde_json::{Value, json};
     sample_guide(shell, 12)?;
     shell.state.panel_collapsed = false;
-    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_panel(archforge_ui_egui::state::Panel::Properties);
     let run = |shell: &mut Shell, command: &str, params: Value| snapshot::run(shell, command, params).map_err(|e| format!("{command}: {e}"));
     let id = |v: &Value| v.get("id").and_then(Value::as_str).and_then(Uuid::parse).ok_or_else(|| "a command gave no id".to_string());
     let find = |shell: &Shell, class: Option<archforge_mof::ClassId>, name: &str| -> Result<Uuid, String> {
@@ -2703,7 +2707,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     // A class diagram of the root package, opened.
     let new_diagram = |shell: &mut Shell, name: &str| -> Result<Uuid, String> {
         let d = id(&run(shell, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": root.to_string(), "name": name }))?)?;
-        crate::canvas::open(shell, d);
+        archforge_ui_egui::canvas::open(shell, d);
         Ok(d)
     };
     let place = |shell: &mut Shell, d: Uuid, element: Uuid, x: f64, y: f64, width: f64, height: f64| {
@@ -2804,7 +2808,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             let status = find(shell, None, "OrderStatus")?;
             run(shell, "uml.classifier.set-owner", json!({ "classifier": status.to_string(), "owner": order.to_string() }))?;
             select(shell, &[status])?;
-            shell.state.show_explorer(crate::state::Explorer::Models);
+            shell.state.show_explorer(archforge_ui_egui::state::Explorer::Models);
             shell.explorer.expanded.insert(order);
             guide_view(shell, &[status, order], 0.9)?;
         }
@@ -2853,7 +2857,7 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             let profile = id(&run(shell, "uml.profile.add", json!({ "name": "Persistence" }))?)?;
             let entity = id(&run(shell, "uml.stereotype.add", json!({ "profile": profile.to_string(), "name": "Entity", "extends": ["Class"] }))?)?;
             run(shell, "uml.attribute.add", json!({ "class": entity.to_string(), "name": "table", "type": "String" }))?;
-            shell.state.show_explorer(crate::state::Explorer::Models);
+            shell.state.show_explorer(archforge_ui_egui::state::Explorer::Models);
             if screen == Screen::GuideProfile {
                 snapshot::cx(shell, |cx| uml_profiles::open_profile_diagram(cx, profile))?;
                 select(shell, &[entity])?;
@@ -3011,7 +3015,7 @@ fn sample_diagram(shell: &mut Shell, filled: bool) -> Result<(), String> {
     }
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     let id = archforge_mof::Uuid::parse(&diagram).ok_or_else(|| "the diagram's id does not parse".to_string())?;
-    crate::canvas::open(shell, id);
+    archforge_ui_egui::canvas::open(shell, id);
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
     run(session, "view.select", json!({ "ids": [select] }))?;
     // The canvas fits the diagram on its first frame; the sample wants the design's 100 %.
@@ -3028,7 +3032,7 @@ fn sample_subtypes(shell: &mut Shell) -> Result<(), String> {
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
     let store = session.doc();
     let diagram = shell.canvas.active.and_then(|id| store.by_uuid(id)).ok_or_else(|| "the sample has no open diagram".to_string())?;
-    let schema = crate::diagrams::owner_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
+    let schema = archforge_ui_egui::diagrams::owner_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
     let (schema, diagram) = (store.uuid(schema).map_err(|e| e.to_string())?.to_string(), store.uuid(diagram).map_err(|e| e.to_string())?.to_string());
     let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
@@ -3066,7 +3070,7 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
     let store = session.doc();
     let diagram = shell.canvas.active.and_then(|id| store.by_uuid(id)).ok_or_else(|| "the sample has no open diagram".to_string())?;
-    let schema = crate::diagrams::owner_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
+    let schema = archforge_ui_egui::diagrams::owner_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
     let (schema_id, diagram_id) = (store.uuid(schema).map_err(|e| e.to_string())?, store.uuid(diagram).map_err(|e| e.to_string())?);
     let out = session
         .batch("Add table", |b| {
@@ -3083,8 +3087,9 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
     let (Some(entity), Some(node)) = (id_at(0), id_at(1)) else { return Err("the sample's table has no id".to_string()) };
     session.execute("view.select", &json!({ "ids": [entity.to_string()] })).map_err(|e| format!("view.select: {e:?}"))?;
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
-    shell.canvas.tool = crate::canvas::Tool::Place("entity");
-    shell.canvas.rename = Some(crate::editing::NodeRename { node, element: entity, text: "Entity".to_string(), opened: true, refused: None });
+    shell.canvas.tool = archforge_ui_egui::canvas::Tool::Place("entity");
+    shell.canvas.rename =
+        Some(archforge_ui_egui::editing::NodeRename { node, element: entity, text: "Entity".to_string(), opened: true, refused: None });
     Ok(())
 }
 
@@ -3161,7 +3166,11 @@ mod tests {
                     panic!("{name} in {theme:?} records other automation ids than the fixture lists; it records:\n{}", rows.join("\n"));
                 }
                 for (_, id) in recorded {
-                    assert_eq!(crate::widgets::egui_id(id), egui::Id::unique(("automation", id)), "{name} in {theme:?}: the toolkit id of {id}");
+                    assert_eq!(
+                        archforge_ui_egui::widgets::egui_id(id),
+                        egui::Id::unique(("automation", id)),
+                        "{name} in {theme:?}: the toolkit id of {id}"
+                    );
                 }
             }
         }

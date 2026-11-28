@@ -21,7 +21,7 @@ People will trust Archforge with their models. This outranks feature work.
 - A request out of range is refused, not clamped.
 
 ## The patterns already in the code
-- The panic hook in `apps/archforge/src/main.rs` sends a panic's message and place to the log, and
+- The panic hook in `apps/archforge/src/lib.rs` sends a panic's message and place to the log, and
   nothing on that path can panic again.
 - Preferences (`apps/archforge/src/prefs.rs`): a file too long, damaged or not text is set aside
   under a new name and said in the log; it is never overwritten unseen. The defaults take over.
