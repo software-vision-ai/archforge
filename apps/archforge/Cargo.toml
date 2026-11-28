@@ -47,8 +47,9 @@ archforge-er.workspace = true
 archforge-mcp.workspace = true
 archforge-secrets = { workspace = true, features = ["testing"] }
 archforge-uml.workspace = true
-# The words the shell hands its lookups through a table, for the tests across every catalogue.
-archforge-ui-egui = { workspace = true, features = ["testing"] }
+# The words the shell hands its lookups through a table, for the tests across every catalogue, and
+# what UML's window tests (`tests/uml_window`) reach in the shell.
+archforge-ui-egui = { workspace = true, features = ["snapshot", "testing"] }
 # The words UML's screens hand their lookups through a table, for the tests across every catalogue.
 archforge-uml-ui = { workspace = true, features = ["snapshot"] }
 craft-testkit.workspace = true
