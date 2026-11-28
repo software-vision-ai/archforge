@@ -19,7 +19,7 @@ pub(crate) use archforge_shell_api::editing::Action;
 use archforge_shell_api::editing::ask_delete_of;
 pub use archforge_shell_api::editing::{Corner, ElementMenu, Gesture, NodeRename, NoteEdit, diagrams_showing};
 pub(crate) use archforge_shell_api::editing::{
-    ask_delete_cx, element_of, hit, new_row_keys, nodes_of, on_diagram, place_with_lines_cx, select_cx, unplace_cx, uuid,
+    ask_delete_cx, element_of, hit, new_row_keys, nodes_of, on_diagram, place_with_lines_cx, select_cx, unit_rect, unplace_cx, uuid,
 };
 
 use crate::canvas::{CARD_FIRST_ROW, CARD_HEADER, CARD_ROW, Tool, View};
@@ -109,12 +109,6 @@ fn node_target(store: &Store, notations: &ProjectView, n: Obj) -> Obj {
 /// The element of node `n` when it takes part in the gestures of `kind`.
 fn part_of_node(kind: Option<&'static dyn crate::kinds::DiagramKind>, store: &Store, n: Obj) -> Option<Obj> {
     element_of(store, n).filter(|e| kind.is_some_and(|k| k.takes_part(store, *e)))
-}
-
-/// A node's rectangle in diagram units.
-pub(crate) fn unit_rect(store: &Store, n: Obj) -> Rect {
-    let b = bounds_of(store, n);
-    Rect::from_min_size(pos2(b.x as f32, b.y as f32), vec2(b.width as f32, b.height as f32))
 }
 
 /// The nodes of the selected elements on diagram `d`, with the hit node first.

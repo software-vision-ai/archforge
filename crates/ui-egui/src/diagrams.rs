@@ -20,6 +20,8 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
+pub use archforge_shell_api::editing::owner_of;
+
 use crate::home::control;
 use crate::home_search::Typed;
 use crate::i18n::tr;
@@ -139,11 +141,6 @@ pub fn subject_name(store: &Store, o: Obj) -> String {
     }
     let name = diagram_name(store, o);
     if name.is_empty() { tr("Unnamed diagram") } else { name }
-}
-
-/// The element a diagram is of, its owner, when it has one.
-pub fn owner_of(store: &Store, d: Obj) -> Option<Obj> {
-    store.get(d, diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|o| store.is_alive(*o))
 }
 
 fn members(store: &Store, owner: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {

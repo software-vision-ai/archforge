@@ -7,9 +7,10 @@
 //! shows, and the actions on a diagram through the narrow context: selecting, placing an element
 //! with its lines, taking nodes off a diagram and asking before an element goes from the model.
 
+use archforge_diagram::grid::bounds_of;
 use archforge_diagram::{Grid, Hit, ProjectView, diagram, node};
 use archforge_mof::{Obj, Store, Uuid};
-use egui::{Pos2, Rect};
+use egui::{Pos2, Rect, pos2, vec2};
 use serde_json::json;
 
 use crate::cx::{Ctx, Request};
@@ -141,6 +142,17 @@ pub fn nodes_of(store: &Store, d: Obj) -> Vec<Obj> {
 /// Whether diagram `d` shows element `e`.
 pub fn on_diagram(store: &Store, d: Obj, e: Obj) -> bool {
     nodes_of(store, d).into_iter().any(|n| element_of(store, n) == Some(e))
+}
+
+/// A node's rectangle in diagram units.
+pub fn unit_rect(store: &Store, n: Obj) -> Rect {
+    let b = bounds_of(store, n);
+    Rect::from_min_size(pos2(b.x as f32, b.y as f32), vec2(b.width as f32, b.height as f32))
+}
+
+/// The element a diagram is of, its owner, when it has one.
+pub fn owner_of(store: &Store, d: Obj) -> Option<Obj> {
+    store.get(d, diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|o| store.is_alive(*o))
 }
 
 /// Places element `e` dropped on diagram `d`, centred on `at` at `size`, with those of `links`

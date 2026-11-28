@@ -9,12 +9,12 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
 use crate::cx::Ctx;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::er_ui::children;
 use crate::i18n::{fmt, tr};
+use crate::notation_ui::NotationStates;
 use crate::panels::{
     FIELD, PAD, ROW, Subject, check_cx, control_cx, edit_button_cx, icon_button_cx, menu_cx, name_field_cx, refusal, reveal_cx, run_cx, section_cx,
     select_element_cx, select_field_cx, selected_id_cx, string_of, text_field_cx,
@@ -205,15 +205,16 @@ pub(crate) fn entity_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect,
     }
 }
 
-/// The column editor, while it is open: ER's own ([`crate::er_state::ErState::column`]), for the
-/// app's journeys, which fill it in as a person types.
-pub fn column_edit(shell: &Shell) -> Option<&ColumnEdit> {
-    er(&shell.notation_states).and_then(|er| er.column.as_ref())
+/// The column editor, while it is open, in what the notations keep between frames `states`: ER's
+/// own ([`crate::er_state::ErState::column`]), for the app's journeys, which fill it in as a person
+/// types.
+pub fn column_edit(states: &NotationStates) -> Option<&ColumnEdit> {
+    er(states).and_then(|er| er.column.as_ref())
 }
 
 /// The column editor, while it is open, to fill in ([`column_edit`]).
-pub fn column_edit_mut(shell: &mut Shell) -> Option<&mut ColumnEdit> {
-    er_mut(&mut shell.notation_states).and_then(|er| er.column.as_mut())
+pub fn column_edit_mut(states: &mut NotationStates) -> Option<&mut ColumnEdit> {
+    er_mut(states).and_then(|er| er.column.as_mut())
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.

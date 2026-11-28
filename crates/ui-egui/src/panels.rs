@@ -22,7 +22,7 @@ pub(crate) use archforge_shell_api::panels::{
     name_field_cx, off_words_cx, problems_section_cx, refused_on_cx, reveal_cx, section_cx, select_element_cx, select_field_cx, selected_id_cx,
     text_field_cx,
 };
-pub(crate) use archforge_shell_api::panels::{refusal, run_cx, said};
+pub(crate) use archforge_shell_api::panels::{refusal, run_cx, said, string_of};
 
 use crate::home::control;
 use crate::i18n::{fmt, tr};
@@ -121,11 +121,6 @@ fn subject(shell: &Shell, project: &str) -> Subject {
 /// [`run_cx`] over the whole shell, for code not on the narrow context yet.
 pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     shell.cx(|cx| run_cx(cx, id, params))
-}
-
-/// The string `prop` of `o`; empty when it has none.
-pub(crate) fn string_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
-    store.get(o, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
 /// Drops a name or description being typed whose element is gone; the notations drop their own
