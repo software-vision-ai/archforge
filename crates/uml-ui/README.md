@@ -20,8 +20,10 @@ and UML's window tests) and the shell's tests reach in them. Its tests run again
 interfaces' test context (`archforge_shell_api::testing`, `forge-ux/adr/0005`, "Tests follow the
 plugin"), without the shell: what UML's own code draws or decides (its refusal words, its hooks,
 its Properties bodies and editors) in `src/tests.rs`, drawn in both appearances. Its window tests
-of the canvas, its tools and tabs, and relationships drive the whole window with the notations the
-app registers, so they are the app's: `apps/archforge/tests/uml_window/main.rs`.
+(the canvas, its tools and tabs, and relationships; Properties, Models, profiles and stereotypes,
+Chat, the menus, the rail's panels and the views of a version) drive the whole window with the
+notations the app registers, so they are the app's: `apps/archforge/tests/uml_window/`, one module
+for each area beside `main.rs`.
 
 **Layer.** 10, the notations' screens' layer: above the shell's interfaces (9), below the shell
 (11). It takes `archforge-uml` (7), UML's model, `archforge-shell-api` (9) and the crates below

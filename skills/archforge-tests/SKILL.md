@@ -11,10 +11,12 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - UML's screens without the shell, what UML's own code draws or decides (its refusal words, its
     hooks, its Properties bodies and editors), against the shell's interfaces' test context:
     `crates/uml-ui/src/tests.rs`
-  - UML's window tests of the canvas, its tools and tabs, and relationships, the whole window with
-    the notations the app registers (ADR 0005, whole-app behaviour): the app's
-    `apps/archforge/tests/uml_window/main.rs`, through ui-egui's `testing` and `snapshot` and UML's
-    screens' `snapshot`
+  - UML's window tests, the whole window with the notations the app registers (ADR 0005, whole-app
+    behaviour): the app's `apps/archforge/tests/uml_window/`, through ui-egui's `testing` and
+    `snapshot` and UML's screens' `snapshot`, in the module of their area beside `main.rs` (the
+    canvas, its tools and tabs, and relationships; Properties and its keys; Models; profiles and
+    stereotypes; Chat; the menus and the rail's panels; the views of a version; UML's refusals in
+    the chosen language)
   - every offscreen screen's automation ids, in both appearances: the `tests` module in
     `crates/ui-egui/src/offscreen.rs`, against `crates/ui-egui/src/offscreen/automation-ids.tsv`;
     a change that renames, adds or removes an id on purpose updates the screen's rows from the

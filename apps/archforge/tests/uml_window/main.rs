@@ -2,19 +2,24 @@
 //! them, drawn in a harness in both appearances, its controls found and pressed by automation id
 //! (ADR 0005: whole-app behaviour with real notations is tested in the app). They reach the shell
 //! through `archforge_ui_egui::testing` and `archforge_ui_egui::snapshot`, and UML's screens
-//! through `archforge_uml_ui::snapshot`. Here are their harnesses, samples and probes; the tests of
-//! the canvas, its tools and tabs, and relationships are in `canvas`.
+//! through `archforge_uml_ui::snapshot`. Here are their harnesses, samples, fake hosts and probes;
+//! the tests are in the module of their area: the canvas, its tools and tabs, and relationships in
+//! `canvas`; Properties in `properties` and its keys in `properties_keys`; Models in `models`;
+//! profiles and stereotypes in `profiles`; Chat in `chat`; the rail's panels and About in
+//! `panels`; the Edit and Model menus in `edit_menu` and `model_menu`; a version shown, left for
+//! and detailed in `read_only`, `version_chip` and `version_details`; UML's refusals in the chosen
+//! language in `words`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test helpers sit outside the #[test] code that clippy.toml exempts")]
 
 use egui_kittest::Harness;
 
 use archforge_ui_egui::testing::{click, ids};
 use archforge_ui_egui::theme::ThemeKind;
-use archforge_ui_egui::{Services, Shell};
+use archforge_ui_egui::{Picked, Services, Shell};
 // UML's screens' modules, as their crate's `snapshot` lists them for the tests outside it.
 use archforge_uml_ui::snapshot::{
-    uml_bindings, uml_classifier, uml_constraints, uml_inline, uml_nary, uml_nav_route, uml_package, uml_package_nav, uml_panel, uml_profiles,
-    uml_relate, uml_sets, uml_state, uml_stereotypes, uml_ui,
+    uml_bindings, uml_classifier, uml_constraints, uml_inline, uml_nary, uml_nav_route, uml_nesting, uml_package, uml_package_nav, uml_panel,
+    uml_profiles, uml_relate, uml_sets, uml_state, uml_stereotypes, uml_ui,
 };
 
 /// The app's screens parts, ER's then UML's, as the app registers them: every shell the tests make
@@ -23,6 +28,18 @@ static SCREENS: archforge_shell_api::screens::ScreensRegistry =
     archforge_shell_api::screens::ScreensRegistry::new(&[archforge_ui_egui::ER, archforge_uml_ui::UML]);
 
 mod canvas;
+mod chat;
+mod edit_menu;
+mod model_menu;
+mod models;
+mod panels;
+mod profiles;
+mod properties;
+mod properties_keys;
+mod read_only;
+mod version_chip;
+mod version_details;
+mod words;
 
 /// UML's own state in `shell`, whose notations hold UML.
 fn uml_of(shell: &Shell) -> &uml_state::UmlState {
@@ -1278,4 +1295,810 @@ fn centred_at_landing(h: &Harness<'static, Shell>, card: archforge_mof::Uuid) ->
     let c = &h.state().canvas;
     let centre = egui::vec2((b.x + b.width / 2.0) as f32, (b.y + b.height / 2.0) as f32);
     c.zoom == 1.0 && (c.pan + centre - c.size / 2.0).length() < 1.0
+}
+
+/// A host that keeps each creation's sender, so a test answers when it chooses.
+#[derive(Default)]
+struct FakeHost {
+    pending: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<archforge_ui_egui::Opened, archforge_ui_egui::CreateError>>>>,
+    asked: std::sync::Mutex<Vec<(std::path::PathBuf, String)>>,
+}
+
+impl archforge_ui_egui::ProjectHost for FakeHost {
+    /// Keeps the creation's sender and what was asked for.
+    fn create(
+        &self,
+        folder: &std::path::Path,
+        name: &str,
+    ) -> std::sync::mpsc::Receiver<Result<archforge_ui_egui::Opened, archforge_ui_egui::CreateError>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.pending.lock().unwrap().push(tx);
+        self.asked.lock().unwrap().push((folder.to_path_buf(), name.to_string()));
+        rx
+    }
+}
+
+/// Where a test answers a save.
+#[expect(dead_code, reason = "the host keeps each save's sender; no test here answers a save")]
+struct SaveAnswer(std::sync::mpsc::Sender<Result<archforge_ui_egui::Saved, archforge_ui_egui::SaveError>>);
+
+/// A host that writes and saves: it keeps every hand-over of rows, and each
+/// save's and opening's sender, so a test answers when it chooses.
+#[derive(Default)]
+struct SavingHost {
+    version_limits: std::sync::Mutex<Vec<usize>>,
+    written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
+    saves: std::sync::Mutex<Vec<SaveAnswer>>,
+    /// Why the last write failed, as the test sets it; none by default.
+    write_error: std::sync::Mutex<Option<String>>,
+    descriptions: std::sync::Mutex<Vec<Option<String>>>,
+    saved_by: std::sync::Mutex<Vec<archforge_ui_egui::SavedBy>>,
+    opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<archforge_ui_egui::Opened, archforge_ui_egui::CreateError>>)>>,
+    /// The branch each opening was asked to open on.
+    opened_on: std::sync::Mutex<Vec<Option<String>>>,
+    closed: std::sync::Mutex<Vec<std::path::PathBuf>>,
+    /// Each closing's answer, sent by the test.
+    closings: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<(), String>>>>,
+    /// The projects put back to their last save and closed (Don't save), and those closed without
+    /// writing what waited (Close without writing).
+    discarded: std::sync::Mutex<Vec<std::path::PathBuf>>,
+    unwritten: std::sync::Mutex<Vec<std::path::PathBuf>>,
+    /// Each branch delete's answer, sent by the test.
+    branch_deletes: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<Vec<archforge_mof::Uuid>, archforge_ui_egui::BranchNotDeleted>>>>,
+    /// Each branch made, by its stored name, and where the test answers it.
+    branch_makes: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<(), archforge_ui_egui::BranchRefused>>)>>,
+    /// The version each branch made starts at, in the same order; none for current work.
+    branch_starts: std::sync::Mutex<Vec<Option<String>>>,
+    /// Each branch rename, from and to as stored, and where the test answers it.
+    branch_renames: std::sync::Mutex<Vec<(String, String, std::sync::mpsc::Sender<Result<(), archforge_ui_egui::BranchRefused>>)>>,
+    /// Each count of what goes with a branch, by its stored name, and where the test answers it.
+    branch_counts: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<archforge_ui_egui::BranchCounts, String>>)>>,
+    /// Each read of a version waiting for the answer the test sends.
+    reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
+    /// The branch each read of another branch's version was asked on, by its stored name.
+    branch_version_reads: std::sync::Mutex<Vec<(String, String)>>,
+    /// Each read of the versions waiting for the answer the test sends.
+    version_reads: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<archforge_ui_egui::VersionsPage, String>>>>,
+    /// The version each read of the versions started after.
+    version_asks: std::sync::Mutex<Vec<Option<String>>>,
+    /// The branch the project is on, what a read of the branches answers (none for no branches),
+    /// whether it says more exist, and how many reads were asked for.
+    branch_now: std::sync::Mutex<Option<String>>,
+    branch_list: std::sync::Mutex<Option<Result<Vec<archforge_ui_egui::BranchEntry>, String>>>,
+    branch_cut: std::sync::Mutex<bool>,
+    /// While set, each read of the branches waits there for the test to answer it.
+    branch_held: std::sync::Mutex<Option<Vec<std::sync::mpsc::Sender<Result<(Vec<archforge_ui_egui::BranchEntry>, bool), String>>>>>,
+    branch_reads: std::sync::Mutex<usize>,
+    /// Where the answers of each restore's job go, sent by the test.
+    restores: std::sync::Mutex<Vec<RestoreEnds>>,
+    /// When each version restored was saved and when its restore was asked for, as its job was told.
+    restore_dates: std::sync::Mutex<Vec<(String, String)>>,
+    /// Each branch switch asked for, and what the next one is refused with.
+    switches: std::sync::Mutex<Vec<SwitchEnds>>,
+    switch_refused: std::sync::Mutex<Option<String>>,
+}
+
+/// Where a branch switch is answered: the branch, its check, the unsaved mark, and its move.
+#[expect(dead_code, reason = "the host keeps each branch switch's ends; no test here answers a switch")]
+struct SwitchEnds {
+    branch: String,
+    check: ReadAnswer,
+    unsaved: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    moved: RestoreEnds,
+}
+
+/// Where a restore's job is answered, and where its reading back is.
+type RestoreEnds = (std::sync::mpsc::Sender<Result<(), archforge_ui_egui::replace::JobFailure>>, std::sync::mpsc::Sender<Result<bool, String>>);
+
+/// Where the answer to a read of a version goes.
+type ReadAnswer = std::sync::mpsc::Sender<archforge_ui_egui::VersionRead>;
+
+impl archforge_ui_egui::ProjectHost for SavingHost {
+    /// A job the test answers through what is kept in `restores`.
+    fn restore_job(
+        &self,
+        _project: &std::path::Path,
+        _commit: String,
+        (saved_at, before_at): (String, String),
+        _by: archforge_ui_egui::SavedBy,
+        _repair: archforge_ui_egui::Repair,
+    ) -> archforge_ui_egui::replace::Job {
+        let (answer, answers) = std::sync::mpsc::channel();
+        let (reading, readings) = std::sync::mpsc::channel();
+        self.restore_dates.lock().unwrap().push((saved_at, before_at));
+        self.restores.lock().unwrap().push((answer, reading));
+        archforge_ui_egui::replace::Job { run: Box::new(move || answers), read_back: Box::new(move || readings) }
+    }
+
+    /// The branch the test says the project is on.
+    fn current_branch(&self, _project: &std::path::Path) -> Option<String> {
+        self.branch_now.lock().unwrap().clone()
+    }
+
+    /// Answers at once with what the test has set.
+    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(Vec<archforge_ui_egui::BranchEntry>, bool), String>> {
+        *self.branch_reads.lock().unwrap() += 1;
+        let (tx, rx) = std::sync::mpsc::channel();
+        if let Some(held) = self.branch_held.lock().unwrap().as_mut() {
+            held.push(tx);
+            return rx;
+        }
+        let listed = self.branch_list.lock().unwrap().clone().unwrap_or(Ok(Vec::new()));
+        let _ = tx.send(listed.map(|l| (l, *self.branch_cut.lock().unwrap())));
+        rx
+    }
+
+    /// A switch the test answers through what is kept in `switches`.
+    fn begin_branch_switch(&self, _project: &std::path::Path, branch: String) -> Result<archforge_ui_egui::BranchSwitch, String> {
+        if let Some(why) = self.switch_refused.lock().unwrap().take() {
+            return Err(why);
+        }
+        let (check, read) = std::sync::mpsc::channel();
+        let unsaved = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (answer, answers) = std::sync::mpsc::channel();
+        let (reading, readings) = std::sync::mpsc::channel();
+        self.switches.lock().unwrap().push(SwitchEnds { branch, check, unsaved: unsaved.clone(), moved: (answer, reading) });
+        Ok(archforge_ui_egui::BranchSwitch {
+            read,
+            unsaved,
+            job: archforge_ui_egui::replace::Job { run: Box::new(move || answers), read_back: Box::new(move || readings) },
+        })
+    }
+
+    /// Answers nothing yet: the test answers later, through what is kept in `reads`.
+    fn read_version(&self, _project: &std::path::Path, commit: String) -> std::sync::mpsc::Receiver<archforge_ui_egui::VersionRead> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.reads.lock().unwrap().push((commit, tx));
+        rx
+    }
+
+    /// A read of a version, answered as [`SavingHost::read_version`]'s are, and kept with its branch.
+    fn read_branch_version(
+        &self,
+        project: &std::path::Path,
+        branch: &str,
+        commit: String,
+    ) -> std::sync::mpsc::Receiver<archforge_ui_egui::VersionRead> {
+        self.branch_version_reads.lock().unwrap().push((branch.to_string(), commit.clone()));
+        self.read_version(project, commit)
+    }
+
+    /// Never answers: no test here creates a project.
+    fn create(
+        &self,
+        _folder: &std::path::Path,
+        _name: &str,
+    ) -> std::sync::mpsc::Receiver<Result<archforge_ui_egui::Opened, archforge_ui_egui::CreateError>> {
+        std::sync::mpsc::channel().1
+    }
+
+    /// Keeps the answer for the test to send.
+    fn versions(
+        &self,
+        _project: &std::path::Path,
+        after: Option<String>,
+        limit: usize,
+    ) -> std::sync::mpsc::Receiver<Result<archforge_ui_egui::VersionsPage, String>> {
+        self.version_asks.lock().unwrap().push(after);
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.version_limits.lock().unwrap().push(limit);
+        self.version_reads.lock().unwrap().push(tx);
+        rx
+    }
+
+    /// Keeps the answer for the test to send.
+    fn delete_branch(
+        &self,
+        _path: &std::path::Path,
+        _branch: &str,
+    ) -> std::sync::mpsc::Receiver<Result<Vec<archforge_mof::Uuid>, archforge_ui_egui::BranchNotDeleted>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_deletes.lock().unwrap().push(tx);
+        rx
+    }
+
+    /// Stored in lower case with hyphens, which no listed name shares by accident; empty is refused.
+    fn branch_name(&self, typed: &str) -> Result<String, String> {
+        Some(typed.trim().to_lowercase().replace(' ', "-")).filter(|s| !s.is_empty()).ok_or_else(|| archforge_ui_egui::i18n::tr("Enter a name."))
+    }
+
+    /// Keeps the answer for the test to send.
+    fn create_branch(
+        &self,
+        _path: &std::path::Path,
+        name: &str,
+        start: Option<&str>,
+    ) -> std::sync::mpsc::Receiver<Result<(), archforge_ui_egui::BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_starts.lock().unwrap().push(start.map(str::to_string));
+        self.branch_makes.lock().unwrap().push((name.to_string(), tx));
+        rx
+    }
+
+    /// Keeps the answer for the test to send.
+    fn branch_counts(&self, _path: &std::path::Path, branch: &str) -> std::sync::mpsc::Receiver<Result<archforge_ui_egui::BranchCounts, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_counts.lock().unwrap().push((branch.to_string(), tx));
+        rx
+    }
+
+    /// Keeps the answer for the test to send.
+    fn rename_branch(
+        &self,
+        _path: &std::path::Path,
+        from: &str,
+        to: &str,
+    ) -> std::sync::mpsc::Receiver<Result<(), archforge_ui_egui::BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_renames.lock().unwrap().push((from.to_string(), to.to_string(), tx));
+        rx
+    }
+
+    /// Keeps the opening's sender for the test to answer.
+    fn open(&self, path: &std::path::Path) -> std::sync::mpsc::Receiver<Result<archforge_ui_egui::Opened, archforge_ui_egui::CreateError>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.opens.lock().unwrap().push((path.to_path_buf(), tx));
+        rx
+    }
+
+    /// Records the stored branch it was asked for, then opens as `open` does.
+    fn open_on(
+        &self,
+        path: &std::path::Path,
+        branch: Option<&str>,
+    ) -> std::sync::mpsc::Receiver<Result<archforge_ui_egui::Opened, archforge_ui_egui::CreateError>> {
+        self.opened_on.lock().unwrap().push(branch.map(str::to_string));
+        self.open(path)
+    }
+
+    /// Keeps the rows handed over.
+    fn write(&self, project: &std::path::Path, rows: archforge_mof::rows::Rows) {
+        self.written.lock().unwrap().push((project.to_path_buf(), rows));
+    }
+
+    /// Builds the rows on a thread of its own, as the app's writer does, then records them.
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
+        let (tables, junctions) = archforge_notations::storage();
+        let rows = std::thread::spawn(move || model.rows(&tables, &junctions)).join().unwrap().unwrap();
+        self.write(project, rows);
+    }
+
+    /// Nothing waits; the write failed when the test says so.
+    fn writing(&self, _project: &std::path::Path) -> archforge_ui_egui::Writing {
+        archforge_ui_egui::Writing { pending: false, error: self.write_error.lock().unwrap().clone() }
+    }
+
+    /// Keeps the closing's answer for the test to send.
+    fn close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        self.closed.lock().unwrap().push(project.to_path_buf());
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.closings.lock().unwrap().push(tx);
+        rx
+    }
+
+    /// Records the project put back to its last save, and keeps the closing's answer.
+    fn discard_and_close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        self.discarded.lock().unwrap().push(project.to_path_buf());
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.closings.lock().unwrap().push(tx);
+        rx
+    }
+
+    /// Records the project closed without writing, and keeps the closing's answer.
+    fn close_without_writing(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        self.unwritten.lock().unwrap().push(project.to_path_buf());
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.closings.lock().unwrap().push(tx);
+        rx
+    }
+
+    /// Keeps the save's answer and its description for the test.
+    fn save(
+        &self,
+        project: &std::path::Path,
+        description: Option<String>,
+        by: archforge_ui_egui::SavedBy,
+    ) -> std::sync::mpsc::Receiver<Result<archforge_ui_egui::Saved, archforge_ui_egui::SaveError>> {
+        assert_eq!(project, std::path::Path::new("/tmp/Commerce platform.archforge"), "the save names the open project");
+        self.descriptions.lock().unwrap().push(description);
+        self.saved_by.lock().unwrap().push(by);
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.saves.lock().unwrap().push(SaveAnswer(tx));
+        rx
+    }
+}
+
+/// The shell over a saving host, with a picker that chooses `picked`, and a project open when
+/// `opened` is given.
+fn saving_harness(opened: Option<archforge_ui_egui::Opened>, picked: Option<&str>) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    archforge_ui_egui::i18n::set_language("en");
+    let host = std::sync::Arc::new(SavingHost::default());
+    let picked = picked.map(std::path::PathBuf::from);
+    let services = Services {
+        projects: Some(host.clone()),
+        ids: Some(test_ids()),
+        pick_project: Some(std::sync::Arc::new(move |_| Picked::at_once(picked.clone()))),
+        ..Services::default()
+    };
+    let mut shell = Shell::new(services, &SCREENS);
+    if let Some(opened) = opened {
+        shell.open_project(opened);
+    }
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run_steps(4);
+    (h, host)
+}
+
+/// The sample project's opening: Commerce platform, at its path, with a new model.
+fn commerce() -> archforge_ui_egui::Opened {
+    archforge_ui_egui::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() }
+}
+
+/// Starts replacing the session; gives where the model read goes.
+fn start_replacing(
+    h: &mut Harness<'static, Shell>,
+    job: Option<archforge_ui_egui::replace::Job>,
+) -> std::sync::mpsc::Sender<archforge_ui_egui::VersionRead> {
+    let (read, answer) = std::sync::mpsc::channel();
+    h.state_mut().begin_replacement(answer, job).unwrap();
+    h.run_steps(4);
+    read
+}
+
+/// Frames that wait out a replacement's comparison on another thread.
+trait Steps {
+    /// `n` frames, not counting those a replacement spends waiting for its comparison.
+    fn steps(&mut self, n: usize);
+}
+
+impl Steps for Harness<'static, Shell> {
+    /// Gives up past a generous bound, so a comparison that never answers fails the test.
+    fn steps(&mut self, n: usize) {
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut left = n;
+        while left > 0 {
+            assert!(std::time::Instant::now() < until, "still comparing");
+            let waiting = archforge_ui_egui::testing::replacement_comparing(self.state_mut());
+            self.run_steps(1);
+            left -= usize::from(!waiting);
+        }
+    }
+}
+
+/// Starts viewing `commit`, its read not answered yet.
+fn start_viewing(h: &mut Harness<'static, Shell>, commit: &str) {
+    h.state_mut().view_version(commit).unwrap();
+    h.run_steps(3);
+}
+
+/// Answers the oldest read waiting.
+fn answer_read(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: archforge_ui_egui::VersionRead) {
+    host.reads.lock().unwrap().remove(0).1.send(answer).unwrap();
+    h.run_steps(4);
+}
+
+/// A conversation on a project a version can be read from, and the rows that version holds.
+fn chat_and_a_version(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, archforge_ui_egui::chat_fixture::Rig, std::sync::Arc<SavingHost>, std::sync::Arc<archforge_mof::rows::Rows>) {
+    let (mut h, rig) = chat_harness(theme, true);
+    let host = std::sync::Arc::new(SavingHost::default());
+    h.state_mut().services.projects = Some(host.clone());
+    let earlier = rows_now(&h);
+    (h, rig, host, earlier)
+}
+
+/// The turns of the conversation shown.
+fn chat_turns<'a>(h: &'a Harness<'static, Shell>) -> &'a [archforge_ui_egui::chat_panel::Turn] {
+    &h.state().chat_panel.chat.as_ref().unwrap().turns
+}
+
+/// Runs `test` on what `fixture` makes, once in each appearance.
+fn in_both<A, B>(fixture: impl Fn() -> (Harness<'static, Shell>, A, B), test: impl Fn(Harness<'static, Shell>, A, B)) {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, a, b) = fixture();
+        h.state_mut().state.theme = theme;
+        test(h, a, b);
+    }
+}
+
+/// Clicks the bar's control `id`.
+fn click_menu(h: &mut Harness<'static, Shell>, id: &str) {
+    let at = rect_of(h, id).center();
+    click(h, at);
+}
+
+/// Clicks the in-window bar's File title, by the pointer or else as a screen reader does, with `key`
+/// and `modifiers` pressed and let go in the frame of the click, as both can arrive together, and
+/// asserts that the click opened File (AR-518).
+fn open_file_with(h: &mut Harness<'static, Shell>, key: egui::Key, modifiers: egui::Modifiers, pointer: bool) {
+    let (at, primary, none) = (rect_of(h, "strip.menu.file").center(), egui::PointerButton::Primary, egui::Modifiers::NONE);
+    let click = if pointer {
+        h.event(egui::Event::PointerMoved(at));
+        h.event(egui::Event::PointerButton { pos: at, button: primary, pressed: true, modifiers: none });
+        h.step();
+        egui::Event::PointerButton { pos: at, button: primary, pressed: false, modifiers: none }
+    } else {
+        let (action, target_tree) = (egui::accesskit::Action::Click, egui::accesskit::TreeId::ROOT);
+        let target_node = archforge_ui_egui::widgets::egui_id("strip.menu.file").accesskit_id();
+        egui::Event::AccessKitActionRequest(egui::accesskit::ActionRequest { action, target_tree, target_node, data: None })
+    };
+    // kittest runs a frame per event it queues, so the click and the key go in by hand, together.
+    let press = |pressed| egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers };
+    h.input_mut().events.extend([click, press(true), press(false)]);
+    h.step();
+    assert_eq!(archforge_ui_egui::testing::open_menu(h.state()), Some("file"), "the click opened the bar's File menu");
+}
+
+/// What a key meant alone must not act with held: Shift, Alt, Control, and the command key in the
+/// two shapes keyboards send it, a Mac's ⌘ and the Ctrl of Windows and Linux.
+const NOT_ALONE: [egui::Modifiers; 5] = [
+    egui::Modifiers::SHIFT,
+    egui::Modifiers::ALT,
+    egui::Modifiers::CTRL,
+    egui::Modifiers::MAC_CMD.plus(egui::Modifiers::COMMAND),
+    egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND),
+];
+
+/// The centre of the Properties control `id`, the panel's body wheeled until that centre is inside
+/// it: a control under the fold or above the body is not listed, and one an edge cuts is listed
+/// with a centre no press reaches. It is looked for down to the body's end, then up to its top,
+/// and it is a failure when neither way has it (AR-467).
+fn reached_in_properties(h: &mut Harness<'static, Shell>, id: &str) -> egui::Pos2 {
+    let mut down = true;
+    for _ in 0..120 {
+        let body = h.state().panels.body.expect("the Properties body");
+        let at = h.state().widgets().iter().find(|w| w.id == id).map(|w| egui::pos2((w.rect[0] + w.rect[2]) / 2.0, (w.rect[1] + w.rect[3]) / 2.0));
+        if let Some(at) = at.filter(|at| body.contains(*at)) {
+            return at;
+        }
+        let before = h.state().panels.scroll;
+        h.event(egui::Event::PointerMoved(body.center()));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, if down { -120.0 } else { 120.0 }),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run();
+        // At an end of the body: the search turns at its foot and gives up at its top.
+        if (h.state().panels.scroll - before).abs() < 0.5 {
+            assert!(down, "no control {id} in reach of the wheel in Properties");
+            down = false;
+        }
+    }
+    panic!("no control {id} in reach of the wheel in Properties");
+}
+
+/// The constraint editor's Apply and Cancel.
+const CONSTRAINT_APPLY: &str = "workspace.properties.constraint.apply";
+
+const CONSTRAINT_CANCEL: &str = "workspace.properties.constraint.cancel";
+
+/// The sample class model in `theme` with Order's Properties shown; gives Order and its node.
+fn order_properties(theme: ThemeKind) -> (Harness<'static, Shell>, String, String) {
+    let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+    archforge_ui_egui::snapshot::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
+    h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
+    h.run();
+    (h, order, nodes["Order"].clone())
+}
+
+/// The centre of the Properties control `id` while it is inside the body as drawn, with no wheel.
+fn in_view(h: &Harness<'static, Shell>, id: &str) -> Option<egui::Pos2> {
+    let body = h.state().panels.body?;
+    let w = h.state().widgets().iter().find(|w| w.id == id)?;
+    Some(egui::pos2((w.rect[0] + w.rect[2]) / 2.0, (w.rect[1] + w.rect[3]) / 2.0)).filter(|at| body.contains(*at))
+}
+
+/// Whether the text `said` was painted inside the Properties body in the last frame.
+fn said_in_view(h: &Harness<'static, Shell>, said: &str) -> bool {
+    /// The rectangles of the texts `said` in the shape `s` and the shapes it holds.
+    fn walk(s: &egui::Shape, said: &str, out: &mut Vec<egui::Rect>) {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == said => out.push(t.galley.rect.translate(t.pos.to_vec2())),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, said, out)),
+            _ => {}
+        }
+    }
+    let Some(body) = h.state().panels.body else { return false };
+    let mut rects = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, said, &mut rects));
+    rects.iter().any(|r| body.contains_rect(*r))
+}
+
+/// The body wheeled by `dy` points with the pointer over it, as a person scrolls it.
+fn wheel_properties(h: &mut Harness<'static, Shell>, dy: f32) {
+    let body = h.state().panels.body.expect("the Properties body");
+    h.event(egui::Event::PointerMoved(body.center()));
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, dy),
+        modifiers: egui::Modifiers::NONE,
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
+    });
+    h.run();
+}
+
+/// Order's constraint editor opened from its section, at the foot of the body, with braces picked
+/// for a class the diagram no longer shows: Apply is refused above the buttons.
+fn constraint_refused(theme: ThemeKind) -> Harness<'static, Shell> {
+    let (mut h, _, node) = order_properties(theme);
+    archforge_ui_egui::snapshot::run(h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [node] })).unwrap();
+    h.run();
+    let at = reached_in_properties(&mut h, "workspace.properties.constraints.add");
+    click(&mut h, at);
+    let edit = uml_of_mut(h.state_mut()).constraint.as_mut().expect("the editor");
+    (edit.expression, edit.form, edit.form_chosen) = ("total > 0".into(), archforge_uml::constraints::Form::Braces, true);
+    h.run();
+    let before = in_view(&h, CONSTRAINT_APPLY).expect("the editor opened in view");
+    click(&mut h, before);
+    let edit = uml_of(h.state()).constraint.clone().expect("the editor stays open");
+    assert_eq!(edit.refused_at, Some("show"), "{theme:?}: refused above the buttons");
+    h
+}
+
+/// Asserts that `words` are read out as a polite live status, inside the area recorded as `id`.
+fn read_out(h: &Harness<'static, Shell>, words: &str, id: &str) {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let status = h.get_by_label(words).accesskit_node();
+    assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{words}: read out");
+    assert!(ids(h).iter().any(|i| i == id), "{words}: recorded as {id}");
+}
+
+/// Whether the element `id` is in the open project's model.
+fn alive_in(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> bool {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.by_uuid(id).is_some_and(|o| st.is_alive(o))
+}
+
+/// Runs `check` in both appearances.
+fn in_both_appearances(check: impl Fn(ThemeKind)) {
+    [ThemeKind::Light, ThemeKind::Dark].into_iter().for_each(check);
+}
+
+/// The Versions explorer of a project, first drawn with no host, then its read waiting for the test.
+fn versions_panel(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().state.theme = theme;
+    h.state_mut().services.projects = None;
+    h.state_mut().versions = Default::default();
+    host.version_reads.lock().unwrap().clear();
+    let at = rect_of(&h, "workspace.explorers.source-control").center();
+    click(&mut h, at);
+    h.state_mut().services.projects = Some(host.clone());
+    h.run_steps(2);
+    (h, host)
+}
+
+/// Answers the read the panel is waiting for.
+fn versions_answer(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: Result<archforge_ui_egui::VersionsPage, String>) {
+    h.run_steps(2);
+    let reply = host.version_reads.lock().unwrap().pop().expect("a read was asked for");
+    reply.send(answer).unwrap();
+    h.run_steps(2);
+}
+
+/// Whether the control `id` is drawn.
+fn has_id(h: &Harness<'static, Shell>, id: &str) -> bool {
+    ids(h).iter().any(|i| i == id)
+}
+
+/// A version with the things a row says.
+fn version_row(hash: &str, description: Option<&str>, by: (Option<&str>, bool), date: &str) -> archforge_ui_egui::VersionEntry {
+    let (description, author) = (description.map(str::to_string), by.0.map(str::to_string));
+    archforge_ui_egui::VersionEntry { hash: hash.into(), description, author, by_agent: by.1, date: date.into(), previous: None, shared: false }
+}
+
+/// Frames until the comparison on another thread has answered, at most a few seconds.
+fn compared(h: &mut Harness<'static, Shell>) {
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    h.run_steps(2);
+    while archforge_ui_egui::testing::comparing(h.state()) {
+        assert!(std::time::Instant::now() < until, "the comparison answered");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        h.run_steps(1);
+    }
+    h.run_steps(2);
+}
+
+/// A difference that no real comparison of these rows could find.
+fn found(n: u8) -> archforge_notations::differences::Difference {
+    use archforge_notations::differences::{Area, ChangeKind, Difference};
+    Difference {
+        id: archforge_mof::Uuid([n; 16]),
+        class: archforge_core::SKILL,
+        area: Area::Model,
+        kind: ChangeKind::Changed,
+        name: None,
+        path: vec![],
+    }
+}
+
+/// The sample class model open with `class` selected and Properties showing it; gives its id.
+fn class_properties(class: &str) -> (Harness<'static, Shell>, archforge_mof::Uuid) {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    archforge_ui_egui::snapshot::cx(h.state_mut(), uml_ui::open_sample).unwrap();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == class).unwrap();
+    let id = st.uuid(c).unwrap();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
+    h.run();
+    (h, id)
+}
+
+/// The index of `package` among every package, as Properties' Package menu lists them.
+fn st_index(st: &archforge_mof::Store, package: archforge_mof::Obj) -> usize {
+    archforge_uml::commands::all_packages(st).iter().position(|p| *p == package).unwrap()
+}
+
+/// The sample class model with the Chat panel shown, over the fake agents host and conversations
+/// kept in memory (`archforge_ui_egui::chat_fixture`), Claude set up when `ready`.
+fn chat_harness(theme: ThemeKind, ready: bool) -> (Harness<'static, Shell>, archforge_ui_egui::chat_fixture::Rig) {
+    archforge_ui_egui::i18n::set_language("en");
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
+    shell.state.theme = theme;
+    shell.open_project(archforge_ui_egui::Opened {
+        name: "Commerce platform".into(),
+        path: "/tmp/Commerce platform.archforge".into(),
+        ..Default::default()
+    });
+    let rig = archforge_ui_egui::chat_fixture::sample(&mut shell, ready).unwrap();
+    let h = harness_over(shell);
+    (h, rig)
+}
+
+/// Types `text` into the composer and presses Enter, as the person does.
+fn ask_in_chat(h: &mut Harness<'static, Shell>, text: &str) {
+    let at = rect_of(h, "workspace.chat.composer").center();
+    click(h, at);
+    h.event(egui::Event::Text(text.into()));
+    h.run();
+    key(h, egui::Key::Enter, egui::Modifiers::NONE);
+    // The composer's caret blinks while it has the keyboard: let it go, so the window settles.
+    h.ctx.memory_mut(|m| m.surrender_focus(archforge_ui_egui::widgets::egui_id("workspace.chat.composer")));
+    h.run();
+}
+
+/// The host says `event` of the conversation shown.
+fn chat_event(h: &mut Harness<'static, Shell>, rig: &archforge_ui_egui::chat_fixture::Rig, event: archforge_ui_egui::chat::ChatEvent) {
+    let key = archforge_ui_egui::chat_fixture::key(h.state());
+    assert!(rig.agents.emit(&key, event), "the shell takes the conversation's events");
+    h.run();
+}
+
+/// How many times `text` is painted whole.
+fn painted_times(h: &Harness<'static, Shell>, text: &str) -> usize {
+    painted(h).iter().filter(|t| t.as_str() == text).count()
+}
+
+/// The conversation shown, as the store keeps it.
+fn kept_chat(h: &Harness<'static, Shell>, rig: &archforge_ui_egui::chat_fixture::Rig) -> archforge_ui_egui::chat_store::fake::Kept {
+    let id = h.state().chat_panel.chat.as_ref().map(|c| c.id).unwrap();
+    rig.store.kept(id).unwrap()
+}
+
+/// The fake host's conversation calls: starts, sends, stops, ends.
+fn chat_calls(rig: &archforge_ui_egui::chat_fixture::Rig) -> (usize, usize, usize, usize) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let c = &rig.agents.calls;
+    (c.start.load(Relaxed), c.send.load(Relaxed), c.stop.load(Relaxed), c.end.load(Relaxed))
+}
+
+/// A turn's end failed with `kind`.
+fn failed_turn(kind: archforge_ui_egui::chat::FailureKind) -> archforge_ui_egui::chat::ChatEvent {
+    archforge_ui_egui::chat::ChatEvent::TurnEnded(archforge_ui_egui::chat::TurnEnd::Failed(archforge_ui_egui::chat::ChatFailure {
+        kind,
+        detail: "x".into(),
+        reset: None,
+    }))
+}
+
+/// The messages the fake agent was sent, in order.
+fn sent_texts(rig: &archforge_ui_egui::chat_fixture::Rig) -> Vec<String> {
+    rig.agents.sent.lock().unwrap().iter().map(|(_, t)| t.clone()).collect()
+}
+
+/// A window over `shell`, as the workspace harness builds one.
+fn harness_over(shell: Shell) -> Harness<'static, Shell> {
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run();
+    h
+}
+
+/// The sample class model in `theme` and a window of `size`, its association "paid by" (Order to
+/// Payment) selected and its Properties shown; its id.
+fn paid_by(theme: ThemeKind, size: egui::Vec2) -> (Harness<'static, Shell>, archforge_mof::Uuid) {
+    let (mut h, _) = related_sample_in(theme, size);
+    let paid = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let a =
+            st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION) && archforge_core::name_of(st, *o) == "paid by").unwrap();
+        st.uuid(a).unwrap()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [paid.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(archforge_shell_api::state::Panel::Properties);
+    h.run();
+    (h, paid)
+}
+
+/// The multiplicity field of end `i` as typed.
+fn typed_multiplicity(h: &Harness<'static, Shell>, i: usize) -> String {
+    uml_of(h.state()).ends.as_ref().unwrap().multiplicity[i].clone()
+}
+
+/// Clicks the field `id`, selects what it holds and types `text` over it.
+fn retype(h: &mut Harness<'static, Shell>, id: &str, text: &str) {
+    let at = rect_of(h, id).center();
+    click(h, at);
+    h.event(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+    h.run();
+    if text.is_empty() {
+        key(h, egui::Key::Backspace, egui::Modifiers::NONE);
+    } else {
+        h.event(egui::Event::Text(text.into()));
+        h.run();
+    }
+}
+
+/// The links the last frame asked the window to open.
+fn opened_links(h: &Harness<'static, Shell>) -> Vec<String> {
+    h.output()
+        .platform_output
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            egui::OutputCommand::OpenUrl(u) => Some(u.url.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The attribute `id`'s card row, as its class's card and Properties list it.
+fn attribute_row(h: &Harness<'static, Shell>, id: &str) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_uml::figures::attribute_text(st, st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap())
+}
+
+/// Opens the attribute editor on the attribute `id` of the selected class.
+fn edit_attribute(h: &mut Harness<'static, Shell>, id: &str) {
+    // The row's pencil shows while the pointer is over the row.
+    let row = rect_of(h, &format!("workspace.properties.attribute.{id}")).left_center() + egui::vec2(20.0, 0.0);
+    h.event(egui::Event::PointerMoved(row));
+    h.run();
+    let at = rect_of(h, &format!("workspace.properties.attribute.{id}.edit")).center();
+    click(h, at);
+    assert_eq!(uml_of(h.state()).member.as_ref().and_then(|e| e.target).map(|t| t.to_string()).as_deref(), Some(id));
+}
+
+/// An association with both ends' Modifiers open, Read only changed on each end in `changed`.
+fn both_modifiers_open(theme: ThemeKind, changed: &[usize]) -> Harness<'static, Shell> {
+    let (mut h, made) = modifiers_sample(theme);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["holds"]] })).unwrap();
+    h.run();
+    for i in [0, 1] {
+        let at = rect_of(&h, &format!("workspace.properties.end.{i}.modifiers")).center();
+        click(&mut h, at);
+    }
+    for i in changed {
+        let at = rect_of(&h, &format!("workspace.properties.end.{i}.read-only")).center();
+        click(&mut h, at);
+    }
+    h
 }
