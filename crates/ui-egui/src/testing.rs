@@ -5,8 +5,11 @@
 //! built outside the crate. Here too are the words the shell hands its lookups through a table
 //! rather than as a literal, which the app's tests across every catalogue read.
 //!
-//! Each item hands over to the shell's own code unchanged: none draws, reads or decides anything
-//! of its own. What a notation's screens reach is not here.
+//! Each item hands over to the shell's own code unchanged and decides nothing of its own. Where an
+//! item draws, the shell's own drawing paints: `harness` and `click` run the window's frames, and
+//! the four that draw alone (`drawn_alone_at`, `recorded_alone`, `overlaid_alone`, `badge_alone`)
+//! make a frame of their own with the window's fonts, let the shell's code paint one part into it
+//! and give back what it painted and recorded. What a notation's screens reach is not here.
 
 use archforge_mof::rows::Rows;
 use archforge_mof::{Obj, Store, Uuid};

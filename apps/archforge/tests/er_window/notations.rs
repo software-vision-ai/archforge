@@ -442,6 +442,24 @@ fn a_notation_s_state_answers_what_is_edited_held_set_aside_and_closed() {
     assert!(!states.editing());
 }
 
+/// A shell keeps the states of the notations whose screens parts it is given and of no other: given
+/// ER's part alone, ER keeps its state and UML keeps none; given UML's alone, the other way round.
+/// The shell's own test of the parts it is given, on the fake notation, cannot name ER or UML (ADR
+/// 0005), so this half of it is checked here, where both exist.
+#[test]
+fn a_shell_keeps_no_state_for_a_notation_whose_screens_part_it_is_not_given() {
+    static ER_ALONE: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[archforge_er_ui::ER]);
+    static UML_ALONE: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[archforge_uml_ui::UML]);
+    let shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &ER_ALONE);
+    let states = archforge_ui_egui::testing::notation_states_of(&shell);
+    assert!(er_state::er(states).is_some(), "ER keeps its state");
+    assert!(uml_state::uml(states).is_none(), "UML keeps no state when its part is not given");
+    let shell = Shell::new(Services::default(), &archforge_notations::NOTATIONS, &UML_ALONE);
+    let states = archforge_ui_egui::testing::notation_states_of(&shell);
+    assert!(uml_state::uml(states).is_some(), "UML keeps its state");
+    assert!(er_state::er(states).is_none(), "ER keeps no state when its part is not given");
+}
+
 /// Only a notation's own menu that takes typing keeps the keys from the canvas and the Models tree:
 /// UML's Stereotypes picker does; another of its menus, or a menu of another owner under the
 /// picker's key, does not (AR-135, AR-787).
@@ -1682,7 +1700,6 @@ fn the_canvas_starts_n_ary_legs_where_umls_kind_says() {
             .unwrap()
             .into_iter()
             .filter_map(|v| v.as_ref())
-            .into_iter()
             .filter(|e| st.get(*e, archforge_diagram::edge::SOURCE).ok().and_then(|v| v.as_ref()) == Some(diamond))
             .map(|e| format!("workspace.canvas.edge.{}", st.uuid(e).unwrap()))
             .collect()
