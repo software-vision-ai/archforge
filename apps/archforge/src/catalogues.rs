@@ -796,8 +796,13 @@ fn every_reason_a_command_is_not_available_has_its_row() {
     };
     let options = archforge_engine::Options::default();
     let rootless = archforge_notations::NOTATIONS.store(ids()).unwrap();
-    let rootless =
-        archforge_engine::Session::with_view(archforge_notations::NOTATIONS.registry().unwrap(), rootless, 1, options, archforge_notations::NOTATIONS.view());
+    let rootless = archforge_engine::Session::with_view(
+        archforge_notations::NOTATIONS.registry().unwrap(),
+        rootless,
+        1,
+        options,
+        archforge_notations::NOTATIONS.view(),
+    );
     let new = archforge_notations::NOTATIONS.new_project_session("Shop", ids()).unwrap();
     set_language("en");
     let mut reasons = std::collections::BTreeSet::new();

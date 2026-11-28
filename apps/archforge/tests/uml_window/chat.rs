@@ -587,6 +587,14 @@ fn a_turns_change_that_clears_the_history_still_counts() {
 /// a description's comment; the shell counts diagrams, skills and the rest as elements.
 #[test]
 fn the_app_notations_count_their_kinds_in_their_words() {
+    use archforge_ui_egui::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
+    use archforge_ui_egui::chat_words::tool_words;
+    let at = |n: u8, role: AnchorRole, metaclass: &str, name: &str| Anchor {
+        element: archforge_mof::Uuid([n; 16]),
+        role,
+        metaclass: metaclass.into(),
+        name: Some(name.into()),
+    };
     let uis = SCREENS.notation_uis();
     archforge_ui_egui::i18n::set_language("en");
     let read = |metaclasses: &[&str]| ToolFacts {

@@ -147,7 +147,11 @@ fn stays_open(h: &mut Harness<'static, Shell>, typed: fn(&Shell) -> Option<Strin
         let at = rect_of(h, id).center();
         click(h, at);
     }
-    assert_eq!((archforge_ui_egui::testing::open_menu(h.state()), typed(h.state())), (Some("file"), None), "{theme:?}: File, from Edit, found it committed");
+    assert_eq!(
+        (archforge_ui_egui::testing::open_menu(h.state()), typed(h.state())),
+        (Some("file"), None),
+        "{theme:?}: File, from Edit, found it committed"
+    );
     key(h, Key::Escape, Modifiers::NONE);
 }
 
@@ -168,11 +172,11 @@ fn the_member_editor_stays_open_through_the_in_window_edit_menu() {
             h.run();
             let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
             click(&mut h, at);
-            h.event(Event::Text(if ty { "rating" } else { "Draft" }.into()));
+            h.event(egui::Event::Text(if ty { "rating" } else { "Draft" }.into()));
             h.run();
             if ty {
                 key(&mut h, Key::Tab, Modifiers::NONE);
-                h.event(Event::Text("Draft".into()));
+                h.event(egui::Event::Text("Draft".into()));
                 h.run();
                 stays_open(&mut h, |s| uml_of(s).inline.as_ref().map(|i| i.ty.clone()), "Real", theme);
             } else {

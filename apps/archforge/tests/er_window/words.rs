@@ -51,8 +51,9 @@ fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
         h.state_mut().state.language = "de".into();
         h.run();
-        let breaks =
-            |kind, why| archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::WouldBreak { kind, name: "pk_kunde".into(), why: Box::new(why) });
+        let breaks = |kind, why| {
+            archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::WouldBreak { kind, name: "pk_kunde".into(), why: Box::new(why) })
+        };
         let nullable = || Reason::NullableKeyColumn { name: "notiz".into() };
         let said = "Der Schlüssel pk_kunde wäre danach ungültig: notiz darf leer sein, was eine Primärschlüsselspalte nie darf.";
         assert_eq!(breaks("primary key", nullable()).as_deref(), Some(said), "{theme:?}");
@@ -61,13 +62,13 @@ fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
         assert_eq!(breaks("unique constraint", not_column).as_deref(), Some(other), "{theme:?}");
         assert_eq!(breaks("check", nullable()), None, "{theme:?}");
         assert_eq!(breaks("primary key", Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
-        let deep = archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::TooDeep { kind: "key", max: 32 });
+        let deep = archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::TooDeep { kind: "key", max: 32 });
         assert_eq!(
             deep.as_deref(),
             Some("Aufeinander aufbauende Schlüssel reichen hier tiefer als 32 Ebenen oder bilden eine Schleife."),
             "{theme:?}"
         );
-        assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::TooDeep { kind: "untyped kind", max: 32 }), None, "{theme:?}");
+        assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::TooDeep { kind: "untyped kind", max: 32 }), None, "{theme:?}");
         h.run();
     }
     archforge_ui_egui::i18n::set_language("en");
@@ -86,7 +87,7 @@ fn an_er_removal_refused_is_said_in_the_chosen_language() {
             (Reason::RemovedWhereEdited, "Dieses Element wird dort entfernt, wo es bearbeitet wird."),
             (Reason::SubtypeKeyPart, "Dies ist Teil des Schlüssels eines Untertyps und wird nur mit diesem Untertyp entfernt."),
         ] {
-            assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
         h.run();
     }
@@ -123,12 +124,16 @@ fn an_er_mapping_table_refused_is_said_in_the_chosen_language() {
             (keys(0), "Posten hat keinen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei."),
             (keys(1), "Posten hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei."),
         ] {
-            assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::Mapping(rule.clone())).as_deref(), Some(said), "{rule:?} {theme:?}");
+            assert_eq!(
+                archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::Mapping(rule.clone())).as_deref(),
+                Some(said),
+                "{rule:?} {theme:?}"
+            );
         }
         let breaks = Reason::WouldBreak { kind: "table", name: "Verknüpfung".into(), why: Box::new(Reason::Mapping(keys(1))) };
         let said = "Die Tabelle Verknüpfung wäre danach ungültig: Posten hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. \
                     Eine Zuordnungstabelle braucht zwei.";
-        assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &breaks).as_deref(), Some(said), "{theme:?}");
+        assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &breaks).as_deref(), Some(said), "{theme:?}");
         h.run();
     }
     archforge_ui_egui::i18n::set_language("en");
@@ -154,14 +159,22 @@ fn an_er_columns_generation_refused_is_said_in_the_chosen_language() {
             (G::IdentityTakesNoDefault, "Eine Identitätsspalte hat keinen Standardwert."),
             (G::IdentityTakesNoExpression, "Eine Identitätsspalte hat keinen Ausdruck."),
         ] {
-            assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::Generation(rule)).as_deref(), Some(said), "{rule:?} {theme:?}");
+            assert_eq!(
+                archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::Generation(rule)).as_deref(),
+                Some(said),
+                "{rule:?} {theme:?}"
+            );
         }
-        let breaks =
-            |why| archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::WouldBreak { kind: "column", name: "nummer".into(), why: Box::new(why) });
+        let breaks = |why| {
+            archforge_shell_api::panels::said(
+                SCREENS.notation_uis(),
+                &Reason::WouldBreak { kind: "column", name: "nummer".into(), why: Box::new(why) },
+            )
+        };
         let said = "Die Spalte nummer wäre danach ungültig: Eine Identitätsspalte braucht einen Ganzzahltyp.";
         assert_eq!(breaks(Reason::Generation(G::IdentityNeedsInteger)).as_deref(), Some(said), "{theme:?}");
         assert_eq!(breaks(Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
-        let null = archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::NotNullable);
+        let null = archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::NotNullable);
         assert_eq!(null.as_deref(), Some("Eine Schlüssel- oder Identitätsspalte darf nie leer sein."), "{theme:?}");
         h.run();
     }
@@ -192,7 +205,7 @@ fn an_er_size_refused_is_said_in_the_chosen_language() {
             (R::ScaleWithoutPrecision, "NUMERIC", 2, "Nachkommastellen brauchen eine Genauigkeit."),
         ] {
             let reason = Reason::SizeMisfit { rule, ty: ty.into(), value };
-            assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
         h.run();
     }
@@ -221,9 +234,9 @@ fn an_er_columns_default_collation_place_and_link_refused_are_said_in_the_chosen
             (Reason::PastLastColumn { columns: 3 }, "Die Tabelle hat 3 Spalten."),
             (Reason::FollowsNoColumn { name: "kunde_id".into() }, "kunde_id folgt keiner Spalte."),
         ] {
-            assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
-        assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::DomainGives { what: "check" }), None, "{theme:?}");
+        assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::DomainGives { what: "check" }), None, "{theme:?}");
         h.run();
     }
     archforge_ui_egui::i18n::set_language("en");
@@ -247,9 +260,9 @@ fn what_an_er_column_is_typed_by_refused_is_said_in_the_chosen_language() {
             (Reason::EnumTypeTakesNo { what: "type" }, "Eine Spalte eines Aufzählungstyps hat keinen eigenen Typnamen."),
             (Reason::EnumTypeTakesNo { what: "size" }, "Eine Spalte eines Aufzählungstyps hat keine Größe."),
         ] {
-            assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
-        assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::EnumTypeTakesNo { what: "default" }), None, "{theme:?}");
+        assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::EnumTypeTakesNo { what: "default" }), None, "{theme:?}");
         h.run();
     }
     archforge_ui_egui::i18n::set_language("en");
@@ -277,9 +290,9 @@ fn an_er_checks_refused_are_said_in_the_chosen_language() {
             (Reason::UnknownKey { key: "expresion".into(), takes }, "Ein Eintrag kennt keinen Schlüssel expresion. Er kennt expression, name."),
             (Reason::UnknownKey { key: String::new(), takes }, "Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt expression, name."),
         ] {
-            assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
-        assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::ItemsExpected { kind: "gadget" }), None, "{theme:?}");
+        assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::ItemsExpected { kind: "gadget" }), None, "{theme:?}");
         h.run();
     }
     archforge_ui_egui::i18n::set_language("en");
@@ -304,7 +317,11 @@ fn an_er_sequences_numbers_owner_and_views_query_refused_are_said_in_the_chosen_
             (Rule::StartBelow { start: 1, minimum: 10 }, "Der Startwert 1 liegt unter dem Minimum 10.".into()),
             (Rule::StartAbove { start: 50, maximum: 10 }, "Der Startwert 50 liegt über dem Maximum 10.".into()),
         ] {
-            assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &Reason::Sequence(reason.clone())), Some(said), "{reason:?} {theme:?}");
+            assert_eq!(
+                archforge_shell_api::panels::said(SCREENS.notation_uis(), &Reason::Sequence(reason.clone())),
+                Some(said),
+                "{reason:?} {theme:?}"
+            );
         }
         let owner = "Eine Sequenz gehört zu einer Spalte";
         for (reason, said) in [
@@ -319,7 +336,7 @@ fn an_er_sequences_numbers_owner_and_views_query_refused_are_said_in_the_chosen_
             (Reason::TextEmpty, "Der Text darf nicht leer sein.".into()),
             (Reason::ControlCharacter, "Steuerzeichen und unsichtbare Zeichen sind nicht erlaubt.".into()),
         ] {
-            assert_eq!(archforge_ui_egui::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said.as_str()), "{reason:?} {theme:?}");
+            assert_eq!(archforge_shell_api::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said.as_str()), "{reason:?} {theme:?}");
         }
         h.run();
     }

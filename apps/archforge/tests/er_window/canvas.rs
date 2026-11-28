@@ -1220,14 +1220,22 @@ fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schem
     archforge_ui_egui::explorer::add(h.state_mut(), "table");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    let rows = archforge_ui_egui::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    let rows = archforge_ui_egui::testing::models_rows(
+        archforge_ui_egui::testing::notation_uis(h.state()),
+        h.state().session.as_ref().unwrap().doc(),
+        &h.state().explorer,
+    );
     assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1"]);
     assert_eq!(rows[1].depth, 1);
     // A column under the table.
     archforge_ui_egui::explorer::add(h.state_mut(), "column");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    let rows = archforge_ui_egui::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    let rows = archforge_ui_egui::testing::models_rows(
+        archforge_ui_egui::testing::notation_uis(h.state()),
+        h.state().session.as_ref().unwrap().doc(),
+        &h.state().explorer,
+    );
     assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1", "column_1"]);
     assert_eq!(rows[2].detail.as_deref(), Some("TEXT"));
     // Select the schema by its row and press Delete: it holds a table, so the dialog asks.

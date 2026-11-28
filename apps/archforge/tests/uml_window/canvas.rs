@@ -8088,7 +8088,7 @@ fn a_line_link_or_label_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &other)), unlinkable, "{theme:?}");
         let anchor = id(&mut h, "diagram.link-note", link(&note, &nodes["Order"]));
         assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &nodes["Order"])), "Die Notiz ist bereits damit verbunden.", "{theme:?}");
-        let elsewhere = archforge_ui_egui::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::TargetOtherDiagram);
+        let elsewhere = archforge_shell_api::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::TargetOtherDiagram);
         assert_eq!(elsewhere.as_deref(), Some("Womit die Notiz verbunden wird, liegt in einem anderen Diagramm."), "{theme:?}");
         // Labels.
         let label = |edge: &str| json!({ "edge": edge, "kind": "from_end" });

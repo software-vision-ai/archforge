@@ -141,7 +141,11 @@ fn a_chosen_row_makes_its_element_as_the_tool_does() {
         let mut h = menu_harness(theme, true);
         click_menu(&mut h, "strip.menu.model");
         click_menu(&mut h, "strip.menu.row.model.note");
-        assert_eq!((archforge_ui_egui::testing::open_menu(h.state()), h.state().canvas.tool), (Some("model"), Tool::Select), "{theme:?}: off, it stays open");
+        assert_eq!(
+            (archforge_ui_egui::testing::open_menu(h.state()), h.state().canvas.tool),
+            (Some("model"), Tool::Select),
+            "{theme:?}: off, it stays open"
+        );
         let mut h = er(theme);
         [F10, ArrowRight, ArrowRight, ArrowRight, ArrowDown].into_iter().for_each(|key| menu_press(&mut h, key));
         assert_eq!(menu_at(&h), (Some("model"), Some("model.relationship")), "{theme:?}");
@@ -182,7 +186,10 @@ fn each_kind_answers_its_own_rows() {
     let all: Vec<&str> = archforge_ui_egui::testing::model_rows(SCREENS.kinds()).into_iter().map(|(_, row)| row.key).collect();
     assert_eq!(all, [ER_ROWS.to_vec(), uml.concat(), SHARED.to_vec()].concat());
     assert!(all.iter().enumerate().all(|(n, id)| !all[n + 1..].contains(id)), "{all:?}");
-    assert!(all.iter().all(|id| archforge_ui_egui::actions::keys(id).is_none() && !archforge_ui_egui::actions::ACTIONS.iter().any(|a| a.id == *id)), "{all:?}");
+    assert!(
+        all.iter().all(|id| archforge_ui_egui::actions::keys(id).is_none() && !archforge_ui_egui::actions::ACTIONS.iter().any(|a| a.id == *id)),
+        "{all:?}"
+    );
     assert_eq!(
         archforge_ui_egui::testing::model_menus(SCREENS.kinds()),
         [[ER_ROWS.to_vec(), SHARED.to_vec()].concat(), [uml.concat(), SHARED.to_vec()].concat()]
