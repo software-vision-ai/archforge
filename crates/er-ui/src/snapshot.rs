@@ -73,9 +73,9 @@ pub mod er_connect {
     pub use crate::er_connect::{MappingOffer, RelKind, connect, has_foreign_key, offer_mapping};
 }
 
-/// The icons only ER draws.
+/// The Entity tool's icon, which the shell's tests give a sketch kind's tool.
 pub mod icons {
-    pub use crate::ux::icons::{COLUMN, DOMAIN, ENUM, GRIP, MERGE_LINE, SEQUENCE, SORT_ASCENDING, SORT_DESCENDING, TOOL_ENTITY};
+    pub use crate::ux::icons::TOOL_ENTITY;
 }
 
 /// Every word one of ER's modules hands `tr` through a table rather than as a literal, which a

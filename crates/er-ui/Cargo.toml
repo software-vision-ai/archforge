@@ -29,5 +29,11 @@ log.workspace = true
 # The parameters of the commands ER's screens run.
 serde_json.workspace = true
 
+[dev-dependencies]
+# A project's session for the tests (`new_project_session`).
+archforge-notations.workspace = true
+# The test context the screens' tests run against without the shell (ADR 0005).
+archforge-shell-api = { workspace = true, features = ["testing"] }
+
 [lints]
 workspace = true

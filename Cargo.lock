@@ -381,6 +381,7 @@ dependencies = [
  "archforge-engine",
  "archforge-er",
  "archforge-mof",
+ "archforge-notations",
  "archforge-shell-api",
  "egui",
  "log",

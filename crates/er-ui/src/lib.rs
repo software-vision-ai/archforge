@@ -31,4 +31,7 @@ mod ux;
 #[cfg(feature = "snapshot")]
 pub mod snapshot;
 
+#[cfg(test)]
+mod tests;
+
 pub use er_ui::ER;

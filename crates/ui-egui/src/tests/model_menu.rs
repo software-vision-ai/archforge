@@ -43,26 +43,6 @@ fn drawn_rows(h: &mut Harness<'static, Shell>) -> Vec<String> {
     menu_ids(h).iter().filter_map(|i| i.strip_prefix("strip.menu.row.")).map(String::from).collect()
 }
 
-/// Each diagram's own kinds and the shared rows are listed, and only those; a skill's tab has no canvas.
-#[test]
-fn the_menu_lists_only_what_the_open_diagram_offers() {
-    for theme in BOTH {
-        let mut h = uml_sized(theme, BIG);
-        assert_eq!(model_sections(h.state()).iter().map(Vec::len).collect::<Vec<_>>(), [6, 6, 2, 2, 2], "{theme:?}: the tools' own sections");
-        assert_eq!(drawn_rows(&mut h), model_sections(h.state()).concat(), "{theme:?}");
-        let root = h.state().session.as_ref().map(|s| s.doc().uuid(archforge_uml::commands::root_package(s.doc()).unwrap()).unwrap()).unwrap();
-        let skill = serde_json::json!({ "subject": root.to_string(), "name": "Naming", "body": "text" });
-        let skill = crate::panels::run(h.state_mut(), "skill.add", skill).unwrap();
-        crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(skill["id"].as_str().unwrap()).unwrap());
-        assert_eq!(model_sections(h.state()), [SHARED], "{theme:?}: a skill");
-        assert!(!available(h.state(), "model.note"), "{theme:?}: a skill");
-        let mut h = er(theme);
-        assert_eq!(model_sections(h.state()), [ER_ROWS, SHARED], "{theme:?}");
-        assert_eq!(drawn_rows(&mut h), [ER_ROWS, SHARED].concat(), "{theme:?}");
-        assert_eq!(model_sections(menu_harness(theme, true).state()), [SHARED], "{theme:?}: no diagram");
-    }
-}
-
 /// Runs `id` from the kinds given, with a popover open, and gives the canvas's tool and kinds after.
 fn armed_by(h: &mut Harness<'static, Shell>, id: &str, classifier: Classifier, relate: Relate) -> (Tool, Classifier, Relate) {
     let s = h.state_mut();

@@ -17,6 +17,12 @@ screens name are its own, in `src/i18n/er/<code>.tsv`, embedded, handed to the s
 notation (`NotationUi::catalogues`), and checked at build time by the interfaces' row check
 (`build.rs`). Its modules are private: the app registers `ER`, and behind the `snapshot` feature
 `snapshot` lists what the screenshot tool, the app's tests and the shell's tests reach in them.
+Its tests run against the shell's interfaces' test context (`archforge_shell_api::testing`,
+`forge-ux/adr/0005`, "Tests follow the plugin"), without the shell: what ER's own code decides
+(its refusal words) in `src/tests.rs`. Its window tests (the canvas, its tools and relationships,
+Properties, ER's refusals that take a row of the shell's catalogue, and the shell asking both
+notations) drive the whole window with the notations the app registers, so they are the app's:
+`apps/archforge/tests/er_window/`, one module for each area beside `main.rs`.
 
 **Layer.** 10, the notations' screens' layer: above the shell's interfaces (9), below the shell
 (11). It takes `archforge-er` (7), ER's model, `archforge-shell-api` (9) and the crates below
@@ -29,7 +35,7 @@ code (the gate's `layers` step scans it as it scans the shell).
 | Item | Signature |
 |---|---|
 | `ER` | `pub const ER: ScreensPart`: ER's screens part, its `NotationUi` with the ER diagram's kind, which the app registers (`static SCREENS: ScreensRegistry = ScreensRegistry::new(&[ER, UML])`) |
-| `snapshot::{er_ui, er_kind, er_said, er_place, er_state, er_table, er_types, er_relation, er_indexes, er_objects, er_keys, er_checks, er_connect, icons}` | feature `snapshot`: the items of ER's modules the screenshot tool and the tests outside the crate reach, each under its module's name: ER's notation and kind, its refusal words, its tables' geometry, its state and menus, the editors they open with their rows, the column editor the app's journeys fill in (`er_table::{column_edit, column_edit_mut}`, over the notations' states), the Relationship tool's kinds and mapping offer, and the icons only ER draws |
+| `snapshot::{er_ui, er_kind, er_said, er_place, er_state, er_table, er_types, er_relation, er_indexes, er_objects, er_keys, er_checks, er_connect, icons}` | feature `snapshot`: the items of ER's modules the screenshot tool and the tests outside the crate reach, each under its module's name: ER's notation and kind, its refusal words, its tables' geometry, its state and menus, the editors they open with their rows, the column editor the app's journeys fill in (`er_table::{column_edit, column_edit_mut}`, over the notations' states), the Relationship tool's kinds and mapping offer, and the Entity tool's icon |
 | `snapshot::word_lists` | feature `snapshot`: `pub fn word_lists() -> Vec<(&'static str, Vec<&'static str>)>`: every word a module hands `tr` through a table rather than as a literal, each list with the name of its module (`src/<name>.rs`), for the app's tests across every catalogue |
 
 **Non-goals.** The shell's own screens, panels and canvas, which ER's screens are drawn inside;
