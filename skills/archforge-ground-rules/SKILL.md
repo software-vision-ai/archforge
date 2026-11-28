@@ -45,4 +45,7 @@ The rules a change cannot break. `AGENTS.md` lists them in one line each.
 - Archforge everywhere: crates `archforge-*` (the prefix `xtask/src/layers.rs` strips), the binary
   `archforge`, the window title, the settings folder.
 - A new crate gets its row in the layer table, `TABLE` in `xtask/src/layers.rs`; the layer check
-  fails without it.
+  fails without it. A notation is a model crate on layer 7 and its screens crate `<name>-ui` on
+  layer 10; only archforge-notations, its screens crate and the app link the model crate, only the
+  app the screens crate, in production and in tests (`xtask/src/notation_rules.rs`, ADRs 0002,
+  0004, 0005).
