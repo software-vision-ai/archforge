@@ -74,20 +74,20 @@ pub const MULTIPLICITY_LOWER_VALUE: PropId = p(13);
 pub const MULTIPLICITY_UPPER_VALUE: PropId = p(14);
 pub const MULTIPLICITY_IS_ORDERED: PropId = p(15);
 pub const MULTIPLICITY_IS_UNIQUE: PropId = p(16);
-pub const PROPERTY_AGGREGATION: PropId = p(17);
-pub const PROPERTY_ASSOCIATION: PropId = p(18);
-pub const PROPERTY_CLASS: PropId = p(19);
-pub const OPERATION_OWNED_PARAMETER: PropId = p(20);
-pub const PARAMETER_DIRECTION: PropId = p(21);
-pub const GENERALIZATION_GENERAL: PropId = p(22);
-pub const ASSOCIATION_MEMBER_END: PropId = p(23);
-pub const ASSOCIATION_OWNED_END: PropId = p(24);
-pub const LITERAL_INTEGER_VALUE: PropId = p(25);
-pub const LITERAL_UNLIMITED_VALUE: PropId = p(26);
-pub const ENUMERATION_OWNED_LITERAL: PropId = p(27);
 /// A multiplicity's lower bound as a number, derived from its lower value and never stored, as
 /// UML's is: a single data value a reader of cards must leave out.
-pub const MULTIPLICITY_LOWER: PropId = p(28);
+pub const MULTIPLICITY_LOWER: PropId = p(17);
+pub const PROPERTY_AGGREGATION: PropId = p(18);
+pub const PROPERTY_ASSOCIATION: PropId = p(19);
+pub const PROPERTY_CLASS: PropId = p(20);
+pub const OPERATION_OWNED_PARAMETER: PropId = p(21);
+pub const PARAMETER_DIRECTION: PropId = p(22);
+pub const GENERALIZATION_GENERAL: PropId = p(23);
+pub const ASSOCIATION_MEMBER_END: PropId = p(24);
+pub const ASSOCIATION_OWNED_END: PropId = p(25);
+pub const LITERAL_INTEGER_VALUE: PropId = p(26);
+pub const LITERAL_UNLIMITED_VALUE: PropId = p(27);
+pub const ENUMERATION_OWNED_LITERAL: PropId = p(28);
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
     let mut b = Builder::new(INDEX, URI, "toy", "1", "toy-content-hash");
@@ -194,6 +194,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     )?;
     prop(&mut b, MULTIPLICITY_IS_ORDERED, PropertySpec::new("isOrdered", MULTIPLICITY_ELEMENT, bool_).required().default(Value::Bool(false)))?;
     prop(&mut b, MULTIPLICITY_IS_UNIQUE, PropertySpec::new("isUnique", MULTIPLICITY_ELEMENT, bool_).required().default(Value::Bool(true)))?;
+    prop(&mut b, MULTIPLICITY_LOWER, PropertySpec::new("lower", MULTIPLICITY_ELEMENT, TypeRef::Data(INTEGER)).derived())?;
     class(&mut b, PROPERTY, "Property", false, &[TYPED_ELEMENT, MULTIPLICITY_ELEMENT])?;
     prop(
         &mut b,
@@ -249,7 +250,6 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
             .subsets(&[NAMESPACE_OWNED_MEMBER]),
     )?;
     class(&mut b, ENUMERATION_LITERAL, "EnumerationLiteral", false, &[NAMED_ELEMENT])?;
-    prop(&mut b, MULTIPLICITY_LOWER, PropertySpec::new("lower", MULTIPLICITY_ELEMENT, TypeRef::Data(INTEGER)).derived())?;
     Ok(b.finish())
 }
 

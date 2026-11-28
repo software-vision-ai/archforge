@@ -81,13 +81,18 @@ pub fn violations(packages: &[Package]) -> Vec<String> {
     }
     for model in &models {
         if !screens.contains(&screens_of(model).as_str()) {
-            out.push(format!("{model}: rule 4 (ADR 0002): the model crate has no screens crate {}; a notation is a model part and a screens part", screens_of(model)));
+            out.push(format!(
+                "{model}: rule 4 (ADR 0002): the model crate has no screens crate {}; a notation is a model part and a screens part",
+                screens_of(model)
+            ));
         }
     }
     for screen in &screens {
         let model = screen.strip_suffix("-ui").unwrap_or(screen);
         if model == *screen || !models.contains(&model) {
-            out.push(format!("{screen}: rule 4 (ADR 0002): the screens crate has no model crate {model}; a notation is a model part and a screens part"));
+            out.push(format!(
+                "{screen}: rule 4 (ADR 0002): the screens crate has no model crate {model}; a notation is a model part and a screens part"
+            ));
         }
     }
     out
@@ -116,7 +121,8 @@ pub fn names_in(text: &str, prefixes: &[String], names: &[String]) -> Vec<(usize
         let rest = &bytes[i..];
         let id = prefixes.iter().any(|p| rest.starts_with(p.as_bytes()) && rest.get(p.len()).is_some_and(u8::is_ascii_lowercase));
         if id {
-            let end = rest.iter().position(|b| !(b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'-'))).unwrap_or(rest.len());
+            let end =
+                rest.iter().position(|b| !(b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'-'))).unwrap_or(rest.len());
             out.push((line, String::from_utf8_lossy(&rest[..end]).trim_end_matches('.').to_string()));
             continue;
         }
@@ -135,7 +141,10 @@ fn row_keys(dir: &Path) -> Result<Vec<String>, String> {
         let text = std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?;
         let text = String::from_utf8_lossy(&text);
         for piece in text.split('"').skip(1).step_by(2) {
-            if piece.strip_prefix("model.").is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_lowercase() || matches!(b, b'.' | b'-'))) {
+            if piece
+                .strip_prefix("model.")
+                .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_lowercase() || matches!(b, b'.' | b'-')))
+            {
                 keys.push(piece.to_string());
             }
         }
@@ -213,7 +222,10 @@ mod tests {
     /// another screens crate included.
     #[test]
     fn rule_2_refuses_a_screens_crate_linked_by_anyone_but_the_app() {
-        let v = violations(&workspace(vec![pkg("dolt", Class::Layer(12), &[("flow-ui", "dev")]), pkg(NOTATIONS, Class::Layer(8), &[("flow-ui", "build")])]));
+        let v = violations(&workspace(vec![
+            pkg("dolt", Class::Layer(12), &[("flow-ui", "dev")]),
+            pkg(NOTATIONS, Class::Layer(8), &[("flow-ui", "build")]),
+        ]));
         assert!(v.iter().any(|l| l.starts_with("dolt -> flow-ui (dev): rule 2 (ADR 0004, ADR 0005)")), "{v:?}");
         assert!(v.iter().any(|l| l.starts_with("notations -> flow-ui (build): rule 2")), "{v:?}");
     }
@@ -243,6 +255,22 @@ mod tests {
                 "chart-ui: rule 4 (ADR 0002): the screens crate has no model crate chart; a notation is a model part and a screens part"
             ]
         );
+    }
+
+    /// The layer check's findings carry the notation rules': a link refused by rule 1 and a name
+    /// refused by rule 5 are among them.
+    #[test]
+    fn the_layer_check_reports_the_notation_rules() {
+        let tree = util::Scratch::new("notation-rules-in-layers").unwrap();
+        for name in crate::layers::interface_crates() {
+            tree.file(&format!("crates/{name}/src/lib.rs"), "\n").unwrap();
+        }
+        tree.file("flow-ui/src/lib.rs", "\n").unwrap();
+        tree.file("cli/src/main.rs", "\"flow.step.add\"\n").unwrap();
+        let packages = workspace(vec![pkg("dolt", Class::Layer(12), &[("flow", "dev")]), pkg("cli", Class::Exempt, &[])]);
+        let found = crate::layers::findings(&tree.path, &packages).unwrap();
+        assert!(found.iter().any(|f| f.starts_with("dolt -> flow (dev): rule 1")), "{found:?}");
+        assert!(found.iter().any(|f| f.starts_with("cli: src/main.rs line 1: flow.step.add: rule 5")), "{found:?}");
     }
 
     /// Rule 5's names: a command id under a model crate's name and a declared row, each standing

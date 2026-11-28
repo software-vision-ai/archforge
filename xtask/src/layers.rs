@@ -221,16 +221,23 @@ pub fn interface_findings(crates: &std::path::Path) -> Result<Vec<String>, Strin
     Ok(out)
 }
 
+/// Every finding of the check over `packages` in the workspace at `root`: the layers', the
+/// interface's process and network code, and the notation rules' (`notation_rules`).
+pub fn findings(root: &std::path::Path, packages: &[Package]) -> Result<Vec<String>, String> {
+    let mut v = violations(packages);
+    v.extend(interface_findings(&root.join("crates"))?);
+    v.extend(crate::notation_rules::violations(packages));
+    v.extend(crate::notation_rules::command_names(root, packages)?);
+    Ok(v)
+}
+
 pub fn run() -> Result<(), String> {
     let packages = packages()?;
     println!("{:<12} class", "crate");
     for p in &packages {
         println!("{:<12} {:?}", p.short, p.class);
     }
-    let mut v = violations(&packages);
-    v.extend(interface_findings(&util::root().join("crates"))?);
-    v.extend(crate::notation_rules::violations(&packages));
-    v.extend(crate::notation_rules::command_names(&util::root(), &packages)?);
+    let v = findings(&util::root(), &packages)?;
     if v.is_empty() {
         println!("layers: {} crates, no violation", packages.len());
         Ok(())
