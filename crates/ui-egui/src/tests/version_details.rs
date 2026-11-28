@@ -1509,7 +1509,7 @@ fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
         // Far above every top-level box: it fits only if it is counted itself, and only below the
         // canvas's least zoom.
         let nested = edit(&mut h, "diagram.note", serde_json::json!({ "diagram": diagram, "text": "check", "parent": kept, "x": 300, "y": -60000 }));
-        let joins = edit(&mut h, "sketch.association.add", serde_json::json!({ "from": a, "to": d, "name": "joins" }));
+        let joins = edit(&mut h, "sketch.association.add", serde_json::json!({ "from": a, "to": d, "name": "joins", "from_role": "1", "to_role": "0..*" }));
         let line = edit(&mut h, "diagram.connect", serde_json::json!({ "diagram": diagram, "element": joins, "source": kept, "target": fresh }));
         list_still(&mut h);
         host.reads.lock().unwrap().clear();
@@ -2985,14 +2985,14 @@ fn what_differs_is_marked_with_a_sign_and_a_tint() {
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1), "{:?}", painted(h));
         assert!(filled(h, &format!("{BEFORE}.field.0"), p.danger_tint) && filled(h, &format!("{AFTER}.field.0"), p.green_tint));
         assert!(!filled(h, &format!("{BEFORE}.field.1"), p.danger_tint), "a same row is plain");
-        assert_eq!(named(h, "Schema, kept"), 2, "the same name is not marked");
+        assert_eq!(named(h, "Package, kept"), 2, "the same name is not marked");
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("was"), schema("is"), Vec::new()))));
-        assert_eq!((named(h, "Schema, was, Changed"), named(h, "Schema, is, Changed")), (1, 1), "a rename: {:?}", painted(h));
+        assert_eq!((named(h, "Package, was, Changed"), named(h, "Package, is, Changed")), (1, 1), "a rename: {:?}", painted(h));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1));
         assert!(filled(h, &format!("{BEFORE}.name"), p.danger_tint) && filled(h, &format!("{AFTER}.name"), p.green_tint));
         let entity = Some(ElementCard { class: archforge_mof::toy::CLASS, name: Some("kept".into()), made: false });
         landed(h, id, key, Ok(Some(sided(id, schema("kept"), entity, Vec::new()))));
-        assert_eq!((named(h, "Schema, kept, Changed"), named(h, "Table, kept, Changed")), (1, 1), "a new kind");
+        assert_eq!((named(h, "Package, kept, Changed"), named(h, "Class, kept, Changed")), (1, 1), "a new kind");
     });
 }
 
@@ -3042,7 +3042,7 @@ fn the_summary_counts_and_says_each_difference() {
         says(h, "1 value changed", &format!("Aggregation changed from Not set to Shared. {MARKED}"));
         let entity = Some(ElementCard { class: archforge_mof::toy::CLASS, name: None, made: false });
         landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![aggregation]))));
-        let said = "The name changed from was to Unnamed. The kind changed from Schema to Table. Aggregation changed from Not set to Shared.";
+        let said = "The name changed from was to Unnamed. The kind changed from Package to Class. Aggregation changed from Not set to Shared.";
         says(h, "3 values changed", &format!("{said} {MARKED}"));
     });
 }
@@ -3123,7 +3123,7 @@ fn listed(id: Uuid, name: &str, lists: CardLists) -> Result<Option<ElementSides>
 
 /// A list of `kind` holding rows that say each `(words, change)`.
 fn list(kind: ListKind, rows: Vec<(Named, Option<ChangeKind>)>) -> CardList {
-    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_mof::toy::PROPERTY, name, to: None, note: String::new(), change };
+    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_mof::toy::CLASS, name, to: None, note: String::new(), change };
     CardList { kind, rows: rows.into_iter().map(row).collect() }
 }
 
@@ -3151,14 +3151,14 @@ fn lists_are_headed_and_their_changes_marked() {
         ];
         let lists = CardLists { before, after, ..CardLists::default() };
         landed(h, id, key, listed(id, "kept", lists));
-        assert_eq!(named(h, "Attributes, id"), 2);
-        assert_eq!(named(h, "Attributes, status : String, Changed"), 1, "{:?}", painted(h));
-        assert_eq!(named(h, "Attributes, status : Kind, Changed"), 1);
-        assert_eq!(named(h, "Operations, old(), Removed"), 1);
-        assert_eq!(named(h, "Operations, new(), Added"), 1);
-        assert_eq!(named(h, "Literals, open"), 2);
+        assert_eq!(named(h, "Fields of the sketch, id"), 2);
+        assert_eq!(named(h, "Fields of the sketch, status : String, Changed"), 1, "{:?}", painted(h));
+        assert_eq!(named(h, "Fields of the sketch, status : Kind, Changed"), 1);
+        assert_eq!(named(h, "Members, old(), Removed"), 1);
+        assert_eq!(named(h, "Members, new(), Added"), 1);
+        assert_eq!(named(h, "Members, open"), 2);
         assert!(!painted_has(h, "The owner changed."), "a member is not the owner");
-        assert_eq!((painted_times(h, "ATTRIBUTES"), painted_times(h, "OPERATIONS")), (2, 2));
+        assert_eq!((painted_times(h, "FIELDS OF THE SKETCH"), painted_times(h, "MEMBERS")), (2, 4));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (2, 2), "text marks as well as colour: {:?}", painted(h));
         assert!(filled(h, &format!("{BEFORE}.list.0.1"), p.danger_tint) && filled(h, &format!("{AFTER}.list.0.1"), p.green_tint));
         assert!(!filled(h, &format!("{BEFORE}.list.0.0"), p.danger_tint), "a same row is plain");
@@ -3180,7 +3180,7 @@ fn a_missing_name_is_said_in_words() {
         assert_eq!(named(h, "Ownership, None"), 1);
         let lists = CardLists { before: owner(Named::Unnamed), after: owner(Named::Said(String::new())), ..CardLists::default() };
         landed(h, id, key, listed(id, "a", lists));
-        assert_eq!(named(h, "Ownership, Column"), 2, "a nameless row goes by its kind");
+        assert_eq!(named(h, "Ownership, Class"), 2, "a nameless row goes by its kind");
     });
 }
 
@@ -3206,24 +3206,24 @@ fn a_relationship_reads_as_what_it_joins_to() {
         landed(h, id, key, listed(id, "a", lists));
         assert_eq!(named(h, "Relationships, lines \u{2192} OrderLine [1..*]"), 2, "{:?}", painted(h));
         assert_eq!(named(h, "Relationships, Generalization \u{2192} Shape"), 2, "no role: its kind");
-        assert_eq!(named(h, "Relationships, Relationship \u{2192} Not available on this side, Changed"), 1);
-        assert_eq!(named(h, "Relationships, Relationship \u{2192} order, Changed"), 1);
+        assert_eq!(named(h, "Relationships, Generalization \u{2192} Not available on this side, Changed"), 1);
+        assert_eq!(named(h, "Relationships, Generalization \u{2192} order, Changed"), 1);
         assert_eq!(painted_times(h, "RELATIONSHIPS"), 2);
     });
 }
 
-/// A table reads in its notation's words: its kind, its columns, and a nameless line by what it joins,
-/// whose words differing is no renaming.
+/// An element reads in its notation's words: its kind, its features, and a nameless line by what it
+/// joins, whose words differing is no renaming.
 #[test]
-fn an_er_element_reads_in_its_notations_words() {
+fn an_element_reads_in_its_notations_words() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
         let line = |name: &str| Some(ElementCard { class: archforge_mof::toy::CLASS, name: Some(name.into()), made: true });
         let rows = |words: &str| vec![list(ListKind::Features(archforge_mof::toy::PROPERTY), vec![(Named::Made(words.into()), None)])];
         let lists = CardLists { before: rows("a → b"), after: rows("c → b"), ..CardLists::default() };
         landed(h, id, key, Ok(Some(ElementSides { lists: Arc::new(lists), ..sided(id, line("a → b"), line("c → b"), Vec::new()) })));
-        assert_eq!((named(h, "Table, a → b"), named(h, "Table, c → b")), (1, 1), "unmarked: {:?}", painted(h));
-        assert_eq!((named(h, "Columns, a → b"), named(h, "Columns, c → b")), (1, 1));
+        assert_eq!((named(h, "Class, a → b"), named(h, "Class, c → b")), (1, 1), "unmarked: {:?}", painted(h));
+        assert_eq!((named(h, "Fields of the sketch, a → b"), named(h, "Fields of the sketch, c → b")), (1, 1));
         assert!(!painted_has(h, "The name changed"), "{:?}", painted(h));
     });
 }

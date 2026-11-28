@@ -10277,9 +10277,10 @@ impl crate::notation_ui::NotationUi for SketchUi {
             _ => &[],
         }
     }
-    /// The class, the one kind it makes.
+    /// The package and the class, which its Models `+` makes, and the generalization and the
+    /// association, which its commands make.
     fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
-        &[archforge_mof::toy::CLASS]
+        &[archforge_mof::toy::PACKAGE, archforge_mof::toy::CLASS, archforge_mof::toy::GENERALIZATION, archforge_mof::toy::ASSOCIATION]
     }
     /// Its one refusal of its own, something that is no sketch, signed with its name, so a test
     /// sees it asked.
@@ -10293,9 +10294,14 @@ impl crate::notation_ui::NotationUi for SketchUi {
     fn disabled(&self, reason: &str) -> Option<String> {
         (reason == SKETCH_UNAVAILABLE).then(|| format!("The {} has nothing to draw yet.", self.0))
     }
-    /// Its one kind with its article, by its name, so a test sees it asked.
+    /// Its kinds with their article, the sketch by its name, so a test sees it asked.
     fn a_kind(&self, kind: &str) -> Option<String> {
-        (kind == "sketch").then(|| format!("a {}", self.0))
+        Some(match kind {
+            "sketch" => format!("a {}", self.0),
+            "package" | "class" => format!("a {kind}"),
+            "attribute" | "operation" => format!("an {kind}"),
+            _ => return None,
+        })
     }
     /// A class's attributes as its fields, by its name, so a test sees it asked.
     fn list_heading(&self, class: archforge_mof::ClassId) -> Option<String> {

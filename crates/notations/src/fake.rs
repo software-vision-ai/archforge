@@ -177,13 +177,22 @@ impl Notation for Sketch {
         let general = store.get(element, GENERALIZATION_GENERAL).ok()?.as_ref()?;
         Some((specific, general))
     }
-    /// An association's line may show its name.
+    /// An association's line may show its name and each end's role.
     fn text_slots(&self, class: ClassId) -> &'static [&'static str] {
-        if class == ASSOCIATION { &["name"] } else { &[] }
+        if class == ASSOCIATION { &["name", "from_end", "to_end"] } else { &[] }
     }
-    /// An association's name.
+    /// An association's name, or the role of its first or its second end.
     fn slot_text(&self, store: &Store, element: Obj, slot: &str) -> String {
-        if slot == "name" { archforge_core::name_of(store, element) } else { String::new() }
+        let end = |n: usize| {
+            let ends = store.list(element, ASSOCIATION_OWNED_END).unwrap_or_default();
+            ends.get(n).and_then(Value::as_ref).map(|e| archforge_core::name_of(store, e)).unwrap_or_default()
+        };
+        match slot {
+            "name" => archforge_core::name_of(store, element),
+            "from_end" => end(0),
+            "to_end" => end(1),
+            _ => String::new(),
+        }
     }
     /// A class's card: its name, its attributes, then its operations.
     fn card(&self, store: &Store, element: Obj, _: Obj) -> Option<Card> {
