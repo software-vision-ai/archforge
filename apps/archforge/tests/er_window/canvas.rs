@@ -5,6 +5,7 @@
 
 use super::*;
 
+/// A table box saved too short for its columns opens grown to show them, with no undo step.
 #[test]
 fn a_table_box_saved_too_short_for_its_columns_opens_grown_without_an_undo_step() {
     // A project written by an earlier version: Account holds two columns in a box that shows none.
@@ -36,6 +37,8 @@ fn a_table_box_saved_too_short_for_its_columns_opens_grown_without_an_undo_step(
     assert!(host.written.lock().unwrap().is_empty());
 }
 
+/// A connection dropped on empty canvas makes a new table there, joined to the table it came from, in
+/// one step.
 #[test]
 fn a_connection_dropped_on_empty_canvas_makes_a_new_table_joined_to_it_in_one_step() {
     let (mut h, _customer, _order) = two_tables_harness();
@@ -75,6 +78,7 @@ fn a_connection_dropped_on_empty_canvas_makes_a_new_table_joined_to_it_in_one_st
     assert_eq!((tables(&h), relationships(&h).len(), node_ids(&h).len()), before);
 }
 
+/// A line drawn to a table without columns starts with its foreign key off.
 #[test]
 fn a_line_to_a_table_without_columns_starts_with_its_foreign_key_off() {
     let (mut h, customer, _order) = two_tables_harness();
@@ -148,6 +152,7 @@ fn a_new_diagram_refused_by_its_schema_says_why_in_plain_words() {
     }
 }
 
+/// The Diagrams explorer creates an ER diagram through the New diagram dialog and opens it in a tab.
 #[test]
 fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_tab() {
     let (mut h, _customer) = table_harness();
@@ -222,6 +227,7 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     assert_eq!(selected_name(&h), "Billing");
 }
 
+/// The canvas draws an ER diagram's tables and line, and the pointer selects, pans and zooms.
 #[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
@@ -283,6 +289,8 @@ fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let _ = diagram;
 }
 
+/// A table's menu removes it from the diagram and keeps it in the model; the delete dialog deletes it
+/// from the model.
 #[test]
 fn the_entity_menu_removes_from_the_diagram_and_the_dialog_deletes_from_the_model() {
     let (mut h, customer, _diagram) = diagram_harness();
@@ -428,6 +436,7 @@ fn a_tables_menu_adds_its_own_rows_and_runs_them() {
     }
 }
 
+/// A table added in Models is placed on the open diagram, and its box grows with its columns.
 #[test]
 fn a_table_added_in_models_is_placed_on_the_open_diagram_and_grows_with_its_columns() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -460,6 +469,8 @@ fn a_table_added_in_models_is_placed_on_the_open_diagram_and_grows_with_its_colu
     assert!((node_bounds(&h, &id).height - er_place::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
 }
 
+/// A double click on a table's header renames it in place and one on a column opens its editor; a
+/// refused name stays open with its refusal.
 #[test]
 fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
     let (mut h, customer, _diagram) = diagram_harness();
@@ -512,6 +523,8 @@ fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
     assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Order"), "the table stays in the model");
 }
 
+/// The Relationship tool draws a line between two tables with its foreign key as one step, and
+/// Delete removes it with a toast that offers Undo.
 #[test]
 fn the_relationship_tool_draws_a_line_with_its_foreign_key_as_one_step_and_delete_offers_undo() {
     let (mut h, customer, _order) = two_tables_harness();
@@ -650,6 +663,7 @@ fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapp
     assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "CustomerOrder"), "the mapping table exists");
 }
 
+/// The rules' problems badge the canvas, and the Note tool places a note typed in place.
 #[test]
 fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -721,6 +735,7 @@ fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
     assert!(toast.text.starts_with("customer_id removed · "), "{}", toast.text);
 }
 
+/// A table of another schema dragged from Models onto the diagram lands with its line, once.
 #[test]
 fn a_table_of_another_schema_dragged_from_the_explorer_lands_with_its_line_once() {
     let (mut h, _, order) = two_tables_harness();
@@ -777,6 +792,7 @@ fn a_table_of_another_schema_dragged_from_the_explorer_lands_with_its_line_once(
     assert_eq!(shown(&h), (2, 0));
 }
 
+/// The key columns a new line adds grow the child table's box to show them, in the same step.
 #[test]
 fn key_columns_a_line_adds_grow_the_table_to_show_them_in_the_same_step() {
     let (mut h, _customer, order) = two_tables_harness();
@@ -816,6 +832,7 @@ fn key_columns_a_line_adds_grow_the_table_to_show_them_in_the_same_step() {
     assert_eq!(node_bounds(&h, &order_node).height, snug, "one undo takes the line and the growth back");
 }
 
+/// A table box shorter than its columns shows those that fit and counts the rest.
 #[test]
 fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest() {
     let (mut h, customer, diagram) = diagram_harness();
@@ -838,6 +855,7 @@ fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest
     assert!(texts.iter().any(|t| t == "+ 2 more columns"), "{texts:?}");
 }
 
+/// Generate scrolls its body in a short window and keeps its footer clear of it.
 #[test]
 fn generate_scrolls_its_body_in_a_short_window_and_keeps_its_footer_clear() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -871,6 +889,7 @@ fn generate_scrolls_its_body_in_a_short_window_and_keeps_its_footer_clear() {
     assert_eq!(rect_of(&h, "generate.close").top() - 20.0, foot, "the footer stays put");
 }
 
+/// Generate hands a schema and its export skills to an agent as a request the user can copy.
 #[test]
 fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can_copy() {
     let (mut h, _customer, _diagram) = diagram_harness();

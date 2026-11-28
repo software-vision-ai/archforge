@@ -569,6 +569,8 @@ fn the_apps_screens_parts_give_a_shell_er_then_uml() {
     assert_eq!(kinds(archforge_ui_egui::testing::kinds(&shell)), [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]);
 }
 
+/// An ER project's New diagram starts at ER and makes a class diagram beside its ER diagrams when
+/// asked, and an agent's command makes one too.
 #[test]
 fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes_one_too() {
     let (mut h, _customer, er_diagram) = diagram_harness();
@@ -779,6 +781,8 @@ fn an_enumeration_at_its_literal_cap_says_so_and_takes_no_more() {
     }
 }
 
+/// The toast after a removal keeps clear of the minimap at every width, and its Undo still brings
+/// the removed back.
 #[test]
 fn the_removal_toast_keeps_clear_of_the_minimap_at_every_width_and_its_undo_still_undoes() {
     let (mut h, _customer, _diagram) = diagram_harness();

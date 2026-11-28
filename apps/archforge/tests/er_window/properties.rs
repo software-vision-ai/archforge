@@ -191,6 +191,7 @@ fn an_er_documents_typed_problems_are_said_in_the_chosen_language() {
     archforge_ui_egui::i18n::set_language("en");
 }
 
+/// Properties lists a table's columns, and the column editor changes them through the engine.
 #[test]
 fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_engine() {
     let (mut h, customer) = table_harness();
@@ -262,6 +263,7 @@ fn a_column_refused_in_properties_says_why_in_plain_words() {
     }
 }
 
+/// Apply closes a new column's editor once a type is picked from the type list.
 #[test]
 fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
     let (mut h, customer) = table_harness();
@@ -312,6 +314,8 @@ fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
     assert!(er_of(h.state()).column.as_ref().is_some_and(|c| !c.primary_key && !c.not_null));
 }
 
+/// A column's row in Properties selects the column; only its edit button opens the editor, and
+/// selecting elsewhere closes it.
 #[test]
 fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_selecting_elsewhere_closes_it() {
     let (mut h, customer) = table_harness();
@@ -373,6 +377,7 @@ fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_sel
     assert!(er_of(h.state()).column.is_none(), "Cancel stays closed: {:?}", er_of(h.state()).column);
 }
 
+/// A relationship's Properties set its ends, roles, Identifying and the foreign key's actions.
 #[test]
 fn relationship_properties_set_the_ends_roles_identifying_and_the_foreign_key_actions() {
     let (mut h, rel) = relationship_harness();
@@ -433,6 +438,7 @@ fn relationship_properties_set_the_ends_roles_identifying_and_the_foreign_key_ac
     );
 }
 
+/// The Foreign key switch removes the key with its columns, and adds them back, each as one step.
 #[test]
 fn the_foreign_key_switch_removes_and_adds_the_key_with_its_columns_as_one_step() {
     let (mut h, rel) = relationship_harness();
@@ -488,6 +494,7 @@ fn the_foreign_key_switch_removes_and_adds_the_key_with_its_columns_as_one_step(
     assert!(cols.contains(&"buyer_ref".to_string()), "{cols:?} notice {:?}", h.state().panels.notice);
 }
 
+/// A relationship whose parent has no key shows the card for it, and Add id column makes the key.
 #[test]
 fn a_parent_without_a_key_gets_the_card_and_add_id_column_makes_the_key() {
     let (mut h, _customer, _order) = two_tables_harness();
@@ -523,6 +530,7 @@ fn a_parent_without_a_key_gets_the_card_and_add_id_column_makes_the_key() {
     assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add id column"));
 }
 
+/// The key editor adds a unique constraint and removes the primary key.
 #[test]
 fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     let (mut h, customer) = table_harness();
@@ -564,6 +572,8 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     assert_eq!(problems[0].text, "Customer has no primary key");
 }
 
+/// The column editor sets a column's size, default and generation, and the heading takes the table's
+/// description.
 #[test]
 fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_a_description() {
     let (mut h, customer) = table_harness();
@@ -849,6 +859,7 @@ fn the_column_editor_changes_type_nullability_and_generation_in_one_apply() {
     }
 }
 
+/// The check and index editors write through the engine, and a refusal changes nothing.
 #[test]
 fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_nothing() {
     use archforge_er::{NullsOrder, SortDirection};
@@ -929,6 +940,8 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
     assert!(archforge_er::rules::indexes_of(h.state().session.as_ref().unwrap().doc(), customer_obj).is_empty());
 }
 
+/// Key columns follow the column they point at until unlinked, and a pure mapping table collapses
+/// into a relationship.
 #[test]
 fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_collapses() {
     let (mut h, customer) = table_harness();
@@ -1015,6 +1028,8 @@ fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_colla
     assert_eq!(relationships, 2, "Customer to Order and the many-to-many line");
 }
 
+/// A schema's Properties list its domains and enum types, and a column takes an enum type from the
+/// column editor's type menu.
 #[test]
 fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu() {
     let (mut h, customer) = table_harness();
@@ -1130,6 +1145,7 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
     assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3);
 }
 
+/// A subtype shows in its supertype's Properties, and the ER toolbar has no generalization tool.
 #[test]
 fn a_subtype_shows_in_the_supertypes_properties_and_the_toolbar_draws_no_generalizations() {
     let (mut h, customer, order) = two_tables_harness();
@@ -1176,6 +1192,8 @@ fn a_subtype_shows_in_the_supertypes_properties_and_the_toolbar_draws_no_general
     assert_eq!(selected_name(&h), "Customer");
 }
 
+/// A schema's Properties add and edit sequences and views, and a selected one's edit button opens
+/// its editor.
 #[test]
 fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button_opens_its_editor() {
     let (mut h, _) = table_harness();
@@ -1262,6 +1280,7 @@ fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button
     assert_eq!(selected_name(&h), "Shop");
 }
 
+/// The Properties body scrolls, and an editor opened below the fold comes into view.
 #[test]
 fn the_properties_body_scrolls_and_an_editor_opened_below_the_fold_comes_into_view() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1440.0, 760.0));

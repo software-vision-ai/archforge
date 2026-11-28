@@ -6786,6 +6786,8 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// With a schema selected, Models' `+` offers a table first and adds one; Delete asks before the
+/// schema goes with what it holds.
 #[test]
 fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -6827,6 +6829,8 @@ fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schem
     assert_eq!(schema_names(&h), ["Schema 1"], "undo brings them back");
 }
 
+/// The Models filter narrows the tree to the names that hold what is typed, and the arrow keys walk
+/// the rows it leaves.
 #[test]
 fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -7232,6 +7236,7 @@ fn st_body(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> String {
     st.get(st.by_uuid(id).unwrap(), archforge_core::skill::BODY).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
+/// The Skills panel's `+` makes a skill on the selection and opens it with its name ready to type.
 #[test]
 fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     let (mut h, customer) = table_harness();
@@ -7341,6 +7346,7 @@ fn a_skill_name_refused_in_its_tab_says_why_in_plain_words() {
     crate::i18n::set_language("en");
 }
 
+/// A skill opens in a tab of its own, and its Markdown is kept as typed.
 #[test]
 fn a_skill_opens_in_its_own_tab_and_keeps_its_markdown() {
     let (mut h, customer) = table_harness();
@@ -7527,6 +7533,7 @@ fn read_out(h: &Harness<'static, Shell>, words: &str, id: &str) {
     assert!(ids(h).iter().any(|i| i == id), "{words}: recorded as {id}");
 }
 
+/// The Appearance panel styles the selected box and line on the open diagram only.
 #[test]
 fn appearance_styles_the_selection_on_this_diagram() {
     let (mut h, customer, diagram) = diagram_harness();
@@ -7627,6 +7634,8 @@ fn appearance_styles_the_selection_on_this_diagram() {
     assert!(!h.state().canvas.key_status, "the line colours show");
 }
 
+/// The control channel runs its methods through the open session; without a project it says none
+/// is open.
 #[test]
 fn the_control_channel_runs_commands_through_the_open_session() {
     use crate::control::answer;
@@ -7694,6 +7703,8 @@ fn drag_through(h: &mut Harness<'static, Shell>, points: &[egui::Pos2]) {
     h.run();
 }
 
+/// A click on the minimap centres the view there, and a drag of its viewport moves the view with the
+/// pointer while the map keeps its scale.
 #[test]
 fn the_minimap_viewport_drags_the_view_without_the_map_rescaling_under_it() {
     let (mut h, _, _) = diagram_harness();
@@ -7717,6 +7728,7 @@ fn the_minimap_viewport_drags_the_view_without_the_map_rescaling_under_it() {
     assert!((stepped - one_step).length() < 0.5, "{one_step:?} vs {stepped:?}");
 }
 
+/// A drag with the primary button from `from` to `to`, a frame at each step.
 fn drag(h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2) {
     h.event(egui::Event::PointerMoved(from));
     h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
@@ -7727,6 +7739,8 @@ fn drag(h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2) {
     h.run();
 }
 
+/// The name of the first element selected: a diagram's as the Diagrams explorer says it, any other
+/// element's own.
 fn selected_name(h: &Harness<'static, Shell>) -> String {
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
@@ -7759,6 +7773,8 @@ fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
     crate::diagrams::rows(st, &h.state().diagrams, h.state().kinds).rows.into_iter().map(|r| (r.depth, r.label, r.count)).collect()
 }
 
+/// The Diagrams explorer groups the diagrams by kind, each group named, with its `+`, and opens each
+/// diagram with its package.
 #[test]
 fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_package() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -8023,6 +8039,8 @@ fn a_focused_diagram_row_deletes_its_diagram_by_key_and_says_why_a_default_stays
     }
 }
 
+/// Typing a group's name in the Diagrams explorer's filter opens the folded folders its diagrams sit
+/// in.
 #[test]
 fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     // A model with a folder holding a class diagram, as a project may keep one.
@@ -8200,6 +8218,7 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
     }
 }
 
+/// In a narrow window, New diagram's kind cards stand one above the other.
 #[test]
 fn in_a_narrow_window_the_kinds_cards_stand_one_above_the_other() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(520.0, 900.0));
@@ -8291,6 +8310,8 @@ fn a_package_card_is_drawn_by_the_kind_that_draws_packages_whatever_the_scenes_k
     }
 }
 
+/// Enter on New diagram's focused Cancel cancels and makes nothing; on a kind's card it goes on to
+/// the details.
 #[test]
 fn enter_on_new_diagrams_focused_cancel_cancels_and_on_a_card_goes_on() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
@@ -8357,16 +8378,20 @@ fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::U
     (root, first, sales, sales_d)
 }
 
+/// The automation ids of the canvas's nodes the last frame drew.
 fn node_ids(h: &Harness<'static, Shell>) -> Vec<String> {
     ids(h).iter().filter(|i| i.starts_with("workspace.canvas.node.")).cloned().collect()
 }
 
+/// The bounds of the node `node` in diagram units.
 fn node_bounds(h: &Harness<'static, Shell>, node: &str) -> archforge_diagram::Rect {
     let st = h.state().session.as_ref().unwrap().doc();
     let n = st.by_uuid(archforge_mof::Uuid::parse(node).unwrap()).unwrap();
     archforge_diagram::grid::bounds_of(st, n)
 }
 
+/// The Entity tool places a table where the canvas is clicked, its name typed in place, as one undo
+/// step.
 #[test]
 fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -8402,6 +8427,8 @@ fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select);
 }
 
+/// A drag moves a node by the drag in diagram units and a corner handle resizes it, each one undo
+/// step; the Arrange bar aligns two selected nodes.
 #[test]
 fn dragging_moves_and_resizes_nodes_and_the_arrange_bar_aligns_two() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -8453,6 +8480,7 @@ fn dragging_moves_and_resizes_nodes_and_the_arrange_bar_aligns_two() {
     assert!((a2.x - a.x - 1.0).abs() < 0.01, "{a:?} -> {a2:?}");
 }
 
+/// A drag with `button` from `from` to `to`, a frame at each step.
 fn drag_by(h: &mut Harness<'static, Shell>, button: egui::PointerButton, from: egui::Pos2, to: egui::Pos2) {
     h.event(egui::Event::PointerMoved(from));
     h.event(egui::Event::PointerButton { pos: from, button, pressed: true, modifiers: egui::Modifiers::NONE });
@@ -8463,6 +8491,7 @@ fn drag_by(h: &mut Harness<'static, Shell>, button: egui::PointerButton, from: e
     h.run();
 }
 
+/// A marquee selects what it crosses; a middle drag over a node pans the view and moves nothing.
 #[test]
 fn the_marquee_selects_what_it_crosses_and_a_middle_drag_only_pans() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -8564,6 +8593,7 @@ fn two_tables_harness() -> (Harness<'static, Shell>, String, String) {
     (h, customer, order)
 }
 
+/// The live relationships of the open model.
 fn relationships(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
     let st = h.state().session.as_ref().unwrap().doc();
     st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).collect()
@@ -11656,6 +11686,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
     }
     /// The sketch draws nothing over the canvas.
     fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
+    /// The sketch notation's search entry: a class, under its package.
     fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Entry> {
         (store.class_of(o).ok()? == archforge_uml::CLASS).then(|| {
             let pkg = store.container(o).ok().flatten().map(|(c, _)| archforge_core::name_of(store, c)).unwrap_or_default();

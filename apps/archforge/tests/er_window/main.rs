@@ -249,6 +249,7 @@ impl archforge_ui_egui::ProjectHost for SavingHost {
         self.read_version(project, commit)
     }
 
+    /// Makes no project: the receiver never answers.
     fn create(
         &self,
         _folder: &std::path::Path,
@@ -319,6 +320,7 @@ impl archforge_ui_egui::ProjectHost for SavingHost {
         rx
     }
 
+    /// Keeps the opening's sender for the test to answer.
     fn open(&self, path: &std::path::Path) -> std::sync::mpsc::Receiver<Result<archforge_ui_egui::Opened, archforge_ui_egui::CreateError>> {
         let (tx, rx) = std::sync::mpsc::channel();
         self.opens.lock().unwrap().push((path.to_path_buf(), tx));
@@ -335,6 +337,7 @@ impl archforge_ui_egui::ProjectHost for SavingHost {
         self.open(path)
     }
 
+    /// Records the rows handed over.
     fn write(&self, project: &std::path::Path, rows: archforge_mof::rows::Rows) {
         self.written.lock().unwrap().push((project.to_path_buf(), rows));
     }
@@ -351,6 +354,7 @@ impl archforge_ui_egui::ProjectHost for SavingHost {
         archforge_ui_egui::Writing { pending: false, error: self.write_error.lock().unwrap().clone() }
     }
 
+    /// Records the project closed and keeps the closing's sender for the test to answer.
     fn close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
         self.closed.lock().unwrap().push(project.to_path_buf());
         let (tx, rx) = std::sync::mpsc::channel();
@@ -358,6 +362,7 @@ impl archforge_ui_egui::ProjectHost for SavingHost {
         rx
     }
 
+    /// Records the project put back to its last save and closed, and keeps the closing's sender.
     fn discard_and_close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
         self.discarded.lock().unwrap().push(project.to_path_buf());
         let (tx, rx) = std::sync::mpsc::channel();
@@ -365,6 +370,7 @@ impl archforge_ui_egui::ProjectHost for SavingHost {
         rx
     }
 
+    /// Records the project closed without writing what waited, and keeps the closing's sender.
     fn close_without_writing(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
         self.unwritten.lock().unwrap().push(project.to_path_buf());
         let (tx, rx) = std::sync::mpsc::channel();
@@ -420,6 +426,7 @@ fn commerce() -> archforge_ui_egui::Opened {
     archforge_ui_egui::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() }
 }
 
+/// Whether the open session holds work not saved.
 fn dirty(h: &Harness<'static, Shell>) -> bool {
     h.state().session.as_ref().unwrap().is_dirty()
 }
@@ -523,6 +530,7 @@ const NOT_ALONE: [egui::Modifiers; 5] = [
     egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND),
 ];
 
+/// The names of the open model's live schemas.
 fn schema_names(h: &Harness<'static, Shell>) -> Vec<String> {
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
@@ -670,6 +678,8 @@ fn drag(h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2) {
     h.run();
 }
 
+/// The name of the first element selected: a diagram's as the Diagrams explorer says it, any other
+/// element's own.
 fn selected_name(h: &Harness<'static, Shell>) -> String {
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
@@ -739,6 +749,7 @@ fn two_tables_harness() -> (Harness<'static, Shell>, String, String) {
     (h, customer, order)
 }
 
+/// The live relationships of the open model.
 fn relationships(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
     let st = h.state().session.as_ref().unwrap().doc();
     st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).collect()
@@ -759,6 +770,7 @@ fn relationship_harness() -> (Harness<'static, Shell>, archforge_mof::Obj) {
     (h, rel)
 }
 
+/// The foreign key that realises the relationship `rel`, if any.
 fn fk_of(h: &Harness<'static, Shell>, rel: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
     let st = h.state().session.as_ref().unwrap().doc();
     st.referrers(rel).into_iter().find(|(_, p)| *p == archforge_er::foreign_key::RELATIONSHIP).map(|(f, _)| f)
