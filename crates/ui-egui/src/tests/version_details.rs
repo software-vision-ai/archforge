@@ -954,7 +954,7 @@ fn unbuildable(h: &mut Harness<'static, Shell>) {
     let s = NOTATIONS
         .session_from_rows_repaired(&rows_now(h), ids, |st| {
             let o = st.create(archforge_mof::toy::LITERAL_UNLIMITED_NATURAL).unwrap();
-            st.set(o, archforge_uml::literal_unlimited_natural::VALUE, Value::Unlimited(Some(u64::MAX))).unwrap();
+            st.set(o, archforge_mof::toy::LITERAL_UNLIMITED_VALUE, Value::Unlimited(Some(u64::MAX))).unwrap();
         })
         .unwrap();
     h.state_mut().written = Some(s.revision());
@@ -1131,7 +1131,8 @@ fn two_rows_of_one_element_open_it_once() {
         let (mut row, key) = (h.state().versions.changes[0].clone(), h.state().versions.compared.clone().unwrap());
         let mut gone = row.clone();
         (gone.class, gone.kind, gone.name, row.name) = (archforge_mof::toy::CLASS, ChangeKind::Removed, Some("old".into()), Some("new".into()));
-        let sheet = Difference { id: Uuid([9; 16]), area: Area::Diagram, class: archforge_mof::toy::PROPERTY, name: Some("sheet".into()), ..gone.clone() };
+        let sheet =
+            Difference { id: Uuid([9; 16]), area: Area::Diagram, class: archforge_mof::toy::PROPERTY, name: Some("sheet".into()), ..gone.clone() };
         crate::versions::settle_changes(h.state_mut(), key, Ok(vec![row, gone, sheet]));
         h.run_steps(2);
         open_change(h, "sheet");
@@ -2917,9 +2918,9 @@ fn schema(name: &str) -> Option<ElementCard> {
     Some(ElementCard { class: archforge_mof::toy::PACKAGE, name: Some(name.into()), made: false })
 }
 
-/// A field of the enumeration-typed Visibility with these values.
+/// A field of the enumeration-typed Aggregation with these values.
 fn field(before: Option<Value>, after: Option<Value>, changed: bool) -> CardField {
-    CardField { prop: archforge_uml::named_element::VISIBILITY, before, after, changed }
+    CardField { prop: archforge_mof::toy::PROPERTY_AGGREGATION, before, after, changed }
 }
 
 /// How many controls are named exactly `name`.
@@ -2955,7 +2956,7 @@ fn values_are_worded_per_type_without_a_read() {
             (Value::str("words"), "words"),
             (Value::Unlimited(None), "*"),
             (Value::Unlimited(Some(3)), "3"),
-            (Value::Enum(1), "Private"),
+            (Value::Enum(1), "Shared"),
             (Value::Enum(99), "Unknown"),
             (Value::Ref(shop), "Unknown"),
         ];
@@ -2964,7 +2965,7 @@ fn values_are_worded_per_type_without_a_read() {
         landed(h, id, key, Ok(Some(sided(id, schema("a"), None, fields))));
         for (_, want) in &cases {
             let times = cases.iter().filter(|(_, w)| w == want).count();
-            assert_eq!(named(h, &format!("Visibility, {want}")), times, "{want}: {:?}", painted(h));
+            assert_eq!(named(h, &format!("Aggregation, {want}")), times, "{want}: {:?}", painted(h));
         }
         assert_eq!(named(h, "Unknown, odd"), 1, "a label the metamodel doesn't give");
         assert!(asked(host).is_empty(), "drawing reads nothing");
@@ -2980,7 +2981,7 @@ fn what_differs_is_marked_with_a_sign_and_a_tint() {
         let fields =
             vec![field(Some(Value::str("old")), Some(Value::str("new")), true), field(Some(Value::str("same")), Some(Value::str("same")), false)];
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
-        assert_eq!((named(h, "Visibility, old, Changed"), named(h, "Visibility, new, Changed"), named(h, "Visibility, same")), (1, 1, 2));
+        assert_eq!((named(h, "Aggregation, old, Changed"), named(h, "Aggregation, new, Changed"), named(h, "Aggregation, same")), (1, 1, 2));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1), "{:?}", painted(h));
         assert!(filled(h, &format!("{BEFORE}.field.0"), p.danger_tint) && filled(h, &format!("{AFTER}.field.0"), p.green_tint));
         assert!(!filled(h, &format!("{BEFORE}.field.1"), p.danger_tint), "a same row is plain");
@@ -3034,14 +3035,14 @@ fn the_summary_says_added_or_removed() {
 fn the_summary_counts_and_says_each_difference() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        let visibility = field(Some(Value::Null), Some(Value::Enum(1)), true);
+        let aggregation = field(Some(Value::Null), Some(Value::Enum(1)), true);
         let same = field(Some(Value::str("same")), Some(Value::str("same")), false);
-        let fields = vec![visibility.clone(), same];
+        let fields = vec![aggregation.clone(), same];
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
+        says(h, "1 value changed", &format!("Aggregation changed from Not set to Shared. {MARKED}"));
         let entity = Some(ElementCard { class: archforge_mof::toy::CLASS, name: None, made: false });
-        landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![visibility]))));
-        let said = "The name changed from was to Unnamed. The kind changed from Schema to Table. Visibility changed from Not set to Private.";
+        landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![aggregation]))));
+        let said = "The name changed from was to Unnamed. The kind changed from Schema to Table. Aggregation changed from Not set to Shared.";
         says(h, "3 values changed", &format!("{said} {MARKED}"));
     });
 }
@@ -3051,7 +3052,7 @@ fn the_summary_counts_and_says_each_difference() {
 fn the_summary_counts_what_it_does_not_write_out() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        let line = "Visibility changed from a to b.";
+        let line = "Aggregation changed from a to b.";
         let three = format!("{line} {line} {line}");
         for (n, more) in [(3, String::new()), (4, " 1 more value changed.".to_owned()), (5, " 2 more values changed.".to_owned())] {
             let fields = vec![field(Some(Value::str("a")), Some(Value::str("b")), true); n];
@@ -3068,7 +3069,7 @@ fn the_summary_says_a_property_is_on_one_side_alone() {
         let (id, key) = element_open(h, host);
         let fields = vec![field(Some(Value::str("a")), None, true), field(None, Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        let said = "Visibility is only on the Before side. Visibility is only on the After side.";
+        let said = "Aggregation is only on the Before side. Aggregation is only on the After side.";
         says(h, "2 values changed", &format!("{said} {MARKED}"));
     });
 }
@@ -3096,8 +3097,8 @@ fn the_summary_cuts_a_long_value() {
         let long = "x".repeat(60);
         let fields = vec![field(Some(Value::str(&long)), Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from {}… to b. {MARKED}", "x".repeat(40)));
-        assert_eq!(named(h, &format!("Visibility, {long}, Changed")), 1, "the card holds it whole");
+        says(h, "1 value changed", &format!("Aggregation changed from {}… to b. {MARKED}", "x".repeat(40)));
+        assert_eq!(named(h, &format!("Aggregation, {long}, Changed")), 1, "the card holds it whole");
     });
 }
 
@@ -3297,11 +3298,11 @@ fn the_summary_counts_members_and_says_the_owner() {
         says(
             h,
             "1 value changed \u{b7} 1 member changed \u{b7} 2 relationships changed",
-            &format!("Visibility changed from Not set to Private. {MARKED}"),
+            &format!("Aggregation changed from Not set to Shared. {MARKED}"),
         );
         let fields = vec![field(Some(Value::Null), Some(Value::Enum(1)), true)];
         landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(some(1)), ..sided(id, schema("a"), schema("a"), fields) })));
-        says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
+        says(h, "1 value changed \u{b7} 1 member changed", &format!("Aggregation changed from Not set to Shared. {MARKED}"));
         let moved = || vec![list(ListKind::Ownership, vec![(Named::Said("p".into()), Some(ChangeKind::Changed))])];
         let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n, ..Default::default() };
         landed(h, id, key.clone(), listed(id, "a", owned(0)));
@@ -3309,9 +3310,9 @@ fn the_summary_counts_members_and_says_the_owner() {
         let changed = field(Some(Value::Null), Some(Value::Enum(1)), true);
         let with_owner = |fields: Vec<CardField>| Ok(Some(ElementSides { lists: Arc::new(owned(0)), ..sided(id, schema("a"), schema("a"), fields) }));
         landed(h, id, key.clone(), with_owner(vec![changed.clone()]));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {MARKED}"));
+        says(h, "1 value changed", &format!("Aggregation changed from Not set to Shared. The owner changed. {MARKED}"));
         landed(h, id, key, with_owner(vec![changed; 4]));
-        let one = "Visibility changed from Not set to Private.";
+        let one = "Aggregation changed from Not set to Shared.";
         says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {MARKED}"));
     });
 }

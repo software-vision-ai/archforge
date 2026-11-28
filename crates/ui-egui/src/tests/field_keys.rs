@@ -10,18 +10,25 @@ use super::*;
 /// The control key as Windows and Linux report it.
 const CONTROL: Modifiers = Modifiers::CTRL.plus(Modifiers::COMMAND);
 
-/// A new column's editor in `theme` with the keyboard in its name field, which holds `column_1`.
+/// A class named `column_1` selected in `theme`, with the keyboard in its Properties name field.
 fn name_field(theme: ThemeKind) -> Harness<'static, Shell> {
     let (mut h, _) = table_harness();
     h.state_mut().state.theme = theme;
-    click_id(&mut h, "workspace.properties.columns.add");
-    click_id(&mut h, "workspace.properties.column.name");
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let package = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "Fields" })).unwrap().value);
+        let class = id(s.execute("sketch.class.add", &serde_json::json!({ "package": package, "name": "column_1" })).unwrap().value);
+        s.execute("view.select", &serde_json::json!({ "ids": [class] })).unwrap();
+    }
+    h.run();
+    click_id(&mut h, "workspace.properties.name");
     h
 }
 
-/// The name in the column's editor.
+/// The name in the Properties name field: its draft once typed in, the model's before.
 fn name(h: &Harness<'static, Shell>) -> String {
-    er_of(h.state()).column.as_ref().map(|c| c.name.clone()).unwrap_or_default()
+    h.state().panels.name.as_ref().map(|n| n.text.clone()).unwrap_or_else(|| selected_name(h))
 }
 
 /// The name after `chord` is pressed with the cursor at the text's start or end.

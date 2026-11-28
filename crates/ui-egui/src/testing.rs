@@ -13,7 +13,7 @@ use archforge_mof::{Obj, Store, Uuid};
 use archforge_notations::Session;
 use archforge_notations::differences::Difference;
 use archforge_shell_api::cx::CtxRef;
-use archforge_shell_api::kinds::DiagramKind;
+use archforge_shell_api::kinds::{DiagramKind, ModelRow};
 use archforge_shell_api::notation_ui::{NotationStates, NotationUi, Row};
 use archforge_shell_api::screens::ScreensRegistry;
 use egui_kittest::Harness;
@@ -87,6 +87,22 @@ pub fn registry(shell: &Shell) -> &widgets::Registry {
 /// The menu of the bar open in `shell`, if any.
 pub fn open_menu(shell: &Shell) -> Option<&'static str> {
     shell.menu_bar.open
+}
+
+/// The row of the bar's open menu the keys are on, if any.
+pub fn menu_row(shell: &Shell) -> Option<&'static str> {
+    shell.menu_bar.row
+}
+
+/// Every Model menu row of the kinds `kinds`, each with the kind it is of, then the shared ones, as
+/// the table of actions finds them.
+pub fn model_rows(kinds: &[&'static dyn DiagramKind]) -> Vec<(Option<&'static str>, &'static ModelRow)> {
+    crate::model_menu::rows(kinds).collect()
+}
+
+/// The rows the Model menu can show at once, one list per kind of `kinds`.
+pub fn model_menus(kinds: &[&'static dyn DiagramKind]) -> Vec<Vec<&'static str>> {
+    crate::model_menu::every_menu(kinds)
 }
 
 /// The inline editor the bar holds the keyboard for, if any.

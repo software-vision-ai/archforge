@@ -12,10 +12,11 @@ use archforge_diagram::{Notation, ProjectView, Removed, Standing};
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::schema::{Column, Junction, Table};
 use archforge_mof::toy::{
-    ASSOCIATION, ASSOCIATION_OWNED_END, CLASS, CLASS_GENERALIZATION, CLASS_IS_ABSTRACT, CLASS_OWNED_ATTRIBUTE, CLASS_OWNED_OPERATION, COMMENT,
-    COMMENT_ANNOTATED_ELEMENT, COMMENT_BODY, ELEMENT_OWNED_COMMENT, GENERALIZATION, GENERALIZATION_GENERAL, INDEX, MULTIPLICITY_IS_ORDERED,
-    MULTIPLICITY_IS_UNIQUE, MULTIPLICITY_LOWER_VALUE, MULTIPLICITY_UPPER_VALUE, NAMED_ELEMENT_NAME, OPERATION, PACKAGE, PACKAGE_PACKAGED_ELEMENT,
-    PROPERTY, PROPERTY_AGGREGATION, PROPERTY_ASSOCIATION, PROPERTY_CLASS, TYPED_ELEMENT_TYPE, ToySlabs,
+    ASSOCIATION, ASSOCIATION_MEMBER_END, ASSOCIATION_OWNED_END, CLASS, CLASS_FEATURE, CLASS_GENERALIZATION, CLASS_IS_ABSTRACT, CLASS_OWNED_ATTRIBUTE,
+    CLASS_OWNED_OPERATION, COMMENT, COMMENT_ANNOTATED_ELEMENT, COMMENT_BODY, ELEMENT_OWNED_COMMENT, GENERALIZATION, GENERALIZATION_GENERAL, INDEX,
+    MULTIPLICITY_IS_ORDERED, MULTIPLICITY_IS_UNIQUE, MULTIPLICITY_LOWER_VALUE, MULTIPLICITY_UPPER_VALUE, NAMED_ELEMENT_NAME, OPERATION,
+    OPERATION_OWNED_PARAMETER, PACKAGE, PACKAGE_PACKAGED_ELEMENT, PROPERTY, PROPERTY_AGGREGATION, PROPERTY_ASSOCIATION, PROPERTY_CLASS,
+    TYPED_ELEMENT_TYPE, ToySlabs,
 };
 use archforge_mof::{ClassId, Invalid, NameKind, Obj, PropId, Store, Value};
 use serde_json::{Value as Json, json};
@@ -98,10 +99,16 @@ const JUNCTIONS: &[Junction] = &[
     Junction { name: "sketch_class_owned_attribute", class: CLASS, prop: CLASS_OWNED_ATTRIBUTE, ordered: true, reference: true },
     Junction { name: "sketch_class_owned_operation", class: CLASS, prop: CLASS_OWNED_OPERATION, ordered: true, reference: true },
     Junction { name: "sketch_class_generalization", class: CLASS, prop: CLASS_GENERALIZATION, ordered: false, reference: true },
+    Junction { name: "sketch_class_feature", class: CLASS, prop: CLASS_FEATURE, ordered: false, reference: true },
     Junction { name: "sketch_class_owned_comment", class: CLASS, prop: ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "sketch_property_owned_comment", class: PROPERTY, prop: ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
+    Junction { name: "sketch_operation_owned_parameter", class: OPERATION, prop: OPERATION_OWNED_PARAMETER, ordered: true, reference: true },
+    Junction { name: "sketch_operation_owned_comment", class: OPERATION, prop: ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
+    Junction { name: "sketch_generalization_owned_comment", class: GENERALIZATION, prop: ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
+    Junction { name: "sketch_association_member_end", class: ASSOCIATION, prop: ASSOCIATION_MEMBER_END, ordered: true, reference: true },
     Junction { name: "sketch_association_owned_end", class: ASSOCIATION, prop: ASSOCIATION_OWNED_END, ordered: true, reference: true },
     Junction { name: "sketch_association_owned_comment", class: ASSOCIATION, prop: ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
+    Junction { name: "sketch_comment_owned_comment", class: COMMENT, prop: ELEMENT_OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "sketch_comment_annotated_element", class: COMMENT, prop: COMMENT_ANNOTATED_ELEMENT, ordered: false, reference: true },
 ];
 

@@ -9,7 +9,10 @@ use crate::{Picked, Services, Shell, UiState};
 /// The fake notation's screens part, the one the shells the tests make are given (ADR 0005): the
 /// sketch notation with its one diagram kind, over the fake notation's model ([`NOTATIONS`]).
 pub(crate) static SCREENS: archforge_shell_api::screens::ScreensRegistry =
-    archforge_shell_api::screens::ScreensRegistry::new(&[archforge_shell_api::screens::ScreensPart { ui: &SketchUi("sketch"), kinds: &[&SketchKind(SKETCH)] }]);
+    archforge_shell_api::screens::ScreensRegistry::new(&[archforge_shell_api::screens::ScreensPart {
+        ui: &SketchUi("sketch"),
+        kinds: &[&SketchKind(SKETCH)],
+    }]);
 
 /// The notations the shells the tests make hold their projects of, composed: the fake notation alone.
 pub(crate) static NOTATIONS: &archforge_notations::Notations = &archforge_notations::fake::NOTATIONS;
@@ -999,7 +1002,8 @@ fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
         assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
         assert!(h.query_by_label("A name can't be empty.").is_none(), "{theme:?}: and no longer read out");
         let s = h.state_mut().session.as_mut().unwrap();
-        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).and_then(|o| s.doc().uuid(o).ok()).unwrap();
+        let schema =
+            s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).and_then(|o| s.doc().uuid(o).ok()).unwrap();
         s.execute("sketch.class.add", &serde_json::json!({ "package": schema.to_string(), "name": "order" })).unwrap();
         retype_on(&mut h, table, "workspace.properties.name", "order");
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -2645,10 +2649,7 @@ fn a_repair_made_while_building_is_unsaved_and_written_but_row_order_is_not_one(
         s.execute("sketch.attribute.add", &serde_json::json!({ "class": table, "name": "id" })).unwrap();
         s.execute("sketch.attribute.add", &serde_json::json!({ "class": table, "name": "code" })).unwrap();
         if !reordered {
-            let diagram = id(s
-                .execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": shop, "name": "Shop" }))
-                .unwrap()
-                .value);
+            let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": shop, "name": "Shop" })).unwrap().value);
             s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 }))
                 .unwrap();
         }
@@ -6474,11 +6475,7 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
         h.run();
         let id = |v: Result<serde_json::Value, String>| v.unwrap()["id"].as_str().unwrap().to_string();
         let schema = id(crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": "Shop" })));
-        let diagram = id(crate::panels::run(
-            h.state_mut(),
-            "diagram.add",
-            serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop" }),
-        ));
+        let diagram = id(crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop" })));
         h.run();
         let max = archforge_er::rules::MAX_NAME;
         let too_long = crate::i18n::fmt(&crate::i18n::tr("It can't be longer than {max} characters."), &[("max", &max.to_string())]);
@@ -6489,7 +6486,11 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
                 serde_json::json!({ "schema": schema, "name": "Auf\u{7}trag" }),
                 crate::i18n::tr("It can't hold a control or hidden character."),
             ),
-            ("sketch.class.add", serde_json::json!({ "package": schema, "name": "Auftrag " }), crate::i18n::tr("It can't start or end with a space.")),
+            (
+                "sketch.class.add",
+                serde_json::json!({ "package": schema, "name": "Auftrag " }),
+                crate::i18n::tr("It can't start or end with a space."),
+            ),
             ("diagram.note", serde_json::json!({ "diagram": diagram, "text": "", "x": 0, "y": 0 }), crate::i18n::tr("The text can't be empty.")),
         ] {
             assert!(
@@ -6777,7 +6778,8 @@ fn pages(h: &mut Harness<'static, Shell>, rows: &[String], bounds: (f32, f32), o
 fn many_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
     for n in 0..60 {
-        let schema = crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": format!("s{n:02}") })).unwrap()["id"].clone();
+        let schema =
+            crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": format!("s{n:02}") })).unwrap()["id"].clone();
         let made = serde_json::json!({ "kind": SKETCH, "element": schema, "name": format!("d{n:02}") });
         crate::panels::run(h.state_mut(), "diagram.add", made).unwrap();
     }
@@ -6936,8 +6938,7 @@ fn table_harness_in(theme: ThemeKind) -> (Harness<'static, Shell>, String) {
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
         let schema = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
         let customer = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Customer" })).unwrap().value);
-        s.execute("sketch.attribute.add", &serde_json::json!({ "class": customer, "name": "customer_id" }))
-            .unwrap();
+        s.execute("sketch.attribute.add", &serde_json::json!({ "class": customer, "name": "customer_id" })).unwrap();
         s.execute("sketch.attribute.add", &serde_json::json!({ "class": customer, "name": "email" })).unwrap();
         s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
         (schema, customer)
@@ -7153,14 +7154,8 @@ fn diagram_harness_in(theme: ThemeKind) -> (Harness<'static, Shell>, String, Str
         let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap()).unwrap().to_string();
         let order = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Order" })).unwrap().value);
         s.execute("sketch.attribute.add", &serde_json::json!({ "class": order, "name": "order_id" })).unwrap();
-        let places = id(s
-            .execute("sketch.association.add", &serde_json::json!({ "from": customer, "to": order, "name": "places" }))
-            .unwrap()
-            .value);
-        let diagram = id(s
-            .execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop schema" }))
-            .unwrap()
-            .value);
+        let places = id(s.execute("sketch.association.add", &serde_json::json!({ "from": customer, "to": order, "name": "places" })).unwrap().value);
+        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop schema" })).unwrap().value);
         let c = id(s
             .execute(
                 "diagram.place",
@@ -7377,8 +7372,8 @@ fn the_control_channel_runs_commands_through_the_open_session() {
     let described = answer(h.state_mut(), "engine.describe", &json!({ "command": "sketch.class.add" })).unwrap();
     assert!(described["params"].as_array().unwrap().iter().any(|p| p["key"] == "name"));
     // A command runs in the session the window draws, and undo takes it back.
-    let out =
-        answer(h.state_mut(), "engine.execute", &json!({ "command": "sketch.class.add", "params": { "package": schema, "name": "Invoice" } })).unwrap();
+    let out = answer(h.state_mut(), "engine.execute", &json!({ "command": "sketch.class.add", "params": { "package": schema, "name": "Invoice" } }))
+        .unwrap();
     assert!(out["result"]["id"].is_string());
     assert_eq!(count(&h), before + 1);
     answer(h.state_mut(), "engine.undo", &json!({})).unwrap();
@@ -7504,8 +7499,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         assert_eq!(diagram_rows(&h), vec![row(0, "ER diagrams", 0), row(0, "UML structure diagrams", 0)]);
         let found = painted(&h);
         assert_eq!(found.iter().filter(|t| *t == "UML structure diagrams").count(), 1, "{theme:?}: {found:?}");
-        let (er, structure) =
-            (rect_of(&h, "workspace.diagrams.group.er"), rect_of(&h, &format!("workspace.diagrams.group.{}", SKETCH)));
+        let (er, structure) = (rect_of(&h, "workspace.diagrams.group.er"), rect_of(&h, &format!("workspace.diagrams.group.{}", SKETCH)));
         assert!(er.bottom() <= structure.top(), "{theme:?}: ER diagrams above");
         // By their names, not by the order the shell lists the kinds in.
         {
@@ -7547,10 +7541,8 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
             let orders_package = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "Orders", "parent": sales })).unwrap().value);
             s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop" })).unwrap();
             s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": sales, "name": "Sales" })).unwrap();
-            let orders = id(s
-                .execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": orders_package, "name": "Orders" }))
-                .unwrap()
-                .value);
+            let orders =
+                id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": orders_package, "name": "Orders" })).unwrap().value);
             (orders_package, orders)
         };
         h.run();
@@ -7626,10 +7618,7 @@ fn deletable_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, [archforge_
         let place = serde_json::json!({ "diagram": details.to_string(), "element": order.to_string(), "x": 0, "y": 0, "width": 240, "height": 72 });
         s.execute("diagram.place", &place).unwrap();
         let schema = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-        let shop = id(s
-            .execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema.to_string(), "name": "Shop" }))
-            .unwrap()
-            .value);
+        let shop = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema.to_string(), "name": "Shop" })).unwrap().value);
         [order, default, details, shop]
     };
     crate::canvas::open(h.state_mut(), made[1]);
@@ -8028,10 +8017,7 @@ fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::U
     let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
     let s = h.state_mut().session.as_mut().unwrap();
     let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-    let first = id(s
-        .execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": root, "name": "First" }))
-        .unwrap()
-        .value);
+    let first = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": root, "name": "First" })).unwrap().value);
     let sales = id(s.execute("sketch.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
     let p = serde_json::json!({ "diagram": first.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 });
     s.execute("diagram.place", &p).unwrap();
@@ -8239,10 +8225,7 @@ fn two_tables_harness() -> (Harness<'static, Shell>, String, String) {
         let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap()).unwrap().to_string();
         let order = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Order" })).unwrap().value);
         s.execute("sketch.attribute.add", &serde_json::json!({ "class": order, "name": "order_id" })).unwrap();
-        let diagram = id(s
-            .execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop schema" }))
-            .unwrap()
-            .value);
+        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop schema" })).unwrap().value);
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 }))
             .unwrap();
         s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 166 }))
@@ -8487,11 +8470,7 @@ fn related_tables(order_at: (f64, f64)) -> (Harness<'static, Shell>, archforge_m
     let (mut h, customer, order) = two_tables_harness();
     {
         let s = h.state_mut().session.as_mut().unwrap();
-        s.execute(
-            "sketch.association.add",
-            &serde_json::json!({ "from": customer, "to": order, "name": "places" }),
-        )
-        .unwrap();
+        s.execute("sketch.association.add", &serde_json::json!({ "from": customer, "to": order, "name": "places" })).unwrap();
         let st = s.doc();
         let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
         let did = st.uuid(d).unwrap().to_string();
@@ -8641,7 +8620,6 @@ fn the_avatar_shows_the_initials_of_the_name_entered_in_settings() {
 
 /// The fake notation's diagram kind, the one the sketch kind serves in the shell.
 pub(crate) const SKETCH: &str = archforge_notations::fake::KIND;
-
 
 /// Every text the last frame painted.
 /// The colours the text `label` is laid out in, where it is painted inside `within`.
@@ -11048,15 +11026,25 @@ fn sketch_classes(store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<
         .collect()
 }
 
-/// The sketch notation's state: none of its own for the trait's answers, only the selection it
-/// was last told of ([`NotationUi::selection_moved`](crate::notation_ui::NotationUi::selection_moved)),
-/// so a test sees it asked.
+/// The sketch notation's state: the selection it was last told of
+/// ([`NotationUi::selection_moved`](crate::notation_ui::NotationUi::selection_moved)), so a test
+/// sees it asked, and whether an editor card of its own is open or a drawing of its own is under
+/// way, which a test sets to see the shell ask whether the notation is editing, and a mark a test
+/// leaves to see whose state it is reading.
 #[derive(Default)]
 struct SketchState {
     told: Option<Option<archforge_mof::Uuid>>,
+    card: bool,
+    drawing: bool,
+    mark: u8,
 }
 
-impl archforge_shell_api::notation_ui::NotationState for SketchState {}
+impl archforge_shell_api::notation_ui::NotationState for SketchState {
+    /// While its card is open or its drawing under way.
+    fn editing(&self) -> bool {
+        self.card || self.drawing
+    }
+}
 
 impl crate::notation_ui::NotationUi for SketchUi {
     fn metamodel(&self) -> u16 {
@@ -11919,7 +11907,7 @@ fn names_typed_in_place(theme: ThemeKind) {
         let o = |name: &str| st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap()).unwrap();
         (o("sales"), o("Party"))
     };
-    let longest = archforge_er::rules::MAX_NAME.max(archforge_diagram::rules::MAX_NAME);
+    let longest = archforge_diagram::rules::MAX_NAME.max(SKETCH_NAME_LIMIT);
     assert!(SKETCH_NAME_LIMIT < longest, "the sketch's limit is told apart from the others'");
     assert_eq!(name_limit_of(h.state(), party), SKETCH_NAME_LIMIT);
     // A diagram's name takes the diagrams' own limit, never another notation's, so its field takes
@@ -12342,11 +12330,8 @@ fn a_row_properties_selects_opens_the_rows_its_notation_names() {
 fn member_rows(h: &Harness<'static, Shell>, class: archforge_mof::Uuid, operations: bool) -> Vec<String> {
     let st = h.state().session.as_ref().unwrap().doc();
     let c = st.by_uuid(class).unwrap();
-    if operations {
-        archforge_uml::members::operations(st, c).into_iter().map(|o| archforge_uml::figures::operation_text(st, o)).collect()
-    } else {
-        archforge_uml::members::attributes(st, c).into_iter().map(|a| archforge_uml::figures::attribute_text(st, a)).collect()
-    }
+    let list = if operations { archforge_mof::toy::CLASS_OWNED_OPERATION } else { archforge_mof::toy::CLASS_OWNED_ATTRIBUTE };
+    st.list(c, list).unwrap().iter().filter_map(archforge_mof::Value::as_ref).map(|o| archforge_core::name_of(st, o)).collect()
 }
 
 /// Clicks the field `id` and types `text` into it.
@@ -12411,8 +12396,7 @@ fn chat_harness(theme: ThemeKind, ready: bool) -> (Harness<'static, Shell>, crat
     let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, NOTATIONS, &SCREENS);
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
-    let rig =
-        crate::chat_fixture::sample(&mut shell, ready, open_sample, (archforge_mof::toy::CLASS, "Order")).unwrap();
+    let rig = crate::chat_fixture::sample(&mut shell, ready, open_sample, (archforge_mof::toy::CLASS, "Order")).unwrap();
     let h = harness_over(shell);
     (h, rig)
 }
@@ -14951,7 +14935,13 @@ fn open_sample(cx: &mut crate::cx::Ctx) -> Result<archforge_mof::Uuid, String> {
         ids.insert(*name, c);
     }
     let mut named = Vec::new();
-    for (from, to, name) in [("Customer", "Order", "places"), ("Order", "OrderLine", "holds"), ("OrderLine", "Product", ""), ("Catalog", "Product", ""), ("Order", "Payment", "")] {
+    for (from, to, name) in [
+        ("Customer", "Order", "places"),
+        ("Order", "OrderLine", "holds"),
+        ("OrderLine", "Product", ""),
+        ("Catalog", "Product", ""),
+        ("Order", "Payment", ""),
+    ] {
         let a = run("sketch.association.add", serde_json::json!({ "from": ids[from], "to": ids[to], "name": name }))?;
         if !name.is_empty() {
             named.push(a);
@@ -14964,10 +14954,16 @@ fn open_sample(cx: &mut crate::cx::Ctx) -> Result<archforge_mof::Uuid, String> {
         run("diagram.place", serde_json::json!({ "diagram": d, "element": ids[name], "x": x, "y": y, "width": 290, "height": height }))?;
     }
     run("diagram.connect-all", serde_json::json!({ "diagram": d }))?;
+    let mut edges = Vec::new();
     for line in named {
         let store = session.doc();
-        let edge = store.by_uuid(archforge_mof::Uuid::parse(&line).ok_or("a line's id")?).and_then(|l| archforge_diagram::views_of(store, l).1.first().copied());
-        let edge = edge.and_then(|e| store.uuid(e).ok()).ok_or("a named line's edge")?;
+        let edge = store
+            .by_uuid(archforge_mof::Uuid::parse(&line).ok_or("a line's id")?)
+            .and_then(|l| archforge_diagram::views_of(store, l).1.first().copied());
+        edges.push(edge.and_then(|e| store.uuid(e).ok()).ok_or("a named line's edge")?);
+    }
+    let mut run = |cmd: &str, p: serde_json::Value| session.execute(cmd, &p).map(|_| ()).map_err(|e| format!("{cmd}: {e}"));
+    for edge in edges {
         run("diagram.label", serde_json::json!({ "edge": edge.to_string(), "kind": "name", "at": "middle" }))?;
     }
     run("view.select", serde_json::json!({ "ids": [] }))?;
@@ -15766,7 +15762,7 @@ fn a_menus_rows_of_one_text_are_told_apart() {
         click(&mut h, at);
         assert_eq!(picks.lock().unwrap().as_slice(), [(0, "Sales".to_string())], "{theme:?}: the first row, alone, not its twin");
         // Billing reached, then the two change places: Enter picks Billing where it went.
-        h.state_mut().panels.menu = Some(er_state::menus::KIND);
+        h.state_mut().panels.menu = Some(crate::panels::MenuId::shell("rows"));
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         swapped.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -15894,7 +15890,7 @@ fn rows_menu(theme: ThemeKind, rows: &MenuRowsSet, picks: &std::sync::Arc<std::s
         },
         shell,
     );
-    h.state_mut().panels.menu = Some(er_state::menus::KIND);
+    h.state_mut().panels.menu = Some(crate::panels::MenuId::shell("rows"));
     h.run();
     h
 }
@@ -17465,115 +17461,6 @@ fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_some(), "given back");
 }
 
-/// Repository, Order and Entity (Order specializes it) in the package Shop, on two class diagrams,
-/// the first open and Repository selected with Properties shown (AR-130). Gives the ids by name:
-/// Repository, Order, Entity, diagram, second.
-fn templates_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
-    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
-    let mut made = std::collections::BTreeMap::new();
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-        let pkg = run("sketch.package.add", serde_json::json!({ "name": "Shop" }));
-        let repo = run("sketch.class.add", serde_json::json!({ "package": pkg, "name": "Repository" }));
-        let order = run("sketch.class.add", serde_json::json!({ "package": pkg, "name": "Order" }));
-        let entity = run("sketch.class.add", serde_json::json!({ "package": pkg, "name": "Entity" }));
-        run("sketch.inherit.add", serde_json::json!({ "specific": order, "general": entity }));
-        let mut diagrams = Vec::new();
-        for (name, x) in [("Shop", 200), ("Overview", 500)] {
-            let d = run("diagram.add", serde_json::json!({ "kind": SKETCH, "element": pkg, "name": name }));
-            run("diagram.place", serde_json::json!({ "diagram": d, "element": repo, "x": x, "y": 200 }));
-            diagrams.push(d);
-        }
-        for (k, v) in [("Repository", repo), ("Order", order), ("Entity", entity), ("diagram", diagrams[0].clone()), ("second", diagrams[1].clone())]
-        {
-            made.insert(k, v);
-        }
-    }
-    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&made["diagram"]).unwrap());
-    h.run();
-    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["Repository"]] })).unwrap();
-    h.state_mut().state.show_panel(crate::state::Panel::Properties);
-    h.run();
-    (h, made)
-}
-
-/// The id of `element`'s card on diagram `d`.
-fn node_on(h: &Harness<'static, Shell>, element: &str, d: &str) -> String {
-    let st = h.state().session.as_ref().unwrap().doc();
-    let d = st.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap();
-    let n = archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap())
-        .2
-        .into_iter()
-        .find(|n| archforge_diagram::diagram_of(st, *n) == Some(d))
-        .unwrap();
-    st.uuid(n).unwrap().to_string()
-}
-
-/// The template sample with T (no default) and Key (a data type, Integer by default) on
-/// Repository, and the class OrderRepository placed on the diagram beside it: gives the harness,
-/// the sample's ids, and the cards of OrderRepository and Repository.
-fn binding_sample(
-    theme: ThemeKind,
-) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>, (archforge_mof::Uuid, archforge_mof::Uuid)) {
-    let (mut h, mut made) = templates_sample(theme);
-    let repo = made["Repository"].clone();
-    let s = h.state_mut().session.as_mut().unwrap();
-    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "T" })).unwrap();
-    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer" }))
-        .unwrap();
-    let st = s.doc();
-    let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&repo).unwrap()).unwrap()).unwrap();
-    let pkg = st.uuid(pkg).unwrap().to_string();
-    let bound = s.execute("sketch.class.add", &serde_json::json!({ "package": pkg, "name": "OrderRepository" })).unwrap().value["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    s.execute("diagram.place", &serde_json::json!({ "diagram": made["diagram"], "element": bound, "x": 200, "y": 600 })).unwrap();
-    s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
-    made.insert("OrderRepository", bound.clone());
-    h.run();
-    let nodes = (
-        archforge_mof::Uuid::parse(&node_on(&h, &bound, &made["diagram"])).unwrap(),
-        archforge_mof::Uuid::parse(&node_on(&h, &repo, &made["diagram"])).unwrap(),
-    );
-    (h, made, nodes)
-}
-
-/// The sample class model's Recommendations diagram (AR-128): Customer and Product side by side,
-/// Catalog under them; `drawn`, the n-ary association recommends between them. In `theme`, in a
-/// window tall enough for an end's editor. Gives the ids by name, as `put_recommends` does.
-fn nary_sample(theme: ThemeKind, drawn: bool) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
-    nary_sample_in(theme, drawn, egui::vec2(1600.0, 1200.0))
-}
-
-/// [`nary_sample`] in a window of `size`.
-fn nary_sample_in(theme: ThemeKind, drawn: bool, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
-    let mut h = workspace_harness(theme, size);
-    h.state_mut().cx(open_sample).unwrap();
-    h.run();
-    let ids = h.state_mut().cx(|cx| uml_nary::put_recommends(cx, drawn)).unwrap();
-    h.state_mut().canvas.fit_pending = false;
-    h.state_mut().canvas.zoom = 1.0;
-    h.state_mut().canvas.pan = egui::vec2(20.0, 30.0);
-    h.state_mut().state.show_panel(crate::state::Panel::Properties);
-    h.run();
-    (h, ids)
-}
-
-/// The centre of the card `node` on the canvas.
-fn card(h: &Harness<'static, Shell>, node: &str) -> egui::Pos2 {
-    rect_of(h, &format!("workspace.canvas.node.{node}")).center()
-}
-
-/// Arms the Relationship tool with N-ary association, from its chevron's menu.
-fn arm_nary(h: &mut Harness<'static, Shell>) {
-    let at = rect_of(h, "workspace.tools.relationship-kinds").center();
-    click(h, at);
-    let at = rect_of(h, "workspace.relate.n-ary").center();
-    click(h, at);
-}
-
 fn selection(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
     h.state().session.as_ref().unwrap().view().selection.clone()
 }
@@ -17737,74 +17624,74 @@ fn a_zoom_made_is_the_kinds_to_follow_once() {
     }
 }
 
-/// A test-only notation over UML's metamodel that draws and places as UML does, but a click on
-/// Order's figure selects Order's package. ER and UML each select what was clicked, so only a
-/// notation like this one shows that the canvas asks a node's notation what a click on it
+/// A test-only notation over the fake notation's model that draws and places as the fake notation
+/// does, but a click on Order's figure selects Order's package. The fake notation selects what was
+/// clicked, so only a notation like this one shows that the canvas asks a node's notation what a click on it
 /// selects, and draws a card selected with it (AR-784, ADR 0005).
 struct PackageClicks;
 
 impl archforge_diagram::Notation for PackageClicks {
-    /// UML's name, as the notation it stands in for.
+    /// The fake notation's name, as the notation it stands in for.
     fn name(&self) -> &'static str {
-        "UML"
+        "Sketch"
     }
-    /// UML's metamodel.
+    /// The fake notation's metamodel.
     fn metamodel(&self) -> u16 {
         archforge_mof::toy::INDEX
     }
-    /// UML's diagram kinds.
+    /// The fake notation's diagram kinds.
     fn kinds(&self) -> &'static [&'static str] {
-        archforge_uml::UmlNotation.kinds()
+        archforge_notations::fake::Sketch.kinds()
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn needs_element(&self, kind: &str) -> bool {
-        archforge_uml::UmlNotation.needs_element(kind)
+        archforge_notations::fake::Sketch.needs_element(kind)
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn is_of(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
-        archforge_uml::UmlNotation.is_of(kind, class)
+        archforge_notations::fake::Sketch.is_of(kind, class)
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn shows(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
-        archforge_uml::UmlNotation.shows(kind, class)
+        archforge_notations::fake::Sketch.shows(kind, class)
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn may_show(&self, store: &archforge_mof::Store, diagram: archforge_mof::Obj, element: archforge_mof::Obj) -> bool {
-        archforge_uml::UmlNotation.may_show(store, diagram, element)
+        archforge_notations::fake::Sketch.may_show(store, diagram, element)
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn connects(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
-        archforge_uml::UmlNotation.connects(kind, class)
+        archforge_notations::fake::Sketch.connects(kind, class)
     }
-    /// As UML answers.
+    /// As the fake notation answers.
     fn ends(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<(archforge_mof::Obj, archforge_mof::Obj)> {
-        archforge_uml::UmlNotation.ends(store, element)
+        archforge_notations::fake::Sketch.ends(store, element)
     }
-    /// UML's card, so the diagram draws as it does.
+    /// The fake notation's card, so the diagram draws as it does.
     fn card(
         &self,
         store: &archforge_mof::Store,
         element: archforge_mof::Obj,
         diagram: archforge_mof::Obj,
     ) -> Option<archforge_diagram::figure::Card> {
-        archforge_uml::UmlNotation.card(store, element, diagram)
+        archforge_notations::fake::Sketch.card(store, element, diagram)
     }
-    /// UML's line, so the diagram draws as it does.
+    /// The fake notation's line, so the diagram draws as it does.
     fn line(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
-        archforge_uml::UmlNotation.line(store, element)
+        archforge_notations::fake::Sketch.line(store, element)
     }
     /// A click on Order's figure selects Order's package; anything else selects itself.
     fn selects_as(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> archforge_mof::Obj {
         if store.class_of(element).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(store, element) == "Order" {
-            archforge_uml::nesting::home_package(store, element).unwrap_or(element)
+            store.container(element).ok().flatten().map_or(element, |(package, _)| package)
         } else {
             element
         }
     }
 }
 
-/// A project of ER and [`PackageClicks`].
-static PACKAGE_CLICKS: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotation, &PackageClicks];
+/// A project of [`PackageClicks`] alone.
+static PACKAGE_CLICKS: &[&dyn archforge_diagram::Notation] = &[&PackageClicks];
 
 /// The sample class diagram open in `theme`, its session over a view of [`PackageClicks`]: Order's
 /// card's node, Order's package, and Customer with its card's node.
@@ -17831,7 +17718,7 @@ fn package_clicks_sample(theme: ThemeKind) -> (Harness<'static, Shell>, String, 
         |name: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
     let (order, customer) = (class("Order"), class("Customer"));
     let node = st.uuid(archforge_diagram::views_of(st, order).2[0]).unwrap().to_string();
-    let package = archforge_uml::nesting::home_package(st, order).unwrap();
+    let package = st.container(order).unwrap().unwrap().0;
     let customer_node = archforge_diagram::views_of(st, customer).2[0];
     (h, node, package, customer, customer_node)
 }

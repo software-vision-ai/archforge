@@ -202,8 +202,7 @@ fn drawn(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let schema = s.doc().uuid(schema).unwrap().to_string();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
     s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Order" })).unwrap();
-    let d =
-        id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop" })).unwrap().value);
+    let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop" })).unwrap().value);
     let table = id(s
         .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": customer, "x": 0, "y": 0, "width": 240, "height": 72 }))
         .unwrap()
@@ -212,10 +211,7 @@ fn drawn(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let inner = id(s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "How", "parent": table, "x": 8, "y": 8 })).unwrap().value);
     let address = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema, "name": "Address" })).unwrap().value);
     let at = id(s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": address, "x": 400, "y": 0 })).unwrap().value);
-    let lives = id(s
-        .execute("sketch.association.add", &serde_json::json!({ "from": customer, "to": address, "name": "lives at" }))
-        .unwrap()
-        .value);
+    let lives = id(s.execute("sketch.association.add", &serde_json::json!({ "from": customer, "to": address, "name": "lives at" })).unwrap().value);
     s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": lives, "source": table, "target": at })).unwrap();
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&d).unwrap());
     let s = h.state_mut().session.as_mut().unwrap();
@@ -382,10 +378,7 @@ fn command_a_on_the_canvas_selects_what_the_diagram_draws() {
         let s = h.state_mut().session.as_mut().unwrap();
         let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_mof::toy::PACKAGE)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();
-        let empty = s
-            .execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Empty" }))
-            .unwrap()
-            .value["id"]
+        let empty = s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Empty" })).unwrap().value["id"]
             .as_str()
             .unwrap()
             .to_string();
@@ -695,7 +688,9 @@ fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
         h.state_mut().in_window_menu = true;
         let st = h.state().session.as_ref().unwrap().doc();
         let catalog = st
-            .uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(st, *o) == "Catalog").unwrap())
+            .uuid(
+                st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::CLASS) && archforge_core::name_of(st, *o) == "Catalog").unwrap(),
+            )
             .unwrap();
         for ty in [false, true] {
             h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
