@@ -3259,7 +3259,6 @@ fn refused_in_german(kinds: &[&str], template: &str) -> (String, String) {
 /// AR-548: an opening refused for diagrams of kinds Archforge does not support says so in the
 /// user's words, each kind once, in the status bar and on Home; the project shown, the one parked
 /// and the model's revision stay as they were.
-#[cfg(any())] // AR-796 parked
 #[test]
 fn an_opening_refused_for_unsupported_diagram_kinds_says_so_and_keeps_the_projects() {
     in_both_appearances(|theme| {
@@ -3273,13 +3272,13 @@ fn an_opening_refused_for_unsupported_diagram_kinds_says_so_and_keeps_the_projec
         h.state_mut().open_from_picker();
         h.run_steps(2);
         let (_, tx) = host.opens.lock().unwrap().pop().expect("the host was asked to open");
-        let kinds = ["uml.class", "", "uml.class", "legacy.kind"].map(String::from).to_vec();
+        let kinds = ["old.class", "", "old.class", "legacy.kind"].map(String::from).to_vec();
         tx.send(Err(crate::CreateError::UnsupportedKinds { kinds })).unwrap();
         h.run_steps(4);
-        let (said, line) = refused_in_german(&["uml.class", "legacy.kind"], "The project could not be opened: {why}");
+        let (said, line) = refused_in_german(&["old.class", "legacy.kind"], "The project could not be opened: {why}");
         let shell = h.state();
         assert_eq!(shell.open_error.as_deref(), Some(said.as_str()), "{theme:?}");
-        assert_eq!(said.matches("uml.class").count(), 1, "{theme:?}: each kind once");
+        assert_eq!(said.matches("old.class").count(), 1, "{theme:?}: each kind once");
         assert!(!shell.is_opening() && shell.tabs.len() == 2 && shell.active == Some(1), "{theme:?}: no tab opened");
         let shown = shell.project.as_ref().map(|o| o.path.clone());
         assert!(shell.tabs[0].parked.is_some() && shown == Some("/tmp/Library.archforge".into()), "{theme:?}");
@@ -3295,12 +3294,11 @@ fn an_opening_refused_for_unsupported_diagram_kinds_says_so_and_keeps_the_projec
 }
 
 /// The sentence names the first few kinds, each once and cut short, and one with no kind at all.
-#[cfg(any())] // AR-796 parked
 #[test]
 fn the_unsupported_kinds_sentence_names_a_few_kinds_each_once() {
     crate::i18n::set_language("en");
     let said = |kinds: &[&str]| crate::unsupported_kinds(&kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>());
-    assert_eq!(said(&["uml.class"]), "It holds diagrams whose kind Archforge does not support (uml.class); create a new project to carry on.");
+    assert_eq!(said(&["old.class"]), "It holds diagrams whose kind Archforge does not support (old.class); create a new project to carry on.");
     assert_eq!(said(&["", ""]), "It holds diagrams whose kind Archforge does not support; create a new project to carry on.");
     let long = "k".repeat(200);
     assert!(said(&["a", "b", "a", "c", "d", "e", &long]).contains("(a, b, c, …);"), "the first three, each once, and that more were found");
@@ -5652,7 +5650,6 @@ fn a_name_refused_in_place_is_said_in_the_chosen_language() {
 /// an association's line lacks, with those it has, and one a generalization's line, which has none,
 /// and a style's name; a project without notations said from the reason alone. In light and dark
 /// (AR-512).
-#[cfg(any())] // AR-796 parked
 #[test]
 fn a_kind_word_refused_is_said_in_the_chosen_language() {
     use archforge_mof::Value;
@@ -5686,13 +5683,13 @@ fn a_kind_word_refused_is_said_in_the_chosen_language() {
             st.uuid(lines.iter().filter_map(Value::as_ref).find(|e| shows(e) == Some(class)).unwrap()).unwrap().to_string()
         };
         let (association, generalization) = (line_of(archforge_mof::toy::ASSOCIATION), line_of(archforge_mof::toy::GENERALIZATION));
-        let slots = archforge_uml::figures::text_slots(archforge_mof::toy::ASSOCIATION).join(", ");
+        let slots = archforge_diagram::Notation::text_slots(&archforge_notations::fake::Sketch, archforge_mof::toy::ASSOCIATION).join(", ");
         let lacks = format!("Diese Linie hat keinen Beschriftungstext kind. Sie hat {slots}.");
         assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": association, "kind": "kind" })), lacks, "{theme:?}");
         let none = "Diese Linie hat keinen Beschriftungstext name. Sie hat keinen.";
         assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": generalization, "kind": "name" })), none, "{theme:?}");
         assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [nodes["Order"]], "name": "Akzent" })), plain, "{theme:?}");
-        let bare = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "uml.class".into(), known: Vec::new() };
+        let bare = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "old.class".into(), known: Vec::new() };
         let no_notation = crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::NotOneOf(Box::new(bare)));
         let no_kind = "Dieses Projekt enthält keine Notation und kennt daher keine Diagrammart.";
         assert_eq!(no_notation.as_deref(), Some(no_kind), "{theme:?}");
@@ -5718,71 +5715,6 @@ fn a_new_diagrams_element_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused(""), "Es ist kein Element angegeben. Geben Sie seine ID an.", "{theme:?}");
         assert_eq!(refused("nope"), "Es gibt kein Element mit der ID nope.", "{theme:?}");
         assert_eq!(refused(&order), "Order kann kein Diagramm dieser Art haben.", "{theme:?}");
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A line, a note's link or a label a diagram command refuses by its rules is said in the chosen
-/// language: a line between two classes with no relationship, of a class, of an attribute, which
-/// lacks an end, between boxes that do not show its ends, and one shown already; a note's link from
-/// a class's box, to itself, to another note and twice, and one onto another diagram said from the
-/// reason alone; and a label on a note's link or shown already. In light and dark (AR-515).
-#[cfg(any())] // AR-796 parked
-#[test]
-fn a_line_link_or_label_refused_is_said_in_the_chosen_language() {
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p);
-        let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).err().unwrap_or_default();
-        let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let d = h.state().canvas.active.unwrap().to_string();
-        let order = named(&h, archforge_mof::toy::CLASS, "Order").to_string();
-        let st = h.state().session.as_ref().unwrap().doc();
-        let g = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_mof::toy::GENERALIZATION)).unwrap();
-        let (specific, general) = archforge_uml::figures::ends(st, g).unwrap();
-        let (specific, general) = (&nodes[&archforge_core::name_of(st, specific)], &nodes[&archforge_core::name_of(st, general)]);
-        let g = st.uuid(g).unwrap().to_string();
-        let edges = st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap();
-        let shows = |e: &archforge_mof::Obj| st.get(*e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref());
-        let is_association = |e: &archforge_mof::Obj| shows(e).and_then(|el| st.class_of(el).ok()) == Some(archforge_mof::toy::ASSOCIATION);
-        let association = st.uuid(edges.iter().filter_map(archforge_mof::Value::as_ref).find(is_association).unwrap()).unwrap().to_string();
-        let connect = |element: &str, source: &str, target: &str| json!({ "diagram": d, "element": element, "source": source, "target": target });
-        let between = connect("", &nodes["Order"], &nodes["Customer"]);
-        let unnamed = "Eine Linie zwischen zwei Elementen zeigt eine Beziehung. Geben Sie die Beziehung an.";
-        assert_eq!(refused(&mut h, "diagram.connect", between), unnamed, "{theme:?}: the language is German");
-        let of_class = connect(&order, &nodes["Order"], &nodes["Customer"]);
-        assert_eq!(refused(&mut h, "diagram.connect", of_class), "Ein Diagramm dieser Art zeigt Order nicht.", "{theme:?}");
-        let status = id(&mut h, "sketch.attribute.add", json!({ "class": order, "name": "status" }));
-        let lacks = "Diesem Element fehlt ein Ende, daher zeigt keine Linie es.";
-        assert_eq!(refused(&mut h, "diagram.connect", connect(&status, &nodes["Order"], &nodes["Customer"])), lacks, "{theme:?}");
-        let first = "Der erste Kasten zeigt nicht das erste Ende der Beziehung.";
-        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, general, general)), first, "{theme:?}");
-        let second = "Der zweite Kasten zeigt nicht das zweite Ende der Beziehung.";
-        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, specific, specific)), second, "{theme:?}");
-        let shown = format!("Dieses Diagramm zeigt {g} bereits.");
-        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, specific, general)), shown, "{theme:?}");
-        // A note's links.
-        let note = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Hinweis", "x": 0, "y": 0 }));
-        let other = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Zweiter", "x": 0, "y": 200 }));
-        let link = |note: &str, target: &str| json!({ "diagram": d, "note": note, "target": target });
-        let not_note = "Dieser Kasten zeigt Order. Nur eine Notiz wird mit einem Kasten oder einer Linie verbunden.";
-        assert_eq!(refused(&mut h, "diagram.link-note", link(&nodes["Order"], &note)), not_note, "{theme:?}");
-        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &note)), "Eine Notiz wird nicht mit sich selbst verbunden.", "{theme:?}");
-        let unlinkable = "Eine Notiz wird mit einem Kasten verbunden, der ein Element zeigt, oder mit der Linie einer Beziehung.";
-        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &other)), unlinkable, "{theme:?}");
-        let anchor = id(&mut h, "diagram.link-note", link(&note, &nodes["Order"]));
-        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &nodes["Order"])), "Die Notiz ist bereits damit verbunden.", "{theme:?}");
-        let elsewhere = crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::TargetOtherDiagram);
-        assert_eq!(elsewhere.as_deref(), Some("Womit die Notiz verbunden wird, liegt in einem anderen Diagramm."), "{theme:?}");
-        // Labels.
-        let label = |edge: &str| json!({ "edge": edge, "kind": "from_end" });
-        let unlabelled = "Die Verbindung einer Notiz zeigt kein Element und erhält daher keine Beschriftung.";
-        assert_eq!(refused(&mut h, "diagram.label", label(&anchor)), unlabelled, "{theme:?}");
-        id(&mut h, "diagram.label", label(&association));
-        assert_eq!(refused(&mut h, "diagram.label", label(&association)), "Diese Linie hat den Beschriftungstext from_end bereits.", "{theme:?}");
     }
     crate::i18n::set_language("en");
 }
@@ -5857,11 +5789,10 @@ fn a_style_colour_or_an_arrangement_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
-/// An association's end, which UML does not remove yet, removed with the selection is said in the
-/// chosen language, named by its role or, without one, its id. In light and dark (AR-530).
-#[cfg(any())] // AR-796 parked
+/// An association's end, which the notation does not remove yet, removed with the selection is said
+/// in the chosen language, named by its role or, without one, its id. In light and dark (AR-530).
 #[test]
-fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
+fn an_element_not_removed_yet_is_said_in_the_chosen_language() {
     use serde_json::json;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
@@ -5873,11 +5804,9 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
         let p = json!({ "package": st.uuid(commerce).unwrap().to_string(), "name": "Shop" });
         let mut run = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p);
         let shop = run("sketch.class.add", p).unwrap()["id"].as_str().unwrap().to_string();
-        let sells = run("uml.association.add", json!({ "from": shop, "to": order })).unwrap()["id"].as_str().unwrap().to_string();
-        let seller = run("uml.association.set-end", json!({ "association": sells, "end": 0, "role": "seller" })).unwrap();
-        let unnamed = run("uml.association.set-end", json!({ "association": sells, "end": 1, "multiplicity": "*" })).unwrap();
-        let unnamed = unnamed["id"].as_str().unwrap();
-        let refused = run("element.remove", json!({ "ids": [seller["id"]] })).unwrap_err();
+        let sells = run("sketch.association.add", json!({ "from": shop, "to": order, "from_role": "seller" })).unwrap();
+        let (seller, unnamed) = (sells["ends"][0].as_str().unwrap().to_string(), sells["ends"][1].as_str().unwrap().to_string());
+        let refused = run("element.remove", json!({ "ids": [seller] })).unwrap_err();
         assert_eq!(refused, "seller lässt sich noch nicht entfernen.", "{theme:?}");
         let refused = run("element.remove", json!({ "ids": [unnamed] })).unwrap_err();
         assert_eq!(refused, format!("{unnamed} lässt sich noch nicht entfernen."), "{theme:?}");
@@ -6140,7 +6069,6 @@ fn every_reason() -> Vec<archforge_engine::Reason> {
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).
-#[cfg(any())] // AR-796 parked
 #[test]
 fn the_engines_name_rules_are_said_in_the_chosen_language() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -6151,13 +6079,13 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
         let schema = id(crate::panels::run(h.state_mut(), "sketch.package.add", serde_json::json!({ "name": "Shop" })));
         let diagram = id(crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": SKETCH, "element": schema, "name": "Shop" })));
         h.run();
-        let max = archforge_er::rules::MAX_NAME;
+        let max = archforge_notations::fake::MAX_NAME;
         let too_long = crate::i18n::fmt(&crate::i18n::tr("It can't be longer than {max} characters."), &[("max", &max.to_string())]);
         for (cmd, params, said) in [
             ("sketch.class.add", serde_json::json!({ "package": schema, "name": "n".repeat(max + 1) }), too_long),
             (
                 "sketch.class.add",
-                serde_json::json!({ "schema": schema, "name": "Auf\u{7}trag" }),
+                serde_json::json!({ "package": schema, "name": "Auf\u{7}trag" }),
                 crate::i18n::tr("It can't hold a control or hidden character."),
             ),
             (
@@ -7451,11 +7379,10 @@ fn a_note_commits_on_its_own_chord_alone() {
     });
 }
 
-/// A table's description typed and left by clicking another table's row in Models is kept on the
-/// table it was typed on, and the other table is left as it was. In light and dark.
-#[cfg(any())] // AR-796 parked
+/// An element's description typed and left by clicking another element's row in Models is kept on
+/// the element it was typed on, and the other element is left as it was. In light and dark.
 #[test]
-fn a_table_description_draft_left_by_clicking_another_table_stays_on_its_own() {
+fn a_description_draft_left_by_clicking_another_row_stays_on_its_own() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, customer) = table_harness();
         h.state_mut().state.theme = theme;
@@ -7482,8 +7409,9 @@ fn a_table_description_draft_left_by_clicking_another_table_stays_on_its_own() {
         let st = s.doc();
         let (customer, order) = (st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap(), st.by_uuid(order).unwrap());
         assert_eq!(s.view().selection, vec![order], "the row selected Order");
-        assert_eq!(archforge_er::rules::text_of(st, customer, archforge_er::element::DESCRIPTION), "People who buy.");
-        assert_eq!(archforge_er::rules::text_of(st, order, archforge_er::element::DESCRIPTION), "", "Order is unchanged");
+        let described = |o| s.view().of_element(st, o).map(|n| n.description(st, o)).unwrap_or_default();
+        assert_eq!(described(customer), "People who buy.");
+        assert_eq!(described(order), "", "Order is unchanged");
         assert!(h.state().panels.description.is_none(), "the draft is spent");
     }
 }
@@ -9432,6 +9360,11 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn connect_to_new(&self, _: &mut crate::cx::Ctx, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
         SKETCH_CALLS.lock().unwrap().push(format!("connect to new {tool}"));
     }
+    /// The second sketch's popover of kinds, which the arrow keys walk, so a test sees whose kind
+    /// is asked; no other.
+    fn popover_takes_keys(&self, key: &str) -> bool {
+        self.0 == "test.second" && key == SECOND_KINDS
+    }
     /// Writes down the name typed in place, and gives it to a class through the fake notation's
     /// rename.
     fn rename(&self, cx: &mut crate::cx::Ctx, element: archforge_mof::Uuid, name: &str) -> Result<(), String> {
@@ -10444,6 +10377,217 @@ static FIRST_SKETCH: SketchUi = SketchUi("first");
 static SECOND_SKETCH: SketchUi = SketchUi("second");
 static TWO_SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&FIRST_SKETCH, &SECOND_SKETCH];
 
+/// The sketch notation's catalogue table, one catalogue for each language in the languages' order
+/// with its word and the access letters of its kind's Model menu rows, so the shell's tests see a
+/// notation's table registered and looked up beside the shell's own.
+static SKETCH_CATALOGUE: &[crate::i18n::Rows] = &[
+    crate::i18n::Rows { code: "en", catalogue: "sketch.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\nstr\t\tSketch\tSketch\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
+    crate::i18n::Rows { code: "de", catalogue: "sketch-de.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tSkizze\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
+    crate::i18n::Rows { code: "es", catalogue: "sketch-es.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tBoceto\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
+    crate::i18n::Rows { code: "fr", catalogue: "sketch-fr.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tCroquis\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
+    crate::i18n::Rows { code: "pt-PT", catalogue: "sketch-pt-PT.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tEsboço\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
+    crate::i18n::Rows { code: "ja", catalogue: "sketch-ja.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tスケッチ\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
+    crate::i18n::Rows { code: "zh-Hans", catalogue: "sketch-zh-Hans.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\t草图\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
+];
+
+/// The second sketch's catalogue, a row only it says, in English and in German.
+static SECOND_SKETCH_ROWS: &[crate::i18n::Rows] = &[
+    crate::i18n::Rows { code: "en", catalogue: "second-sketch.tsv", text: "str\t\tSecond sketch\tSecond sketch\n" },
+    crate::i18n::Rows { code: "de", catalogue: "second-sketch-de.tsv", text: "str\t\tSecond sketch\tZweite Skizze\n" },
+];
+
+/// The popover of kinds the second sketch's kind walks with the keys.
+const SECOND_KINDS: &str = "second.kinds";
+
+/// Two more sketch kinds, both of the second sketch's part, so a part with more than one kind
+/// lists them in its order.
+static SECOND_SKETCH_KINDS: [SketchKind; 2] = [SketchKind("test.second"), SketchKind("test.third")];
+
+/// A screens registry of two parts: the sketch with its kind, then the second sketch with two
+/// kinds of its own.
+static SKETCH_SCREENS: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[
+    archforge_shell_api::screens::ScreensPart { ui: &FIRST_SKETCH, kinds: &[&SketchKind(SKETCH)] },
+    archforge_shell_api::screens::ScreensPart { ui: &SECOND_SKETCH, kinds: &[&SECOND_SKETCH_KINDS[0], &SECOND_SKETCH_KINDS[1]] },
+]);
+
+/// A screens registry gives the shell its notations, its diagram kinds and the notations'
+/// catalogue tables from the parts it was given: every part's notation in the parts' order, every
+/// part's kinds part after part, each part's in its own order, and each part's table in the
+/// parts' order. The lists are made once: asked again, the same lists come back.
+#[test]
+fn a_screens_registry_lists_its_parts_notations_kinds_and_catalogues_in_order() {
+    let parts = SKETCH_SCREENS.parts();
+    assert_eq!(parts.len(), 2);
+    let uis = SKETCH_SCREENS.notation_uis();
+    let first: &dyn crate::notation_ui::NotationUi = &FIRST_SKETCH;
+    let second: &dyn crate::notation_ui::NotationUi = &SECOND_SKETCH;
+    assert_eq!(uis.len(), 2, "one notation for each part");
+    assert!(std::ptr::addr_eq(uis[0], first) && std::ptr::addr_eq(uis[1], second), "the parts' notations, in the parts' order");
+    assert!(std::ptr::addr_eq(parts[0].ui, first) && std::ptr::addr_eq(parts[1].ui, second));
+    let kinds: Vec<&str> = SKETCH_SCREENS.kinds().iter().map(|k| k.kind()).collect();
+    assert_eq!(kinds, [SKETCH, "test.second", "test.third"]);
+    let tables: Vec<Vec<&str>> = SKETCH_SCREENS.catalogues().map(|t| t.iter().map(|r| r.catalogue).collect()).collect();
+    assert_eq!(tables, [vec![], vec!["second-sketch.tsv", "second-sketch-de.tsv"]]);
+    assert!(std::ptr::eq(SKETCH_SCREENS.notation_uis(), uis), "made once");
+    assert!(std::ptr::eq(SKETCH_SCREENS.kinds(), SKETCH_SCREENS.kinds()), "made once");
+}
+
+/// A shell takes its notations, its diagram kinds, its notations' states and its catalogues from
+/// the screens parts it is given, not from any fixed list: given the sketches' parts, it knows the
+/// two sketches and their three kinds, keeps the sketch's state, and finds the second sketch's row
+/// in German, which no other shell registers.
+#[test]
+fn a_shell_takes_its_notations_kinds_states_and_catalogues_from_the_screens_parts_it_is_given() {
+    let shell = Shell::new(Services::default(), NOTATIONS, &SKETCH_SCREENS);
+    assert!(std::ptr::eq(shell.notation_uis, SKETCH_SCREENS.notation_uis()), "the parts' notations");
+    let kinds: Vec<&str> = shell.kinds.iter().map(|k| k.kind()).collect();
+    assert_eq!(kinds, [SKETCH, "test.second", "test.third"], "the parts' kinds");
+    assert!(shell.notation_states.own::<SketchState>().is_some(), "the sketch keeps its state");
+    let row = "Second sketch";
+    crate::i18n::set_language("de");
+    let said = crate::i18n::tr(row);
+    crate::i18n::set_language("en");
+    assert_eq!(said, "Zweite Skizze", "the second sketch's catalogue is registered");
+}
+
+/// The sketch notation's limits, shorter than any other notation's, so a field that takes them is
+/// told apart from one that takes another's.
+const SKETCH_NAME_LIMIT: usize = 40;
+const SKETCH_DESCRIPTION_LIMIT: usize = 100;
+
+/// Why the sketch's one command is not available, as its availability check would give it.
+const SKETCH_UNAVAILABLE: &str = "nothing to draw";
+
+/// The sketch's rename that may leave its element unnamed.
+const SKETCH_UNNAMED: &str = "sketch.link.rename";
+
+/// The refusal words ask the notations the shell registered, not the app's own list: the sketch,
+/// which the shell knows here and the app does not, says its own refusal, names its own kind in the
+/// shell's sentence and says why its command is not available, each through an engine's refusal as
+/// the shell says it; a shell given no notation, which does not know the sketch, leaves the
+/// engine's English.
+#[test]
+fn the_refusal_words_ask_the_notations_the_shell_registered() {
+    use archforge_engine::{CommandError, EngineError, Reason};
+    let (mut h, ..) = sketch_harness();
+    let failed = |reason| EngineError::Failed { id: "sketch.class.add".into(), error: CommandError::new("refused in English").because(reason) };
+    let refusals = || {
+        [
+            failed(Reason::NotA { kind: "sketch", name: "Party".into() }),
+            failed(Reason::NameTaken { kind: "sketch", name: "Party".into() }),
+            EngineError::Disabled { id: "sketch.draw".into(), reason: SKETCH_UNAVAILABLE },
+        ]
+    };
+    let said = h.state_mut().cx(|cx| refusals().map(|e| crate::panels::refusal(cx.notation_uis, &e)));
+    assert_eq!(said, ["Party is not drawn in the sketch.", "There is a sketch named Party already.", "The sketch has nothing to draw yet."]);
+    let none: &[&'static dyn crate::notation_ui::NotationUi] = &[];
+    let alone = refusals().map(|e| crate::panels::refusal(none, &e));
+    assert_eq!(alone, ["Refused in English.", "Refused in English.", "Nothing to draw."]);
+}
+
+/// Whether a name of nothing but spaces is refused is asked of the notations the shell registered,
+/// not of a fixed list: the sketch may leave its element unnamed, and its classes, which it never
+/// lets go unnamed, are refused; a shell given no notation refuses the sketch's rename too, as the
+/// sketch is not its own.
+#[test]
+fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
+    crate::i18n::set_language("en");
+    let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
+    assert!(!shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, SKETCH_UNNAMED, "  ")), "the sketch may leave its element unnamed");
+    assert_eq!(shell.panels.notice, None);
+    assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, "sketch.class.rename", "  ")), "a class is never unnamed");
+    assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
+    shell.notation_uis = &[];
+    assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, SKETCH_UNNAMED, "  ")), "the sketch is not this shell's");
+    assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
+}
+
+/// Chat counts what a tool row names as the notations the shell registered say, not as a fixed
+/// list: the sketch counts a class as a kind of its own in its words, an attribute as a line and an
+/// operation as a part of its class, which is not counted, where a shell given no notation counts
+/// each as an element; a kind it does not know is an element. The tool rows the window draws and the changes a turn keeps ask the shell's notations.
+#[test]
+fn chats_counts_ask_the_notations_the_shell_registered() {
+    use crate::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
+    use crate::chat_words::{counted, tool_words};
+    crate::i18n::set_language("en");
+    let at =
+        |n: u8, role: AnchorRole, metaclass: &str| Anchor { element: archforge_mof::Uuid([n; 16]), role, metaclass: metaclass.into(), name: None };
+    let read = |anchors: Vec<Anchor>| ToolFacts {
+        tool: "engine.execute".into(),
+        command: Some("sketch.class.list".into()),
+        detail: None,
+        status: ToolStatus::Done,
+        changed_model: false,
+        element_count: None,
+        anchors,
+    };
+    let none: &[&'static dyn crate::notation_ui::NotationUi] = &[];
+    let mut named: Vec<Anchor> = (1..=3).map(|n| at(n, AnchorRole::Read, "sketch_class")).collect();
+    named.extend((4..=5).map(|n| at(n, AnchorRole::Read, "sketch_property")));
+    named.extend((6..=9).map(|n| at(n, AnchorRole::Read, "sketch_operation")));
+    assert_eq!(tool_words(SKETCH_UIS, &read(named.clone())).0, "Read 3 drawn in the sketch, 2 lines");
+    assert_eq!(tool_words(none, &read(named)).0, "Read 4 elements, 3 elements");
+    assert!(!counted(SKETCH_UIS, "sketch_operation") && counted(none, "sketch_operation"));
+    // What a row is about, unnamed: one of its kind, several of one kind, or elements of several.
+    let mut added = read(vec![at(1, AnchorRole::Target, "sketch_class")]);
+    (added.command, added.changed_model) = (Some("sketch.class.add".into()), true);
+    assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 1 drawn in the sketch");
+    added.anchors.push(at(2, AnchorRole::Target, "sketch_class"));
+    assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 2 drawn in the sketch");
+    added.anchors.push(at(3, AnchorRole::Target, "sketch_property"));
+    assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 3 elements");
+    // The window's tool row asks the shell's notations.
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "What is on the diagram?");
+    let diagram = h.state().canvas.active.unwrap();
+    crate::chat_fixture::call(
+        h.state_mut(),
+        "engine.execute",
+        serde_json::json!({ "command": "diagram.get", "params": { "diagram": diagram.to_string() } }),
+    )
+    .unwrap();
+    h.run();
+    assert!(painted(&h).iter().any(|t| t.contains("drawn in the sketch")), "{:?}", painted(&h));
+    // What a read's answer named is kept as the sketch counts it: Customer's operation, a part of
+    // its class to the sketch, is neither kept nor in the row's count.
+    let customer = crate::chat_fixture::element(h.state(), archforge_mof::toy::CLASS, "Customer").unwrap();
+    crate::chat_fixture::call(
+        h.state_mut(),
+        "engine.execute",
+        serde_json::json!({ "command": "sketch.class.get", "params": { "class": customer.to_string() } }),
+    )
+    .unwrap();
+    h.run();
+    let facts = kept_chat(&h, &rig)
+        .messages
+        .iter()
+        .rev()
+        .find_map(|m| if let crate::chat_store::StoredBody::Tool(f) = &m.body { Some(f.clone()) } else { None })
+        .unwrap();
+    let kept = facts.anchors.iter().filter(|a| a.role == AnchorRole::Read).count();
+    assert!(kept > 0 && facts.anchors.iter().all(|a| a.metaclass != "sketch_operation"), "{facts:?}");
+    assert_eq!(facts.element_count, Some(u32::try_from(kept).unwrap()), "{facts:?}");
+    chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    // A turn's changes keep what the sketch counts: a description's comment is listed beside the
+    // class described.
+    let at = rect_of(&h, "workspace.chat.allow-changes").center();
+    click(&mut h, at);
+    ask_in_chat(&mut h, "Describe Customer");
+    crate::chat_fixture::call(
+        h.state_mut(),
+        "engine.execute",
+        serde_json::json!({ "command": "element.describe", "params": { "element": customer.to_string(), "text": "A buyer" } }),
+    )
+    .unwrap();
+    h.run();
+    chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let changes = kept_chat(&h, &rig).ends.last().unwrap().1.clone().unwrap();
+    let mut listed: Vec<String> = changes.changed.iter().map(|e| e.metaclass.clone()).collect();
+    listed.sort();
+    assert_eq!(listed, ["sketch_class", "sketch_comment"]);
+}
+
 /// A notation that answers for no element, as no class is of its metamodel, and only says words of
 /// its own: an association with its article, a sentence for an enum type without literals, a row
 /// of its own catalogue, and a repair that leaves a tag in the model. Registered before ER and UML,
@@ -10566,321 +10710,6 @@ impl crate::notation_ui::NotationUi for WordsUi {
 
 /// The worded notation before the sketch.
 static WORDS_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &SketchUi("sketch")];
-
-/// The sketch notation's catalogue table, one catalogue for each language in the languages' order
-/// with its word and the access letters of its kind's Model menu rows, so the shell's tests see a
-/// notation's table registered and looked up beside the shell's own.
-static SKETCH_CATALOGUE: &[crate::i18n::Rows] = &[
-    crate::i18n::Rows { code: "en", catalogue: "sketch.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\nstr\t\tSketch\tSketch\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
-    crate::i18n::Rows { code: "de", catalogue: "sketch-de.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tSkizze\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
-    crate::i18n::Rows { code: "es", catalogue: "sketch-es.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tBoceto\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
-    crate::i18n::Rows { code: "fr", catalogue: "sketch-fr.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tCroquis\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
-    crate::i18n::Rows { code: "pt-PT", catalogue: "sketch-pt-PT.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tEsboço\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
-    crate::i18n::Rows { code: "ja", catalogue: "sketch-ja.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\tスケッチ\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
-    crate::i18n::Rows { code: "zh-Hans", catalogue: "sketch-zh-Hans.tsv", text: "# The sketch notation's catalogue, for the shell's tests.\n# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.\nstr\t\tSketch\t草图\nstr\taccess\tmodel.sketch-class\tC\nstr\taccess\tmodel.sketch-inherit\tI\n" },
-];
-
-/// The second sketch's catalogue, a row only it says, in English and in German.
-static SECOND_SKETCH_ROWS: &[crate::i18n::Rows] = &[
-    crate::i18n::Rows { code: "en", catalogue: "second-sketch.tsv", text: "str\t\tSecond sketch\tSecond sketch\n" },
-    crate::i18n::Rows { code: "de", catalogue: "second-sketch-de.tsv", text: "str\t\tSecond sketch\tZweite Skizze\n" },
-];
-
-/// Two more sketch kinds, both of the second sketch's part, so a part with more than one kind
-/// lists them in its order.
-static SECOND_SKETCH_KINDS: [SketchKind; 2] = [SketchKind("test.second"), SketchKind("test.third")];
-
-/// A screens registry of two parts: the sketch with its kind, then the second sketch with two
-/// kinds of its own.
-static SKETCH_SCREENS: archforge_shell_api::screens::ScreensRegistry = archforge_shell_api::screens::ScreensRegistry::new(&[
-    archforge_shell_api::screens::ScreensPart { ui: &FIRST_SKETCH, kinds: &[&SketchKind(SKETCH)] },
-    archforge_shell_api::screens::ScreensPart { ui: &SECOND_SKETCH, kinds: &[&SECOND_SKETCH_KINDS[0], &SECOND_SKETCH_KINDS[1]] },
-]);
-
-/// A screens registry gives the shell its notations, its diagram kinds and the notations'
-/// catalogue tables from the parts it was given: every part's notation in the parts' order, every
-/// part's kinds part after part, each part's in its own order, and each part's table in the
-/// parts' order. The lists are made once: asked again, the same lists come back.
-#[test]
-fn a_screens_registry_lists_its_parts_notations_kinds_and_catalogues_in_order() {
-    let parts = SKETCH_SCREENS.parts();
-    assert_eq!(parts.len(), 2);
-    let uis = SKETCH_SCREENS.notation_uis();
-    let first: &dyn crate::notation_ui::NotationUi = &FIRST_SKETCH;
-    let second: &dyn crate::notation_ui::NotationUi = &SECOND_SKETCH;
-    assert_eq!(uis.len(), 2, "one notation for each part");
-    assert!(std::ptr::addr_eq(uis[0], first) && std::ptr::addr_eq(uis[1], second), "the parts' notations, in the parts' order");
-    assert!(std::ptr::addr_eq(parts[0].ui, first) && std::ptr::addr_eq(parts[1].ui, second));
-    let kinds: Vec<&str> = SKETCH_SCREENS.kinds().iter().map(|k| k.kind()).collect();
-    assert_eq!(kinds, [SKETCH, "test.second", "test.third"]);
-    let tables: Vec<Vec<&str>> = SKETCH_SCREENS.catalogues().map(|t| t.iter().map(|r| r.catalogue).collect()).collect();
-    assert_eq!(tables, [vec![], vec!["second-sketch.tsv", "second-sketch-de.tsv"]]);
-    assert!(std::ptr::eq(SKETCH_SCREENS.notation_uis(), uis), "made once");
-    assert!(std::ptr::eq(SKETCH_SCREENS.kinds(), SKETCH_SCREENS.kinds()), "made once");
-}
-
-/// A shell takes its notations, its diagram kinds, its notations' states and its catalogues from
-/// the screens parts it is given, not from the app's: given the sketches' parts, it knows the two
-/// sketches and their three kinds, keeps the sketch's state and none of ER's or UML's, and finds
-/// the second sketch's row in German, which no other shell registers.
-#[cfg(any())] // AR-796 parked
-#[test]
-fn a_shell_takes_its_notations_kinds_states_and_catalogues_from_the_screens_parts_it_is_given() {
-    let shell = Shell::new(Services::default(), NOTATIONS, &SKETCH_SCREENS);
-    assert!(std::ptr::eq(shell.notation_uis, SKETCH_SCREENS.notation_uis()), "the parts' notations");
-    let kinds: Vec<&str> = shell.kinds.iter().map(|k| k.kind()).collect();
-    assert_eq!(kinds, [SKETCH, "test.second", "test.third"], "the parts' kinds");
-    assert!(shell.notation_states.own::<SketchState>().is_some(), "the sketch keeps its state");
-    assert!(er_state::er(&shell.notation_states).is_none(), "ER is not among the parts");
-    assert!(uml_state::uml(&shell.notation_states).is_none(), "nor is UML");
-    let row = "Second sketch";
-    crate::i18n::set_language("de");
-    let said = crate::i18n::tr(row);
-    crate::i18n::set_language("en");
-    assert_eq!(said, "Zweite Skizze", "the second sketch's catalogue is registered");
-}
-
-/// The sketch notation's limits, shorter than any other notation's, so a field that takes them is
-/// told apart from one that takes another's.
-const SKETCH_NAME_LIMIT: usize = 40;
-const SKETCH_DESCRIPTION_LIMIT: usize = 100;
-
-/// Why the sketch's one command is not available, as its availability check would give it.
-const SKETCH_UNAVAILABLE: &str = "nothing to draw";
-
-/// The sketch's rename that may leave its element unnamed.
-const SKETCH_UNNAMED: &str = "sketch.link.rename";
-
-/// The refusal words ask the notations the shell registered, not the app's own list: the sketch,
-/// which the shell knows here and the app does not, says its own refusal, names its own kind in the
-/// shell's sentence and says why its command is not available, each through an engine's refusal as
-/// the shell says it; a shell given no notation, which does not know the sketch, leaves the
-/// engine's English.
-#[test]
-fn the_refusal_words_ask_the_notations_the_shell_registered() {
-    use archforge_engine::{CommandError, EngineError, Reason};
-    let (mut h, ..) = sketch_harness();
-    let failed = |reason| EngineError::Failed { id: "sketch.class.add".into(), error: CommandError::new("refused in English").because(reason) };
-    let refusals = || {
-        [
-            failed(Reason::NotA { kind: "sketch", name: "Party".into() }),
-            failed(Reason::NameTaken { kind: "sketch", name: "Party".into() }),
-            EngineError::Disabled { id: "sketch.draw".into(), reason: SKETCH_UNAVAILABLE },
-        ]
-    };
-    let said = h.state_mut().cx(|cx| refusals().map(|e| crate::panels::refusal(cx.notation_uis, &e)));
-    assert_eq!(said, ["Party is not drawn in the sketch.", "There is a sketch named Party already.", "The sketch has nothing to draw yet."]);
-    let none: &[&'static dyn crate::notation_ui::NotationUi] = &[];
-    let alone = refusals().map(|e| crate::panels::refusal(none, &e));
-    assert_eq!(alone, ["Refused in English.", "Refused in English.", "Nothing to draw."]);
-}
-
-/// Whether a name of nothing but spaces is refused is asked of the notations the shell registered,
-/// not the app's own list: the sketch, which the shell knows here and the app does not, may leave
-/// its element unnamed, and UML's relationship, which the app's list lets go unnamed, is refused,
-/// as UML is not the shell's here. ER, which both hold, still lets its relationship go unnamed.
-#[cfg(any())] // AR-796 parked
-#[test]
-fn an_empty_name_is_refused_by_the_notations_the_shell_registered() {
-    crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
-    shell.notation_uis = SKETCH_UIS;
-    assert!(!shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, SKETCH_UNNAMED, "  ")), "the sketch may leave its element unnamed");
-    assert_eq!(shell.panels.notice, None);
-    assert!(
-        !shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, "er.relationship.rename", "  ")),
-        "ER may leave its relationship unnamed"
-    );
-    assert_eq!(shell.panels.notice, None);
-    assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, "uml.relationship.rename", "  ")), "UML is not the shell's here");
-    assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."));
-}
-
-/// Chat counts what a tool row names as the notations the shell registered say, not the app's own
-/// list: the sketch, which the shell knows here and the app does not, counts a class as a kind of
-/// its own in its words, an attribute as a line and an operation as a part of its class, which is
-/// not counted, where UML counts classes, attributes and operations; a kind it does not know is an
-/// element. The tool rows the window draws and the changes a turn keeps ask the shell's notations.
-#[cfg(any())] // AR-796 parked
-#[test]
-fn chats_counts_ask_the_notations_the_shell_registered() {
-    use crate::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
-    use crate::chat_words::{counted, tool_words};
-    crate::i18n::set_language("en");
-    let at =
-        |n: u8, role: AnchorRole, metaclass: &str| Anchor { element: archforge_mof::Uuid([n; 16]), role, metaclass: metaclass.into(), name: None };
-    let read = |anchors: Vec<Anchor>| ToolFacts {
-        tool: "engine.execute".into(),
-        command: Some("sketch.class.list".into()),
-        detail: None,
-        status: ToolStatus::Done,
-        changed_model: false,
-        element_count: None,
-        anchors,
-    };
-    let mut named: Vec<Anchor> = (1..=3).map(|n| at(n, AnchorRole::Read, "uml_class")).collect();
-    named.extend((4..=5).map(|n| at(n, AnchorRole::Read, "uml_property")));
-    named.extend((6..=9).map(|n| at(n, AnchorRole::Read, "sketch_operation")));
-    assert_eq!(tool_words(SKETCH_UIS, &read(named.clone())).0, "Read 3 drawn in the sketch, 2 lines");
-    assert_eq!(tool_words(SCREENS.notation_uis(), &read(named)).0, "Read 4 operations, 3 classes");
-    assert!(!counted(SKETCH_UIS, "sketch_operation") && counted(SCREENS.notation_uis(), "sketch_operation"));
-    // What a row is about, unnamed: one of its kind, several of one kind, or elements of several.
-    let mut added = read(vec![at(1, AnchorRole::Target, "uml_class")]);
-    (added.command, added.changed_model) = (Some("sketch.class.add".into()), true);
-    assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 1 drawn in the sketch");
-    added.anchors.push(at(2, AnchorRole::Target, "uml_class"));
-    assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 2 drawn in the sketch");
-    added.anchors.push(at(3, AnchorRole::Target, "uml_property"));
-    assert_eq!(tool_words(SKETCH_UIS, &added).0, "Added 3 elements");
-    // The window's tool row asks the shell's notations.
-    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
-    h.state_mut().notation_uis = SKETCH_UIS;
-    ask_in_chat(&mut h, "What is on the diagram?");
-    let diagram = h.state().canvas.active.unwrap();
-    crate::chat_fixture::call(
-        h.state_mut(),
-        "engine.execute",
-        serde_json::json!({ "command": "diagram.get", "params": { "diagram": diagram.to_string() } }),
-    )
-    .unwrap();
-    h.run();
-    assert!(painted(&h).iter().any(|t| t.contains("drawn in the sketch")), "{:?}", painted(&h));
-    // What a read's answer named is kept as the sketch counts it: Customer's operation, a part of
-    // its class to the sketch, is neither kept nor in the row's count.
-    let customer = crate::chat_fixture::element(h.state(), archforge_mof::toy::CLASS, "Customer").unwrap();
-    crate::chat_fixture::call(
-        h.state_mut(),
-        "engine.execute",
-        serde_json::json!({ "command": "uml.class.get", "params": { "class": customer.to_string() } }),
-    )
-    .unwrap();
-    h.run();
-    let facts = kept_chat(&h, &rig)
-        .messages
-        .iter()
-        .rev()
-        .find_map(|m| if let crate::chat_store::StoredBody::Tool(f) = &m.body { Some(f.clone()) } else { None })
-        .unwrap();
-    let kept = facts.anchors.iter().filter(|a| a.role == AnchorRole::Read).count();
-    assert!(kept > 0 && facts.anchors.iter().all(|a| a.metaclass != "sketch_operation"), "{facts:?}");
-    assert_eq!(facts.element_count, Some(u32::try_from(kept).unwrap()), "{facts:?}");
-    chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
-    // A turn's changes keep what the sketch counts: a description's comment, which UML leaves out
-    // as a part of its element, is listed beside the class described.
-    let at = rect_of(&h, "workspace.chat.allow-changes").center();
-    click(&mut h, at);
-    ask_in_chat(&mut h, "Describe Customer");
-    crate::chat_fixture::call(
-        h.state_mut(),
-        "engine.execute",
-        serde_json::json!({ "command": "element.describe", "params": { "element": customer.to_string(), "text": "A buyer" } }),
-    )
-    .unwrap();
-    h.run();
-    chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
-    let changes = kept_chat(&h, &rig).ends.last().unwrap().1.clone().unwrap();
-    let mut listed: Vec<String> = changes.changed.iter().map(|e| e.metaclass.clone()).collect();
-    listed.sort();
-    assert_eq!(listed, ["uml_class", "uml_comment"]);
-}
-
-/// What a notation says inside its own refusals, a reason it holds or a kind it names, is said by
-/// the notations the shell registered, not the app's own list: with the worded notation registered
-/// before ER and UML, ER's sentences say why a key, a foreign key, a column, a table or a literal
-/// would break in its words, and UML's name an association, which no name names, by its word, each
-/// through an engine's refusal as the shell says it; over the app's notations, ER's and UML's own
-/// words.
-#[cfg(any())] // AR-796 parked
-#[test]
-fn a_notations_refusals_say_their_parts_by_the_notations_the_shell_registered() {
-    use archforge_engine::{AppliedTo, CommandError, EngineError, InUse, LiteralValued, Named, Reason, Used};
-    crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
-    shell.notation_uis = WORDS_UIS;
-    let no_literal = || Box::new(Reason::TooFew { kind: "enum literal", min: 1 });
-    let unnamed = || Named::Unnamed { kind: "association" };
-    let types = archforge_uml::members::TYPES;
-    let reasons = || {
-        [
-            Reason::WouldBreak { kind: "primary key", name: "pk".into(), why: no_literal() },
-            Reason::WouldBreak { kind: "foreign key", name: "fk".into(), why: no_literal() },
-            Reason::WouldBreak { kind: "column", name: "id".into(), why: no_literal() },
-            Reason::WouldBreak { kind: "table", name: "Order".into(), why: no_literal() },
-            Reason::LiteralName { name: "x".into(), why: no_literal() },
-            Reason::DependsOnItself { kind: "association" },
-            Reason::HoldsBuiltInName { kind: "association", name: "String".into() },
-            Reason::BuiltInTaken { kind: "association", name: "String".into() },
-            Reason::InUse(Box::new(InUse { what: Used::Element("Trace".into()), uses: vec![("Trace".into(), vec![unnamed()], 1)] })),
-            Reason::LiteralValued(Box::new(LiteralValued {
-                literal: "lazy".into(),
-                property: "fetch".into(),
-                stereotype: "Entity".into(),
-                element: AppliedTo::Element(unnamed()),
-            })),
-        ]
-    };
-    let failed = |reason| EngineError::Failed { id: "element.add".into(), error: CommandError::new("refused in English").because(reason) };
-    let sentences = |what: &str, why: &str| {
-        [
-            format!("The key pk would break: {why}"),
-            format!("The foreign key fk would break: {why}"),
-            format!("The column id would break: {why}"),
-            format!("The table Order would break: {why}"),
-            format!("The literal \"x\" is not a valid name. {why}"),
-            format!("{}{} cannot depend on itself.", what[..1].to_uppercase(), &what[1..]),
-            format!("The package holds {what} named String, a built-in type's name, which in {types} would mean that type. Rename String first."),
-            format!("The package {types} holds {what} named String, where that built-in type is kept: rename it to use the built-in type."),
-            format!("Trace is in use: «Trace» on {what}. Remove those first."),
-            format!("The literal lazy is the value of fetch in «Entity» on {what}. Set another value there first."),
-        ]
-    };
-    let said = shell.cx(|cx| reasons().map(|r| crate::panels::refusal(cx.notation_uis, &failed(r))));
-    assert_eq!(said, sentences(WORDED_ASSOCIATION, WORDED_LITERALS));
-    let app = reasons().map(|r| crate::panels::refusal(SCREENS.notation_uis(), &failed(r)));
-    assert_eq!(app, sentences("an association", "An enum type needs at least one literal."));
-}
-
-/// The problems the shell shows are said by the notations it registered, not the app's own list:
-/// an enum type without literals is ER's problem, said in the worded notation's words when it is
-/// registered before ER, in ER's over the app's notations.
-#[cfg(any())] // AR-796 parked
-#[test]
-fn a_notations_problems_are_said_by_the_notations_the_shell_registered() {
-    crate::i18n::set_language("en");
-    let mut st = NOTATIONS
-        .store(Box::new({
-            let ids = test_ids();
-            move || ids()
-        }))
-        .unwrap();
-    let schema = st.create(archforge_mof::toy::PACKAGE).unwrap();
-    st.set(schema, archforge_mof::toy::NAMED_ELEMENT_NAME, archforge_mof::Value::str("shop")).unwrap();
-    let status = st.create(archforge_er::ENUM_TYPE).unwrap();
-    st.set(status, archforge_mof::toy::NAMED_ELEMENT_NAME, archforge_mof::Value::str("Status")).unwrap();
-    st.push(schema, archforge_er::schema::ENUM_TYPE, archforge_mof::Value::Ref(status)).unwrap();
-    let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
-    let said = |shell: &Shell| crate::problems::all(shell.notation_uis, &st).into_iter().map(|p| (p.element, p.text)).collect::<Vec<_>>();
-    assert_eq!(said(&shell), [(status, "Status: An enum type needs at least one literal.".to_string())], "the app's notations");
-    shell.notation_uis = WORDS_UIS;
-    assert_eq!(said(&shell), [(status, format!("Status: {WORDED_LITERALS}"))], "the worded notation first");
-}
-
-/// A model's kind words ask the notations the shell registered, not the app's own list: over the
-/// app's notations UML's attribute is an Attribute and its interface an Interface; with the sketch
-/// answering for UML's metamodel, which has no word of its own and creates only classes, the
-/// attribute and the interface are Elements and the class keeps its name.
-#[cfg(any())] // AR-796 parked
-#[test]
-fn a_models_kind_words_ask_the_notations_the_shell_registered() {
-    crate::i18n::set_language("en");
-    let universe = NOTATIONS.universe().unwrap();
-    let mut shell = Shell::new(Services::default(), NOTATIONS, &SCREENS);
-    let classes = [archforge_mof::toy::PROPERTY, archforge_uml::INTERFACE, archforge_mof::toy::CLASS];
-    let words = |shell: &Shell| classes.map(|c| crate::model_words::kind_label(shell.notation_uis, &universe, c));
-    assert_eq!(words(&shell), ["Attribute", "Interface", "Class"], "the app's notations");
-    shell.notation_uis = SKETCH_UIS;
-    assert_eq!(words(&shell), ["Element", "Element", "Class"], "the sketch for UML's metamodel");
-}
 
 /// The catalogues registered are those of the notations a shell is given: the worded notation's
 /// row, which no notation of the app holds, is found in German once its catalogues are registered
@@ -11171,20 +11000,19 @@ fn the_narrow_contexts_requests_run_in_order_once_after_the_call() {
 /// The narrow context reaches each notation's own state, the shell's: what is changed through it
 /// lands on the shell, and its read-only twin, from the shell or from the context, reads the same
 /// states.
-#[cfg(any())] // AR-796 parked
 #[test]
 fn the_narrow_context_reaches_each_notations_own_state() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     let shell = h.state_mut();
     let states: *const _ = &shell.notation_states;
     assert!(std::ptr::eq(shell.cx_ref().notation_states, states), "the twin over the shell");
-    assert!(!er_of(shell).more_open);
+    assert_eq!(shell.notation_states.own::<SketchState>().unwrap().mark, 0);
     shell.cx(|cx| {
         assert!(std::ptr::eq(&*cx.notation_states, states), "the context's states are the shell's");
-        er_state::er_mut(cx.notation_states).expect("the shell's notations hold ER").more_open = true;
+        cx.notation_states.own_mut::<SketchState>().expect("the shell's notations hold the sketch").mark = 1;
         assert!(std::ptr::eq(cx.cx_ref().notation_states, states), "the twin over the context");
     });
-    assert!(er_of(shell).more_open, "changed through the context, changed on the shell");
+    assert_eq!(shell.notation_states.own::<SketchState>().unwrap().mark, 1, "changed through the context, changed on the shell");
 }
 
 /// A panel the narrow context asks for shows, unfolded, once the call returns; of two asked in one
@@ -11352,17 +11180,15 @@ fn shared_removals_ask_the_notation(theme: ThemeKind) {
 /// words, and asks only when something goes: a sketch class shown on no diagram goes at once from
 /// Models when the sketch says nothing goes with it, and asks with the sketch's sentence when it
 /// has an attribute; the canvas's Delete from the model says the same. In light and dark.
-#[cfg(any())] // AR-796 parked
 #[test]
 fn the_delete_dialog_says_what_the_notation_says_goes_with_it() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        h.state_mut().notation_uis = SKETCH_UIS;
         h.run();
         let order = named(&h, archforge_mof::toy::CLASS, "Order").to_string();
         let pkg = {
             let st = h.state().session.as_ref().unwrap().doc();
-            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap()).unwrap();
+            let p = st.container(st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap()).unwrap().unwrap().0;
             st.uuid(p).unwrap().to_string()
         };
         let s = h.state_mut().session.as_mut().unwrap();
@@ -11404,10 +11230,8 @@ fn the_delete_dialog_says_what_the_notation_says_goes_with_it() {
 }
 
 /// A row Properties selects opens the rows its element sits under in Models, as its notation names
-/// them (AR-785): in ER exactly the rows its table and schema were before (a column's and a key's
-/// table and schema, a relationship's and a view's schema), and a class's package in the sketch
-/// notation.
-#[cfg(any())] // AR-796 parked
+/// them (AR-785): exactly the rows of what holds it (an attribute's and a generalization's class
+/// and package, an association's package), and a class's package.
 #[test]
 fn a_row_properties_selects_opens_the_rows_its_notation_names() {
     use std::collections::BTreeSet;
@@ -11417,26 +11241,23 @@ fn a_row_properties_selects_opens_the_rows_its_notation_names() {
     };
     let (mut h, customer) = table_harness();
     let (customer, email) = (archforge_mof::Uuid::parse(&customer).unwrap(), find(&h, "email"));
-    let (schema, key) = {
+    let schema = {
         let st = h.state().session.as_ref().unwrap().doc();
-        let schema = st.uuid(archforge_er::rules::schema_of(st, st.by_uuid(customer).unwrap()).unwrap()).unwrap();
-        let key = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::PRIMARY_KEY)).unwrap();
-        (schema, st.uuid(key).unwrap())
+        st.uuid(st.container(st.by_uuid(customer).unwrap()).unwrap().unwrap().0).unwrap()
     };
-    let (relationship, view) = {
+    let (association, generalization) = {
         let s = h.state_mut().session.as_mut().unwrap();
         let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
         let order = id(s.execute("sketch.class.add", &serde_json::json!({ "package": schema.to_string(), "name": "Order" })).unwrap().value);
-        let r = serde_json::json!({ "from": customer.to_string(), "to": order.to_string(), "name": "places" });
-        let relationship = id(s.execute("er.relationship.add", &r).unwrap().value);
-        let v = serde_json::json!({ "schema": schema.to_string(), "name": "open_orders", "query": "select * from orders" });
-        (relationship, id(s.execute("er.view.add", &v).unwrap().value))
+        let a = serde_json::json!({ "from": customer.to_string(), "to": order.to_string(), "name": "places" });
+        let association = id(s.execute("sketch.association.add", &a).unwrap().value);
+        let g = serde_json::json!({ "specific": customer.to_string(), "general": order.to_string() });
+        (association, id(s.execute("sketch.inherit.add", &g).unwrap().value))
     };
     for (what, element, rows) in [
-        ("a column", email, BTreeSet::from([customer, schema])),
-        ("a key", key, BTreeSet::from([customer, schema])),
-        ("a relationship", relationship, BTreeSet::from([schema])),
-        ("a view", view, BTreeSet::from([schema])),
+        ("an attribute", email, BTreeSet::from([customer, schema])),
+        ("a generalization", generalization, BTreeSet::from([customer, schema])),
+        ("an association", association, BTreeSet::from([schema])),
     ] {
         h.state_mut().explorer.expanded.clear();
         h.state_mut().cx(|cx| archforge_shell_api::panels::select_element_cx(cx, element));
@@ -14855,7 +14676,6 @@ fn a_more_menus_reached_row_stays_when_a_pick_ending_brings_its_opening_back() {
 /// A menu's rows of one text (types of one name, told apart by their notes) are rows of their own
 /// to the toolkit, even two of one note: a click on the first picks the first. The row the keys
 /// reached stays the row of its note when rows change places (AR-749).
-#[cfg(any())] // AR-796 parked
 #[test]
 fn a_menus_rows_of_one_text_are_told_apart() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -16616,12 +16436,10 @@ fn recorded_alone(shell: &mut Shell, mut draw: impl FnMut(&mut Shell, &egui::Ui)
 }
 
 /// The kind of a diagram, the kind of the diagram shown and whether the open popover takes the
-/// keys are asked of the kinds the shell registered, and the kind shown is the active tab's. In the
-/// sketch shell, whose kinds are ER's and the sketch's, the sketch diagram is the sketch kind's,
-/// which the app's parts' kinds (`SCREENS`) do not know; UML's classifier kinds, which the app's
-/// UML kind walks with the keys, hold none there, as UML is not the shell's. With no tab active,
-/// or no project open, no kind shows.
-#[cfg(any())] // AR-796 parked
+/// keys are asked of the kinds the shell registered, and the kind shown is the active tab's: the
+/// sketch diagram is the sketch kind's, which kinds without it do not know; the second sketch's
+/// popover, which the second sketch's kind walks with the keys, holds none in the shell, as that
+/// kind is not the shell's. With no tab active, or no project open, no kind shows.
 #[test]
 fn the_kinds_asked_are_the_shells_and_the_kind_shown_is_the_active_tabs() {
     let (mut h, d, ..) = sketch_harness();
@@ -16630,12 +16448,13 @@ fn the_kinds_asked_are_the_shells_and_the_kind_shown_is_the_active_tabs() {
     let store = shell.session.as_ref().unwrap().doc();
     let diagram = store.by_uuid(id).unwrap();
     assert_eq!(crate::kinds::kind_of(shell, store, diagram).map(|k| k.kind()), Some(SKETCH));
-    assert!(archforge_shell_api::kinds::kind_of(SCREENS.kinds(), store, diagram).is_none(), "the app's kinds know no sketch");
+    let others: &[&'static dyn crate::kinds::DiagramKind] = &[&SECOND_SKETCH_KINDS[0], &SECOND_SKETCH_KINDS[1]];
+    assert!(archforge_shell_api::kinds::kind_of(others, store, diagram).is_none(), "kinds without the sketch's know no sketch");
     assert_eq!(crate::kinds::active_kind(shell).map(|k| k.kind()), Some(SKETCH));
-    assert!(archforge_shell_api::kinds::active_kind(SCREENS.kinds(), &shell.canvas, shell.session.as_ref()).is_none());
-    shell.canvas.popover = Some(uml_classifier::KINDS);
-    assert!(!crate::kinds::popover_takes_keys(shell), "UML is not the sketch shell's");
-    assert!(archforge_shell_api::kinds::popover_takes_keys(SCREENS.kinds(), &shell.canvas), "the app's UML walks them");
+    assert!(archforge_shell_api::kinds::active_kind(others, &shell.canvas, shell.session.as_ref()).is_none());
+    shell.canvas.popover = Some(SECOND_KINDS);
+    assert!(!crate::kinds::popover_takes_keys(shell), "the second sketch is not the shell's");
+    assert!(archforge_shell_api::kinds::popover_takes_keys(others, &shell.canvas), "the second sketch's kind walks them");
     shell.canvas.popover = None;
     assert_eq!(shell.canvas.tabs, vec![id]);
     shell.canvas.active = None;
@@ -16753,9 +16572,10 @@ impl archforge_diagram::Notation for PackageClicks {
     fn is_of(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
         archforge_notations::fake::Sketch.is_of(kind, class)
     }
-    /// As the fake notation answers.
+    /// As the fake notation answers, and a package too, so its own card can stand beside its
+    /// classes'.
     fn shows(&self, kind: &str, class: archforge_mof::ClassId) -> bool {
-        archforge_notations::fake::Sketch.shows(kind, class)
+        archforge_notations::fake::Sketch.shows(kind, class) || (kind == SKETCH && class == archforge_mof::toy::PACKAGE)
     }
     /// As the fake notation answers.
     fn may_show(&self, store: &archforge_mof::Store, diagram: archforge_mof::Obj, element: archforge_mof::Obj) -> bool {
@@ -16825,6 +16645,11 @@ fn package_clicks_sample(theme: ThemeKind) -> (Harness<'static, Shell>, String, 
     (h, node, package, customer, customer_node)
 }
 
+/// The centre of the card `node` on the canvas.
+fn card(h: &Harness<'static, Shell>, node: &str) -> egui::Pos2 {
+    rect_of(h, &format!("workspace.canvas.node.{node}")).center()
+}
+
 /// Whether the last frame stroked a rectangle in the accent colour of `theme` round the centre of
 /// `card`, as a selected card is drawn.
 fn card_ringed(h: &Harness<'static, Shell>, theme: ThemeKind, card: egui::Rect) -> bool {
@@ -16834,11 +16659,10 @@ fn card_ringed(h: &Harness<'static, Shell>, theme: ThemeKind, card: egui::Rect) 
 
 /// What a click on a node selects is its notation's answer, on every way a node is selected (a
 /// click with Select, a drag that starts a move, Select all, a marquee, and a click with the
-/// Note, Link, classifier and Relationship tools); while that answer is selected the card draws
+/// Note, Link, Class and Inherit tools); while that answer is selected the card draws
 /// selected, shows its resize handles and moves with the rest of the selection, the first drag
 /// that makes the selection included: through a notation whose click on Order selects its package.
 /// In light and dark.
-#[cfg(any())] // AR-796 parked
 #[test]
 fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -16891,8 +16715,8 @@ fn every_way_of_selecting_a_node_asks_its_notation_what_it_selects() {
         for tool in [
             crate::canvas::Tool::Note,
             crate::canvas::Tool::Link,
-            crate::canvas::Tool::Place(uml_classifier::TOOL),
-            crate::canvas::Tool::Connect("relationship"),
+            crate::canvas::Tool::Place("class"),
+            crate::canvas::Tool::Connect("inherit"),
         ] {
             clear(&mut h);
             h.state_mut().canvas.tool = tool;

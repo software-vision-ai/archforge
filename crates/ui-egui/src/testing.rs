@@ -110,6 +110,12 @@ pub fn kind_classes(uis: &[&'static dyn NotationUi]) -> Vec<archforge_mof::Class
     crate::model_words::kinds(uis)
 }
 
+/// Gives `shell` the notations `uis` in place of its screens parts', for the tests of what the
+/// shell asks the notations it holds.
+pub fn set_notation_uis(shell: &mut Shell, uis: &'static [&'static dyn NotationUi]) {
+    shell.notation_uis = uis;
+}
+
 /// The inline editor the bar holds the keyboard for, if any.
 pub fn menu_held(shell: &Shell) -> Option<egui::Id> {
     shell.menu_bar.held

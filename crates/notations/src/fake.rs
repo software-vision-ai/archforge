@@ -4,8 +4,8 @@
 //! them, a class's attributes, operations and generalizations, an element's description in an owned
 //! comment. Its one diagram kind, [`KIND`], is of a package and shows its classes as cards and
 //! their generalizations and associations as lines.
-//! Its commands add, rename, list and remove them. Kept as small as the interfaces allow; behind
-//! the `testing` feature, never shipped.
+//! Its commands add, rename, list and read them; the shell's removal removes them. Kept as small
+//! as the interfaces allow; behind the `testing` feature, never shipped.
 
 use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_diagram::{Notation, ProjectView, Removed, Standing};
@@ -25,6 +25,9 @@ use crate::{Notations, Part};
 
 /// The fake notation's one diagram kind: a sketch of a package's classes.
 pub const KIND: &str = "test.sketch";
+
+/// The most characters a name of the fake notation's takes.
+pub const MAX_NAME: usize = 128;
 
 /// The fake notation alone, composed: the toy metamodel's part, the notation and its commands.
 pub static NOTATIONS: Notations = Notations::new(PARTS, VIEWS, commands);
@@ -372,11 +375,12 @@ fn answer(ctx: &C<'_>, obj: Obj) -> R {
     Ok(json!({ "id": ctx.doc.uuid(obj).map_err(fail)?.to_string() }))
 }
 
-/// Refuses an empty name under `key`, and one another element of `list` of `owner` has, naming the
+/// Refuses a name the shared name rules refuse under `key`, and one another element of `list` of
+/// `owner` has, naming the
 /// element of `kind` that has it.
 fn named(ctx: &C<'_>, key: &str, name: &str, owner: Obj, list: PropId, except: Option<Obj>, kind: &'static str) -> Result<(), CommandError> {
-    if name.trim().is_empty() {
-        return Err(CommandError::about(key, "a name is needed").because(Reason::NameEmpty));
+    if let Some(problem) = archforge_core::skills::name_problem(name, MAX_NAME) {
+        return Err(CommandError::about(key, format!("the name {problem}")).because(problem.reason));
     }
     let taken = ctx.doc.list(owner, list).map_err(fail)?.iter().filter_map(Value::as_ref).any(|o| {
         Some(o) != except && ctx.doc.get(o, NAMED_ELEMENT_NAME).ok().and_then(|v| v.as_str().map(str::to_lowercase)) == Some(name.to_lowercase())
@@ -478,6 +482,18 @@ fn class_list(ctx: &mut C<'_>, p: &Params) -> R {
     ))
 }
 
+/// `sketch.class.get`: the class's id and name, and each of its attributes' and operations'.
+fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
+    let class = id_of(ctx, p, "class", CLASS)?;
+    let st = &*ctx.doc;
+    let named = |o: Obj| json!({ "id": st.uuid(o).map(|u| u.to_string()).unwrap_or_default(), "name": archforge_core::name_of(st, o) });
+    let list = |prop| -> Result<Json, CommandError> { Ok(Json::Array(st.list(class, prop).map_err(fail)?.iter().filter_map(Value::as_ref).map(named).collect())) };
+    let mut out = named(class);
+    out["attributes"] = list(CLASS_OWNED_ATTRIBUTE)?;
+    out["operations"] = list(CLASS_OWNED_OPERATION)?;
+    Ok(out)
+}
+
 /// `sketch.attribute.add`: an attribute at the end of the class's.
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let class = id_of(ctx, p, "class", CLASS)?;
@@ -570,6 +586,7 @@ fn commands() -> Vec<CommandSpec<Store, ProjectView>> {
             class_rename
         ),
         cmd!(query "sketch.class.list", "List classes", &["Class"], None, "package: string; the package's id", has_packages, class_list),
+        cmd!(query "sketch.class.get", "Get class", &["Class"], None, "class: string; the class's id", has_classes, class_get),
         cmd!(
             "sketch.attribute.add",
             "Add attribute",

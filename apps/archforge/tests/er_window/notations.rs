@@ -2354,3 +2354,97 @@ fn a_focused_diagram_row_deletes_its_diagram_by_key_and_says_why_a_default_stays
         assert!(whole, "{theme:?}: the reason reads whole, not cut");
     }
 }
+
+/// What a notation says inside its own refusals, a reason it holds or a kind it names, is said by
+/// the notations the shell registered, not the app's own list: with the worded notation registered
+/// before ER and UML, ER's sentences say why a key, a foreign key, a column, a table or a literal
+/// would break in its words, and UML's name an association, which no name names, by its word, each
+/// through an engine's refusal as the shell says it; over the app's notations, ER's and UML's own
+/// words.
+#[test]
+fn a_notations_refusals_say_their_parts_by_the_notations_the_shell_registered() {
+    use archforge_engine::{AppliedTo, CommandError, EngineError, InUse, LiteralValued, Named, Reason, Used};
+    archforge_ui_egui::i18n::set_language("en");
+    let mut shell = Shell::new(Services::default(), &SCREENS);
+    shell.notation_uis = WORDS_UIS;
+    let no_literal = || Box::new(Reason::TooFew { kind: "enum literal", min: 1 });
+    let unnamed = || Named::Unnamed { kind: "association" };
+    let types = archforge_uml::members::TYPES;
+    let reasons = || {
+        [
+            Reason::WouldBreak { kind: "primary key", name: "pk".into(), why: no_literal() },
+            Reason::WouldBreak { kind: "foreign key", name: "fk".into(), why: no_literal() },
+            Reason::WouldBreak { kind: "column", name: "id".into(), why: no_literal() },
+            Reason::WouldBreak { kind: "table", name: "Order".into(), why: no_literal() },
+            Reason::LiteralName { name: "x".into(), why: no_literal() },
+            Reason::DependsOnItself { kind: "association" },
+            Reason::HoldsBuiltInName { kind: "association", name: "String".into() },
+            Reason::BuiltInTaken { kind: "association", name: "String".into() },
+            Reason::InUse(Box::new(InUse { what: Used::Element("Trace".into()), uses: vec![("Trace".into(), vec![unnamed()], 1)] })),
+            Reason::LiteralValued(Box::new(LiteralValued {
+                literal: "lazy".into(),
+                property: "fetch".into(),
+                stereotype: "Entity".into(),
+                element: AppliedTo::Element(unnamed()),
+            })),
+        ]
+    };
+    let failed = |reason| EngineError::Failed { id: "element.add".into(), error: CommandError::new("refused in English").because(reason) };
+    let sentences = |what: &str, why: &str| {
+        [
+            format!("The key pk would break: {why}"),
+            format!("The foreign key fk would break: {why}"),
+            format!("The column id would break: {why}"),
+            format!("The table Order would break: {why}"),
+            format!("The literal \"x\" is not a valid name. {why}"),
+            format!("{}{} cannot depend on itself.", what[..1].to_uppercase(), &what[1..]),
+            format!("The package holds {what} named String, a built-in type's name, which in {types} would mean that type. Rename String first."),
+            format!("The package {types} holds {what} named String, where that built-in type is kept: rename it to use the built-in type."),
+            format!("Trace is in use: «Trace» on {what}. Remove those first."),
+            format!("The literal lazy is the value of fetch in «Entity» on {what}. Set another value there first."),
+        ]
+    };
+    let said = shell.cx(|cx| reasons().map(|r| archforge_ui_egui::panels::refusal(cx.notation_uis, &failed(r))));
+    assert_eq!(said, sentences(WORDED_ASSOCIATION, WORDED_LITERALS));
+    let app = reasons().map(|r| archforge_ui_egui::panels::refusal(SCREENS.notation_uis(), &failed(r)));
+    assert_eq!(app, sentences("an association", "An enum type needs at least one literal."));
+}
+
+/// The problems the shell shows are said by the notations it registered, not the app's own list:
+/// an enum type without literals is ER's problem, said in the worded notation's words when it is
+/// registered before ER, in ER's over the app's notations.
+#[test]
+fn a_notations_problems_are_said_by_the_notations_the_shell_registered() {
+    archforge_ui_egui::i18n::set_language("en");
+    let mut st = archforge_notations::store(Box::new({
+        let ids = test_ids();
+        move || ids()
+    }))
+    .unwrap();
+    let schema = st.create(archforge_er::SCHEMA).unwrap();
+    st.set(schema, archforge_er::named_element::NAME, archforge_mof::Value::str("shop")).unwrap();
+    let status = st.create(archforge_er::ENUM_TYPE).unwrap();
+    st.set(status, archforge_er::named_element::NAME, archforge_mof::Value::str("Status")).unwrap();
+    st.push(schema, archforge_er::schema::ENUM_TYPE, archforge_mof::Value::Ref(status)).unwrap();
+    let mut shell = Shell::new(Services::default(), &SCREENS);
+    let said = |shell: &Shell| archforge_ui_egui::problems::all(shell.notation_uis, &st).into_iter().map(|p| (p.element, p.text)).collect::<Vec<_>>();
+    assert_eq!(said(&shell), [(status, "Status: An enum type needs at least one literal.".to_string())], "the app's notations");
+    shell.notation_uis = WORDS_UIS;
+    assert_eq!(said(&shell), [(status, format!("Status: {WORDED_LITERALS}"))], "the worded notation first");
+}
+
+/// A model's kind words ask the notations the shell registered, not the app's own list: over the
+/// app's notations UML's attribute is an Attribute and its interface an Interface; with the sketch
+/// answering for UML's metamodel, which has no word of its own and creates only classes, the
+/// attribute and the interface are Elements and the class keeps its name.
+#[test]
+fn a_models_kind_words_ask_the_notations_the_shell_registered() {
+    archforge_ui_egui::i18n::set_language("en");
+    let universe = archforge_notations::universe().unwrap();
+    let mut shell = Shell::new(Services::default(), &SCREENS);
+    let classes = [archforge_uml::PROPERTY, archforge_uml::INTERFACE, archforge_uml::CLASS];
+    let words = |shell: &Shell| classes.map(|c| archforge_ui_egui::model_words::kind_label(shell.notation_uis, &universe, c));
+    assert_eq!(words(&shell), ["Attribute", "Interface", "Class"], "the app's notations");
+    shell.notation_uis = SKETCH_UIS;
+    assert_eq!(words(&shell), ["Element", "Element", "Class"], "the sketch for UML's metamodel");
+}

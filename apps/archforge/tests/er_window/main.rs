@@ -1172,3 +1172,126 @@ fn deletable_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, [archforge_
     click(&mut h, at);
     (h, made)
 }
+
+/// A notation that answers for no element, as no class is of its metamodel, and only says words of
+/// its own: an association with its article, a sentence for an enum type without literals, a row
+/// of its own catalogue, and a repair that leaves a tag in the model. Registered before ER and UML,
+/// it is asked before them, so a test sees that the words a notation says inside its own sentences,
+/// a model's kind words, the catalogues and an opening's repair ask the notations the shell
+/// registered, not the app's own list.
+struct WordsUi;
+
+/// The worded notation's word for an association with its article.
+const WORDED_ASSOCIATION: &str = "a worded association";
+
+/// The worded notation's sentence for an enum type without literals.
+const WORDED_LITERALS: &str = "The words want a literal.";
+
+/// The worded notation's own catalogue row, the same in every language but German.
+const WORDED_ROW: &str = "A worded row";
+
+/// The worded notation's catalogues: its one row in every language, German's own text.
+static WORDED_CATALOGUES: &[archforge_ui_egui::i18n::Rows] = &[
+    archforge_ui_egui::i18n::Rows { code: "en", catalogue: "words/en.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "de", catalogue: "words/de.tsv", text: "str\t\tA worded row\tEine Wortzeile\n" },
+    archforge_ui_egui::i18n::Rows { code: "es", catalogue: "words/es.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "fr", catalogue: "words/fr.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "pt-PT", catalogue: "words/pt-PT.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "ja", catalogue: "words/ja.tsv", text: "str\t\tA worded row\tA worded row\n" },
+    archforge_ui_egui::i18n::Rows { code: "zh-Hans", catalogue: "words/zh-Hans.tsv", text: "str\t\tA worded row\tA worded row\n" },
+];
+
+impl archforge_ui_egui::notation_ui::NotationUi for WordsUi {
+    /// A metamodel no class is of, so it answers for no element.
+    fn metamodel(&self) -> u16 {
+        u16::MAX
+    }
+    /// No element, so no top of Models.
+    fn is_top(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> bool {
+        false
+    }
+    /// No rows in Models.
+    fn tree(&self, _: &archforge_mof::Store, _: archforge_mof::Obj, _: &archforge_ui_egui::explorer::Tree<'_>) -> Vec<archforge_ui_egui::explorer::Row> {
+        Vec::new()
+    }
+    /// Nothing for Models' `+`.
+    fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<archforge_ui_egui::notation_ui::Offer> {
+        Vec::new()
+    }
+    /// Adds nothing, as it offers nothing.
+    fn add(&self, _: &mut archforge_ui_egui::cx::Ctx, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<archforge_ui_egui::notation_ui::Added, String>> {
+        None
+    }
+    /// Renames nothing.
+    fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
+        None
+    }
+    /// Nothing worked out, as none of its elements is removed.
+    fn before_removal(&self, _: &archforge_mof::Store, _: &[archforge_mof::Obj]) -> archforge_ui_egui::notation_ui::Removal {
+        archforge_ui_egui::notation_ui::Removal::default()
+    }
+    /// The word alone, as none of its elements is removed.
+    fn removed_text(&self, what: &str, _: &archforge_ui_egui::notation_ui::Removal) -> String {
+        what.to_string()
+    }
+    /// No row opens.
+    fn foldable(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        Vec::new()
+    }
+    /// No rows to open.
+    fn parents(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        Vec::new()
+    }
+    /// No search entry.
+    fn entry(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Entry> {
+        None
+    }
+    /// No words for Properties.
+    fn words(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_ui_egui::notation_ui::Words> {
+        None
+    }
+    /// Draws nothing, as Properties shows none of its elements.
+    fn body(&self, _: &mut archforge_ui_egui::cx::Ctx, _: &mut egui::Ui, _: &archforge_ui_egui::ux::Palette, _: egui::Rect, _: f32, _: &archforge_ui_egui::panels::Subject) {}
+    /// Its one row ([`WORDED_CATALOGUES`]).
+    fn catalogues(&self) -> &'static [archforge_ui_egui::i18n::Rows] {
+        WORDED_CATALOGUES
+    }
+    /// Creates nothing.
+    fn created_classes(&self) -> &'static [archforge_mof::ClassId] {
+        &[]
+    }
+    /// None of its own, so the longest of the shell's is another notation's.
+    fn name_limit(&self) -> usize {
+        0
+    }
+    /// None of its own, so the longest of the shell's is another notation's.
+    fn description_limit(&self) -> usize {
+        0
+    }
+    /// Deletes nothing on the canvas.
+    fn canvas_delete(&self, _: &mut archforge_ui_egui::cx::Ctx, _: bool) -> bool {
+        false
+    }
+    /// Draws nothing over the canvas.
+    fn canvas_overlay(&self, _: &mut archforge_ui_egui::cx::Ctx, _: &mut egui::Ui, _: archforge_ui_egui::notation_ui::Layer, _: &archforge_ui_egui::notation_ui::Overlaid<'_>) {}
+    /// The sketch's state, unused.
+    fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
+        Box::new(SketchState::default())
+    }
+    /// Its sentence for an enum type without literals ([`WORDED_LITERALS`]), so a test sees it asked
+    /// before ER.
+    fn said(&self, _: &[&'static dyn archforge_ui_egui::notation_ui::NotationUi], reason: &archforge_engine::Reason) -> Option<String> {
+        matches!(reason, archforge_engine::Reason::TooFew { kind: "enum literal", min: 1 }).then(|| WORDED_LITERALS.to_string())
+    }
+    /// Its word for an association ([`WORDED_ASSOCIATION`]), so a test sees it asked before UML.
+    fn a_kind(&self, kind: &str) -> Option<String> {
+        (kind == "association").then(|| WORDED_ASSOCIATION.to_string())
+    }
+    /// Leaves a tag in the model, so a test sees an opening's repair ask it.
+    fn open_repair(&self, store: &mut archforge_mof::Store) {
+        let _ = store.create(archforge_core::TAG);
+    }
+}
+
+/// The worded notation before the app's two.
+static WORDS_UIS: &[&dyn archforge_ui_egui::notation_ui::NotationUi] = &[&WordsUi, &er_ui::ErUi, &uml_ui::UmlUi];
