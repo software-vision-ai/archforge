@@ -23,8 +23,8 @@ pub(crate) use archforge_shell_api::canvas::{
     colour, dashed_rect, diagram_bounds, edge_points, element_of, eyebrow_case, fit, grid, ink_for, line_mark, look_of, name_from_afar, open_cx,
     real, refs, row_at, say, with_draft, zoom_by,
 };
-pub use archforge_shell_api::canvas::{CardLabel, CardPart, EndText, MinimapDrag, State, Toast, Tool, self_loop};
-pub(crate) use archforge_shell_api::canvas::{Drawing, END_HANDLE, View, along, end_handles_at, exit_point, nesting_route};
+pub use archforge_shell_api::canvas::{CardLabel, CardPart, EndText, MinimapDrag, State, Toast, Tool, line, self_loop};
+pub(crate) use archforge_shell_api::canvas::{Drawing, END_HANDLE, View, along, end_glyph, end_handles_at, exit_point, nesting_route};
 use archforge_shell_api::canvas::{Slot, beside, beside_pair, keep_left_view, mark_shape, model_rect, settle_view, slots, string};
 pub use archforge_shell_api::kinds::ExtraLabel;
 pub(crate) use archforge_shell_api::kinds::{CardDrawn, LineDrawn, LineEnds};
@@ -1134,15 +1134,6 @@ fn draw_edge(
     badge
 }
 
-/// A line, solid for an identifying relationship and dashed for the rest.
-pub fn line(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, identifying: bool, z: f32) {
-    if identifying {
-        paint.add(egui::Shape::line(points.to_vec(), stroke));
-    } else {
-        paint.add(egui::Shape::dashed_line(points, stroke, 6.0 * z.max(0.5), 4.0 * z.max(0.5)));
-    }
-}
-
 /// A soft band under a line's whole route, so the line under the pointer stands out.
 fn halo(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, p: &Palette) {
     let band = Stroke::new(stroke.width + 6.0, p.accent.gamma_multiply(0.18));
@@ -1184,65 +1175,6 @@ fn draw_link(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widg
     if let Ok(id) = store.uuid(e) {
         widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}"), "edge", Rect::from_two_pos(from, to).expand(6.0));
     }
-}
-
-/// A line's end mark at `end`, the line coming from `from`. Crow's foot: the outer mark is the
-/// most (a bar for one, a crow's foot for many), the inner mark the fewest (a circle for zero, a
-/// bar for one), so exactly one is two bars and one or more a bar and a crow's foot; the
-/// cardinality is written under the line. A triangle is drawn with its line.
-#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its mark and the view")]
-pub(crate) fn end_glyph(paint: &egui::Painter, p: &Palette, end: Pos2, from: Pos2, mark: EndMark, stroke: Stroke, z: f32, with_text: bool) {
-    end_glyph_on(paint, p, end, from, mark, stroke, z, with_text, p.canvas);
-}
-
-/// [`end_glyph`] over a background `fill`, which the circle for zero is filled with.
-#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its mark, the view and what it is drawn on")]
-pub(crate) fn end_glyph_on(
-    paint: &egui::Painter,
-    p: &Palette,
-    end: Pos2,
-    from: Pos2,
-    mark: EndMark,
-    stroke: Stroke,
-    z: f32,
-    with_text: bool,
-    fill: ux::Colour,
-) {
-    let (many, zero, text) = match mark {
-        EndMark::ExactlyOne => (false, false, "1"),
-        EndMark::ZeroOrOne => (false, true, "0..1"),
-        EndMark::ZeroOrMore => (true, true, "0..*"),
-        EndMark::OneOrMore => (true, false, "1..*"),
-        _ => return,
-    };
-    let d = from - end;
-    if d.length() <= f32::EPSILON || !d.is_finite() {
-        return;
-    }
-    let d = d.normalized();
-    let n = vec2(-d.y, d.x);
-    if many {
-        let base = end + d * 14.0 * z;
-        paint.line_segment([base, end + n * 7.0 * z], stroke);
-        paint.line_segment([base, end - n * 7.0 * z], stroke);
-    } else {
-        let bar = end + d * 10.0 * z;
-        paint.line_segment([bar + n * 7.0 * z, bar - n * 7.0 * z], stroke);
-    }
-    // The inner mark: a circle for zero, a bar for one.
-    let inner = end + d * (if many { 20.0 } else { 18.0 }) * z;
-    if zero {
-        paint.circle_filled(inner, 4.0 * z, fill);
-        paint.circle_stroke(inner, 4.0 * z, stroke);
-    } else {
-        paint.line_segment([inner + n * 7.0 * z, inner - n * 7.0 * z], stroke);
-    }
-    if !with_text {
-        return;
-    }
-    let g = ux::galley(paint, text, types::SMALL.scaled(z), p.text_secondary, None);
-    let at = end + d * 26.0 * z + vec2(0.0, 6.0 * z);
-    paint.galley(at - vec2(g.size().x / 2.0, 0.0), g, p.text_secondary.into());
 }
 
 /// The minimap: the whole diagram small, the viewport over it, and the zoom control.

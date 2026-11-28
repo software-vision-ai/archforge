@@ -665,12 +665,12 @@ fn draw(s: &mut Shell) {
 #[test]
 fn an_open_editor_stops_every_way_of_leaving() {
     use crate::{
-        checks::CheckEdit,
         editing::{Gesture, NodeRename},
         explorer::Rename,
         hold::HoldRefused::Editing,
         panels::NameEdit,
     };
+    use archforge_er_ui::snapshot::er_checks::CheckEdit;
     let open: [(&str, &dyn Fn(&mut Shell)); 8] = [
         ("panel name", &|s| s.panels.name = Some(NameEdit { target: ID, text: "x".into() })),
         ("panel card", &|s| {
@@ -1127,14 +1127,14 @@ fn a_version_opens_on_the_diagram_showing_and_going_back_restores_the_work() {
         h.state_mut().canvas.pan = egui::vec2(123.0, 45.0);
         h.state_mut().canvas.zoom = 1.75;
         h.run_steps(2);
-        let (before, selected) = (centre(&h), crate::panels::selected_id_cx(&h.state().cx_ref()));
+        let (before, selected) = (centre(&h), archforge_shell_api::panels::selected_id_cx(&h.state().cx_ref()));
         enter(&mut h, &host, earlier, "c1");
         assert_eq!(centre(&h), (vec![b], Some(b)));
         assert!(painted_has(&h, "Beta") && !h.state().canvas.fit_pending, "drawn and fitted: {:?}", painted(&h));
         assert!(h.state().canvas.pan != egui::vec2(123.0, 45.0) || h.state().canvas.zoom != 1.75, "the work's view stays with it");
         assert!(h.state_mut().back_to_current_work());
         h.run_steps(3);
-        assert_eq!((centre(&h), crate::panels::selected_id_cx(&h.state().cx_ref())), (before, selected));
+        assert_eq!((centre(&h), archforge_shell_api::panels::selected_id_cx(&h.state().cx_ref())), (before, selected));
         assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), (egui::vec2(123.0, 45.0), 1.75));
     });
 }

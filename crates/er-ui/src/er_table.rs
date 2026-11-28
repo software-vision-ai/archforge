@@ -9,17 +9,17 @@ use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::Shell;
-use crate::cx::Ctx;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::er_ui::children;
-use crate::i18n::{fmt, tr};
-use crate::panels::{
-    FIELD, PAD, ROW, Subject, check_cx, control_cx, edit_button_cx, icon_button_cx, menu_cx, name_field_cx, refusal, reveal_cx, run_cx, section_cx,
+use crate::ux::{self, Palette, icons, types};
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::notation_ui::Subject;
+use archforge_shell_api::panels::{
+    FIELD, PAD, ROW, check_cx, control_cx, edit_button_cx, icon_button_cx, menu_cx, name_field_cx, refusal, reveal_cx, run_cx, section_cx,
     select_element_cx, select_field_cx, selected_id_cx, string_of, text_field_cx,
 };
-use crate::ux::{self, Palette, icons, types};
 
 /// The longest type name a column takes, as ER's rules allow.
 const MAX_TYPE: usize = archforge_er::rules::MAX_TYPE;
@@ -66,7 +66,7 @@ fn linked_label(store: &Store, a: Obj) -> Option<String> {
 
 /// The base types the column type menu offers after the schema's own types: the names the size
 /// rules know, and the common plain ones.
-pub(crate) const BASE_TYPES: [&str; 12] =
+pub const BASE_TYPES: [&str; 12] =
     ["VARCHAR", "CHAR", "TEXT", "SMALLINT", "INTEGER", "BIGINT", "NUMERIC", "BOOLEAN", "DATE", "TIMESTAMP", "TIME", "UUID"];
 
 /// One column as the panel lists it.
@@ -187,11 +187,11 @@ pub(crate) fn entity_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect,
     }
     y += 10.0;
     // Keys, checks and indexes, then the problems the rules find on the table.
-    y = crate::keys::keys_section(cx, ui, p, r, y, entity, entity_id);
-    y = crate::checks::checks_section(cx, ui, p, r, y + 4.0, entity, entity_id);
-    y = crate::indexes::indexes_section(cx, ui, p, r, y + 4.0, entity, entity_id);
-    y = crate::subtypes::subtypes_section(cx, ui, p, r, y + 4.0, entity, entity_id, entity_id);
-    crate::panels::problems_section_cx(cx, ui, p, r, y + 4.0, entity);
+    y = crate::er_keys::keys_section(cx, ui, p, r, y, entity, entity_id);
+    y = crate::er_checks::checks_section(cx, ui, p, r, y + 4.0, entity, entity_id);
+    y = crate::er_indexes::indexes_section(cx, ui, p, r, y + 4.0, entity, entity_id);
+    y = crate::er_subtypes::subtypes_section(cx, ui, p, r, y + 4.0, entity, entity_id, entity_id);
+    archforge_shell_api::panels::problems_section_cx(cx, ui, p, r, y + 4.0, entity);
     // The kind menu last, over the rows.
     if cx.panels.menu == Some(menus::KIND) {
         let items = [tr("Regular"), tr("Mapping table")];
@@ -205,19 +205,22 @@ pub(crate) fn entity_body(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect,
     }
 }
 
-/// The column editor, while it is open: ER's own ([`crate::er_state::ErState::column`]), for the
-/// app's journeys, which fill it in as a person types.
-pub fn column_edit(shell: &Shell) -> Option<&ColumnEdit> {
-    er(&shell.notation_states).and_then(|er| er.column.as_ref())
+/// The column editor, while it is open, in what the notations keep between frames `states`: ER's
+/// own ([`crate::er_state::ErState::column`]), for the app's journeys, which fill it in as a person
+/// types.
+#[cfg(feature = "snapshot")]
+pub fn column_edit(states: &archforge_shell_api::notation_ui::NotationStates) -> Option<&ColumnEdit> {
+    er(states).and_then(|er| er.column.as_ref())
 }
 
 /// The column editor, while it is open, to fill in ([`column_edit`]).
-pub fn column_edit_mut(shell: &mut Shell) -> Option<&mut ColumnEdit> {
-    er_mut(&mut shell.notation_states).and_then(|er| er.column.as_mut())
+#[cfg(feature = "snapshot")]
+pub fn column_edit_mut(states: &mut archforge_shell_api::notation_ui::NotationStates) -> Option<&mut ColumnEdit> {
+    er_mut(states).and_then(|er| er.column.as_mut())
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.
-pub(crate) fn open_column(cx: &mut Ctx, entity: Uuid, target: Option<Uuid>) {
+pub fn open_column(cx: &mut Ctx, entity: Uuid, target: Option<Uuid>) {
     let Some(store) = cx.session.as_ref().map(|s| s.doc()) else { return };
     let edit = match target.and_then(|t| store.by_uuid(t)) {
         Some(a) => {
@@ -257,7 +260,7 @@ pub(crate) fn open_column(cx: &mut Ctx, entity: Uuid, target: Option<Uuid>) {
                     children(store, e, archforge_er::entity::ATTRIBUTE).into_iter().map(|a| archforge_core::name_of(store, a)).collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            let name = crate::explorer::fresh_name("column", taken.into_iter(), true).unwrap_or_default();
+            let name = archforge_shell_api::explorer::fresh_name("column", taken.into_iter(), true).unwrap_or_default();
             ColumnEdit {
                 target: None,
                 entity,
@@ -721,7 +724,7 @@ fn column_editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
                         fmt(&tr("{name} removed · {keys} went with it"), &[("name", &edit.name), ("keys", &went.join(", "))])
                     };
                     let undo_label = cx.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
-                    cx.canvas.toast = Some(crate::canvas::Toast { text, until: cx.frames.saturating_add(300), undo_label });
+                    cx.canvas.toast = Some(archforge_shell_api::canvas::Toast { text, until: cx.frames.saturating_add(300), undo_label });
                 }
                 Err(e) => set_column_refusal(cx, e),
             }
@@ -879,7 +882,7 @@ fn commit_column(cx: &mut Ctx, edit: &ColumnEdit) {
 
 /// The words of the table's panel that reach `tr` through a variable: the hover hints of its icon
 /// buttons and the generations' names, for the catalogue tests.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add column", "Remove", "Cancel", "Apply", "Unlink", "Pick a type"].into_iter().chain(GENERATIONS.iter().map(|(_, w)| *w))
 }

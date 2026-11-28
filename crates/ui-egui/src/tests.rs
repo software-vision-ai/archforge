@@ -6,16 +6,15 @@ use egui_kittest::Harness;
 use crate::testing::{click, ids};
 use crate::theme::ThemeKind;
 use crate::{Picked, Services, Shell, UiState};
+// ER's screens' modules, as their crate's `snapshot` lists them for the tests outside it.
+use archforge_er_ui::snapshot::{er_checks, er_connect, er_indexes, er_keys, er_kind, er_objects, er_relation, er_state, er_table, er_types, er_ui};
 // UML's screens' modules, as their crate's `snapshot` lists them for the tests outside it.
-use archforge_uml_ui::snapshot::{
-    uml_classifier, uml_inline, uml_nary, uml_package_nav, uml_panel, uml_profiles, uml_relate, uml_sets, uml_state, uml_stereotypes, uml_templates,
-    uml_ui,
-};
+use archforge_uml_ui::snapshot::{uml_classifier, uml_inline, uml_nary, uml_package_nav, uml_panel, uml_profiles, uml_relate, uml_state, uml_ui};
 
 /// The app's screens parts, ER's then UML's, as the app registers them: the shells the tests make
 /// are given them, and the tests that ask the app's notations without a shell ask them.
 pub(crate) static SCREENS: archforge_shell_api::screens::ScreensRegistry =
-    archforge_shell_api::screens::ScreensRegistry::new(&[crate::ER, archforge_uml_ui::UML]);
+    archforge_shell_api::screens::ScreensRegistry::new(&[archforge_er_ui::ER, archforge_uml_ui::UML]);
 
 mod branches;
 mod edit_menu;
@@ -31,13 +30,13 @@ mod versions_menu;
 mod view_menu;
 
 /// ER's own state in `shell`, whose notations hold ER.
-fn er_of(shell: &Shell) -> &crate::er_state::ErState {
-    crate::er_state::er(&shell.notation_states).expect("the shell's notations hold ER")
+fn er_of(shell: &Shell) -> &er_state::ErState {
+    er_state::er(&shell.notation_states).expect("the shell's notations hold ER")
 }
 
 /// ER's own state in `shell`, to change.
-fn er_of_mut(shell: &mut Shell) -> &mut crate::er_state::ErState {
-    crate::er_state::er_mut(&mut shell.notation_states).expect("the shell's notations hold ER")
+fn er_of_mut(shell: &mut Shell) -> &mut er_state::ErState {
+    er_state::er_mut(&mut shell.notation_states).expect("the shell's notations hold ER")
 }
 
 /// UML's own state in `shell`, whose notations hold UML.
@@ -138,7 +137,7 @@ fn the_new_project_dialog_opens_from_home_in_both_appearances_with_its_controls(
 
 /// The kinds a New project dialog lists: the sketch alone, then the sketch between ER and UML.
 static SKETCH_ALONE: &[&dyn crate::kinds::DiagramKind] = &[&SketchKind(SKETCH)];
-static SKETCH_BETWEEN: &[&dyn crate::kinds::DiagramKind] = &[&crate::er_kind::ErKind, &SketchKind(SKETCH), &uml_ui::UmlKind];
+static SKETCH_BETWEEN: &[&dyn crate::kinds::DiagramKind] = &[&er_kind::ErKind, &SketchKind(SKETCH), &uml_ui::UmlKind];
 
 /// The New project dialog's line on diagrams lists the kinds the shell was given, each by the name
 /// of its group in the Diagrams explorer, as a sentence lists them: the two kinds the app registers
@@ -1026,36 +1025,6 @@ fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         let notice = h.state().panels.notice.clone().unwrap_or_default();
         assert!(notice.starts_with(char::is_uppercase) && notice.contains("order") && !notice.contains("rename"), "{theme:?}: {notice}");
-    }
-}
-
-/// A draft left on the element selected before and refused when the selection moves on names
-/// that element at the panel's foot, so it is not read as about the one shown, until the selection
-/// moves again; a description's draft stays on its element. An association's ends too, which have
-/// no name. In light and dark (AR-417).
-#[test]
-fn a_draft_refused_as_the_selection_moves_on_names_its_element() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _host, class, table) = described_project(theme);
-        let select = |h: &mut Harness<'static, Shell>, id: String| {
-            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
-            h.run();
-        };
-        select(&mut h, class.to_string());
-        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: class, text: "a\u{7}b".into(), refused: false });
-        select(&mut h, table.to_string());
-        let notice = h.state().panels.notice.clone().unwrap_or_default();
-        assert!(notice.starts_with("Not kept on Order: ") && notice.contains("control"), "{theme:?}: {notice}");
-        assert!(painted(&h).contains(&notice), "{theme:?}: at the panel's foot");
-        assert!(h.state().panels.description.as_ref().is_some_and(|d| d.target == class && d.refused), "{theme:?}: the draft stays");
-        select(&mut h, class.to_string());
-        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the next selection");
-        let (mut h, made) = modifiers_sample(theme);
-        select(&mut h, made["holds"].clone());
-        uml_of_mut(h.state_mut()).ends.as_mut().unwrap().role[1] = "a\u{7}b".into();
-        select(&mut h, made["Order"].clone());
-        let notice = h.state().panels.notice.clone().unwrap_or_default();
-        assert!(notice.starts_with("Not kept on the element selected before: "), "{theme:?}: {notice}");
     }
 }
 
@@ -3243,37 +3212,6 @@ fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
 }
 
 #[test]
-fn a_table_box_saved_too_short_for_its_columns_opens_grown_without_an_undo_step() {
-    // A project written by an earlier version: Account holds two columns in a box that shows none.
-    let rows = {
-        let (mut h, host) = saving_harness(Some(commerce()), None);
-        let s = h.state_mut().session.as_mut().unwrap();
-        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
-        let account = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Account" })).unwrap().value);
-        for name in ["employee_id", "employee_id_2"] {
-            s.execute("er.attribute.add", &serde_json::json!({ "entity": account, "name": name, "type": "UUID" })).unwrap();
-        }
-        let d = id(s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" }))
-            .unwrap()
-            .value);
-        s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": account, "x": 0, "y": 0, "width": 240, "height": 72 })).unwrap();
-        h.run_steps(2);
-        host.written.lock().unwrap().pop().unwrap().1
-    };
-    let opened = crate::Opened { model: Some(std::sync::Arc::new(rows)), ..commerce() };
-    let (h, host) = saving_harness(Some(opened), None);
-    let session = h.state().session.as_ref().expect("the model read opens");
-    let st = session.doc();
-    let node = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::NODE)).unwrap();
-    assert_eq!(archforge_diagram::grid::bounds_of(st, node).height, crate::er_place::content_height(2), "the box shows both columns");
-    assert_eq!(session.undo_label(), None, "growing it is no step of the user's");
-    assert!(!session.is_dirty(), "nor a change to save");
-    assert!(host.written.lock().unwrap().is_empty());
-}
-
-#[test]
 fn a_project_that_never_held_a_model_opens_with_a_fresh_one() {
     // Its tables hold no row at all: made before projects were saved.
     let empty = crate::Opened { model: Some(std::sync::Arc::new(archforge_mof::rows::Rows::default())), ..commerce() };
@@ -4328,90 +4266,6 @@ fn homes_search_finds_the_projects_in_the_pinned_folders_one_search_at_a_time_an
     let (path, _tx) = host.opens.lock().unwrap().pop().expect("Enter opened the project found");
     assert_eq!(path, std::path::PathBuf::from("/Users/robin/Work/Client/Billing.archforge"));
     assert_eq!(asked.lock().unwrap().len(), 2, "each opening after an answer searches again");
-}
-
-#[test]
-fn a_connection_dropped_on_empty_canvas_makes_a_new_table_joined_to_it_in_one_step() {
-    let (mut h, _customer, _order) = two_tables_harness();
-    let nodes = node_ids(&h);
-    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
-    let tables = |h: &Harness<'static, Shell>| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).count()
-    };
-    let before = (tables(&h), relationships(&h).len(), node_ids(&h).len());
-    let at = rect_of(&h, &customer_node).center();
-    click(&mut h, at);
-    // From the connect handle to a spot well below the tables, where nothing is drawn.
-    let from = rect_of(&h, "workspace.canvas.adorn.connect").center();
-    let empty = rect_of(&h, &customer_node).center() + egui::vec2(0.0, 320.0);
-    drag(&mut h, from, empty);
-    h.run_steps(2);
-    assert_eq!(
-        (tables(&h), relationships(&h).len(), node_ids(&h).len()),
-        (before.0 + 1, before.1 + 1, before.2 + 1),
-        "{:?}",
-        h.state().canvas.notice
-    );
-    let rename = h.state().canvas.rename.clone().expect("the new table's name is open for typing");
-    assert_eq!(rename.text, "Entity");
-    let st = h.state().session.as_ref().unwrap().doc();
-    let rel = relationships(&h)[0];
-    let to = st.get(rel, archforge_er::relationship::TO).unwrap().as_ref().unwrap();
-    assert_eq!(st.uuid(to).unwrap(), rename.element, "the line joins the new table");
-    assert!(!crate::connect::has_foreign_key(st, rel), "the new table's relationship starts with its foreign key off");
-    // One undo takes the table, its node and its line away together.
-    let undo = h.state().session.as_ref().unwrap().undo_label();
-    assert_eq!(undo, Some("Add table"));
-    h.state_mut().canvas.rename = None;
-    h.state_mut().session.as_mut().unwrap().undo().unwrap();
-    h.run_steps(2);
-    assert_eq!((tables(&h), relationships(&h).len(), node_ids(&h).len()), before);
-}
-
-#[test]
-fn a_line_to_a_table_without_columns_starts_with_its_foreign_key_off() {
-    let (mut h, customer, _order) = two_tables_harness();
-    // A third table with no columns at all, beside the other two.
-    let empty = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        let d = st.uuid(s.view().open_diagram.unwrap()).unwrap().to_string();
-        let e =
-            s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Note" })).unwrap().value["id"].as_str().unwrap().to_string();
-        s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": e, "x": 100, "y": 420, "width": 240, "height": 72 })).unwrap();
-        e
-    };
-    h.run_steps(2);
-    let node_of = |h: &Harness<'static, Shell>, element: &str| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let e = st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap();
-        let n = st
-            .alive()
-            .find(|n| {
-                st.class_of(*n).ok() == Some(archforge_diagram::NODE) && st.get(*n, archforge_diagram::node::ELEMENT).unwrap().as_ref() == Some(e)
-            })
-            .unwrap();
-        format!("workspace.canvas.node.{}", st.uuid(n).unwrap())
-    };
-    let (from, to) = (node_of(&h, &customer), node_of(&h, &empty));
-    let columns_of = |h: &Harness<'static, Shell>, element: &str| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let e = st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap();
-        st.list(e, archforge_er::entity::ATTRIBUTE).unwrap().len()
-    };
-    let before = (columns_of(&h, &customer), columns_of(&h, &empty));
-    assert_eq!(before.1, 0);
-    let at = rect_of(&h, "workspace.tools.relationship").center();
-    click(&mut h, at);
-    let (a, b) = (rect_of(&h, &from).center(), rect_of(&h, &to).center());
-    drag(&mut h, a, b);
-    let rels = relationships(&h);
-    assert_eq!(rels.len(), 1, "{:?}", h.state().canvas.notice);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(!crate::connect::has_foreign_key(st, rels[0]), "Customer has its key, but Note has no columns: the key starts off");
-    assert_eq!((columns_of(&h, &customer), columns_of(&h, &empty)), before, "and no column is made on either table");
 }
 
 #[test]
@@ -5812,158 +5666,6 @@ fn a_name_refused_in_place_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
-/// The centre of the Properties control `id`, the panel's body wheeled until that centre is inside
-/// it: a control under the fold or above the body is not listed, and one an edge cuts is listed
-/// with a centre no press reaches. It is looked for down to the body's end, then up to its top,
-/// and it is a failure when neither way has it (AR-467).
-fn reached_in_properties(h: &mut Harness<'static, Shell>, id: &str) -> egui::Pos2 {
-    let mut down = true;
-    for _ in 0..120 {
-        let body = h.state().panels.body.expect("the Properties body");
-        let at = h.state().widgets().iter().find(|w| w.id == id).map(|w| egui::pos2((w.rect[0] + w.rect[2]) / 2.0, (w.rect[1] + w.rect[3]) / 2.0));
-        if let Some(at) = at.filter(|at| body.contains(*at)) {
-            return at;
-        }
-        let before = h.state().panels.scroll;
-        h.event(egui::Event::PointerMoved(body.center()));
-        h.event(egui::Event::MouseWheel {
-            unit: egui::MouseWheelUnit::Point,
-            delta: egui::vec2(0.0, if down { -120.0 } else { 120.0 }),
-            modifiers: egui::Modifiers::NONE,
-            phase: egui::TouchPhase::Move,
-            source: egui::MouseWheelSource::Wheel,
-        });
-        h.run();
-        // At an end of the body: the search turns at its foot and gives up at its top.
-        if (h.state().panels.scroll - before).abs() < 0.5 {
-            assert!(down, "no control {id} in reach of the wheel in Properties");
-            down = false;
-        }
-    }
-    panic!("no control {id} in reach of the wheel in Properties");
-}
-
-/// The centre of the Properties control `id` while it is inside the body as drawn, with no wheel.
-fn in_view(h: &Harness<'static, Shell>, id: &str) -> Option<egui::Pos2> {
-    let body = h.state().panels.body?;
-    let w = h.state().widgets().iter().find(|w| w.id == id)?;
-    Some(egui::pos2((w.rect[0] + w.rect[2]) / 2.0, (w.rect[1] + w.rect[3]) / 2.0)).filter(|at| body.contains(*at))
-}
-
-/// The body wheeled by `dy` points with the pointer over it, as a person scrolls it.
-fn wheel_properties(h: &mut Harness<'static, Shell>, dy: f32) {
-    let body = h.state().panels.body.expect("the Properties body");
-    h.event(egui::Event::PointerMoved(body.center()));
-    h.event(egui::Event::MouseWheel {
-        unit: egui::MouseWheelUnit::Point,
-        delta: egui::vec2(0.0, dy),
-        modifiers: egui::Modifiers::NONE,
-        phase: egui::TouchPhase::Move,
-        source: egui::MouseWheelSource::Wheel,
-    });
-    h.run();
-}
-
-/// Two editors opened before one draw, the first key's above the body and a new check's below it:
-/// each reveal counts the scroll the one before it moved, so the check's card, drawn last, ends in
-/// view.
-#[test]
-fn two_editors_opened_before_one_draw_leave_the_last_in_view() {
-    in_both_appearances(|theme| {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", serde_json::json!({ "name": "Shop" }));
-        let table = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Orders" }));
-        for i in 0..30 {
-            let column = id("er.attribute.add", serde_json::json!({ "entity": table, "name": format!("c{i}"), "type": "TEXT" }));
-            id("er.unique.add", serde_json::json!({ "entity": table, "columns": [column], "name": format!("u{i}") }));
-        }
-        crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [table] })).unwrap();
-        h.state_mut().state.show_panel(crate::state::Panel::Properties);
-        h.run();
-        let entity = archforge_mof::Uuid::parse(&table).unwrap();
-        let first = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            crate::keys::rows(st, st.by_uuid(entity).unwrap()).remove(0)
-        };
-        let at = reached_in_properties(&mut h, &format!("workspace.properties.key.row.{}", first.id));
-        let above = h.state().panels.body.unwrap().top() - at.y;
-        wheel_properties(&mut h, above - 200.0);
-        assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.properties.check")), "{theme:?}: Checks under the fold");
-        h.state_mut().cx(|cx| crate::keys::open(cx, entity, Some(&first)));
-        h.state_mut().cx(|cx| crate::checks::open(cx, entity, None));
-        h.run();
-        assert!(in_view(&h, "workspace.properties.check.apply").is_some(), "{theme:?}: the check's Apply in view");
-    });
-}
-
-/// The diagram commands' refusals are said in the chosen language: placing with no diagram, an
-/// element a class diagram does not show, one outside it and one shown already, a text set on a box
-/// that shows an element or on an element that is no box, and a note's link routed; so are the
-/// other ids and kinds, places, sizes, nesting, bends and a notation's elements it does not remove.
-/// In a window of the design's height, in light and dark (AR-439).
-#[test]
-fn a_diagram_refusal_is_said_in_the_chosen_language() {
-    use crate::i18n::{fmt, tr};
-    use archforge_engine::Reason;
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p);
-        let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).err().unwrap_or_default();
-        let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
-        let d = h.state().canvas.active.unwrap().to_string();
-        let place = |element: &str| json!({ "diagram": d, "element": element, "x": 0, "y": 0 });
-        let no_diagram = refused(&mut h, "diagram.place", json!({ "diagram": "", "element": order }));
-        assert_eq!(no_diagram, "Es ist kein Diagramm angegeben. Geben Sie seine ID an.", "{theme:?}: the language is German");
-        let status = id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "status" }));
-        let unshown = fmt(&tr("A diagram of this kind does not show {name}."), &[("name", "status")]);
-        assert_eq!(refused(&mut h, "diagram.place", place(&status)), unshown, "{theme:?}");
-        let profile = id(&mut h, "uml.profile.add", json!({ "name": "Persistence" }));
-        let entity = id(&mut h, "uml.stereotype.add", json!({ "profile": profile, "name": "Entity", "extends": ["Class"] }));
-        let outside = fmt(&tr("{name} is outside what this diagram shows."), &[("name", "Entity")]);
-        assert_eq!(refused(&mut h, "diagram.place", place(&entity)), outside, "{theme:?}");
-        let shown = fmt(&tr("This diagram shows {name} already."), &[("name", "Order")]);
-        assert_eq!(refused(&mut h, "diagram.place", place(&order)), shown, "{theme:?}");
-        let own = tr("This box shows an element and draws its text. Only a note takes a text of its own.");
-        assert_eq!(refused(&mut h, "diagram.set-text", json!({ "node": nodes["Order"], "text": "x" })), own, "{theme:?}");
-        let not_box = fmt(&tr("{name} is not a box on a diagram."), &[("name", "Order")]);
-        assert_eq!(refused(&mut h, "diagram.set-text", json!({ "node": order, "text": "x" })), not_box, "{theme:?}");
-        let note = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Hinweis", "x": 0, "y": 0 }));
-        let link = id(&mut h, "diagram.link-note", json!({ "diagram": d, "note": note, "target": nodes["Order"] }));
-        let straight = tr("A note's link is a straight line and does not bend.");
-        assert_eq!(refused(&mut h, "diagram.route", json!({ "edge": link, "points": [] })), straight, "{theme:?}");
-        // The rest, which a file or a caller gives, said from the reason alone.
-        let said = |r: Reason| crate::panels::said(SCREENS.notation_uis(), &r).unwrap_or_default();
-        let size = [("min", "20"), ("max", "10000")];
-        for (reason, words) in [
-            (Reason::IdEmpty { kind: "node" }, tr("No box is given. Give its id.")),
-            (Reason::IdEmpty { kind: "edge" }, tr("No line is given. Give its id.")),
-            (Reason::IdEmpty { kind: "label" }, tr("No label is given. Give its id.")),
-            (Reason::NotA { kind: "diagram", name: "N".into() }, fmt(&tr("{name} is not a diagram."), &[("name", "N")])),
-            (Reason::NotA { kind: "edge", name: "N".into() }, fmt(&tr("{name} is not a line on a diagram."), &[("name", "N")])),
-            (Reason::NotA { kind: "label", name: "N".into() }, fmt(&tr("{name} is not a label on a line."), &[("name", "N")])),
-            (Reason::CoordinateNotANumber { axis: "x" }, fmt(&tr("The {axis} is not a number."), &[("axis", "x")])),
-            (
-                Reason::CoordinateTooFar { axis: "y" },
-                fmt(&tr("The {axis} is farther than {max} from the origin."), &[("axis", "y"), ("max", "1000000")]),
-            ),
-            (Reason::SizeOutOfRange { side: "width" }, fmt(&tr("The width is not between {min} and {max}."), &size)),
-            (Reason::SizeOutOfRange { side: "height" }, fmt(&tr("The height is not between {min} and {max}."), &size)),
-            (Reason::OtherDiagram, tr("That box is on another diagram.")),
-            (Reason::TooMany { kind: "nesting level", max: 16 }, fmt(&tr("Boxes nest at most {max} deep."), &[("max", "16")])),
-            (Reason::TooMany { kind: "waypoint", max: 256 }, fmt(&tr("A line bends at most {max} times."), &[("max", "256")])),
-            (Reason::NotRemovable { notation: "ER" }, fmt(&tr("{notation} elements cannot be removed yet."), &[("notation", "ER")])),
-        ] {
-            assert_eq!(said(reason), words, "{theme:?}");
-        }
-    }
-    crate::i18n::set_language("en");
-}
-
 /// A kind word a diagram command refuses is said in the chosen language: a diagram's kind that is
 /// no plain word or none the notations know, with the kinds there are, a box's kind, a label's text
 /// an association's line lacks, with those it has, and one a generalization's line, which has none,
@@ -6172,38 +5874,6 @@ fn a_style_colour_or_an_arrangement_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
-/// A list of elements selected or removed, or an element described, that a shared command refuses
-/// is said in the chosen language: no list of ids, an empty id, an empty list to remove, an element
-/// named twice, an id of no element, and a diagram, which belongs to no notation, removed or
-/// described; a notation's elements it does not describe said from the reason alone. In light and
-/// dark (AR-517).
-#[test]
-fn a_shared_commands_element_refused_is_said_in_the_chosen_language() {
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
-        let d = h.state().canvas.active.unwrap();
-        let st = h.state().session.as_ref().unwrap().doc();
-        let not_of = format!("{} ist kein Element einer Notation dieses Projekts.", archforge_core::name_of(st, st.by_uuid(d).unwrap()));
-        let d = d.to_string();
-        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        assert_eq!(refused("view.select", json!({ "ids": [7] })), "Geben Sie die Elemente als Liste von IDs an.", "{theme:?}");
-        assert_eq!(refused("view.select", json!({ "ids": [""] })), "Es ist kein Element angegeben. Geben Sie seine ID an.", "{theme:?}");
-        assert_eq!(refused("element.remove", json!({ "ids": [] })), "Geben Sie mindestens ein Element an.", "{theme:?}");
-        let twice = "Ein Element ist zweimal genannt. Jedes Element nur einmal nennen.";
-        assert_eq!(refused("element.remove", json!({ "ids": [&order, &order] })), twice, "{theme:?}");
-        assert_eq!(refused("element.describe", json!({ "element": "nope" })), "Es gibt kein Element mit der ID nope.", "{theme:?}");
-        assert_eq!(refused("element.remove", json!({ "ids": [&d] })), not_of, "{theme:?}");
-        assert_eq!(refused("element.describe", json!({ "element": &d })), not_of, "{theme:?}");
-        let undescribed = crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::NotDescribable { notation: "ER" });
-        assert_eq!(undescribed.as_deref(), Some("ER-Elemente lassen sich noch nicht beschreiben."), "{theme:?}");
-    }
-    crate::i18n::set_language("en");
-}
-
 /// An association's end, which UML does not remove yet, removed with the selection is said in the
 /// chosen language, named by its role or, without one, its id. In light and dark (AR-530).
 #[test]
@@ -6227,738 +5897,6 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
         assert_eq!(refused, "seller lässt sich noch nicht entfernen.", "{theme:?}");
         let refused = run("element.remove", json!({ "ids": [unnamed] })).unwrap_err();
         assert_eq!(refused, format!("{unnamed} lässt sich noch nicht entfernen."), "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// The engine's own refusals are said in the chosen language: a command not available now by its
-/// reason, a reason the catalogues don't hold in the engine's words, a gesture under way, undo
-/// inside another change and a session that could not be put back, each in its sentence, and an
-/// unknown command, a parameter refused and an internal error as one sentence that repeats no
-/// engine text. In light and dark (AR-440). A change made for another revision of the model, or for
-/// none, is said in its sentence too (AR-574), as is each way a package's default diagram binding
-/// can be unsound, with the choice that mends it (AR-576), and a diagram a package's binding keeps,
-/// its own default or another element's diagram, with the package named (AR-578), as are a nested
-/// package's diagrams that cannot move up to a parent with no diagram yet or no valid default
-/// (AR-673). Each package move
-/// or rename the root package or the package Types refuses is said in its own sentence (AR-563), as
-/// is a default diagram chosen for no package, for something that is none or among another
-/// element's diagrams (AR-580), and a default's replacement that is the diagram removed, is no
-/// other diagram of the same kind of its package, or is named for a diagram that is no default,
-/// each in a sentence of its own that speaks of replacing, not of choosing a default (AR-640), and
-/// one given both as another diagram and as a new one, or a new one's name that is no text (AR-641).
-/// A relationship chosen to reuse that does not join its two elements, or no longer does, is said
-/// with the choice to make again when others remain, and as such when none does (AR-699).
-#[test]
-fn an_engine_refusal_is_said_in_the_chosen_language() {
-    use archforge_engine::EngineError;
-    use serde_json::json;
-    let internal = "Dies war wegen eines internen Fehlers nicht möglich. Es wurde nichts geändert.";
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let refused =
-            |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        let fill = json!({ "ids": [&nodes["Order"]], "fill": "#3366cc" });
-        crate::panels::run(h.state_mut(), "diagram.style", fill.clone()).unwrap();
-        assert_eq!(refused(&mut h, "edit.redo", json!({})), "Es gibt nichts zu wiederholen.", "{theme:?}");
-        let unheld = EngineError::Disabled { id: "edit.redo".into(), reason: "a reason no catalogue holds" };
-        assert_eq!(crate::panels::refusal(SCREENS.notation_uis(), &unheld), "A reason no catalogue holds.", "{theme:?}");
-        let session = h.state_mut().session.as_mut().unwrap();
-        let in_batch = session.batch("Undo inside", |b| b.execute("edit.undo", &json!({})).map(|_| ())).unwrap_err();
-        assert!(matches!(in_batch, EngineError::NotInBatch { .. }), "{theme:?}: {in_batch:?}");
-        let said = "Rückgängig und Wiederholen können nicht Teil einer anderen Änderung sein.";
-        assert_eq!(crate::panels::refusal(SCREENS.notation_uis(), &in_batch), said, "{theme:?}");
-        session.begin_interaction("er.schema.add").unwrap();
-        let running = "Eine andere Änderung läuft noch. Versuchen Sie es erneut, sobald sie beendet ist.";
-        assert_eq!(refused(&mut h, "diagram.style", fill.clone()), running, "{theme:?}");
-        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
-        let poisoned = EngineError::Poisoned { message: "the rollback failed".into() };
-        let reopen = "Das Modell konnte nach einem Fehler nicht wiederhergestellt werden. Öffnen Sie das Projekt erneut, um fortzufahren.";
-        assert_eq!(crate::panels::refusal(SCREENS.notation_uis(), &poisoned), reopen, "{theme:?}");
-        assert_eq!(refused(&mut h, "no.such.command", json!({})), internal, "{theme:?}");
-        assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [&nodes["Order"]], "shade": 1 })), internal, "{theme:?}");
-        let stopped = EngineError::Internal { id: "diagram.style".into(), message: "a handler panicked".into() };
-        assert_eq!(crate::panels::refusal(SCREENS.notation_uis(), &stopped), internal, "{theme:?}");
-        let at = archforge_engine::Revision { history: 2, revision: 5 };
-        let stale = |expected| {
-            let reason = archforge_engine::Reason::StaleRevision { expected, current: at };
-            let error = archforge_engine::CommandError::about("expected_revision", "stale").because(reason);
-            crate::panels::refusal(SCREENS.notation_uis(), &EngineError::Failed { id: "uml.package.default.set".into(), error })
-        };
-        let changed = "Das Modell hat sich geändert, seit es gelesen wurde, oder ein anderes Projekt wurde gelesen. \
-                       Lesen Sie es erneut und versuchen Sie es noch einmal. Es wurde nichts geändert.";
-        assert_eq!(stale(Some(archforge_engine::Revision { revision: 4, ..at })), changed, "{theme:?}");
-        let none = "Die Änderung gibt nicht an, für welchen Stand des Modells sie gedacht ist. \
-                    Lesen Sie das Modell und versuchen Sie es noch einmal. Es wurde nichts geändert.";
-        assert_eq!(stale(None), none, "{theme:?}");
-        use archforge_engine::BindingFault::{DeadTarget, Duplicate, Missing, WrongKind, WrongOwner};
-        let unsound = [Missing, Duplicate, DeadTarget, WrongKind, WrongOwner].map(|fault| {
-            let error = archforge_engine::CommandError::about("package", "unsound").because(archforge_engine::Reason::InvalidBinding(fault));
-            crate::panels::refusal(SCREENS.notation_uis(), &EngineError::Failed { id: "uml.package.default.get".into(), error })
-        });
-        let missing = "Das Paket hat Klassendiagramme, aber keines ist sein Standarddiagramm. Wählen Sie eines davon als Standarddiagramm.";
-        assert_eq!(unsound[0], missing, "{theme:?}");
-        let mut distinct = unsound.to_vec();
-        distinct.sort();
-        distinct.dedup();
-        assert_eq!(distinct.len(), 5, "{theme:?}: each fault its own sentence {unsound:?}");
-        assert!(unsound.iter().all(|s| s.contains("Standarddiagramm")), "{theme:?}: {unsound:?}");
-        let kept = |fault| {
-            let reason = archforge_engine::Reason::DefaultDiagramOf { package: "Vertrieb".into(), fault };
-            let error = archforge_engine::CommandError::about("diagram", "kept").because(reason);
-            crate::panels::refusal(SCREENS.notation_uis(), &EngineError::Failed { id: "diagram.remove".into(), error })
-        };
-        let own = "Dieses Diagramm ist das Standarddiagramm von Vertrieb. \
-                   Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von Vertrieb.";
-        assert_eq!(kept(None), own, "{theme:?}");
-        let foreign = "Vertrieb hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. \
-                       Wählen Sie zuerst eines seiner eigenen Klassendiagramme.";
-        assert_eq!(kept(Some(WrongOwner)), foreign, "{theme:?}");
-        // A nested package's diagrams that cannot move up: a parent with no diagram yet, or with no valid default (AR-673).
-        let up = |fault| {
-            let error = archforge_engine::CommandError::about("ids", "up")
-                .because(archforge_engine::Reason::ParentDefaultUnsound { parent: "Vertrieb".into(), fault });
-            crate::panels::refusal(SCREENS.notation_uis(), &EngineError::Failed { id: "element.remove".into(), error })
-        };
-        let none_yet = "Vertrieb hat noch kein Diagramm, das die Diagramme dieses Pakets aufnehmen kann. Erstellen Sie zuerst eines dafür. Es wurde nichts geändert.";
-        let invalid = "Vertrieb hat kein gültiges Standarddiagramm, das die Diagramme dieses Pakets aufnehmen kann. Wählen Sie zuerst sein Standarddiagramm. Es wurde nichts geändert.";
-        assert_eq!([up(None), up(Some(Missing)), up(Some(WrongOwner))], [none_yet, invalid, invalid], "{theme:?}");
-        // A dependency moved onto the client and supplier another has (AR-697).
-        let exists = "Diese Verbindung besteht bereits: die Abhängigkeit zahlt. Wählen Sie die bestehende Beziehung aus.";
-        let repeated = archforge_engine::Reason::ConnectionExists { dependency: "zahlt".into() };
-        assert_eq!(crate::panels::said(SCREENS.notation_uis(), &repeated), Some(exists.to_string()), "{theme:?}");
-        // A relationship chosen to reuse that does not join the two (any more): none left, or some to choose among (AR-699).
-        let stale = "Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr. \
-                     Wählen Sie erneut unter denen, die sie verbinden. Es wurde nichts geändert.";
-        let none_left = "Die gewählte Beziehung verbindet diese beiden Elemente nicht oder nicht mehr, und keine andere tut es jetzt. \
-                         Es wurde nichts geändert.";
-        let chosen = [Box::default(), vec!["d-2".into()].into_boxed_slice()]
-            .map(|candidates| crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::StaleChoice { candidates }));
-        assert_eq!(chosen, [Some(none_left.to_string()), Some(stale.to_string())], "{theme:?}: none left, or some to choose among");
-        // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
-        use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
-        let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
-        let chosen = [IdEmpty { kind: "package" }, NotA { kind: "package", name: "Vertrieb".into() }, other]
-            .map(|r| crate::panels::said(SCREENS.notation_uis(), &r));
-        let theirs =
-            "Rechnungen ist keines der Klassendiagramme von Vertrieb. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.";
-        let chosen_said = ["Es ist kein Paket angegeben. Geben Sie seine ID an.", "Vertrieb ist kein Paket.", theirs].map(|s| Some(s.to_string()));
-        assert_eq!(chosen, chosen_said, "{theme:?}");
-        // A replacement that is the diagram removed, or one named for a diagram that is no default (AR-640).
-        use archforge_engine::Reason::{NotReplacement, ReplacementIsRemoved, ReplacementNotNeeded};
-        let foreign = NotReplacement { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
-        let replaced = [ReplacementIsRemoved, ReplacementNotNeeded { diagram: "Rechnungen".into() }, foreign]
-            .map(|r| crate::panels::said(SCREENS.notation_uis(), &r));
-        let itself = "Ein Diagramm kann sich beim Entfernen nicht selbst ersetzen. Wählen Sie ein anderes Diagramm als Ersatz.";
-        let not_needed = "Rechnungen ist kein Standarddiagramm und wird daher ohne Ersatz entfernt.";
-        let not_own = "Rechnungen ist kein anderes Diagramm derselben Art von Vertrieb und kann das zu entfernende Diagramm daher nicht ersetzen.";
-        assert_eq!(replaced, [itself, not_needed, not_own].map(|s| Some(s.to_string())), "{theme:?}");
-        let both = "Wählen Sie als Ersatz entweder ein vorhandenes Diagramm oder ein neues, nicht beides.";
-        assert_eq!(crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::OneReplacement), Some(both.to_string()), "{theme:?}");
-        assert_eq!(
-            crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::NameNotText),
-            Some("Ein Name muss Text sein.".to_string()),
-            "{theme:?}"
-        );
-        // A package move or rename the root package or the package Types refuses, each its own sentence.
-        use archforge_engine::Reason::{HoldsBuiltInName, RootPackageStays, TypesPackageExists, TypesPackageKept};
-        let held = HoldsBuiltInName { kind: "class", name: "String".into() };
-        let package = [RootPackageStays, TypesPackageKept, TypesPackageExists, held]
-            .map(|r| crate::panels::said(SCREENS.notation_uis(), &r).unwrap_or_default());
-        let mut distinct = package.to_vec();
-        distinct.sort();
-        distinct.dedup();
-        assert_eq!(distinct.len(), 4, "{theme:?}: each its own sentence {package:?}");
-        assert!(package.iter().all(|s| s.contains("Paket")), "{theme:?}: in German {package:?}");
-        assert!(package[3].contains("eine Klasse den Namen String"), "{theme:?}: {}", package[3]);
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A name another element has, whatever the case, is said in the chosen language with that
-/// element's kind and name, never in the engine's English: an attribute of a class, a column of a
-/// table, and a skill on one subject, renamed and added. In light and dark (AR-435).
-#[test]
-fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let sales = id("uml.package.add", serde_json::json!({ "name": "Sales" }));
-        let order = id("uml.class.add", serde_json::json!({ "package": sales, "name": "Order" }));
-        id("uml.attribute.add", serde_json::json!({ "class": order, "name": "status" }));
-        let schema = id("er.schema.add", serde_json::json!({ "name": "Shop" }));
-        let table = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Kunde" }));
-        id("er.attribute.add", serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT" }));
-        id("skill.add", serde_json::json!({ "subject": sales, "name": "Naming" }));
-        let style = id("skill.add", serde_json::json!({ "subject": sales, "name": "Style" }));
-        for (cmd, params, kind, name) in [
-            ("uml.attribute.add", serde_json::json!({ "class": order, "name": "STATUS" }), "an attribute", "status"),
-            ("er.attribute.add", serde_json::json!({ "entity": table, "name": "ID", "type": "TEXT" }), "a column", "id"),
-            ("skill.rename", serde_json::json!({ "skill": style, "name": "naming" }), "a skill", "Naming"),
-            ("skill.add", serde_json::json!({ "subject": sales, "name": "NAMING" }), "a skill", "Naming"),
-        ] {
-            let what = crate::i18n::tr_ctx("refusal", kind);
-            assert_ne!(what, kind, "{theme:?}: the catalogue has the kind in German");
-            let said = crate::i18n::fmt(&crate::i18n::tr("There is {what} named {name} already."), &[("what", &what), ("name", name)]);
-            let refused = crate::panels::run(h.state_mut(), cmd, params).err().unwrap_or_default();
-            assert_eq!(refused.to_lowercase(), said.to_lowercase(), "{theme:?} {cmd}: the kind and the other's name in German");
-            assert!(refused.starts_with(char::is_uppercase) && refused.contains(name), "{theme:?} {cmd}: a sentence naming {name}: {refused}");
-        }
-    }
-    crate::i18n::set_language("en");
-}
-
-/// An ER command's id, key columns and constraint name refused are said in the chosen language,
-/// never in the engine's English: no id, as the id of what the parameter takes, or of no element,
-/// an element of another kind by its name, a subtype's among them, a key's columns too many, no ids or one given twice,
-/// by the column's name (AR-544), and a constraint name the schema has; a kind ER does not name is left to the other
-/// rows. In a window of the design's height, in light and dark (AR-438).
-#[test]
-fn an_er_id_key_column_or_constraint_name_refused_is_said_in_the_chosen_language() {
-    use crate::i18n::{fmt, tr, tr_ctx};
-    use archforge_engine::Reason;
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let table = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
-        let column = id("er.attribute.add", json!({ "entity": table, "name": "nummer", "type": "BIGINT" }));
-        id("er.unique.add", json!({ "entity": table, "columns": [column], "name": "uq_nummer" }));
-        let refused =
-            |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        let no_id = tr("No id is given. Give the id of {what}.");
-        assert_eq!(no_id, "Es ist keine ID angegeben. Hier wird {what} per ID erwartet.", "{theme:?}: the language is German");
-        let no_table = fmt(&no_id, &[("what", &tr_ctx("refusal", "a table"))]);
-        assert_eq!(refused(&mut h, "er.entity.rename", json!({ "entity": "", "name": "X" })), no_table, "{theme:?}");
-        let nope = fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]);
-        assert_eq!(refused(&mut h, "er.entity.rename", json!({ "entity": "nope", "name": "X" })), nope, "{theme:?}");
-        let not_a = tr("{name} is not {what}.");
-        let not_table = fmt(&not_a, &[("name", "nummer"), ("what", &tr_ctx("refusal", "a table"))]);
-        assert_eq!(refused(&mut h, "er.entity.rename", json!({ "entity": column, "name": "X" })), not_table, "{theme:?}");
-        let not_key = fmt(&not_a, &[("name", "Kunde"), ("what", &tr_ctx("refusal", "a key"))]);
-        assert_eq!(refused(&mut h, "er.foreign-key.add", json!({ "entity": table, "key": table })), not_key, "{theme:?}");
-        // A subtype link, the interface's word for the link from a subtype to its supertype.
-        let no_subtype = fmt(&no_id, &[("what", &tr_ctx("refusal", "a subtype"))]);
-        assert_eq!(refused(&mut h, "er.generalization.remove", json!({ "generalization": "" })), no_subtype, "{theme:?}");
-        let not_subtype = fmt(&not_a, &[("name", "Kunde"), ("what", &tr_ctx("refusal", "a subtype"))]);
-        assert_eq!(refused(&mut h, "er.generalization.remove", json!({ "generalization": table })), not_subtype, "{theme:?}");
-        let columns = |given: serde_json::Value| json!({ "entity": table, "columns": given, "name": "uq_x" });
-        let many = vec![column.as_str(); archforge_er::rules::MAX_KEY_COLUMNS + 1];
-        let most = fmt(&tr("A key holds at most {max} columns."), &[("max", "32")]);
-        assert_eq!(refused(&mut h, "er.unique.add", columns(json!(many))), most, "{theme:?}");
-        assert_eq!(refused(&mut h, "er.unique.add", columns(json!([7]))), tr("Give the key's columns as a list of ids."), "{theme:?}");
-        let twice = "nummer kommt im Schlüssel zweimal vor. Geben Sie jede Spalte nur einmal an.";
-        assert_eq!(refused(&mut h, "er.unique.add", columns(json!([column, column]))), twice, "{theme:?}");
-        let taken = fmt(&tr("There is {what} named {name} already."), &[("what", &tr_ctx("refusal", "a constraint")), ("name", "uq_nummer")]);
-        let clash = json!({ "entity": table, "columns": [column], "name": "UQ_NUMMER" });
-        assert_eq!(refused(&mut h, "er.unique.add", clash).to_lowercase(), taken.to_lowercase(), "{theme:?}");
-        // A kind ER does not name, though the catalogues have its word, is not ER's to say.
-        assert_eq!(crate::er_said::said(SCREENS.notation_uis(), &Reason::NotA { kind: "attribute", name: "x".into() }), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// An index column's direction or nulls order that is none of the words, or no word, is said in
-/// the chosen language under the choice's label, with the words taken, one of only spaces as no
-/// choice given, though not one whose word comes after 40 spaces; a word of another place is not ER's to say. In a window of the design's height, in light and dark (AR-491).
-#[test]
-fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let table = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
-        let column = id("er.attribute.add", json!({ "entity": table, "name": "nummer", "type": "BIGINT" }));
-        let mut refused = |field: &str, value: serde_json::Value| {
-            let p = json!({ "entity": table, "columns": [{ "attribute": column, field: value }] });
-            crate::panels::run(h.state_mut(), "er.index.add", p).err().unwrap_or_default()
-        };
-        let up = "Richtung: up ist keine der Möglichkeiten. Möglich sind ascending, descending.";
-        assert_eq!(refused("direction", json!("up")), up, "{theme:?}");
-        let array = "Nullwerte: [1] ist keine der Möglichkeiten. Möglich sind default, first, last.";
-        assert_eq!(refused("nulls", json!([1])), array, "{theme:?}");
-        let none = "Richtung: Es ist keine Möglichkeit angegeben. Möglich sind ascending, descending.";
-        assert_eq!(refused("direction", json!(" ")), none, "{theme:?}");
-        // A word after more spaces than the typed word keeps is no blank.
-        assert_eq!(refused("direction", json!(format!("{}up", " ".repeat(40)))), up, "{theme:?}");
-        let diagram = archforge_engine::NotOneOf {
-            what: archforge_engine::WordPlace::DiagramKind,
-            word: "x".into(),
-            known: vec![archforge_er::DIAGRAM_KIND.into()],
-        };
-        assert_eq!(crate::er_said::said(SCREENS.notation_uis(), &archforge_engine::Reason::NotOneOf(Box::new(diagram))), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A key's columns refused are said in the chosen language, never in the engine's English: none,
-/// for a primary key and a unique constraint, a column of another table, a key column a foreign key
-/// needs and no primary key to remove; a column that may be null in a primary key, which the rules
-/// type, too. In a window of the design's height, in light and dark (AR-492).
-#[test]
-fn an_er_keys_columns_refused_are_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
-        let order = id("er.entity.add", json!({ "schema": schema, "name": "Bestellung" }));
-        let nummer = id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
-        let column = id("er.attribute.add", json!({ "entity": order, "name": "kunde_nummer", "type": "BIGINT", "nullable": "no" }));
-        id("er.foreign-key.add", json!({ "entity": order, "references": kunde, "columns": [column], "name": "fk_kunde" }));
-        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        let none = "Ein Schlüssel braucht mindestens eine Spalte.";
-        assert_eq!(refused("er.primary-key.set", json!({ "entity": order, "columns": [], "name": "" })), none, "{theme:?}");
-        assert_eq!(refused("er.unique.add", json!({ "entity": order, "columns": [] })), none, "{theme:?}");
-        let other = "nummer ist keine Spalte von Bestellung.";
-        assert_eq!(refused("er.unique.add", json!({ "entity": order, "columns": [nummer] })), other, "{theme:?}");
-        let flags = json!({ "attribute": nummer, "primary_key": false, "nullable": "auto", "unique": false });
-        let in_use = "Der Fremdschlüssel fk_kunde verweist auf diesen Schlüssel von Kunde. Ändern oder entfernen Sie ihn zuerst.";
-        assert_eq!(refused("er.attribute.set-flags", flags), in_use, "{theme:?}");
-        assert_eq!(refused("er.primary-key.remove", json!({ "entity": order })), "Bestellung hat keinen Primärschlüssel.", "{theme:?}");
-        let nullable = crate::er_said::said(SCREENS.notation_uis(), &Reason::NullableKeyColumn { name: "notiz".into() });
-        assert_eq!(nullable.as_deref(), Some("notiz darf leer sein, was eine Primärschlüsselspalte nie darf."), "{theme:?}");
-        // At least two columns is no rule of a key's.
-        assert_eq!(crate::er_said::said(SCREENS.notation_uis(), &Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A key's column given twice is said by the column's name in the chosen language: refused when a
-/// primary key or a unique constraint lists it twice, and as the key rules' problem the Problems
-/// panel says, which no document holds, as a key's columns are a list without repeats. In light and
-/// dark (AR-544).
-#[test]
-fn an_er_key_column_given_twice_is_said_by_its_name_in_the_chosen_language() {
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
-        let nummer = id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "nullable": "no" }));
-        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        let twice = "nummer kommt im Schlüssel zweimal vor. Geben Sie jede Spalte nur einmal an.";
-        let pk = json!({ "entity": kunde, "columns": [nummer, nummer], "name": "pk_kunde" });
-        assert_eq!(refused("er.primary-key.set", pk), twice, "{theme:?}");
-        assert_eq!(refused("er.unique.add", json!({ "entity": kunde, "columns": [nummer, nummer] })), twice, "{theme:?}");
-        let st = h.state().session.as_ref().unwrap().doc();
-        let obj = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
-        let (table, column) = (obj(&kunde), obj(&nummer));
-        let problem = archforge_er::rules::key_columns_problem(st, table, &[column, column], true).unwrap();
-        assert_eq!(crate::panels::said(SCREENS.notation_uis(), &problem.reason()).as_deref(), Some(twice), "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A foreign key's column given twice is said by the column's name in the foreign key's own words in
-/// the chosen language, not a key's: refused when adding a foreign key and when pointing one at
-/// another key. In light and dark (AR-544).
-#[test]
-fn an_er_foreign_key_column_given_twice_is_said_as_the_foreign_keys_in_the_chosen_language() {
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
-        let bestellung = id("er.entity.add", json!({ "schema": schema, "name": "Bestellung" }));
-        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
-        let mail = id("er.attribute.add", json!({ "entity": kunde, "name": "mail", "type": "TEXT", "nullable": "no" }));
-        let uq = id("er.unique.add", json!({ "entity": kunde, "columns": [mail], "name": "uq_mail" }));
-        let column = id("er.attribute.add", json!({ "entity": bestellung, "name": "kunde_nummer", "type": "BIGINT", "nullable": "no" }));
-        let fk = id("er.foreign-key.add", json!({ "entity": bestellung, "references": kunde, "columns": [column], "name": "fk_kunde" }));
-        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        let twice = "kunde_nummer kommt im Fremdschlüssel zweimal vor.";
-        let add = json!({ "entity": bestellung, "references": kunde, "columns": [column, column], "name": "fk_zwei" });
-        assert_eq!(refused("er.foreign-key.add", add), twice, "{theme:?}");
-        assert_eq!(refused("er.foreign-key.set-key", json!({ "foreign_key": fk, "key": uq, "columns": [column, column] })), twice, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// The delete dialog of a column a key lists, which a foreign key points at, says in the chosen
-/// language that the key and the foreign key go with it, in ER's own words, under its question and
-/// above what it holds. In light and dark.
-#[test]
-fn the_delete_dialog_says_the_keys_that_go_in_the_chosen_language() {
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
-        let bestellung = id("er.entity.add", json!({ "schema": schema, "name": "Bestellung" }));
-        let nummer = id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
-        let column = id("er.attribute.add", json!({ "entity": bestellung, "name": "kunde_nummer", "type": "BIGINT", "nullable": "no" }));
-        id("er.foreign-key.add", json!({ "entity": bestellung, "references": kunde, "columns": [column], "name": "fk_kunde" }));
-        crate::panels::run(h.state_mut(), "view.select", json!({ "ids": [nummer] })).unwrap();
-        h.run();
-        crate::explorer::remove_selection(h.state_mut());
-        h.run();
-        let asked = h.state().explorer.delete.clone().unwrap_or_else(|| panic!("{theme:?}: the dialog asks"));
-        assert_eq!(asked.consequences, ["1 Schlüssel geht mit.", "1 Fremdschlüssel geht mit."], "{theme:?}");
-        for line in ["1 Schlüssel geht mit.", "1 Fremdschlüssel geht mit.", "Was es enthält, geht mit."] {
-            assert!(painted_has(&h, line), "{theme:?}: {line} in {:?}", painted(&h));
-        }
-        h.state_mut().explorer.delete = None;
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// The key a foreign key points at, refused, is said in the chosen language, never in the engine's
-/// English: a key of another table, a table without a primary key, the key it points at already
-/// and identifying relationships that would run in a cycle; a key without columns, which only a
-/// loaded document holds, too. In light and dark (AR-501).
-#[test]
-fn the_key_a_foreign_key_points_at_refused_is_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut run = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap();
-        let mut id = |cmd: &str, p: serde_json::Value| run(cmd, p)["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let [kunde, posten, teil, notiz] =
-            ["Kunde", "Posten", "Teil", "Notiz"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
-        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
-        let hat = id("er.relationship.add", json!({ "from": kunde, "to": posten, "create_foreign_key": true, "identifying": true }));
-        id("er.relationship.add", json!({ "from": posten, "to": teil, "create_foreign_key": true, "identifying": true }));
-        let mut entity = |e: &str| run("er.entity.get", json!({ "entity": e }));
-        let key_of = |table: &serde_json::Value| table["primary_key"]["id"].as_str().unwrap().to_string();
-        let (kunde_pk, teil_pk) = (key_of(&entity(&kunde)), key_of(&entity(&teil)));
-        let posten_json = entity(&posten);
-        let (posten_pk, posten_fk) = (key_of(&posten_json), posten_json["foreign_keys"][0]["id"].as_str().unwrap().to_string());
-        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        for (cmd, p, said) in [
-            (
-                "er.foreign-key.add",
-                json!({ "entity": notiz, "key": kunde_pk, "references": posten }),
-                "Der Schlüssel ist keiner der Schlüssel von Posten.",
-            ),
-            ("er.foreign-key.add", json!({ "entity": kunde, "references": notiz }), "Notiz hat keinen Primärschlüssel."),
-            (
-                "er.foreign-key.set-key",
-                json!({ "foreign_key": posten_fk, "key": kunde_pk }),
-                "Der Fremdschlüssel verweist bereits auf diesen Schlüssel. Nennen Sie die Spalten, um sie zu ändern.",
-            ),
-            (
-                "er.foreign-key.add",
-                json!({ "entity": kunde, "key": posten_pk, "relationship": hat }),
-                "Identifizierende Beziehungen würden einen Zyklus zwischen Kunde und Posten bilden.",
-            ),
-            (
-                "er.foreign-key.set-key",
-                json!({ "foreign_key": posten_fk, "key": teil_pk }),
-                "Identifizierende Beziehungen würden einen Zyklus zwischen Posten und Teil bilden.",
-            ),
-        ] {
-            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
-        }
-        let no_columns = crate::er_said::said(SCREENS.notation_uis(), &Reason::NoKeyColumns { table: "Lager".into() });
-        assert_eq!(no_columns.as_deref(), Some("Der Schlüssel von Lager hat keine Spalten, auf die verwiesen werden kann."), "{theme:?}");
-        // Another kind pointed at again is not a foreign key's.
-        assert_eq!(crate::er_said::said(SCREENS.notation_uis(), &Reason::Again { relationship: "index" }), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A foreign key's columns, refused, are said in the chosen language, never in the engine's
-/// English: not as many as the key's, types that differ, a column without a type on either side,
-/// and a column's new type that would break a foreign key; none, too many and one twice, which
-/// only a loaded document holds, too. In light and dark (AR-502).
-#[test]
-fn a_foreign_keys_columns_refused_are_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let [kunde, auftrag, notiz] = ["Kunde", "Auftrag", "Notiz"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
-        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
-        id("er.attribute.add", json!({ "entity": notiz, "name": "code", "primary_key": true }));
-        let mut column = |name: &str, ty: &str| id("er.attribute.add", json!({ "entity": auftrag, "name": name, "type": ty }));
-        let (kaeufer, haendler, titel, frei) =
-            (column("kaeufer", "BIGINT"), column("haendler", "BIGINT"), column("titel", "TEXT"), column("frei", ""));
-        let fk = id("er.foreign-key.add", json!({ "entity": auftrag, "references": kunde, "columns": [kaeufer], "name": "fk_kaeufer" }));
-        let notiz_pk = crate::panels::run(h.state_mut(), "er.entity.get", json!({ "entity": notiz })).unwrap()["primary_key"]["id"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        let add = |columns: serde_json::Value| json!({ "entity": auftrag, "references": kunde, "columns": columns });
-        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        for (cmd, p, said) in [
-            (
-                "er.foreign-key.add",
-                add(json!([kaeufer, haendler])),
-                "Der Fremdschlüssel braucht so viele Spalten wie der Schlüssel von Kunde, also 1.",
-            ),
-            ("er.foreign-key.add", add(json!([titel])), "titel hat den Typ TEXT, aber nummer hat den Typ BIGINT."),
-            ("er.foreign-key.add", add(json!([frei])), "frei hat keinen Typ, aber nummer hat den Typ BIGINT."),
-            (
-                "er.foreign-key.set-key",
-                json!({ "foreign_key": fk, "key": notiz_pk, "columns": [haendler] }),
-                "haendler hat den Typ BIGINT, aber code hat keinen Typ.",
-            ),
-            (
-                "er.attribute.set-type",
-                json!({ "attribute": kaeufer, "type": "TEXT" }),
-                "Der Fremdschlüssel fk_kaeufer wäre danach ungültig: kaeufer hat den Typ TEXT, aber nummer hat den Typ BIGINT.",
-            ),
-        ] {
-            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
-        }
-        let kind = "foreign key column";
-        for (reason, said) in [
-            (Reason::TooFew { kind, min: 1 }, "Ein Fremdschlüssel braucht mindestens eine Spalte."),
-            (Reason::TooMany { kind, max: 32 }, "Ein Fremdschlüssel umfasst höchstens 32 Spalten."),
-            (Reason::NamedTwice { kind, name: "c0".into() }, "c0 kommt im Fremdschlüssel zweimal vor."),
-        ] {
-            assert_eq!(crate::er_said::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{theme:?}");
-        }
-        // Two columns without a type never differ: that is left to the engine's English.
-        let untyped = Reason::TypesDiffer { column: "a".into(), target: "b".into(), types: Box::new([None, None]) };
-        assert_eq!(crate::er_said::said(SCREENS.notation_uis(), &untyped), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A foreign key's actions and relationship, refused, are said in the chosen language, never in
-/// the engine's English: set null on a column that may never be null, from adding a foreign key and
-/// from setting its actions, a relationship that does not join the two tables, a column outside
-/// the primary key under an identifying relationship, and a column made not null under a set-null
-/// foreign key; a key that is none and one without columns, which only a loaded document holds,
-/// too. In light and dark (AR-503).
-#[test]
-fn a_foreign_keys_actions_and_relationship_refused_are_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let [kunde, auftrag, artikel] = ["Kunde", "Auftrag", "Artikel"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
-        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
-        id("er.attribute.add", json!({ "entity": artikel, "name": "code", "type": "TEXT", "primary_key": true }));
-        let mut column =
-            |name: &str, nullable: &str| id("er.attribute.add", json!({ "entity": auftrag, "name": name, "type": "BIGINT", "nullable": nullable }));
-        let (kaeufer, vielleicht) = (column("kaeufer", "no"), column("vielleicht", "yes"));
-        let fk = id("er.foreign-key.add", json!({ "entity": auftrag, "references": kunde, "columns": [kaeufer], "name": "fk_kaeufer" }));
-        let null = json!({ "entity": auftrag, "references": kunde, "columns": [vielleicht], "name": "fk_vielleicht", "on_delete": "set-null" });
-        id("er.foreign-key.add", null);
-        let bestellt = json!({ "from": kunde, "to": auftrag, "to_end": "zero-or-more", "name": "bestellt" });
-        let bestellt = id("er.relationship.add", bestellt);
-        let traegt = json!({ "from": artikel, "to": auftrag, "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true });
-        let traegt = id("er.relationship.add", traegt);
-        let titel = id("er.attribute.add", json!({ "entity": auftrag, "name": "titel", "type": "TEXT", "nullable": "no" }));
-        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        for (cmd, p, said) in [
-            (
-                "er.foreign-key.add",
-                json!({ "entity": auftrag, "references": kunde, "columns": [kaeufer], "on_delete": "set-null" }),
-                "„Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber kaeufer darf nie leer sein.",
-            ),
-            (
-                "er.foreign-key.set-actions",
-                json!({ "foreign_key": fk, "on_delete": "no-action", "on_update": "set-null" }),
-                "„Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber kaeufer darf nie leer sein.",
-            ),
-            (
-                "er.foreign-key.add",
-                json!({ "entity": auftrag, "references": artikel, "columns": [titel], "relationship": bestellt }),
-                "Die Beziehung verbindet Auftrag und Artikel nicht.",
-            ),
-            (
-                "er.foreign-key.add",
-                json!({ "entity": auftrag, "references": artikel, "columns": [titel], "relationship": traegt }),
-                "Die Fremdschlüsselspalten einer identifizierenden Beziehung gehören zum Primärschlüssel, titel aber nicht.",
-            ),
-            (
-                "er.attribute.set-flags",
-                json!({ "attribute": vielleicht, "primary_key": false, "nullable": "no", "unique": false }),
-                "Der Fremdschlüssel fk_vielleicht wäre danach ungültig: „Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber vielleicht darf nie leer sein.",
-            ),
-        ] {
-            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
-        }
-        for (reason, said) in [
-            (Reason::NotA { kind: "key", name: "nummer".into() }, "nummer passt hier nicht: erwartet wird ein Schlüssel."),
-            (Reason::NoKeyColumns { table: "Kunde".into() }, "Der Schlüssel von Kunde hat keine Spalten, auf die verwiesen werden kann."),
-        ] {
-            assert_eq!(crate::er_said::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{theme:?}");
-        }
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A subtype refused is said in the chosen language, never in the engine's English: a table its own
-/// subtype, tables of two schemas, a subtype with a supertype already, a circle, identifying keys in
-/// a cycle, a discriminator of another table and a part of a subtype's key changed on its own; a
-/// chain too deep too. In light and dark (AR-506).
-#[test]
-fn a_subtype_refused_is_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut run = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap();
-        let mut id = |cmd: &str, p: serde_json::Value| run(cmd, p)["id"].as_str().unwrap().to_string();
-        let (schema, archiv) = (id("er.schema.add", json!({ "name": "Shop" })), id("er.schema.add", json!({ "name": "Archiv" })));
-        let [partei, person, gut, a, b] =
-            ["Partei", "Person", "Gut", "A", "B"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
-        let alt = id("er.entity.add", json!({ "schema": archiv, "name": "Alt" }));
-        for (e, name) in [(&partei, "nummer"), (&a, "a_nr"), (&b, "b_nr")] {
-            id("er.attribute.add", json!({ "entity": e, "name": name, "type": "BIGINT", "primary_key": true }));
-        }
-        let fremd = id("er.attribute.add", json!({ "entity": gut, "name": "art", "type": "TEXT" }));
-        id("er.generalization.add", json!({ "supertype": partei, "subtype": person }));
-        id("er.relationship.add", json!({ "from": b, "to": a, "create_foreign_key": true, "identifying": true }));
-        let geerbt = run("er.entity.get", json!({ "entity": person }))["attributes"][0]["id"].as_str().unwrap().to_string();
-        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        let add = |sup: &str, sub: &str| json!({ "supertype": sup, "subtype": sub });
-        let piece = "Dies ist Teil des Schlüssels eines Untertyps. Entfernen Sie stattdessen den Untertyp oder ändern Sie die Untertyp-Abbildung des Obertyps.";
-        for (cmd, p, said) in [
-            ("er.generalization.add", add(&partei, &partei), "Eine Tabelle kann kein Untertyp von sich selbst sein."),
-            (
-                "er.generalization.add",
-                add(&partei, &alt),
-                "Die beiden Tabellen liegen in verschiedenen Schemas. Ein Untertyp liegt im Schema seines Obertyps.",
-            ),
-            ("er.generalization.add", add(&gut, &person), "Person hat bereits einen Obertyp. Eine Tabelle hat einen Obertyp."),
-            ("er.generalization.add", add(&person, &partei), "Der Obertyp ist bereits ein Untertyp dieser Tabelle, das würde einen Kreis schließen."),
-            ("er.generalization.add", add(&a, &b), "Identifizierende Beziehungen würden einen Zyklus zwischen B und A bilden."),
-            ("er.entity.set-subtyping", json!({ "entity": partei, "discriminator": fremd }), "art ist keine Spalte von Partei."),
-            ("er.attribute.remove", json!({ "attribute": geerbt }), piece),
-            ("er.primary-key.remove", json!({ "entity": person }), piece),
-        ] {
-            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
-        }
-        let deep = crate::er_said::said(SCREENS.notation_uis(), &Reason::TooDeep { kind: "subtype", max: 32 });
-        assert_eq!(deep.as_deref(), Some("Untertypen würden hier tiefer als 32 Ebenen reichen."), "{theme:?}");
-        // A cycle of another relationship is not a subtype's.
-        assert_eq!(crate::er_said::said(SCREENS.notation_uis(), &Reason::Cycle { relationship: "foreign key" }), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// A relationship refused is said in the chosen language, never in the engine's English:
-/// identifying or a key to point at without the foreign key, a foreign key for many to many, a
-/// table with itself without a role or identifying itself, a key of another table, a parent without
-/// a primary key, roles against the name rule or without a letter, and a subtype's key changed. In
-/// light and dark (AR-504).
-#[test]
-fn a_relationship_refused_is_said_in_the_chosen_language() {
-    use serde_json::json;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut run = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap();
-        let mut id = |cmd: &str, p: serde_json::Value| run(cmd, p)["id"].as_str().unwrap().to_string();
-        let schema = id("er.schema.add", json!({ "name": "Shop" }));
-        let [kunde, auftrag, notiz, vip] =
-            ["Kunde", "Auftrag", "Notiz", "Vip"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
-        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
-        id("er.attribute.add", json!({ "entity": notiz, "name": "nummer", "type": "BIGINT", "primary_key": true }));
-        id("er.generalization.add", json!({ "supertype": kunde, "subtype": vip }));
-        let places = id("er.relationship.add", json!({ "from": kunde, "to": auftrag }));
-        let vip_json = run("er.entity.get", json!({ "entity": vip }));
-        let vip_fk = vip_json["foreign_keys"][0]["id"].as_str().unwrap().to_string();
-        let notiz_pk = run("er.entity.get", json!({ "entity": notiz }))["primary_key"]["id"].as_str().unwrap().to_string();
-        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
-        let add = "er.relationship.add";
-        let keyed = |from: &str, to: &str, extra: serde_json::Value| {
-            let mut p = json!({ "from": from, "to": to, "create_foreign_key": true });
-            p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
-            p
-        };
-        for (cmd, p, said) in [
-            (
-                add,
-                json!({ "from": kunde, "to": auftrag, "identifying": true }),
-                "Eine identifizierende Beziehung braucht ihren Fremdschlüssel; erst den Schalter einschalten",
-            ),
-            (
-                add,
-                json!({ "from": kunde, "to": auftrag, "points_to": notiz_pk }),
-                "Nur eine Beziehung mit ihrem Fremdschlüssel verweist auf einen Schlüssel.",
-            ),
-            (
-                add,
-                keyed(&kunde, &auftrag, json!({ "from_end": "one-or-more" })),
-                "Eine Viele-zu-viele-Beziehung hat keinen Fremdschlüssel. Fügen Sie stattdessen eine Zuordnungstabelle hinzu.",
-            ),
-            (
-                add,
-                keyed(&kunde, &kunde, json!({})),
-                "Eine Beziehung einer Tabelle mit sich selbst braucht eine Rolle an dem Ende, auf das ihr Schlüssel verweist, etwa parent.",
-            ),
-            (
-                add,
-                keyed(&kunde, &kunde, json!({ "from_role": "ganzes", "identifying": true })),
-                "Identifizierende Beziehungen würden einen Zyklus zwischen Kunde und Kunde bilden.",
-            ),
-            (add, keyed(&kunde, &auftrag, json!({ "points_to": notiz_pk })), "Der Schlüssel ist keiner der Schlüssel von Kunde."),
-            (add, keyed(&auftrag, &kunde, json!({})), "Auftrag hat keinen Primärschlüssel."),
-            (add, keyed(&kunde, &auftrag, json!({ "to_role": "käufer " })), "Am Anfang und am Ende darf kein Leerzeichen stehen."),
-            (
-                add,
-                keyed(&kunde, &auftrag, json!({ "from_role": "--" })),
-                "Eine Rolle braucht einen Buchstaben oder eine Ziffer, da sie Schlüsselspalten benennt.",
-            ),
-            (
-                "er.relationship.set-identifying",
-                json!({ "relationship": places, "identifying": true }),
-                "Eine identifizierende Beziehung braucht ihren Fremdschlüssel; erst den Schalter einschalten",
-            ),
-            (
-                "er.foreign-key.remove",
-                json!({ "foreign_key": vip_fk }),
-                "Dies ist Teil des Schlüssels eines Untertyps. Entfernen Sie stattdessen den Untertyp oder ändern Sie die Untertyp-Abbildung des Obertyps.",
-            ),
-        ] {
-            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
-        }
         h.run();
     }
     crate::i18n::set_language("en");
@@ -7122,59 +6060,6 @@ fn an_er_size_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
-/// A domain or an enum type that columns take, and an enum type's literals refused, are said in the
-/// chosen language: the type with its first columns, singular and plural, a list the engine cut
-/// ending in an ellipsis; none, too many, no list
-/// of names, a literal that is no name with why in the same words (an empty one on its own), and
-/// one twice, also as a problem of a loaded enum type. In light and dark (AR-498).
-#[test]
-fn an_er_type_in_use_and_its_literals_refused_are_said_in_the_chosen_language() {
-    use archforge_engine::{Reason, TypeInUse};
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let in_use = |name: &str, columns: &[&str], count| {
-            Reason::TypeInUse(Box::new(TypeInUse { name: name.into(), columns: columns.iter().map(|c| c.to_string()).collect(), count }))
-        };
-        let named = |name: &str, why| Reason::LiteralName { name: name.into(), why: Box::new(why) };
-        for (reason, said) in [
-            (in_use("status", &["Bestellung.status"], 1), "1 Spalte verwendet status: Bestellung.status. Ändern Sie zuerst ihren Typ."),
-            (
-                in_use("geld", &["Bestellung.summe", "Kunde.saldo"], 7),
-                "7 Spalten verwenden geld: Bestellung.summe, Kunde.saldo, …. Ändern Sie zuerst ihren Typ.",
-            ),
-            (Reason::NamesExpected { kind: "enum literal" }, "Geben Sie die Literale als Liste von Namen an."),
-            (Reason::TooFew { kind: "enum literal", min: 1 }, "Ein Aufzählungstyp braucht mindestens ein Literal."),
-            (Reason::TooMany { kind: "enum literal", max: 256 }, "Ein Aufzählungstyp hat höchstens 256 Literale."),
-            (named("", Reason::NameEmpty), "Ein Literal darf nicht leer sein."),
-            (named(" offen", Reason::EdgeSpace), "Das Literal „ offen“ ist kein gültiger Name. Am Anfang und am Ende darf kein Leerzeichen stehen."),
-            (
-                Reason::NamedTwice { kind: "enum literal", name: "OFFEN".into() },
-                "Das Literal „OFFEN“ ist doppelt angegeben. Geben Sie jedes Literal nur einmal an.",
-            ),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
-        }
-        // A loaded enum type's literal twice, which no command makes, is a problem in the same words.
-        let mut n = 0u64;
-        let ids = Box::new(move || {
-            n += 1;
-            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
-        });
-        let mut st = archforge_er::store(ids).unwrap();
-        let e = st.create(archforge_er::ENUM_TYPE).unwrap();
-        st.set(e, archforge_er::named_element::NAME, archforge_mof::Value::str("status")).unwrap();
-        for literal in ["offen", "OFFEN"] {
-            st.push(e, archforge_er::enum_type::LITERAL, archforge_mof::Value::str(literal)).unwrap();
-        }
-        let texts: Vec<String> = crate::problems::all(SCREENS.notation_uis(), &st).into_iter().map(|p| p.text).collect();
-        assert_eq!(texts, ["status: Das Literal „OFFEN“ ist doppelt angegeben. Geben Sie jedes Literal nur einmal an."], "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
 /// A column's own default, collation, place and link refused are said in the chosen language: a
 /// default none of its enum type's literals in the words UML says it in, also for a column that
 /// would break; a default or collation its domain gives; a place past the table's last, singular
@@ -7200,44 +6085,6 @@ fn an_er_columns_default_collation_place_and_link_refused_are_said_in_the_chosen
             assert_eq!(crate::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
         assert_eq!(crate::panels::said(SCREENS.notation_uis(), &Reason::DomainGives { what: "check" }), None, "{theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// The Problems panel names a loaded document's enum type without a name, which no command makes, by
-/// its id when a column's default is none of its literals, in the chosen language, never as an empty
-/// name. In light and dark.
-#[test]
-fn an_er_columns_default_none_of_an_unnamed_enum_types_literals_names_the_type_by_its_id() {
-    use archforge_er::{ATTRIBUTE, ENTITY, ENUM_TYPE, SCHEMA};
-    use archforge_mof::Value;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        let mut n = 0u64;
-        let ids = Box::new(move || {
-            n += 1;
-            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
-        });
-        let mut st = archforge_er::store(ids).unwrap();
-        let schema = st.create(SCHEMA).unwrap();
-        let status = st.create(ENUM_TYPE).unwrap();
-        st.push(status, archforge_er::enum_type::LITERAL, Value::str("offen")).unwrap();
-        st.push(schema, archforge_er::schema::ENUM_TYPE, Value::Ref(status)).unwrap();
-        let bestellung = st.create(ENTITY).unwrap();
-        st.set(bestellung, archforge_er::named_element::NAME, Value::str("bestellung")).unwrap();
-        st.push(schema, archforge_er::schema::ENTITY, Value::Ref(bestellung)).unwrap();
-        let zustand = st.create(ATTRIBUTE).unwrap();
-        st.set(zustand, archforge_er::named_element::NAME, Value::str("zustand")).unwrap();
-        st.set(zustand, archforge_er::attribute::ENUM_TYPE, Value::Ref(status)).unwrap();
-        st.set(zustand, archforge_er::attribute::DEFAULT, Value::str("'zu'")).unwrap();
-        st.push(bestellung, archforge_er::entity::ATTRIBUTE, Value::Ref(zustand)).unwrap();
-        let id = st.uuid(status).unwrap();
-        let texts: Vec<String> = crate::problems::all(SCREENS.notation_uis(), &st).into_iter().map(|p| p.text).collect();
-        let zustand: Vec<&String> = texts.iter().filter(|t| t.starts_with("zustand")).collect();
-        assert_eq!(zustand, [&format!("zustand: 'zu' ist kein Literal von {id}.")], "{texts:?} {theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -7590,67 +6437,6 @@ fn no_two_notations_claim_the_same_refusal() {
     assert!(claimed.iter().all(|n| *n > 0), "claims of typed reasons, reasons not available and renames: {claimed:?}");
 }
 
-/// A refusal names each kind of element in its catalogue row, with its article, as before the
-/// notations said their own (AR-785): the shell's for the kinds the core, the diagrams or both
-/// notations name, and one notation's for each of the rest; a kind no row names is none.
-#[test]
-fn each_kind_a_refusal_names_is_said_by_the_shell_or_one_notation() {
-    // The app's shell registers its notations' catalogues, whose rows this says.
-    let _shell = crate::Shell::new(crate::Services::default(), &SCREENS);
-    use crate::i18n::{set_language, tr_ctx};
-    let uis = SCREENS.notation_uis();
-    let own = [("element", "an element"), ("constraint", "a constraint"), ("skill", "a skill")];
-    let er = [
-        ("schema", "a schema"),
-        ("table", "a table"),
-        ("column", "a column"),
-        ("relationship", "a relationship"),
-        ("domain", "a domain"),
-        ("enum type", "an enum type"),
-        ("sequence", "a sequence"),
-        ("view", "a view"),
-        ("primary key", "a primary key"),
-        ("unique constraint", "a unique constraint"),
-        ("foreign key", "a foreign key"),
-        ("check", "a check"),
-        ("index", "an index"),
-        ("subtype", "a subtype"),
-        ("key", "a key"),
-        ("key column", "a key column"),
-    ];
-    let uml = [
-        ("class", "a class"),
-        ("association class", "an association class"),
-        ("interface", "an interface"),
-        ("enumeration", "an enumeration"),
-        ("data type", "a data type"),
-        ("primitive type", "a primitive type"),
-        ("package", "a package"),
-        ("profile", "a profile"),
-        ("stereotype", "a stereotype"),
-        ("attribute", "an attribute"),
-        ("operation", "an operation"),
-        ("literal", "a literal"),
-        ("qualifier", "a qualifier"),
-        ("template parameter", "a template parameter"),
-        ("generalization set", "a generalization set"),
-        ("association end", "an association end"),
-    ];
-    set_language("de");
-    assert_ne!(tr_ctx("refusal", "a table"), "a table", "the rows checked are really translations");
-    for (owner, kinds) in [(None, &own[..]), (Some(archforge_er::INDEX), &er[..]), (Some(archforge_uml::INDEX), &uml[..])] {
-        for (kind, row) in kinds {
-            assert_eq!(archforge_shell_api::panels::a_kind(SCREENS.notation_uis(), kind), Some(tr_ctx("refusal", row)), "{kind}");
-            let by: Vec<u16> = uis.iter().filter(|ui| ui.a_kind(kind).is_some()).map(|ui| ui.metamodel()).collect();
-            assert_eq!(by, owner.into_iter().collect::<Vec<_>>(), "{kind} is said by the notations of the metamodels {by:?}");
-        }
-    }
-    for kind in ["waypoint", "nesting level", "Table", ""] {
-        assert_eq!(archforge_shell_api::panels::a_kind(SCREENS.notation_uis(), kind), None, "{kind:?}");
-    }
-    set_language("en");
-}
-
 /// Each notation answers for its own elements alone (AR-785): every class it creates is of its
 /// metamodel, so the kind words find it; a schema, a table and a class are what Generate can be
 /// about, a column and a package are not; and its limits are its commands'.
@@ -7670,7 +6456,7 @@ fn each_notation_answers_the_words_and_limits_of_its_own_elements() {
     let customer = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
     let schema = archforge_er::rules::schema_of(st, customer).unwrap();
     let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
-    let er = crate::er_ui::ErUi;
+    let er = er_ui::ErUi;
     assert_eq!(er.scope_word(st, schema).as_deref(), Some("Schema"));
     assert_eq!(er.scope_word(st, customer).as_deref(), Some("Table"));
     assert_eq!(er.scope_word(st, email), None, "a column is no scope");
@@ -7703,7 +6489,7 @@ fn each_notation_starts_with_a_state_of_its_own_and_its_cards_are_its_own() {
     use crate::notation_ui::NotationStates;
     let uis = SCREENS.notation_uis();
     let states = NotationStates::new(uis);
-    assert!(crate::er_state::er(&states).is_some(), "ER keeps its own state");
+    assert!(er_state::er(&states).is_some(), "ER keeps its own state");
     assert!(uml_state::uml(&states).is_some(), "UML keeps its own state");
     assert!(!states.editing() && !states.holds_keys(), "nothing is open in a fresh state");
     let open = states.open_editors();
@@ -7715,65 +6501,8 @@ fn each_notation_starts_with_a_state_of_its_own_and_its_cards_are_its_own() {
     assert_eq!(uml_cards, ["member", "constraint", "qualifier", "template", "profile", "nary-end"]);
     assert_eq!(cards.len(), er_cards.len() + uml_cards.len(), "every card is ER's or UML's");
     let sketch = NotationStates::new(SKETCH_UIS);
-    assert!(crate::er_state::er(&sketch).is_some(), "the sketch shell knows ER");
+    assert!(er_state::er(&sketch).is_some(), "the sketch shell knows ER");
     assert!(uml_state::uml(&sketch).is_none(), "a notation the shell does not know keeps no state there");
-}
-
-/// What the shell asks a notation's state: whether something is being edited or drawn, what holds
-/// the canvas's keys, what a project set aside ends, and what moving the selection closes, a
-/// binding's menu in the shell's one menu slot among it; an editor opened this frame stays (AR-787).
-#[test]
-fn a_notation_s_state_answers_what_is_edited_held_set_aside_and_closed() {
-    use crate::notation_ui::NotationStates;
-    let uis = SCREENS.notation_uis();
-    let id = archforge_mof::Uuid([7; 16]);
-    let mut states = NotationStates::new(uis);
-    uml_state::uml_mut(&mut states).unwrap().line_menu = Some(egui::pos2(1.0, 1.0));
-    assert!(states.holds_keys() && !states.editing(), "the generalization lines' menu holds the keys and edits nothing");
-    let uml = uml_state::uml_mut(&mut states).unwrap();
-    (uml.line_menu, uml.nary_menu) = (None, Some((egui::pos2(1.0, 1.0), id)));
-    assert!(states.holds_keys(), "an n-ary association's menu holds the keys");
-    uml_state::uml_mut(&mut states).unwrap().nary = Some(uml_nary::Nary::AddEnd { diagram: id, association: id });
-    assert!(states.editing(), "an n-ary association under way is being drawn");
-    states.set_aside();
-    let uml = uml_state::uml(&states).unwrap();
-    assert!(uml.nary.is_none() && uml.nary_menu.is_none(), "a drawing and its menu end with the project set aside");
-    assert!(!states.editing() && !states.holds_keys());
-
-    let key = |opened| crate::keys::KeyEdit {
-        target: None,
-        entity: id,
-        primary: false,
-        name: String::new(),
-        columns: Vec::new(),
-        nulls_distinct: true,
-        refused: None,
-        opened,
-    };
-    crate::er_state::er_mut(&mut states).unwrap().role = Some(crate::relation::RoleEdit { target: id, end: 0, text: "buyer".into() });
-    assert!(states.editing(), "a relationship's role is being typed");
-    crate::er_state::er_mut(&mut states).unwrap().role = None;
-
-    crate::er_state::er_mut(&mut states).unwrap().key = Some(key(true));
-    let uml = uml_state::uml_mut(&mut states).unwrap();
-    uml.nary_remove = Some(uml_nary::RemoveAsk { association: id, end: 0, opened: true });
-    uml.final_refused = Some(id);
-    uml.stereotypes.filter = "Ent".into();
-    uml.template_in_use = Some(uml_templates::InUse { parameter: id, why: "bound".into(), binding: None });
-    assert!(states.editing(), "an editor card and a question are open");
-    let mut menu = Some(uml_state::menus::BINDING_TEMPLATE);
-    states.close_editors(&mut menu);
-    assert_eq!(menu, None, "a binding's menu closes with the editors");
-    assert_eq!(crate::er_state::er(&states).unwrap().key, Some(key(true)), "an editor opened this frame stays");
-    let uml = uml_state::uml(&states).unwrap();
-    assert!(uml.nary_remove.is_none() && uml.final_refused.is_none() && uml.template_in_use.is_none(), "the question and the refusals close");
-    assert_eq!(uml.stereotypes, uml_stereotypes::Stereotypes::default(), "the Stereotypes picker's filter goes with them");
-    crate::er_state::er_mut(&mut states).unwrap().key = Some(key(false));
-    let mut menu = Some(crate::er_state::menus::KEY_COLUMN);
-    states.close_editors(&mut menu);
-    assert_eq!(menu, Some(crate::er_state::menus::KEY_COLUMN), "another menu is not the editors' to close");
-    assert!(crate::er_state::er(&states).unwrap().key.is_none(), "an editor shown already closes");
-    assert!(!states.editing());
 }
 
 /// A menu of the shell's one slot is its owner's alone: one of a kind shown per row is recognised
@@ -7783,7 +6512,7 @@ fn a_notation_s_state_answers_what_is_edited_held_set_aside_and_closed() {
 fn a_menu_is_recognised_only_by_its_owner_and_key() {
     use crate::panels::MenuId;
     let (er, uml) = (archforge_er::INDEX, archforge_uml::INDEX);
-    let pair = crate::er_state::menus::PAIR;
+    let pair = er_state::menus::PAIR;
     assert_eq!(pair.at(3).index_in(pair), Some(3), "a key pair's menu is ER's pair menu, by its row");
     assert_eq!(pair.at(3), MenuId::of(er, "pair").at(3), "the row changes the index alone");
     assert_eq!(MenuId::of(er, "points").index_in(pair), None, "another key of the same notation is another menu");
@@ -7792,7 +6521,7 @@ fn a_menu_is_recognised_only_by_its_owner_and_key() {
     assert_ne!(pair.at(1), pair.at(2), "two rows' menus are two menus");
 
     let er_menus = {
-        use crate::er_state::menus::*;
+        use archforge_er_ui::snapshot::er_state::menus::*;
         [
             KIND,
             POINTS,
@@ -7866,33 +6595,6 @@ fn a_menu_is_recognised_only_by_its_owner_and_key() {
     }
 }
 
-/// Only a notation's own menu that takes typing keeps the keys from the canvas and the Models tree:
-/// UML's Stereotypes picker does; another of its menus, or a menu of another owner under the
-/// picker's key, does not (AR-135, AR-787).
-#[test]
-fn only_a_notation_s_typed_menu_takes_the_keys() {
-    use crate::notation_ui::NotationStates;
-    let uis = SCREENS.notation_uis();
-    use crate::panels::MenuId;
-    let states = NotationStates::new(uis);
-    let pick = uml_state::menus::STEREOTYPE_PICK;
-    assert!(states.menu_takes_keys(Some(pick)), "the Stereotypes picker takes the keys");
-    assert!(!states.menu_takes_keys(None), "no menu open takes nothing");
-    assert!(!states.menu_takes_keys(Some(uml_state::menus::STEREOTYPE_PROFILE)), "a select of UML's leaves the keys");
-    assert!(!states.menu_takes_keys(Some(MenuId::of(archforge_er::INDEX, pick.key))), "ER's menu under the picker's key is not the picker");
-    assert!(!states.menu_takes_keys(Some(MenuId::shell(pick.key))), "nor is the shell's");
-    assert!(!states.menu_takes_keys(Some(pick.at(1))), "the picker is shown once");
-
-    let mut binding = Some(uml_state::menus::BINDING_ARGUMENT.at(2));
-    let mut states = NotationStates::new(uis);
-    states.close_editors(&mut binding);
-    assert_eq!(binding, None, "a binding's argument menu closes with the editors, whichever parameter it is on");
-    let theirs = MenuId::of(archforge_er::INDEX, uml_state::menus::BINDING_TEMPLATE.key);
-    let mut other = Some(theirs);
-    states.close_editors(&mut other);
-    assert_eq!(other, Some(theirs), "UML closes only its own binding menus, not another owner's of the same key");
-}
-
 /// A notation's state belongs to its project, as the panels and the canvas do: a project opened
 /// beside another starts fresh, the one parked keeps its tools' kinds when shown again while its
 /// drawing under way ends, and a project opened after the last one closed starts fresh too (AR-787).
@@ -7925,8 +6627,8 @@ fn a_notation_s_state_goes_with_its_project() {
 /// element is. A row typed in place is being edited and holds the canvas's keys (AR-787).
 #[test]
 fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
-    use crate::objects::ObjectKind;
-    use crate::types::TypeKind;
+    use archforge_er_ui::snapshot::er_objects::ObjectKind;
+    use archforge_er_ui::snapshot::er_types::TypeKind;
     let (mut h, nodes) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     let s = h.state_mut();
     let session = s.session.as_mut().unwrap();
@@ -7938,16 +6640,16 @@ fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
     let class = store.uuid(store.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap();
     assert!(s.cx(|cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)), "Catalog's card takes a row");
     assert!(s.notation_states.editing() && s.notation_states.holds_keys(), "a row typed in place is edited and holds the keys");
-    s.cx(|cx| crate::er_table::open_column(cx, table, None));
-    s.cx(|cx| crate::keys::open(cx, table, None));
-    s.cx(|cx| crate::checks::open(cx, table, None));
-    s.cx(|cx| crate::indexes::open(cx, table, None));
-    s.cx(|cx| crate::types::open(cx, schema, TypeKind::Domain, None));
-    s.cx(|cx| crate::objects::open(cx, schema, ObjectKind::Sequence, None));
+    s.cx(|cx| er_table::open_column(cx, table, None));
+    s.cx(|cx| er_keys::open(cx, table, None));
+    s.cx(|cx| er_checks::open(cx, table, None));
+    s.cx(|cx| er_indexes::open(cx, table, None));
+    s.cx(|cx| er_types::open(cx, schema, TypeKind::Domain, None));
+    s.cx(|cx| er_objects::open(cx, schema, ObjectKind::Sequence, None));
     let er = er_of_mut(s);
-    er.role = Some(crate::relation::RoleEdit { target: table, end: 0, text: "buyer".into() });
+    er.role = Some(er_relation::RoleEdit { target: table, end: 0, text: "buyer".into() });
     er.no_key_card = Some(table);
-    er.mapping = Some(crate::connect::MappingOffer { relationship: table, name: "CustomerCustomer".into(), refused: None });
+    er.mapping = Some(er_connect::MappingOffer { relationship: table, name: "CustomerCustomer".into(), refused: None });
     let modifiers = uml_relate::EndModifiers {
         is_static: false,
         default: String::new(),
@@ -8001,149 +6703,6 @@ fn a_notation_drops_what_it_keeps_about_an_element_once_the_element_is_gone() {
     session.execute("element.remove", &serde_json::json!({ "ids": [class.to_string()] })).unwrap();
     retain(s);
     assert_eq!(kept(s), [false; 13], "everything goes with its element");
-}
-
-/// A name of nothing but spaces is refused before it is sent, except for a diagram and for what a
-/// notation's rename command may leave unnamed: a relationship's, in ER and in UML (AR-786).
-#[test]
-fn an_empty_name_is_refused_unless_the_rename_may_leave_it_unnamed() {
-    crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services::default(), &SCREENS);
-    for cmd in ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"] {
-        assert!(!shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, cmd, "  ")), "{cmd} may leave its element unnamed");
-        assert_eq!(shell.panels.notice, None, "{cmd}");
-    }
-    for cmd in ["er.schema.rename", "uml.class.rename"] {
-        assert!(shell.cx(|cx| archforge_shell_api::panels::refuse_empty_name_cx(cx, cmd, "  ")), "{cmd} needs a name");
-        assert_eq!(shell.panels.notice.take().as_deref(), Some("A name can't be empty."), "{cmd}");
-    }
-}
-
-/// An index's columns refused are said in the chosen language: none, too many, one twice, an item
-/// of another shape, and an index column with both a column and an expression or with neither, also
-/// as a problem of a loaded index without columns. In light and dark (AR-500).
-#[test]
-fn an_er_indexs_columns_refused_are_said_in_the_chosen_language() {
-    use archforge_engine::Reason;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        for (reason, said) in [
-            (Reason::TooFew { kind: "index column", min: 1 }, "Ein Index braucht mindestens eine Spalte."),
-            (Reason::TooMany { kind: "index column", max: 32 }, "Ein Index umfasst höchstens 32 Spalten."),
-            (Reason::NamedTwice { kind: "index column", name: "total".into() }, "total steht zweimal im Index. Geben Sie jede Spalte nur einmal an."),
-            (
-                Reason::ItemsExpected { kind: "index column" },
-                "Geben Sie jede Indexspalte als ID einer Spalte an oder als Objekt mit einem Attribut oder einem Ausdruck.",
-            ),
-            (
-                Reason::AttributeAndExpression { column: "total".into() },
-                "total ist zusammen mit einem Ausdruck angegeben. Eine Indexspalte sortiert nach einer Spalte oder nach einem Ausdruck.",
-            ),
-            (Reason::NoAttributeNorExpression, "Eine Indexspalte braucht eine Spalte oder einen Ausdruck, nach dem sie sortiert."),
-        ] {
-            assert_eq!(crate::panels::said(SCREENS.notation_uis(), &reason).as_deref(), Some(said), "{reason:?} {theme:?}");
-        }
-        // A loaded index without columns, which no command makes, is a problem in the same words.
-        let mut n = 0u64;
-        let ids = Box::new(move || {
-            n += 1;
-            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
-        });
-        let mut st = archforge_er::store(ids).unwrap();
-        let e = st.create(archforge_er::ENTITY).unwrap();
-        st.set(e, archforge_er::named_element::NAME, archforge_mof::Value::str("Bestellung")).unwrap();
-        let ix = st.create(archforge_er::TABLE_INDEX).unwrap();
-        st.set(ix, archforge_er::table_index::NAME, archforge_mof::Value::str("ix_leer")).unwrap();
-        st.push(e, archforge_er::entity::TABLE_INDEX, archforge_mof::Value::Ref(ix)).unwrap();
-        let texts: Vec<String> = crate::problems::all(SCREENS.notation_uis(), &st).into_iter().map(|p| p.text).collect();
-        let index: Vec<&String> = texts.iter().filter(|t| t.starts_with("ix_leer")).collect();
-        assert_eq!(index, ["ix_leer: Ein Index braucht mindestens eine Spalte."], "{texts:?} {theme:?}");
-        h.run();
-    }
-    crate::i18n::set_language("en");
-}
-
-/// The Problems panel says a loaded document's typed rule problems in the chosen language: a key
-/// without columns or with one that may be null in a primary key, a column's default none of its enum type's literals, a check without an
-/// expression and a foreign key without columns; a foreign key without its key keeps its own row.
-/// In light and dark (AR-532).
-#[test]
-fn an_er_documents_typed_problems_are_said_in_the_chosen_language() {
-    use archforge_er::{ATTRIBUTE, CHECK_CONSTRAINT, ENTITY, ENUM_TYPE, FOREIGN_KEY, PRIMARY_KEY, SCHEMA, UNIQUE_CONSTRAINT};
-    use archforge_mof::Value;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        h.state_mut().state.language = "de".into();
-        h.run();
-        // A document no command makes, each table in the schema, so the foreign key's rules apply.
-        let mut n = 0u64;
-        let ids = Box::new(move || {
-            n += 1;
-            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
-        });
-        let mut st = archforge_er::store(ids).unwrap();
-        let schema = st.create(SCHEMA).unwrap();
-        let table = |st: &mut archforge_mof::Store, name: &str, nullable: bool| {
-            let e = st.create(ENTITY).unwrap();
-            st.set(e, archforge_er::named_element::NAME, Value::str(name)).unwrap();
-            st.push(schema, archforge_er::schema::ENTITY, Value::Ref(e)).unwrap();
-            let id = st.create(ATTRIBUTE).unwrap();
-            st.set(id, archforge_er::named_element::NAME, Value::str("id")).unwrap();
-            st.set(id, archforge_er::attribute::TYPE, Value::str("INT")).unwrap();
-            st.set(id, archforge_er::attribute::NULLABLE, Value::Bool(nullable)).unwrap();
-            st.push(e, archforge_er::entity::ATTRIBUTE, Value::Ref(id)).unwrap();
-            let pk = st.create(PRIMARY_KEY).unwrap();
-            st.set(pk, archforge_er::key::NAME, Value::str(&format!("pk_{name}"))).unwrap();
-            st.push(pk, archforge_er::key::COLUMN, Value::Ref(id)).unwrap();
-            st.set(e, archforge_er::entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
-            e
-        };
-        let kunde = table(&mut st, "kunde", false);
-        let bestellung = table(&mut st, "bestellung", true);
-        let leer = st.create(UNIQUE_CONSTRAINT).unwrap();
-        st.set(leer, archforge_er::key::NAME, Value::str("uq_leer")).unwrap();
-        st.push(bestellung, archforge_er::entity::UNIQUE_CONSTRAINT, Value::Ref(leer)).unwrap();
-        let status = st.create(ENUM_TYPE).unwrap();
-        st.set(status, archforge_er::named_element::NAME, Value::str("status")).unwrap();
-        st.push(status, archforge_er::enum_type::LITERAL, Value::str("offen")).unwrap();
-        st.push(schema, archforge_er::schema::ENUM_TYPE, Value::Ref(status)).unwrap();
-        let zustand = st.create(ATTRIBUTE).unwrap();
-        st.set(zustand, archforge_er::named_element::NAME, Value::str("zustand")).unwrap();
-        st.set(zustand, archforge_er::attribute::ENUM_TYPE, Value::Ref(status)).unwrap();
-        st.set(zustand, archforge_er::attribute::DEFAULT, Value::str("'zu'")).unwrap();
-        st.push(bestellung, archforge_er::entity::ATTRIBUTE, Value::Ref(zustand)).unwrap();
-        let check = st.create(CHECK_CONSTRAINT).unwrap();
-        st.set(check, archforge_er::check_constraint::NAME, Value::str("ck_leer")).unwrap();
-        st.push(bestellung, archforge_er::entity::CHECK_CONSTRAINT, Value::Ref(check)).unwrap();
-        let pk_kunde = archforge_er::rules::primary_key_of(&st, kunde).unwrap();
-        for (name, key) in [("fk_kunde", Some(pk_kunde)), ("fk_offen", None)] {
-            let fk = st.create(FOREIGN_KEY).unwrap();
-            st.set(fk, archforge_er::foreign_key::NAME, Value::str(name)).unwrap();
-            if let Some(key) = key {
-                st.set(fk, archforge_er::foreign_key::REFERENCES, Value::Ref(key)).unwrap();
-            }
-            st.push(bestellung, archforge_er::entity::FOREIGN_KEY, Value::Ref(fk)).unwrap();
-        }
-        let mut texts: Vec<String> = crate::problems::all(SCREENS.notation_uis(), &st).into_iter().map(|p| p.text).collect();
-        texts.sort();
-        assert_eq!(
-            texts,
-            [
-                "ck_leer: Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest.",
-                "fk_kunde: Ein Fremdschlüssel braucht mindestens eine Spalte.",
-                "fk_offen: hat keine Tabelle oder keinen Schlüssel",
-                "id ist eine Schlüsselspalte und darf leer sein",
-                "pk_bestellung: id darf leer sein, was eine Primärschlüsselspalte nie darf.",
-                "uq_leer: Ein Schlüssel braucht mindestens eine Spalte.",
-                "zustand: 'zu' ist kein Literal von status.",
-            ],
-            "{theme:?}"
-        );
-        h.run();
-    }
-    crate::i18n::set_language("en");
 }
 
 /// A sequence's numbers and owner and a view's query refused are said in the chosen language: each
@@ -8227,6 +6786,8 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// With a schema selected, Models' `+` offers a table first and adds one; Delete asks before the
+/// schema goes with what it holds.
 #[test]
 fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -8268,6 +6829,8 @@ fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schem
     assert_eq!(schema_names(&h), ["Schema 1"], "undo brings them back");
 }
 
+/// The Models filter narrows the tree to the names that hold what is typed, and the arrow keys walk
+/// the rows it leaves.
 #[test]
 fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -8667,194 +7230,13 @@ fn table_harness_in(theme: ThemeKind) -> (Harness<'static, Shell>, String) {
     (h, customer)
 }
 
-#[test]
-fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_engine() {
-    let (mut h, customer) = table_harness();
-    let found = ids(&h);
-    let rows: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).cloned().collect();
-    assert_eq!(rows.len(), 2, "two column rows: {found:?}");
-    assert!(found.iter().any(|i| i == "workspace.properties.kind"));
-    // Open the second column's editor and make it unique and not null.
-    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.is_some(), "the editor opened");
-    let at = rect_of(&h, "workspace.properties.column.unique").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.not-null").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
-    let s = h.state().session.as_ref().unwrap();
-    let st = s.doc();
-    let email_obj = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
-    assert!(archforge_er::rules::is_unique(st, email_obj));
-    assert!(!archforge_er::rules::is_nullable(st, email_obj));
-    assert!(s.can_undo());
-    // The + adds a column through the editor.
-    let at = rect_of(&h, "workspace.properties.columns.add").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.is_none() && c.name == "column_1"));
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
-    assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3);
-    // The kind select makes a mapping table.
-    let at = rect_of(&h, "workspace.properties.kind").center();
-    click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::KIND));
-    let at = rect_of(&h, "workspace.properties.kind.1").center();
-    click(&mut h, at);
-    // A mapping table needs its foreign keys: the engine refuses, and the panel says so.
-    assert!(h.state().panels.menu.is_none());
-    assert!(h.state().panels.notice.is_some(), "the refusal is shown");
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(st.get(customer_obj, archforge_er::entity::KIND).unwrap(), archforge_mof::Value::Enum(archforge_er::EntityKind::Regular.index()));
-}
-
-/// A column's editor refused by the engine says why in plain words under the card, never with the
-/// command's id or the parameter it is about: a column renamed, or a new one added. In light and
-/// dark (AR-428).
-#[test]
-fn a_column_refused_in_properties_says_why_in_plain_words() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        for new in [false, true] {
-            let (mut h, _customer) = table_harness();
-            h.state_mut().state.theme = theme;
-            h.run();
-            let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
-            let opener = if new { "workspace.properties.columns.add".to_string() } else { format!("{}.edit", rows[1]) };
-            let at = rect_of(&h, &opener).center();
-            click(&mut h, at);
-            er_of_mut(h.state_mut()).column.as_mut().unwrap_or_else(|| panic!("{theme:?}: the editor opened")).name = "customer_id".into();
-            h.run();
-            let at = rect_of(&h, "workspace.properties.column.apply").center();
-            click(&mut h, at);
-            let refused = er_of(h.state()).column.as_ref().and_then(|c| c.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
-            let plain = refused.starts_with("There is a column named") && !refused.contains("er.") && !refused.contains("name:");
-            assert!(plain, "{theme:?}, new {new}: {refused}");
-        }
-    }
-}
-
-#[test]
-fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
-    let (mut h, customer) = table_harness();
-    let at = rect_of(&h, "workspace.properties.columns.add").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.name").center();
-    click(&mut h, at);
-    h.event(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
-    h.event(egui::Event::Text("id".into()));
-    h.run();
-    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.type.menu.2").center();
-    click(&mut h, at);
-    assert!(h.state().panels.menu.is_none(), "a pick closes the list");
-    // The list lies over the sections below the card; its last entry takes the click, not the
-    // section row under it.
-    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
-    click(&mut h, at);
-    let n = crate::er_table::BASE_TYPES.len() - 1;
-    let last = rect_of(&h, &format!("workspace.properties.column.type.menu.{n}"));
-    let keys_add = rect_of(&h, "workspace.properties.keys.add");
-    assert!(last.bottom() > keys_add.top(), "the list reaches over the keys: {last:?} {keys_add:?}");
-    click(&mut h, egui::pos2(keys_add.center().x.min(last.right() - 4.0), last.center().y));
-    assert_eq!(er_of(h.state()).column.as_ref().map(|c| c.ty.clone()), Some(crate::er_table::BASE_TYPES[n].to_string()));
-    assert!(er_of(h.state()).key.is_none(), "the key editor under the list stayed closed");
-    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.type.menu.2").center();
-    click(&mut h, at);
-    // Primary key brings Not null with it.
-    let at = rect_of(&h, "workspace.properties.column.primary-key").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.primary_key && c.not_null));
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    h.run();
-    assert!(er_of(h.state()).column.is_none(), "one Apply closes the editor: {:?}", er_of(h.state()).column);
-    let st = h.state().session.as_ref().unwrap().doc();
-    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
-    assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3, "one column added");
-    // Not null cannot be unticked under a key: it takes the key with it.
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
-    let at = rect_of(&h, &format!("{}.edit", rows[0])).center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.not-null").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| !c.primary_key && !c.not_null));
-}
-
-#[test]
-fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_selecting_elsewhere_closes_it() {
-    let (mut h, customer) = table_harness();
-    let select = |h: &mut Harness<'static, Shell>, id: &str| {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
-    };
-    let email = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
-        st.uuid(email).unwrap().to_string()
-    };
-    select(&mut h, &email);
-    h.run();
-    assert!(er_of(h.state()).column.is_none(), "selecting a column only marks its row: {:?}", er_of(h.state()).column);
-    // A click on a row selects its column, as the tree and the canvas do, and opens its table in
-    // the tree so the row there shows too; it does not open the editor.
-    let customer_id = archforge_mof::Uuid::parse(&customer).unwrap();
-    select(&mut h, &customer);
-    h.state_mut().explorer.expanded.remove(&customer_id);
-    h.run();
-    let at = rect_of(&h, &format!("workspace.properties.column.{email}")).center();
-    click(&mut h, at);
-    h.run();
-    assert_eq!(selected_name(&h), "email", "the row's click selects its column");
-    assert!(h.state().explorer.expanded.contains(&customer_id), "its table opens in the tree");
-    assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{email}")), "{:?}", ids(&h));
-    assert!(er_of(h.state()).column.is_none(), "a click on the row does not open it");
-    let at = rect_of(&h, &format!("workspace.properties.column.{email}.edit")).center();
-    click(&mut h, at);
-    h.run();
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "the edit button opens it");
-    // The edit button of a row while the table is selected selects the column too.
-    let at = rect_of(&h, "workspace.properties.column.cancel").center();
-    click(&mut h, at);
-    select(&mut h, &customer);
-    h.run();
-    let at = rect_of(&h, &format!("workspace.properties.column.{email}.edit")).center();
-    click(&mut h, at);
-    h.run();
-    assert_eq!(selected_name(&h), "email");
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "and opens it");
-    // Selecting the table, then the column again: the editor closed and stays closed.
-    select(&mut h, &customer);
-    h.run();
-    assert!(er_of(h.state()).column.is_none(), "selecting elsewhere closes it");
-    select(&mut h, &email);
-    h.run();
-    assert!(er_of(h.state()).column.is_none(), "coming back does not reopen it");
-    // The + opens an editor for a new column; Cancel closes it and it stays closed.
-    let at = rect_of(&h, "workspace.properties.columns.add").center();
-    click(&mut h, at);
-    h.run();
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.is_none()), "the + opens an editor for a new column");
-    let at = rect_of(&h, "workspace.properties.column.cancel").center();
-    click(&mut h, at);
-    h.run();
-    h.run();
-    assert!(er_of(h.state()).column.is_none(), "Cancel stays closed: {:?}", er_of(h.state()).column);
-}
-
 /// The text the store has for skill `id`.
 fn st_body(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> String {
     let st = h.state().session.as_ref().unwrap().doc();
     st.get(st.by_uuid(id).unwrap(), archforge_core::skill::BODY).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
+/// The Skills panel's `+` makes a skill on the selection and opens it with its name ready to type.
 #[test]
 fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     let (mut h, customer) = table_harness();
@@ -8964,6 +7346,7 @@ fn a_skill_name_refused_in_its_tab_says_why_in_plain_words() {
     crate::i18n::set_language("en");
 }
 
+/// A skill opens in a tab of its own, and its Markdown is kept as typed.
 #[test]
 fn a_skill_opens_in_its_own_tab_and_keeps_its_markdown() {
     let (mut h, customer) = table_harness();
@@ -9150,34 +7533,7 @@ fn read_out(h: &Harness<'static, Shell>, words: &str, id: &str) {
     assert!(ids(h).iter().any(|i| i == id), "{words}: recorded as {id}");
 }
 
-/// A new diagram whose new schema is refused says why in plain words, as Properties says a
-/// refusal: no command id, no engine wording. In light and dark (AR-427).
-#[test]
-fn a_new_diagram_refused_by_its_schema_says_why_in_plain_words() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap();
-        h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
-        let step = crate::diagrams::Step::Details;
-        let new = crate::diagrams::NewDiagram {
-            step,
-            name: "Shop".into(),
-            kind: archforge_er::DIAGRAM_KIND,
-            owner: None,
-            menu: None,
-            refused: None,
-            opened: false,
-        };
-        h.state_mut().diagrams.new = Some(new);
-        h.run();
-        let at = rect_of(&h, "workspace.new-diagram.create").center();
-        click(&mut h, at);
-        let refused = h.state().diagrams.new.as_ref().and_then(|n| n.refused.clone()).expect("a second schema named Shop is refused");
-        assert!(refused.starts_with("There is a schema named Shop") && !refused.contains("er."), "{theme:?}: {refused}");
-        read_out(&h, &refused, "workspace.new-diagram.notice");
-    }
-}
-
+/// The Appearance panel styles the selected box and line on the open diagram only.
 #[test]
 fn appearance_styles_the_selection_on_this_diagram() {
     let (mut h, customer, diagram) = diagram_harness();
@@ -9278,6 +7634,8 @@ fn appearance_styles_the_selection_on_this_diagram() {
     assert!(!h.state().canvas.key_status, "the line colours show");
 }
 
+/// The control channel runs its methods through the open session; without a project it says none
+/// is open.
 #[test]
 fn the_control_channel_runs_commands_through_the_open_session() {
     use crate::control::answer;
@@ -9345,6 +7703,8 @@ fn drag_through(h: &mut Harness<'static, Shell>, points: &[egui::Pos2]) {
     h.run();
 }
 
+/// A click on the minimap centres the view there, and a drag of its viewport moves the view with the
+/// pointer while the map keeps its scale.
 #[test]
 fn the_minimap_viewport_drags_the_view_without_the_map_rescaling_under_it() {
     let (mut h, _, _) = diagram_harness();
@@ -9368,6 +7728,7 @@ fn the_minimap_viewport_drags_the_view_without_the_map_rescaling_under_it() {
     assert!((stepped - one_step).length() < 0.5, "{one_step:?} vs {stepped:?}");
 }
 
+/// A drag with the primary button from `from` to `to`, a frame at each step.
 fn drag(h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2) {
     h.event(egui::Event::PointerMoved(from));
     h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
@@ -9378,85 +7739,13 @@ fn drag(h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2) {
     h.run();
 }
 
+/// The name of the first element selected: a diagram's as the Diagrams explorer says it, any other
+/// element's own.
 fn selected_name(h: &Harness<'static, Shell>) -> String {
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
     let o = s.view().selection.first().copied().unwrap();
     if st.class_of(o).ok() == Some(archforge_diagram::DIAGRAM) { crate::diagrams::diagram_name(st, o) } else { archforge_core::name_of(st, o) }
-}
-
-#[test]
-fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_tab() {
-    let (mut h, _customer) = table_harness();
-    let at = rect_of(&h, "workspace.explorers.diagrams").center();
-    click(&mut h, at);
-    assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.diagrams.row.")), "no diagram yet");
-    assert!(!ids(&h).iter().any(|i| i == "workspace.canvas"), "the canvas is plain without a diagram");
-    // The + opens the dialog with the schema's name and the schema chosen.
-    let at = rect_of(&h, "workspace.diagrams.add").center();
-    click(&mut h, at);
-    let edit = h.state().diagrams.new.clone().expect("the dialog opened");
-    assert_eq!(edit.step, crate::diagrams::Step::Kind, "the kind comes first");
-    assert_eq!(edit.name, "Shop");
-    assert!(edit.owner.is_some());
-    let at = rect_of(&h, "workspace.new-diagram.continue").center();
-    click(&mut h, at);
-    assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.step), Some(crate::diagrams::Step::Details));
-    let at = rect_of(&h, "workspace.new-diagram.create").center();
-    click(&mut h, at);
-    assert!(h.state().diagrams.new.is_none(), "the dialog closed");
-    let diagram = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).expect("the diagram was added");
-        st.uuid(d).unwrap()
-    };
-    assert_eq!(h.state().canvas.active, Some(diagram));
-    assert_eq!(h.state().canvas.tabs, vec![diagram]);
-    assert_eq!(selected_name(&h), "Shop", "the diagram is selected, so Properties shows it");
-    let found = ids(&h);
-    for id in [
-        format!("workspace.tabs.{diagram}"),
-        format!("workspace.diagrams.row.{diagram}"),
-        "workspace.canvas".to_string(),
-        "workspace.minimap.fit".to_string(),
-    ] {
-        assert!(found.contains(&id), "{id} in {found:?}");
-    }
-    // Closing the tab empties the centre; the row opens it again.
-    let at = rect_of(&h, &format!("workspace.tabs.{diagram}.close")).center();
-    click(&mut h, at);
-    assert_eq!(h.state().canvas.active, None);
-    assert!(h.state().canvas.tabs.is_empty());
-    assert!(!ids(&h).iter().any(|i| i == "workspace.canvas"));
-    let at = rect_of(&h, &format!("workspace.diagrams.row.{diagram}")).center();
-    click(&mut h, at);
-    assert_eq!(h.state().canvas.active, Some(diagram));
-    // The filter narrows the rows.
-    h.state_mut().diagrams.filter = "zzz".into();
-    h.run();
-    assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.diagrams.row.")));
-    h.state_mut().diagrams.filter = "sho".into();
-    h.run();
-    assert!(ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{diagram}")));
-    h.state_mut().diagrams.filter.clear();
-    // A second diagram of a new schema: the schema is made with the diagram's name.
-    let at = rect_of(&h, "workspace.tabs.add").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.new-diagram.continue").center();
-    click(&mut h, at);
-    h.state_mut().diagrams.new.as_mut().unwrap().name = "Billing".into();
-    let at = rect_of(&h, "workspace.new-diagram.schema").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.new-diagram.schema.1").center();
-    click(&mut h, at);
-    assert_eq!(h.state().diagrams.new.as_ref().unwrap().owner, None, "New schema chosen");
-    let at = rect_of(&h, "workspace.new-diagram.create").center();
-    click(&mut h, at);
-    assert!(h.state().diagrams.new.is_none(), "{:?}", h.state().diagrams.new);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.alive().any(|o| st.class_of(o).ok() == Some(archforge_er::SCHEMA) && archforge_core::name_of(st, o) == "Billing"));
-    assert_eq!(h.state().canvas.tabs.len(), 2);
-    assert_eq!(selected_name(&h), "Billing");
 }
 
 /// Where the first text painted as `words` stands on the screen.
@@ -9484,6 +7773,8 @@ fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
     crate::diagrams::rows(st, &h.state().diagrams, h.state().kinds).rows.into_iter().map(|r| (r.depth, r.label, r.count)).collect()
 }
 
+/// The Diagrams explorer groups the diagrams by kind, each group named, with its `+`, and opens each
+/// diagram with its package.
 #[test]
 fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_package() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -9748,6 +8039,8 @@ fn a_focused_diagram_row_deletes_its_diagram_by_key_and_says_why_a_default_stays
     }
 }
 
+/// Typing a group's name in the Diagrams explorer's filter opens the folded folders its diagrams sit
+/// in.
 #[test]
 fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     // A model with a folder holding a class diagram, as a project may keep one.
@@ -9925,6 +8218,7 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
     }
 }
 
+/// In a narrow window, New diagram's kind cards stand one above the other.
 #[test]
 fn in_a_narrow_window_the_kinds_cards_stand_one_above_the_other() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(520.0, 900.0));
@@ -10001,7 +8295,7 @@ fn a_package_card_is_drawn_by_the_kind_that_draws_packages_whatever_the_scenes_k
     let (none, clean) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
     let (tab, preview) = (format!("workspace.canvas.node.{card}.tab"), format!("workspace.canvas.node.{card}.preview"));
     let uml: &'static dyn crate::kinds::DiagramKind = &uml_ui::UmlKind;
-    let er: &'static dyn crate::kinds::DiagramKind = &crate::er_kind::ErKind;
+    let er: &'static dyn crate::kinds::DiagramKind = &er_kind::ErKind;
     for dark in [false, true] {
         for scene in [Some(uml), Some(er), None] {
             let (texts, at, _) = drawn_alone_at(&session, &top.to_string(), (scene, SCREENS.kinds()), dark, 1000.0, &none, &clean);
@@ -10016,6 +8310,8 @@ fn a_package_card_is_drawn_by_the_kind_that_draws_packages_whatever_the_scenes_k
     }
 }
 
+/// Enter on New diagram's focused Cancel cancels and makes nothing; on a kind's card it goes on to
+/// the details.
 #[test]
 fn enter_on_new_diagrams_focused_cancel_cancels_and_on_a_card_goes_on() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
@@ -10053,45 +8349,15 @@ fn package_navigation_is_umls_kinds_and_ers_does_none() {
         let d = shell.session.as_ref().unwrap().doc().by_uuid(sales_d).unwrap();
         let p = crate::ux::palette(theme == ThemeKind::Dark);
         let view = |shell: &Shell| (shell.canvas.zoom, shell.canvas.pan, uml_of(shell).nav.centre);
-        recorded_alone(shell, |shell, ui| shell.cx(|cx| crate::er_kind::ErKind.before_draw(cx, ui, CANVAS, d)));
+        recorded_alone(shell, |shell, ui| shell.cx(|cx| er_kind::ErKind.before_draw(cx, ui, CANVAS, d)));
         assert_eq!(view(shell), (0.5, egui::vec2(33.0, 44.0), true), "{theme:?}: the default lands nothing");
         recorded_alone(shell, |shell, ui| shell.cx(|cx| uml_ui::UmlKind.before_draw(cx, ui, CANVAS, d)));
         assert_eq!(view(shell), (uml_package_nav::LANDING, egui::Vec2::ZERO, false), "{theme:?}: UML lands the entry");
         let mut room = (0.0, 0.0);
-        let er = recorded_alone(shell, |shell, ui| room.0 = shell.cx(|cx| crate::er_kind::ErKind.after_draw(cx, ui, p, CANVAS, d)));
+        let er = recorded_alone(shell, |shell, ui| room.0 = shell.cx(|cx| er_kind::ErKind.after_draw(cx, ui, p, CANVAS, d)));
         let uml = recorded_alone(shell, |shell, ui| room.1 = shell.cx(|cx| uml_ui::UmlKind.after_draw(cx, ui, p, CANVAS, d)));
         assert!(er.is_empty() && room.0 == 0.0, "{theme:?}: the default draws nothing: {er:?}");
         assert!(uml.iter().any(|i| i == "workspace.canvas.path") && room.1 > 0.0, "{theme:?}: UML's path bar: {uml:?} {room:?}");
-    }
-}
-
-/// A row dropped in Models runs as its notation runs it (AR-788): UML moves a package dropped into
-/// another as Properties' Parent package does, with a toast offering Undo; ER's notation, which
-/// keeps the default, runs the same command plainly, with no toast. In light and dark.
-#[test]
-fn a_drop_in_models_runs_as_its_notation_runs_it() {
-    use crate::notation_ui::NotationUi;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
-        let s = h.state_mut().session.as_mut().unwrap();
-        let mut add =
-            |name: &str| s.execute("uml.package.add", &serde_json::json!({ "name": name })).unwrap().value["id"].as_str().unwrap().to_string();
-        let (sales, orders, billing) = (add("Sales"), add("Orders"), add("Billing"));
-        let parent = |shell: &Shell, package: &str| {
-            let st = shell.session.as_ref().unwrap().doc();
-            let p = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(package).unwrap()).unwrap()).unwrap();
-            archforge_core::name_of(st, p)
-        };
-        let shell = h.state_mut();
-        let params = |package: &str| serde_json::json!({ "package": package, "to": sales });
-        shell.cx(|cx| crate::er_ui::ErUi.run_drop(cx, "uml.package.move", params(&orders))).unwrap();
-        assert_eq!((parent(shell, &orders).as_str(), shell.canvas.toast.is_none()), ("Sales", true), "{theme:?}: run plainly");
-        shell.cx(|cx| uml_ui::UmlUi.run_drop(cx, "uml.package.move", params(&billing))).unwrap();
-        assert_eq!(parent(shell, &billing), "Sales", "{theme:?}");
-        assert_eq!(shell.canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Billing moved into Sales"), "{theme:?}: as Properties moves it");
-        assert_eq!(shell.session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}");
-        let refused = shell.cx(|cx| uml_ui::UmlUi.run_drop(cx, "uml.package.move", serde_json::json!({ "package": sales, "to": billing })));
-        assert!(refused.is_err(), "{theme:?}: into a package it holds, refused in words: {refused:?}");
     }
 }
 
@@ -10112,77 +8378,20 @@ fn first_and_sales(h: &mut Harness<'static, Shell>) -> (String, archforge_mof::U
     (root, first, sales, sales_d)
 }
 
-#[test]
-fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
-    let (mut h, customer, diagram) = diagram_harness();
-    let found = ids(&h);
-    let nodes: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.canvas.node.")).cloned().collect();
-    assert_eq!(nodes.len(), 2, "both tables are drawn: {found:?}");
-    assert_eq!(found.iter().filter(|i| i.starts_with("workspace.canvas.edge.")).count(), 1, "the relationship is drawn");
-    assert_eq!(selected_name(&h), "Shop schema", "opening selects the diagram");
-    // The node at the left is Customer: a click selects the table behind it.
-    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
-    let at = rect_of(&h, &customer_node).center();
-    click(&mut h, at);
-    assert_eq!(selected_name(&h), "Customer");
-    let st = h.state().session.as_ref().unwrap().doc();
-    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
-    assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![customer_obj]);
-    // A click on the empty canvas selects the diagram again.
-    let canvas = rect_of(&h, "workspace.canvas");
-    click(&mut h, canvas.left_top() + egui::vec2(20.0, 20.0));
-    assert_eq!(selected_name(&h), "Shop schema");
-    // The pan tool drags the view.
-    let at = rect_of(&h, "workspace.tools.pan").center();
-    click(&mut h, at);
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Pan);
-    let before = h.state().canvas.pan;
-    let from = canvas.left_top() + egui::vec2(20.0, 20.0);
-    drag(&mut h, from, from + egui::vec2(50.0, 20.0));
-    let after = h.state().canvas.pan;
-    assert!((after - before - egui::vec2(50.0, 20.0)).length() < 1.0, "{before:?} -> {after:?}");
-    // The zoom buttons and Whole diagram.
-    let fitted = h.state().canvas.zoom;
-    let at = rect_of(&h, "workspace.zoom.in").center();
-    click(&mut h, at);
-    assert!(h.state().canvas.zoom > fitted);
-    let at = rect_of(&h, "workspace.zoom.out").center();
-    click(&mut h, at);
-    click(&mut h, at);
-    assert!(h.state().canvas.zoom < fitted);
-    let at = rect_of(&h, "workspace.minimap.fit").center();
-    click(&mut h, at);
-    assert!((h.state().canvas.zoom - fitted).abs() < 0.001);
-    // The toggles.
-    let at = rect_of(&h, "workspace.tools.grid").center();
-    click(&mut h, at);
-    assert!(!h.state().canvas.grid);
-    let at = rect_of(&h, "workspace.tools.key-status").center();
-    click(&mut h, at);
-    assert!(!h.state().canvas.key_status);
-    let at = rect_of(&h, "workspace.minimap.toggle").center();
-    click(&mut h, at);
-    assert!(!h.state().canvas.minimap_open);
-    assert!(!ids(&h).iter().any(|i| i == "workspace.minimap.fit"));
-    let at = rect_of(&h, "workspace.minimap.toggle").center();
-    click(&mut h, at);
-    assert!(h.state().canvas.minimap_open);
-    // Properties shows the diagram with its schema when the diagram is selected.
-    click(&mut h, canvas.left_top() + egui::vec2(20.0, 20.0));
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.schema"));
-    let _ = diagram;
-}
-
+/// The automation ids of the canvas's nodes the last frame drew.
 fn node_ids(h: &Harness<'static, Shell>) -> Vec<String> {
     ids(h).iter().filter(|i| i.starts_with("workspace.canvas.node.")).cloned().collect()
 }
 
+/// The bounds of the node `node` in diagram units.
 fn node_bounds(h: &Harness<'static, Shell>, node: &str) -> archforge_diagram::Rect {
     let st = h.state().session.as_ref().unwrap().doc();
     let n = st.by_uuid(archforge_mof::Uuid::parse(node).unwrap()).unwrap();
     archforge_diagram::grid::bounds_of(st, n)
 }
 
+/// The Entity tool places a table where the canvas is clicked, its name typed in place, as one undo
+/// step.
 #[test]
 fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -10218,6 +8427,8 @@ fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select);
 }
 
+/// A drag moves a node by the drag in diagram units and a corner handle resizes it, each one undo
+/// step; the Arrange bar aligns two selected nodes.
 #[test]
 fn dragging_moves_and_resizes_nodes_and_the_arrange_bar_aligns_two() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -10269,183 +8480,7 @@ fn dragging_moves_and_resizes_nodes_and_the_arrange_bar_aligns_two() {
     assert!((a2.x - a.x - 1.0).abs() < 0.01, "{a:?} -> {a2:?}");
 }
 
-#[test]
-fn the_entity_menu_removes_from_the_diagram_and_the_dialog_deletes_from_the_model() {
-    let (mut h, customer, _diagram) = diagram_harness();
-    let nodes = node_ids(&h);
-    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
-    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
-    // The add-column adorner opens the column editor for the selected table, and Properties shows
-    // it in place of the panel that showed.
-    let at = rect_of(&h, &customer_node).center();
-    click(&mut h, at);
-    h.state_mut().state.panel = crate::state::Panel::Skills;
-    h.run();
-    let at = rect_of(&h, "workspace.canvas.adorn.add-column").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.target.is_none() && c.entity.to_string() == customer));
-    assert_eq!(h.state().state.panel, crate::state::Panel::Properties);
-    // A right click opens the menu; Remove from this diagram keeps the table in the model.
-    let at = rect_of(&h, &order_node).center();
-    h.event(egui::Event::PointerMoved(at));
-    for pressed in [true, false] {
-        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
-    }
-    h.run();
-    assert!(h.state().canvas.menu.is_some(), "the menu opened");
-    assert!(painted(&h).iter().any(|t| t == "Ctrl+Shift+G"), "Generate's keys as the menu bar writes them");
-    let at = rect_of(&h, "workspace.canvas.menu.remove").center();
-    click(&mut h, at);
-    assert_eq!(node_ids(&h).len(), 1, "the node went; notice {:?}, active {:?}, ids {:?}", h.state().canvas.notice, h.state().canvas.active, ids(&h));
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Order"), "the table stays");
-    // Shift+Delete on the selected Customer asks; Delete confirms and the table goes with its node.
-    let at = rect_of(&h, &customer_node).center();
-    click(&mut h, at);
-    key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
-    let d = h.state().explorer.delete.clone().expect("the dialog asks");
-    assert_eq!(d.name, "Customer");
-    assert_eq!(d.diagrams, 1);
-    assert!(d.node.is_some());
-    assert!(ids(&h).iter().any(|i| i == "workspace.explorer.delete.unplace"));
-    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
-    click(&mut h, at);
-    assert!(h.state().explorer.delete.is_none());
-    assert!(node_ids(&h).is_empty());
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(!st.alive().any(|o| archforge_core::name_of(st, o) == "Customer"));
-}
-
-/// A table's menu as ER answers it: Show related tables first, in a section of its own and off,
-/// then after Open in Models Add column and, on a pure mapping table alone, Collapse into a
-/// relationship; Add column opens the table's new column in Properties and Collapse brings the
-/// line back. Its keys are the platform's (⌘↩ on the Mac), and nothing but a table takes ER's menu.
-#[test]
-fn a_tables_menu_adds_its_own_rows_and_runs_them() {
-    use crate::kinds::DiagramKind;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _customer, diagram) = diagram_harness_in(theme);
-        let mapping = {
-            let s = h.state_mut().session.as_mut().unwrap();
-            let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-            let st = s.doc();
-            let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-            let order = st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap();
-            let order_node = st.uuid(archforge_diagram::views_of(st, order).2[0]).unwrap().to_string();
-            let order = st.uuid(order).unwrap().to_string();
-            let tag = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Tag" })).unwrap().value);
-            s.execute("er.attribute.add", &serde_json::json!({ "entity": tag, "name": "tag_id", "type": "INT", "primary_key": true })).unwrap();
-            let line = id(s
-                .execute(
-                    "er.relationship.add",
-                    &serde_json::json!({ "from": order, "to": tag, "from_end": "zero-or-more", "to_end": "zero-or-more" }),
-                )
-                .unwrap()
-                .value);
-            let t = id(s
-                .execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": tag, "x": 900, "y": 400, "width": 240, "height": 120 }))
-                .unwrap()
-                .value);
-            s.execute("diagram.connect", &serde_json::json!({ "diagram": diagram, "element": line, "source": order_node, "target": t })).unwrap();
-            id(s.execute("er.relationship.resolve", &serde_json::json!({ "relationship": line })).unwrap().value)
-        };
-        h.run();
-        let node_of = |h: &Harness<'static, Shell>, element: &str| {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let e = st.alive().find(|o| archforge_core::name_of(st, *o) == element || st.uuid(*o).is_ok_and(|u| u.to_string() == element)).unwrap();
-            format!("workspace.canvas.node.{}", st.uuid(archforge_diagram::views_of(st, e).2[0]).unwrap())
-        };
-        // ER answers for its tables alone, in the platform's keys.
-        {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let order = st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap();
-            let column = st.alive().find(|o| archforge_core::name_of(st, *o) == "order_id").unwrap();
-            let own: Vec<_> = crate::er_kind::ErKind.menu(st, order, false).unwrap().iter().map(|r| (r.key, r.label, r.live, r.first)).collect();
-            assert_eq!(own, [("related", "Show related tables", false, true), ("add-column", "Add column", true, false)], "{theme:?}");
-            let keys = |mac: bool| crate::er_kind::ErKind.menu(st, order, mac).unwrap().iter().map(|r| r.keys).collect::<Vec<_>>();
-            assert_eq!((keys(true), keys(false)), (vec!["R", "⌘↩"], vec!["R", "Ctrl Enter"]), "{theme:?}");
-            assert!(crate::er_kind::ErKind.menu(st, column, false).is_none(), "{theme:?}: a column takes no menu");
-        }
-        // Order: no collapse, as it is no mapping table.
-        let at = rect_of(&h, &node_of(&h, "Order")).center();
-        right_click(&mut h, at);
-        let rows = |h: &Harness<'static, Shell>| menu_drawn(h).into_iter().map(|(key, gap)| format!("{key} {gap}")).collect::<Vec<_>>();
-        assert_eq!(rows(&h), ["related 0", "open 1", "add-column 0", "generate 0", "remove 1", "delete 0"], "{theme:?}");
-        let texts = painted(&h);
-        assert!(["Show related tables", "R", "Add column", "Ctrl Enter"].iter().all(|t| texts.iter().any(|p| p == t)), "{theme:?}: {texts:?}");
-        // Show related tables is off: its click runs nothing and falls to the canvas, which closes the menu.
-        let at = rect_of(&h, "workspace.canvas.menu.related").center();
-        click(&mut h, at);
-        assert!(h.state().canvas.menu.is_none() && er_of(h.state()).column.is_none(), "{theme:?}: Show related tables is off");
-        // Add column shows Properties in place of the panel that showed.
-        h.state_mut().state.panel = crate::state::Panel::Skills;
-        h.run();
-        let at = rect_of(&h, &node_of(&h, "Order")).center();
-        right_click(&mut h, at);
-        let at = rect_of(&h, "workspace.canvas.menu.add-column").center();
-        click(&mut h, at);
-        assert!(h.state().canvas.menu.is_none(), "{theme:?}: the menu closed");
-        let order = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap()).unwrap()
-        };
-        assert!(
-            er_of(h.state()).column.as_ref().is_some_and(|c| c.target.is_none() && c.entity == order),
-            "{theme:?}: {:?}",
-            er_of(h.state()).column
-        );
-        assert_eq!(h.state().state.panel, crate::state::Panel::Properties, "{theme:?}");
-        // The mapping table: Collapse after Add column, and its click brings the line back.
-        er_of_mut(h.state_mut()).column = None;
-        h.run();
-        let at = rect_of(&h, &node_of(&h, &mapping)).center();
-        right_click(&mut h, at);
-        assert_eq!(rows(&h), ["related 0", "open 1", "add-column 0", "collapse 0", "generate 0", "remove 1", "delete 0"], "{theme:?}");
-        assert!(painted(&h).iter().any(|t| t == "Collapse into a relationship"), "{theme:?}");
-        let at = rect_of(&h, "workspace.canvas.menu.collapse").center();
-        click(&mut h, at);
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert!(
-            st.by_uuid(archforge_mof::Uuid::parse(&mapping).unwrap()).is_none_or(|m| !st.is_alive(m)),
-            "{theme:?}: {:?}",
-            h.state().canvas.notice
-        );
-        assert!(h.state().canvas.menu.is_none(), "{theme:?}");
-    }
-}
-
-#[test]
-fn a_table_added_in_models_is_placed_on_the_open_diagram_and_grows_with_its_columns() {
-    let (mut h, _customer, _diagram) = diagram_harness();
-    let before = node_ids(&h).len();
-    // Select the schema in Models and add a table: it lands on the diagram.
-    let schema_row = ids(&h).into_iter().find(|i| i.starts_with("workspace.explorer.row.")).unwrap();
-    let at = rect_of(&h, &schema_row).center();
-    click(&mut h, at);
-    crate::explorer::add(h.state_mut(), "table");
-    h.run();
-    assert_eq!(node_ids(&h).len(), before + 1, "placed on the open diagram");
-    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-    // Its node starts at the empty height and grows with the first column.
-    let new_node = node_ids(&h).into_iter().max_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap();
-    let id = new_node.trim_start_matches("workspace.canvas.node.").to_string();
-    assert!((node_bounds(&h, &id).height - crate::er_place::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
-    crate::explorer::add(h.state_mut(), "column");
-    h.run();
-    assert!(
-        (node_bounds(&h, &id).height - crate::er_place::content_height(1)).abs() < 0.01,
-        "{:?} notice {:?} undo {:?}",
-        node_bounds(&h, &id),
-        h.state().explorer.notice,
-        h.state().session.as_ref().unwrap().undo_label()
-    );
-    // Growth and the column were one step.
-    let s = h.state_mut().session.as_mut().unwrap();
-    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
-    h.run();
-    assert!((node_bounds(&h, &id).height - crate::er_place::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
-}
-
+/// A drag with `button` from `from` to `to`, a frame at each step.
 fn drag_by(h: &mut Harness<'static, Shell>, button: egui::PointerButton, from: egui::Pos2, to: egui::Pos2) {
     h.event(egui::Event::PointerMoved(from));
     h.event(egui::Event::PointerButton { pos: from, button, pressed: true, modifiers: egui::Modifiers::NONE });
@@ -10456,6 +8491,7 @@ fn drag_by(h: &mut Harness<'static, Shell>, button: egui::PointerButton, from: e
     h.run();
 }
 
+/// A marquee selects what it crosses; a middle drag over a node pans the view and moves nothing.
 #[test]
 fn the_marquee_selects_what_it_crosses_and_a_middle_drag_only_pans() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -10511,58 +8547,6 @@ fn a_name_refused_on_the_canvas_says_why_in_plain_words() {
     crate::i18n::set_language("en");
 }
 
-#[test]
-fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
-    let (mut h, customer, _diagram) = diagram_harness();
-    let nodes = node_ids(&h);
-    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
-    let rect = rect_of(&h, &customer_node);
-    // A double click on the header opens the name; "Order" is taken, so the rename is refused and stays open.
-    let at = rect.left_top() + egui::vec2(60.0, 30.0);
-    double_click(&mut h, at);
-    assert!(h.state().canvas.rename.as_ref().is_some_and(|r| r.text == "Customer"), "{:?}", h.state().canvas.rename);
-    h.state_mut().canvas.rename.as_mut().unwrap().text = "Order".into();
-    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-    let rename = h.state().canvas.rename.clone().expect("a refused name stays open");
-    assert!(rename.refused.is_some());
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().canvas.rename.is_none());
-    assert_eq!(selected_name(&h), "Customer");
-    // A double click on the second column row opens that column's editor.
-    let at = rect.left_top() + egui::vec2(100.0, 77.0 + 20.0 + 6.0);
-    double_click(&mut h, at);
-    let edit = er_of(h.state()).column.clone().expect("the column editor opened");
-    assert_eq!(edit.entity.to_string(), customer);
-    assert_eq!(edit.name, "email", "the second row is the email column");
-    // With the Entity tool, a click on a node selects it instead of placing one.
-    let n = node_ids(&h).len();
-    let at = rect_of(&h, "workspace.tools.entity").center();
-    click(&mut h, at);
-    let order_node = nodes.iter().find(|x| **x != customer_node).unwrap().clone();
-    let at = rect_of(&h, &order_node).center();
-    click(&mut h, at);
-    assert_eq!(node_ids(&h).len(), n);
-    assert_eq!(selected_name(&h), "Order");
-    // The dialog's third button removes from the diagram only. Time passes first, so the next
-    // click on Order is not read as a double click on the one before; the column editor, which
-    // would keep the keyboard, is closed.
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    for _ in 0..45 {
-        h.step();
-    }
-    er_of_mut(h.state_mut()).column = None;
-    let at = rect_of(&h, &order_node).center();
-    click(&mut h, at);
-    key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
-    assert!(h.state().explorer.delete.is_some());
-    let at = rect_of(&h, "workspace.explorer.delete.unplace").center();
-    click(&mut h, at);
-    assert!(h.state().explorer.delete.is_none());
-    assert_eq!(node_ids(&h).len(), n - 1);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Order"), "the table stays in the model");
-}
-
 /// A secondary click, for context menus.
 fn right_click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.event(egui::Event::PointerMoved(at));
@@ -10609,359 +8593,10 @@ fn two_tables_harness() -> (Harness<'static, Shell>, String, String) {
     (h, customer, order)
 }
 
+/// The live relationships of the open model.
 fn relationships(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
     let st = h.state().session.as_ref().unwrap().doc();
     st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).collect()
-}
-
-#[test]
-fn the_relationship_tool_draws_a_line_with_its_foreign_key_as_one_step_and_delete_offers_undo() {
-    let (mut h, customer, _order) = two_tables_harness();
-    let nodes = node_ids(&h);
-    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
-    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
-    let at = rect_of(&h, "workspace.tools.relationship").center();
-    click(&mut h, at);
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Connect("relationship"));
-    // Drag from Customer to Order: one to many, Customer has a primary key, so the key comes along.
-    let (from, to) = (rect_of(&h, &customer_node).center(), rect_of(&h, &order_node).center());
-    drag(&mut h, from, to);
-    let rels = relationships(&h);
-    assert_eq!(rels.len(), 1, "one relationship drawn");
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "drawing hands back to Select");
-    let st = h.state().session.as_ref().unwrap().doc();
-    let rel = rels[0];
-    assert_eq!(st.get(rel, archforge_er::relationship::FROM).unwrap().as_ref().and_then(|o| st.uuid(o).ok()).unwrap().to_string(), customer);
-    assert!(crate::connect::has_foreign_key(st, rel), "the foreign key came with the line");
-    assert!(ids(&h).iter().any(|i| i.starts_with("workspace.canvas.edge.")), "the edge is drawn");
-    assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![rel], "the relationship is selected");
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.name"), "Properties shows its name field");
-    // The line, its edge and its label were one step.
-    let s = h.state_mut().session.as_mut().unwrap();
-    assert_eq!(s.undo_label(), Some("Add relationship"));
-    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
-    h.run();
-    assert!(relationships(&h).is_empty());
-    let s = h.state_mut().session.as_mut().unwrap();
-    s.execute("edit.redo", &serde_json::Value::Null).unwrap();
-    h.run();
-    // Escape returns to Select; a click on the edge selects the relationship; Delete removes it with a toast.
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    let edge = ids(&h).into_iter().find(|i| i.starts_with("workspace.canvas.edge.")).unwrap();
-    let at = rect_of(&h, &edge).center();
-    click(&mut h, at);
-    assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 1);
-    let keys_and_columns = |h: &Harness<'static, Shell>| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let count = |c| st.alive().filter(|o| st.class_of(*o).ok() == Some(c)).count();
-        (count(archforge_er::FOREIGN_KEY), count(archforge_er::ATTRIBUTE))
-    };
-    let with_line = keys_and_columns(&h);
-    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
-    assert!(relationships(&h).is_empty(), "the relationship went");
-    assert_eq!(keys_and_columns(&h), (with_line.0 - 1, with_line.1 - 1), "its foreign key and its key column went with it");
-    assert!(h.state().canvas.toast.is_some(), "the toast offers Undo");
-    let at = rect_of(&h, "workspace.toast.undo").center();
-    click(&mut h, at);
-    assert_eq!(relationships(&h).len(), 1, "Undo brings it back");
-    assert_eq!(keys_and_columns(&h), with_line, "with its key and column");
-    assert!(h.state().canvas.toast.is_none());
-    // A step after the removal takes the toast with it: Undo never undoes something else.
-    let edge = ids(&h).into_iter().find(|i| i.starts_with("workspace.canvas.edge.")).unwrap();
-    let at = rect_of(&h, &edge).center();
-    click(&mut h, at);
-    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
-    assert!(h.state().canvas.toast.is_some());
-    let from = rect_of(&h, &customer_node).center();
-    drag(&mut h, from, from + egui::vec2(30.0, 0.0));
-    assert!(h.state().canvas.toast.is_none(), "the toast went with the move");
-    assert!(!ids(&h).iter().any(|i| i == "workspace.toast.undo"));
-}
-
-/// A mapping table refused for its name says why in plain words on the offer, never with the
-/// command's id or the parameter it is about. In light and dark (AR-428).
-#[test]
-fn a_mapping_table_refused_for_its_name_says_why_in_plain_words() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, customer, order) = two_tables_harness();
-        h.state_mut().state.theme = theme;
-        let line = {
-            let s = h.state_mut().session.as_mut().unwrap();
-            let rel = s.execute(
-                "er.relationship.add",
-                &serde_json::json!({ "from": customer, "to": order, "from_end": "zero-or-more", "to_end": "zero-or-more" }),
-            );
-            rel.unwrap().value["id"].as_str().unwrap().to_string()
-        };
-        let relationship = archforge_mof::Uuid::parse(&line).unwrap();
-        er_of_mut(h.state_mut()).mapping = Some(crate::connect::MappingOffer { relationship, name: "Customer".into(), refused: None });
-        h.run();
-        let at = rect_of(&h, "workspace.mapping.add").center();
-        click(&mut h, at);
-        let refused = er_of(h.state()).mapping.as_ref().and_then(|o| o.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
-        assert!(
-            refused.starts_with("There is a table named Customer") && !refused.contains("er.") && !refused.contains("name:"),
-            "{theme:?}: {refused}"
-        );
-    }
-}
-
-/// ER's cardinality popover sets a new line's ends, and a many-to-many line offers its mapping table.
-#[test]
-fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapping_table() {
-    let (mut h, _customer, _order) = two_tables_harness();
-    let nodes = node_ids(&h);
-    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
-    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
-    let at = rect_of(&h, "workspace.tools.relationship-types").center();
-    click(&mut h, at);
-    assert!(h.state().canvas.popover.is_some() && h.state().canvas.tool == crate::canvas::Tool::Connect("relationship"));
-    assert!(ids(&h).iter().any(|i| i == "workspace.cardinality.preset.3"), "{:?}", ids(&h));
-    let at = rect_of(&h, "workspace.cardinality.preset.3").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).relationship.many_to_many());
-    let at = rect_of(&h, "workspace.cardinality.identifying").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).relationship.identifying);
-    let at = rect_of(&h, "workspace.cardinality.end.1").center();
-    click(&mut h, at);
-    assert_eq!(er_of(h.state()).relationship.to, archforge_er::Cardinality::ExactlyOne);
-    let at = rect_of(&h, "workspace.cardinality.preset.3").center();
-    click(&mut h, at);
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().canvas.popover.is_none(), "Escape closes the popover");
-    // The pick stays: the connect adorner of the selected Customer draws a many-to-many line.
-    h.state_mut().canvas.tool = crate::canvas::Tool::Select;
-    let at = rect_of(&h, &customer_node).center();
-    click(&mut h, at);
-    let from = rect_of(&h, "workspace.canvas.adorn.connect").center();
-    let to = rect_of(&h, &order_node).center();
-    drag(&mut h, from, to);
-    let rels = relationships(&h);
-    assert_eq!(rels.len(), 1);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(archforge_er::rules::is_many_to_many(st, rels[0]));
-    assert!(!crate::connect::has_foreign_key(st, rels[0]), "no key for a many-to-many line");
-    let offer = er_of(h.state()).mapping.clone().expect("the mapping table is offered");
-    assert_eq!(offer.name, "CustomerOrder");
-    assert!(ids(&h).iter().any(|i| i == "workspace.mapping.add"));
-    let at = rect_of(&h, "workspace.mapping.add").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).mapping.is_none(), "{:?}", er_of(h.state()).mapping);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "CustomerOrder"), "the mapping table exists");
-}
-
-/// The diagram harness with the relationship `places` selected, its Properties shown.
-fn relationship_harness() -> (Harness<'static, Shell>, archforge_mof::Obj) {
-    let (mut h, _customer, _diagram) = diagram_harness();
-    let rel = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let st = s.doc();
-        let rel = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap();
-        let id = st.uuid(rel).unwrap().to_string();
-        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
-        rel
-    };
-    h.run();
-    (h, rel)
-}
-
-fn fk_of(h: &Harness<'static, Shell>, rel: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
-    let st = h.state().session.as_ref().unwrap().doc();
-    st.referrers(rel).into_iter().find(|(_, p)| *p == archforge_er::foreign_key::RELATIONSHIP).map(|(f, _)| f)
-}
-
-#[test]
-fn relationship_properties_set_the_ends_roles_identifying_and_the_foreign_key_actions() {
-    let (mut h, rel) = relationship_harness();
-    let found = ids(&h);
-    for id in [
-        "workspace.properties.identifying",
-        "workspace.properties.end.from.0",
-        "workspace.properties.end.to.3",
-        "workspace.properties.role.from",
-        "workspace.properties.foreign-key",
-        "workspace.properties.points-to",
-        "workspace.properties.pair.0",
-        "workspace.properties.on-delete",
-        "workspace.properties.more",
-    ] {
-        assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
-    }
-    // The to end becomes one-or-more.
-    let at = rect_of(&h, "workspace.properties.end.to.3").center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(archforge_er::rules::cardinality_of(st, rel, archforge_er::relationship::TO_END), Some(archforge_er::Cardinality::OneOrMore));
-    // Identifying: the foreign key's columns join the child's primary key.
-    let at = rect_of(&h, "workspace.properties.identifying").center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(matches!(st.get(rel, archforge_er::relationship::IDENTIFYING), Ok(archforge_mof::Value::Bool(true))), "{:?}", h.state().panels.notice);
-    // A role typed and committed with Enter.
-    let at = rect_of(&h, "workspace.properties.role.from").center();
-    click(&mut h, at);
-    h.event(egui::Event::Text("buyer".into()));
-    h.run();
-    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(st.get(rel, archforge_er::relationship::FROM_ROLE).unwrap().as_str(), Some("buyer"));
-    // On delete: Cascade.
-    let at = rect_of(&h, "workspace.properties.on-delete").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.on-delete.2").center();
-    click(&mut h, at);
-    let fk = fk_of(&h, rel).expect("the foreign key");
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(
-        st.get(fk, archforge_er::foreign_key::ON_DELETE).unwrap(),
-        archforge_mof::Value::Enum(archforge_er::ReferentialAction::Cascade.index())
-    );
-    // More opens Deferrable; checked at commit.
-    let at = rect_of(&h, "workspace.properties.more").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.deferrable").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.deferrable.2").center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(
-        st.get(fk, archforge_er::foreign_key::DEFERRABLE).unwrap(),
-        archforge_mof::Value::Enum(archforge_er::Deferrability::InitiallyDeferred.index())
-    );
-}
-
-#[test]
-fn the_foreign_key_switch_removes_and_adds_the_key_with_its_columns_as_one_step() {
-    let (mut h, rel) = relationship_harness();
-    let columns_of_order = |h: &Harness<'static, Shell>| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let order = st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap();
-        st.list(order, archforge_er::entity::ATTRIBUTE).unwrap().len()
-    };
-    let before = columns_of_order(&h);
-    let fk = fk_of(&h, rel).expect("the foreign key");
-    let key_columns = h.state().session.as_ref().unwrap().doc().list(fk, archforge_er::foreign_key::COLUMN).unwrap().len();
-    assert!(key_columns >= 1);
-    // Off: the key and its columns go together.
-    let at = rect_of(&h, "workspace.properties.foreign-key").center();
-    click(&mut h, at);
-    assert!(fk_of(&h, rel).is_none(), "{:?}", h.state().panels.notice);
-    assert_eq!(columns_of_order(&h), before - key_columns);
-    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Remove foreign key"));
-    // On again: one Order column per Customer key column, and the key.
-    let at = rect_of(&h, "workspace.properties.foreign-key").center();
-    click(&mut h, at);
-    assert!(fk_of(&h, rel).is_some(), "{:?}", h.state().panels.notice);
-    assert_eq!(columns_of_order(&h), before);
-    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add foreign key"));
-    // A pair's child column can be an existing column of the same type.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let st = s.doc();
-        let order = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "buyer_ref", "type": "BIGINT" })).unwrap();
-        // Adding selected the column; the panel shows the relationship again.
-        let rel_id = s.doc().uuid(rel).unwrap().to_string();
-        s.execute("view.select", &serde_json::json!({ "ids": [rel_id] })).unwrap();
-    }
-    h.run();
-    let at = rect_of(&h, "workspace.properties.pair.0").center();
-    click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::PAIR.at(0)));
-    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.pair.0.")).collect();
-    assert!(items.len() >= 2, "{items:?}");
-    // The last item is buyer_ref (same type as customer_id).
-    let at = rect_of(&h, items.last().unwrap()).center();
-    click(&mut h, at);
-    let fk = fk_of(&h, rel).unwrap();
-    let st = h.state().session.as_ref().unwrap().doc();
-    let cols: Vec<String> = st
-        .list(fk, archforge_er::foreign_key::COLUMN)
-        .unwrap()
-        .iter()
-        .filter_map(archforge_mof::Value::as_ref)
-        .map(|c| archforge_core::name_of(st, c))
-        .collect();
-    assert!(cols.contains(&"buyer_ref".to_string()), "{cols:?} notice {:?}", h.state().panels.notice);
-}
-
-#[test]
-fn a_parent_without_a_key_gets_the_card_and_add_id_column_makes_the_key() {
-    let (mut h, _customer, _order) = two_tables_harness();
-    // Payment without any column, joined from Order as the parent-less side.
-    let (payment_rel, payment) = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        let order = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
-        let payment = s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Payment" })).unwrap().value["id"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        let rel = s.execute("er.relationship.add", &serde_json::json!({ "from": payment, "to": order, "name": "settles" })).unwrap().value["id"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        s.execute("view.select", &serde_json::json!({ "ids": [rel] })).unwrap();
-        (rel, payment)
-    };
-    h.run();
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.foreign-key"));
-    let at = rect_of(&h, "workspace.properties.foreign-key").center();
-    click(&mut h, at);
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.add-id"), "the card offers Add id column: {:?}", ids(&h));
-    let at = rect_of(&h, "workspace.properties.add-id").center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    let payment_obj = st.by_uuid(archforge_mof::Uuid::parse(&payment).unwrap()).unwrap();
-    assert!(archforge_er::rules::primary_key_of(st, payment_obj).is_some(), "Payment has its id key: {:?}", h.state().panels.notice);
-    let rel_obj = st.by_uuid(archforge_mof::Uuid::parse(&payment_rel).unwrap()).unwrap();
-    assert!(st.referrers(rel_obj).into_iter().any(|(_, p)| p == archforge_er::foreign_key::RELATIONSHIP), "the foreign key exists");
-    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add id column"));
-}
-
-#[test]
-fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
-    let (mut h, customer) = table_harness();
-    let found = ids(&h);
-    assert!(found.iter().any(|i| i == "workspace.properties.keys.add"), "{found:?}");
-    let key_rows: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.properties.key.row.") && !i.ends_with(".edit")).cloned().collect();
-    assert_eq!(key_rows.len(), 1, "the primary key: {key_rows:?}");
-    // + opens the editor for a new unique constraint; a column is added from the menu; Apply.
-    let at = rect_of(&h, "workspace.properties.keys.add").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).key.as_ref().is_some_and(|k| k.target.is_none() && !k.primary));
-    let at = rect_of(&h, "workspace.properties.key.column.add").center();
-    click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::KEY_COLUMN));
-    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.key.column.add.")).collect();
-    assert!(!items.is_empty());
-    let at = rect_of(&h, &items[0]).center();
-    click(&mut h, at);
-    assert_eq!(er_of(h.state()).key.as_ref().unwrap().columns.len(), 1);
-    let at = rect_of(&h, "workspace.properties.key.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).key.is_none(), "{:?}", er_of(h.state()).key);
-    let st = h.state().session.as_ref().unwrap().doc();
-    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
-    assert_eq!(archforge_er::rules::unique_constraints(st, customer_obj).len(), 1, "the unique constraint was added");
-    assert_eq!(selected_name(&h), "Customer", "the table stays selected");
-    // The primary key's row opens its editor; the bin removes the key, and the table gains a problem.
-    let pk_row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.key.row.") && !i.ends_with(".edit")).unwrap();
-    let at = rect_of(&h, &format!("{pk_row}.edit")).center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).key.as_ref().is_some_and(|k| k.primary));
-    let at = rect_of(&h, "workspace.properties.key.remove").center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(archforge_er::rules::primary_key_of(st, customer_obj).is_none(), "{:?}", h.state().panels.notice);
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.problem.0"), "Problems lists the missing key: {:?}", ids(&h));
-    let problems =
-        archforge_shell_api::problems::of(SCREENS.notation_uis(), st, &crate::problems::by_element(SCREENS.notation_uis(), st), customer_obj);
-    assert_eq!(problems.len(), 1);
-    assert_eq!(problems[0].text, "Customer has no primary key");
 }
 
 /// A note's text typed in place commits on ⌘↩ (Ctrl Enter) alone, in both key shapes: with Shift,
@@ -10992,397 +8627,6 @@ fn a_note_commits_on_its_own_chord_alone() {
             assert_eq!(st.get(st.by_uuid(note).unwrap(), archforge_diagram::node::TEXT).unwrap().as_str(), Some(typed), "{theme:?}");
         }
     });
-}
-
-#[test]
-fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
-    let (mut h, _customer, _diagram) = diagram_harness();
-    // Order's primary key goes: its node gets a badge; the schema's Properties lists and selects.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let (order, schema) = {
-            let st = s.doc();
-            let order = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
-            let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-            (order, schema)
-        };
-        s.execute("er.primary-key.remove", &serde_json::json!({ "entity": order })).unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
-    }
-    h.run();
-    let badges: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.canvas.problem.")).collect();
-    assert_eq!(badges.len(), 1, "one badge on Order: {badges:?}");
-    let at = rect_of(&h, "workspace.properties.problem.0").center();
-    click(&mut h, at);
-    assert_eq!(selected_name(&h), "Order", "the problem row selects its table");
-    // The Note tool places a note and opens its text; typing and Cmd+Enter set it.
-    let at = rect_of(&h, "workspace.tools.note").center();
-    click(&mut h, at);
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Note);
-    let canvas = rect_of(&h, "workspace.canvas");
-    let before = node_ids(&h).len();
-    click(&mut h, canvas.left_top() + egui::vec2(canvas.width() - 120.0, 80.0));
-    assert_eq!(node_ids(&h).len(), before + 1, "the note is a node: {:?}", h.state().canvas.notice);
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "placing hands back to Select");
-    assert!(h.state().canvas.note_edit.is_some(), "its text is open");
-    assert!(ids(&h).iter().any(|i| i == "workspace.canvas.note"));
-    h.state_mut().canvas.note_edit.as_mut().unwrap().text = "Product.sku is unique per supplier".into();
-    key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
-    assert!(h.state().canvas.note_edit.is_none(), "{:?}", h.state().canvas.note_edit);
-    let st = h.state().session.as_ref().unwrap().doc();
-    let note = st
-        .alive()
-        .find(|o| {
-            st.class_of(*o).ok() == Some(archforge_diagram::NODE)
-                && st.get(*o, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()).is_none()
-        })
-        .unwrap();
-    assert_eq!(st.get(note, archforge_diagram::node::TEXT).unwrap().as_str(), Some("Product.sku is unique per supplier"));
-    // Removing a column with its key says so in a toast.
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    let st = h.state().session.as_ref().unwrap().doc();
-    let customer_id = st
-        .uuid(
-            st.alive()
-                .find(|o| {
-                    archforge_core::name_of(st, *o) == "customer_id"
-                        && archforge_er::rules::entity_of(st, *o).is_some_and(|e| archforge_core::name_of(st, e) == "Customer")
-                })
-                .unwrap(),
-        )
-        .unwrap();
-    h.state_mut().cx(|cx| crate::er_table::open_column(cx, archforge_mof::Uuid::parse(&_customer).unwrap(), Some(customer_id)));
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [_customer] })).unwrap();
-    }
-    h.run();
-    let at = rect_of(&h, "workspace.properties.column.remove").center();
-    click(&mut h, at);
-    let toast = h.state().canvas.toast.clone().expect("the toast");
-    assert!(toast.text.starts_with("customer_id removed · "), "{}", toast.text);
-}
-
-#[test]
-fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_a_description() {
-    let (mut h, customer) = table_harness();
-    // email becomes VARCHAR with a length of 255 and a default; the row shows VARCHAR(255).
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
-    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
-    click(&mut h, at);
-    er_of_mut(h.state_mut()).column.as_mut().unwrap().ty = "VARCHAR".into();
-    h.run();
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.column.length"), "a varchar takes a length: {:?}", ids(&h));
-    assert!(!ids(&h).iter().any(|i| i == "workspace.properties.column.scale"));
-    {
-        let c = er_of_mut(h.state_mut()).column.as_mut().unwrap();
-        c.length = "255".into();
-        c.default = "''".into();
-    }
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
-    let st = h.state().session.as_ref().unwrap().doc();
-    let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
-    assert_eq!(archforge_er::rules::type_display(st, email), "VARCHAR(255)");
-    assert_eq!(archforge_er::rules::text_of(st, email, archforge_er::attribute::DEFAULT), "''");
-    // A numeric takes precision and scale; the scale above the precision is refused and the editor stays open.
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
-    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
-    click(&mut h, at);
-    {
-        let c = er_of_mut(h.state_mut()).column.as_mut().unwrap();
-        c.ty = "NUMERIC".into();
-        c.length.clear();
-        c.precision = "4".into();
-        c.scale = "6".into();
-    }
-    h.run();
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.column.scale"));
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.refused.is_some()), "the refusal stays in the editor");
-    er_of_mut(h.state_mut()).column.as_mut().unwrap().scale = "2".into();
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(archforge_er::rules::type_display(st, email), "NUMERIC(4, 2)");
-    // Generation: computed with an expression through the select and the expression field.
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
-    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
-    click(&mut h, at);
-    er_of_mut(h.state_mut()).column.as_mut().unwrap().default.clear();
-    let at = rect_of(&h, "workspace.properties.column.generation").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.generation.3").center();
-    click(&mut h, at);
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.column.expression"), "a computed column takes an expression");
-    er_of_mut(h.state_mut()).column.as_mut().unwrap().expression = "lower(name)".into();
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(archforge_er::rules::generation_of(st, email), archforge_er::Generation::ComputedStored);
-    assert_eq!(archforge_er::rules::text_of(st, email, archforge_er::attribute::EXPRESSION), "lower(name)");
-    // The heading's description field describes the table.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
-    }
-    h.run();
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.description"));
-    let at = rect_of(&h, "workspace.properties.description").center();
-    click(&mut h, at);
-    h.event(egui::Event::Text("People who buy.".into()));
-    h.run();
-    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-    let st = h.state().session.as_ref().unwrap().doc();
-    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
-    assert_eq!(archforge_er::rules::text_of(st, customer_obj, archforge_er::element::DESCRIPTION), "People who buy.");
-}
-
-/// `Customer.email` of [`table_harness_in`] given `steps` through the engine (its type, flags,
-/// default and generation as a test starts it), each with the column as its `attribute`.
-fn give_email(h: &mut Harness<'static, Shell>, steps: &[(&str, serde_json::Value)]) {
-    let s = h.state_mut().session.as_mut().unwrap();
-    let st = s.doc();
-    let email = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap()).unwrap().to_string();
-    for (cmd, params) in steps {
-        let mut params = params.clone();
-        params["attribute"] = serde_json::json!(email);
-        s.execute(cmd, &params).unwrap();
-    }
-}
-
-/// `Customer.email` of [`table_harness_in`] given `steps` first ([`give_email`]), then its column
-/// editor opened from its row, the generation numbered `generation` chosen in the select, `change`
-/// made to the rest of what is typed, and Apply clicked. Gives the column and the refusal the
-/// editor kept, if any.
-fn apply_email_edit(
-    h: &mut Harness<'static, Shell>,
-    steps: &[(&str, serde_json::Value)],
-    generation: usize,
-    change: impl FnOnce(&mut crate::er_table::ColumnEdit),
-) -> (archforge_mof::Obj, Option<String>) {
-    give_email(h, steps);
-    h.run();
-    let rows: Vec<String> = ids(h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
-    let at = rect_of(h, &format!("{}.edit", rows[1])).center();
-    click(h, at);
-    let at = rect_of(h, "workspace.properties.column.generation").center();
-    click(h, at);
-    let at = rect_of(h, &format!("workspace.properties.column.generation.{generation}")).center();
-    click(h, at);
-    change(er_of_mut(h.state_mut()).column.as_mut().unwrap());
-    h.run();
-    let at = rect_of(h, "workspace.properties.column.apply").center();
-    click(h, at);
-    let refused = er_of(h.state()).column.as_ref().map(|c| c.refused.clone().unwrap_or_else(|| "the editor stayed open".into()));
-    let st = h.state().session.as_ref().unwrap().doc();
-    (st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap(), refused)
-}
-
-/// A computed or an identity column made a plain one with a default in one Apply of the column
-/// editor lands: the generation is given up before the default is set, and the computed column's
-/// expression, hidden once None is chosen, goes with it, for a saved plain column taken to
-/// Computed and back in its editor and for a column being added too. A default
-/// on a column that stays computed is still refused by its rule, and a new expression alone lands.
-/// In light and dark.
-#[test]
-fn the_column_editor_makes_a_computed_or_identity_column_plain_with_a_default() {
-    use archforge_er::{Generation, attribute, rules};
-    let computed = ("er.attribute.set-generation", serde_json::json!({ "generation": "computed-stored", "expression": "lower(name)" }));
-    let integer = ("er.attribute.set-type", serde_json::json!({ "type": "BIGINT" }));
-    let not_null = ("er.attribute.set-flags", serde_json::json!({ "primary_key": false, "nullable": "no", "unique": false }));
-    let identity = ("er.attribute.set-generation", serde_json::json!({ "generation": "identity-always" }));
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        // Computed, stored to None with a default.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 0, |c| c.default = "'none'".into());
-        assert_eq!(refused, None, "computed to plain with a default lands");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
-        assert_eq!(rules::text_of(st, email, attribute::DEFAULT), "'none'");
-        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "", "the hidden expression went with the generation");
-        // Computed, stored to None and nothing else.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 0, |_| {});
-        assert_eq!(refused, None, "computed to plain lands");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
-        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "");
-        // Identity, always to None with a default.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, &[integer.clone(), not_null.clone(), identity.clone()], 0, |c| c.default = "0".into());
-        assert_eq!(refused, None, "identity to plain with a default lands");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
-        assert_eq!(rules::text_of(st, email, attribute::DEFAULT), "0");
-        // A default on a column that stays computed is still refused, and nothing changes.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 3, |c| c.default = "'x'".into());
-        let said = crate::panels::said(
-            SCREENS.notation_uis(),
-            &archforge_engine::Reason::Generation(archforge_engine::GenerationRule::ComputedTakesNoDefault),
-        );
-        assert_eq!(refused, said, "a computed column takes no default");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::ComputedStored);
-        assert_eq!(rules::text_of(st, email, attribute::DEFAULT), "");
-        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "lower(name)");
-        // A column that stays computed takes a new expression alone.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 3, |c| c.expression = "upper(name)".into());
-        assert_eq!(refused, None, "a new expression lands");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::ComputedStored);
-        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "upper(name)");
-        // A saved plain column made computed, given an expression and made plain again in its
-        // editor stays plain without an expression: the generation never changed in the model.
-        let (mut h, _) = table_harness_in(theme);
-        let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
-        let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
-        click(&mut h, at);
-        for generation in [3, 0] {
-            let at = rect_of(&h, "workspace.properties.column.generation").center();
-            click(&mut h, at);
-            let at = rect_of(&h, &format!("workspace.properties.column.generation.{generation}")).center();
-            click(&mut h, at);
-            if generation == 3 {
-                er_of_mut(h.state_mut()).column.as_mut().unwrap().expression = "lower(name)".into();
-            }
-        }
-        let at = rect_of(&h, "workspace.properties.column.apply").center();
-        click(&mut h, at);
-        assert!(er_of(h.state()).column.is_none(), "the plain column's Apply lands: {:?}", er_of(h.state()).column);
-        let st = h.state().session.as_ref().unwrap().doc();
-        let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
-        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
-        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "");
-        // A column being added that was made computed, given an expression and made plain again
-        // is added plain, without the expression its hidden field still holds.
-        let (mut h, customer) = table_harness_in(theme);
-        h.state_mut().cx(|cx| crate::er_table::open_column(cx, archforge_mof::Uuid::parse(&customer).unwrap(), None));
-        h.run();
-        er_of_mut(h.state_mut()).column.as_mut().unwrap().name = "nickname".into();
-        er_of_mut(h.state_mut()).column.as_mut().unwrap().ty = "TEXT".into();
-        for generation in [3, 0] {
-            let at = rect_of(&h, "workspace.properties.column.generation").center();
-            click(&mut h, at);
-            let at = rect_of(&h, &format!("workspace.properties.column.generation.{generation}")).center();
-            click(&mut h, at);
-            if generation == 3 {
-                er_of_mut(h.state_mut()).column.as_mut().unwrap().expression = "lower(name)".into();
-            }
-        }
-        let at = rect_of(&h, "workspace.properties.column.apply").center();
-        click(&mut h, at);
-        assert!(er_of(h.state()).column.is_none(), "the new column is added: {:?}", er_of(h.state()).column);
-        let st = h.state().session.as_ref().unwrap().doc();
-        let nickname = st.alive().find(|o| archforge_core::name_of(st, *o) == "nickname").unwrap();
-        assert_eq!(rules::generation_of(st, nickname), Generation::NoneKind);
-        assert_eq!(rules::text_of(st, nickname, attribute::EXPRESSION), "");
-    }
-}
-
-/// A column's type, nullability and generation changed together in one Apply of the column editor
-/// land whichever generation it leaves and takes: the old generation is given up first and the new
-/// one taken last, so no step meets a rule only the other generation has. An identity left
-/// nullable is still refused, a refusal after the old generation was given up rolls the whole
-/// Apply back, and the Apply that gives one generation up for another is one undo step. In light
-/// and dark.
-#[test]
-fn the_column_editor_changes_type_nullability_and_generation_in_one_apply() {
-    use archforge_er::{Generation, attribute, rules};
-    let integer = ("er.attribute.set-type", serde_json::json!({ "type": "BIGINT" }));
-    let not_null = ("er.attribute.set-flags", serde_json::json!({ "primary_key": false, "nullable": "no", "unique": false }));
-    let identity = ("er.attribute.set-generation", serde_json::json!({ "generation": "identity-always" }));
-    let computed = ("er.attribute.set-generation", serde_json::json!({ "generation": "computed-stored", "expression": "lower(name)" }));
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        // None (TEXT, nullable) to Identity, always with BIGINT and Not null.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, &[], 1, |c| {
-            c.ty = "BIGINT".into();
-            c.not_null = true;
-        });
-        assert_eq!(refused, None, "plain to identity with its type and Not null lands");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::IdentityAlways);
-        assert!(!rules::is_nullable(st, email));
-        // Identity, always (BIGINT, not null) to Computed, stored with TEXT, nullable.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, &[integer.clone(), not_null.clone(), identity.clone()], 3, |c| {
-            c.ty = "TEXT".into();
-            c.not_null = false;
-            c.expression = "lower(name)".into();
-        });
-        assert_eq!(refused, None, "identity to computed with another type and nullable lands");
-        let computed_state = |h: &Harness<'static, Shell>| {
-            let st = h.state().session.as_ref().unwrap().doc();
-            (
-                rules::generation_of(st, email),
-                rules::type_of(st, email),
-                rules::is_nullable(st, email),
-                rules::text_of(st, email, attribute::EXPRESSION),
-            )
-        };
-        let after = (Generation::ComputedStored, "TEXT".to_string(), true, "lower(name)".to_string());
-        assert_eq!(computed_state(&h), after);
-        // The Apply is one step: one Undo brings the identity column back whole, one Redo the
-        // computed one.
-        h.state_mut().session.as_mut().unwrap().undo().unwrap();
-        assert_eq!(computed_state(&h), (Generation::IdentityAlways, "BIGINT".to_string(), false, String::new()), "one undo");
-        h.state_mut().session.as_mut().unwrap().redo().unwrap();
-        assert_eq!(computed_state(&h), after, "one redo");
-        // Identity, always (BIGINT, not null) to None with TEXT, nullable.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, &[integer.clone(), not_null.clone(), identity.clone()], 0, |c| {
-            c.ty = "TEXT".into();
-            c.not_null = false;
-        });
-        assert_eq!(refused, None, "identity to plain with another type and nullable lands");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
-        assert_eq!(rules::type_of(st, email), "TEXT");
-        assert!(rules::is_nullable(st, email));
-        // Computed, stored (TEXT) to Identity, by default with BIGINT and Not null.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, std::slice::from_ref(&computed), 2, |c| {
-            c.ty = "BIGINT".into();
-            c.not_null = true;
-        });
-        assert_eq!(refused, None, "computed to identity with its type and Not null lands");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::IdentityByDefault);
-        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "");
-        // Identity left nullable is still refused, and the column keeps what it had.
-        let (mut h, _) = table_harness_in(theme);
-        let (email, refused) = apply_email_edit(&mut h, &[], 1, |c| c.ty = "BIGINT".into());
-        let said =
-            crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::Generation(archforge_engine::GenerationRule::IdentityNotNullable));
-        assert_eq!(refused, said, "an identity column cannot be nullable");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::NoneKind);
-        assert_eq!(rules::type_of(st, email), "TEXT");
-        // A refusal after the old generation was given up rolls the whole Apply back: a computed
-        // column made Identity with BIGINT but left nullable keeps its type, generation and
-        // expression, and neither a step nor a change is added.
-        let (mut h, _) = table_harness_in(theme);
-        give_email(&mut h, std::slice::from_ref(&computed));
-        let session = h.state().session.as_ref().unwrap();
-        let before = (session.undo_label().map(str::to_string), session.revision());
-        let (email, refused) = apply_email_edit(&mut h, &[], 1, |c| c.ty = "BIGINT".into());
-        let said =
-            crate::panels::said(SCREENS.notation_uis(), &archforge_engine::Reason::Generation(archforge_engine::GenerationRule::IdentityNotNullable));
-        assert_eq!(refused, said, "an identity column cannot be nullable");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(rules::generation_of(st, email), Generation::ComputedStored);
-        assert_eq!(rules::type_of(st, email), "TEXT");
-        assert_eq!(rules::text_of(st, email, attribute::EXPRESSION), "lower(name)");
-        let session = h.state().session.as_ref().unwrap();
-        assert_eq!((session.undo_label().map(str::to_string), session.revision()), before, "nothing landed");
-    }
 }
 
 /// A table's description typed and left by clicking another table's row in Models is kept on the
@@ -11419,634 +8663,6 @@ fn a_table_description_draft_left_by_clicking_another_table_stays_on_its_own() {
         assert_eq!(archforge_er::rules::text_of(st, order, archforge_er::element::DESCRIPTION), "", "Order is unchanged");
         assert!(h.state().panels.description.is_none(), "the draft is spent");
     }
-}
-
-#[test]
-fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_nothing() {
-    use archforge_er::{NullsOrder, SortDirection};
-    let (mut h, customer) = table_harness();
-    let found = ids(&h);
-    assert!(
-        found.iter().any(|i| i == "workspace.properties.checks.add") && found.iter().any(|i| i == "workspace.properties.indexes.add"),
-        "{found:?}"
-    );
-    // + opens the check editor; Apply without an expression is refused and nothing lands; with
-    // one, the check is added and the table stays selected.
-    let at = rect_of(&h, "workspace.properties.checks.add").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).check.as_ref().is_some_and(|c| c.target.is_none()));
-    let at = rect_of(&h, "workspace.properties.check.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).check.as_ref().is_some_and(|c| c.refused.is_some()), "{:?}", er_of(h.state()).check);
-    let customer_obj = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap()
-    };
-    assert!(archforge_er::rules::checks_of(h.state().session.as_ref().unwrap().doc(), customer_obj).is_empty());
-    er_of_mut(h.state_mut()).check.as_mut().unwrap().expression = "email <> ''".into();
-    let at = rect_of(&h, "workspace.properties.check.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).check.is_none(), "{:?}", er_of(h.state()).check);
-    assert_eq!(archforge_er::rules::checks_of(h.state().session.as_ref().unwrap().doc(), customer_obj).len(), 1);
-    assert_eq!(ids(&h).iter().filter(|i| i.starts_with("workspace.properties.check.row.") && !i.ends_with(".edit")).count(), 1);
-    assert_eq!(selected_name(&h), "Customer");
-    // + opens the index editor; two columns come from the menu, the second turns descending, the
-    // first takes Nulls last from its right-click menu; Apply writes the index in one command.
-    let at = rect_of(&h, "workspace.properties.indexes.add").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).index.as_ref().is_some_and(|i| i.target.is_none()));
-    let at = rect_of(&h, "workspace.properties.index.column.add").center();
-    click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::INDEX_COLUMN));
-    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.index.column.add.")).collect();
-    assert_eq!(items.len(), 3, "two columns and an expression: {items:?}");
-    let at = rect_of(&h, &items[0]).center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.index.column.add").center();
-    click(&mut h, at);
-    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.index.column.add.")).collect();
-    assert_eq!(items.len(), 2, "the column left and an expression: {items:?}");
-    let at = rect_of(&h, &items[0]).center();
-    click(&mut h, at);
-    assert_eq!(er_of(h.state()).index.as_ref().unwrap().columns.len(), 2);
-    let at = rect_of(&h, "workspace.properties.index.column.1.direction").center();
-    click(&mut h, at);
-    assert_eq!(er_of(h.state()).index.as_ref().unwrap().columns[1].direction, SortDirection::Descending);
-    let at = rect_of(&h, "workspace.properties.index.column.0").center();
-    right_click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::INDEX_NULLS.at(0)));
-    let at = rect_of(&h, "workspace.properties.index.column.0.nulls.2").center();
-    click(&mut h, at);
-    assert_eq!(er_of(h.state()).index.as_ref().unwrap().columns[0].nulls, NullsOrder::Last);
-    let at = rect_of(&h, "workspace.properties.index.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).index.is_none(), "{:?}", er_of(h.state()).index);
-    {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let indexes = archforge_er::rules::indexes_of(st, customer_obj);
-        assert_eq!(indexes.len(), 1);
-        let specs = archforge_er::rules::index_specs(st, indexes[0]);
-        assert_eq!((specs.len(), specs[0].nulls, specs[1].direction), (2, NullsOrder::Last, SortDirection::Descending));
-        assert_eq!(archforge_er::rules::display_name(st, indexes[0]), "ix_customer_customer_id_email");
-    }
-    assert_eq!(selected_name(&h), "Customer");
-    // The index row's edit button opens its editor; the bin removes the index.
-    let row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.index.row.") && !i.ends_with(".edit")).unwrap();
-    let at = rect_of(&h, &format!("{row}.edit")).center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).index.as_ref().is_some_and(|i| i.target.is_some()));
-    let at = rect_of(&h, "workspace.properties.index.remove").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).index.is_none());
-    assert!(archforge_er::rules::indexes_of(h.state().session.as_ref().unwrap().doc(), customer_obj).is_empty());
-}
-
-#[test]
-fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_collapses() {
-    let (mut h, customer) = table_harness();
-    let (order, rel, mapping) = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap().value);
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
-        let rel = id(s
-            .execute(
-                "er.relationship.add",
-                &serde_json::json!({ "from": customer, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
-            )
-            .unwrap()
-            .value);
-        let tag = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Tag" })).unwrap().value);
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": tag, "name": "tag_id", "type": "INT", "primary_key": true })).unwrap();
-        let line = id(s
-            .execute("er.relationship.add", &serde_json::json!({ "from": order, "to": tag, "from_end": "zero-or-more", "to_end": "zero-or-more" }))
-            .unwrap()
-            .value);
-        let mapping = id(s.execute("er.relationship.resolve", &serde_json::json!({ "relationship": line })).unwrap().value);
-        s.execute("view.select", &serde_json::json!({ "ids": [order] })).unwrap();
-        (order, rel, mapping)
-    };
-    h.run();
-    // Order's key column follows Customer.customer_id: the row carries the link mark, the editor
-    // names the target and Unlink frees it.
-    let marks: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.") && i.ends_with(".link")).collect();
-    assert_eq!(marks.len(), 1, "{marks:?}");
-    let row = marks[0].trim_end_matches(".link").to_string();
-    let at = rect_of(&h, &format!("{row}.edit")).center();
-    click(&mut h, at);
-    assert_eq!(er_of(h.state()).column.as_ref().and_then(|c| c.linked.as_deref()), Some("Customer.customer_id"));
-    let at = rect_of(&h, "workspace.properties.column.unlink").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.linked.is_none() && c.unlink), "{:?}", er_of(h.state()).column);
-    // Cancel keeps the link; Unlink then Apply is one step that drops it.
-    let at = rect_of(&h, "workspace.properties.column.cancel").center();
-    click(&mut h, at);
-    assert_eq!(ids(&h).iter().filter(|i| i.ends_with(".link")).count(), 1, "Cancel kept the link");
-    let at = rect_of(&h, &format!("{row}.edit")).center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.unlink").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
-    assert!(!ids(&h).iter().any(|i| i.ends_with(".link")), "the mark is gone");
-    // The relationship's parent end set to zero-or-one makes the key column nullable.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [rel] })).unwrap();
-    }
-    h.run();
-    let at = rect_of(&h, "workspace.properties.end.from.0").center();
-    click(&mut h, at);
-    {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let order_obj = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
-        let column = st
-            .list(order_obj, archforge_er::entity::ATTRIBUTE)
-            .unwrap()
-            .iter()
-            .filter_map(archforge_mof::Value::as_ref)
-            .find(|a| archforge_core::name_of(st, *a) == "customer_customer_id")
-            .unwrap();
-        assert!(archforge_er::rules::is_nullable(st, column), "zero-or-one made the key column nullable");
-    }
-    // The mapping table's Properties offer to collapse it; the click brings the line back.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [mapping] })).unwrap();
-    }
-    h.run();
-    assert!(ids(&h).iter().any(|i| i == "workspace.properties.collapse"), "{:?}", ids(&h));
-    let at = rect_of(&h, "workspace.properties.collapse").center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.by_uuid(archforge_mof::Uuid::parse(&mapping).unwrap()).is_none_or(|m| !st.is_alive(m)), "{:?}", h.state().panels.notice);
-    let relationships = st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).count();
-    assert_eq!(relationships, 2, "Customer to Order and the many-to-many line");
-}
-
-#[test]
-fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu() {
-    let (mut h, customer) = table_harness();
-    let schema = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        s.execute(
-            "er.domain.add",
-            &serde_json::json!({ "schema": schema, "name": "email_address", "base_type": "VARCHAR", "length": 255, "checks": ["position('@' in value) > 1"] }),
-        )
-        .unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
-        schema
-    };
-    h.run();
-    // The schema's Properties list the domain; + offers the kinds; the enum editor takes its
-    // literals and Apply writes the enum type.
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.type.row.") && !i.ends_with(".edit")).collect();
-    assert_eq!(rows.len(), 1, "{rows:?}");
-    let at = rect_of(&h, "workspace.properties.types.add").center();
-    click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::TYPE_KIND));
-    let at = rect_of(&h, "workspace.properties.types.add.1").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).type_edit.as_ref().is_some_and(|t| t.kind == crate::types::TypeKind::Enum && t.target.is_none()));
-    let at = rect_of(&h, "workspace.properties.enum.literal.add").center();
-    click(&mut h, at);
-    click(&mut h, at);
-    {
-        let edit = er_of_mut(h.state_mut()).type_edit.as_mut().unwrap();
-        edit.name = "customer_status".into();
-        edit.literals = vec!["active".into(), "dormant".into()];
-    }
-    h.run();
-    let at = rect_of(&h, "workspace.properties.type.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).type_edit.is_none(), "{:?}", er_of(h.state()).type_edit);
-    let (schema_obj, enum_id) = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let schema_obj = st.by_uuid(archforge_mof::Uuid::parse(&schema).unwrap()).unwrap();
-        let enums = archforge_er::rules::enums_of(st, schema_obj);
-        assert_eq!(enums.len(), 1);
-        assert_eq!(archforge_er::rules::literals_of(st, enums[0]), ["active", "dormant"]);
-        (schema_obj, st.uuid(enums[0]).unwrap())
-    };
-    assert_eq!(selected_name(&h), "Shop", "the schema stays selected");
-    assert_eq!(ids(&h).iter().filter(|i| i.starts_with("workspace.properties.type.row.") && !i.ends_with(".edit")).count(), 2);
-    // The Models tree lists both types under the schema.
-    assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{enum_id}")), "{:?}", ids(&h));
-    // A column takes the enum type from its editor's type menu; the row shows the type's name.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
-    }
-    h.run();
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
-    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
-    click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::COLUMN_TYPE));
-    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.type.menu.")).collect();
-    assert!(items.len() > 10, "the schema's two types and the base types: {items:?}");
-    let at = rect_of(&h, &items[1]).center();
-    click(&mut h, at);
-    assert_eq!(er_of(h.state()).column.as_ref().and_then(|c| c.enum_type), Some(enum_id));
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
-    let st = h.state().session.as_ref().unwrap().doc();
-    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
-    let email = st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().iter().filter_map(archforge_mof::Value::as_ref).nth(1).unwrap();
-    assert_eq!(archforge_er::rules::type_display(st, email), "customer_status");
-    // A column on a sized domain applies a change of its own (Not null) without touching the size.
-    let domain = archforge_er::rules::domains_of(st, schema_obj)[0];
-    let domain = st.uuid(domain).unwrap().to_string();
-    let email_id = st.uuid(email).unwrap().to_string();
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("er.attribute.set-type", &serde_json::json!({ "attribute": email_id, "domain": domain })).unwrap();
-    }
-    h.run();
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
-    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
-    click(&mut h, at);
-    assert!(!ids(&h).iter().any(|i| i == "workspace.properties.column.default"), "a domain column shows no default of its own");
-    er_of_mut(h.state_mut()).column.as_mut().unwrap().not_null = true;
-    h.run();
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.is_none(), "{:?}", er_of(h.state()).column);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(!archforge_er::rules::is_nullable(st, email));
-    assert_eq!(archforge_er::rules::type_display(st, email), "email_address");
-    // A new column typed with a default, then put on the domain from the menu, adds cleanly: the
-    // domain's default counts and the typed one goes with the pick.
-    let at = rect_of(&h, "workspace.properties.columns.add").center();
-    click(&mut h, at);
-    er_of_mut(h.state_mut()).column.as_mut().unwrap().default = "'x'".into();
-    h.run();
-    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
-    click(&mut h, at);
-    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.type.menu.")).collect();
-    let at = rect_of(&h, &items[0]).center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).column.as_ref().is_some_and(|c| c.domain.is_some() && c.default.is_empty()));
-    let at = rect_of(&h, "workspace.properties.column.apply").center();
-    click(&mut h, at);
-    // The add selects the new column, whose editor opens on it without a refusal.
-    assert!(er_of(h.state()).column.as_ref().is_none_or(|c| c.refused.is_none() && c.target.is_some()), "{:?}", er_of(h.state()).column);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3);
-}
-
-#[test]
-fn a_subtype_shows_in_the_supertypes_properties_and_the_toolbar_draws_no_generalizations() {
-    let (mut h, customer, order) = two_tables_harness();
-    // ER draws subtypes with the tools it has; the toolbar has no generalization tool.
-    assert!(!ids(&h).iter().any(|i| i == "workspace.tools.generalization"));
-    let generalization = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let out = s.execute("er.generalization.add", &serde_json::json!({ "supertype": customer, "subtype": order })).unwrap();
-        let id = out.value.get("id").and_then(|v| v.as_str()).unwrap().to_string();
-        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
-        archforge_mof::Uuid::parse(&id).unwrap()
-    };
-    h.run();
-    let (generalization, customer_obj, order_obj) = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let g = st.by_uuid(generalization).unwrap();
-        let c = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
-        let o = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
-        assert_eq!(archforge_er::rules::generalization_parts(st, g).0, Some(c));
-        assert_eq!(archforge_er::rules::generalization_parts(st, g).1, Some(o));
-        assert!(archforge_er::rules::generalization_parts(st, g).2.is_some(), "table per type made the key");
-        (g, c, o)
-    };
-    // The generalization's Properties show the supertype's Subtypes section; Mapping single table
-    // removes the shared key in one step.
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.subtype.row.") && !i.ends_with(".remove")).collect();
-    assert_eq!(rows.len(), 1, "{rows:?}");
-    let at = rect_of(&h, "workspace.properties.subtypes.mapping").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.properties.subtypes.mapping.1").center();
-    click(&mut h, at);
-    {
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(archforge_er::rules::mapping_of(st, customer_obj), archforge_er::SubtypeMapping::SingleTable);
-        assert!(archforge_er::rules::generalization_parts(st, generalization).2.is_none(), "the key went");
-        assert_eq!(st.list(order_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 1, "Order keeps its own order_id only");
-    }
-    // The row's cross removes the subtype; the supertype stays selected.
-    let remove = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.subtype.row.") && i.ends_with(".remove")).unwrap();
-    let at = rect_of(&h, &remove).center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(!st.is_alive(generalization));
-    assert_eq!(selected_name(&h), "Customer");
-}
-
-#[test]
-fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button_opens_its_editor() {
-    let (mut h, _) = table_harness();
-    let (schema, key) = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        let key = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "customer_id").unwrap()).unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
-        (schema, key)
-    };
-    h.run();
-    // + opens the sequence editor; Owned by offers the whole-number columns; Apply writes it.
-    let at = rect_of(&h, "workspace.properties.sequences.add").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).object_edit.as_ref().is_some_and(|e| e.kind == crate::objects::ObjectKind::Sequence && e.target.is_none()));
-    let at = rect_of(&h, "workspace.properties.sequence.owned-by").center();
-    click(&mut h, at);
-    assert_eq!(h.state().panels.menu, Some(crate::er_state::menus::OWNED_BY));
-    let offered: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.sequence.owned-by.")).collect();
-    assert_eq!(offered.len(), 2, "None and Customer.customer_id, not the text column: {offered:?}");
-    let at = rect_of(&h, "workspace.properties.sequence.owned-by.1").center();
-    click(&mut h, at);
-    assert_eq!(er_of(h.state()).object_edit.as_ref().and_then(|e| e.owned_by), Some(key));
-    {
-        let edit = er_of_mut(h.state_mut()).object_edit.as_mut().unwrap();
-        edit.name = "customer_id_seq".into();
-        edit.start = "one".into();
-    }
-    h.run();
-    let at = rect_of(&h, "workspace.properties.object.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).object_edit.as_ref().is_some_and(|e| e.refused.is_some()), "a start that is no number is refused");
-    {
-        let edit = er_of_mut(h.state_mut()).object_edit.as_mut().unwrap();
-        edit.start = "1000".into();
-        edit.minimum = "1000".into();
-    }
-    h.run();
-    click(&mut h, at);
-    assert!(er_of(h.state()).object_edit.is_none(), "{:?}", er_of(h.state()).object_edit);
-    // The view editor takes the query over several lines.
-    let at = rect_of(&h, "workspace.properties.views.add").center();
-    click(&mut h, at);
-    {
-        let edit = er_of_mut(h.state_mut()).object_edit.as_mut().unwrap();
-        assert_eq!(edit.kind, crate::objects::ObjectKind::View);
-        edit.name = "recent_customers".into();
-        edit.query = "SELECT customer_id\nFROM \"Customer\"\n".into();
-        edit.materialized = true;
-    }
-    h.run();
-    let at = rect_of(&h, "workspace.properties.object.apply").center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).object_edit.is_none(), "{:?}", er_of(h.state()).object_edit);
-    let (seq, view) = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let s = st.by_uuid(archforge_mof::Uuid::parse(&schema).unwrap()).unwrap();
-        let (seqs, views) = (archforge_er::rules::sequences_of(st, s), archforge_er::rules::views_of(st, s));
-        assert_eq!((seqs.len(), views.len()), (1, 1));
-        let n = archforge_er::rules::sequence_numbers(st, seqs[0]);
-        assert_eq!((n.start, n.minimum.as_str()), (1000, "1000"));
-        assert_eq!(archforge_er::rules::owner_of_sequence(st, seqs[0]).and_then(|a| st.uuid(a).ok()), Some(key));
-        assert_eq!(archforge_er::rules::text_of(st, views[0], archforge_er::view::QUERY), "SELECT customer_id\nFROM \"Customer\"");
-        (st.uuid(seqs[0]).unwrap(), st.uuid(views[0]).unwrap())
-    };
-    assert_eq!(selected_name(&h), "Shop", "the schema stays selected");
-    // Both show in the Models tree; a click on one selects it under its schema's section, and its
-    // row's edit button opens its editor.
-    for id in [seq, view] {
-        assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{id}")), "{:?}", ids(&h));
-    }
-    let at = rect_of(&h, &format!("workspace.explorer.row.{view}")).center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).object_edit.is_none(), "selecting it does not open its editor");
-    let at = rect_of(&h, &format!("workspace.properties.view.row.{view}.edit")).center();
-    click(&mut h, at);
-    assert!(er_of(h.state()).object_edit.as_ref().is_some_and(|e| e.target == Some(view) && e.materialized));
-    // The bin removes it; the schema is selected again.
-    let at = rect_of(&h, "workspace.properties.object.remove").center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.by_uuid(view).is_none_or(|v| !st.is_alive(v)));
-    assert_eq!(selected_name(&h), "Shop");
-}
-
-#[test]
-fn a_table_of_another_schema_dragged_from_the_explorer_lands_with_its_line_once() {
-    let (mut h, _, order) = two_tables_harness();
-    let (account, diagram) = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let crm = id(s.execute("er.schema.add", &serde_json::json!({ "name": "CRM" })).unwrap().value);
-        let account = id(s.execute("er.entity.add", &serde_json::json!({ "schema": crm, "name": "Account" })).unwrap().value);
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": account, "name": "account_id", "type": "BIGINT", "primary_key": true }))
-            .unwrap();
-        s.execute(
-            "er.relationship.add",
-            &serde_json::json!({ "from": account, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
-        )
-        .unwrap();
-        let st = s.doc();
-        let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
-        (account, d)
-    };
-    h.run();
-    let shown = |h: &Harness<'static, Shell>| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        (st.list(diagram, archforge_diagram::diagram::NODE).unwrap().len(), st.list(diagram, archforge_diagram::diagram::EDGE).unwrap().len())
-    };
-    assert_eq!(shown(&h), (2, 0));
-    // The new schema starts folded; Expand all opens it.
-    let fold_all = rect_of(&h, "workspace.explorer.fold-all").center();
-    click(&mut h, fold_all);
-    h.run();
-    let row = rect_of(&h, &format!("workspace.explorer.row.{account}")).center();
-    let canvas = rect_of(&h, "workspace.canvas");
-    let to = egui::pos2(canvas.center().x, canvas.bottom() - 200.0);
-    drag(&mut h, row, to);
-    assert_eq!(shown(&h), (3, 1), "the table and its relationship to Order, drawn together");
-    assert_eq!(selected_name(&h), "Account");
-    assert!(ids(&h).iter().any(|i| i.starts_with("workspace.canvas.node.")));
-    // One undo takes both; a second drop of the same table is said and changes nothing.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("edit.undo", &serde_json::Value::Null).unwrap();
-        s.execute("edit.redo", &serde_json::Value::Null).unwrap();
-    }
-    h.run();
-    assert_eq!(shown(&h), (3, 1));
-    let row = rect_of(&h, &format!("workspace.explorer.row.{account}")).center();
-    drag(&mut h, row, to);
-    assert_eq!(shown(&h), (3, 1));
-    assert_eq!(h.state().canvas.notice.as_deref(), Some("Already on this diagram"));
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("edit.undo", &serde_json::Value::Null).unwrap();
-    }
-    h.run();
-    assert_eq!(shown(&h), (2, 0));
-}
-
-#[test]
-fn the_properties_body_scrolls_and_an_editor_opened_below_the_fold_comes_into_view() {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1440.0, 760.0));
-    let customer = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-        let customer = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
-        for i in 0..14 {
-            s.execute(
-                "er.attribute.add",
-                &serde_json::json!({ "entity": customer, "name": format!("column_{i}"), "type": "BIGINT", "primary_key": i == 0 }),
-            )
-            .unwrap();
-        }
-        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
-        customer
-    };
-    let _ = customer;
-    h.run();
-    // The sections past the window's foot are out of reach until the body scrolls.
-    assert!(!ids(&h).iter().any(|i| i == "workspace.properties.indexes.add"), "the Indexes section starts below the fold");
-    assert!(h.state().panels.content > h.state().panels.body.unwrap().height());
-    let body = h.state().panels.body.unwrap();
-    h.event(egui::Event::PointerMoved(body.center()));
-    h.event(egui::Event::MouseWheel {
-        unit: egui::MouseWheelUnit::Point,
-        delta: egui::vec2(0.0, -2000.0),
-        modifiers: egui::Modifiers::NONE,
-        phase: egui::TouchPhase::Move,
-        source: egui::MouseWheelSource::Wheel,
-    });
-    // The wheel scrolls smoothly over several frames.
-    h.run_steps(30);
-    assert!(h.state().panels.scroll > 0.0);
-    let at = rect_of(&h, "workspace.properties.indexes.add").center();
-    click(&mut h, at);
-    h.run();
-    // The index editor opened at the foot is brought into view with its Apply.
-    let apply = rect_of(&h, "workspace.properties.index.apply");
-    let body = h.state().panels.body.unwrap();
-    assert!(body.contains_rect(apply), "{apply:?} in {body:?}");
-    // Another table starts at the top again.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let st = s.doc();
-        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
-    }
-    h.run();
-    assert_eq!(h.state().panels.scroll, 0.0);
-}
-
-/// A column's Properties page is its table's, as ER answers the shell
-/// ([`crate::notation_ui::NotationUi::page`]): moving from a table to one of its columns keeps the
-/// body where it was scrolled, and moving on to another element starts it at the top.
-#[test]
-fn a_column_shows_its_tables_page_so_moving_to_it_keeps_the_scroll() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1440.0, 760.0));
-        let (schema, column) = {
-            let s = h.state_mut().session.as_mut().unwrap();
-            let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-            let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-            let customer = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
-            let mut last = String::new();
-            for i in 0..14 {
-                let added = s.execute(
-                    "er.attribute.add",
-                    &serde_json::json!({ "entity": customer, "name": format!("column_{i}"), "type": "BIGINT", "primary_key": i == 0 }),
-                );
-                last = id(added.unwrap().value);
-            }
-            s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
-            (schema, last)
-        };
-        h.run();
-        let body = h.state().panels.body.unwrap();
-        h.event(egui::Event::PointerMoved(body.center()));
-        h.event(egui::Event::MouseWheel {
-            unit: egui::MouseWheelUnit::Point,
-            delta: egui::vec2(0.0, -2000.0),
-            modifiers: egui::Modifiers::NONE,
-            phase: egui::TouchPhase::Move,
-            source: egui::MouseWheelSource::Wheel,
-        });
-        h.run_steps(30);
-        let scrolled = h.state().panels.scroll;
-        assert!(scrolled > 0.0, "{theme:?}: the table's body scrolled");
-        // Its column shows the same page: the body stays where it was.
-        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [column] })).unwrap();
-        h.run();
-        assert_eq!(h.state().panels.scroll, scrolled, "{theme:?}: the column's page is its table's");
-        // The schema is another page: it starts at the top.
-        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
-        h.run();
-        assert_eq!(h.state().panels.scroll, 0.0, "{theme:?}: another element starts at the top");
-    }
-}
-
-/// Every notation answers which page Properties shows for its elements: ER a column's table and
-/// any other element its own, UML each element its own.
-#[test]
-fn each_notation_answers_the_page_of_its_elements() {
-    let mut n: u128 = 0;
-    let ids = Box::new(move || {
-        n += 1;
-        archforge_mof::Uuid(n.to_le_bytes())
-    });
-    let mut s = archforge_notations::new_project_session("P", ids).unwrap();
-    let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-    let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
-    let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
-    let column = id(s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT" })).unwrap().value);
-    let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
-    let store = s.doc();
-    let obj = |id: &str| store.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
-    let er = crate::notation_ui::of(SCREENS.notation_uis(), store, obj(&table)).unwrap();
-    assert_eq!(er.page(store, obj(&column)), Some(obj(&table)), "a column's page is its table's");
-    assert_eq!(er.page(store, obj(&table)), Some(obj(&table)));
-    assert_eq!(er.page(store, obj(&schema)), Some(obj(&schema)));
-    let uml = crate::notation_ui::of(SCREENS.notation_uis(), store, obj(&root)).unwrap();
-    assert_eq!(uml.page(store, obj(&root)), Some(obj(&root)));
-}
-
-#[test]
-fn every_relationship_end_draws_its_two_crows_foot_marks() {
-    use archforge_er::Cardinality as C;
-    // The shapes an end draws: its line segments and its circles.
-    let marks = |c: C| {
-        let ctx = egui::Context::default();
-        let mut out = ctx.run_ui(Default::default(), |ui| {
-            let p = crate::ux::palette(false);
-            let stroke = egui::Stroke::new(1.2, p.text);
-            crate::canvas::end_glyph(
-                ui.painter(),
-                p,
-                egui::pos2(100.0, 100.0),
-                egui::pos2(200.0, 100.0),
-                archforge_er::figures::end_mark(Some(c)),
-                stroke,
-                1.0,
-                false,
-            );
-        });
-        out.textures_delta.clear();
-        let shapes: Vec<egui::Shape> = out.shapes.into_iter().map(|s| s.shape).collect();
-        let lines = shapes.iter().filter(|s| matches!(s, egui::Shape::LineSegment { .. })).count();
-        let circles = shapes.iter().filter(|s| matches!(s, egui::Shape::Circle(c) if c.stroke.width > 0.0)).count();
-        (lines, circles)
-    };
-    // The outer mark is the most (a bar, or a crow's foot of two lines), the inner the fewest (a
-    // circle for zero, a bar for one).
-    assert_eq!(marks(C::ZeroOrOne), (1, 1));
-    assert_eq!(marks(C::ExactlyOne), (2, 0), "exactly one is two bars");
-    assert_eq!(marks(C::ZeroOrMore), (2, 1));
-    assert_eq!(marks(C::OneOrMore), (3, 0), "one or more is a bar and a crow's foot");
 }
 
 #[test]
@@ -12136,45 +8752,6 @@ fn the_link_note_tool_drags_a_link_from_a_note_to_a_table_and_hands_back_to_sele
         .count();
     assert_eq!(links, 1, "{:?}", h.state().canvas.notice);
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
-}
-
-#[test]
-fn key_columns_a_line_adds_grow_the_table_to_show_them_in_the_same_step() {
-    let (mut h, _customer, order) = two_tables_harness();
-    // Order's box just fits its one column.
-    let order_node = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let e = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
-        let n = st
-            .alive()
-            .find(|n| {
-                st.class_of(*n).ok() == Some(archforge_diagram::NODE) && st.get(*n, archforge_diagram::node::ELEMENT).unwrap().as_ref() == Some(e)
-            })
-            .unwrap();
-        st.uuid(n).unwrap().to_string()
-    };
-    let snug = crate::er_place::content_height(1);
-    h.state_mut()
-        .session
-        .as_mut()
-        .unwrap()
-        .execute("diagram.resize", &serde_json::json!({ "node": order_node, "width": 240, "height": snug }))
-        .unwrap();
-    h.run_steps(2);
-    let nodes = node_ids(&h);
-    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
-    let at = rect_of(&h, "workspace.tools.relationship").center();
-    click(&mut h, at);
-    let (a, b) = (rect_of(&h, &customer_node).center(), rect_of(&h, &format!("workspace.canvas.node.{order_node}")).center());
-    drag(&mut h, a, b);
-    let rels = relationships(&h);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(crate::connect::has_foreign_key(st, rels[0]), "both tables have columns and Customer its key: the key comes on");
-    let grown = node_bounds(&h, &order_node).height;
-    assert_eq!(grown, crate::er_place::content_height(2), "Order grew to show its new key column");
-    h.state_mut().session.as_mut().unwrap().undo().unwrap();
-    h.run_steps(2);
-    assert_eq!(node_bounds(&h, &order_node).height, snug, "one undo takes the line and the growth back");
 }
 
 #[test]
@@ -12711,7 +9288,7 @@ fn a_stores_diagram_draws_with_no_shell() {
 /// light and dark.
 #[test]
 fn a_diagrams_kind_draws_its_own_figures_and_ers_draws_none() {
-    use crate::er_kind::ErKind;
+    use archforge_er_ui::snapshot::er_kind::ErKind;
     use uml_ui::UmlKind;
     let mut r = reviews(ThemeKind::Light);
     let (_, edge, card) = r.review();
@@ -14168,16 +10745,16 @@ const SKETCH_MARKS: &str = "Sketch marks";
 /// What the sketch kind's line end handles say on hover.
 const SKETCH_ENDS: &str = "Drag onto another sketch card";
 
-static SKETCH_TOOLS: &[crate::kinds::KindTool] = &[
-    crate::kinds::KindTool {
+static SKETCH_TOOLS: &[archforge_shell_api::kinds::KindTool] = &[
+    archforge_shell_api::kinds::KindTool {
         key: "class",
-        icon: &crate::ux::icons::TOOL_ENTITY,
+        icon: &archforge_er_ui::snapshot::icons::TOOL_ENTITY,
         hint: "Entity",
         use_: crate::kinds::ToolUse::Place,
         chevron: None,
         wide: false,
     },
-    crate::kinds::KindTool {
+    archforge_shell_api::kinds::KindTool {
         key: "inherit",
         icon: &crate::ux::icons::TOOL_RELATIONSHIP,
         hint: "Relationship",
@@ -14199,7 +10776,7 @@ impl crate::kinds::DiagramKind for SketchKind {
         self.0
     }
     /// Class and Inherit.
-    fn tools(&self) -> &'static [crate::kinds::KindTool] {
+    fn tools(&self) -> &'static [archforge_shell_api::kinds::KindTool] {
         SKETCH_TOOLS
     }
     /// A row for each of its tools, each in a section of its own.
@@ -14515,7 +11092,7 @@ fn the_element_menu_builds_from_the_kinds_answer() {
     }
 }
 
-static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&crate::er_kind::ErKind, &SketchKind(SKETCH)];
+static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&er_kind::ErKind, &SketchKind(SKETCH)];
 
 #[test]
 fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_hooks_run() {
@@ -14917,7 +11494,7 @@ fn every_kind_is_asked_once_what_it_draws_of_cards_and_lines() {
 }
 
 /// ER's screens alone: the sketch's package then has no notation in the shell to word it.
-static ER_UI_ONLY: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi];
+static ER_UI_ONLY: &[&dyn crate::notation_ui::NotationUi] = &[&er_ui::ErUi];
 
 /// The word over a diagram's Properties field for what it is of: the word that element's notation
 /// gives it, and when no notation of the shell words it, the word of the diagram's own kind for
@@ -14969,7 +11546,7 @@ struct SketchState {
     told: Option<Option<archforge_mof::Uuid>>,
 }
 
-impl crate::notation_ui::NotationState for SketchState {}
+impl archforge_shell_api::notation_ui::NotationState for SketchState {}
 
 impl crate::notation_ui::NotationUi for SketchUi {
     fn metamodel(&self) -> u16 {
@@ -15081,7 +11658,7 @@ impl crate::notation_ui::NotationUi for SketchUi {
         SKETCH_DESCRIPTION_LIMIT
     }
     /// The sketch keeps nothing of its own between frames but the selection it was last told of.
-    fn new_state(&self) -> Box<dyn crate::notation_ui::NotationState> {
+    fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
         Box::new(SketchState::default())
     }
     /// The sketch removes nothing its own way: Delete goes on to the shared removals.
@@ -15109,10 +11686,11 @@ impl crate::notation_ui::NotationUi for SketchUi {
     }
     /// The sketch draws nothing over the canvas.
     fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
-    fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
+    /// The sketch notation's search entry: a class, under its package.
+    fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Entry> {
         (store.class_of(o).ok()? == archforge_uml::CLASS).then(|| {
             let pkg = store.container(o).ok().flatten().map(|(c, _)| archforge_core::name_of(store, c)).unwrap_or_default();
-            crate::notation_ui::Entry {
+            archforge_shell_api::notation_ui::Entry {
                 icon: &crate::ux::icons::TABLE,
                 order: 2,
                 label: archforge_core::name_of(store, o),
@@ -15181,13 +11759,13 @@ impl crate::notation_ui::NotationUi for SketchUi {
     }
 }
 
-static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi, &SketchUi("sketch")];
+static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&er_ui::ErUi, &SketchUi("sketch")];
 
 /// Two sketch notations told apart by name, both answering for UML's metamodel, so a test sees
 /// which of them answers and in what order.
 static FIRST_SKETCH: SketchUi = SketchUi("first");
 static SECOND_SKETCH: SketchUi = SketchUi("second");
-static TWO_SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi, &FIRST_SKETCH, &SECOND_SKETCH];
+static TWO_SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&er_ui::ErUi, &FIRST_SKETCH, &SECOND_SKETCH];
 
 /// A notation that answers for no element, as no class is of its metamodel, and only says words of
 /// its own: an association with its article, a sentence for an enum type without literals, a row
@@ -15259,7 +11837,7 @@ impl crate::notation_ui::NotationUi for WordsUi {
         Vec::new()
     }
     /// No search entry.
-    fn entry(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
+    fn entry(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_shell_api::notation_ui::Entry> {
         None
     }
     /// No words for Properties.
@@ -15291,7 +11869,7 @@ impl crate::notation_ui::NotationUi for WordsUi {
     /// Draws nothing over the canvas.
     fn canvas_overlay(&self, _: &mut crate::cx::Ctx, _: &mut egui::Ui, _: crate::notation_ui::Layer, _: &crate::notation_ui::Overlaid<'_>) {}
     /// The sketch's state, unused.
-    fn new_state(&self) -> Box<dyn crate::notation_ui::NotationState> {
+    fn new_state(&self) -> Box<dyn archforge_shell_api::notation_ui::NotationState> {
         Box::new(SketchState::default())
     }
     /// Its sentence for an enum type without literals ([`WORDED_LITERALS`]), so a test sees it asked
@@ -15310,7 +11888,7 @@ impl crate::notation_ui::NotationUi for WordsUi {
 }
 
 /// The worded notation before the app's two.
-static WORDS_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &crate::er_ui::ErUi, &uml_ui::UmlUi];
+static WORDS_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&WordsUi, &er_ui::ErUi, &uml_ui::UmlUi];
 
 /// The second sketch's catalogue, a row only it says, in English and in German.
 static SECOND_SKETCH_ROWS: &[crate::i18n::Rows] = &[
@@ -15362,26 +11940,13 @@ fn a_shell_takes_its_notations_kinds_states_and_catalogues_from_the_screens_part
     let kinds: Vec<&str> = shell.kinds.iter().map(|k| k.kind()).collect();
     assert_eq!(kinds, [SKETCH, "test.second", "test.third"], "the parts' kinds");
     assert!(shell.notation_states.own::<SketchState>().is_some(), "the sketch keeps its state");
-    assert!(crate::er_state::er(&shell.notation_states).is_none(), "ER is not among the parts");
+    assert!(er_state::er(&shell.notation_states).is_none(), "ER is not among the parts");
     assert!(uml_state::uml(&shell.notation_states).is_none(), "nor is UML");
     let row = "Second sketch";
     crate::i18n::set_language("de");
     let said = crate::i18n::tr(row);
     crate::i18n::set_language("en");
     assert_eq!(said, "Zweite Skizze", "the second sketch's catalogue is registered");
-}
-
-/// The app's screens parts, ER's before UML's, give a shell the lists the shell knew before it
-/// was given parts: ER's notation and kind, then UML's, each the part's own.
-#[test]
-fn the_apps_screens_parts_give_a_shell_er_then_uml() {
-    let shell = Shell::new(Services::default(), &SCREENS);
-    let metamodels = |uis: &[&dyn crate::notation_ui::NotationUi]| uis.iter().map(|ui| ui.metamodel()).collect::<Vec<_>>();
-    assert_eq!(metamodels(shell.notation_uis), metamodels(&[crate::ER.ui, archforge_uml_ui::UML.ui]), "ER's notation, then UML's");
-    assert_eq!(metamodels(shell.notation_uis), [archforge_er::INDEX, archforge_uml::INDEX]);
-    let kinds = |kinds: &[&dyn crate::kinds::DiagramKind]| kinds.iter().map(|k| k.kind()).collect::<Vec<_>>();
-    assert_eq!(kinds(shell.kinds), kinds(&[crate::ER.kinds, archforge_uml_ui::UML.kinds].concat()), "ER's kind, then UML's");
-    assert_eq!(kinds(shell.kinds), [archforge_er::DIAGRAM_KIND, archforge_uml::STRUCTURE_DIAGRAM]);
 }
 
 /// The sketch notation's limits, shorter than any other notation's, so a field that takes them is
@@ -15996,7 +12561,7 @@ fn the_narrow_contexts_requests_run_in_order_once_after_the_call() {
     shell.explorer.expanded.clear();
     let asked = shell.cx(|cx| {
         cx.requests.push(Request::ExpandRows(vec![other]));
-        crate::panels::select_element_cx(cx, class);
+        archforge_shell_api::panels::select_element_cx(cx, class);
         cx.requests.push(Request::HideVersionDetails);
         cx.requests.clone()
     });
@@ -16011,7 +12576,7 @@ fn the_narrow_contexts_requests_run_in_order_once_after_the_call() {
     shell.cx(|cx| assert!(cx.requests.is_empty(), "a new call starts with nothing asked"));
     assert!(shell.explorer.expanded.is_empty(), "a request runs once");
     // Asked alone in a context of its own, the rows open as that call returns.
-    shell.cx(|cx| crate::panels::select_element_cx(cx, class));
+    shell.cx(|cx| archforge_shell_api::panels::select_element_cx(cx, class));
     assert!(shell.explorer.expanded.contains(&pkg), "a context of its own carries the request out too");
 }
 
@@ -16027,7 +12592,7 @@ fn the_narrow_context_reaches_each_notations_own_state() {
     assert!(!er_of(shell).more_open);
     shell.cx(|cx| {
         assert!(std::ptr::eq(&*cx.notation_states, states), "the context's states are the shell's");
-        crate::er_state::er_mut(cx.notation_states).expect("the shell's notations hold ER").more_open = true;
+        er_state::er_mut(cx.notation_states).expect("the shell's notations hold ER").more_open = true;
         assert!(std::ptr::eq(cx.cx_ref().notation_states, states), "the twin over the context");
     });
     assert!(er_of(shell).more_open, "changed through the context, changed on the shell");
@@ -16283,62 +12848,15 @@ fn a_row_properties_selects_opens_the_rows_its_notation_names() {
         ("a view", view, BTreeSet::from([schema])),
     ] {
         h.state_mut().explorer.expanded.clear();
-        h.state_mut().cx(|cx| crate::panels::select_element_cx(cx, element));
+        h.state_mut().cx(|cx| archforge_shell_api::panels::select_element_cx(cx, element));
         assert_eq!(h.state().explorer.expanded.iter().copied().collect::<BTreeSet<_>>(), rows, "{what}");
     }
     let (mut h, ..) = sketch_harness();
     let (sales, party) = (find(&h, "sales"), find(&h, "Party"));
     h.state_mut().explorer.expanded.clear();
-    h.state_mut().cx(|cx| crate::panels::select_element_cx(cx, party));
+    h.state_mut().cx(|cx| archforge_shell_api::panels::select_element_cx(cx, party));
     assert_eq!(h.state().explorer.expanded.iter().copied().collect::<Vec<_>>(), [sales], "the class's package");
     assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 1, "and it is selected");
-}
-
-/// The class diagram the canvas shows, and its classes' names on it.
-fn class_diagram_shown(h: &Harness<'static, Shell>) -> (String, Vec<String>) {
-    let st = h.state().session.as_ref().unwrap().doc();
-    let d = st.by_uuid(h.state().canvas.active.expect("a diagram is open")).unwrap();
-    let kind = st.get(d, archforge_diagram::diagram::KIND).unwrap().as_str().unwrap().to_string();
-    let classes = st
-        .list(d, archforge_diagram::diagram::NODE)
-        .unwrap()
-        .iter()
-        .filter_map(archforge_mof::Value::as_ref)
-        .filter_map(|n| st.get(n, archforge_diagram::node::ELEMENT).ok()?.as_ref())
-        .map(|e| archforge_core::name_of(st, e))
-        .collect();
-    (kind, classes)
-}
-
-#[test]
-fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes_one_too() {
-    let (mut h, _customer, er_diagram) = diagram_harness();
-    let at = rect_of(&h, "workspace.tabs.add").center();
-    click(&mut h, at);
-    assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND, "an ER project starts at ER");
-    let at = rect_of(&h, "workspace.new-diagram.type.uml.structure").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.new-diagram.continue").center();
-    click(&mut h, at);
-    h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
-    let at = rect_of(&h, "workspace.new-diagram.create").center();
-    click(&mut h, at);
-    assert_eq!(class_diagram_shown(&h).0, archforge_uml::STRUCTURE_DIAGRAM);
-    assert_eq!(h.state().canvas.tabs.len(), 2, "beside the ER diagram's tab");
-    assert!(h.state().canvas.tabs.contains(&archforge_mof::Uuid::parse(&er_diagram).unwrap()));
-    // An agent, through the control channel's commands, as its MCP tools call them.
-    let mut call = |command: &str, params: serde_json::Value| {
-        let out = crate::control::answer(h.state_mut(), "engine.execute", &serde_json::json!({ "command": command, "params": params }))
-            .unwrap_or_else(|e| panic!("{command}: {e}"));
-        out["result"]["id"].as_str().unwrap_or_default().to_string()
-    };
-    let pkg = call("uml.package.add", serde_json::json!({ "name": "Billing" }));
-    let d = call("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Billing" }));
-    let invoice = call("uml.class.add", serde_json::json!({ "package": pkg, "name": "Invoice" }));
-    call("diagram.place", serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 }));
-    let st = h.state().session.as_ref().unwrap().doc();
-    let d = st.by_uuid(archforge_mof::Uuid::parse(&d).unwrap()).expect("the agent's class diagram");
-    assert_eq!(st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), 1);
 }
 
 /// A class's attributes or operations as its card lists them.
@@ -16405,28 +12923,6 @@ fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, egui::Co
     let mut out = Vec::new();
     h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut out));
     out
-}
-
-#[test]
-fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest() {
-    let (mut h, customer, diagram) = diagram_harness();
-    let s = h.state_mut().session.as_mut().unwrap();
-    for name in ["name", "phone", "city"] {
-        s.execute("er.attribute.add", &serde_json::json!({ "entity": customer, "name": name, "type": "TEXT" })).unwrap();
-    }
-    h.run();
-    let st = h.state().session.as_ref().unwrap().doc();
-    let (e, d) =
-        (st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap(), st.by_uuid(archforge_mof::Uuid::parse(&diagram).unwrap()).unwrap());
-    let rows: Vec<String> =
-        archforge_diagram::Notation::card(&archforge_er::ErNotation, st, e, d).unwrap().compartments[0].iter().map(|r| r.text.clone()).collect();
-    assert_eq!(rows.len(), 5);
-    // Its box, 166 tall, holds four rows' places: three columns, then the two past it said in one.
-    // A column is painted in the Models tree and, when it shows, in its box too.
-    let texts = painted(&h);
-    let times = |row: &String| texts.iter().filter(|t| *t == row).count();
-    assert_eq!(rows.iter().map(times).collect::<Vec<_>>(), [2, 2, 2, 1, 1], "{texts:?}");
-    assert!(texts.iter().any(|t| t == "+ 2 more columns"), "{texts:?}");
 }
 
 /// The sample class model with the Chat panel shown, over the fake agents host and conversations
@@ -18866,39 +15362,6 @@ fn leaving_the_projects_tab_stops_its_running_turn_and_closing_it_ends_its_conve
     assert_eq!(chat_calls(&rig).3, 1, "closing the project ended its conversation");
 }
 
-#[test]
-fn generate_scrolls_its_body_in_a_short_window_and_keeps_its_footer_clear() {
-    let (mut h, _customer, _diagram) = diagram_harness();
-    let schema = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
-    };
-    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [schema.to_string()] })).unwrap();
-    // The smallest window the app allows.
-    h.set_size(egui::vec2(800.0, 400.0));
-    h.state_mut().open_generate();
-    h.run();
-    let foot = rect_of(&h, "generate.close").top() - 20.0;
-    let request = |h: &Harness<'static, Shell>| ids(h).iter().any(|i| i == "generate.request").then(|| rect_of(h, "generate.request"));
-    assert!(request(&h).is_none_or(|r| r.bottom() > foot), "the request does not fit above the footer before scrolling");
-    // The wheel over the body brings the request into view above the footer.
-    let over = rect_of(&h, "generate.output.ddl").center();
-    h.event(egui::Event::PointerMoved(over));
-    for _ in 0..6 {
-        h.event(egui::Event::MouseWheel {
-            unit: egui::MouseWheelUnit::Point,
-            delta: egui::vec2(0.0, -1200.0),
-            modifiers: egui::Modifiers::NONE,
-            phase: egui::TouchPhase::Move,
-            source: egui::MouseWheelSource::Wheel,
-        });
-        h.run_steps(30);
-    }
-    let r = request(&h).expect("the request in view");
-    assert!(r.bottom() <= foot, "{r:?} ends above the footer at {foot}");
-    assert_eq!(rect_of(&h, "generate.close").top() - 20.0, foot, "the footer stays put");
-}
-
 /// Chat's workspace with a schema selected and File ▸ Generate… open for it, and the queue of
 /// control requests attached as the app attaches it on every start. The sender keeps the queue open.
 fn generate_with_the_queue(
@@ -18959,102 +15422,6 @@ fn generate_says_agent_access_is_on_when_the_person_turned_it_on_for_this_start(
     }
 }
 
-#[test]
-fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can_copy() {
-    let (mut h, _customer, _diagram) = diagram_harness();
-    let schema = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
-    };
-    let run = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
-        h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
-    };
-    // With nothing selected it is from the open diagram.
-    h.state_mut().open_generate();
-    h.run();
-    assert!(painted(&h).iter().any(|t| t == "Diagram · Shop schema"), "{:?}", painted(&h));
-    for more in NOT_ALONE {
-        key(&mut h, egui::Key::Escape, more);
-        assert!(h.state().generate.is_some(), "Escape with {more:?} closes nothing");
-    }
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(h.state().generate.is_none());
-    // A project's export skill and a schema's of the same name with its dialect: the schema's wins.
-    run(&mut h, "skill.add", serde_json::json!({ "name": "DDL conventions", "body": "Plain CREATE TABLE.", "triggers": ["export"] }));
-    run(
-        &mut h,
-        "skill.add",
-        serde_json::json!({ "subject": schema.to_string(), "name": "DDL conventions", "body": "Named constraints.", "triggers": ["export"], "dialect": "MySQL" }),
-    );
-    run(&mut h, "view.select", serde_json::json!({ "ids": [schema.to_string()] }));
-    h.state_mut().open_generate();
-    h.run();
-    assert_eq!(h.state().generate.as_ref().unwrap().dialect, "MySQL", "the dialect the skills in effect name");
-    let texts = painted(&h);
-    assert!(texts.iter().any(|t| t == "Schema · Shop"), "{texts:?}");
-    assert!(texts.iter().any(|t| t == "DDL conventions · on this element · MySQL"), "{texts:?}");
-    assert!(texts.iter().any(|t| t == "DDL conventions · from the project · overridden"), "{texts:?}");
-    assert!(texts.iter().any(|t| t.starts_with("Agent access is off")), "the harness did not turn agent access on: {texts:?}");
-    // The request names the resources to read and the revision it is of.
-    let revision = h.state().session.as_ref().unwrap().revision();
-    let request = texts.iter().find(|t| t.starts_with("Generate SQL DDL (MySQL)")).expect("the request").clone();
-    assert!(request.contains(&format!("archforge://element/{schema}")), "{request}");
-    assert!(request.contains(&format!("archforge://skills/effective/{schema}/export")), "{request}");
-    assert!(request.contains(&format!("model revision {revision}")), "{request}");
-    // Copied, it says so; a change after copying says to copy again.
-    let at = rect_of(&h, "generate.copy").center();
-    click(&mut h, at);
-    assert_eq!(h.state().generate.as_ref().unwrap().copied, Some(revision));
-    assert!(painted(&h).iter().any(|t| t.starts_with("Copied.")));
-    run(&mut h, "er.entity.add", serde_json::json!({ "schema": schema.to_string(), "name": "Invoice" }));
-    h.run();
-    assert!(painted(&h).iter().any(|t| t.starts_with("The model changed after the request was copied")));
-    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add entity"), "the dialog itself changes nothing");
-    // Behind the dialog the workspace's keys rest: Delete removes nothing and undo undoes nothing.
-    h.state_mut().canvas.focused = true;
-    let revision = h.state().session.as_ref().unwrap().revision();
-    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
-    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
-    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing behind the dialog changed");
-    // Documentation takes no dialect.
-    let at = rect_of(&h, "generate.output.documentation").center();
-    click(&mut h, at);
-    assert!(!ids(&h).iter().any(|i| i == "generate.dialect"));
-    assert!(painted(&h).iter().any(|t| t.starts_with("Write Markdown documentation")));
-    let at = rect_of(&h, "generate.close").center();
-    click(&mut h, at);
-    assert!(h.state().generate.is_none());
-    // On every platform: its keys open it, and so does a table's menu.
-    key(&mut h, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
-    assert!(h.state().generate.is_some(), "Ctrl or Cmd with Shift and G");
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    let node = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        let c = st.by_uuid(archforge_mof::Uuid::parse(&_customer).unwrap()).unwrap();
-        st.uuid(archforge_diagram::views_of(st, c).2[0]).unwrap()
-    };
-    let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
-    h.event(egui::Event::PointerMoved(at));
-    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed: true, modifiers: egui::Modifiers::NONE });
-    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed: false, modifiers: egui::Modifiers::NONE });
-    h.run();
-    let at = rect_of(&h, "workspace.canvas.menu.generate").center();
-    click(&mut h, at);
-    assert!(h.state().generate.is_some(), "from the table's menu");
-    assert!(painted(&h).iter().any(|t| t == "Table · Customer"), "{:?}", painted(&h));
-    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    // With nothing to be from, there is no request to copy.
-    run(&mut h, "view.select", serde_json::json!({ "ids": [] }));
-    h.state_mut().canvas.active = None;
-    h.state_mut().open_generate();
-    h.run();
-    let texts = painted(&h);
-    assert!(texts.iter().any(|t| t == "Nothing selected") && texts.iter().any(|t| t.starts_with("Select a schema")), "{texts:?}");
-    let at = rect_of(&h, "generate.copy").center();
-    click(&mut h, at);
-    assert_eq!(h.state().generate.as_ref().unwrap().copied, None);
-}
-
 /// A window over `shell`, as the workspace harness builds one.
 fn harness_over(shell: Shell) -> Harness<'static, Shell> {
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).with_step_dt(1.0 / 60.0).build_ui_state(
@@ -19066,80 +15433,6 @@ fn harness_over(shell: Shell) -> Harness<'static, Shell> {
     );
     h.run();
     h
-}
-
-/// A project opened again resumes its tabs, the diagram it showed and its view.
-#[test]
-fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    h.state_mut().cx(uml_ui::open_sample).unwrap();
-    h.run();
-    let class_diagram = h.state().canvas.active.expect("the sample's class diagram");
-    // An ER diagram beside it, then the class diagram shown again, panned and zoomed.
-    let er = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let schema = s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value["id"].as_str().unwrap().to_string();
-        let d =
-            s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap().value;
-        archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
-    };
-    crate::canvas::open(h.state_mut(), er);
-    h.run();
-    crate::canvas::open(h.state_mut(), class_diagram);
-    h.run();
-    h.state_mut().canvas.zoom = 1.5;
-    h.state_mut().canvas.pan = egui::vec2(-120.0, 40.0);
-    h.run();
-    let path = h.state().project.as_ref().unwrap().path.clone();
-    let kept = h.state().state.view_of(&path).cloned().expect("the view is kept with the recent entry");
-    assert_eq!(kept.tabs, [class_diagram.to_string(), er.to_string()]);
-    assert_eq!((kept.active.as_deref(), kept.zoom, kept.pan), (Some(class_diagram.to_string().as_str()), 1.5, [-120.0, 40.0]));
-    assert_eq!(kept.label, "Commerce", "the shown diagram's name, for Home");
-    // Home's recent row says it.
-    h.state_mut().go_home();
-    h.run();
-    assert!(painted(&h).iter().any(|t| t.ends_with("Last view: Commerce")), "{:?}", painted(&h));
-    let at = rect_of(&h, "workspace.header.project.0").center();
-    click(&mut h, egui::pos2(at.x - 20.0, at.y));
-    h.run();
-    // Saved, closed and opened again in a new window with the same preferences: the same tabs,
-    // the same diagram shown, panned and zoomed as it was, and nothing changed or undoable.
-    let (tables, junctions) = archforge_notations::storage();
-    let rows = std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap());
-    let reopen = |state: crate::state::UiState| {
-        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() }, &SCREENS);
-        shell.state = state;
-        shell.open_project(crate::Opened {
-            name: "Commerce platform".into(),
-            path: path.clone(),
-            model: Some(rows.clone()),
-            unsaved: false,
-            notice: None,
-        });
-        harness_over(shell)
-    };
-    let back = reopen(h.state().state.clone());
-    let canvas = &back.state().canvas;
-    assert_eq!((canvas.tabs.clone(), canvas.active), (vec![class_diagram, er], Some(class_diagram)));
-    assert_eq!((canvas.zoom, canvas.pan), (1.5, egui::vec2(-120.0, 40.0)));
-    let session = back.state().session.as_ref().unwrap();
-    assert!(!session.can_undo() && !session.is_dirty(), "resuming the view changes nothing");
-    // A tab whose diagram is gone is left out; a view that does not read opens on no tab.
-    let mut state = h.state().state.clone();
-    let gone = archforge_mof::Uuid::v7(1_761_670_900_000, [5; 10]).to_string();
-    state.keep_view(
-        &path,
-        crate::state::SavedView { tabs: vec![gone.clone(), er.to_string()], active: Some(gone), pan: [0.0, 0.0], zoom: 1.0, label: String::new() },
-    );
-    let back = reopen(state.clone());
-    assert_eq!((back.state().canvas.tabs.clone(), back.state().canvas.active), (vec![er], Some(er)));
-    state.keep_view(
-        &path,
-        crate::state::SavedView { tabs: vec!["not an id".into()], active: None, pan: [f32::NAN, 0.0], zoom: 99.0, label: String::new() },
-    );
-    state.sanitize();
-    assert!(state.view_of(&path).is_none());
-    assert!(reopen(state).state().canvas.tabs.is_empty());
 }
 
 /// [`related_sample`] in `theme` in a window of `size`.
@@ -19186,172 +15479,11 @@ fn named(h: &Harness<'static, Shell>, class: archforge_mof::ClassId, name: &str)
     st.uuid(o).unwrap()
 }
 
-/// A class diagram's menu closes on an ER tab, so the arrows nudge there.
-#[test]
-fn a_menu_left_open_on_a_class_diagram_closes_on_an_er_tab_and_the_arrows_nudge_there() {
-    let (mut h, customer, er_diagram) = diagram_harness();
-    let uml = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-        let pkg = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
-        let d = id(s
-            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Billing" }))
-            .unwrap()
-            .value);
-        let invoice = id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "Invoice" })).unwrap().value);
-        s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 })).unwrap();
-        archforge_mof::Uuid::parse(&d).unwrap()
-    };
-    crate::canvas::open(h.state_mut(), uml);
-    h.run();
-    let node_at = |h: &Harness<'static, Shell>| {
-        let id = node_ids(h).into_iter().next().expect("a node");
-        (id.clone(), rect_of(h, &id))
-    };
-    // With the Relationship menu open, the arrows still nudge the selected card, as before.
-    let (invoice, was) = node_at(&h);
-    click(&mut h, was.center());
-    let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
-    click(&mut h, at);
-    assert_eq!(h.state().canvas.popover, Some("relationship-kinds"));
-    key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
-    assert!(rect_of(&h, &invoice).left() > was.left(), "the card moved");
-    assert_eq!(h.state().canvas.popover, Some("relationship-kinds"));
-    // The ER tab: the class diagram's menu closes, though ER's tool has the same key.
-    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&er_diagram).unwrap());
-    h.run();
-    assert_eq!((h.state().canvas.popover, h.state().canvas.menu_focus), (None, None));
-    let node = node_ids(&h)
-        .into_iter()
-        .find(|n| {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let o = st.by_uuid(archforge_mof::Uuid::parse(n.trim_start_matches("workspace.canvas.node.")).unwrap()).unwrap();
-            st.get(o, archforge_diagram::node::ELEMENT).unwrap().as_ref().and_then(|e| st.uuid(e).ok()).map(|u| u.to_string())
-                == Some(customer.clone())
-        })
-        .expect("Customer's node");
-    let was = rect_of(&h, &node);
-    click(&mut h, was.center());
-    key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
-    assert!(rect_of(&h, &node).left() > was.left(), "the arrows nudge on the ER canvas");
-}
-
-/// The sample with its payment kinds, BankTransfer's generalization alone in the set Kinds and
-/// named by the constraint settled on Payment beside Payment: the generalizations' ids and
-/// Payment's.
-fn sample_with_a_set_and_a_rule(theme: ThemeKind) -> (Harness<'static, Shell>, [String; 3], String) {
-    let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-    let (gens, payment) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
-    let s = h.state_mut().session.as_mut().unwrap();
-    s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": [gens[1]], "name": "Kinds" })).unwrap();
-    let rule = serde_json::json!({ "context": payment, "name": "settled", "expression": "x", "constrained": [gens[1], payment] });
-    s.execute("uml.constraint.add", &rule).unwrap();
-    h.run();
-    (h, gens, payment)
-}
-
-/// What each notation says of a removal of its own (AR-789), worked out before it runs: UML the
-/// generalization sets a line alone made up and what it does to the constraints, and its toast
-/// for the line naming those sets; ER nothing beyond `{what} removed`. In light and dark.
-#[test]
-fn each_notation_says_what_a_removal_of_its_own_does() {
-    use crate::notation_ui::{NotationUi, Removal};
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (h, gens, _) = sample_with_a_set_and_a_rule(theme);
-        let st = h.state().session.as_ref().unwrap().doc();
-        let o = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
-        let said = uml_ui::UmlUi.before_removal(st, &[o(&gens[1])]);
-        let want = Removal { went: vec!["Kinds".into()], after: Some("settled now constrains Payment only".into()) };
-        assert_eq!(said, want, "{theme:?}");
-        let text = uml_ui::UmlUi.removed_text("Generalization", &said);
-        assert_eq!(text, "Generalization removed · Kinds had no other member and went too", "{theme:?}");
-        // CardPayment's generalization is in no set and no rule names it.
-        let plain = uml_ui::UmlUi.before_removal(st, &[o(&gens[0])]);
-        assert_eq!(plain, Removal::default(), "{theme:?}");
-        assert_eq!(uml_ui::UmlUi.removed_text("Generalization", &plain), "Generalization removed", "{theme:?}");
-        // ER says nothing before, and its toast names no set even when given one.
-        assert_eq!(crate::er_ui::ErUi.before_removal(st, &[]), Removal::default(), "{theme:?}");
-        assert_eq!(crate::er_ui::ErUi.removed_text("Relationship", &want), "Relationship removed", "{theme:?}");
-    }
-}
-
 /// The node that shows `element` on the open diagram.
 fn node_of(h: &Harness<'static, Shell>, element: archforge_mof::Uuid) -> String {
     let st = h.state().session.as_ref().unwrap().doc();
     let n = archforge_diagram::views_of(st, st.by_uuid(element).unwrap()).2[0];
     st.uuid(n).unwrap().to_string()
-}
-
-/// The names of the enumeration `enumeration`'s literals, in their order.
-fn literal_names(h: &Harness<'static, Shell>, enumeration: archforge_mof::Uuid) -> Vec<String> {
-    let st = h.state().session.as_ref().unwrap().doc();
-    archforge_uml::commands::literals(st, st.by_uuid(enumeration).unwrap()).into_iter().map(|l| archforge_core::name_of(st, l)).collect()
-}
-
-/// [`enumeration_sample`] with OrderStatus holding `literals` and selected: the harness, every
-/// card's node by name, OrderStatus and its node.
-fn literal_sample(
-    theme: ThemeKind,
-    literals: &[&str],
-) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>, archforge_mof::Uuid, String) {
-    let (mut h, nodes, [status_node, _]) = enumeration_sample(theme);
-    let status = named(&h, archforge_uml::ENUMERATION, "OrderStatus");
-    if !literals.is_empty() {
-        h.state_mut().cx(|cx| uml_ui::put_literals(cx, status, literals)).unwrap();
-    }
-    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [status.to_string()] })).unwrap();
-    h.run();
-    assert!(h.state().canvas.zoom >= crate::canvas::DETAIL_ZOOM, "the cards show their rows");
-    (h, nodes, status, status_node)
-}
-
-/// An enumeration that holds the most literals it may takes no more: Properties' editor says so in
-/// the user's words and writes nothing; the cap is ER's enum types' too. In light and dark.
-#[test]
-fn an_enumeration_at_its_literal_cap_says_so_and_takes_no_more() {
-    assert_eq!(archforge_uml::members::MAX_LITERALS, archforge_er::rules::MAX_LITERALS, "one rule across the notations");
-    let names: Vec<String> = (0..archforge_uml::members::MAX_LITERALS).map(|i| format!("C{i}")).collect();
-    let names: Vec<&str> = names.iter().map(String::as_str).collect();
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _, status, _) = literal_sample(theme, &names);
-        h.state_mut().state.show_panel(crate::state::Panel::Properties);
-        h.run();
-        let revision = h.state().session.as_ref().unwrap().revision();
-        let at = rect_of(&h, "workspace.properties.literals.add").center();
-        click(&mut h, at);
-        h.event(egui::Event::Text("More".into()));
-        h.run();
-        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        let refused = uml_of(h.state()).member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
-        assert_eq!(refused, "An enumeration holds at most 256 literals.");
-        assert_eq!((literal_names(&h, status).len(), h.state().session.as_ref().unwrap().revision()), (256, revision), "nothing written");
-    }
-}
-
-/// The sample class model in `theme` with two enumerations, OrderStatus and ClosingStatus, placed in
-/// its empty bottom row and the whole diagram in view: the harness, every card's node by name, and
-/// the enumerations' nodes.
-fn enumeration_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>, [String; 2]) {
-    let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-    let d = h.state().canvas.active.unwrap().to_string();
-    let s = h.state_mut().session.as_mut().unwrap();
-    let st = s.doc();
-    let commerce =
-        st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
-    let commerce = st.uuid(commerce).unwrap().to_string();
-    let mut place = |name: &str, x: i32| {
-        let id = s.execute("uml.enumeration.add", &serde_json::json!({ "package": commerce, "name": name })).unwrap().value["id"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        let n =
-            s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": id, "x": x, "y": 1000, "width": 290, "height": 136 })).unwrap();
-        n.value["id"].as_str().unwrap().to_string()
-    };
-    let enumerations = [place("OrderStatus", 560), place("ClosingStatus", 1040)];
-    h.state_mut().canvas.fit_pending = true;
-    h.run();
-    (h, nodes, enumerations)
 }
 
 /// A package Reviews on its own class diagram, open in `theme`: the classes Customer and Product
@@ -19409,61 +15541,6 @@ impl Reviews {
     }
 }
 
-/// The open Delete from the model dialog: the diagrams it says the element disappears from, and
-/// whether it says so in those words. Cancelled after, so nothing changes.
-fn asked_diagrams(h: &mut Harness<'static, Shell>) -> (usize, Vec<String>) {
-    h.run();
-    let asked = h.state().explorer.delete.clone().expect("the dialog asks");
-    let said = painted(h).into_iter().filter(|t| t.starts_with("It disappears from")).collect();
-    let at = rect_of(h, "workspace.explorer.delete.cancel").center();
-    click(h, at);
-    assert!(h.state().explorer.delete.is_none());
-    (asked.diagrams, said)
-}
-
-/// An ER table shown on two diagrams: deleted from Models, the dialog says it disappears from both
-/// (AR-187). A bare table shown there is asked about too, one shown nowhere goes at once, and the
-/// schema the two diagrams belong to, shown on neither, disappears from none. In light and dark.
-#[test]
-fn deleting_a_table_shown_on_two_diagrams_from_models_says_two() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
-        {
-            let s = h.state_mut().session.as_mut().unwrap();
-            let mut id = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-            let schema = id("er.schema.add", serde_json::json!({ "name": "Shop" }));
-            let customer = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Customer" }));
-            id("er.attribute.add", serde_json::json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true }));
-            let bare = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Bare" }));
-            id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Unplaced" }));
-            for name in ["Shop schema", "Customers"] {
-                let d = id("diagram.add", serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": name }));
-                for (table, x) in [(&customer, 100), (&bare, 500)] {
-                    id("diagram.place", serde_json::json!({ "diagram": d, "element": table, "x": x, "y": 100, "width": 240, "height": 166 }));
-                }
-            }
-        }
-        h.run();
-        let two = vec!["It disappears from 2 diagrams.".to_string()];
-        select_named(&mut h, archforge_er::ENTITY, "Customer");
-        crate::explorer::remove_selection(h.state_mut());
-        assert_eq!(asked_diagrams(&mut h), (2, two.clone()), "a table with a column");
-        select_named(&mut h, archforge_er::ENTITY, "Bare");
-        crate::explorer::remove_selection(h.state_mut());
-        assert_eq!(asked_diagrams(&mut h), (2, two), "a table with nothing else going");
-        // The schema's own diagrams go with it, but it is shown on neither.
-        select_named(&mut h, archforge_er::SCHEMA, "Shop");
-        crate::explorer::remove_selection(h.state_mut());
-        assert_eq!(asked_diagrams(&mut h), (0, Vec::new()), "the schema");
-        select_named(&mut h, archforge_er::ENTITY, "Unplaced");
-        crate::explorer::remove_selection(h.state_mut());
-        assert!(h.state().explorer.delete.is_none(), "no dialog: nothing goes and no diagram shows it");
-        assert!(schema_names(&h) == ["Shop"]);
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert!(!st.alive().any(|o| archforge_core::name_of(st, o) == "Unplaced"), "removed at once");
-    }
-}
-
 /// Clicks the field `id`, selects what it holds and types `text` over it.
 fn retype(h: &mut Harness<'static, Shell>, id: &str, text: &str) {
     let at = rect_of(h, id).center();
@@ -19476,15 +15553,6 @@ fn retype(h: &mut Harness<'static, Shell>, id: &str, text: &str) {
         h.event(egui::Event::Text(text.into()));
         h.run();
     }
-}
-
-fn select_named(h: &mut Harness<'static, Shell>, class: archforge_mof::ClassId, name: &str) -> archforge_mof::Uuid {
-    let st = h.state().session.as_ref().unwrap().doc();
-    let o = st.alive().find(|o| st.class_of(*o).ok() == Some(class) && archforge_core::name_of(st, *o) == name).unwrap();
-    let id = st.uuid(o).unwrap();
-    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
-    h.run();
-    id
 }
 
 #[test]
@@ -20142,7 +16210,7 @@ fn a_menus_rows_of_one_text_are_told_apart() {
         click(&mut h, at);
         assert_eq!(picks.lock().unwrap().as_slice(), [(0, "Sales".to_string())], "{theme:?}: the first row, alone, not its twin");
         // Billing reached, then the two change places: Enter picks Billing where it went.
-        h.state_mut().panels.menu = Some(crate::er_state::menus::KIND);
+        h.state_mut().panels.menu = Some(er_state::menus::KIND);
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         swapped.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -20270,7 +16338,7 @@ fn rows_menu(theme: ThemeKind, rows: &MenuRowsSet, picks: &std::sync::Arc<std::s
         },
         shell,
     );
-    h.state_mut().panels.menu = Some(crate::er_state::menus::KIND);
+    h.state_mut().panels.menu = Some(er_state::menus::KIND);
     h.run();
     h
 }
@@ -20628,52 +16696,6 @@ fn about_scrolls_its_body_in_a_short_window_and_keeps_done_clear() {
     assert!(h.state().about.is_none());
 }
 
-#[test]
-fn the_removal_toast_keeps_clear_of_the_minimap_at_every_width_and_its_undo_still_undoes() {
-    let (mut h, _customer, _diagram) = diagram_harness();
-    let schema = {
-        let st = h.state().session.as_ref().unwrap().doc();
-        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
-    };
-    let tables = |h: &Harness<'static, Shell>| {
-        let st = h.state().session.as_ref().unwrap().doc();
-        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).count()
-    };
-    let before = tables(&h);
-    h.state_mut()
-        .session
-        .as_mut()
-        .unwrap()
-        .execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Invoice" }))
-        .unwrap();
-    // A long message, as a translation makes it, on the toast the removal would show.
-    let text = "Orders entfernt; was es enthielt, wurde nach Commerce UML verschoben, mit allen Klassen und Beziehungen".to_string();
-    let mut beside_minimap = Vec::new();
-    // The report's 1505-point window among them; at the narrower ones the minimap folds away.
-    for size in [egui::vec2(1600.0, 1000.0), egui::vec2(1505.0, 1040.0), egui::vec2(1420.0, 900.0), egui::vec2(980.0, 900.0)] {
-        h.set_size(size);
-        let undo_label = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
-        let until = h.state().frames + 1000;
-        h.state_mut().canvas.toast = Some(crate::canvas::Toast { text: text.clone(), until, undo_label });
-        h.run();
-        let toast = rect_of(&h, "workspace.toast");
-        let undo = rect_of(&h, "workspace.toast.undo");
-        assert!(toast.contains_rect(undo), "{size:?}: Undo {undo:?} lies within the toast {toast:?}");
-        if ids(&h).iter().any(|i| i == "workspace.minimap") {
-            let minimap = rect_of(&h, "workspace.minimap");
-            assert!(!toast.intersects(minimap), "{size:?}: the toast {toast:?} is clear of the minimap {minimap:?}");
-            beside_minimap.push(size);
-        }
-        assert!(painted(&h).iter().any(|t| t.starts_with("Orders entfernt") && t.ends_with("Beziehungen")), "{size:?}: the whole message shows");
-    }
-    // The minimap showed at the wider widths, so the check above ran there.
-    assert!(beside_minimap.len() >= 2, "{beside_minimap:?}");
-    // Its Undo, at the narrowest width, undoes what the toast is about.
-    let at = rect_of(&h, "workspace.toast.undo").center();
-    click(&mut h, at);
-    assert_eq!(tables(&h), before, "Undo took the table back");
-}
-
 /// New project from the native menu, with a project open: the dialog draws over the workspace,
 /// and with nothing in it holding the keyboard no key reaches what is behind it.
 #[test]
@@ -20916,66 +16938,6 @@ fn the_new_project_dialog_links_to_dolts_install_page_when_dolt_is_missing() {
     assert!(!ids(&h).iter().any(|i| i == "new-project.install-dolt"));
 }
 
-/// AR-790: a project saved before each notation answered its own open-time steps, holding both
-/// shapes an opening puts right (a table box too short for its two columns, and two packages from
-/// before the root package), opens to the very model, boxes and history the shell made of it
-/// before: ER's boxes grown as the rows are read, then UML's root package as one step that can be
-/// undone.
-#[test]
-fn a_project_saved_before_the_open_time_hooks_opens_to_the_same_model_and_boxes() {
-    // Ids of their own while the older project is made, so none is given again as it opens.
-    let ids = |at: u64| -> Box<dyn FnMut() -> archforge_mof::Uuid + Send> {
-        let mut n: u64 = 0;
-        Box::new(move || {
-            n += 1;
-            let mut r = [0u8; 10];
-            r[2..].copy_from_slice(&n.to_be_bytes());
-            archforge_mof::Uuid::v7(at, r)
-        })
-    };
-    let (tables, junctions) = archforge_notations::storage();
-    let snap = |s: &archforge_notations::Session| archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
-    let mut made = archforge_notations::new_project_session("Commerce platform", ids(1_761_670_700_000)).unwrap();
-    let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
-    let schema = id(made.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
-    let account = id(made.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Account" })).unwrap().value);
-    for name in ["employee_id", "employee_id_2"] {
-        made.execute("er.attribute.add", &serde_json::json!({ "entity": account, "name": name, "type": "UUID" })).unwrap();
-    }
-    let diagram =
-        id(made.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "Shop" })).unwrap().value);
-    made.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": account, "x": 0, "y": 0, "width": 240, "height": 72 }))
-        .unwrap();
-    // The packages as older projects saved them: at the top level, with no root package.
-    let older = archforge_notations::session_from_rows_repaired(&snap(&made), ids(1_761_670_710_000), |st| {
-        let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
-        for name in ["Commerce", "Billing"] {
-            let p = st.create(archforge_uml::PACKAGE).unwrap();
-            st.set(p, archforge_uml::named_element::NAME, archforge_mof::Value::str(name)).unwrap();
-            st.push(model, archforge_core::model::MEMBER, archforge_mof::Value::Ref(p)).unwrap();
-        }
-    })
-    .unwrap();
-    let rows = snap(&older);
-    // What the shell made of it before: the boxes fitted as the rows were read, then the root.
-    // The shell's ids are the harness's, from the first.
-    let shells = test_ids();
-    let mut before = archforge_notations::session_from_rows_repaired(&rows, Box::new(move || shells()), crate::er_place::fit_tables).unwrap();
-    before.execute("uml.model.root", &serde_json::json!({})).unwrap();
-    let opened = crate::Opened { model: Some(std::sync::Arc::new(rows)), ..commerce() };
-    let (h, _host) = saving_harness(Some(opened), None);
-    let session = h.state().session.as_ref().expect("the older project opens");
-    assert_eq!(snap(session), snap(&before), "the same model and the same boxes");
-    assert_eq!((session.undo_label(), session.is_dirty()), (before.undo_label(), true), "the root package is one step, to be written");
-    // Both steps were taken: the box shows both columns, and the packages sit in the root.
-    let st = session.doc();
-    let node = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::NODE)).unwrap();
-    assert_eq!(archforge_diagram::grid::bounds_of(st, node).height, crate::er_place::content_height(2));
-    let root = archforge_uml::commands::root_package(st).expect("the root is made on opening");
-    let held: Vec<String> = archforge_uml::commands::subpackages(st, root).into_iter().map(|p| archforge_core::name_of(st, p)).collect();
-    assert_eq!(held, ["Commerce", "Billing"]);
-}
-
 #[test]
 fn the_activity_rail_puts_diagrams_above_models_in_its_look_and_its_keyboard_order() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -20991,56 +16953,6 @@ fn the_activity_rail_puts_diagrams_above_models_in_its_look_and_its_keyboard_ord
         let at = |id: &str| ids.iter().position(|i| i == id).unwrap();
         assert!(at("workspace.explorers.diagrams") < at("workspace.explorers.models"), "{theme:?}: {ids:?}");
     }
-}
-
-/// A package Shop open on its diagram in `theme` (AR-126): the classes Item and Order, Order
-/// specializing Item; the enumeration Status with Placed and Paid; Item's `parts : Item [*]`,
-/// Order's `lines : Item [*]` and `status : Status`; an association from Order to Item whose
-/// second end is `items [*]`. Order is selected with Properties showing it. Gives the harness and
-/// the ids by name: Item, Order, Status, parts, lines, status and the association, `holds`.
-fn modifiers_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
-    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1400.0));
-    let mut ids = std::collections::BTreeMap::new();
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
-        let pkg = run("uml.package.add", serde_json::json!({ "name": "Shop" }));
-        let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": pkg, "name": "Shop" }));
-        let item = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Item" }));
-        let order = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Order" }));
-        run("uml.generalization.add", serde_json::json!({ "specific": order, "general": item }));
-        let status = run("uml.enumeration.add", serde_json::json!({ "package": pkg, "name": "Status" }));
-        for l in ["Placed", "Paid"] {
-            run("uml.literal.add", serde_json::json!({ "enumeration": status, "name": l }));
-        }
-        let parts = run("uml.attribute.add", serde_json::json!({ "class": item, "name": "parts", "type": item, "multiplicity": "*" }));
-        let lines = run("uml.attribute.add", serde_json::json!({ "class": order, "name": "lines", "type": item, "multiplicity": "*" }));
-        let st = run("uml.attribute.add", serde_json::json!({ "class": order, "name": "status", "type": status }));
-        let holds = run("uml.association.add", serde_json::json!({ "from": order, "to": item }));
-        run("uml.association.set-end", serde_json::json!({ "association": holds, "end": 1, "role": "items", "multiplicity": "*" }));
-        for (element, x, y) in [(&item, 80, 80), (&order, 80, 420), (&status, 520, 80)] {
-            run("diagram.place", serde_json::json!({ "diagram": d, "element": element, "x": x, "y": y, "width": 260, "height": 160 }));
-        }
-        run("diagram.connect-all", serde_json::json!({ "diagram": d }));
-        for (k, v) in [
-            ("Item", item),
-            ("Order", order.clone()),
-            ("Status", status),
-            ("parts", parts),
-            ("lines", lines),
-            ("status", st),
-            ("holds", holds),
-            ("diagram", d),
-        ] {
-            ids.insert(k, v);
-        }
-    }
-    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&ids["diagram"]).unwrap());
-    h.run();
-    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["Order"]] })).unwrap();
-    h.state_mut().state.show_panel(crate::state::Panel::Properties);
-    h.run();
-    (h, ids)
 }
 
 /// Settings → AI Agents over Home, from the fake agents host set up by `setup`; the window is tall
@@ -21997,31 +17909,6 @@ fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_some(), "given back");
 }
 
-/// The Relationship tool armed with N-ary association draws by clicks on a class diagram only: not
-/// on an ER diagram, whose own Relationship tool has the same key, and not with no diagram open
-/// (AR-128).
-#[test]
-fn the_n_ary_tool_is_armed_on_a_class_diagram_only() {
-    let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    let class_diagram = h.state().canvas.active.expect("the class diagram is open");
-    let er_diagram = {
-        let s = h.state_mut().session.as_mut().unwrap();
-        let shop = s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value["id"].as_str().unwrap().to_string();
-        let d = s.execute("diagram.add", &serde_json::json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "Shop" })).unwrap().value;
-        archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
-    };
-    let armed_on = |shell: &mut Shell, d: Option<archforge_mof::Uuid>| {
-        shell.canvas.active = d;
-        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
-        uml_of_mut(shell).relation = uml_relate::Relate::NAry;
-        uml_nary::armed(&shell.cx_ref())
-    };
-    let shell = h.state_mut();
-    assert!(armed_on(shell, Some(class_diagram)), "on the class diagram");
-    assert!(!armed_on(shell, Some(er_diagram)), "not on an ER diagram");
-    assert!(!armed_on(shell, None), "not with no diagram open");
-}
-
 /// Repository, Order and Entity (Order specializes it) in the package Shop, on two class diagrams,
 /// the first open and Repository selected with Properties shown (AR-130). Gives the ids by name:
 /// Repository, Order, Entity, diagram, second.
@@ -22161,219 +18048,6 @@ fn recorded_alone(shell: &mut Shell, mut draw: impl FnMut(&mut Shell, &egui::Ui)
     ids
 }
 
-/// What `ask` gives for a press at one point of the diagram `shell` shows, with `node` and `line`
-/// under it and the primary button `clicked` or not, as the canvas hands a press to its kind.
-fn pressed_with<R>(
-    shell: &Shell,
-    node: Option<archforge_mof::Obj>,
-    line: Option<archforge_mof::Obj>,
-    clicked: bool,
-    ask: impl FnOnce(&crate::kinds::Press<'_>) -> R,
-) -> R {
-    let s = shell.session.as_ref().unwrap();
-    let store = s.doc();
-    let d = store.by_uuid(shell.canvas.active.unwrap()).unwrap();
-    let selection = s.view().selection.clone();
-    let node_at = move |_| node;
-    let line_at = move |_| line;
-    let at = Some(PRESSED_AT);
-    ask(&crate::kinds::Press {
-        at,
-        clicked,
-        double: false,
-        store,
-        notations: s.view(),
-        d,
-        selection: &selection,
-        node_at: &node_at,
-        line_at: &line_at,
-    })
-}
-
-/// Where [`pressed_with`] presses, on screen.
-const PRESSED_AT: egui::Pos2 = egui::pos2(300.0, 200.0);
-
-/// What a kind's answer to a press is, in a word: none left to the shared gestures, nothing taken,
-/// or an action of its own; any other is the shared gestures' own.
-fn answered(action: Option<crate::editing::Action>) -> (&'static str, Option<Box<dyn FnOnce(&mut crate::cx::Ctx)>>) {
-    match action {
-        None => ("none", None),
-        Some(crate::editing::Action::Nothing) => ("nothing", None),
-        Some(crate::editing::Action::Own(run)) => ("own", Some(run)),
-        Some(_) => ("shared", None),
-    }
-}
-
-/// The node of the element `id` on the diagram `shell` shows.
-fn node_here(shell: &Shell, id: &str) -> archforge_mof::Obj {
-    let st = shell.session.as_ref().unwrap().doc();
-    let d = st.by_uuid(shell.canvas.active.unwrap()).unwrap();
-    let e = st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
-    archforge_diagram::views_of(st, e).2.into_iter().find(|n| archforge_diagram::diagram_of(st, *n) == Some(d)).unwrap()
-}
-
-/// The diagram's kind reads a press of the primary button first (AR-789): with UML's N-ary
-/// association tool armed, a click on a card is the drawing's next end, a press that is no click
-/// is still the drawing's (no line starts), and a click on empty canvas cancels it; with Select
-/// while Add end waits, a click on a card gives the association its new end. With nothing of UML's
-/// under way, and from ER's kind always, the press is left to the shared gestures. In light and
-/// dark.
-#[test]
-fn the_kind_reads_a_press_first_and_ers_leaves_it() {
-    use crate::kinds::DiagramKind;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, ids) = nary_sample(theme, true);
-        let shell = h.state_mut();
-        let customer = node_here(shell, &ids["Customer"]);
-        let ask = |shell: &Shell, kind: &dyn DiagramKind, node, clicked| {
-            pressed_with(shell, node, None, clicked, |p| answered(kind.pointer(&shell.cx_ref(), p)))
-        };
-        assert_eq!(ask(shell, &uml_ui::UmlKind, Some(customer), true).0, "none", "{theme:?}: nothing under way");
-        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
-        uml_of_mut(shell).relation = uml_relate::Relate::NAry;
-        assert_eq!(ask(shell, &crate::er_kind::ErKind, Some(customer), true).0, "none", "{theme:?}: ER's kind leaves it");
-        assert_eq!(ask(shell, &uml_ui::UmlKind, Some(customer), false).0, "nothing", "{theme:?}: no line starts");
-        let (word, run) = ask(shell, &uml_ui::UmlKind, Some(customer), true);
-        assert_eq!(word, "own", "{theme:?}");
-        shell.cx(|cx| run.unwrap()(cx));
-        let ends = |shell: &Shell| match &uml_of(shell).nary {
-            Some(uml_nary::Nary::Draft { ends, .. }) => ends.len(),
-            _ => 0,
-        };
-        assert_eq!(ends(shell), 1, "{theme:?}: Customer is the first end");
-        let (word, run) = ask(shell, &uml_ui::UmlKind, None, true);
-        assert_eq!(word, "own", "{theme:?}");
-        shell.cx(|cx| run.unwrap()(cx));
-        assert!(uml_of(shell).nary.is_none() && shell.canvas.tool == crate::canvas::Tool::Select, "{theme:?}: empty canvas cancels");
-        // Add end waits on a class.
-        let st = shell.session.as_ref().unwrap().doc();
-        let association = st.alive().find(|o| archforge_uml::nary::is_nary(st, *o)).unwrap();
-        let (association, diagram) = (st.uuid(association).unwrap(), shell.canvas.active.unwrap());
-        uml_of_mut(shell).nary = Some(uml_nary::Nary::AddEnd { diagram, association });
-        assert_eq!(ask(shell, &crate::er_kind::ErKind, Some(customer), true).0, "none", "{theme:?}: ER's kind leaves it");
-        assert_eq!(ask(shell, &uml_ui::UmlKind, Some(customer), false).0, "none", "{theme:?}: a drag may start");
-        let (word, run) = ask(shell, &uml_ui::UmlKind, Some(customer), true);
-        assert_eq!(word, "own", "{theme:?}");
-        shell.cx(|cx| run.unwrap()(cx));
-        let st = shell.session.as_ref().unwrap().doc();
-        let ends = archforge_uml::nary::ends(st, st.by_uuid(association).unwrap()).len();
-        assert_eq!((ends, uml_of(shell).nary.is_none()), (4, true), "{theme:?}: a fourth end, at Customer");
-    }
-}
-
-/// A right click means what the diagram's kind says first (AR-789): UML opens an n-ary
-/// association's menu from its diamond, the association selected, and the set actions from a
-/// generalization's line, the line selected first unless its generalization was; on a card it
-/// leaves the click to the element menu, and ER's kind leaves every right click to it. In light
-/// and dark.
-#[test]
-fn the_kind_reads_a_right_click_first_and_ers_leaves_it() {
-    use crate::kinds::DiagramKind;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, ids) = nary_sample(theme, true);
-        let shell = h.state_mut();
-        let st = shell.session.as_ref().unwrap().doc();
-        let a = st.alive().find(|o| archforge_uml::nary::is_nary(st, *o)).unwrap();
-        let a_id = st.uuid(a).unwrap();
-        let diamond = node_here(shell, &a_id.to_string());
-        let customer = node_here(shell, &ids["Customer"]);
-        let ask = |shell: &Shell, kind: &dyn DiagramKind, node, line| {
-            pressed_with(shell, node, line, false, |p| answered(kind.secondary_click(&shell.cx_ref(), p)))
-        };
-        assert_eq!(ask(shell, &crate::er_kind::ErKind, Some(diamond), None).0, "none", "{theme:?}: ER's kind leaves it");
-        assert_eq!(ask(shell, &uml_ui::UmlKind, Some(customer), None).0, "none", "{theme:?}: a card's menu is the element menu");
-        let (word, run) = ask(shell, &uml_ui::UmlKind, Some(diamond), None);
-        assert_eq!(word, "own", "{theme:?}");
-        shell.cx(|cx| run.unwrap()(cx));
-        assert_eq!(uml_of(shell).nary_menu, Some((PRESSED_AT, a_id)), "{theme:?}: its menu, where pressed");
-        let st = shell.session.as_ref().unwrap().doc();
-        assert_eq!(shell.session.as_ref().unwrap().view().selection, vec![st.by_uuid(a_id).unwrap()], "{theme:?}: the association selected");
-    }
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
-        h.run();
-        let shell = h.state_mut();
-        let st = shell.session.as_ref().unwrap().doc();
-        let g = st.by_uuid(archforge_mof::Uuid::parse(&gens[0]).unwrap()).unwrap();
-        let line = archforge_diagram::views_of(st, g).1[0];
-        let ask = |shell: &Shell, kind: &dyn DiagramKind| {
-            pressed_with(shell, None, Some(line), false, |p| answered(kind.secondary_click(&shell.cx_ref(), p)))
-        };
-        assert_eq!(ask(shell, &crate::er_kind::ErKind).0, "none", "{theme:?}: ER's kind leaves it");
-        let (word, run) = ask(shell, &uml_ui::UmlKind);
-        assert_eq!(word, "own", "{theme:?}");
-        shell.cx(|cx| run.unwrap()(cx));
-        assert_eq!(uml_of(shell).line_menu, Some(PRESSED_AT), "{theme:?}: the set actions, where pressed");
-        assert_eq!(shell.session.as_ref().unwrap().view().selection, vec![g], "{theme:?}: the line selected first");
-        uml_of_mut(shell).line_menu = None;
-        shell.session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        let run = ask(shell, &uml_ui::UmlKind).1.unwrap();
-        shell.cx(|cx| run(cx));
-        assert_eq!(shell.session.as_ref().unwrap().view().selection.len(), 3, "{theme:?}: a selection holding it is kept");
-    }
-}
-
-/// What `read` gives when it reads once a frame of its own whose input holds `keys`, each pressed
-/// with `modifiers`, away from any window.
-fn keyed_alone(shell: &mut Shell, keys: &[egui::Key], modifiers: egui::Modifiers, mut read: impl FnMut(&mut Shell, &egui::Ui) -> bool) -> bool {
-    let events = keys.iter().map(|key| egui::Event::Key { key: *key, physical_key: None, pressed: true, repeat: false, modifiers }).collect();
-    let mut took = false;
-    let mut out = egui::Context::default().run_ui(egui::RawInput { events, ..Default::default() }, |ui| took = read(shell, ui));
-    // Nothing is shown: the fonts' textures go unused.
-    out.textures_delta.clear();
-    took
-}
-
-/// A drawing under way on the diagram's kind takes its keys first (AR-789): UML's n-ary
-/// association drawing takes Escape, which drops it; with nothing drawn UML leaves the keys to
-/// the canvas, and ER's kind always does. In light and dark.
-#[test]
-fn the_kind_takes_its_drawings_keys_first_and_ers_takes_none() {
-    use crate::kinds::DiagramKind;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, ids) = nary_sample(theme, false);
-        let shell = h.state_mut();
-        let d = shell.session.as_ref().unwrap().doc().by_uuid(shell.canvas.active.unwrap()).unwrap();
-        let escape = |shell: &mut Shell, kind: &dyn DiagramKind| {
-            keyed_alone(shell, &[egui::Key::Escape], egui::Modifiers::NONE, |s, ui| s.cx(|cx| kind.keys(cx, ui, d)))
-        };
-        assert!(!escape(shell, &uml_ui::UmlKind), "{theme:?}: nothing drawn");
-        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
-        uml_of_mut(shell).relation = uml_relate::Relate::NAry;
-        let customer = node_here(shell, &ids["Customer"]);
-        let node = shell.session.as_ref().unwrap().doc().uuid(customer).unwrap();
-        shell.cx(|cx| uml_nary::click(cx, d, node, false));
-        assert!(uml_of(shell).nary.is_some(), "{theme:?}: a drawing under way");
-        assert!(!escape(shell, &crate::er_kind::ErKind), "{theme:?}: ER's kind takes none");
-        assert!(uml_of(shell).nary.is_some(), "{theme:?}: and leaves the drawing");
-        assert!(escape(shell, &uml_ui::UmlKind), "{theme:?}: UML takes Escape");
-        assert!(uml_of(shell).nary.is_none(), "{theme:?}: the drawing dropped");
-    }
-}
-
-/// A popover's menu holds the keys as the kind whose chevron it is says (AR-789): UML's
-/// classifier kinds do, its relationship kinds do not, ER's relationship types do not; every kind
-/// is asked, so the classifier kinds still hold the keys while an ER diagram shows, until the
-/// toolbar closes them. In light and dark.
-#[test]
-fn a_popover_holds_the_keys_as_its_kind_says() {
-    use crate::kinds::DiagramKind;
-    let (uml, er) = (uml_ui::UmlKind, crate::er_kind::ErKind);
-    assert!(uml.popover_takes_keys(uml_classifier::KINDS));
-    assert!(!uml.popover_takes_keys("relationship-kinds") && !uml.popover_takes_keys("relationship-types"));
-    assert!(!er.popover_takes_keys("relationship-types") && !er.popover_takes_keys(uml_classifier::KINDS));
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _, _) = diagram_harness_in(theme);
-        let shell = h.state_mut();
-        assert!(!crate::kinds::popover_takes_keys(shell), "{theme:?}: none open");
-        shell.canvas.popover = Some("relationship-types");
-        assert!(!crate::kinds::popover_takes_keys(shell), "{theme:?}");
-        shell.canvas.popover = Some(uml_classifier::KINDS);
-        assert!(crate::kinds::popover_takes_keys(shell), "{theme:?}: UML's, over an ER diagram");
-    }
-}
-
 /// The kind of a diagram, the kind of the diagram shown and whether the open popover takes the
 /// keys are asked of the kinds the shell registered, and the kind shown is the active tab's. In the
 /// sketch shell, whose kinds are ER's and the sketch's, the sketch diagram is the sketch kind's,
@@ -22401,130 +18075,6 @@ fn the_kinds_asked_are_the_shells_and_the_kind_shown_is_the_active_tabs() {
     shell.canvas.active = Some(id);
     shell.session = None;
     assert!(crate::kinds::active_kind(shell).is_none(), "no project open");
-}
-
-/// Select all takes in what the diagram's kind adds beside its boxes and lines (AR-789): UML the
-/// generalization set its generalizations belong to, ER's kind nothing. In light and dark.
-#[test]
-fn select_all_takes_in_what_the_kind_adds() {
-    use crate::kinds::DiagramKind;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
-        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        assert!(h.state_mut().cx(uml_sets::shortcut), "{theme:?}: a set made");
-        let st = h.state().session.as_ref().unwrap().doc();
-        let set = st.alive().find(|o| archforge_uml::generalization_sets::is_set(st, *o)).unwrap();
-        let lines: Vec<archforge_mof::Obj> = gens.iter().map(|g| st.by_uuid(archforge_mof::Uuid::parse(g).unwrap()).unwrap()).collect();
-        let class = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS)).unwrap();
-        assert!(crate::er_kind::ErKind.also_selects(st, &lines).is_empty(), "{theme:?}: ER's kind adds nothing");
-        assert!(uml_ui::UmlKind.also_selects(st, &[class]).is_empty(), "{theme:?}: no generalization, no set");
-        let added = uml_ui::UmlKind.also_selects(st, &lines);
-        assert!(!added.is_empty() && added.iter().all(|o| *o == set), "{theme:?}: the set of its lines, {added:?}");
-    }
-}
-
-/// Delete removes a notation's own selected element its own way, whatever the diagram (AR-789): ER
-/// a relationship with its foreign key, without Shift; UML a generalization set, its
-/// generalizations kept, Shift held or not; each leaves the other's element to it. In light and
-/// dark.
-#[test]
-fn delete_removes_each_notations_own_selected_element_its_own_way() {
-    use crate::notation_ui::NotationUi;
-    let alive = |h: &Harness<'static, Shell>, o: archforge_mof::Obj| h.state().session.as_ref().unwrap().doc().is_alive(o);
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _, _) = diagram_harness_in(theme);
-        let (rel, fk) = {
-            let s = h.state_mut().session.as_mut().unwrap();
-            let st = s.doc();
-            let rel = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap();
-            let fk = st.referrers(rel).into_iter().find(|(_, p)| *p == archforge_er::foreign_key::RELATIONSHIP).map(|(f, _)| f).unwrap();
-            let id = st.uuid(rel).unwrap().to_string();
-            s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
-            (rel, fk)
-        };
-        assert!(!h.state_mut().cx(|cx| uml_ui::UmlUi.canvas_delete(cx, false)), "{theme:?}: UML leaves a relationship");
-        assert!(!h.state_mut().cx(|cx| crate::er_ui::ErUi.canvas_delete(cx, true)), "{theme:?}: Shift leaves it to the dialog");
-        assert!(alive(&h, rel), "{theme:?}");
-        assert!(h.state_mut().cx(|cx| crate::er_ui::ErUi.canvas_delete(cx, false)), "{theme:?}");
-        assert!(!alive(&h, rel) && !alive(&h, fk), "{theme:?}: with its foreign key");
-        assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("places removed"), "{theme:?}");
-    }
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
-        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        assert!(h.state_mut().cx(uml_sets::shortcut), "{theme:?}: a set made, and selected");
-        let st = h.state().session.as_ref().unwrap().doc();
-        let set = st.alive().find(|o| archforge_uml::generalization_sets::is_set(st, *o)).unwrap();
-        let g = st.by_uuid(archforge_mof::Uuid::parse(&gens[0]).unwrap()).unwrap();
-        assert!(!h.state_mut().cx(|cx| crate::er_ui::ErUi.canvas_delete(cx, false)), "{theme:?}: ER leaves a set");
-        assert!(alive(&h, set), "{theme:?}");
-        assert!(h.state_mut().cx(|cx| uml_ui::UmlUi.canvas_delete(cx, true)), "{theme:?}: Shift held too");
-        assert!(!alive(&h, set) && alive(&h, g), "{theme:?}: its generalizations kept");
-    }
-}
-
-/// A notation's chord on the selection is its own (AR-789): ⌥⌘G with generalizations selected
-/// makes UML's set and takes the keys; ER's notation takes no chord; without the chord UML takes
-/// nothing. In light and dark.
-#[test]
-fn a_notations_chord_on_the_selection_is_its_own() {
-    use crate::notation_ui::NotationUi;
-    let chord = egui::Modifiers::COMMAND | egui::Modifiers::ALT;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (gens, _) = h.state_mut().cx(uml_ui::put_payment_kinds).unwrap();
-        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": gens })).unwrap();
-        let sets = |h: &Harness<'static, Shell>| {
-            let st = h.state().session.as_ref().unwrap().doc();
-            st.alive().filter(|o| archforge_uml::generalization_sets::is_set(st, *o)).count()
-        };
-        let shell = h.state_mut();
-        assert!(!keyed_alone(shell, &[egui::Key::G], chord, |s, ui| s.cx(|cx| crate::er_ui::ErUi.canvas_keys(cx, ui))), "{theme:?}: ER takes none");
-        assert!(!keyed_alone(shell, &[egui::Key::G], egui::Modifiers::COMMAND, |s, ui| s.cx(|cx| uml_ui::UmlUi.canvas_keys(cx, ui))), "{theme:?}");
-        assert_eq!(sets(&h), 0, "{theme:?}");
-        assert!(keyed_alone(h.state_mut(), &[egui::Key::G], chord, |s, ui| s.cx(|cx| uml_ui::UmlUi.canvas_keys(cx, ui))), "{theme:?}: ⌥⌘G");
-        assert_eq!(sets(&h), 1, "{theme:?}: a set made");
-    }
-}
-
-/// Escape on the canvas closes ER's mapping table offer, open over an ER diagram (AR-789); the
-/// offer reads Escape itself too, so this holds the outcome whichever of the two ends it. In light
-/// and dark.
-#[test]
-fn escape_on_the_canvas_closes_ers_mapping_offer() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _, _) = diagram_harness_in(theme);
-        let rel = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
-        };
-        h.state_mut().cx(|cx| crate::connect::offer_mapping(cx, rel));
-        h.state_mut().canvas.focused = true;
-        h.run();
-        assert!(er_of(h.state()).mapping.is_some(), "{theme:?}: the offer is open");
-        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-        assert!(er_of(h.state()).mapping.is_none(), "{theme:?}: Escape closed it");
-    }
-}
-
-/// What a press and Escape on the canvas close is each notation's own (AR-789): a press closes
-/// UML's menus of generalization lines and of an n-ary association, Escape ER's mapping table
-/// offer; neither closes the other's.
-#[test]
-fn a_press_and_escape_close_each_notations_own() {
-    use crate::notation_ui::NotationState;
-    let id = archforge_mof::Uuid([7; 16]);
-    let mut uml = uml_state::UmlState { line_menu: Some(PRESSED_AT), nary_menu: Some((PRESSED_AT, id)), ..Default::default() };
-    let offer = || Some(crate::connect::MappingOffer { relationship: id, name: "CustomerOrder".into(), refused: None });
-    let mut er = crate::er_state::ErState { mapping: offer(), ..Default::default() };
-    uml.canvas_escape();
-    er.canvas_pressed();
-    assert!(uml.line_menu.is_some() && uml.nary_menu.is_some() && er.mapping.is_some(), "neither closes the other's");
-    uml.canvas_pressed();
-    er.canvas_escape();
-    assert!(uml.line_menu.is_none() && uml.nary_menu.is_none() && er.mapping.is_none());
 }
 
 /// What `notation` draws over the canvas of `h`'s open diagram at `layer`, alone in a frame of its
@@ -22572,11 +18122,11 @@ fn ers_overlay_is_its_mapping_offer_at_the_offers_layer() {
             let st = h.state().session.as_ref().unwrap().doc();
             st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
         };
-        h.state_mut().cx(|cx| crate::connect::offer_mapping(cx, rel));
-        let (shapes, ids) = overlaid(&mut h, &crate::er_ui::ErUi, Layer::Offers);
+        h.state_mut().cx(|cx| er_connect::offer_mapping(cx, rel));
+        let (shapes, ids) = overlaid(&mut h, &er_ui::ErUi, Layer::Offers);
         assert!(shapes > 0 && ids.iter().any(|i| i == "workspace.mapping.name"), "{theme:?}: the offer, {ids:?}");
         for layer in [Layer::Drafts, Layer::Rows, Layer::Menus] {
-            assert_eq!(overlaid(&mut h, &crate::er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
+            assert_eq!(overlaid(&mut h, &er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
         }
         for layer in [Layer::Drafts, Layer::Rows, Layer::Menus, Layer::Offers] {
             assert_eq!(overlaid(&mut h, &uml_ui::UmlUi, layer), (0, Vec::new()), "{theme:?}: UML draws nothing at {layer:?}");
@@ -22604,7 +18154,7 @@ fn umls_overlays_go_at_their_layers() {
             let (shapes, ids) = overlaid(&mut h, &uml_ui::UmlUi, layer);
             assert_eq!(shapes > 0, layer == Layer::Drafts, "{theme:?}: the draft is drawn at {layer:?} alone");
             assert!(ids.is_empty(), "{theme:?}: {layer:?} {ids:?}");
-            assert_eq!(overlaid(&mut h, &crate::er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
+            assert_eq!(overlaid(&mut h, &er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
         }
         // A member typed on Catalog's card, and the menu of three selected generalization lines.
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
@@ -22623,54 +18173,8 @@ fn umls_overlays_go_at_their_layers() {
             let row = ids.iter().any(|i| i.starts_with("workspace.canvas.member."));
             let menu = ids.iter().any(|i| i.starts_with("workspace.canvas.contextMenu"));
             assert_eq!((row, menu), (layer == Layer::Rows, layer == Layer::Menus), "{theme:?}: at {layer:?}, {ids:?}");
-            assert_eq!(overlaid(&mut h, &crate::er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
+            assert_eq!(overlaid(&mut h, &er_ui::ErUi, layer), (0, Vec::new()), "{theme:?}: ER draws nothing at {layer:?}");
         }
-    }
-}
-
-/// The card typed on is drawn with its row as UML's state says (AR-789): none while nothing is
-/// typed, the class, its attributes' compartment and a new row once a member is typed on Catalog's
-/// card; ER's state has no row of its own; the shell's states answer as UML's does. In light and
-/// dark.
-#[test]
-fn a_card_draft_is_the_notations_row_typed_in_place() {
-    use crate::notation_ui::NotationState;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
-        let (class, catalog) = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let node = st.by_uuid(archforge_mof::Uuid::parse(&nodes["Catalog"]).unwrap()).unwrap();
-            let class = st.get(node, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap();
-            (st.uuid(class).unwrap(), class)
-        };
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(uml_of(h.state()).card_draft(st), None, "{theme:?}");
-        assert!(h.state_mut().cx(|cx| uml_inline::open(cx, class, uml_panel::MemberKind::Attribute, None)), "{theme:?}");
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(uml_of(h.state()).card_draft(st), Some((catalog, 0, None)), "{theme:?}: a new attribute on Catalog");
-        assert_eq!(er_of(h.state()).card_draft(st), None, "{theme:?}: ER types no row on a card");
-        assert_eq!(h.state().notation_states.card_draft(st), Some((catalog, 0, None)), "{theme:?}");
-    }
-}
-
-/// A problem badge that offers a way out says and does what its element's notation answers
-/// (AR-789): ER's many-to-many relationship offers its mapping table and a click opens the offer;
-/// UML offers none. In light and dark.
-#[test]
-fn a_resolvable_badge_says_and_does_what_its_notation_answers() {
-    use crate::notation_ui::NotationUi;
-    assert_eq!(crate::er_ui::ErUi.resolve_hint().as_deref(), Some("Many to many · add a mapping table"));
-    assert_eq!(uml_ui::UmlUi.resolve_hint(), None);
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _, _) = diagram_harness_in(theme);
-        let rel = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap()).unwrap()
-        };
-        h.state_mut().cx(|cx| uml_ui::UmlUi.resolve(cx, rel));
-        assert!(er_of(h.state()).mapping.is_none(), "{theme:?}: UML opens nothing");
-        h.state_mut().cx(|cx| crate::er_ui::ErUi.resolve(cx, rel));
-        assert_eq!(er_of(h.state()).mapping.as_ref().map(|m| m.relationship), Some(rel), "{theme:?}: ER opens the offer");
     }
 }
 
@@ -22722,63 +18226,6 @@ fn a_badge_shows_a_way_out_only_where_its_notation_offers_one() {
     }
 }
 
-/// A problem badge that offers a way out acts on a click as its notation says (AR-789): the badge
-/// of a many-to-many line drawn from Customer to Order says the way out on hover and opens ER's
-/// mapping table offer named after both; Order's badge, for its missing primary key, opens nothing.
-/// In light and dark.
-#[test]
-fn a_many_to_many_badge_opens_the_mapping_offer_and_another_badge_nothing() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _, _) = diagram_harness_in(theme);
-        let node_of = |h: &Harness<'static, Shell>, name: &str| {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let e = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY) && archforge_core::name_of(st, *o) == name).unwrap();
-            st.uuid(archforge_diagram::views_of(st, e).2[0]).unwrap()
-        };
-        let (customer, order) = (node_of(&h, "Customer"), node_of(&h, "Order"));
-        er_of_mut(h.state_mut()).relationship =
-            crate::connect::RelKind { from: archforge_er::Cardinality::ZeroOrMore, to: archforge_er::Cardinality::ZeroOrMore, identifying: false };
-        let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
-        h.state_mut().cx(|cx| crate::connect::connect(cx, d, customer, order));
-        er_of_mut(h.state_mut()).mapping = None;
-        let edge = {
-            let s = h.state_mut().session.as_mut().unwrap();
-            let st = s.doc();
-            let rel = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP) && archforge_er::rules::is_many_to_many(st, *o));
-            let edge = st.uuid(archforge_diagram::views_of(st, rel.unwrap()).1[0]).unwrap();
-            let order = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY) && archforge_core::name_of(st, *o) == "Order");
-            let order = st.uuid(order.unwrap()).unwrap().to_string();
-            s.execute("er.primary-key.remove", &serde_json::json!({ "entity": order })).unwrap();
-            edge
-        };
-        h.run();
-        let badge = |what: archforge_mof::Uuid| format!("workspace.canvas.problem.{what}");
-        // The line's badge says the way out while the pointer rests on it.
-        let hint = "Many to many · add a mapping table";
-        let before = painted(&h).iter().filter(|t| *t == hint).count();
-        h.event(egui::Event::PointerMoved(rect_of(&h, &badge(edge)).center()));
-        for _ in 0..40 {
-            h.step();
-        }
-        assert_eq!(painted(&h).iter().filter(|t| *t == hint).count(), before + 1, "{theme:?}: its tooltip");
-        let at = rect_of(&h, &badge(order)).center();
-        click(&mut h, at);
-        assert!(er_of(h.state()).mapping.is_none(), "{theme:?}: Order's badge offers nothing");
-        let at = rect_of(&h, &badge(edge)).center();
-        click(&mut h, at);
-        assert_eq!(er_of(h.state()).mapping.as_ref().map(|m| m.name.as_str()), Some("CustomerOrder"), "{theme:?}: the offer opens");
-    }
-}
-
-/// The words each notation's figures say reach the catalogue tests through that notation's own
-/// list (AR-789): ER's and UML's, and no longer the canvas's.
-#[test]
-fn each_notations_figure_words_are_its_own() {
-    assert!(archforge_er::figures::WORDS.iter().all(|w| crate::er_ui::texts().any(|t| t == *w)));
-    assert!(archforge_uml::WORDS.iter().all(|w| uml_ui::texts().any(|t| t == *w)));
-    assert!(crate::canvas::texts().all(|t| t != "Entity · {schema}" && t != "Class · {package}"), "the canvas names neither");
-}
-
 /// The canvas starts each line where the diagram's kind says (AR-788): drawn with UML's kind, an
 /// n-ary association's legs that leave the diamond's node away from a corner reach on to its outline, so each leg's drawn
 /// extent holds the one drawn with ER's kind, which starts lines at the node's border, and at least
@@ -22808,7 +18255,7 @@ fn the_canvas_starts_n_ary_legs_where_umls_kind_says() {
             let (_, at, _) = drawn_alone_at(&session, &ids["diagram"], (Some(kind), SCREENS.kinds()), dark, 1000.0, &none, &clean);
             legs.iter().map(|l| at.iter().find(|(id, _)| id == l).map(|(_, r)| *r).unwrap()).collect::<Vec<_>>()
         };
-        let (uml, er) = (leg_rects(&uml_ui::UmlKind), leg_rects(&crate::er_kind::ErKind));
+        let (uml, er) = (leg_rects(&uml_ui::UmlKind), leg_rects(&er_kind::ErKind));
         assert!(uml.iter().zip(&er).all(|(u, e)| u.contains_rect(*e)), "{dark}: {uml:?} hold {er:?}");
         assert!(uml.iter().zip(&er).any(|(u, e)| u != e), "{dark}: a leg reaches on to the diamond: {uml:?} {er:?}");
     }
@@ -22853,7 +18300,7 @@ fn the_n_ary_hint_bar_is_umls_kinds_and_ers_draws_none() {
             ids.iter().any(|i| i == "workspace.canvas.gestureHint")
         };
         assert!(hinted(&uml_ui::UmlKind, h.state_mut()), "{theme:?}: UML's kind draws the hint");
-        assert!(!hinted(&crate::er_kind::ErKind, h.state_mut()), "{theme:?}: the default draws none");
+        assert!(!hinted(&er_kind::ErKind, h.state_mut()), "{theme:?}: the default draws none");
     }
 }
 

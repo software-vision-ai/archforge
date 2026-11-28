@@ -33,8 +33,9 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use archforge_er_ui::ER;
 use archforge_shell_api::screens::ScreensRegistry;
-use archforge_ui_egui::{ER, Shell};
+use archforge_ui_egui::Shell;
 use archforge_uml_ui::UML;
 
 /// The notations' screens parts the app registers at start-up (ADR 0003, "Two registries"), in

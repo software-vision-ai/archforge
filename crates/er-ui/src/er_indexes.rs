@@ -12,14 +12,14 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::checks::badge;
-use crate::cx::Ctx;
+use crate::er_checks::badge;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
-use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, check_cx, control_cx, icon_button_cx, menu_cx, run_cx, section_cx, text_field_cx};
 use crate::ux::{self, Palette, icons, types};
-use crate::widgets;
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::panels::{FIELD, PAD, check_cx, control_cx, icon_button_cx, menu_cx, run_cx, section_cx, text_field_cx};
+use archforge_shell_api::widgets;
 
 /// One column of an index as edited: a column of the table, or an expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +95,7 @@ pub fn rows(store: &Store, e: Obj) -> Vec<IndexRow> {
 }
 
 /// Opens the editor on an index, or on one to add to `entity`.
-pub(crate) fn open(cx: &mut Ctx, entity: Uuid, target: Option<&IndexRow>) {
+pub fn open(cx: &mut Ctx, entity: Uuid, target: Option<&IndexRow>) {
     if let Some(er) = er_mut(cx.notation_states) {
         er.index = Some(match target {
             Some(ix) => IndexEdit {
@@ -156,7 +156,7 @@ pub(crate) fn indexes_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: R
         badge(&paint, row.min + vec2(2.0, 6.0), "IX", p.purple_tint, p.purple);
         ux::text(&paint, row.min + vec2(38.0, 4.0), &index.label, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, row.min + vec2(38.0, 23.0), &index.summary, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if crate::panels::edit_button_cx(cx, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
+        if archforge_shell_api::panels::edit_button_cx(cx, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
             open(cx, entity_id, Some(index));
         }
         y += 44.0;
@@ -191,7 +191,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal_cx(cx, ui, crate::er_state::INDEX, card);
+    archforge_shell_api::panels::reveal_cx(cx, ui, crate::er_state::INDEX, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -249,7 +249,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
                     .hint_text(tr("An expression"))
                     .char_limit(archforge_er::rules::MAX_TEXT)
                     .desired_width(field.width())
-                    .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(crate::panels::field_inner(ui, field))));
+                    .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(archforge_shell_api::panels::field_inner(ui, field))));
                 let _ = (*out.response).clone().accessible_name(tr("An expression"));
                 if out.response.has_focus() {
                     paint.rect_stroke(row, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
@@ -474,7 +474,7 @@ fn commit(cx: &mut Ctx, edit: &IndexEdit) {
 }
 
 /// Every hover text to translate, for the catalogue tests.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add index", "Ascending", "Descending"].into_iter()
 }

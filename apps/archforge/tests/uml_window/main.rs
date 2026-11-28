@@ -25,7 +25,7 @@ use archforge_uml_ui::snapshot::{
 /// The app's screens parts, ER's then UML's, as the app registers them: every shell the tests make
 /// is given them.
 static SCREENS: archforge_shell_api::screens::ScreensRegistry =
-    archforge_shell_api::screens::ScreensRegistry::new(&[archforge_ui_egui::ER, archforge_uml_ui::UML]);
+    archforge_shell_api::screens::ScreensRegistry::new(&[archforge_er_ui::ER, archforge_uml_ui::UML]);
 
 mod canvas;
 mod chat;

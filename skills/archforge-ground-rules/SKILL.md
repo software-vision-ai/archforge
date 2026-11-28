@@ -37,7 +37,7 @@ The rules a change cannot break. `AGENTS.md` lists them in one line each.
   toolkit's face stands in.
 - The interface's icons are drawn in code from the design's vector paths
   (`crates/shell-api/src/ux/icons.rs`, and for an icon only one notation draws
-  `crates/uml-ui/src/ux/icons.rs`, UML's, or `crates/ui-egui/src/ux/icons.rs`, ER's), not shipped as files. A new icon follows the ones there: our own drawing, the design's stroke
+  `crates/er-ui/src/ux/icons.rs`, ER's, or `crates/uml-ui/src/ux/icons.rs`, UML's), not shipped as files. A new icon follows the ones there: our own drawing, the design's stroke
   weight.
 - `ATTRIBUTION.toml` is a hot file: a new row goes beside its relatives, never at the end.
 

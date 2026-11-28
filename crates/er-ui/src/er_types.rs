@@ -12,15 +12,15 @@ use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::checks::badge;
-use crate::cx::Ctx;
+use crate::er_checks::badge;
 use crate::er_state::menus;
 use crate::er_state::{er, er_mut};
 use crate::er_table::{number, size_value};
-use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, PAD, check_cx, control_cx, ghost_button_cx, icon_button_cx, menu_cx, run_cx, section_cx, text_field_cx};
 use crate::ux::{self, Palette, icons, types};
-use crate::widgets;
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::i18n::{fmt, tr};
+use archforge_shell_api::panels::{FIELD, PAD, check_cx, control_cx, ghost_button_cx, icon_button_cx, menu_cx, run_cx, section_cx, text_field_cx};
+use archforge_shell_api::widgets;
 
 /// Which kind of type an editor edits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,7 +79,7 @@ pub fn rows(store: &Store, schema: Obj) -> Vec<TypeRow> {
         }
         let checks = r::domain_checks(store, d).len();
         if checks > 0 {
-            detail = format!("{detail} · {}", crate::i18n::trn("{n} check", "{n} checks", checks as u64));
+            detail = format!("{detail} · {}", archforge_shell_api::i18n::trn("{n} check", "{n} checks", checks as u64));
         }
         out.push(TypeRow { id, kind: TypeKind::Domain, name: r::name_of(store, d), detail });
     }
@@ -91,7 +91,7 @@ pub fn rows(store: &Store, schema: Obj) -> Vec<TypeRow> {
 }
 
 /// Opens the editor on a type, or on one of `kind` to add to `schema`.
-pub(crate) fn open(cx: &mut Ctx, schema: Uuid, kind: TypeKind, target: Option<Uuid>) {
+pub fn open(cx: &mut Ctx, schema: Uuid, kind: TypeKind, target: Option<Uuid>) {
     let mut edit = TypeEdit {
         kind,
         target,
@@ -158,7 +158,7 @@ pub(crate) fn types_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rec
     };
     y = next - 6.0;
     let editing_new = er(cx.notation_states).and_then(|er| er.type_edit.as_ref()).is_some_and(|t| t.target.is_none() && t.schema == schema_id);
-    let chosen = crate::panels::selected_id_cx(&cx.cx_ref());
+    let chosen = archforge_shell_api::panels::selected_id_cx(&cx.cx_ref());
     for row in &list {
         if er(cx.notation_states).and_then(|er| er.type_edit.as_ref()).is_some_and(|t| t.target == Some(row.id)) {
             y = editor(cx, ui, p, r, y);
@@ -178,11 +178,11 @@ pub(crate) fn types_section(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rec
         }
         ux::text(&paint, rect.min + vec2(38.0, 4.0), &row.name, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, rect.min + vec2(38.0, 23.0), &row.detail, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if crate::panels::edit_button_cx(cx, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
-            crate::panels::select_element_cx(cx, row.id);
+        if archforge_shell_api::panels::edit_button_cx(cx, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
+            archforge_shell_api::panels::select_element_cx(cx, row.id);
             open(cx, schema_id, row.kind, Some(row.id));
         } else if resp.clicked() {
-            crate::panels::select_element_cx(cx, row.id);
+            archforge_shell_api::panels::select_element_cx(cx, row.id);
         }
         y += 44.0;
     }
@@ -214,7 +214,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal_cx(cx, ui, crate::er_state::TYPE, card);
+    archforge_shell_api::panels::reveal_cx(cx, ui, crate::er_state::TYPE, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -338,8 +338,10 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
             for i in 0..edit.checks.len() {
                 let rect = Rect::from_min_size(at(0.0, cy), vec2(inner, FIELD));
                 paint.rect_filled(rect, 6.0, p.field);
-                let field =
-                    crate::panels::field_inner(ui, Rect::from_min_max(pos2(rect.left() + 0.0, rect.top()), pos2(rect.right() - 22.0, rect.bottom())));
+                let field = archforge_shell_api::panels::field_inner(
+                    ui,
+                    Rect::from_min_max(pos2(rect.left() + 0.0, rect.top()), pos2(rect.right() - 22.0, rect.bottom())),
+                );
                 let id = format!("workspace.properties.domain.check.{i}");
                 widgets::record_visible(ui, cx.registry, &id, "field", field);
                 let out = egui::TextEdit::singleline(&mut edit.checks[i])
@@ -381,7 +383,7 @@ fn editor(cx: &mut Ctx, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 
                 let rect = Rect::from_min_size(at(0.0, cy), vec2(inner, FIELD));
                 paint.rect_filled(rect, 6.0, p.field);
                 ux::icon_mid(&paint, pos2(rect.left() + 14.0, rect.center().y), &icons::GRIP, p.text_muted);
-                let field = crate::panels::field_inner(
+                let field = archforge_shell_api::panels::field_inner(
                     ui,
                     Rect::from_min_max(pos2(rect.left() + 20.0, rect.top()), pos2(rect.right() - 22.0, rect.bottom())),
                 );
@@ -546,7 +548,7 @@ fn commit(cx: &mut Ctx, edit: &TypeEdit) {
 }
 
 /// Every hover text to translate, for the catalogue tests.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add type"].into_iter()
 }

@@ -11,7 +11,7 @@
 //! The geometry is the design's: a section is 16 px in from the panel's edges with a full-width
 //! line over it, a field is 28 px tall and filled, its label 11 px above, a row 36 px.
 
-use archforge_mof::{Obj, Uuid};
+use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Response, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
@@ -115,6 +115,11 @@ pub struct DescriptionDraft {
 pub fn run_cx(cx: &mut Ctx, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = cx.session.as_mut() else { return Err(tr("The model could not be opened")) };
     session.execute(id, &params).map(|o| o.value).map_err(|e| refusal(cx.notation_uis, &e))
+}
+
+/// The string `prop` of `o`; empty when it has none.
+pub fn string_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
+    store.get(o, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
 /// An engine's refusal as the panel says it: the reason alone, without the command's id or the

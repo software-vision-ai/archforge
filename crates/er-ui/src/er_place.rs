@@ -10,11 +10,11 @@ use archforge_diagram::grid::bounds_of;
 use archforge_mof::{Obj, Store, Uuid};
 use serde_json::json;
 
-use crate::canvas::{CARD_FIRST_ROW, CARD_ROW, Tool};
-use crate::cx::Ctx;
-use crate::editing::{NodeRename, element_of, nodes_of, on_diagram, place_with_lines_cx, select_cx, unit_rect, uuid};
 use crate::er_state::er;
-use crate::i18n::tr;
+use archforge_shell_api::canvas::{CARD_FIRST_ROW, CARD_ROW, Tool};
+use archforge_shell_api::cx::Ctx;
+use archforge_shell_api::editing::{NodeRename, element_of, nodes_of, on_diagram, place_with_lines_cx, select_cx, unit_rect, uuid};
+use archforge_shell_api::i18n::tr;
 
 /// A new entity's node: the design's width, and its height without columns.
 pub const ENTITY_WIDTH: f64 = 240.0;
@@ -52,7 +52,7 @@ pub(crate) fn place_entity(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
     cx.canvas.notice = None;
     let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
-    let Some(schema) = crate::diagrams::owner_of(store, d) else {
+    let Some(schema) = archforge_shell_api::editing::owner_of(store, d) else {
         cx.canvas.notice = Some(tr("The diagram is of no schema"));
         return;
     };
@@ -82,7 +82,7 @@ pub(crate) fn place_entity(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
             }
             cx.canvas.tool = Tool::Select;
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
+        Err(e) => cx.canvas.notice = Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -91,12 +91,12 @@ pub(crate) fn place_entity(cx: &mut Ctx, d: Obj, x: f64, y: f64) {
 /// is open for typing. The relationship's foreign key starts off (and so it is not identifying):
 /// the new table is still to be shaped, and its keys come when the user turns the key on.
 pub(crate) fn connect_to_new(cx: &mut Ctx, d: Obj, from_node: Uuid, x: f64, y: f64) {
-    use crate::connect::cardinality_word;
+    use crate::er_connect::cardinality_word;
     cx.canvas.notice = None;
     let kind = er(cx.notation_states).map(|er| er.relationship).unwrap_or_default();
     let Some(session) = cx.session.as_mut() else { return };
     let store = session.doc();
-    let Some(schema) = crate::diagrams::owner_of(store, d) else {
+    let Some(schema) = archforge_shell_api::editing::owner_of(store, d) else {
         cx.canvas.notice = Some(tr("The diagram is of no schema"));
         return;
     };
@@ -148,7 +148,7 @@ pub(crate) fn connect_to_new(cx: &mut Ctx, d: Obj, from_node: Uuid, x: f64, y: f
                 cx.canvas.focused = true;
             }
         }
-        Err(e) => cx.canvas.notice = Some(crate::panels::refusal(cx.notation_uis, &e)),
+        Err(e) => cx.canvas.notice = Some(archforge_shell_api::panels::refusal(cx.notation_uis, &e)),
     }
 }
 
@@ -184,7 +184,7 @@ fn free_place(cx: &Ctx, schema: Obj) -> Option<(Uuid, f64, f64)> {
     let session = cx.session.as_ref()?;
     let store = session.doc();
     let d = cx.canvas.active.and_then(|id| store.by_uuid(id)).filter(|d| store.is_alive(*d))?;
-    if crate::diagrams::owner_of(store, d) != Some(schema) {
+    if archforge_shell_api::editing::owner_of(store, d) != Some(schema) {
         return None;
     }
     let nodes = nodes_of(store, d);
@@ -202,7 +202,7 @@ pub(crate) fn add_entity(cx: &mut Ctx, schema: Uuid, name: &str) -> Result<Uuid,
     let session = cx.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
     let add = json!({ "schema": schema.to_string(), "name": name });
     let entity = match placed {
-        None => session.execute("er.entity.add", &add).map(|o| o.value).map_err(|e| crate::panels::refusal(cx.notation_uis, &e))?,
+        None => session.execute("er.entity.add", &add).map(|o| o.value).map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e))?,
         Some((diagram, x, y)) => {
             let out = session
                 .batch(&tr("Add table"), |b| {
@@ -214,7 +214,7 @@ pub(crate) fn add_entity(cx: &mut Ctx, schema: Uuid, name: &str) -> Result<Uuid,
                     )?;
                     Ok(())
                 })
-                .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))?;
+                .map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e))?;
             out.value.get(0).cloned().unwrap_or(serde_json::Value::Null)
         }
     };
@@ -241,7 +241,7 @@ pub(crate) fn run_growing(cx: &mut Ctx, label: &str, cmd: &str, params: serde_js
         })
         .collect();
     if grow.is_empty() {
-        return session.execute(cmd, &params).map(|o| o.value).map_err(|e| crate::panels::refusal(cx.notation_uis, &e));
+        return session.execute(cmd, &params).map(|o| o.value).map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e));
     }
     session
         .batch(label, |b| {
@@ -252,13 +252,13 @@ pub(crate) fn run_growing(cx: &mut Ctx, label: &str, cmd: &str, params: serde_js
             Ok(())
         })
         .map(|o| o.value.get(0).cloned().unwrap_or(serde_json::Value::Null))
-        .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
+        .map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e))
 }
 
 /// Grows every table box of the model read that is too short for its columns, before the project's
 /// session starts: a box an earlier version left short (its key columns hidden below its edge)
 /// shows them all when the project opens, without an undo step.
-pub(crate) fn fit_tables(store: &mut Store) {
+pub fn fit_tables(store: &mut Store) {
     let mut grow: Vec<(Obj, f64)> = Vec::new();
     for e in store.alive().filter(|o| store.class_of(*o).ok() == Some(archforge_er::ENTITY)) {
         let columns = store
@@ -327,5 +327,5 @@ pub(crate) fn run_fitting(cx: &mut Ctx, label: &str, cmd: &str, params: serde_js
             grow_to_fit(b, entities)
         })
         .map(|o| o.value.get(0).cloned().unwrap_or(serde_json::Value::Null))
-        .map_err(|e| crate::panels::refusal(cx.notation_uis, &e))
+        .map_err(|e| archforge_shell_api::panels::refusal(cx.notation_uis, &e))
 }

@@ -1087,6 +1087,74 @@ pub fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, st
     }
 }
 
+/// A line, solid for an identifying relationship and dashed for the rest.
+pub fn line(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, identifying: bool, z: f32) {
+    if identifying {
+        paint.add(egui::Shape::line(points.to_vec(), stroke));
+    } else {
+        paint.add(egui::Shape::dashed_line(points, stroke, 6.0 * z.max(0.5), 4.0 * z.max(0.5)));
+    }
+}
+
+/// A line's end mark at `end`, the line coming from `from`. Crow's foot: the outer mark is the
+/// most (a bar for one, a crow's foot for many), the inner mark the fewest (a circle for zero, a
+/// bar for one), so exactly one is two bars and one or more a bar and a crow's foot; the
+/// cardinality is written under the line. A triangle is drawn with its line.
+#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its mark and the view")]
+pub fn end_glyph(paint: &egui::Painter, p: &Palette, end: Pos2, from: Pos2, mark: EndMark, stroke: Stroke, z: f32, with_text: bool) {
+    end_glyph_on(paint, p, end, from, mark, stroke, z, with_text, p.canvas);
+}
+
+/// [`end_glyph`] over a background `fill`, which the circle for zero is filled with.
+#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its mark, the view and what it is drawn on")]
+pub fn end_glyph_on(
+    paint: &egui::Painter,
+    p: &Palette,
+    end: Pos2,
+    from: Pos2,
+    mark: EndMark,
+    stroke: Stroke,
+    z: f32,
+    with_text: bool,
+    fill: ux::Colour,
+) {
+    let (many, zero, text) = match mark {
+        EndMark::ExactlyOne => (false, false, "1"),
+        EndMark::ZeroOrOne => (false, true, "0..1"),
+        EndMark::ZeroOrMore => (true, true, "0..*"),
+        EndMark::OneOrMore => (true, false, "1..*"),
+        _ => return,
+    };
+    let d = from - end;
+    if d.length() <= f32::EPSILON || !d.is_finite() {
+        return;
+    }
+    let d = d.normalized();
+    let n = vec2(-d.y, d.x);
+    if many {
+        let base = end + d * 14.0 * z;
+        paint.line_segment([base, end + n * 7.0 * z], stroke);
+        paint.line_segment([base, end - n * 7.0 * z], stroke);
+    } else {
+        let bar = end + d * 10.0 * z;
+        paint.line_segment([bar + n * 7.0 * z, bar - n * 7.0 * z], stroke);
+    }
+    // The inner mark: a circle for zero, a bar for one.
+    let inner = end + d * (if many { 20.0 } else { 18.0 }) * z;
+    if zero {
+        paint.circle_filled(inner, 4.0 * z, fill);
+        paint.circle_stroke(inner, 4.0 * z, stroke);
+    } else {
+        paint.line_segment([inner + n * 7.0 * z, inner - n * 7.0 * z], stroke);
+    }
+    if !with_text {
+        return;
+    }
+    let g = ux::galley(paint, text, types::SMALL.scaled(z), p.text_secondary, None);
+    let at = end + d * 26.0 * z + vec2(0.0, 6.0 * z);
+    paint.galley(at - vec2(g.size().x / 2.0, 0.0), g, p.text_secondary.into());
+}
+
 /// A line's points on screen, from its source's edge to its target's, run as its style or its
 /// diagram's says (straight, at right angles, around the other cards, or curved) through its
 /// waypoints; a line from a card back to itself loops out of its right side. Routed in diagram
@@ -1294,4 +1362,31 @@ fn the_nesting_line_runs_from_the_owners_side_and_none_joins_overlapping_cards()
     assert_eq!(points.last().copied(), Some(pos2(400.0, 330.0)));
     let over = Rect::from_min_size(pos2(150.0, 60.0), egui::vec2(100.0, 80.0));
     assert!(nesting_route(owner, over, 7.0, &[]).is_none(), "overlapping cards draw no line");
+}
+
+/// Every crow's-foot end draws its two marks: the outer the most (a bar, or a crow's foot of two
+/// lines), the inner the fewest (a circle for zero, a bar for one).
+#[cfg(test)]
+#[test]
+fn every_relationship_end_draws_its_two_crows_foot_marks() {
+    use crate::canvas::end_glyph;
+    use archforge_diagram::figure::EndMark;
+    // The shapes an end draws: its line segments and its circles.
+    let marks = |mark: EndMark| {
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            let p = crate::ux::palette(false);
+            let stroke = egui::Stroke::new(1.2, p.text);
+            end_glyph(ui.painter(), p, egui::pos2(100.0, 100.0), egui::pos2(200.0, 100.0), mark, stroke, 1.0, false);
+        });
+        out.textures_delta.clear();
+        let shapes: Vec<egui::Shape> = out.shapes.into_iter().map(|s| s.shape).collect();
+        let lines = shapes.iter().filter(|s| matches!(s, egui::Shape::LineSegment { .. })).count();
+        let circles = shapes.iter().filter(|s| matches!(s, egui::Shape::Circle(c) if c.stroke.width > 0.0)).count();
+        (lines, circles)
+    };
+    assert_eq!(marks(EndMark::ZeroOrOne), (1, 1));
+    assert_eq!(marks(EndMark::ExactlyOne), (2, 0), "exactly one is two bars");
+    assert_eq!(marks(EndMark::ZeroOrMore), (2, 1));
+    assert_eq!(marks(EndMark::OneOrMore), (3, 0), "one or more is a bar and a crow's foot");
 }

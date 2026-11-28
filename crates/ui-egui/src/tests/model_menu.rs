@@ -1,6 +1,7 @@
 //! The Model menu: its rows are what the open diagram's tools make, each arms that tool and no
 //! other, and all of them answer to the one rule of when a tool can be picked.
 
+use archforge_er_ui::snapshot::er_kind;
 use egui::Key::{ArrowDown, ArrowRight, Enter, F10};
 
 use super::*;
@@ -40,26 +41,6 @@ fn er(theme: ThemeKind) -> Harness<'static, Shell> {
 fn drawn_rows(h: &mut Harness<'static, Shell>) -> Vec<String> {
     click_menu(h, "strip.menu.model");
     menu_ids(h).iter().filter_map(|i| i.strip_prefix("strip.menu.row.")).map(String::from).collect()
-}
-
-/// Each diagram's own kinds and the shared rows are listed, and only those; a skill's tab has no canvas.
-#[test]
-fn the_menu_lists_only_what_the_open_diagram_offers() {
-    for theme in BOTH {
-        let mut h = uml_sized(theme, BIG);
-        assert_eq!(model_sections(h.state()).iter().map(Vec::len).collect::<Vec<_>>(), [6, 6, 2, 2, 2], "{theme:?}: the tools' own sections");
-        assert_eq!(drawn_rows(&mut h), model_sections(h.state()).concat(), "{theme:?}");
-        let root = h.state().session.as_ref().map(|s| s.doc().uuid(archforge_uml::commands::root_package(s.doc()).unwrap()).unwrap()).unwrap();
-        let skill = serde_json::json!({ "subject": root.to_string(), "name": "Naming", "body": "text" });
-        let skill = crate::panels::run(h.state_mut(), "skill.add", skill).unwrap();
-        crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(skill["id"].as_str().unwrap()).unwrap());
-        assert_eq!(model_sections(h.state()), [SHARED], "{theme:?}: a skill");
-        assert!(!available(h.state(), "model.note"), "{theme:?}: a skill");
-        let mut h = er(theme);
-        assert_eq!(model_sections(h.state()), [ER_ROWS, SHARED], "{theme:?}");
-        assert_eq!(drawn_rows(&mut h), [ER_ROWS, SHARED].concat(), "{theme:?}");
-        assert_eq!(model_sections(menu_harness(theme, true).state()), [SHARED], "{theme:?}: no diagram");
-    }
 }
 
 /// Runs `id` from the kinds given, with a popover open, and gives the canvas's tool and kinds after.
@@ -148,7 +129,7 @@ fn ids_of(rows: &[&[crate::kinds::ModelRow]]) -> Vec<Vec<&'static str>> {
 #[test]
 fn each_kind_answers_its_own_rows() {
     use crate::kinds::DiagramKind;
-    assert_eq!(ids_of(crate::er_kind::ErKind.menu_rows()), [ER_ROWS.to_vec()]);
+    assert_eq!(ids_of(er_kind::ErKind.menu_rows()), [ER_ROWS.to_vec()]);
     let classifiers = ["model.class", "model.interface", "model.enumeration", "model.data-type", "model.primitive-type", "model.package"];
     let relate = [
         vec![
@@ -198,8 +179,7 @@ fn each_kind_answers_its_own_rows() {
 fn the_entries_are_made_from_the_rows_data() {
     use crate::kinds::DiagramKind;
     for theme in BOTH {
-        let kinds: [(Harness<'static, Shell>, &dyn DiagramKind); 2] =
-            [(er(theme), &crate::er_kind::ErKind), (uml_sized(theme, BIG), &uml_ui::UmlKind)];
+        let kinds: [(Harness<'static, Shell>, &dyn DiagramKind); 2] = [(er(theme), &er_kind::ErKind), (uml_sized(theme, BIG), &uml_ui::UmlKind)];
         for (mut h, kind) in kinds {
             let s = h.state_mut();
             for (_, row) in crate::model_menu::rows(&[kind]) {

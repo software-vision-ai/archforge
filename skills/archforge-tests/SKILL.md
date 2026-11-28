@@ -17,12 +17,20 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     canvas, its tools and tabs, and relationships; Properties and its keys; Models; profiles and
     stereotypes; Chat; the menus and the rail's panels; the views of a version; UML's refusals in
     the chosen language)
+  - ER's screens without the shell, what ER's own code decides (its refusal words), against the
+    shell's interfaces' test context: `crates/er-ui/src/tests.rs`
+  - ER's window tests, the whole window with the notations the app registers, and the tests that
+    ask both notations: the app's `apps/archforge/tests/er_window/`, through ui-egui's `testing`
+    and `snapshot` and the notations' screens' `snapshot`, in the module of their area beside
+    `main.rs` (ER's canvas, its tools, relationships, tables and Generate; ER's Properties; ER's
+    refusals that take a row of the shell's catalogue; both notations asked; the Model menu)
   - every offscreen screen's automation ids, in both appearances: the `tests` module in
     `crates/ui-egui/src/offscreen.rs`, against `crates/ui-egui/src/offscreen/automation-ids.tsv`;
     a change that renames, adds or removes an id on purpose updates the screen's rows from the
     listing the failing test prints, and a new screen, a row of the `screens!` list in the same
     file (its one list of screens, `offscreen::SCREENS`), gets its rows under its name
-  - translations: the shell's and the notations' catalogues in `crates/ui-egui/src/i18n/tests.rs`;
+  - translations: the shell's catalogues in `crates/ui-egui/src/i18n/tests.rs`, each notation's
+    registering in its screens crate;
     the tests across every catalogue (every literal has a row, every row is read and is in the
     catalogue of the code that reads it, no key twice, the model words) in the app, the one crate
     that knows every catalogue: `apps/archforge/src/catalogues.rs`; the machinery (lookups, plural rules, registering, the build-time row check) in
